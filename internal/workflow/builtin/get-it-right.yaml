@@ -72,7 +72,7 @@ inputs:
 
   lint_log:
     type: string
-    default: "./data/get-it-right/lint.log"
+    default: "./.reliant/data/get-it-right/lint.log"
     description: File path for lint output.
 
   test_command:
@@ -82,7 +82,7 @@ inputs:
 
   test_log:
     type: string
-    default: "./data/get-it-right/test.log"
+    default: "./.reliant/data/get-it-right/test.log"
     description: File path for test output.
 
   build_command:
@@ -92,7 +92,7 @@ inputs:
 
   build_log:
     type: string
-    default: "./data/get-it-right/build.log"
+    default: "./.reliant/data/get-it-right/build.log"
     description: File path for build output.
 
   review_instructions:
@@ -127,10 +127,7 @@ nodes:
     type: loop
     while: >
       ((has(outputs.eval_strategy) && outputs.eval_strategy != "pass"
-        && !(outputs.eval_strategy == "stuck" && !outputs.has_feedback)
-       || (has(outputs.lint_exit) && outputs.lint_exit != 0)
-       || (has(outputs.test_exit) && outputs.test_exit != 0)
-       || (has(outputs.build_exit) && outputs.build_exit != 0))
+        && !(outputs.eval_strategy == "stuck" && !outputs.has_feedback))
       && iter.iteration < inputs.max_retries)
       || outputs.has_feedback == true
     ask: "inputs.ask"
@@ -148,7 +145,7 @@ nodes:
               ? 'continue' : 'pass'}}
         review_grade: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null && has(nodes.review.response.grade) ? nodes.review.response.grade : 'pass'}}"
         review_feedback: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.feedback : ''}}"
-        has_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.has_feedback) ? nodes.stuck_checkpoint.has_feedback : (has(nodes.review_checkpoint) && has(nodes.review_checkpoint.has_feedback) ? nodes.review_checkpoint.has_feedback : (has(nodes.check_failure_checkpoint) && has(nodes.check_failure_checkpoint.has_feedback) ? nodes.check_failure_checkpoint.has_feedback : false))}}"
+        has_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.has_feedback) ? nodes.stuck_checkpoint.has_feedback : (has(nodes.review_checkpoint) && has(nodes.review_checkpoint.has_feedback) ? nodes.review_checkpoint.has_feedback : false)}}"
 
       nodes:
         - id: implement
@@ -168,6 +165,10 @@ nodes:
                 ## Get It Right — Attempt {{iter.iteration + 1}} of {{inputs.max_retries}}
 
                 Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.
+
+                {{(inputs.lint_command == '' && inputs.test_command == '' && inputs.build_command == '') ?
+                  'No lint/test/build commands are configured for this run, so nothing verifies your work automatically. Discover the checks this project already defines — package.json scripts, Makefile/justfile targets, go test / go build, pyproject/tox, cargo, etc. — and run the relevant ones (typecheck/lint, tests, build) yourself. Report each command you ran and whether it passed; if you genuinely cannot find any checks, say so explicitly.' :
+                  'Configured lint/test/build commands run automatically after this step, but still run focused tests yourself to verify your changes before finishing.'}}
 
                 {{inputs.context_bridge != 'none' ? 'The review feedback and implementation summaries from previous attempts (if any) are in the conversation above. Use them to guide your implementation.' : 'You have no context from prior attempts — implement from scratch.'}}
                 {{inputs.context_bridge != 'none' ? 'If previous checks failed, the error details and log file paths are in the messages above.\nRead the log files FIRST before making changes — they contain the actual error output as JSON with working_dir, stdout, and stderr.' : ''}}
@@ -232,11 +233,6 @@ nodes:
         - id: join_checks
           type: join
 
-        - id: check_failure_checkpoint
-          type: ask_question
-          args:
-            metadata: '{"type":"ask_user","questions":[{"question":"Verification has failed across multiple attempts. Continue retrying automatically, or provide guidance before the next attempt?","options":[{"label":"Continue","description":"Continue retrying with the latest lint/test/build output"},{"label":"Provide feedback","description":"Give instructions or context for the next implementation attempt"}]}]}'
-
         - id: review
           type: workflow
           ref: builtin://structured-agent
@@ -292,10 +288,10 @@ nodes:
               content: |
                 ## Get It Right — Review Attempt {{iter.iteration + 1}}
 
-                **Check results:**
-                - Lint: {{inputs.lint_command == '' ? 'skipped' : (nodes.lint.exit_code == 0 ? 'passed' : 'FAILED')}}
-                - Test: {{inputs.test_command == '' ? 'skipped' : (nodes.test.exit_code == 0 ? 'passed' : 'FAILED')}}
-                - Build: {{inputs.build_command == '' ? 'skipped' : (nodes.build.exit_code == 0 ? 'passed' : 'FAILED')}}
+                **Check results** (unconfigured checks were run by the implementer — see the implementation notes above for the commands and results):
+                - Lint: {{inputs.lint_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.lint.exit_code == 0 ? 'passed' : 'FAILED')}}
+                - Test: {{inputs.test_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.test.exit_code == 0 ? 'passed' : 'FAILED')}}
+                - Build: {{inputs.build_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.build.exit_code == 0 ? 'passed' : 'FAILED')}}
 
                 {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — load the ux-review-methodology skill to audit it via Chrome DevTools.' : ''}}
 
@@ -366,14 +362,6 @@ nodes:
         - from: build
           default: [join_checks]
         - from: join_checks
-          cases:
-            - condition: >
-                (nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0)
-                && iter.iteration >= 2
-              to: [check_failure_checkpoint]
-            - condition: >
-                nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0
-              to: []
           default: [review]
         - from: review
           cases:

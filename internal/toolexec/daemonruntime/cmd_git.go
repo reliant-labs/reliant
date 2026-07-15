@@ -72,9 +72,12 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
+	// git clone can be memory-heavy on large repos; attribute a SIGKILL to
+	// the workspace OOM killer when the cgroup recorded one.
+	oomSnap := memReader.SnapshotOOMKills()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("git clone failed: %v: %s", err, sanitizeGitOutput(string(output), req.Token))
+		return nil, fmt.Errorf("git clone failed: %v: %s", wrapChildOOMKill(err, oomSnap), sanitizeGitOutput(string(output), req.Token))
 	}
 
 	// If token was provided, set up credential helper for this repo so push/pull works
@@ -158,9 +161,10 @@ func handleGitPull(ctx context.Context, payload []byte) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
+	oomSnap := memReader.SnapshotOOMKills()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("git pull failed: %v: %s", err, string(output))
+		return nil, fmt.Errorf("git pull failed: %v: %s", wrapChildOOMKill(err, oomSnap), string(output))
 	}
 	return json.Marshal(gitPullResponse{
 		Success: true,

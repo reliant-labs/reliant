@@ -2339,8 +2339,14 @@ type SaveMessageNodeArgs struct {
 	TokenCount           int32            `protobuf:"varint,27,opt,name=token_count,json=tokenCount,proto3" json:"token_count,omitempty"`
 	ResolvedInjectFiles  []*InjectFileMsg `protobuf:"bytes,28,rep,name=resolved_inject_files,json=resolvedInjectFiles,proto3" json:"resolved_inject_files,omitempty"`
 	Cost                 float64          `protobuf:"fixed64,29,opt,name=cost,proto3" json:"cost,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// ResolvedModel is the concrete model that served the completion, forwarded
+	// from CallLLMOutput.model, persisted onto messages.model.
+	ResolvedModel string `protobuf:"bytes,30,opt,name=resolved_model,json=resolvedModel,proto3" json:"resolved_model,omitempty"`
+	// ResolvedAgent is the agent/workflow identity that produced the message,
+	// persisted onto messages.agent.
+	ResolvedAgent string `protobuf:"bytes,31,opt,name=resolved_agent,json=resolvedAgent,proto3" json:"resolved_agent,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SaveMessageNodeArgs) Reset() {
@@ -2483,6 +2489,20 @@ func (x *SaveMessageNodeArgs) GetCost() float64 {
 		return x.Cost
 	}
 	return 0
+}
+
+func (x *SaveMessageNodeArgs) GetResolvedModel() string {
+	if x != nil {
+		return x.ResolvedModel
+	}
+	return ""
+}
+
+func (x *SaveMessageNodeArgs) GetResolvedAgent() string {
+	if x != nil {
+		return x.ResolvedAgent
+	}
+	return ""
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -4930,8 +4950,13 @@ type CallLLMOutput struct {
 	// reads this via nodes.call_llm.compaction_threshold so tag-based model
 	// selectors get the correct per-model threshold after resolution.
 	CompactionThreshold int32 `protobuf:"varint,10,opt,name=compaction_threshold,json=compactionThreshold,proto3" json:"compaction_threshold,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Model is the concrete model that served this completion, captured AFTER
+	// tag/selector resolution (e.g. "claude-4.8-opus", not "tags:[flagship]").
+	// Exposed as nodes.call_llm.model so the inline save_message can persist it
+	// onto messages.model. Empty when resolution produced no definition.
+	Model         string `protobuf:"bytes,11,opt,name=model,proto3" json:"model,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallLLMOutput) Reset() {
@@ -5032,6 +5057,13 @@ func (x *CallLLMOutput) GetCompactionThreshold() int32 {
 		return x.CompactionThreshold
 	}
 	return 0
+}
+
+func (x *CallLLMOutput) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.
@@ -6160,7 +6192,20 @@ type Workflow struct {
 	// Daemon specifies the default daemon for tool execution in this workflow.
 	// Can be overridden per-node. Supports string shorthand ("local"),
 	// structured object ({type: "cloud"}), or CEL expression ("{{ params.daemon }}").
-	Daemon        *CelDaemonSelector `protobuf:"bytes,12,opt,name=daemon,proto3" json:"daemon,omitempty"`
+	Daemon *CelDaemonSelector `protobuf:"bytes,12,opt,name=daemon,proto3" json:"daemon,omitempty"`
+	// ResumeNode optionally names the node to enter when a new run resumes an
+	// interrupted (failed/terminated) predecessor for the same chat. When empty,
+	// the runtime resumes at the node recorded in the position checkpoint,
+	// falling back to the workflow's single top-level loop, then to graph entry.
+	// Must reference a node ID defined in this workflow.
+	ResumeNode string `protobuf:"bytes,13,opt,name=resume_node,json=resumeNode,proto3" json:"resume_node,omitempty"`
+	// TransitionTo optionally names a workflow ref (e.g. "builtin://agent") that
+	// the chat permanently transitions to when THIS workflow's run COMPLETES. It
+	// lets a one-shot pipeline (e.g. forge-one-shot) hand the conversation off to
+	// a plain interactive agent so the user can keep talking after the pipeline
+	// ends. Must resolve to a real workflow and must not reference this workflow
+	// itself (no self-cycle).
+	TransitionTo  string `protobuf:"bytes,14,opt,name=transition_to,json=transitionTo,proto3" json:"transition_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6270,6 +6315,20 @@ func (x *Workflow) GetDaemon() *CelDaemonSelector {
 		return x.Daemon
 	}
 	return nil
+}
+
+func (x *Workflow) GetResumeNode() string {
+	if x != nil {
+		return x.ResumeNode
+	}
+	return ""
+}
+
+func (x *Workflow) GetTransitionTo() string {
+	if x != nil {
+		return x.TransitionTo
+	}
+	return ""
 }
 
 var File_reliant_v1_workflow_v2_proto protoreflect.FileDescriptor
@@ -6454,8 +6513,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0fAskQuestionArgs\x12e\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB2\x82\xb5\x18.\n" +
 	",JSON metadata with question text and optionsR\bmetadata:u\x8a\xb5\x18q\n" +
-	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xb6\n" +
-	"\n" +
+	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\x94\v\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
 	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12P\n" +
@@ -6480,7 +6538,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vtoken_count\x18\x1b \x01(\x05B\x06\x82\xb5\x18\x02 \x01R\n" +
 	"tokenCount\x12U\n" +
 	"\x15resolved_inject_files\x18\x1c \x03(\v2\x19.reliant.v1.InjectFileMsgB\x06\x82\xb5\x18\x02 \x01R\x13resolvedInjectFiles\x12\x1a\n" +
-	"\x04cost\x18\x1d \x01(\x01B\x06\x82\xb5\x18\x02 \x01R\x04cost:c\x8a\xb5\x18_\n" +
+	"\x04cost\x18\x1d \x01(\x01B\x06\x82\xb5\x18\x02 \x01R\x04cost\x12-\n" +
+	"\x0eresolved_model\x18\x1e \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedModel\x12-\n" +
+	"\x0eresolved_agent\x18\x1f \x01(\tB\x06\x82\xb5\x18\x02 \x01R\rresolvedAgent:c\x8a\xb5\x18_\n" +
 	"\fsave_message\x12\fSave Message\x1a)Save a message to the conversation thread*\aagentic2\rMessageSquare\"\\\n" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
@@ -6763,7 +6823,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04text\x18\x03 \x01(\tR\x04text\"H\n" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xe1\x03\n" +
+	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xf7\x03\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -6777,7 +6837,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rresponse_data\x18\b \x01(\v2\x17.google.protobuf.StructR\fresponseData\x12\x12\n" +
 	"\x04cost\x18\t \x01(\x01R\x04cost\x121\n" +
 	"\x14compaction_threshold\x18\n" +
-	" \x01(\x05R\x13compactionThreshold\"\xa1\x02\n" +
+	" \x01(\x05R\x13compactionThreshold\x12\x14\n" +
+	"\x05model\x18\v \x01(\tR\x05model\"\xa1\x02\n" +
 	"\x12ExecuteToolsOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12<\n" +
 	"\ftool_results\x18\x02 \x03(\v2\x19.reliant.v1.ToolResultMsgR\vtoolResults\x12,\n" +
@@ -6873,7 +6934,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xe2\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xa8\x05\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -6887,7 +6948,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vapi_version\x18\n" +
 	" \x01(\tR\n" +
 	"apiVersion\x125\n" +
-	"\x06daemon\x18\f \x01(\v2\x1d.reliant.v1.CelDaemonSelectorR\x06daemon\x1aL\n" +
+	"\x06daemon\x18\f \x01(\v2\x1d.reliant.v1.CelDaemonSelectorR\x06daemon\x12\x1f\n" +
+	"\vresume_node\x18\r \x01(\tR\n" +
+	"resumeNode\x12#\n" +
+	"\rtransition_to\x18\x0e \x01(\tR\ftransitionTo\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +

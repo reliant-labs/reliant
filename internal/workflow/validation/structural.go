@@ -217,6 +217,30 @@ func validateStructure(wf *reliantv1.Workflow, result *Result) {
 		}
 	}
 
+	// === Resume Node References a Valid Node ===
+	// resume_node overrides the position checkpoint when a run resumes an
+	// interrupted predecessor; it must name a top-level node in this workflow.
+
+	if rn := wf.GetResumeNode(); rn != "" {
+		if _, exists := seenNodeIDs[rn]; !exists {
+			result.AddError(CategoryStructure, []string{name}, "resume_node",
+				fmt.Sprintf("references unknown node '%s'", rn))
+		}
+	}
+
+	// === transition_to Must Not Self-Reference ===
+	// transition_to names a workflow ref the chat switches to when this
+	// workflow's run completes. It must not reference this workflow itself (a
+	// self-cycle would trap the chat forever). Loadability is checked in
+	// cross-workflow validation, where the WorkflowLoader is available.
+
+	if tt := wf.GetTransitionTo(); tt != "" {
+		if tt == name || tt == "builtin://"+name {
+			result.AddError(CategoryStructure, []string{name}, "transition_to",
+				fmt.Sprintf("must not reference this workflow itself ('%s')", tt))
+		}
+	}
+
 	// === Edge Validation ===
 
 	for i, edge := range wf.GetEdges() {

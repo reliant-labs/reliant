@@ -18,7 +18,6 @@ expect:
     - impl_loop
     - impl_loop.attempt.implement
     - impl_loop.attempt.join_checks
-    - impl_loop.attempt.capture_diff
     - impl_loop.attempt.review
     - success
   not_reached:

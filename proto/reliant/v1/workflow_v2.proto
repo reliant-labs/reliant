@@ -479,6 +479,12 @@ message SaveMessageNodeArgs {
   int32 token_count = 27 [(reliant) = { hidden: true }];
   repeated InjectFileMsg resolved_inject_files = 28 [(reliant) = { hidden: true }];
   double cost = 29 [(reliant) = { hidden: true }];
+  // ResolvedModel is the concrete model that served the completion, forwarded
+  // from CallLLMOutput.model, persisted onto messages.model.
+  string resolved_model = 30 [(reliant) = { hidden: true }];
+  // ResolvedAgent is the agent/workflow identity that produced the message,
+  // persisted onto messages.agent.
+  string resolved_agent = 31 [(reliant) = { hidden: true }];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -978,6 +984,11 @@ message CallLLMOutput {
   // reads this via nodes.call_llm.compaction_threshold so tag-based model
   // selectors get the correct per-model threshold after resolution.
   int32 compaction_threshold = 10;
+  // Model is the concrete model that served this completion, captured AFTER
+  // tag/selector resolution (e.g. "claude-4.8-opus", not "tags:[flagship]").
+  // Exposed as nodes.call_llm.model so the inline save_message can persist it
+  // onto messages.model. Empty when resolution produced no definition.
+  string model = 11;
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.
@@ -1148,4 +1159,17 @@ message Workflow {
   // Can be overridden per-node. Supports string shorthand ("local"),
   // structured object ({type: "cloud"}), or CEL expression ("{{ params.daemon }}").
   CelDaemonSelector daemon = 12;
+  // ResumeNode optionally names the node to enter when a new run resumes an
+  // interrupted (failed/terminated) predecessor for the same chat. When empty,
+  // the runtime resumes at the node recorded in the position checkpoint,
+  // falling back to the workflow's single top-level loop, then to graph entry.
+  // Must reference a node ID defined in this workflow.
+  string resume_node = 13;
+  // TransitionTo optionally names a workflow ref (e.g. "builtin://agent") that
+  // the chat permanently transitions to when THIS workflow's run COMPLETES. It
+  // lets a one-shot pipeline (e.g. forge-one-shot) hand the conversation off to
+  // a plain interactive agent so the user can keep talking after the pipeline
+  // ends. Must resolve to a real workflow and must not reference this workflow
+  // itself (no self-cycle).
+  string transition_to = 14;
 }

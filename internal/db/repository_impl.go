@@ -231,12 +231,18 @@ func (r *Repo) SaveMessageToThread(ctx context.Context, chatID, thread string, r
 				return fmt.Errorf("failed to get attachment metadata for %s: %w", attachmentID, err)
 			}
 
+			// Duplicate of the switch in threads/save_message.go
+			// (createContentBlocks) — the two must accept the same set of
+			// attachment types or first-message saves diverge from
+			// follow-up saves.
 			var blockType reliantv1.ContentBlockType
 			switch att.AttachmentType {
 			case "image":
 				blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE
 			case "file_reference":
 				blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE
+			case "document":
+				blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
 			default:
 				return fmt.Errorf("invalid attachment type %q for attachment %s", att.AttachmentType, attachmentID)
 			}
@@ -1137,6 +1143,8 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	if att.LastStreamActivity.IsZero() {
 		att.LastStreamActivity = now
 	}
+	// Re-attachment resets memory telemetry: a new stream means a fresh
+	// daemon session, and readings from the previous one are stale.
 	query := `
 		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1146,7 +1154,10 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 			pod_ip = EXCLUDED.pod_ip,
 			pod_port = EXCLUDED.pod_port,
 			attached_at = EXCLUDED.attached_at,
-			last_stream_activity = EXCLUDED.last_stream_activity
+			last_stream_activity = EXCLUDED.last_stream_activity,
+			memory_used_bytes = 0,
+			memory_limit_bytes = 0,
+			memory_pressure = FALSE
 	`
 	query = r.bindQuery(query)
 	if _, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity); err != nil {
@@ -1167,6 +1178,23 @@ func (r *Repo) TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string
 	query = r.bindQuery(query)
 	if _, err := r.DB.ExecContext(ctx, query, activityAt, daemonID, activityAt); err != nil {
 		return fmt.Errorf("touching daemon attachment: %w", err)
+	}
+	return nil
+}
+
+// UpdateDaemonAttachmentMemory records the workspace memory telemetry carried
+// by a daemon heartbeat on the attachment (liveness) record. A no-op when the
+// attachment row doesn't exist — telemetry is only meaningful for a live
+// stream. It deliberately does NOT touch last_stream_activity; the lease
+// renewal stays with TouchDaemonAttachmentIfNewer.
+func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	query := `UPDATE daemon_attachment SET memory_used_bytes = ?, memory_limit_bytes = ?, memory_pressure = ? WHERE daemon_id = ?`
+	query = r.bindQuery(query)
+	if _, err := r.DB.ExecContext(ctx, query, usedBytes, limitBytes, pressure, daemonID); err != nil {
+		return fmt.Errorf("updating daemon attachment memory: %w", err)
 	}
 	return nil
 }
@@ -1201,9 +1229,13 @@ func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThresho
 	return true, nil
 }
 
+// attachmentColumns is the shared SELECT column list matching
+// listAttachments' scan order.
+const attachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure`
+
 func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
 	return r.listAttachments(ctx, `
-		SELECT daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity
+		SELECT `+attachmentColumns+`
 		FROM daemon_attachment
 		WHERE source = 'outbound'
 	`)
@@ -1212,17 +1244,33 @@ func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment
 // ListAllDaemonAttachments returns every attachment row regardless of source.
 func (r *Repo) ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
 	return r.listAttachments(ctx, `
-		SELECT daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity
+		SELECT `+attachmentColumns+`
 		FROM daemon_attachment
 	`)
 }
 
+// ListFreshDaemonAttachmentsForUser returns the user's attachment rows whose
+// last_stream_activity is within the stale threshold — the full liveness
+// records (including memory telemetry) behind ListAttachedDaemonIDsForUser's
+// id-only view.
+func (r *Repo) ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*DaemonAttachment, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	return r.listAttachments(ctx, `
+		SELECT `+attachmentColumns+`
+		FROM daemon_attachment
+		WHERE user_id = ? AND last_stream_activity > ?
+	`, userID, cutoff)
+}
+
 // listAttachments runs an attachment-shaped SELECT and scans the rows. Shared
-// by ListOutboundAttachments and ListAllDaemonAttachments so the scan logic
-// (nullable pod_ip / pod_port) lives in one place.
-func (r *Repo) listAttachments(ctx context.Context, query string) ([]*DaemonAttachment, error) {
+// by the attachment list methods so the scan logic (nullable pod_ip /
+// pod_port) lives in one place.
+func (r *Repo) listAttachments(ctx context.Context, query string, args ...any) ([]*DaemonAttachment, error) {
 	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("listing attachments: %w", err)
 	}
@@ -1236,7 +1284,7 @@ func (r *Repo) listAttachments(ctx context.Context, query string) ([]*DaemonAtta
 			podIP   sql.NullString
 			podPort sql.NullInt64
 		)
-		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity); err != nil {
+		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity, &att.MemoryUsedBytes, &att.MemoryLimitBytes, &att.MemoryPressure); err != nil {
 			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		att.Source = DaemonAttachmentSource(source)
@@ -2080,6 +2128,20 @@ func (r *Repo) SetClaudeAuthTokens(ctx context.Context, userID string, tokens Cl
 	}
 
 	return r.settings.SetClaudeAuthTokens(ctx, userID, tokens)
+}
+
+// CompareAndSwapClaudeAuthTokens persists refreshed tokens only when the
+// stored refresh token still equals expectedRefreshToken (i.e. no concurrent
+// rotation was persisted in between). Returns true when the write happened.
+func (r *Repo) CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens ClaudeAuthTokens) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user_id cannot be empty")
+	}
+	if strings.TrimSpace(tokens.AccessToken) == "" {
+		return false, fmt.Errorf("access token cannot be empty")
+	}
+
+	return r.settings.CompareAndSwapClaudeAuthTokens(ctx, userID, expectedRefreshToken, tokens)
 }
 
 func (r *Repo) DeleteClaudeAuthTokens(ctx context.Context, userID string) error {
@@ -3313,6 +3375,27 @@ func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus)
 
 func (r *Repo) ListRootWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
 	return r.workflows.ListRootWorkflowsByStatus(ctx, status)
+}
+
+// ==================== Workflow Checkpoints ====================
+// Position truth for resume-at-position: last top-level node entered (and
+// loop iteration for loop nodes) per workflow ID.
+
+func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error {
+	if checkpoint == nil {
+		return fmt.Errorf("checkpoint cannot be nil")
+	}
+	return r.workflows.UpsertWorkflowCheckpoint(ctx, checkpoint)
+}
+
+// GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
+// (nil, nil) when no checkpoint exists.
+func (r *Repo) GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error) {
+	return r.workflows.GetWorkflowCheckpoint(ctx, workflowID)
+}
+
+func (r *Repo) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
+	return r.workflows.DeleteWorkflowCheckpoint(ctx, workflowID)
 }
 
 // UpdateWorkflowWorkerStarted records when a worker was started for a workflow.

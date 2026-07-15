@@ -24,6 +24,7 @@ import { useWorkflowExecutions } from "../../../hooks/useWorkflowExecutions";
 import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { cn } from "../../../lib/utils";
+import { compareMessagesWithinThread } from "../../../lib/messageOrder";
 
 const MAX_PREVIEW_MESSAGES = 10;
 const MAX_TEXT_LENGTH = 150;
@@ -163,15 +164,12 @@ function SpawnPreview({ ctx }: ToolContentProps) {
 
   const summaries = useMemo((): MessageSummary[] => {
     if (!spawnThreadId) return [];
-    // chatStore keeps messages newest-first; reorder oldest-first so the
-    // preview reads top-to-bottom in chronological order.
+    // Canonical per-thread order (ordinal) so the preview reads
+    // top-to-bottom in conversation order.
     const threadMsgs = allMessages
       .filter((msg) => msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT)
       .slice()
-      .sort(
-        (a, b) =>
-          new Date(a.createdAt || "").getTime() - new Date(b.createdAt || "").getTime(),
-      );
+      .sort(compareMessagesWithinThread);
 
     // When complete, pop the last (most recent) message - it's the result shown in tool output
     const msgs = isDone && threadMsgs.length > 1

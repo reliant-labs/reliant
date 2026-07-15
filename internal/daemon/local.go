@@ -15,11 +15,22 @@ import (
 	"time"
 
 	"github.com/pmezard/go-difflib/difflib"
+	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/pdfutil"
 )
+
+// localMemReader reads the workspace cgroup's memory accounting for
+// OOM-kill attribution and victim steering. LocalClient is the exec path for
+// LLM tool calls executed ON the daemon (the daemon runtime hands its local
+// executor a LocalClient), so on cloud workspace daemons this is the primary
+// place heavy commands like docker builds run. Inert on hosts without cgroup
+// v2 memory files (macOS, uncontained local daemons).
+var localMemReader = cgroupmem.NewReader(cgroupmem.DefaultRoot)
 
 // Compile-time check that LocalClient implements Client.
 var _ Client = (*LocalClient)(nil)
@@ -795,12 +806,29 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
+	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
+	// command's lifetime can be attributed to the kernel OOM killer.
+	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
+	oomSnap := localMemReader.SnapshotOOMKills()
+
 	start := time.Now()
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		// Steer the kernel OOM killer toward the workload (and descendants,
+		// which inherit the score) rather than the daemon. No-op outside
+		// Linux; best-effort everywhere.
+		if cmd.Process != nil {
+			if adjErr := osutil.AdjustChildOOMScore(cmd.Process.Pid); adjErr != nil {
+				logging.Debug("Failed to adjust command oom_score_adj", "pid", cmd.Process.Pid, "error", adjErr)
+			}
+		}
+		err = cmd.Wait()
+	}
 	duration := time.Since(start)
 
 	exitCode := 0
 	timedOut := false
+	oomKilled := false
 	if err != nil {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			timedOut = true
@@ -811,6 +839,20 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 			exitCode = 124 // standard timeout exit code
 		} else {
 			exitCode = 1
+		}
+		// A SIGKILL-shaped failure (exit -1: shell itself killed; exit 137:
+		// shell reports a killed child) that coincides with an oom_kill in
+		// the container cgroup gets the structured out-of-memory explanation
+		// appended to stderr, so the LLM tool result and user RPC consumers
+		// both see actionable text. Timeouts keep precedence.
+		if !timedOut {
+			if oom, msg := localMemReader.CheckOOMKill(exitCode, oomSnap); oom {
+				oomKilled = true
+				if stderrBuf.Len() > 0 {
+					stderrBuf.WriteByte('\n')
+				}
+				stderrBuf.WriteString(msg)
+			}
 		}
 	}
 
@@ -831,6 +873,7 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		Combined:   combined,
 		DurationMs: duration.Milliseconds(),
 		TimedOut:   timedOut,
+		OOMKilled:  oomKilled,
 	}, nil
 }
 
@@ -957,6 +1000,8 @@ func (c *LocalClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error)
 
 	result := make([]*ProcessInfo, 0, len(all))
 	for _, p := range all {
+		// DaemonID stays empty: a LocalClient runs the process on the user's
+		// own machine, so its loopback is directly reachable and needs no proxy.
 		result = append(result, &ProcessInfo{
 			ID:        p.ID,
 			Command:   p.Command,
@@ -964,7 +1009,26 @@ func (c *LocalClient) ListProcesses(ctx context.Context) ([]*ProcessInfo, error)
 			ExitCode:  p.ExitCode,
 			StartTime: p.StartTime,
 			EndTime:   p.EndTime,
+			Ports:     shellPortsToDaemon(p.Ports),
 		})
 	}
 	return result, nil
+}
+
+// shellPortsToDaemon converts the shell package's PortInfo (internal process
+// manager representation) to the daemon wire type.
+func shellPortsToDaemon(ports []shell.PortInfo) []PortInfo {
+	if len(ports) == 0 {
+		return nil
+	}
+	out := make([]PortInfo, len(ports))
+	for i, p := range ports {
+		out[i] = PortInfo{
+			Port:     p.Port,
+			Protocol: p.Protocol,
+			State:    p.State,
+			Address:  p.Address,
+		}
+	}
+	return out
 }

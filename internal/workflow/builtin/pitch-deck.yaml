@@ -37,8 +37,10 @@ inputs:
 
   website_url:
     type: string
-    required: true
-    description: Company website URL (e.g. https://reliantlabs.io)
+    default: ""
+    description: |
+      Company website URL (e.g. https://reliantlabs.io). Optional — if omitted, the
+      pipeline reads it from your request, and asks you for it only if it can't find one.
 
   deck_purpose:
     type: enum
@@ -94,13 +96,11 @@ nodes:
       - id: scrape_website
         description: "Start from scratch — scrape the company website for content and brand identity before doing any research."
       - id: research_competitors
-        description: "Website content is available — skip to competitive and market research phase."
+        description: "Website content is available — skip to the competitive and market research phase (runs both research tracks)."
       - id: founder_interview
         description: "Research is done — skip to the founder interview for narrative direction and missing context."
       - id: plan_deck
-        description: "Research and interview complete — skip to planning the deck narrative arc and slide specifications."
-      - id: slide_pipeline
-        description: "Deck plan exists — skip to writing individual slides from the specifications."
+        description: "Research and interview complete — skip to planning the deck narrative arc and writing the slides. Also the right entry when slide specs need (re)generating: the slide pipeline consumes the plan produced in this run."
       - id: slides_loop
         description: "Slides are written — skip to the visual build and review loop (build, screenshot, review cycle)."
     fallback: scrape_website
@@ -117,7 +117,7 @@ nodes:
     presets:
       default: researcher
     args:
-      tools: "{{inputs.tools}}"
+      tools: "{{inputs.tools + ['ask_user']}}"
       model: "{{inputs.model}}"
       mode: auto
       system_prompt: |
@@ -126,11 +126,14 @@ nodes:
         website.
 
         ## AUTONOMOUS EXECUTION
-        You are running inside an automated pipeline. Do NOT wait for user input.
-        Make your best judgment at every decision point and proceed.
+        You are running inside an automated pipeline. Once you know which website to
+        analyze, do NOT wait for user input — make your best judgment at every decision
+        point and proceed.
 
-        ## Website to Analyze
-        {{inputs.website_url}}
+        ## Which Website to Analyze
+        {{inputs.website_url != '' ?
+          'Analyze this company website: ' + inputs.website_url :
+          'No website URL was set as a parameter. Find the company website in the request above. If the request has no usable URL, call the ask_user tool ONCE to ask for the company website URL before going further. Never guess or invent a URL.'}}
 
         ## Page Discovery Strategy
         1. Fetch the homepage first
@@ -231,11 +234,14 @@ nodes:
 
         Be skeptical on content. Be precise on brand.
     thread:
-      mode: new
+      mode: fork
+      memo: true
       inject:
         role: user
         content: |
-          Analyze the company website at {{inputs.website_url}} and extract both content claims and brand identity.
+          {{inputs.website_url != '' ?
+            'Analyze the company website at ' + inputs.website_url + ' and extract both content claims and brand identity.' :
+            'Analyze the company website for this pitch deck and extract both content claims and brand identity. Determine the URL from my request above; if it is not there, use the ask_user tool to ask me for it first.'}}
           {{inputs.existing_deck_dir != '' ? 'Also read the existing pitch deck at ' + inputs.existing_deck_dir + ' and assess what to keep vs rewrite.' : ''}}
     save_message:
       role: assistant
@@ -355,7 +361,7 @@ nodes:
           ## Phase 2a: Competitive Research
 
           Research the competitive landscape for this company:
-          {{nodes.scrape_website.response_text}}
+          {{has(nodes.scrape_website) && has(nodes.scrape_website.response_text) ? nodes.scrape_website.response_text : '(The website scrape phase did not run this session. Read pitch-deck-content/phase-1-scrape/ if it exists, and use the company context from the conversation above.)'}}
     save_message:
       role: assistant
       content: |
@@ -476,7 +482,7 @@ nodes:
           ## Phase 2b: Market Research
 
           Research market sizing and comparable raises for this company:
-          {{nodes.scrape_website.response_text}}
+          {{has(nodes.scrape_website) && has(nodes.scrape_website.response_text) ? nodes.scrape_website.response_text : '(The website scrape phase did not run this session. Read pitch-deck-content/phase-1-scrape/ if it exists, and use the company context from the conversation above.)'}}
     save_message:
       role: assistant
       content: |
@@ -505,6 +511,13 @@ nodes:
         You are preparing a {{inputs.deck_purpose}} investor pitch deck. You've already analyzed
         the company website and researched the market. Now you need the founder to fill in
         what's missing.
+
+        ## Confirm the Deck Purpose
+        "{{inputs.deck_purpose}}" is a starting assumption, not a fact. As the founder answers —
+        especially on fundraising stage, amount, and audience — judge whether that framing still
+        fits. If their reality points to a different stage or audience (e.g. they're actually
+        pre-seed, or this is really a partnership deck), adopt the corrected purpose and record it
+        in the brief. Don't force the answers to fit the assumed purpose.
 
         ## Rules
         - Ask all questions in ONE message — do not drip them out one at a time
@@ -554,6 +567,10 @@ nodes:
         Synthesize everything into a clean brief. Write to
         `pitch-deck-content/phase-3-interview/founder-brief.md`:
 
+        ## Deck Purpose (confirmed)
+        [The stage/audience you're now targeting — either the assumed "{{inputs.deck_purpose}}"
+        confirmed, or a corrected one with a one-line reason.]
+
         ## Elevator Pitch
         [The 30-second version in the founder's own words]
 
@@ -597,13 +614,13 @@ nodes:
           You have this research:
 
           WEBSITE ANALYSIS:
-          {{nodes.scrape_website.response_text}}
+          {{has(nodes.scrape_website) && has(nodes.scrape_website.response_text) ? nodes.scrape_website.response_text : '(Not run this session — read pitch-deck-content/phase-1-scrape/ if it exists.)'}}
 
           COMPETITIVE LANDSCAPE:
-          {{nodes.research_competitors.response_text}}
+          {{has(nodes.research_competitors) && has(nodes.research_competitors.response_text) ? nodes.research_competitors.response_text : '(Not run this session — read pitch-deck-content/phase-2-research/competitive-landscape.md if it exists.)'}}
 
           MARKET RESEARCH:
-          {{nodes.research_market.response_text}}
+          {{has(nodes.research_market) && has(nodes.research_market.response_text) ? nodes.research_market.response_text : '(Not run this session — read pitch-deck-content/phase-2-research/market-sizing.md if it exists.)'}}
 
           Ask me the questions you need answered to build a credible pitch deck.
     save_message:
@@ -691,6 +708,10 @@ nodes:
         You combine the storytelling instincts of a documentary filmmaker with the analytical
         rigor of a VC partner. Your job is to plan the narrative arc and slide structure for
         a {{inputs.deck_purpose}} pitch deck.
+
+        Treat {{inputs.deck_purpose}} as the default framing, but if the founder brief records a
+        different confirmed deck purpose, follow the brief — it reflects the founder's actual stage
+        and audience. Match the narrative arc, slide count, and tone to the confirmed purpose.
 
         ## AUTONOMOUS EXECUTION
         You are running inside an automated pipeline. Do NOT wait for user input.
@@ -814,16 +835,16 @@ nodes:
           Read ALL research files in pitch-deck-content/ and plan a {{inputs.deck_purpose}} pitch deck.
 
           WEBSITE ANALYSIS:
-          {{nodes.scrape_website.response_text}}
+          {{has(nodes.scrape_website) && has(nodes.scrape_website.response_text) ? nodes.scrape_website.response_text : '(Not run this session — read pitch-deck-content/phase-1-scrape/ if it exists.)'}}
 
           COMPETITIVE LANDSCAPE:
-          {{nodes.research_competitors.response_text}}
+          {{has(nodes.research_competitors) && has(nodes.research_competitors.response_text) ? nodes.research_competitors.response_text : '(Not run this session — read pitch-deck-content/phase-2-research/competitive-landscape.md if it exists.)'}}
 
           MARKET RESEARCH:
-          {{nodes.research_market.response_text}}
+          {{has(nodes.research_market) && has(nodes.research_market.response_text) ? nodes.research_market.response_text : '(Not run this session — read pitch-deck-content/phase-2-research/market-sizing.md if it exists.)'}}
 
           FOUNDER BRIEF:
-          {{nodes.founder_interview.response_text}}
+          {{has(nodes.founder_interview) && has(nodes.founder_interview.response_text) ? nodes.founder_interview.response_text : '(Not run this session — read pitch-deck-content/phase-3-interview/founder-brief.md if it exists.)'}}
     save_message:
       role: assistant
       content: |
@@ -1048,6 +1069,10 @@ nodes:
               You are running inside an automated pipeline. Do NOT wait for user input.
 
               ## Before Writing Any Code
+              Load the design discipline first: run `reliant forge skill load frontend/design`
+              and follow it for all slide UI — declared type/color system, scale floors, no
+              hand-drawn SVGs. If the `reliant` CLI is unavailable here, continue without it.
+
               Read these files first:
               1. `pitch-deck-content/phase-1-scrape/brand-identity.md` — The company's colors,
                  fonts, and visual language. The slides MUST use these, not arbitrary values.
@@ -1456,7 +1481,7 @@ nodes:
         - **React slides**: {{inputs.pitch_deck_dir}}/
 
         ### Pipeline Summary
-        1. Scraped and analyzed {{inputs.website_url}}
+        1. Scraped and analyzed {{inputs.website_url != '' ? inputs.website_url : 'the company website'}}
         2. Researched competitors and market sizing (with real sources)
         3. Interviewed founder to fill in the gaps
         4. Planned deck and wrote slides in parallel
@@ -1483,6 +1508,15 @@ nodes:
         - Practice the speaker notes out loud — edit anything that doesn't sound like you
 
 edges:
+  # Router: entering at the research phase must start BOTH parallel research
+  # tracks — research_done is an "all" join and would deadlock forever if the
+  # router dispatched to research_competitors alone.
+  - from: classify
+    cases:
+      - condition: nodes.classify.selected_node == 'research_competitors'
+        to: [research_competitors, research_market]
+        label: "research_phase"
+
   # Phase 1: Scrape
   - from: scrape_website
     default: research_competitors

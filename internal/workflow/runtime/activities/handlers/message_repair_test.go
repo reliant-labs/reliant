@@ -94,7 +94,7 @@ func TestRepairMessageHistory_WithOrphanedToolCalls(t *testing.T) {
 	for _, tr := range toolResults {
 		resultIDs[tr.ToolCallID] = true
 		require.True(t, tr.IsError)
-		require.Contains(t, tr.Content, "cancelled")
+		require.Contains(t, tr.Content, "interrupted")
 	}
 	require.True(t, resultIDs["tc-1"])
 	require.True(t, resultIDs["tc-2"])
@@ -162,7 +162,7 @@ func TestRepairMessageHistory_PartialResults(t *testing.T) {
 
 	require.NotNil(t, tc2Result)
 	require.True(t, tc2Result.IsError) // Synthetic error
-	require.Contains(t, tc2Result.Content, "cancelled")
+	require.Contains(t, tc2Result.Content, "interrupted")
 }
 
 // TestRepairMessageHistory_MultipleAssistantMessages verifies repair
@@ -482,4 +482,56 @@ func TestRepairMessageHistory_NoToolCalls(t *testing.T) {
 	require.Len(t, result, 2)
 	require.Equal(t, "msg-1", result[0].ID)
 	require.Equal(t, "msg-2", result[1].ID)
+}
+
+// TestRepairMessageHistory_ResumeAfterKilledRun pins the resume-at-position
+// contract: a run killed mid-tool-execution leaves a dangling tool_use at the
+// TAIL of the thread. Before the resumed run's first LLM call, the repair pass
+// must synthesize stub tool_results that tell the model the outcome is UNKNOWN
+// (not merely "cancelled") so it verifies side effects before re-running.
+func TestRepairMessageHistory_ResumeAfterKilledRun(t *testing.T) {
+	msgs := []message.Message{
+		{
+			ID:   "msg-1",
+			Role: message.User,
+			Parts: []message.ContentPart{
+				message.TextContent{Text: "Deploy the service"},
+			},
+		},
+		{
+			ID:   "msg-2",
+			Role: message.Assistant,
+			Parts: []message.ContentPart{
+				message.TextContent{Text: "Deploying now."},
+				message.ToolCall{ID: "tc-deploy", Name: "bash", Input: `{"command": "deploy.sh"}`},
+			},
+		},
+		// Run terminated here: no tool_result was ever recorded.
+		{
+			ID:   "msg-3",
+			Role: message.User,
+			Parts: []message.ContentPart{
+				message.TextContent{Text: "continue"},
+			},
+		},
+	}
+
+	result := repairMessageHistory(msgs)
+
+	// The stub must be inserted immediately after the assistant tool_use.
+	require.Len(t, result, 4)
+	stub := result[2]
+	require.Equal(t, message.Tool, stub.Role)
+	toolResults := stub.ToolResults()
+	require.Len(t, toolResults, 1)
+	require.Equal(t, "tc-deploy", toolResults[0].ToolCallID)
+	require.True(t, toolResults[0].IsError)
+	require.Equal(t, InterruptedToolResultContent, toolResults[0].Content)
+	// Wording contract: interrupted + outcome unknown + verify before re-run.
+	require.Contains(t, toolResults[0].Content, "interrupted")
+	require.Contains(t, toolResults[0].Content, "outcome unknown")
+	require.Contains(t, toolResults[0].Content, "verify")
+
+	// The user's resume message stays the final turn.
+	require.Equal(t, "msg-3", result[3].ID)
 }

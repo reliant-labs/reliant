@@ -22,6 +22,19 @@ type Workflow struct {
 	WorkerStoppedAt *time.Time     `json:"worker_stopped_at,omitempty"`
 }
 
+// WorkflowCheckpoint records the position a workflow run has reached: the last
+// top-level node it entered and, for loop nodes, the loop iteration in flight.
+// It is the position truth used to resume an interrupted (failed/terminated)
+// run at position when the next user message starts a fresh Temporal run.
+// One row per workflow ID (workflow IDs are reused across runs for a chat).
+type WorkflowCheckpoint struct {
+	WorkflowID    string    `json:"workflow_id"`
+	ChatID        string    `json:"chat_id"`
+	NodeID        string    `json:"node_id"`
+	LoopIteration int64     `json:"loop_iteration"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
 // StepExecution represents a single execution of a workflow step.
 type StepExecution struct {
 	ID            string         `json:"id"`
@@ -58,6 +71,12 @@ type WorkflowStore interface {
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
 	UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error
 	UpdateWorkflowWorkerStopped(ctx context.Context, workflowID string) error
+
+	// Position checkpoints (resume-at-position support).
+	// GetWorkflowCheckpoint returns (nil, nil) when no checkpoint exists.
+	UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error
+	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error)
+	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 
 	CreateStepExecution(ctx context.Context, exec *StepExecution) error
 	GetStepExecution(ctx context.Context, id string) (*StepExecution, error)

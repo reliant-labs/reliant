@@ -173,6 +173,54 @@ describe("globalUpdatesStore cache patching", () => {
     ).toBe("New Title");
   });
 
+  it("CHAT_TITLE_CHANGED also updates the Zustand chats map", () => {
+    // The Zustand map is read by ChatInput/useActiveChat — leaving it stale
+    // while patching only the React Query caches splits the source of truth.
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        update_type: UserUpdateType.CHAT_TITLE_CHANGED,
+        data: { title: "New Title", previous_title: "Old" },
+      }),
+    ]);
+
+    expect(useChatStore.getState().chats.get("c1")!.title).toBe("New Title");
+  });
+
+  it("CHAT_ACTIVITY_CHANGED → IDLE clears leftover streaming state for the chat", () => {
+    // The activity-IDLE event is persisted and gap-protected, making it the
+    // authoritative "nothing is streaming anymore" signal. Any streaming
+    // placeholder still around at that point is a stale tail (deltas race
+    // message finalization on a separate channel server-side) and would
+    // otherwise render at the end of the chat until a page refresh.
+    const phantom = {
+      id: "streaming-temp-c1",
+      chatId: "c1",
+      role: 2,
+      contentBlocks: [],
+      createdAt: now,
+      updatedAt: now,
+      thread: "",
+      ordinal: BigInt(999999),
+      sequenceNumber: BigInt(0),
+      attachments: [],
+    } as never;
+    useChatStore.setState({
+      messages: { c1: [phantom] },
+      streamingMessages: { c1: { c1: phantom } },
+    });
+
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        update_type: UserUpdateType.CHAT_ACTIVITY_CHANGED,
+        data: { chat_id: "c1", activity: 0, timestamp: now },
+      }),
+    ]);
+
+    const state = useChatStore.getState();
+    expect(state.messages["c1"] || []).toHaveLength(0);
+    expect(state.streamingMessages["c1"]).toBeUndefined();
+  });
+
   it("CHAT_DELETED removes the chat from the list envelope, detail cache, and Zustand map", () => {
     useGlobalUpdatesStore.getState().handleUpdate([
       buildUpdate({

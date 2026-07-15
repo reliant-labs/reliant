@@ -40,6 +40,7 @@ func validateInlineWorkflowCELWithCompilation(wf *reliantv1.Workflow, basePath [
 		return
 	}
 	typeCtx.LenientInputs = true
+	typeCtx.GuaranteedBefore = computeGuaranteedBefore(wf)
 
 	// Create schema type checker for AST-based type validation
 	schemaTypeChecker := NewSchemaTypeCheckerFromProto(wf)
@@ -93,6 +94,8 @@ func validateInlineWorkflowCELWithCompilation(wf *reliantv1.Workflow, basePath [
 		expr = rewriteNodesAccess(expr, nodeIDs)
 		validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
 		warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
+		// Node conditions evaluate before the node runs
+		warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: node.GetId()}, typeCtx, result)
 		celAst, issues := env.Compile(expr)
 		if celAst != nil && (issues == nil || issues.Err() == nil) {
 			validateConditionReturnType(celAst, origExpr, path, result)
@@ -113,6 +116,8 @@ func validateInlineWorkflowCELWithCompilation(wf *reliantv1.Workflow, basePath [
 			expr = rewriteNodesAccess(expr, nodeIDs)
 			validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
 			warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
+			// Edge conditions evaluate after the source node completes
+			warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: edge.GetFrom(), afterNode: true}, typeCtx, result)
 			celAst, issues := env.Compile(expr)
 			if celAst != nil && (issues == nil || issues.Err() == nil) {
 				validateConditionReturnType(celAst, origExpr, path, result)
@@ -136,6 +141,10 @@ func validateInlineWorkflowCELWithCompilation(wf *reliantv1.Workflow, basePath [
 		expr = rewriteNodesAccess(expr, nodeIDs)
 		validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
 		warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
+		celAst, issues := env.Compile(expr)
+		if celAst != nil && (issues == nil || issues.Err() == nil) {
+			validateOutputNotAlwaysNull(celAst, origExpr, path, result)
+		}
 	}
 }
 
@@ -1567,6 +1576,12 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 	// Build type context from proto
 	typeCtx := BuildWorkflowTypeContext(wf, loader)
 
+	// Execution-order analysis: which nodes are guaranteed to have run before
+	// each node. Enables ordering validation of nodes.<id> references.
+	if typeCtx != nil {
+		typeCtx.GuaranteedBefore = computeGuaranteedBefore(wf)
+	}
+
 	// Create schema type checker for AST-based type validation
 	schemaTypeChecker := NewSchemaTypeCheckerFromProto(wf)
 
@@ -1620,6 +1635,8 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 		expr = rewriteNodesAccess(expr, nodeIDs)
 		validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
 		warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
+		// Node conditions evaluate before the node runs
+		warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: node.GetId()}, typeCtx, result)
 		celAst, issues := env.Compile(expr)
 		if celAst != nil && (issues == nil || issues.Err() == nil) {
 			validateConditionReturnType(celAst, origExpr, path, result)
@@ -1640,6 +1657,8 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 			expr = rewriteNodesAccess(expr, nodeIDs)
 			validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
 			warnConditionalNodeAccessCompiled(origExpr, path, typeCtx, result)
+			// Edge conditions evaluate after the source node completes
+			warnNodeOrderingCompiled(origExpr, path, &nodeOrderScope{nodeID: edge.GetFrom(), afterNode: true}, typeCtx, result)
 			celAst, issues := env.Compile(expr)
 			if celAst != nil && (issues == nil || issues.Err() == nil) {
 				validateConditionReturnType(celAst, origExpr, path, result)
@@ -1687,6 +1706,10 @@ func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader W
 			origExpr := origExprs[name]
 			validateCELExpressionWithCompilationAndSchema(origExpr, expr, path, env, schemaTypeChecker, typeCtx, result)
 			warnConditionalNodeAccessCompiled(strippedExprs[name], path, typeCtx, result)
+			celAst, issues := env.Compile(expr)
+			if celAst != nil && (issues == nil || issues.Err() == nil) {
+				validateOutputNotAlwaysNull(celAst, origExpr, path, result)
+			}
 		}
 
 		inferredTypes, inferErrors := inferOutputTypes(outputExprs, env)
@@ -1728,6 +1751,11 @@ func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []
 		return
 	}
 
+	// Ordering scopes: config/inject evaluate before the node runs;
+	// save_message evaluates after the node completes.
+	startScope := &nodeOrderScope{nodeID: node.GetId()}
+	afterScope := &nodeOrderScope{nodeID: node.GetId(), afterNode: true}
+
 	// Validate save_message expressions with node-specific typed output
 	if sm := node.GetSaveMessage(); sm != nil {
 		nodeType := node.GetType()
@@ -1736,32 +1764,35 @@ func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []
 		if err != nil {
 			saveMessageEnv = env
 		}
-		validateProtoSaveMessageTemplatesWithCompilation(sm, append(basePath, "save_message"), saveMessageEnv, schemaTypeChecker, nodeIDs, typeCtx, result)
+		validateProtoSaveMessageTemplatesWithCompilation(sm, append(basePath, "save_message"), saveMessageEnv, schemaTypeChecker, nodeIDs, typeCtx, afterScope, result)
 	}
 
 	// Validate loop while conditions
 	if loopArgs := node.GetLoop(); loopArgs != nil && model.DirectCelIsSet(loopArgs.GetWhile()) {
 		validateLoopWhileCondition(loopArgs, append(basePath, "while"), result)
+		// While conditions can reference parent-scope nodes (evaluated between
+		// iterations, before the loop node completes).
+		warnNodeOrderingCompiled(model.DirectCelExpr(loopArgs.GetWhile()), append(basePath, "while"), startScope, typeCtx, result)
 	}
 
 	// Validate thread inject expressions (thread is on SubWorkflowArgs only)
 	if thread := model.NodeThreadConfig(node); thread != nil {
 		if inject := thread.GetInject(); inject != nil {
 			if model.CelStringIsSet(inject.GetContent()) {
-				validateCELTemplateStringWithCompilation(celString(inject.GetContent()), append(basePath, "thread", "inject", "content"), env, schemaTypeChecker, nodeIDs, typeCtx, result)
+				validateCELTemplateStringWithCompilation(celString(inject.GetContent()), append(basePath, "thread", "inject", "content"), env, schemaTypeChecker, nodeIDs, typeCtx, startScope, result)
 			}
 			if model.CelStringIsSet(inject.GetLegacyAttachments()) {
-				validateCELTemplateStringWithCompilation(celString(inject.GetLegacyAttachments()), append(basePath, "thread", "inject", "attachments"), env, schemaTypeChecker, nodeIDs, typeCtx, result)
+				validateCELTemplateStringWithCompilation(celString(inject.GetLegacyAttachments()), append(basePath, "thread", "inject", "attachments"), env, schemaTypeChecker, nodeIDs, typeCtx, startScope, result)
 			}
 		}
 	}
 
 	// Validate node-specific templates by walking proto fields explicitly
-	validateProtoNodeFieldTemplatesWithCompilation(node, basePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, result)
+	validateProtoNodeFieldTemplatesWithCompilation(node, basePath, env, schemaTypeChecker, nodeIDs, typeCtx, wf, startScope, result)
 }
 
 // validateProtoSaveMessageTemplatesWithCompilation validates save_message templates from proto.
-func validateProtoSaveMessageTemplatesWithCompilation(sm *reliantv1.SaveMessageConfig, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, result *Result) {
+func validateProtoSaveMessageTemplatesWithCompilation(sm *reliantv1.SaveMessageConfig, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, orderScope *nodeOrderScope, result *Result) {
 	fields := map[string]string{
 		"role":         model.CelStringRaw(sm.GetRole()),
 		"content":      model.CelStringRaw(sm.GetContent()),
@@ -1775,7 +1806,7 @@ func validateProtoSaveMessageTemplatesWithCompilation(sm *reliantv1.SaveMessageC
 			continue
 		}
 		if containsTemplate(value) {
-			validateCELTemplateStringWithCompilation(value, append(basePath, fieldName), env, schemaTypeChecker, nodeIDs, typeCtx, result)
+			validateCELTemplateStringWithCompilation(value, append(basePath, fieldName), env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
 			// Validate return type for save_message fields
 			validateSaveMessageFieldReturnType(fieldName, value, append(basePath, fieldName), env, nodeIDs, result)
 		} else if isSaveMessageListField(fieldName) {
@@ -2007,7 +2038,7 @@ func getSaveMessageTypeSuggestion(fieldName, actualType string) string {
 
 // validateProtoNodeFieldTemplatesWithCompilation walks a proto node's fields to find
 // and validate CEL templates with compilation. Replaces the old reflection-based approach.
-func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, wf *reliantv1.Workflow, result *Result) {
+func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePath []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, wf *reliantv1.Workflow, orderScope *nodeOrderScope, result *Result) {
 	if node == nil {
 		return
 	}
@@ -2016,14 +2047,14 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 	validateCS := func(c *reliantv1.CelString, fieldPath []string) {
 		raw := model.CelStringRaw(c)
 		if raw != "" && containsTemplate(raw) {
-			validateCELTemplateStringWithCompilation(raw, fieldPath, env, schemaTypeChecker, nodeIDs, typeCtx, result)
+			validateCELTemplateStringWithCompilation(raw, fieldPath, env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
 		}
 	}
 
 	// Helper to validate a plain string that may contain templates
 	validateStr := func(s string, fieldPath []string) {
 		if s != "" && containsTemplate(s) {
-			validateCELTemplateStringWithCompilation(s, fieldPath, env, schemaTypeChecker, nodeIDs, typeCtx, result)
+			validateCELTemplateStringWithCompilation(s, fieldPath, env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
 		}
 	}
 
@@ -2047,13 +2078,17 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 		validateCS(args.GetCommand(), append(basePath, "command"))
 		validateCS(args.GetWorkDir(), append(basePath, "work_dir"))
 
+	case node.GetRouter() != nil:
+		args := node.GetRouter()
+		validateCS(args.GetSystemPrompt(), append(basePath, "system_prompt"))
+
 	case node.GetWorkflow() != nil:
 		args := node.GetWorkflow()
 		validateCS(args.GetRef(), append(basePath, "ref"))
 		for key, val := range args.GetArgs() {
 			if val != nil {
 				if s := val.GetStringValue(); s != "" && containsTemplate(s) {
-					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), env, schemaTypeChecker, nodeIDs, typeCtx, result)
+					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), env, schemaTypeChecker, nodeIDs, typeCtx, orderScope, result)
 				}
 			}
 		}
@@ -2064,6 +2099,8 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 	case node.GetLoop() != nil:
 		args := node.GetLoop()
 		validateCS(args.GetRef(), append(basePath, "ref"))
+		validateCS(args.GetItems(), append(basePath, "items"))
+		validateStr(args.GetKey(), append(basePath, "key"))
 
 		// Try to infer iter.item type from the items expression for loop args validation.
 		// This enables compile-time validation of iter.item.<field> access.
@@ -2083,6 +2120,7 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 				NodesWithExtendedOutputs: typeCtx.NodesWithExtendedOutputs,
 				LenientInputs:            typeCtx.LenientInputs,
 				IterItemFields:           itemFields,
+				GuaranteedBefore:         typeCtx.GuaranteedBefore,
 			}
 			if typedEnv, err := newValidationCELEnv([]wfcel.CELNamespace{
 				wfcel.CELInputs,
@@ -2099,7 +2137,7 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 		for key, val := range args.GetArgs() {
 			if val != nil {
 				if s := val.GetStringValue(); s != "" && containsTemplate(s) {
-					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), loopEnv, schemaTypeChecker, nodeIDs, loopTypeCtx, result)
+					validateCELTemplateStringWithCompilation(s, append(basePath, "args", key), loopEnv, schemaTypeChecker, nodeIDs, loopTypeCtx, orderScope, result)
 				}
 			}
 		}
@@ -2122,7 +2160,8 @@ func validateProtoNodeFieldTemplatesWithCompilation(node *reliantv1.Node, basePa
 }
 
 // validateCELTemplateStringWithCompilation validates a string that may contain {{...}} templates.
-func validateCELTemplateStringWithCompilation(input string, path []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, result *Result) {
+// orderScope (optional) enables execution-order validation of nodes.<id> references.
+func validateCELTemplateStringWithCompilation(input string, path []string, env *cel.Env, schemaTypeChecker *SchemaTypeChecker, nodeIDs []string, typeCtx *WorkflowTypeContext, orderScope *nodeOrderScope, result *Result) {
 	if input == "" {
 		return
 	}
@@ -2148,6 +2187,9 @@ func validateCELTemplateStringWithCompilation(input string, path []string, env *
 
 		// Warn about unsafe access to conditional node outputs
 		warnConditionalNodeAccessCompiled(expr, path, typeCtx, result)
+
+		// Validate execution ordering of nodes.<id> references
+		warnNodeOrderingCompiled(expr, path, orderScope, typeCtx, result)
 	}
 }
 
@@ -2202,6 +2244,40 @@ func validateConditionReturnType(celAst *cel.Ast, origExpr string, path []string
 			Path:       path,
 			Message:    fmt.Sprintf("condition must return bool, but expression returns '%s'", typeStr),
 			Suggestion: suggestion,
+		})
+	}
+}
+
+// validateOutputNotAlwaysNull flags output expressions whose static CEL type is
+// exactly null_type — i.e. the expression can never produce anything but null
+// (a literal `null`, or a ternary where every branch is null).
+//
+// Why a warning and not an error: null outputs are LEGAL and fully representable
+// at runtime — CEL null is normalized to Go nil (wfcel.ConvertToNative) and
+// structpb natively represents nil as NullValue, so an output expression that
+// yields null at runtime (e.g. `cond ? nodes.x.field : null`) works end-to-end.
+// Such conditionally-null expressions type as dyn or the branch type, never as
+// null_type, so they are NOT flagged here. Only an always-null expression is
+// statically detectable, and it is almost certainly a workflow-authoring mistake.
+// Proving nullability of dyn expressions statically is impossible; the runtime
+// null normalization is the actual guarantee against null-related failures.
+func validateOutputNotAlwaysNull(celAst *cel.Ast, origExpr string, path []string, result *Result) {
+	if celAst == nil {
+		return
+	}
+
+	outputType := celAst.OutputType()
+	if outputType == nil {
+		return
+	}
+
+	if outputType == types.NullType || outputType.String() == "null_type" {
+		result.Add(&Error{
+			Severity:   SeverityWarning,
+			Category:   CategoryCELSemantic,
+			Path:       path,
+			Message:    fmt.Sprintf("output expression is always null: '%s' — likely a mistake", origExpr),
+			Suggestion: "reference a node output or input, or remove this output if it is not needed",
 		})
 	}
 }

@@ -40,4 +40,3 @@ expect:
     - agent_loop.approval
     - agent_loop.execute_tools
     - agent_loop.compact
-    - max_turns_notification

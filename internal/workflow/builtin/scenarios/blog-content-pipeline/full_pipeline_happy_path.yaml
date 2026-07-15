@@ -1,15 +1,12 @@
 # Full pipeline happy path: all phases reached in order from topic_discovery to complete
 #
 # Tests that all nodes are reached when running the full pipeline.
-# Covers: context_intake → classify → topic_discovery → research_brief → writing → copyedit
-#   → [da_content, da_style] → da_reviews_done → evaluation → visual_generation
-#   → distribution → deai_prep → deai_loop → reddit_summary → validate_artifacts → complete
+# Covers: context_intake → classify → topic_discovery → research_brief → writing
+#   → evaluation → visual_generation → distribution → de_ai → reddit_summary
+#   → validate_artifacts → complete
 
 name: full_pipeline_happy_path
 description: All phases reached in order from context_intake to complete
-
-inputs:
-  yield: false
 
 events:
   # Context intake: no missing website/source context for this run
@@ -38,27 +35,12 @@ events:
     output:
       response_text: "Draft complete. All 6 sections written. Word count: 3200."
 
-  # Phase 3.5: Copyedit
-  - node: copyedit
-    output:
-      response_text: "Copy edit complete. 12 changes applied."
-
-  # Phase 3.6a: DA Content
-  - node: da_content
-    output:
-      response_text: "Content critique complete. 8 findings."
-
-  # Phase 3.6b: DA Style
-  - node: da_style
-    output:
-      response_text: "Style critique complete. 6 findings."
-
   # Phase 4: Evaluation
   - node: evaluation
     output:
       response_text: "Evaluation complete. All sections present. Q1-Q3 passed."
 
-  # Phase 4.5: Visual Generation
+  # Phase 5: Visual Generation
   - node: visual_generation
     output:
       response_text: "Visual generation complete. 2 visuals generated."
@@ -68,42 +50,20 @@ events:
     output:
       response_text: "Final assembly complete. Title applied, images embedded."
 
-  # Phase 7: De-AI Prep
-  - node: deai_prep
+  # Phase 7: De-AI pass (get-it-right sub-workflow, black-box mocked)
+  - node: de_ai
     output:
-      response_text: "Manifest written with 22 paragraphs."
-
-  # Phase 7: De-AI Loop — 2 iterations then done
-  # Iteration 1: rewrite
-  - node: deai_loop.rewrite
-    output:
-      response_text: "PARAGRAPH_INDEX: 0\nORIGINAL: Test paragraph.\nOPTION_A: Revised test.\nOPTION_B: Another revision.\nNO_ISSUES: false"
-  # Iteration 1: select
-  - node: deai_loop.select
-    output:
-      response_text: "SELECTED: A\nREASON: Removed em dash.\nAPPLIED: true\nSTATUS: continue"
-  # Iteration 1: check_continue
-  - node: deai_loop.check_continue
-    output:
-      exit_code: 0
-
-  # Iteration 2: rewrite
-  - node: deai_loop.rewrite
-    output:
-      response_text: "PARAGRAPH_INDEX: 1\nORIGINAL: Second paragraph.\nOPTION_A: Revised second.\nOPTION_B: Another revision.\nNO_ISSUES: true"
-  # Iteration 2: select
-  - node: deai_loop.select
-    output:
-      response_text: "SELECTED: ORIGINAL\nREASON: No issues found.\nAPPLIED: false\nSTATUS: done"
-  # Iteration 2: check_continue (exit 1 = done)
-  - node: deai_loop.check_continue
-    output:
-      exit_code: 1
+      response_text: "De-AI pass complete. Post reads like practitioner writing."
+      review_grade: pass
+      eval_strategy: pass
+      iterations: 2
 
   # Phase 8: Reddit Summary
   - node: reddit_summary
     output:
       response_text: "Reddit post written to final/reddit-post.md."
+
+  # validate_artifacts is a run node — default mock exit_code 0 (success)
 
 expect:
   outcome: completed
@@ -113,15 +73,10 @@ expect:
     - topic_discovery
     - research_brief
     - writing
-    - copyedit
-    - da_content
-    - da_style
-    - da_reviews_done
     - evaluation
     - visual_generation
     - distribution
-    - deai_prep
-    - deai_loop
+    - de_ai
     - reddit_summary
     - validate_artifacts
     - complete

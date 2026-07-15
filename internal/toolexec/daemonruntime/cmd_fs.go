@@ -570,6 +570,9 @@ func handleFSSearch(_ context.Context, payload []byte) ([]byte, error) {
 	if cmdDir != "" {
 		cmd.Dir = cmdDir
 	}
+	// Snapshot the cgroup oom_kill counter so a SIGKILLed ripgrep can be
+	// reported as a workspace OOM instead of a bare "signal: killed".
+	oomSnap := memReader.SnapshotOOMKills()
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -578,7 +581,7 @@ func handleFSSearch(_ context.Context, payload []byte) ([]byte, error) {
 				return json.Marshal(daemon.SearchResult{})
 			}
 		}
-		return nil, fmt.Errorf("ripgrep failed: %w", err)
+		return nil, fmt.Errorf("ripgrep failed: %w", wrapChildOOMKill(err, oomSnap))
 	}
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
@@ -959,6 +962,37 @@ func buildFileTreeFromGit(basePath string, showHidden bool) ([]*fsFileNode, erro
 			}
 		}
 
+		// git ls-files emits an embedded git repository (a checkout nested
+		// inside this one) as a single "dir/" line with a trailing slash
+		// instead of recursing into it. Type it as a directory and list its
+		// contents ourselves — via its own ls-files when it is a git repo
+		// (so its .gitignore is respected), a plain walk otherwise. Without
+		// this branch the entry lands in the tree as a zero-byte FILE named
+		// after the directory and the viewer chokes trying to preview it.
+		if strings.HasSuffix(line, "/") {
+			rel := strings.TrimSuffix(line, "/")
+			ensureDirPath(dirMap, rel, showHidden)
+			node, ok := dirMap[rel]
+			if !ok {
+				continue
+			}
+			sub := filepath.Join(basePath, rel)
+			var children []*fsFileNode
+			if isGitRepo(sub) {
+				if gitChildren, subErr := buildFileTreeFromGit(sub, showHidden); subErr == nil {
+					prefixTreePaths(gitChildren, rel)
+					children = gitChildren
+				}
+			}
+			if children == nil {
+				if walked, walkErr := buildFileTree(sub, rel, showHidden); walkErr == nil {
+					children = walked
+				}
+			}
+			node.Children = append(node.Children, children...)
+			continue
+		}
+
 		// Ensure all parent directories exist in the tree
 		dir := filepath.Dir(line)
 		ensureDirPath(dirMap, dir, showHidden)
@@ -985,6 +1019,17 @@ func buildFileTreeFromGit(basePath string, showHidden bool) ([]*fsFileNode, erro
 	}
 	sortTree(root.Children)
 	return root.Children, nil
+}
+
+// prefixTreePaths rebases node paths produced relative to a subtree root
+// onto the parent tree's coordinate space.
+func prefixTreePaths(nodes []*fsFileNode, prefix string) {
+	for _, n := range nodes {
+		n.Path = filepath.Join(prefix, n.Path)
+		if len(n.Children) > 0 {
+			prefixTreePaths(n.Children, prefix)
+		}
+	}
 }
 
 // ensureDirPath ensures all directories in the path exist in the tree.

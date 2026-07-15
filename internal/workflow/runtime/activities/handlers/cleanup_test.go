@@ -211,7 +211,7 @@ func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
 	require.NotNil(t, resultBlock.IsError)
 	require.True(t, *resultBlock.IsError, "repair tool_result should be marked as error")
 	require.NotNil(t, resultBlock.Content)
-	require.Contains(t, *resultBlock.Content, "cancelled")
+	require.Contains(t, *resultBlock.Content, "interrupted")
 
 	// Verify a cancelled status update was emitted (for UI)
 	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 100)

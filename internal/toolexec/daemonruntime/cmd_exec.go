@@ -70,21 +70,24 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
+	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
+	// command's lifetime can be attributed to the kernel OOM killer.
+	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
+	oomSnap := memReader.SnapshotOOMKills()
+
 	start := time.Now()
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil {
+		// Steer the OOM killer toward the workload, away from the daemon.
+		steerOOMKiller(cmd)
+		err = cmd.Wait()
+	}
 	duration := time.Since(start)
 
 	resp := daemon.CommandResult{
 		Stdout:     stdoutBuf.String(),
 		Stderr:     stderrBuf.String(),
 		DurationMs: duration.Milliseconds(),
-	}
-
-	// Build combined output
-	if resp.Stderr != "" {
-		resp.Combined = resp.Stdout + resp.Stderr
-	} else {
-		resp.Combined = resp.Stdout
 	}
 
 	if err != nil {
@@ -97,6 +100,28 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			resp.ExitCode = 1
 			resp.Stderr = fmt.Sprintf("%s\n%s", resp.Stderr, err.Error())
 		}
+		// A SIGKILL-shaped failure (exit -1: shell itself killed; exit 137:
+		// shell reports a killed child) that coincides with an oom_kill in the
+		// container cgroup gets the structured out-of-memory explanation. The
+		// message rides Stderr so the LLM tool result and user RPC consumers
+		// both see actionable text, plus a flag for programmatic handling.
+		// Timeouts also SIGKILL — TimedOut keeps precedence in consumers.
+		if !resp.TimedOut {
+			if oom, msg := memReader.CheckOOMKill(resp.ExitCode, oomSnap); oom {
+				resp.OOMKilled = true
+				if resp.Stderr != "" {
+					resp.Stderr += "\n"
+				}
+				resp.Stderr += msg
+			}
+		}
+	}
+
+	// Build combined output
+	if resp.Stderr != "" {
+		resp.Combined = resp.Stdout + resp.Stderr
+	} else {
+		resp.Combined = resp.Stdout
 	}
 
 	return json.Marshal(resp)
@@ -259,6 +284,10 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 	mgr := shell.GetBackgroundManager()
 	processes := mgr.GetAllProcesses()
 
+	// Stamp the daemon's control-plane identity so the orchestrator can build
+	// the env-aware proxied preview URL for a detected dev-server port.
+	daemonID := DaemonIdentity()
+
 	result := make([]*daemon.ProcessInfo, 0, len(processes))
 	for _, p := range processes {
 		info := &daemon.ProcessInfo{
@@ -268,8 +297,29 @@ func handleExecBGList(_ context.Context, _ []byte) ([]byte, error) {
 			ExitCode:  p.ExitCode,
 			StartTime: p.StartTime,
 			EndTime:   p.EndTime,
+			Ports:     shellPortsToDaemon(p.Ports),
+			DaemonID:  daemonID,
 		}
 		result = append(result, info)
 	}
 	return json.Marshal(result)
+}
+
+// shellPortsToDaemon converts the shell package's PortInfo to the daemon wire
+// type so listening-port info (with bind address) survives the RPC to the
+// orchestrator, which decides which are publicly bound and previewable.
+func shellPortsToDaemon(ports []shell.PortInfo) []daemon.PortInfo {
+	if len(ports) == 0 {
+		return nil
+	}
+	out := make([]daemon.PortInfo, len(ports))
+	for i, p := range ports {
+		out[i] = daemon.PortInfo{
+			Port:     p.Port,
+			Protocol: p.Protocol,
+			State:    p.State,
+			Address:  p.Address,
+		}
+	}
+	return out
 }

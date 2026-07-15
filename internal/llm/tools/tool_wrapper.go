@@ -9,7 +9,6 @@ import (
 	"reflect"
 	"strings"
 
-	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -302,13 +301,17 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	normalizedInput := unwrapStringifiedValues(call.Input, schema)
 	normalizedInput = coerceKVArrayMaps(normalizedInput)
 
-	// Validate input against JSON Schema
+	// Validate input against JSON Schema. When validation fails because the
+	// model emitted an array/object value as a JSON-encoded string, the shared
+	// repair helper (schema_repair.go) fixes it in place and re-validates.
 	if schema != nil {
-		if err := validateJSONSchema(normalizedInput, schema); err != nil {
+		repairedInput, err := validateJSONSchemaWithRepair(toolName, normalizedInput, schema)
+		if err != nil {
 			errMsg := fmt.Sprintf("JSON Schema validation failed: %v", err)
 			logging.Warn("Tool input schema validation failed", "tool", toolName, "error", err, "input", truncateString(normalizedInput, 500))
 			return NewTextErrorResponse(errMsg), nil
 		}
+		normalizedInput = repairedInput
 	}
 
 	// Unmarshal to typed params with strict validation
@@ -582,36 +585,24 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "... (truncated)"
 }
 
-// validateJSONSchema validates a JSON string against a JSON Schema
+// validateJSONSchema validates a JSON string against a JSON Schema (no repair).
 func validateJSONSchema(jsonStr string, schema *jsonschema.Schema) error {
 	// Convert invopop/jsonschema to raw JSON for google/jsonschema-go
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
 		return fmt.Errorf("failed to marshal schema: %w", err)
 	}
+	return ValidateJSONAgainstSchema(jsonStr, schemaBytes)
+}
 
-	// Parse the schema
-	var goSchema gojsonschema.Schema
-	if err := json.Unmarshal(schemaBytes, &goSchema); err != nil {
-		return fmt.Errorf("failed to unmarshal schema: %w", err)
-	}
-
-	// Resolve the schema
-	resolved, err := goSchema.Resolve(nil)
+// validateJSONSchemaWithRepair validates a JSON string against a JSON Schema,
+// repairing stringified array/object values (see schema_repair.go) before
+// failing. Returns the (possibly repaired) JSON string.
+func validateJSONSchemaWithRepair(toolName, jsonStr string, schema *jsonschema.Schema) (string, error) {
+	// Convert invopop/jsonschema to raw JSON for google/jsonschema-go
+	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
-		return fmt.Errorf("failed to resolve schema: %w", err)
+		return jsonStr, fmt.Errorf("failed to marshal schema: %w", err)
 	}
-
-	// Parse the input JSON
-	var inputData interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &inputData); err != nil {
-		return fmt.Errorf("failed to unmarshal input JSON: %w", err)
-	}
-
-	// Validate
-	if err := resolved.Validate(inputData); err != nil {
-		return fmt.Errorf("validation failed: %w", err)
-	}
-
-	return nil
+	return ValidateJSONWithRepair(toolName, jsonStr, schemaBytes)
 }

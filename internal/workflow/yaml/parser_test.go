@@ -1817,3 +1817,47 @@ nodes:
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestRoundTrip_ResumeNode(t *testing.T) {
+	input := `
+name: resumable
+entry: [plan]
+resume_node: work
+nodes:
+  - id: plan
+    type: call_llm
+  - id: work
+    type: call_llm
+edges:
+  - from: plan
+    default: work
+`
+	wf, err := ParseWorkflow([]byte(input))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if wf.GetResumeNode() != "work" {
+		t.Fatalf("resume_node not parsed: got %q", wf.GetResumeNode())
+	}
+
+	data, err := MarshalWorkflow(wf)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	wf2, err := ParseWorkflow(data)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !proto.Equal(wf, wf2) {
+		t.Errorf("round-trip mismatch:\noriginal: %v\nre-parsed: %v", wf, wf2)
+	}
+
+	// camelCase alias also accepted
+	wfCamel, err := ParseWorkflow([]byte("name: r\nentry: [a]\nresumeNode: a\nnodes:\n  - id: a\n    type: call_llm\n"))
+	if err != nil {
+		t.Fatalf("parse camelCase: %v", err)
+	}
+	if wfCamel.GetResumeNode() != "a" {
+		t.Fatalf("resumeNode alias not parsed: got %q", wfCamel.GetResumeNode())
+	}
+}

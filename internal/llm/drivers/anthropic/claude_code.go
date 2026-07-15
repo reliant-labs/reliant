@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
@@ -67,9 +68,15 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	// tokenRefreshTransport -> lowercaseHeaderTransport -> ResilientTransport (DNS fallback + caching)
 	baseTransport := otelhttp.NewTransport(llm.ResilientTransport())
 
+	// headerMu guards lowercaseHeaders (and the token fields in opts): the
+	// token refresh transport rewrites the authorization entry while other
+	// in-flight requests read the map.
+	headerMu := &sync.RWMutex{}
+
 	lcTransport := &lowercaseHeaderTransport{
 		base:    baseTransport,
 		headers: lowercaseHeaders,
+		mu:      headerMu,
 	}
 
 	var finalTransport http.RoundTripper = lcTransport
@@ -78,6 +85,7 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 			base:             lcTransport,
 			opts:             &opts,
 			lowercaseHeaders: lowercaseHeaders,
+			mu:               headerMu,
 		}
 	}
 
@@ -113,33 +121,136 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 }
 
 // tokenRefreshTransport wraps another RoundTripper and transparently refreshes
-// the OAuth access token when it's expired. On successful refresh it updates the
-// authorization header in lowercaseHeaders so subsequent requests use the new token.
+// the OAuth access token when it's expired. On successful refresh (or adoption
+// of tokens rotated by another goroutine/process) it updates the authorization
+// header in lowercaseHeaders so subsequent requests use the new token. It also
+// recovers from a 401 by reloading the persisted tokens once and retrying —
+// covering the residual window where another process rotated the tokens after
+// this request was sent.
 type tokenRefreshTransport struct {
 	base             http.RoundTripper
 	opts             *llm.DriverOptions
 	lowercaseHeaders map[string]string
+	mu               *sync.RWMutex // guards opts token fields + lowercaseHeaders (shared with lowercaseHeaderTransport)
 }
 
 func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	// Check if token needs refresh before the request
-	if t.opts.TokenRefresher != nil && t.opts.RefreshToken != "" && !t.opts.TokenExpiresAt.IsZero() {
-		if time.Now().After(t.opts.TokenExpiresAt.Add(-5 * time.Minute)) {
-			newToken, newExpiry, err := t.opts.TokenRefresher(t.opts.RefreshToken)
-			if err != nil {
-				logging.Warn("Failed to refresh Claude OAuth token", "error", err)
-				// Continue with the existing token; the API will reject if truly expired
-			} else {
-				logging.Info("Refreshed Claude OAuth token", "new_expiry", newExpiry)
-				// Update the stored state so future requests use the new token
-				t.opts.ApiKey = newToken
-				t.opts.TokenExpiresAt = newExpiry
-				// Update the authorization header in the lowercase headers map
-				t.lowercaseHeaders["authorization"] = "Bearer " + newToken
-			}
-		}
+	t.refreshIfNeeded()
+
+	resp, err := t.base.RoundTrip(req)
+	if err != nil {
+		return resp, err
 	}
-	return t.base.RoundTrip(req)
+
+	// 401 resilience: another process may have rotated the OAuth tokens after
+	// this driver loaded its credentials (refresh tokens are single-use, and
+	// tokens from a superseded grant can be invalidated). Reload the persisted
+	// tokens once; if they changed, retry the request once with the new token
+	// instead of surfacing a terminal auth error.
+	if resp.StatusCode == http.StatusUnauthorized && t.opts.TokenReloader != nil {
+		stored, rerr := t.opts.TokenReloader()
+		if rerr != nil {
+			logging.Warn("Claude API returned 401 and reloading persisted tokens failed",
+				"error", rerr, "user_id", t.opts.UserID)
+			return resp, nil
+		}
+		if stored == nil || stored.AccessToken == "" {
+			return resp, nil
+		}
+		t.mu.Lock()
+		changed := stored.AccessToken != t.opts.ApiKey
+		if changed {
+			t.adoptLocked(*stored)
+		}
+		t.mu.Unlock()
+		if !changed {
+			// The store agrees with the token we just used: this is a genuine
+			// auth failure, not a rotation race.
+			return resp, nil
+		}
+		retryReq := cloneRequestForRetry(req)
+		if retryReq == nil {
+			// Body not replayable; the adopted token still fixes future requests.
+			return resp, nil
+		}
+		logging.Warn("Claude API returned 401 but the store has newer OAuth tokens; retrying once with rotated token",
+			"user_id", t.opts.UserID)
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close()
+		return t.base.RoundTrip(retryReq)
+	}
+
+	return resp, nil
+}
+
+// refreshIfNeeded refreshes the access token before a request when it is
+// within the expiry buffer. The heavy lifting (single-flight, cross-process
+// coordination, persistence) lives in the TokenRefresher callback; this method
+// just snapshots the held state and adopts the result.
+func (t *tokenRefreshTransport) refreshIfNeeded() {
+	if t.opts.TokenRefresher == nil {
+		return
+	}
+
+	t.mu.RLock()
+	held := llm.OAuthTokens{
+		AccessToken:  t.opts.ApiKey,
+		RefreshToken: t.opts.RefreshToken,
+		ExpiresAt:    t.opts.TokenExpiresAt,
+	}
+	t.mu.RUnlock()
+
+	if held.RefreshToken == "" || held.ExpiresAt.IsZero() {
+		return
+	}
+	if !time.Now().After(held.ExpiresAt.Add(-5 * time.Minute)) {
+		return
+	}
+
+	newState, err := t.opts.TokenRefresher(held)
+	if err != nil {
+		logging.Warn("Failed to refresh Claude OAuth token", "error", err, "user_id", t.opts.UserID)
+		// Continue with the existing token; the API will reject if truly expired
+		return
+	}
+
+	t.mu.Lock()
+	t.adoptLocked(newState)
+	t.mu.Unlock()
+	logging.Info("Claude OAuth token state updated", "new_expiry", newState.ExpiresAt, "user_id", t.opts.UserID)
+}
+
+// adoptLocked installs a new token state on the options and rewrites the
+// authorization header. Caller must hold t.mu.
+func (t *tokenRefreshTransport) adoptLocked(state llm.OAuthTokens) {
+	if state.AccessToken == "" {
+		return
+	}
+	t.opts.ApiKey = state.AccessToken
+	if state.RefreshToken != "" {
+		t.opts.RefreshToken = state.RefreshToken
+	}
+	t.opts.TokenExpiresAt = state.ExpiresAt
+	t.lowercaseHeaders["authorization"] = "Bearer " + state.AccessToken
+}
+
+// cloneRequestForRetry returns a replayable copy of req, or nil when the body
+// cannot be replayed. The clone's headers are re-stamped by the downstream
+// lowercaseHeaderTransport, which picks up the rotated authorization value.
+func cloneRequestForRetry(req *http.Request) *http.Request {
+	clone := req.Clone(req.Context())
+	if req.Body == nil || req.Body == http.NoBody {
+		return clone
+	}
+	if req.GetBody == nil {
+		return nil
+	}
+	body, err := req.GetBody()
+	if err != nil {
+		return nil
+	}
+	clone.Body = body
+	return clone
 }
 
 // lowercaseHeaderTransport is a custom RoundTripper that sets headers with exact casing
@@ -147,6 +258,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 type lowercaseHeaderTransport struct {
 	base    http.RoundTripper
 	headers map[string]string // lowercase key -> value
+	mu      *sync.RWMutex     // guards headers; shared with tokenRefreshTransport
 }
 
 func (t *lowercaseHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -156,11 +268,17 @@ func (t *lowercaseHeaderTransport) RoundTrip(req *http.Request) (*http.Response,
 	req.URL.RawQuery = q.Encode()
 
 	// Set headers with exact casing by accessing the map directly
+	if t.mu != nil {
+		t.mu.RLock()
+	}
 	for key, value := range t.headers {
 		// Delete any canonicalized version first
 		req.Header.Del(key)
 		// Set with exact casing using map access (bypasses canonicalization)
 		req.Header[key] = []string{value}
+	}
+	if t.mu != nil {
+		t.mu.RUnlock()
 	}
 
 	// Fresh UUID per request, matching Claude Code's x-client-request-id behavior

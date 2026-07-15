@@ -1,0 +1,50 @@
+# Start from de_ai: skip all earlier phases via router
+#
+# Tests that the classify router can route directly to the de_ai phase,
+# skipping everything through distribution. The de-AI pass operates on the
+# already-assembled post on disk, so no upstream node outputs are required.
+
+name: start_from_de_ai
+description: Router routes to de_ai, skipping all phases through distribution
+
+events:
+  # Context intake: existing final artifact should be enough
+  - node: context_intake
+    output:
+      response_text: "Existing final blog post artifact is the relevant context."
+
+  # Router selects de_ai as starting point
+  - node: classify
+    output:
+      selected_node: de_ai
+      reasoning: "Content is finalized and needs de-AI treatment."
+
+  # De-AI pass (get-it-right sub-workflow, black-box mocked)
+  - node: de_ai
+    output:
+      response_text: "De-AI pass complete after 1 iteration."
+      review_grade: pass
+      eval_strategy: pass
+      iterations: 1
+
+  # Reddit Summary
+  - node: reddit_summary
+    output:
+      response_text: "Reddit post written."
+
+expect:
+  outcome: completed
+  reached:
+    - context_intake
+    - classify
+    - de_ai
+    - reddit_summary
+    - validate_artifacts
+    - complete
+  not_reached:
+    - topic_discovery
+    - research_brief
+    - writing
+    - evaluation
+    - visual_generation
+    - distribution

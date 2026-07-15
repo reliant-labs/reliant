@@ -587,12 +587,20 @@ func (x *ToolResponse) GetBackgrounded() bool {
 	return false
 }
 
-// DaemonHeartbeat is sent periodically to keep connection alive
+// DaemonHeartbeat is sent periodically to keep connection alive.
+// Cloud daemons additionally piggyback workspace memory telemetry read from
+// the pod cgroup (memory.current / memory.max) so the gateway can surface
+// memory pressure before the kernel OOM killer fires. All memory fields are
+// zero for daemons without cgroup v2 accounting (macOS, local daemons) —
+// consumers must treat memory_limit_bytes == 0 as "not reported".
 type DaemonHeartbeat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Timestamp     int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp        int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	MemoryUsedBytes  uint64                 `protobuf:"varint,2,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3" json:"memory_used_bytes,omitempty"`    // cgroup memory.current
+	MemoryLimitBytes uint64                 `protobuf:"varint,3,opt,name=memory_limit_bytes,json=memoryLimitBytes,proto3" json:"memory_limit_bytes,omitempty"` // cgroup memory.max (0 = unlimited/unknown)
+	MemoryPressure   bool                   `protobuf:"varint,4,opt,name=memory_pressure,json=memoryPressure,proto3" json:"memory_pressure,omitempty"`         // hysteresis-smoothed: asserts >= 85% of limit, clears < 75%
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DaemonHeartbeat) Reset() {
@@ -630,6 +638,27 @@ func (x *DaemonHeartbeat) GetTimestamp() int64 {
 		return x.Timestamp
 	}
 	return 0
+}
+
+func (x *DaemonHeartbeat) GetMemoryUsedBytes() uint64 {
+	if x != nil {
+		return x.MemoryUsedBytes
+	}
+	return 0
+}
+
+func (x *DaemonHeartbeat) GetMemoryLimitBytes() uint64 {
+	if x != nil {
+		return x.MemoryLimitBytes
+	}
+	return 0
+}
+
+func (x *DaemonHeartbeat) GetMemoryPressure() bool {
+	if x != nil {
+		return x.MemoryPressure
+	}
+	return false
 }
 
 // ServerMessage is the message sent from server to daemon
@@ -3232,9 +3261,12 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\rerror_message\x18\x06 \x01(\tR\ferrorMessage\x12\x1d\n" +
 	"\n" +
 	"error_code\x18\a \x01(\tR\terrorCode\x12\"\n" +
-	"\fbackgrounded\x18\b \x01(\bR\fbackgrounded\"/\n" +
+	"\fbackgrounded\x18\b \x01(\bR\fbackgrounded\"\xb2\x01\n" +
 	"\x0fDaemonHeartbeat\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\xdf\t\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x12*\n" +
+	"\x11memory_used_bytes\x18\x02 \x01(\x04R\x0fmemoryUsedBytes\x12,\n" +
+	"\x12memory_limit_bytes\x18\x03 \x01(\x04R\x10memoryLimitBytes\x12'\n" +
+	"\x0fmemory_pressure\x18\x04 \x01(\bR\x0ememoryPressure\"\xdf\t\n" +
 	"\rServerMessage\x12<\n" +
 	"\ftool_request\x18\x01 \x01(\v2\x17.reliant.v1.ToolRequestH\x00R\vtoolRequest\x12;\n" +
 	"\theartbeat\x18\x02 \x01(\v2\x1b.reliant.v1.ServerHeartbeatH\x00R\theartbeat\x12H\n" +

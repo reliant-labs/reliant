@@ -46,4 +46,3 @@ expect:
     # No manual approval in auto mode
     - agent_loop.approval
     # Max turns notification shouldn't appear
-    - max_turns_notification

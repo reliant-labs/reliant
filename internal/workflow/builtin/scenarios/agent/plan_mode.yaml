@@ -53,4 +53,3 @@ expect:
   not_reached:
     # Plan mode doesn't need approval (still uses auto execution)
     - agent_loop.approval
-    - max_turns_notification

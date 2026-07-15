@@ -5,14 +5,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // BuildAvailableDrivers creates an AvailableDrivers struct from configured API keys
@@ -168,39 +166,4 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		return models.AvailableDrivers{Drivers: make(map[models.DriverID]models.DriverConfig)}, nil
 	}
 	return models.AvailableDrivers{Drivers: drivers}, nil
-}
-
-// BuildClaudeTokenRefresher returns a closure that refreshes Claude OAuth tokens
-// and persists them to the database. The closure captures the global API key provider's
-// repo and the userID so the transport interceptor can call it without DB knowledge.
-func BuildClaudeTokenRefresher(ctx context.Context, userID string) func(refreshToken string) (string, time.Time, error) {
-	return func(refreshToken string) (string, time.Time, error) {
-		providerMu.Lock()
-		repo := globalAPIKeyProvider.repo
-		providerMu.Unlock()
-
-		tokens, err := claude.RefreshClaudeTokens(refreshToken)
-		if err != nil {
-			return "", time.Time{}, fmt.Errorf("claude token refresh failed: %w", err)
-		}
-
-		// Persist the refreshed tokens to the database
-		dbTokens := db.ClaudeAuthTokens{
-			AccessToken:      tokens.AccessToken,
-			RefreshToken:     tokens.RefreshToken,
-			ExpiresAt:        tokens.ExpiresAt,
-			AccountUUID:      tokens.AccountUUID,
-			AccountEmail:     tokens.AccountEmail,
-			OrganizationUUID: tokens.OrganizationUUID,
-			OrganizationName: tokens.OrganizationName,
-			Scope:            tokens.Scope,
-		}
-		if err := repo.SetClaudeAuthTokens(ctx, userID, dbTokens); err != nil {
-			logging.Warn("Failed to persist refreshed Claude tokens", "error", err)
-			// Still return the new token even if DB persistence fails
-		}
-
-		logging.Info("Claude OAuth tokens refreshed and persisted", "user_id", userID, "expires_at", tokens.ExpiresAt)
-		return tokens.AccessToken, tokens.ExpiresAt, nil
-	}
 }

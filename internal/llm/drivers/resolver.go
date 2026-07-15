@@ -238,7 +238,8 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		driverOpts = append(driverOpts, llm.WithAccountMetadata(userID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
 		if driverConfig.RefreshToken != "" {
 			refresher := BuildClaudeTokenRefresher(ctx, userID)
-			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
+			reloader := BuildClaudeTokenReloader(ctx, userID)
+			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
 		}
 
 		// Add temperature if specified in preference AND supported by the model.

@@ -21,7 +21,15 @@ tmp_dir = "tmp/air-worker"
   follow_symlink = false
   include_ext = ["go", "yaml"]
   include_file = []
-  kill_delay = "5s"
+  # kill_delay must exceed the worker's full graceful-drain path before air
+  # escalates to SIGKILL: Worker.Stop() waits WorkerStopTimeout (5s) for
+  # in-flight activities, serverworker.Run waits up to 15s for the worker,
+  # then shuts down the health server (5s) and flushes telemetry (5s).
+  # SIGKILLing mid-drain abandons activities without releasing them, so
+  # Temporal waits out the 30s heartbeat timeout before re-dispatching —
+  # exactly the stall a graceful reload avoids. A cleanly-draining worker
+  # exits in ~5s, so the long delay costs nothing in the common case.
+  kill_delay = "30s"
   log = "tmp/air-worker/build-errors.log"
   poll = false
   poll_interval = 0

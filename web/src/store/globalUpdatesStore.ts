@@ -40,6 +40,37 @@ const LOG_PREFIX = "[🌐 GlobalUpdates]";
 // Timestamp when the app started - only notify for events after this
 const appStartTime = Date.now();
 
+// Update IDs that already produced an OS notification. Gap-resyncs replay
+// recent updates from the DB (idempotent for state patching), so
+// notifications need their own dedup to not fire twice.
+const notifiedUpdateIds = new Set<string>();
+const NOTIFIED_UPDATE_IDS_MAX = 500;
+
+// Set when the stream errors or ends; the next successful connect then
+// refreshes list state as a safety net (the reconnect's DB replay restores
+// update-driven state, but ephemeral signals like REFETCH are not replayed).
+let streamWasDisrupted = false;
+
+/**
+ * THE single write path for chat metadata updates arriving over the stream:
+ * patches the React Query list/detail caches AND the Zustand chats map in one
+ * call. Never fabricates entries — unknown chats are left to a list refetch.
+ */
+function applyChatPatch(
+  projectId: string | undefined,
+  chatId: string,
+  patch: Partial<Chat>
+): void {
+  patchChatCaches(projectId, chatId, patch);
+  useChatStore.setState((state) => {
+    const existing = state.chats.get(chatId);
+    if (!existing) return state;
+    const newChats = new Map(state.chats);
+    newChats.set(chatId, { ...existing, ...patch });
+    return { chats: newChats };
+  });
+}
+
 interface GlobalUpdatesState {
   // Connection state
   connectionStatus: ConnectionStatus;
@@ -249,10 +280,18 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     logger.info(`${LOG_PREFIX} Connection status: ${prevStatus} -> ${status}`);
     set({ connectionStatus: status });
 
-    // On reconnect, refresh chat state to ensure sync
-    // This handles the case where events were missed during disconnection
-    if (status === "connected" && prevStatus !== "connected" && prevStatus !== "connecting") {
-      logger.info(`${LOG_PREFIX} Reconnected - refreshing chat state to ensure sync`);
+    if (status === "error" || status === "disconnected") {
+      streamWasDisrupted = true;
+    }
+
+    // After a disruption, refresh chat state once reconnected. The stream's
+    // own DB replay (since_seq catch-up) restores update-driven state; this
+    // covers ephemeral signals (REFETCH events are deliberately not replayed).
+    // NOTE: the old condition (`prevStatus !== "connecting"`) could never
+    // fire — every path to "connected" goes through "connecting".
+    if (status === "connected" && streamWasDisrupted) {
+      streamWasDisrupted = false;
+      logger.info(`${LOG_PREFIX} Reconnected after disruption - refreshing chat state`);
       useChatStore.getState().loadChats().catch((err) => {
         logger.warn(`${LOG_PREFIX} Failed to refresh chats on reconnect`, { error: err });
       });
@@ -261,8 +300,11 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   },
 
   handleSync: (lastSequence) => {
-    logger.info(`${LOG_PREFIX} Sync complete, lastSequence: ${lastSequence}`);
-    set({ lastSequence });
+    // Informational only. The resume cursor must track PROCESSED updates:
+    // the server sends sync before replaying catch-up, so adopting its value
+    // here could skip updates if the stream drops mid-replay. lastSequence
+    // is advanced by handleUpdate (per update) and seeded by loadChats.
+    logger.info(`${LOG_PREFIX} Sync received, server lastSequence: ${lastSequence}`);
   },
 
   handleError: (error) => {
@@ -368,7 +410,7 @@ function handleChatStateChange(update: UserUpdate) {
   if (isBecomingArchived) {
     useActivityStore.getState().removeActivity(chat_id);
     logger.info(`${LOG_PREFIX} Chat archived: ${chat_id.slice(0, 8)}`);
-    patchChatCaches(projectId, chat_id, { state: nextState });
+    applyChatPatch(projectId, chat_id, { state: nextState });
     // The archived list needs a refetch — we can't construct an ArchivedChat row.
     queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
     return;
@@ -377,37 +419,21 @@ function handleChatStateChange(update: UserUpdate) {
   // Handle restore transition
   if (isBeingRestored) {
     logger.info(`${LOG_PREFIX} Chat restored: ${chat_id.slice(0, 8)}`);
-    patchChatCaches(projectId, chat_id, { state: nextState });
+    applyChatPatch(projectId, chat_id, { state: nextState });
     queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
     return;
   }
 
-  // Normal state change (not archive/restore): update chat.state in place
-  // Activity (workflow running) is tracked separately via activityStore
-
-  // Update chats Map in a single setState with fresh state
-  useChatStore.setState((state) => {
-    const existing = state.chats.get(chat_id);
-    if (!existing) return state;
-    const newChats = new Map(state.chats);
-    newChats.set(chat_id, { ...existing, state: nextState });
-    return { chats: newChats };
-  });
-  patchChatCaches(projectId, chat_id, { state: nextState });
-
-  // Handle unread flag from the update payload
+  // Normal state change (not archive/restore): update chat state (and the
+  // unread flag when present) in place. Activity (workflow running) is
+  // tracked separately via activityStore.
   const unread = (data as { unread?: boolean }).unread;
-  if (unread !== undefined) {
-    // Update the chat's unread field
-    useChatStore.setState((state) => {
-      const existing = state.chats.get(chat_id);
-      if (!existing) return state;
-      const newChats = new Map(state.chats);
-      newChats.set(chat_id, { ...existing, unread });
-      return { chats: newChats };
-    });
-    patchChatCaches(projectId, chat_id, { unread });
+  applyChatPatch(projectId, chat_id, {
+    state: nextState,
+    ...(unread !== undefined ? { unread } : {}),
+  });
 
+  if (unread !== undefined) {
     // If unread=true and user is viewing this chat, auto-dismiss (fire-and-forget)
     const isViewingThisChat = useChatStore.getState().activeChatId === chat_id;
     const notificationStore = useNotificationStore.getState();
@@ -432,7 +458,22 @@ function handleChatStateChange(update: UserUpdate) {
       });
       return;
     }
-    
+
+    // Replay dedup: gap-resyncs re-deliver recent updates from the DB. State
+    // patching is idempotent, but a notification must fire at most once.
+    if (update.id) {
+      if (notifiedUpdateIds.has(update.id)) {
+        logger.debug(`${LOG_PREFIX} Skipping duplicate notification (replayed update)`, {
+          updateId: update.id,
+        });
+        return;
+      }
+      if (notifiedUpdateIds.size >= NOTIFIED_UPDATE_IDS_MAX) {
+        notifiedUpdateIds.clear();
+      }
+      notifiedUpdateIds.add(update.id);
+    }
+
     logger.info(`${LOG_PREFIX} Processing notification request`, {
       chatId: chat_id.slice(0, 8),
       reason: data.reason,
@@ -600,22 +641,9 @@ function handleChatConfigChanged(update: UserUpdate) {
   if (data.state !== undefined) {
     patch.state = parseChatState(data.state);
   }
-  patchChatCaches(projectId, chat_id, patch);
-
-  // Dual-write workflowName into the Zustand map — ChatInput preset restore
+  // applyChatPatch also updates the Zustand map — ChatInput preset restore
   // reads workflowName/selectedPresets from the Zustand map, not React Query.
-  if (data.workflow_name !== undefined) {
-    useChatStore.setState((state) => {
-      const existing = state.chats.get(chat_id);
-      if (!existing) return state;
-      const newChats = new Map(state.chats);
-      newChats.set(chat_id, {
-        ...existing,
-        workflowName: data.workflow_name ?? undefined,
-      });
-      return { chats: newChats };
-    });
-  }
+  applyChatPatch(projectId, chat_id, patch);
 }
 
 function handleChatCreated(update: UserUpdate) {
@@ -653,7 +681,7 @@ function handleChatTitleChanged(update: UserUpdate) {
 
   const projectId =
     update.project_id || useProjectStore.getState().currentProject?.id;
-  patchChatCaches(projectId, chat_id, { title: data.title });
+  applyChatPatch(projectId, chat_id, { title: data.title });
 }
 
 function handleChatDeleted(update: UserUpdate) {
@@ -716,6 +744,12 @@ function handleChatActivityChanged(update: UserUpdate) {
       },
     }));
     queryClient.invalidateQueries({ queryKey: approvalKeys.list(chat_id) });
+
+    // IDLE is the authoritative "nothing is streaming" signal. Streaming
+    // deltas race message finalization on a separate server channel, so a
+    // stale tail can rebuild a placeholder AFTER the final message arrived —
+    // at the end of a run nothing else would ever clean it up.
+    useChatStore.getState().clearStreamingState(chat_id);
   }
 
   // Clear discuss mode when workflow resumes (activity becomes RUNNING)

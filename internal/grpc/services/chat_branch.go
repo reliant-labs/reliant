@@ -9,11 +9,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
 // BranchChat creates a new chat branched from a specific message ordinal
@@ -459,7 +460,7 @@ func (s *ChatService) createBranchRepairToolMessage(
 	for i, orphan := range orphanedToolCalls {
 		blockID := uuid.New().String()
 		isError := true
-		content := "Tool execution was cancelled before completion. The previous request was interrupted."
+		content := handlers.InterruptedToolResultContent
 
 		block := &db.MessageContentBlock{
 			ID:         blockID,

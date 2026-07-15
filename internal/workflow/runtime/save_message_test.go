@@ -113,6 +113,7 @@ func TestEvaluateSaveMessageConfig_NullAttachments(t *testing.T) {
 				"workflow-123",
 				"step-id",
 				nil, // execContext
+				nil, // iter (not in a loop)
 			)
 
 			if tc.expectError {
@@ -128,6 +129,65 @@ func TestEvaluateSaveMessageConfig_NullAttachments(t *testing.T) {
 			} else {
 				assert.NotNil(t, evalResult.Attachments)
 			}
+		})
+	}
+}
+
+// TestEvaluateSaveMessageConfig_IterInContent is a regression test for the
+// get-it-right feedback-bridge bug: a save_message declared on a node inside a loop
+// referenced "{{iter.iteration + 1}}" in its content, but the save_message CEL
+// context (PostActivityContext) did not declare the iter namespace. That made the
+// template fail CEL compilation; the error was swallowed as non-fatal by the loop
+// executor, so the review feedback / implementation summaries were silently never
+// written to the parent thread and every fresh implement fork ran blind.
+//
+// Before the fix this errored ("CEL compilation error: undeclared reference to
+// 'iter'"). After the fix iter resolves from the loop iteration (or a zero default
+// when not in a loop).
+func TestEvaluateSaveMessageConfig_IterInContent(t *testing.T) {
+	config := &reliantv1.SaveMessageConfig{
+		Role:    celLiteral("assistant"),
+		Content: celExpr("## Implementation Notes (Attempt {{iter.iteration + 1}})"),
+	}
+	workflowContext := map[string]interface{}{
+		"inputs": map[string]interface{}{},
+	}
+
+	tests := []struct {
+		name        string
+		iter        *model.IterContext
+		wantContent string
+	}{
+		{
+			name:        "inside loop resolves iteration",
+			iter:        &model.IterContext{Iteration: 1, Index: 1},
+			wantContent: "## Implementation Notes (Attempt 2)",
+		},
+		{
+			name:        "not in a loop uses zero default",
+			iter:        nil,
+			wantContent: "## Implementation Notes (Attempt 1)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			evalResult, err := evaluateSaveMessageConfig(
+				config,
+				map[string]interface{}{}, // activityOutput
+				workflowContext,
+				map[string]interface{}{}, // nodeOutputs
+				"chat-123",
+				"thread-path",
+				"workflow-123",
+				"step-id",
+				nil, // execContext
+				tc.iter,
+			)
+
+			require.NoError(t, err)
+			require.NotNil(t, evalResult)
+			assert.Equal(t, tc.wantContent, evalResult.Content)
 		})
 	}
 }
@@ -155,6 +215,7 @@ func TestEvaluateSaveMessageConfig_ThreadField(t *testing.T) {
 			"workflow-123",
 			"step-id",
 			nil, // execContext
+			nil, // iter (not in a loop)
 		)
 
 		require.NoError(t, err)
@@ -526,6 +587,7 @@ func TestEvaluateSaveMessageConfig_ThinkingOutput(t *testing.T) {
 				"workflow-123",
 				"step-id",
 				nil, // execContext
+				nil, // iter (not in a loop)
 			)
 
 			if tc.expectError {
@@ -537,6 +599,88 @@ func TestEvaluateSaveMessageConfig_ThinkingOutput(t *testing.T) {
 				require.NoError(t, err)
 				assert.NotNil(t, result)
 			}
+		})
+	}
+}
+
+// TestEvaluateSaveMessageConfig_ModelAndAgent verifies that the resolved model
+// is auto-extracted from the activity output (CallLLMOutput.model) and the agent
+// identity from the workflow context, so messages.model / messages.agent are
+// populated for assistant messages.
+func TestEvaluateSaveMessageConfig_ModelAndAgent(t *testing.T) {
+	tests := []struct {
+		name            string
+		activityOutput  map[string]interface{}
+		workflowContext map[string]interface{}
+		wantModel       string
+		wantAgent       string
+	}{
+		{
+			name:           "model from output, agent from workflow name",
+			activityOutput: map[string]interface{}{"model": "claude-4.8-opus"},
+			workflowContext: map[string]interface{}{
+				workflowContextKeyName:   "builtin://agent",
+				workflowContextKeyInputs: map[string]interface{}{},
+			},
+			wantModel: "claude-4.8-opus",
+			wantAgent: "builtin://agent",
+		},
+		{
+			name:           "agent_name input wins over workflow name",
+			activityOutput: map[string]interface{}{"model": "gpt-5.5"},
+			workflowContext: map[string]interface{}{
+				workflowContextKeyName:      "get-it-right",
+				workflowContextKeyAgentName: "researcher",
+				workflowContextKeyInputs:    map[string]interface{}{},
+			},
+			wantModel: "gpt-5.5",
+			wantAgent: "researcher",
+		},
+		{
+			name:           "no model, no agent",
+			activityOutput: map[string]interface{}{},
+			workflowContext: map[string]interface{}{
+				workflowContextKeyInputs: map[string]interface{}{},
+			},
+			wantModel: "",
+			wantAgent: "",
+		},
+		{
+			name:           "non-string model is ignored",
+			activityOutput: map[string]interface{}{"model": 123},
+			workflowContext: map[string]interface{}{
+				workflowContextKeyName:   "agent",
+				workflowContextKeyInputs: map[string]interface{}{},
+			},
+			wantModel: "",
+			wantAgent: "agent",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			config := &reliantv1.SaveMessageConfig{
+				Role:    celLiteral("assistant"),
+				Content: celLiteral("test"),
+			}
+
+			result, err := evaluateSaveMessageConfig(
+				config,
+				tc.activityOutput,
+				tc.workflowContext,
+				map[string]interface{}{}, // nodeOutputs
+				"chat-123",
+				"thread-path",
+				"workflow-123",
+				"step-id",
+				nil, // execContext
+				nil, // iter
+			)
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tc.wantModel, result.Model)
+			assert.Equal(t, tc.wantAgent, result.Agent)
 		})
 	}
 }

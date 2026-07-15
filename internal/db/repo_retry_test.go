@@ -3,8 +3,11 @@ package db
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func TestIsRetryableError(t *testing.T) {
@@ -56,6 +59,63 @@ func TestIsRetryableError(t *testing.T) {
 		{
 			name:     "case insensitive - DEADLOCK",
 			err:      errors.New("Deadlock Detected"),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isRetryableError(tt.err)
+			if result != tt.expected {
+				t.Errorf("expected %v, got %v for error: %v", tt.expected, result, tt.err)
+			}
+		})
+	}
+}
+
+func TestIsRetryableErrorSQLState(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{
+			// 40001 must be retryable regardless of message text — this
+			// message contains none of the legacy substrings.
+			name:     "pgconn 40001 with non-standard message",
+			err:      &pgconn.PgError{Code: "40001", Message: "canceling statement due to conflict with recovery"},
+			expected: true,
+		},
+		{
+			name:     "pgconn 40001 wrapped through fmt.Errorf chain",
+			err:      fmt.Errorf("failed to create chat_update: %w", fmt.Errorf("failed to get max sequence: %w", &pgconn.PgError{Code: "40001", Message: "whatever"})),
+			expected: true,
+		},
+		{
+			name:     "pgconn 40P01 deadlock",
+			err:      &pgconn.PgError{Code: "40P01", Message: "deadlock detected"},
+			expected: true,
+		},
+		{
+			name:     "pgconn 25P02 aborted transaction",
+			err:      &pgconn.PgError{Code: "25P02", Message: "current transaction is aborted"},
+			expected: true,
+		},
+		{
+			name:     "pgconn 23505 unique violation",
+			err:      &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint"},
+			expected: true,
+		},
+		{
+			name:     "pgconn 42601 syntax error is not retryable",
+			err:      &pgconn.PgError{Code: "42601", Message: "syntax error at or near SELECT"},
+			expected: false,
+		},
+		{
+			// Error flattened to a string (pgconn error no longer in chain)
+			// but still carrying the pgx-rendered SQLSTATE suffix.
+			name:     "flattened string with SQLSTATE 40001",
+			err:      errors.New("failed to get max sequence: ERROR: some message (SQLSTATE 40001)"),
 			expected: true,
 		},
 	}

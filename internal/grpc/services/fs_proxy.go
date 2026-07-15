@@ -6,16 +6,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -303,6 +305,16 @@ func (s *FileSystemProxyService) GetFilePreviewInfo(
 		IsEditable bool   `json:"is_editable"`
 	}
 	if err := s.sendCommand(ctx, userID, "fs.preview_info", cmdReq, &cmdResp, 30000); err != nil {
+		// Requesting preview info for a directory is a client-input condition
+		// (e.g. the UI asking for a tree folder), not a server failure. Return
+		// the same typed error as the local FileSystemService so it stays out
+		// of ERROR logs / Sentry. The daemon-side error text is the contract
+		// here (cmd_fs.go returns "path is a directory: <path>").
+		if strings.Contains(err.Error(), "path is a directory") {
+			logging.Debug("[FSProxy] GetFilePreviewInfo requested for a directory",
+				"path", req.Msg.Path)
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("path is a directory"))
+		}
 		return nil, err
 	}
 

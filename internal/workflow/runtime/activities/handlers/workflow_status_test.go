@@ -146,7 +146,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 	})
 }
 
-func TestWorkflowStatus_ChildWorkflowMustExist(t *testing.T) {
+func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -185,17 +185,23 @@ func TestWorkflowStatus_ChildWorkflowMustExist(t *testing.T) {
 		ParentWorkflowID: parentWorkflowID,
 	}
 
-	t.Run("Child workflow that doesn't exist returns error", func(t *testing.T) {
+	t.Run("Child workflow that doesn't exist is created on missing", func(t *testing.T) {
 		var output WorkflowStatusOutput
 		err = h.ExecuteActivity(activity.Execute, input, &output)
-		// The activity itself succeeds (returns Success=true) but trackWorkflow logs a warning
-		// The error is logged but doesn't fail the activity since chat_update is more important
 		require.NoError(t, err)
 		assert.True(t, output.Success)
 
-		// Verify workflow was NOT created (since parent didn't create it)
-		_, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
-		assert.Error(t, err, "Workflow should not exist - parent must create it first")
+		// The status write can race ahead of the parent's
+		// CreateWorkflowWithThread commit; after a short retry the activity
+		// creates the row itself (CreateWorkflow is idempotent, so the
+		// parent's later create is a no-op).
+		created, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
+		require.NoError(t, err, "child workflow row should be created on missing")
+		require.NotNil(t, created)
+		assert.Equal(t, db.WorkflowStatusRunning, created.Status)
+		require.NotNil(t, created.ParentID)
+		assert.Equal(t, parentWorkflowID, *created.ParentID)
+		assert.Equal(t, childWorkflowID, created.Thread)
 	})
 }
 

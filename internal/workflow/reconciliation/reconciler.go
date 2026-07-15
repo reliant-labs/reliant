@@ -4,16 +4,22 @@ package reconciliation
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
+	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
 
 // Reconciler detects and repairs mismatches between Temporal workflow state
@@ -29,8 +35,26 @@ import (
 // update the frontend in real-time.
 //
 // The Reconciler also handles truly stuck tasks (activities/workflow tasks
-// lost from Temporal's queue) by terminating the workflow and marking it
-// as failed.
+// lost from Temporal's queue). A stuck task is only acted on after it has
+// been observed stuck across multiple consecutive reconcile passes while the
+// task queue had active pollers (a worker that is down or rebuilding is NOT
+// a stuck task — Temporal re-dispatches everything when the worker returns).
+// Once confirmed, recovery is attempted via workflow reset (replay from just
+// before the lost task); termination + mark-failed is the fallback only if
+// the reset fails.
+//
+// Finally, a cause-agnostic PROGRESS WATCHDOG covers the failure classes the
+// enumerated detectors (stuck-in-Scheduled, wedged-task) cannot: a RUNNING
+// workflow that the user is waiting on, with ZERO pending work in Temporal
+// (no pending workflow task, activities, children, or nexus ops) and a
+// HistoryLength that stops growing, is a workflow that claims to be healthy
+// while doing nothing. Legitimate user-input waits are excluded (see
+// observeProgress for the discriminator). Detection only alerts; a further
+// confirmation window must elapse before the workflow is terminated, marked
+// failed (checkpoint preserved), and the user is told how to resume.
+//
+// Every anomaly class increments reliant_reconciler_anomalies_total and logs
+// at ERROR (which the logging package forwards to Sentry).
 type Reconciler struct {
 	repo       db.Repository
 	tempClient client.Client
@@ -42,9 +66,127 @@ type Reconciler struct {
 	isRunning   bool
 
 	// Configuration
-	pollInterval           time.Duration
-	stuckActivityThreshold time.Duration
+	pollInterval            time.Duration
+	stuckActivityThreshold  time.Duration
+	taskQueue               string
+	namespace               string
+	stuckConfirmationPasses int
+	stuckConfirmationWindow time.Duration
+	wedgeAttemptThreshold   int
+	progressStallPasses     int
+	progressStallWindow     time.Duration
+
+	// stuckMu guards stuckObservations, the in-memory debounce state for
+	// stuck-task handling. In-memory tracking is acceptable here: a single
+	// reconciler process runs per deployment, and even if multiple replicas
+	// ran, each replica debouncing independently only makes destructive
+	// actions rarer (each must confirm on its own), while the
+	// CompareAndSwapWorkflowStatus CAS already guards against duplicate
+	// terminal transitions. A process restart merely restarts the debounce.
+	stuckMu           sync.Mutex
+	stuckObservations map[string]*stuckObservation
+
+	// progressMu guards progressObservations, the in-memory streak tracking
+	// for the cause-agnostic progress watchdog. Same in-memory rationale as
+	// stuckObservations: a restart merely restarts the streak, and the CAS
+	// transition guards duplicate terminal actions.
+	progressMu           sync.Mutex
+	progressObservations map[string]*progressObservation
 }
+
+// stuckObservation tracks one workflow's stuck task across reconcile passes.
+type stuckObservation struct {
+	taskType      string    // "workflow" or "activity"
+	activityID    string    // only set for taskType == "activity"
+	firstObserved time.Time // when this stuck task was first seen (pollers active)
+	passes        int       // consecutive poller-active passes observing this same stuck task
+}
+
+// progressObservation tracks one RUNNING workflow's static-history streak for
+// the cause-agnostic progress watchdog. A streak only accumulates while the
+// workflow is in the suspicious "quiescent" shape (running, zero pending
+// work); any pass with pending work, or any HistoryLength change, resets it.
+type progressObservation struct {
+	historyLength int64     // HistoryLength the streak is anchored to
+	firstObserved time.Time // when this static-history streak started
+	passes        int       // consecutive quiescent passes at this historyLength
+	detected      bool      // detection-stage anomaly already reported once
+}
+
+// Anomaly classes for metrics/alerting. These are the label values of
+// reliant_reconciler_anomalies_total; keep them in sync with the metric's
+// help text in internal/observability/metrics.go.
+const (
+	anomalyStuckReset             = "stuck_reset"
+	anomalyWedgeTerminated        = "wedge_terminated"
+	anomalyLostWorkflowRepaired   = "lost_workflow_repaired"
+	anomalyProgressStallDetected  = "progress_stall_detected"
+	anomalyProgressStallConfirmed = "progress_stall_confirmed"
+	anomalyResetFailedTerminated  = "reset_failed_terminated"
+)
+
+// Debounce defaults: a stuck task must be observed on at least
+// DefaultStuckConfirmationPasses consecutive poller-active reconcile passes,
+// spanning at least DefaultStuckConfirmationWindow, before any recovery
+// action is taken. Both must hold. This absorbs transient scheduling delays
+// and worker restarts that DescribeTaskQueue's poller history hasn't aged
+// out yet.
+const (
+	DefaultStuckConfirmationPasses = 3
+	DefaultStuckConfirmationWindow = 3 * time.Minute
+)
+
+// DefaultWedgeAttemptThreshold is the pending WORKFLOW task attempt count at
+// which a running workflow is considered wedged: every workflow task fails and
+// is retried forever (the classic cause is a non-deterministic replay error —
+// TMPRL1100 — after worker code changed mid-run). Transient workflow task
+// failures (worker OOM, deploy blips) resolve within an attempt or two;
+// crossing this threshold while pollers are active, sustained across the
+// debounce window, means the task can never succeed.
+const DefaultWedgeAttemptThreshold = 5
+
+// wedgeObservationTaskType is the debounce identity used for wedged workflow
+// tasks, distinct from the "workflow"/"activity" stuck-in-Scheduled classes.
+const wedgeObservationTaskType = "wedged-workflow-task"
+
+// Progress-watchdog defaults. This is a tripwire for UNKNOWN failure causes,
+// not a hair trigger: a workflow must sit in the quiescent shape (running,
+// zero pending work, HistoryLength frozen) for at least
+// DefaultProgressStallPasses consecutive passes spanning at least
+// DefaultProgressStallWindow before it is even REPORTED (detection stage:
+// ERROR log + metric, no action). The destructive response (terminate + mark
+// failed + resumable chat message) requires double both thresholds
+// (progressStallConfirmMultiplier) — with the default 30s poll interval,
+// detection at ~10 minutes and action at ~20 minutes of provable inactivity.
+//
+// Legitimate long waits do not reach either stage — see observeProgress for
+// the pause / ask-question / approval discriminator.
+const (
+	DefaultProgressStallPasses = 4
+	DefaultProgressStallWindow = 10 * time.Minute
+
+	// progressStallConfirmMultiplier scales the detection thresholds (both
+	// passes and wall-clock window) up to the confirmation thresholds.
+	progressStallConfirmMultiplier = 2
+)
+
+// progressStallChatMessage is posted to the chat when a confirmed progress
+// stall is terminated. It is accurate because the run is marked failed with
+// its position checkpoint preserved, and SendMessage starts the next run in
+// resume-at-position mode.
+const progressStallChatMessage = "This conversation's workflow stopped making progress and was stopped as a precaution. It will resume where it left off when you send a message."
+
+// wedgeInterruptedChatMessage is posted to the chat when a wedged run is
+// terminated. It is accurate because the terminated run is marked failed in
+// the DB and SendMessage starts the next run in resume-at-position mode.
+const wedgeInterruptedChatMessage = "This conversation's workflow was interrupted by an update and will resume where it left off when you send a message."
+
+// pollerRecencyWindow bounds how old a poller's LastAccessTime may be to
+// still count as "active". Temporal's DescribeTaskQueue keeps poller history
+// for ~5 minutes after the last poll, so a dead worker is still listed for a
+// while; a live worker long-polls at least once a minute, so 2 minutes
+// comfortably covers a live worker while aging out a dead one sooner.
+const pollerRecencyWindow = 2 * time.Minute
 
 // ReconcilerConfig contains configuration for the Reconciler
 type ReconcilerConfig struct {
@@ -53,31 +195,113 @@ type ReconcilerConfig struct {
 	PollInterval time.Duration
 
 	// StuckActivityThreshold is how long a task can be in "Scheduled" state
-	// without being picked up before it's considered stuck and marked as failed.
+	// without being picked up before it's considered a stuck-task
+	// observation (recovery only happens after the debounce confirms it).
 	// Default: 30 seconds
 	StuckActivityThreshold time.Duration
+
+	// TaskQueue is the Temporal task queue whose pollers gate stuck-task
+	// handling. Default: the shared workflow task queue.
+	TaskQueue string
+
+	// Namespace is the Temporal namespace used for reset requests.
+	// Default: the reliant namespace.
+	Namespace string
+
+	// StuckConfirmationPasses is how many consecutive poller-active
+	// reconcile passes must observe the same stuck task before recovery.
+	// Default: DefaultStuckConfirmationPasses.
+	StuckConfirmationPasses int
+
+	// StuckConfirmationWindow is the minimum wall-clock time a stuck task
+	// must persist (with pollers active) before recovery.
+	// Default: DefaultStuckConfirmationWindow.
+	StuckConfirmationWindow time.Duration
+
+	// WedgeAttemptThreshold is the pending workflow task attempt count at
+	// which a workflow is treated as wedged (workflow task failing forever,
+	// e.g. non-deterministic replay after a code update).
+	// Default: DefaultWedgeAttemptThreshold.
+	WedgeAttemptThreshold int
+
+	// ProgressStallPasses is how many consecutive quiescent passes (running,
+	// zero pending work, HistoryLength frozen) must observe a workflow before
+	// a progress stall is REPORTED. Action requires double this.
+	// Default: DefaultProgressStallPasses.
+	ProgressStallPasses int
+
+	// ProgressStallWindow is the minimum wall-clock time a static-history
+	// streak must span before a progress stall is REPORTED. Action requires
+	// double this. Default: DefaultProgressStallWindow.
+	ProgressStallWindow time.Duration
 }
 
 // DefaultConfig returns the default reconciler configuration
 func DefaultConfig() *ReconcilerConfig {
 	return &ReconcilerConfig{
-		PollInterval:           30 * time.Second,
-		StuckActivityThreshold: 30 * time.Second,
+		PollInterval:            30 * time.Second,
+		StuckActivityThreshold:  30 * time.Second,
+		TaskQueue:               v2workflow.SharedTaskQueue,
+		Namespace:               v2workflow.TemporalNamespace,
+		StuckConfirmationPasses: DefaultStuckConfirmationPasses,
+		StuckConfirmationWindow: DefaultStuckConfirmationWindow,
+		WedgeAttemptThreshold:   DefaultWedgeAttemptThreshold,
+		ProgressStallPasses:     DefaultProgressStallPasses,
+		ProgressStallWindow:     DefaultProgressStallWindow,
 	}
 }
 
-// NewReconciler creates a new workflow reconciler
+// NewReconciler creates a new workflow reconciler. Zero-valued config fields
+// fall back to DefaultConfig values.
 func NewReconciler(repo db.Repository, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
+	def := DefaultConfig()
 	if config == nil {
-		config = DefaultConfig()
+		config = def
+	}
+	cfg := *config
+	if cfg.PollInterval <= 0 {
+		cfg.PollInterval = def.PollInterval
+	}
+	if cfg.StuckActivityThreshold <= 0 {
+		cfg.StuckActivityThreshold = def.StuckActivityThreshold
+	}
+	if cfg.TaskQueue == "" {
+		cfg.TaskQueue = def.TaskQueue
+	}
+	if cfg.Namespace == "" {
+		cfg.Namespace = def.Namespace
+	}
+	if cfg.StuckConfirmationPasses <= 0 {
+		cfg.StuckConfirmationPasses = def.StuckConfirmationPasses
+	}
+	if cfg.StuckConfirmationWindow <= 0 {
+		cfg.StuckConfirmationWindow = def.StuckConfirmationWindow
+	}
+	if cfg.WedgeAttemptThreshold <= 0 {
+		cfg.WedgeAttemptThreshold = def.WedgeAttemptThreshold
+	}
+	if cfg.ProgressStallPasses <= 0 {
+		cfg.ProgressStallPasses = def.ProgressStallPasses
+	}
+	if cfg.ProgressStallWindow <= 0 {
+		cfg.ProgressStallWindow = def.ProgressStallWindow
 	}
 	return &Reconciler{
-		repo:                   repo,
-		tempClient:             tempClient,
-		pollInterval:           config.PollInterval,
-		stuckActivityThreshold: config.StuckActivityThreshold,
-		stopPolling:            make(chan struct{}),
-		pollDone:               make(chan struct{}),
+		repo:                    repo,
+		tempClient:              tempClient,
+		pollInterval:            cfg.PollInterval,
+		stuckActivityThreshold:  cfg.StuckActivityThreshold,
+		taskQueue:               cfg.TaskQueue,
+		namespace:               cfg.Namespace,
+		stuckConfirmationPasses: cfg.StuckConfirmationPasses,
+		stuckConfirmationWindow: cfg.StuckConfirmationWindow,
+		wedgeAttemptThreshold:   cfg.WedgeAttemptThreshold,
+		progressStallPasses:     cfg.ProgressStallPasses,
+		progressStallWindow:     cfg.ProgressStallWindow,
+		stuckObservations:       make(map[string]*stuckObservation),
+		progressObservations:    make(map[string]*progressObservation),
+		stopPolling:             make(chan struct{}),
+		pollDone:                make(chan struct{}),
 	}
 }
 
@@ -95,17 +319,169 @@ type TemporalWorkflowState struct {
 	StuckActivityType  string        // Activity type name (only if StuckTaskType == "activity")
 	StuckTaskScheduled time.Time     // When the stuck task was scheduled
 	StuckDuration      time.Duration // How long it's been stuck
+
+	// Wedged workflow task detection: the pending WORKFLOW task is being
+	// picked up and failing over and over (attempt count keeps climbing),
+	// so it never sits in Scheduled long enough to look "stuck". The classic
+	// cause is a non-deterministic replay error after worker code changed
+	// mid-run. Reset is USELESS for this class — replay re-diverges — so
+	// recovery is terminate + mark failed + resume-at-position on the next
+	// user message.
+	HasWedgedWorkflowTask bool  // True if pending workflow task attempt >= threshold
+	WedgedTaskAttempt     int32 // Attempt count of the wedged workflow task
+
+	// Progress-watchdog inputs (only populated while IsRunning). Together
+	// they define the suspicious "quiescent" shape: a running workflow with
+	// zero pending work whose HistoryLength has stopped growing.
+	HistoryLength          int64 // WorkflowExecutionInfo.HistoryLength
+	HasPendingWorkflowTask bool  // any pending workflow task (any state)
+	PendingActivityCount   int   // pending activities (any state)
+	PendingChildrenCount   int   // pending Temporal child workflows
+	PendingNexusCount      int   // pending nexus operations
+}
+
+// quiescent reports whether the workflow is in the progress watchdog's
+// suspicious shape: Temporal says RUNNING but there is NOTHING in flight —
+// no pending workflow task, activities, children, or nexus operations. A
+// workflow doing legitimate slow work always has a pending something (a slow
+// LLM call is a pending activity; a fired timer becomes a pending workflow
+// task). The only legitimate quiescent workflows are signal-parked waits,
+// which observeProgress excludes via their DB wait markers.
+func (s *TemporalWorkflowState) quiescent() bool {
+	return s.IsRunning &&
+		!s.HasStuckTask && !s.HasWedgedWorkflowTask &&
+		!s.HasPendingWorkflowTask &&
+		s.PendingActivityCount == 0 &&
+		s.PendingChildrenCount == 0 &&
+		s.PendingNexusCount == 0
 }
 
 // ReconciliationResult contains the result of reconciling a single workflow
 type ReconciliationResult struct {
-	WorkflowID     string
-	ChatID         string
-	DBStatus       db.WorkflowStatus
-	TemporalStatus db.WorkflowStatus
-	WasStale       bool // True if DB status was updated
-	NeedsRecovery  bool // True if workflow is lost and needs user action
-	Error          error
+	WorkflowID       string
+	ChatID           string
+	DBStatus         db.WorkflowStatus
+	TemporalStatus   db.WorkflowStatus
+	WasStale         bool // True if DB status was updated
+	NeedsRecovery    bool // True if workflow is lost and needs user action
+	RecoveredByReset bool // True if a stuck task was recovered via workflow reset
+	ProgressStalled  bool // True if a confirmed progress stall was terminated + marked failed
+	Error            error
+}
+
+// passStats aggregates anomaly counts for one reconcile pass so
+// ReconcileRunningWorkflows can emit a single summary line (and stay silent
+// on clean passes).
+type passStats struct {
+	mu     sync.Mutex
+	counts map[string]int
+}
+
+func (s *passStats) record(class string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counts == nil {
+		s.counts = make(map[string]int)
+	}
+	s.counts[class]++
+}
+
+// snapshot returns the total anomaly count and a stable "class=n" summary.
+func (s *passStats) snapshot() (total int, summary string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.counts) == 0 {
+		return 0, ""
+	}
+	parts := make([]string, 0, len(s.counts))
+	for class, n := range s.counts {
+		parts = append(parts, fmt.Sprintf("%s=%d", class, n))
+		total += n
+	}
+	sort.Strings(parts)
+	return total, strings.Join(parts, " ")
+}
+
+// recordAnomaly increments the Prometheus anomaly counter for the class and
+// adds it to the per-pass summary. Callers pair every recordAnomaly with a
+// context-rich ERROR log (which the logging package forwards to Sentry —
+// these classes are actionable and must never be suppressed).
+func (r *Reconciler) recordAnomaly(stats *passStats, class string) {
+	observability.ReconcilerAnomaliesTotal.WithLabelValues(class).Inc()
+	if stats != nil {
+		stats.record(class)
+	}
+}
+
+// pollerState lazily caches DescribeTaskQueue results for a single reconcile
+// pass, so a pass makes at most one poller check (one call per task queue
+// type) no matter how many workflows are stuck.
+type pollerState struct {
+	mu              sync.Mutex
+	fetched         bool
+	workflowPollers bool
+	activityPollers bool
+	err             error
+}
+
+// pollersActive reports whether the reconciler's task queue has active
+// pollers for the given stuck task type ("workflow" or "activity"). Results
+// are fetched once per reconcile pass and cached. A poller only counts as
+// active if it polled within pollerRecencyWindow (Temporal lists pollers for
+// ~5 minutes after their last poll, so a freshly-dead worker is still
+// listed).
+func (r *Reconciler) pollersActive(ctx context.Context, ps *pollerState, taskType string) (bool, error) {
+	ps.mu.Lock()
+	defer ps.mu.Unlock()
+
+	if !ps.fetched {
+		ps.fetched = true
+		ps.workflowPollers, ps.err = r.queryPollers(ctx, enums.TASK_QUEUE_TYPE_WORKFLOW)
+		if ps.err == nil {
+			ps.activityPollers, ps.err = r.queryPollers(ctx, enums.TASK_QUEUE_TYPE_ACTIVITY)
+		}
+
+		// One summary log line per pass (not per workflow).
+		switch {
+		case ps.err != nil:
+			logging.Warn("[Reconciler] Failed to check task queue pollers - skipping stuck-task handling this pass",
+				"taskQueue", r.taskQueue,
+				"error", ps.err,
+			)
+		case !ps.workflowPollers || !ps.activityPollers:
+			logging.Info("[Reconciler] Task queue has no active pollers - worker down or rebuilding, skipping stuck-task handling this pass",
+				"taskQueue", r.taskQueue,
+				"workflowPollers", ps.workflowPollers,
+				"activityPollers", ps.activityPollers,
+			)
+		}
+	}
+
+	if ps.err != nil {
+		return false, ps.err
+	}
+	// "activity" gates on activity pollers; "workflow" and the wedged-
+	// workflow-task class both gate on workflow pollers.
+	if taskType == "activity" {
+		return ps.activityPollers, nil
+	}
+	return ps.workflowPollers, nil
+}
+
+// queryPollers returns whether the task queue has at least one recently
+// active poller of the given type.
+func (r *Reconciler) queryPollers(ctx context.Context, taskQueueType enums.TaskQueueType) (bool, error) {
+	resp, err := r.tempClient.DescribeTaskQueue(ctx, r.taskQueue, taskQueueType)
+	if err != nil {
+		return false, fmt.Errorf("DescribeTaskQueue(%s, %s): %w", r.taskQueue, taskQueueType, err)
+	}
+	cutoff := time.Now().Add(-pollerRecencyWindow)
+	for _, p := range resp.GetPollers() {
+		if p.GetLastAccessTime().AsTime().After(cutoff) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // getTemporalWorkflowState queries Temporal for the actual workflow state.
@@ -142,9 +518,12 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 		isRunning = true
 	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		mappedStatus = db.WorkflowStatusCompleted
-	case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+	case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+		enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+		// TERMINATED = system/operator kill → Failed (resumable at position).
+		// Only CANCELED (user cancel) maps to Cancelled.
 		mappedStatus = db.WorkflowStatusFailed
-	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
 		mappedStatus = db.WorkflowStatusCancelled
 	case enums.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		// Workflow continued - treat as running since there's a new run
@@ -172,6 +551,33 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 	if isRunning {
 		now := time.Now()
 
+		// Progress-watchdog inputs: history growth + pending-work census.
+		state.HistoryLength = descResp.WorkflowExecutionInfo.HistoryLength
+		state.HasPendingWorkflowTask = descResp.PendingWorkflowTask != nil
+		state.PendingActivityCount = len(descResp.PendingActivities)
+		state.PendingChildrenCount = len(descResp.PendingChildren)
+		state.PendingNexusCount = len(descResp.PendingNexusOperations)
+
+		// Wedge check FIRST: a workflow task with a high attempt count is
+		// being dispatched and failing repeatedly (e.g. non-deterministic
+		// replay error after a code update). It must not be classified as
+		// merely "stuck in Scheduled" — the stuck path recovers via reset,
+		// which is useless here (replay re-diverges). The attempt count on
+		// DescribeWorkflowExecution's PendingWorkflowTask is the cheapest
+		// reliable signal for this class: transient failures resolve within
+		// an attempt or two, while a wedge climbs forever.
+		if pwt := descResp.PendingWorkflowTask; pwt != nil && r.wedgeAttemptThreshold > 0 && pwt.Attempt >= int32(r.wedgeAttemptThreshold) {
+			state.HasWedgedWorkflowTask = true
+			state.WedgedTaskAttempt = pwt.Attempt
+
+			logging.Debug("[Reconciler] Observed wedged workflow task (repeated failures)",
+				"workflowID", workflowID,
+				"attempt", pwt.Attempt,
+				"taskState", pwt.State.String(),
+			)
+			return state, nil
+		}
+
 		// First check for stuck workflow task (higher priority - workflow can't proceed without it)
 		if descResp.PendingWorkflowTask != nil {
 			pwt := descResp.PendingWorkflowTask
@@ -185,7 +591,9 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 					state.StuckTaskScheduled = scheduledTime
 					state.StuckDuration = stuckDuration
 
-					logging.Warn("[Reconciler] Detected stuck workflow task",
+					// Debug: this fires every pass while a task waits (e.g.
+					// during a worker rebuild); action-time logs are louder.
+					logging.Debug("[Reconciler] Observed workflow task in Scheduled state past threshold",
 						"workflowID", workflowID,
 						"scheduledTime", scheduledTime,
 						"stuckDuration", stuckDuration,
@@ -210,7 +618,8 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 						state.StuckTaskScheduled = scheduledTime
 						state.StuckDuration = stuckDuration
 
-						logging.Warn("[Reconciler] Detected stuck activity",
+						// Debug: fires every pass while a task waits; see above.
+						logging.Debug("[Reconciler] Observed activity in Scheduled state past threshold",
 							"workflowID", workflowID,
 							"activityID", pa.ActivityId,
 							"activityType", pa.ActivityType.GetName(),
@@ -230,6 +639,14 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 // ReconcileWorkflow reconciles a single workflow's status with Temporal.
 // Returns a ReconciliationResult with details about what was found/fixed.
 func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *ReconciliationResult {
+	return r.reconcileWorkflow(ctx, wf, &pollerState{}, &passStats{})
+}
+
+// reconcileWorkflow is ReconcileWorkflow with an explicit per-pass poller
+// cache (so ReconcileRunningWorkflows performs at most one poller check per
+// pass regardless of how many workflows it reconciles) and a per-pass anomaly
+// aggregator for the end-of-pass summary line.
+func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pollers *pollerState, stats *passStats) *ReconciliationResult {
 	result := &ReconciliationResult{
 		WorkflowID: wf.ID,
 		ChatID:     wf.ChatID,
@@ -261,12 +678,6 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 
 	if !temporalState.Exists {
 		// Workflow not in Temporal (expired/lost) — repair DB status
-		logging.Warn("[Reconciler] Workflow not found in Temporal, marking as completed",
-			"workflowID", wf.ID,
-			"chatID", wf.ChatID,
-			"dbStatus", wf.Status,
-		)
-
 		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusCompleted, wf.Status)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark lost workflow as completed: %w", err)
@@ -275,6 +686,20 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 		if !swapped {
 			return result // another reconciler already handled this
 		}
+
+		// ERROR (Sentry-visible): the DB believed this workflow was live but
+		// Temporal has no record of it — state was silently lost somewhere.
+		logging.Error("[Reconciler] Workflow not found in Temporal, marked as completed",
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+			"dbStatus", wf.Status,
+		)
+		r.recordAnomaly(stats, anomalyLostWorkflowRepaired)
+
+		// This root workflow just moved to Completed here rather than via the
+		// authoritative WorkflowStatus activity, so transition the chat to any
+		// declared transition_to target (idempotent no-op if the activity did).
+		r.transitionChatOnCompletion(ctx, wf)
 
 		result.TemporalStatus = db.WorkflowStatusCompleted
 		result.WasStale = true
@@ -285,11 +710,119 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 
 	result.TemporalStatus = temporalState.Status
 
-	// Check for stuck task (workflow task or activity) - this indicates the task was lost
-	// and the workflow is unrecoverable. Mark it as failed and notify the user.
-	// With the shared worker pool, there's no per-workflow worker lifecycle to worry about.
+	// Any pass that finds the workflow NOT stuck/wedged-and-running clears its
+	// debounce state: the tracked task was picked up (or completed, or the
+	// workflow paused), so a later stuck observation starts a fresh
+	// confirmation window.
+	if (!temporalState.HasStuckTask && !temporalState.HasWedgedWorkflowTask) || wf.Status != db.WorkflowStatusRunning {
+		r.clearStuckObservation(wf.ID)
+	}
+
+	// Progress-watchdog bookkeeping: only a RUNNING workflow in the quiescent
+	// shape accumulates a stall streak; any other pass resets it. Note that
+	// PAUSED workflows never accumulate — pause (user pause, retry-exhaustion
+	// self-pause, daemon-offline circuit breaker) always marks the DB status
+	// paused, so the user is not awaiting progress.
+	suspicious := wf.Status == db.WorkflowStatusRunning && temporalState.quiescent()
+	if !suspicious {
+		r.clearProgressObservation(wf.ID)
+	}
+
+	// Wedged workflow task: the workflow task is dispatched and fails over
+	// and over (attempt count climbing) — every signal lands in a black hole
+	// and the workflow can never make progress. Debounced like the stuck
+	// path (pollers active + consecutive passes + wall-clock window).
+	// Recovery for this class deliberately does NOT reset: for the dominant
+	// cause (non-deterministic replay after a code update) replay re-diverges
+	// no matter where we reset to. Instead: terminate with a clear reason,
+	// mark failed in the DB (which routes the next user message into
+	// resume-at-position), and tell the user how to continue.
+	if temporalState.HasWedgedWorkflowTask && wf.Status == db.WorkflowStatusRunning {
+		if !r.observeTask(ctx, wf, wedgeObservationTaskType, "", pollers) {
+			// Not yet confirmed (pollers absent, or debounce still counting).
+			return result
+		}
+
+		logging.Error("[Reconciler] Workflow task is failing repeatedly (wedged) - terminating and marking as failed",
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+			"attempt", temporalState.WedgedTaskAttempt,
+		)
+		r.recordAnomaly(stats, anomalyWedgeTerminated)
+
+		terminateReason := fmt.Sprintf(
+			"Workflow wedged: workflow task failing repeatedly (attempt %d) - likely non-deterministic replay after a code update; reset would re-diverge",
+			temporalState.WedgedTaskAttempt,
+		)
+		if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
+			logging.Warn("[Reconciler] Failed to terminate wedged workflow in Temporal",
+				"error", err,
+				"workflowID", wf.ID,
+			)
+			// Continue anyway - we still want to mark it failed in DB
+		}
+		r.clearStuckObservation(wf.ID)
+
+		// Mark failed (CAS prevents duplicate transitions). Failed + kept
+		// position checkpoint = the next user message resumes at position.
+		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusFailed, wf.Status)
+		if err != nil {
+			result.Error = fmt.Errorf("failed to mark wedged workflow as failed: %w", err)
+			return result
+		}
+		if !swapped {
+			return result // another reconciler already handled this
+		}
+
+		// Tell the user what happened and how to continue. Accurate because
+		// SendMessage starts the next run in resume-at-position mode for
+		// failed/terminated predecessors.
+		if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), wedgeInterruptedChatMessage, &wf.ID, nil, nil); err != nil {
+			logging.Warn("[Reconciler] Failed to add wedge interruption message to chat",
+				"error", err,
+				"workflowID", wf.ID,
+			)
+		}
+
+		result.WasStale = true
+		result.TemporalStatus = db.WorkflowStatusFailed
+
+		return result
+	}
+
+	// Check for stuck task (workflow task or activity). A task sitting in
+	// Scheduled state usually means the worker is down or rebuilding — in
+	// that case Temporal re-dispatches it as soon as a worker returns, and
+	// the reconciler must do nothing. Only a task that stays Scheduled
+	// while the task queue has active pollers, across the debounce window,
+	// is treated as lost and recovered.
 	if temporalState.HasStuckTask && wf.Status == db.WorkflowStatusRunning {
-		logging.Error("[Reconciler] Workflow is stuck and unrecoverable - terminating and marking as failed",
+		if !r.observeTask(ctx, wf, temporalState.StuckTaskType, temporalState.StuckActivityID, pollers) {
+			// Not yet confirmed (pollers absent, or debounce still counting).
+			return result
+		}
+
+		// Confirmed: the task stayed Scheduled across the debounce window
+		// with active pollers — it was lost (e.g. worker died mid-dispatch
+		// and the queue entry is gone). Recover by resetting the workflow
+		// to just before the lost task was scheduled: Temporal replays and
+		// re-issues it, and the workflow simply continues.
+		if err := r.recoverStuckWorkflowByReset(ctx, wf, temporalState); err == nil {
+			r.clearStuckObservation(wf.ID)
+			r.recordAnomaly(stats, anomalyStuckReset)
+			result.RecoveredByReset = true
+			return result
+		} else { //nolint:revive // keep err scoped to the recovery attempt
+			logging.Warn("[Reconciler] Workflow reset failed - falling back to terminate",
+				"error", err,
+				"workflowID", wf.ID,
+				"chatID", wf.ChatID,
+				"stuckTaskType", temporalState.StuckTaskType,
+				"stuckActivityID", temporalState.StuckActivityID,
+			)
+		}
+
+		logging.Error("[Reconciler] Workflow is stuck and reset failed - terminating and marking as failed",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
 			"stuckTaskType", temporalState.StuckTaskType,
@@ -297,10 +830,11 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 			"stuckActivityType", temporalState.StuckActivityType,
 			"stuckDuration", temporalState.StuckDuration,
 		)
+		r.recordAnomaly(stats, anomalyResetFailedTerminated)
 
 		// Terminate the stuck workflow in Temporal so it's no longer "running"
 		// This prevents any confusion where DB says failed but Temporal says running
-		terminateReason := fmt.Sprintf("Workflow stuck: %s task in Scheduled state for %v", temporalState.StuckTaskType, temporalState.StuckDuration)
+		terminateReason := fmt.Sprintf("Workflow stuck: %s task in Scheduled state for %v (reset recovery failed)", temporalState.StuckTaskType, temporalState.StuckDuration)
 		if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
 			logging.Warn("[Reconciler] Failed to terminate stuck workflow in Temporal",
 				"error", err,
@@ -308,6 +842,7 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 			)
 			// Continue anyway - we still want to mark it failed in DB
 		}
+		r.clearStuckObservation(wf.ID)
 
 		// Mark workflow as failed in DB (CAS prevents duplicate transitions)
 		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusFailed, wf.Status)
@@ -332,6 +867,95 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 		result.TemporalStatus = db.WorkflowStatusFailed
 
 		return result
+	}
+
+	// Progress watchdog: the cause-agnostic tripwire. The workflow is RUNNING
+	// with ZERO pending work in Temporal — the shape of a silent wedge from an
+	// UNKNOWN cause (every enumerated detector above requires a pending task
+	// to look at). Track HistoryLength across passes; a frozen history across
+	// the detection thresholds is reported (ERROR + metric, no action), and
+	// only after the confirmation thresholds (double detection) is the
+	// workflow terminated, marked failed (checkpoint preserved — SendMessage
+	// resumes at position), and the user told how to continue.
+	if suspicious {
+		stage, passes, elapsed := r.observeProgress(ctx, wf, temporalState)
+		switch stage {
+		case progressStageDetected:
+			// Report only. The cause is unknown — it could still be a wait
+			// class this reconciler doesn't know about — so give it a full
+			// confirmation window before doing anything destructive.
+			logging.Error("[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
+				"workflowID", wf.ID,
+				"chatID", wf.ChatID,
+				"historyLength", temporalState.HistoryLength,
+				"passes", passes,
+				"elapsed", elapsed,
+				"detectPasses", r.progressStallPasses,
+				"detectWindow", r.progressStallWindow,
+			)
+			r.recordAnomaly(stats, anomalyProgressStallDetected)
+
+		case progressStageConfirmed:
+			// Destructive action is additionally gated on live workflow
+			// pollers: with the worker fleet down/rebuilding the whole system
+			// is stalled for a KNOWN reason, and terminating would be wrong.
+			// Unlike the stuck-task debounce, poller absence does NOT reset
+			// the streak — a quiescent workflow needs no worker to make
+			// progress, so the evidence stays valid; we just hold the action.
+			active, pollErr := r.pollersActive(ctx, pollers, "workflow")
+			if pollErr != nil || !active {
+				return result
+			}
+
+			logging.Error("[Reconciler] Progress stall confirmed - terminating and marking as failed for resume",
+				"workflowID", wf.ID,
+				"chatID", wf.ChatID,
+				"historyLength", temporalState.HistoryLength,
+				"passes", passes,
+				"elapsed", elapsed,
+			)
+			r.recordAnomaly(stats, anomalyProgressStallConfirmed)
+
+			terminateReason := fmt.Sprintf(
+				"Workflow stalled: no pending tasks and history length %d unchanged for %v across %d reconcile passes (cause unknown)",
+				temporalState.HistoryLength, elapsed.Round(time.Second), passes,
+			)
+			if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
+				logging.Warn("[Reconciler] Failed to terminate stalled workflow in Temporal",
+					"error", err,
+					"workflowID", wf.ID,
+				)
+				// Continue anyway - we still want to mark it failed in DB
+			}
+			r.clearProgressObservation(wf.ID)
+
+			// Mark failed (CAS prevents duplicate transitions). Failed + kept
+			// position checkpoint = the next user message resumes at position.
+			swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusFailed, wf.Status)
+			if err != nil {
+				result.Error = fmt.Errorf("failed to mark stalled workflow as failed: %w", err)
+				return result
+			}
+			if !swapped {
+				return result // another reconciler already handled this
+			}
+
+			// Tell the user what happened and how to continue. Accurate
+			// because SendMessage starts the next run in resume-at-position
+			// mode for failed/terminated predecessors.
+			if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), progressStallChatMessage, &wf.ID, nil, nil); err != nil {
+				logging.Warn("[Reconciler] Failed to add progress-stall message to chat",
+					"error", err,
+					"workflowID", wf.ID,
+				)
+			}
+
+			result.WasStale = true
+			result.ProgressStalled = true
+			result.TemporalStatus = db.WorkflowStatusFailed
+
+			return result
+		}
 	}
 
 	// Temporal has the workflow - check for status mismatch
@@ -382,10 +1006,314 @@ func (r *Reconciler) ReconcileWorkflow(ctx context.Context, wf *db.Workflow) *Re
 		}
 		if swapped {
 			result.WasStale = true
+			// Drift-repaired to a terminal Completed here (not via the
+			// WorkflowStatus activity) — transition the chat to any target.
+			if temporalState.Status == db.WorkflowStatusCompleted {
+				r.transitionChatOnCompletion(ctx, wf)
+			}
 		}
 	}
 
 	return result
+}
+
+// transitionChatOnCompletion switches the chat to the completed ROOT workflow's
+// declared `transition_to` target. This covers the rare paths where the
+// reconciler — not the authoritative WorkflowStatus completion activity — is what
+// marks a run Completed (Temporal lost the workflow, or a terminal-status drift
+// repair). Best-effort and idempotent: a normal completion already transitioned
+// via the activity, so this is a no-op then. reconcileWorkflow returns early for
+// child workflows (wf.ParentID != nil), so every caller here is a root workflow.
+func (r *Reconciler) transitionChatOnCompletion(ctx context.Context, wf *db.Workflow) {
+	to, err := handlers.TransitionChatOnCompletion(ctx, r.repo, wf.ChatID, wf.WorkflowName)
+	if err != nil {
+		logging.Warn("[Reconciler] Failed to transition chat on completion",
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+			"error", err,
+		)
+		return
+	}
+	if to != "" {
+		handlers.EmitTransitionMessage(ctx, r.repo, wf.ChatID, wf.Thread, wf.ID, to)
+	}
+}
+
+// observeTask records one problem-task observation (stuck-in-Scheduled or
+// wedged workflow task) and reports whether it is now CONFIRMED (eligible for
+// recovery). Confirmation requires:
+//   - active pollers on the task queue for the task's type THIS pass
+//     (no pollers = worker down/rebuilding = Temporal will re-dispatch), and
+//   - at least stuckConfirmationPasses consecutive poller-active passes
+//     observing the SAME task, and
+//   - at least stuckConfirmationWindow elapsed since first observation.
+//
+// The tracking entry resets whenever the task is no longer problematic, the
+// task identity changes, or pollers were absent (or unknown) for a pass.
+func (r *Reconciler) observeTask(ctx context.Context, wf *db.Workflow, taskType, activityID string, pollers *pollerState) bool {
+	active, err := r.pollersActive(ctx, pollers, taskType)
+	if err != nil || !active {
+		// Worker down/rebuilding, or liveness unknown: not evidence of a
+		// lost task. Reset the debounce so only uninterrupted poller-active
+		// observations count. (The skip itself is logged once per pass by
+		// pollersActive, not per workflow.)
+		r.clearStuckObservation(wf.ID)
+		return false
+	}
+
+	r.stuckMu.Lock()
+	defer r.stuckMu.Unlock()
+
+	obs := r.stuckObservations[wf.ID]
+	if obs == nil || obs.taskType != taskType || obs.activityID != activityID {
+		// New task (or the task changed identity, meaning the previous one
+		// made progress) — start a fresh confirmation window.
+		obs = &stuckObservation{
+			taskType:      taskType,
+			activityID:    activityID,
+			firstObserved: time.Now(),
+		}
+		r.stuckObservations[wf.ID] = obs
+	}
+
+	obs.passes++
+	return obs.passes >= r.stuckConfirmationPasses && time.Since(obs.firstObserved) >= r.stuckConfirmationWindow
+}
+
+// clearStuckObservation drops the debounce entry for a workflow.
+func (r *Reconciler) clearStuckObservation(workflowID string) {
+	r.stuckMu.Lock()
+	defer r.stuckMu.Unlock()
+	delete(r.stuckObservations, workflowID)
+}
+
+// pruneStuckObservations drops debounce entries for workflows that are no
+// longer in the running set (completed/cancelled between passes), so the
+// in-memory map cannot grow unboundedly.
+func (r *Reconciler) pruneStuckObservations(running map[string]bool) {
+	r.stuckMu.Lock()
+	defer r.stuckMu.Unlock()
+	for id := range r.stuckObservations {
+		if !running[id] {
+			delete(r.stuckObservations, id)
+		}
+	}
+}
+
+// progressStage is the progress watchdog's verdict for one quiescent pass.
+type progressStage int
+
+const (
+	// progressStageNone: below thresholds, already reported, or excluded as a
+	// legitimate user-input wait — nothing to do this pass.
+	progressStageNone progressStage = iota
+	// progressStageDetected: the detection thresholds were just crossed —
+	// report (ERROR + metric) but take no action. Returned exactly once per
+	// streak.
+	progressStageDetected
+	// progressStageConfirmed: the confirmation thresholds (double detection)
+	// have passed — the caller may act.
+	progressStageConfirmed
+)
+
+// observeProgress records one quiescent-pass observation for the progress
+// watchdog and returns the stage reached, plus the streak's pass count and
+// wall-clock span for logging.
+//
+// A streak is anchored to a HistoryLength value: any growth (or shrink, e.g.
+// continue-as-new/reset) starts a fresh streak, because history movement IS
+// progress. Detection requires progressStallPasses consecutive quiescent
+// passes spanning progressStallWindow; confirmation requires double both.
+//
+// Discriminator for legitimate signal-parked waits: a workflow blocked on a
+// signal (ask_question / ask_user on "signal.question.<id>", tool approval on
+// "signal.approval.<id>", pause on "signal.resume") has the EXACT same
+// Temporal footprint as a silent wedge — RUNNING, zero pending work, frozen
+// history. DescribeWorkflowExecution cannot tell them apart (blocked signal
+// receives and unfired timers are invisible in the pending census). What
+// distinguishes them is the durable DB wait marker each park point writes
+// BEFORE parking:
+//   - pause (user pause, retry-exhaustion, daemon-offline breaker) marks the
+//     workflow status paused, so it never enters the running reconcile set;
+//   - ask_question/ask_user writes a pending questions row (status=1) via the
+//     QuestionCreate activity, keyed by chat;
+//   - tool approvals write a pending approvals row via ApprovalCreate.
+//
+// The DB checks run only when a threshold is being crossed (at most once per
+// detection window per workflow), not on every pass. If the check errors the
+// streak is frozen as-is — never report or act on unknown exclusion state.
+func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState) (stage progressStage, passes int, elapsed time.Duration) {
+	r.progressMu.Lock()
+	obs := r.progressObservations[wf.ID]
+	if obs == nil || obs.historyLength != state.HistoryLength {
+		// First observation, or history moved (= progress): fresh streak.
+		obs = &progressObservation{
+			historyLength: state.HistoryLength,
+			firstObserved: time.Now(),
+		}
+		r.progressObservations[wf.ID] = obs
+	}
+	obs.passes++
+	passes = obs.passes
+	elapsed = time.Since(obs.firstObserved)
+	crossingDetect := !obs.detected &&
+		passes >= r.progressStallPasses &&
+		elapsed >= r.progressStallWindow
+	confirmed := passes >= progressStallConfirmMultiplier*r.progressStallPasses &&
+		elapsed >= time.Duration(progressStallConfirmMultiplier)*r.progressStallWindow
+	r.progressMu.Unlock()
+
+	if !crossingDetect && !confirmed {
+		return progressStageNone, passes, elapsed
+	}
+
+	// Threshold crossing: check the legitimate-wait exclusions before
+	// reporting or acting.
+	waiting, err := r.awaitingUserInput(ctx, wf)
+	if err != nil {
+		logging.Warn("[Reconciler] Progress watchdog could not check user-input waits - holding",
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+			"error", err,
+		)
+		return progressStageNone, passes, elapsed
+	}
+	if waiting {
+		// Signal-parked on user input (question/approval): not a stall. Clear
+		// the streak so a resolved wait starts fresh accounting.
+		r.clearProgressObservation(wf.ID)
+		return progressStageNone, passes, elapsed
+	}
+
+	if confirmed {
+		return progressStageConfirmed, passes, elapsed
+	}
+
+	// Mark the detection as reported so the ERROR/metric fire once per streak.
+	r.progressMu.Lock()
+	if cur := r.progressObservations[wf.ID]; cur != nil {
+		cur.detected = true
+	}
+	r.progressMu.Unlock()
+	return progressStageDetected, passes, elapsed
+}
+
+// awaitingUserInput reports whether the workflow's chat has a durable
+// user-input wait marker: a pending question (ask_question / ask_user) or a
+// pending tool approval. These are the signal-parked waits whose Temporal
+// footprint is indistinguishable from a silent stall.
+func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bool, error) {
+	question, err := r.repo.GetPendingQuestionByChatID(ctx, wf.ChatID)
+	if err != nil {
+		return false, fmt.Errorf("checking pending question: %w", err)
+	}
+	if question != nil {
+		return true, nil
+	}
+	approvals, err := r.repo.ListPendingApprovalsByChat(ctx, wf.ChatID)
+	if err != nil {
+		return false, fmt.Errorf("checking pending approvals: %w", err)
+	}
+	return len(approvals) > 0, nil
+}
+
+// clearProgressObservation drops the watchdog streak for a workflow.
+func (r *Reconciler) clearProgressObservation(workflowID string) {
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	delete(r.progressObservations, workflowID)
+}
+
+// pruneProgressObservations drops watchdog streaks for workflows that are no
+// longer in the running set, so the in-memory map cannot grow unboundedly.
+func (r *Reconciler) pruneProgressObservations(running map[string]bool) {
+	r.progressMu.Lock()
+	defer r.progressMu.Unlock()
+	for id := range r.progressObservations {
+		if !running[id] {
+			delete(r.progressObservations, id)
+		}
+	}
+}
+
+// recoverStuckWorkflowByReset attempts to recover a workflow whose task was
+// lost by resetting it to the last workflow task completed before the stuck
+// task was scheduled. Temporal truncates history there, replays, and
+// re-issues the lost task; completed activities before the reset point keep
+// their recorded results and signals after it are re-applied, so the
+// workflow simply continues.
+func (r *Reconciler) recoverStuckWorkflowByReset(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState) error {
+	resetEventID, err := r.findResetPoint(ctx, wf.ID, state)
+	if err != nil {
+		return fmt.Errorf("finding reset point: %w", err)
+	}
+
+	resp, err := r.tempClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: r.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wf.ID,
+			RunId:      state.RunID,
+		},
+		Reason:                    "reconciler: recovering lost task",
+		WorkflowTaskFinishEventId: resetEventID,
+	})
+	if err != nil {
+		return fmt.Errorf("resetting workflow execution: %w", err)
+	}
+
+	// ERROR (Sentry-visible) even though recovery succeeded: a task was LOST
+	// from Temporal's queue, which should never happen — the repair working is
+	// not a reason to hide the anomaly.
+	logging.Error("[Reconciler] Recovered stuck workflow via reset (task was lost from queue)",
+		"workflowID", wf.ID,
+		"chatID", wf.ChatID,
+		"stuckTaskType", state.StuckTaskType,
+		"stuckActivityID", state.StuckActivityID,
+		"stuckActivityType", state.StuckActivityType,
+		"stuckDuration", state.StuckDuration,
+		"resetEventID", resetEventID,
+		"newRunID", resp.GetRunId(),
+	)
+	return nil
+}
+
+// findResetPoint walks the workflow history and returns the event ID of the
+// WorkflowTaskCompleted event to reset to:
+//   - stuck activity: the last WorkflowTaskCompleted BEFORE the stuck
+//     activity's ActivityTaskScheduled event (replaying that workflow task
+//     re-issues the schedule command);
+//   - stuck workflow task: the last WorkflowTaskCompleted in history
+//     (resetting there issues a fresh workflow task).
+func (r *Reconciler) findResetPoint(ctx context.Context, workflowID string, state *TemporalWorkflowState) (int64, error) {
+	iter := r.tempClient.GetWorkflowHistory(ctx, workflowID, state.RunID, false, enums.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+
+	var lastWorkflowTaskCompleted int64
+	for iter.HasNext() {
+		event, err := iter.Next()
+		if err != nil {
+			return 0, fmt.Errorf("reading workflow history: %w", err)
+		}
+		switch event.GetEventType() {
+		case enums.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+			lastWorkflowTaskCompleted = event.GetEventId()
+		case enums.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+			if state.StuckTaskType == "activity" &&
+				event.GetActivityTaskScheduledEventAttributes().GetActivityId() == state.StuckActivityID {
+				if lastWorkflowTaskCompleted == 0 {
+					return 0, fmt.Errorf("no WorkflowTaskCompleted event before stuck activity %s", state.StuckActivityID)
+				}
+				return lastWorkflowTaskCompleted, nil
+			}
+		}
+	}
+
+	// Stuck workflow task, or the activity's scheduled event was not found
+	// (history may have advanced): fall back to the last workflow task
+	// completed in history.
+	if lastWorkflowTaskCompleted == 0 {
+		return 0, fmt.Errorf("no WorkflowTaskCompleted event found in history of workflow %s", workflowID)
+	}
+	return lastWorkflowTaskCompleted, nil
 }
 
 // ReconcileRunningWorkflows reconciles all workflows with status='running'.
@@ -399,6 +1327,9 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	}
 
 	if len(allWorkflows) == 0 {
+		// Nothing running: any leftover debounce/streak entries are moot.
+		r.pruneStuckObservations(nil)
+		r.pruneProgressObservations(nil)
 		return 0, nil
 	}
 
@@ -406,7 +1337,12 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		"running", len(allWorkflows),
 	)
 
-	// Reconcile each workflow in parallel (with limited concurrency)
+	// Reconcile each workflow in parallel (with limited concurrency).
+	// One pollerState per pass: the poller check is fetched lazily on the
+	// first stuck observation and cached for every other workflow this pass.
+	// One passStats per pass: anomalies are aggregated into a single summary.
+	pollers := &pollerState{}
+	stats := &passStats{}
 	const maxConcurrency = 10
 	sem := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
@@ -419,7 +1355,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 			sem <- struct{}{}        // Acquire semaphore
 			defer func() { <-sem }() // Release semaphore
 
-			result := r.ReconcileWorkflow(ctx, wf)
+			result := r.reconcileWorkflow(ctx, wf, pollers, stats)
 			if result.WasStale {
 				mu.Lock()
 				reconciled++
@@ -434,6 +1370,23 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	}
 
 	wg.Wait()
+
+	// Drop debounce/streak entries for workflows no longer running.
+	runningIDs := make(map[string]bool, len(allWorkflows))
+	for _, wf := range allWorkflows {
+		runningIDs[wf.ID] = true
+	}
+	r.pruneStuckObservations(runningIDs)
+	r.pruneProgressObservations(runningIDs)
+
+	// One summary line per pass when anything anomalous was found; silence
+	// when clean. The per-anomaly detail is in the ERROR logs above.
+	if total, summary := stats.snapshot(); total > 0 {
+		logging.Info("[Reconciler] Anomalies this pass",
+			"total", total,
+			"byClass", summary,
+		)
+	}
 
 	if reconciled > 0 {
 		logging.Info("[Reconciler] Reconciliation complete",
@@ -456,7 +1409,7 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 
 	errorText := fmt.Sprintf(
 		"⚠️ **Workflow Error**\n\n"+
-			"%s became stuck and could not recover after a system restart. "+
+			"%s became stuck and automatic recovery was attempted but failed. "+
 			"The workflow has been terminated.\n\n"+
 			"**To continue:** Send a new message to restart the conversation.",
 		stuckInfo,

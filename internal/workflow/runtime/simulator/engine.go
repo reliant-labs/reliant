@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -150,6 +151,16 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 		execution.Error = parseError(runErr)
 	} else {
 		execution.Outcome = "completed"
+
+		// Evaluate workflow-level outputs so scenarios can assert on them.
+		// Only meaningful on successful runs — a failed run has incomplete state.
+		if workflowOutputs, err := sim.GetWorkflowOutputs(); err == nil {
+			execution.WorkflowOutputs = workflowOutputs
+		} else if scenario.Expect != nil && len(scenario.Expect.Outputs) > 0 {
+			// The scenario asserts on outputs but they failed to evaluate —
+			// surface the evaluation failure instead of a confusing missing-output error.
+			execution.Error = parseError(err)
+		}
 	}
 
 	// Compare against expectations
@@ -268,21 +279,26 @@ func (e *Engine) buildMocker(events []SimulatedEvent) (v2.StepMocker, *mockerSta
 
 // eventToOutput converts a SimulatedEvent to the mock output format.
 // Handles both raw Output mode and typed mode (llm_response, tool_result).
+//
+// Typed mode takes precedence: when `type:` is set, the event is converted to
+// the corresponding activity output shape. For `type: tool_result`, the `output:`
+// field is the tool's result payload (the documented shorthand for `tool_output:`),
+// NOT a raw activity output. Raw output mode only applies to events without a type.
 func (e *Engine) eventToOutput(event SimulatedEvent) map[string]interface{} {
-	// Raw output mode - pass through directly
-	if event.Output != nil {
-		return event.Output
-	}
-
 	// Typed mode - convert to proper output structure
 	switch event.Type {
 	case "llm_response":
 		return e.buildLLMResponseOutput(event)
 	case "tool_result":
 		return e.buildToolResultOutput(event)
-	default:
-		return make(map[string]interface{})
 	}
+
+	// Raw output mode (no type) - pass through directly
+	if event.Output != nil {
+		return event.Output
+	}
+
+	return make(map[string]interface{})
 }
 
 // buildLLMResponseOutput converts an llm_response event to CallLLM output format.
@@ -318,14 +334,51 @@ func (e *Engine) buildLLMResponseOutput(event SimulatedEvent) map[string]interfa
 }
 
 // buildToolResultOutput converts a tool_result event to ExecuteTools output format.
+//
+// The tool's result payload comes from `tool_output:` or, as documented shorthand,
+// `output:`. Mirroring the real ExecuteTools handler, response_data is keyed by
+// tool name (responseData[toolName] = parsed result) so workflows can index
+// nodes.<id>.response_data[<response_tool_name>].
+// executeToolsActivityFields are ExecuteTools OUTPUT-level fields (not tool payload
+// fields). When present in a tool_result event's payload they are promoted to the
+// top-level activity output — mirroring the real activity, where the tool's result
+// lives in tool_results/response_data while these live on the output itself.
+var executeToolsActivityFields = map[string]bool{
+	"thread_token_count": true,
+	"total_result_chars": true,
+}
+
 func (e *Engine) buildToolResultOutput(event SimulatedEvent) map[string]interface{} {
+	toolOutput := event.ToolOutput
+	if toolOutput == nil {
+		toolOutput = event.Output
+	}
+
+	// Split activity-level fields out of the tool payload.
+	var activityFields map[string]interface{}
+	if len(toolOutput) > 0 {
+		payload := make(map[string]interface{}, len(toolOutput))
+		for k, v := range toolOutput {
+			if executeToolsActivityFields[k] {
+				if activityFields == nil {
+					activityFields = make(map[string]interface{})
+				}
+				activityFields[k] = v
+				continue
+			}
+			payload[k] = v
+		}
+		toolOutput = payload
+	}
+
 	var toolResults []message.ToolResult
 	if event.Tool != "" {
-		contentJSON, _ := json.Marshal(event.ToolOutput)
+		contentJSON, _ := json.Marshal(toolOutput)
 		toolResults = append(toolResults, message.ToolResult{
 			ToolCallID: uuid.New().String(),
 			Name:       event.Tool,
 			Content:    string(contentJSON),
+			IsError:    event.IsError,
 		})
 	}
 
@@ -342,8 +395,21 @@ func (e *Engine) buildToolResultOutput(event SimulatedEvent) map[string]interfac
 		_ = json.Unmarshal(data, &trMaps)
 		result["tool_results"] = trMaps
 	}
-	if event.ToolOutput != nil {
-		result["response_data"] = event.ToolOutput
+	if event.Tool != "" {
+		// Keyed by tool name, exactly like the real ExecuteTools activity.
+		// A failed tool call leaves response_data[tool] null — the real handler
+		// only populates it from successful response tool metadata, while the
+		// expected_response_tools contract pre-creates the key as null.
+		var responseValue interface{}
+		if !event.IsError {
+			responseValue = toolOutput
+		}
+		result["response_data"] = map[string]interface{}{
+			event.Tool: responseValue,
+		}
+	}
+	for k, v := range activityFields {
+		result[k] = v
 	}
 	return result
 }
@@ -430,6 +496,22 @@ func (e *Engine) checkExpectations(expect *Expectation, execution *ExecutionDeta
 		}
 	}
 
+	// Check workflow-level outputs (dotted paths into structured values)
+	for path, expectedValue := range expect.Outputs {
+		actualValue, found := lookupDottedPath(execution.WorkflowOutputs, path)
+		if !found {
+			mismatches = append(mismatches,
+				fmt.Sprintf("workflow output %q not found (available: %v)", path, outputKeys(execution.WorkflowOutputs)))
+			continue
+		}
+		if !deepEqual(expectedValue, actualValue) {
+			expectedJSON, _ := json.Marshal(expectedValue)
+			actualJSON, _ := json.Marshal(actualValue)
+			mismatches = append(mismatches,
+				fmt.Sprintf("workflow output %q: expected %s but got %s", path, expectedJSON, actualJSON))
+		}
+	}
+
 	// Check node outputs
 	if len(expect.NodeOutputs) > 0 {
 		for nodeID, expectedOutputs := range expect.NodeOutputs {
@@ -461,6 +543,37 @@ func (e *Engine) checkExpectations(expect *Expectation, execution *ExecutionDeta
 	}
 
 	return mismatches
+}
+
+// lookupDottedPath resolves a dotted path (e.g., "response.choice") into nested maps.
+// Returns the value and whether the full path resolved.
+func lookupDottedPath(root map[string]interface{}, path string) (interface{}, bool) {
+	if root == nil {
+		return nil, false
+	}
+	segments := strings.Split(path, ".")
+	var current interface{} = root
+	for _, seg := range segments {
+		currentMap, ok := current.(map[string]interface{})
+		if !ok {
+			return nil, false
+		}
+		current, ok = currentMap[seg]
+		if !ok {
+			return nil, false
+		}
+	}
+	return current, true
+}
+
+// outputKeys returns the top-level keys of a workflow outputs map for error messages.
+func outputKeys(outputs map[string]interface{}) []string {
+	keys := make([]string, 0, len(outputs))
+	for k := range outputs {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // deepEqual compares two values for equality, handling JSON number type issues

@@ -3,11 +3,18 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { Workflow, ChevronDown, Check, Star } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { toast } from "sonner";
 import { Tooltip } from "../ui/Tooltip";
 import { useWorkflows } from "../../store/globalDataStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
-import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
+
+// Workflow refs appear in two formats: bare names from ListWorkflows ("agent")
+// and URIs from starter cards / preferences ("builtin://agent"). Every ref
+// comparison in this component must go through sameWorkflow so a starter-card
+// selection ("builtin://forge-one-shot") matches its list entry — otherwise
+// the trigger silently falls back to the default label.
+const sameWorkflow = (a: string, b: string) =>
+  normalizeWorkflowRef(a) === normalizeWorkflowRef(b);
 
 interface WorkflowSelectorProps {
   // Current workflow name (null = use user's default workflow)
@@ -79,15 +86,15 @@ export function WorkflowSelector({
 
     // Sort builtin workflows: user's default first (if it's builtin), then alphabetically
     builtin.sort((a, b) => {
-      if (a.name === userDefaultWorkflow) return -1;
-      if (b.name === userDefaultWorkflow) return 1;
+      if (sameWorkflow(a.name, userDefaultWorkflow)) return -1;
+      if (sameWorkflow(b.name, userDefaultWorkflow)) return 1;
       return a.name.localeCompare(b.name);
     });
 
     // Sort custom workflows: user's default first (if it's custom), then alphabetically
     custom.sort((a, b) => {
-      if (a.name === userDefaultWorkflow) return -1;
-      if (b.name === userDefaultWorkflow) return 1;
+      if (sameWorkflow(a.name, userDefaultWorkflow)) return -1;
+      if (sameWorkflow(b.name, userDefaultWorkflow)) return 1;
       return a.name.localeCompare(b.name);
     });
 
@@ -101,8 +108,8 @@ export function WorkflowSelector({
 
   // Find selected workflow - null means use user's default
   const effectiveValue = value || userDefaultWorkflow;
-  const selectedWorkflow = useMemo(() => 
-    sortedWorkflows.find(w => w.name === effectiveValue),
+  const selectedWorkflow = useMemo(() =>
+    sortedWorkflows.find(w => sameWorkflow(w.name, effectiveValue)),
     [sortedWorkflows, effectiveValue]
   );
 
@@ -126,18 +133,7 @@ export function WorkflowSelector({
   const handleSelect = useCallback((workflowName: string | null) => {
     onChange?.(workflowName);
     setIsOpen(false);
-
-    // Show workflow info toast
-    const effectiveName = workflowName || userDefaultWorkflow;
-    const workflow = sortedWorkflows.find(w => w.name === effectiveName);
-    if (workflow?.description && typeof workflow.description === 'string') {
-      const displayName = getWorkflowDisplayName(workflow.name, true);
-      toast.info(displayName, {
-        description: workflow.description,
-        duration: 4000,
-      });
-    }
-  }, [onChange, sortedWorkflows, userDefaultWorkflow]);
+  }, [onChange]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, workflowName: string) => {
     e.preventDefault();
@@ -152,9 +148,11 @@ export function WorkflowSelector({
 
   const canInteract = !isStreaming && !disabled;
 
-  const displayText = selectedWorkflow 
+  // Fall back to the effective value (not the default): an unmatched
+  // selection should still label the trigger with what is actually selected.
+  const displayText = selectedWorkflow
     ? getWorkflowDisplayName(selectedWorkflow.name, true)
-    : getWorkflowDisplayName(userDefaultWorkflow, true);
+    : getWorkflowDisplayName(effectiveValue, true);
 
   return (
     <div ref={dropdownRef} className={cn("relative", className)}>
@@ -213,14 +211,14 @@ export function WorkflowSelector({
                       Built-in Workflows
                     </div>
                     {builtinWorkflows.map((workflow) => {
-                      const isSelected = effectiveValue === workflow.name;
-                      const isDefault = workflow.name === userDefaultWorkflow;
+                      const isSelected = sameWorkflow(effectiveValue, workflow.name);
+                      const isDefault = sameWorkflow(workflow.name, userDefaultWorkflow);
                       return (
                         <button
                           key={workflow.name}
                           onClick={() => handleSelect(
                             // If selecting user's default, pass null (use default)
-                            workflow.name === userDefaultWorkflow ? null : workflow.name
+                            sameWorkflow(workflow.name, userDefaultWorkflow) ? null : workflow.name
                           )}
                           onContextMenu={(e) => handleContextMenu(e, workflow.name)}
                           className={cn(
@@ -265,14 +263,14 @@ export function WorkflowSelector({
                       Custom Workflows
                     </div>
                     {customWorkflows.map((workflow) => {
-                      const isSelected = effectiveValue === workflow.name;
-                      const isDefault = workflow.name === userDefaultWorkflow;
+                      const isSelected = sameWorkflow(effectiveValue, workflow.name);
+                      const isDefault = sameWorkflow(workflow.name, userDefaultWorkflow);
                       return (
                         <button
                           key={workflow.name}
                           onClick={() => handleSelect(
                             // If selecting user's default, pass null (use default)
-                            workflow.name === userDefaultWorkflow ? null : workflow.name
+                            sameWorkflow(workflow.name, userDefaultWorkflow) ? null : workflow.name
                           )}
                           onContextMenu={(e) => handleContextMenu(e, workflow.name)}
                           className={cn(

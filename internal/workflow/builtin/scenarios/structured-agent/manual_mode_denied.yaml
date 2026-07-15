@@ -33,8 +33,6 @@ events:
 
   # User denies the dangerous operation
   - node: agent_loop.approval
-    type: tool_result
-    tool: approval
     output:
       status: "denied"
 
@@ -53,8 +51,6 @@ events:
 
   # User approves the response tool
   - node: agent_loop.approval
-    type: tool_result
-    tool: approval
     output:
       status: "approved"
 

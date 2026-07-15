@@ -102,17 +102,19 @@ expect:
       review_grade: "pass"
 
 ---
-name: check_failures_skip_review
+name: check_failure_goes_to_review
 description: >
-  Build fails on first attempt. Review is skipped because checks failed.
-  Second attempt passes all checks and review says pass.
+  Build fails on the first attempt. Under reviewer-only control the check failure
+  no longer short-circuits the loop — it is injected into the review prompt and the
+  reviewer decides. Here the reviewer returns "continue" to loop back. The second
+  attempt passes the build and the reviewer says pass.
 
 inputs:
   build_command: "make build"
   max_retries: 2
 
 events:
-  # Iteration 1: implement succeeds but build fails
+  # Iteration 1: implement succeeds but build fails; reviewer sees it and says continue
   - node: attempt.implement
     output:
       response_text: "Implemented the feature but introduced a compile error."
@@ -121,7 +123,14 @@ events:
     output:
       exit_code: 1
 
-  # Iteration 2: implement fixes the build
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "The build is failing — fix the compile error on the next attempt."
+
+  # Iteration 2: implement fixes the build; reviewer passes
   - node: attempt.implement
     output:
       response_text: "Fixed the compile error. Build passes now."

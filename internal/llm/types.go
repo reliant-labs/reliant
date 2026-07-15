@@ -118,12 +118,29 @@ type DriverOptions struct {
 	AccountEmail     string
 	OrganizationUUID string
 
-	// TokenRefresher is an optional callback that refreshes an expired OAuth token.
-	// It takes the current refresh token, performs the refresh, persists new tokens to DB,
-	// and returns (newAccessToken, newExpiresAt, error).
-	TokenRefresher func(refreshToken string) (newAccessToken string, newExpiresAt time.Time, err error)
+	// TokenRefresher is an optional callback that coordinates an OAuth
+	// access-token refresh. It receives the token state the caller currently
+	// holds and returns the state to use going forward — which may be freshly
+	// refreshed tokens, or newer tokens that another goroutine/process already
+	// rotated and persisted (OAuth refresh tokens are single-use, so
+	// uncoordinated concurrent refreshes kill the session). Implementations
+	// must be safe for concurrent use.
+	TokenRefresher func(held OAuthTokens) (OAuthTokens, error)
+	// TokenReloader is an optional callback that returns the currently
+	// persisted OAuth tokens, or nil if none are stored. Drivers use it to
+	// recover from a 401 caused by another process rotating the tokens after
+	// this driver loaded its credentials.
+	TokenReloader func() (*OAuthTokens, error)
 	// RefreshToken is the OAuth refresh token used by TokenRefresher.
 	RefreshToken string
 	// TokenExpiresAt is when the current access token expires.
 	TokenExpiresAt time.Time
+}
+
+// OAuthTokens is a snapshot of OAuth credentials held by a driver that
+// supports transparent token refresh (currently Claude OAuth).
+type OAuthTokens struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
 }

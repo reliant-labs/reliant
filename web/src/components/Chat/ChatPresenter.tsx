@@ -16,6 +16,7 @@ import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
+import { OomKillBanner } from "./OomKillBanner";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
@@ -487,6 +488,9 @@ export const ChatPresenter = memo(function ChatPresenter({
         <PermissionsPanelWrapper>
           <PermissionsPanel chatId={chatId || undefined} />
         </PermissionsPanelWrapper>
+
+        {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
+        <OomKillBanner />
 
         {/* Recovery Banner - shown when workflow was lost */}
         {needsRecovery && (

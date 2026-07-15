@@ -104,9 +104,17 @@ message ToolResponse {
   bool backgrounded = 8; // Whether tool was converted to background execution
 }
 
-// DaemonHeartbeat is sent periodically to keep connection alive
+// DaemonHeartbeat is sent periodically to keep connection alive.
+// Cloud daemons additionally piggyback workspace memory telemetry read from
+// the pod cgroup (memory.current / memory.max) so the gateway can surface
+// memory pressure before the kernel OOM killer fires. All memory fields are
+// zero for daemons without cgroup v2 accounting (macOS, local daemons) —
+// consumers must treat memory_limit_bytes == 0 as "not reported".
 message DaemonHeartbeat {
   int64 timestamp = 1;
+  uint64 memory_used_bytes = 2; // cgroup memory.current
+  uint64 memory_limit_bytes = 3; // cgroup memory.max (0 = unlimited/unknown)
+  bool memory_pressure = 4; // hysteresis-smoothed: asserts >= 85% of limit, clears < 75%
 }
 
 // ============================================

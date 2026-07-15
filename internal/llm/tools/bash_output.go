@@ -443,6 +443,11 @@ func buildDaemonStatusInfo(processID string, processes []*daemon.ProcessInfo) st
 			if p.Status != "running" && p.ExitCode != nil {
 				statusInfo += fmt.Sprintf("\nExit Code: %d", *p.ExitCode)
 			}
+			// Surface the env-aware proxied preview URL for any publicly-bound
+			// (0.0.0.0) listening port so the agent posts a reachable link.
+			for _, line := range previewURLsForProcess(p) {
+				statusInfo += "\n" + line
+			}
 			return statusInfo
 		}
 	}

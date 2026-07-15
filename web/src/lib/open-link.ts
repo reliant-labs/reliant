@@ -1,5 +1,6 @@
 import { api } from "../api/client";
 import { useBrowserStore } from "../store/browserStore";
+import { isElectron } from "./constants";
 import { logger } from "./logger";
 
 /**
@@ -25,14 +26,16 @@ export async function openLink(
     const preferences = await api.settings.getPreferences();
     const openInApp = preferences.additional?.browserOpenLinksInApp !== "false"; // Default true
 
-    if (openInApp && worktreeId) {
+    // The embedded browser is an Electron <webview> and does not exist in the web
+    // build — never mount it there. In web, always fall through to a new browser tab.
+    if (openInApp && worktreeId && isElectron()) {
       // Open in embedded browser
       const browserStore = useBrowserStore.getState();
       await browserStore.createTab(worktreeId, url);
       browserStore.showBrowser();
       logger.debug("[openLink] Opened in embedded browser:", url);
     } else {
-      // Open in system browser
+      // Open in system browser (or a new tab in web)
       return openExternalLink(url);
     }
   } catch (error) {

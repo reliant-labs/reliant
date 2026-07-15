@@ -263,6 +263,37 @@ func (s *settingStore) SetClaudeAuthTokens(ctx context.Context, userID string, t
 	return err
 }
 
+// CompareAndSwapClaudeAuthTokens persists tokens only if the stored refresh
+// token still equals expectedRefreshToken. See core.SettingStore for semantics.
+// The conditional UPDATE is atomic, so two processes racing to persist a
+// rotation cannot both win.
+func (s *settingStore) CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error) {
+	now := time.Now().UTC()
+	query := s.bind(`UPDATE claude_auth_tokens SET
+		   access_token = ?,
+		   refresh_token = ?,
+		   expires_at = ?,
+		   account_uuid = ?,
+		   account_email = ?,
+		   organization_uuid = ?,
+		   organization_name = ?,
+		   scope = ?,
+		   updated_at = ?
+		 WHERE user_id = ? AND refresh_token = ?`)
+	res, err := s.db.ExecContext(ctx, query,
+		tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt,
+		tokens.AccountUUID, tokens.AccountEmail, tokens.OrganizationUUID, tokens.OrganizationName, tokens.Scope,
+		now, userID, expectedRefreshToken)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
 func (s *settingStore) DeleteClaudeAuthTokens(ctx context.Context, userID string) error {
 	query := s.bind("DELETE FROM claude_auth_tokens WHERE user_id = ?")
 	_, err := s.db.ExecContext(ctx, query, userID)

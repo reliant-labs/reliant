@@ -193,11 +193,38 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 					"error", err)
 			}
 		} else {
-			// Child workflow - workflow and thread should already exist
-			// (created by parent via V2_CreateWorkflowWithThread)
-			existingWorkflow, err := a.repo.GetWorkflow(ctx, input.WorkflowID)
+			// Child workflow - workflow and thread are normally created by the
+			// parent via V2_CreateWorkflowWithThread before the child starts,
+			// but this status write can race ahead of the parent's commit.
+			// Retry the lookup briefly, then create the row ourselves,
+			// mirroring how the parent creates it. CreateWorkflow is
+			// idempotent (INSERT ... ON CONFLICT DO NOTHING), so the parent's
+			// create remains a safe no-op if it lands afterwards.
+			existingWorkflow, err := a.getWorkflowWithRetry(ctx, input.WorkflowID)
 			if err != nil {
-				return fmt.Errorf("child workflow %s does not exist - parent must create it first: %w", input.WorkflowID, err)
+				var spawnedByNodeID *string
+				if input.SpawnedByNodeID != "" {
+					spawnedByNodeID = &input.SpawnedByNodeID
+				}
+				parentID := input.ParentWorkflowID
+				childWorkflow := &db.Workflow{
+					ID:              input.WorkflowID,
+					ParentID:        &parentID,
+					ChatID:          input.ChatID,
+					WorkflowName:    input.WorkflowName,
+					Thread:          thread,
+					Status:          db.WorkflowStatusRunning,
+					SpawnedByNodeID: spawnedByNodeID,
+					LoopIteration:   input.LoopIteration,
+					CreatedAt:       time.Now().UTC(),
+				}
+				if createErr := a.repo.CreateWorkflow(ctx, childWorkflow); createErr != nil {
+					return fmt.Errorf("child workflow %s does not exist (lookup: %v) and create-on-missing failed: %w", input.WorkflowID, err, createErr)
+				}
+				logging.Info("[WorkflowStatus] Created missing child workflow row (status update raced ahead of parent creation)",
+					"workflowID", input.WorkflowID,
+					"parentWorkflowID", input.ParentWorkflowID)
+				return nil
 			}
 
 			// Update status to running if needed
@@ -216,15 +243,50 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		return nil
 
 	case "completed":
-		// Complete the workflow itself
-		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
+		// Complete the workflow itself, and — for a ROOT workflow that declares a
+		// `transition_to` target — switch the chat to that workflow in the SAME
+		// commit, so the status write and the workflow_name switch land atomically.
+		// If the switch's DB write fails, the whole tx rolls back and Temporal
+		// retries the completion; TransitionChatOnCompletion is idempotent so the
+		// retry is safe.
+		var transitionedTo string
+		if err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
+			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
+				return err
+			}
+			// Only the chat's active root workflow transitions the chat; a
+			// completing child (spawn/fork) must never switch the chat out from
+			// under its parent.
+			if input.ParentWorkflowID == "" {
+				to, tErr := TransitionChatOnCompletion(txCtx, a.repo, input.ChatID, input.WorkflowName)
+				if tErr != nil {
+					return tErr
+				}
+				transitionedTo = to
+			}
+			return nil
+		}); err != nil {
 			return err
 		}
+		// UI signal for the switch — best-effort, outside the tx so a cosmetic
+		// message failure never rolls back the committed transition.
+		if transitionedTo != "" {
+			thread := input.Thread
+			if thread == "" {
+				thread = input.WorkflowID
+			}
+			EmitTransitionMessage(ctx, a.repo, input.ChatID, thread, input.WorkflowID, transitionedTo)
+		}
+		// A completed run never resumes at position — drop the checkpoint so a
+		// later fresh run can't pick up a stale position.
+		a.clearCheckpoint(ctx, input.WorkflowID)
 		// Cascade completion to any thread records owned by this workflow
 		// Thread records ("thread:*") are created by fork()/new() in action configs
 		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
 	case "failed":
+		// NOTE: the position checkpoint is intentionally KEPT on failure — it
+		// is what lets the next user message resume the run at position.
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
 			return err
 		}
@@ -234,6 +296,9 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
 			return err
 		}
+		// User-cancelled runs start fresh on the next message — drop the
+		// checkpoint (resume-at-position applies only to failed/terminated).
+		a.clearCheckpoint(ctx, input.WorkflowID)
 		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
 
 	case "paused":
@@ -246,6 +311,42 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// Unknown status - skip tracking
 		return nil
 	}
+}
+
+// clearCheckpoint drops the position checkpoint for a workflow. Best-effort:
+// a stale checkpoint is harmless for completed/cancelled workflows because
+// SendMessage only consults it for failed/terminated predecessors.
+func (a *WorkflowStatusActivity) clearCheckpoint(ctx context.Context, workflowID string) {
+	if err := a.repo.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
+		logging.Warn("[WorkflowStatus] Failed to clear workflow checkpoint",
+			"workflowID", workflowID,
+			"error", err)
+	}
+}
+
+// getWorkflowWithRetry re-reads a workflow row a few times with short backoff
+// to absorb the window where a child's status write races ahead of the
+// parent's CreateWorkflowWithThread commit.
+func (a *WorkflowStatusActivity) getWorkflowWithRetry(ctx context.Context, workflowID string) (*db.Workflow, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			case <-time.After(time.Duration(attempt) * 100 * time.Millisecond):
+			}
+		}
+		workflow, err := a.repo.GetWorkflow(ctx, workflowID)
+		if err == nil && workflow != nil {
+			return workflow, nil
+		}
+		lastErr = err
+		if lastErr == nil {
+			lastErr = fmt.Errorf("workflow %s not found", workflowID)
+		}
+	}
+	return nil, lastErr
 }
 
 // emitThreadUpdate emits a "thread" update for UI swim lanes when a child workflow starts

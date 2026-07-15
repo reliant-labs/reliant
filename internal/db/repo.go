@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
@@ -199,7 +200,30 @@ func isRetryableError(err error) bool {
 		return false
 	}
 
+	// Prefer classifying by SQLSTATE code when the pgx error is still in the
+	// chain. This is robust against message-text variations (e.g. a 40001 can
+	// be "could not serialize access ..." or "canceling statement due to
+	// conflict with recovery" depending on where it was raised).
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		switch pgErr.Code {
+		case "40001", // serialization_failure
+			"40P01", // deadlock_detected
+			"40002", // transaction_integrity_constraint_violation
+			"25P02", // in_failed_sql_transaction (aborted tx; fresh BEGIN on retry)
+			"23505": // unique_violation (parallel writers; see comment below)
+			return true
+		}
+	}
+
 	errMsg := strings.ToLower(err.Error())
+
+	// Fallback for errors flattened to strings (e.g. re-wrapped with
+	// errors.New) where the pgconn error is no longer in the chain.
+	if strings.Contains(errMsg, "sqlstate 40001") ||
+		strings.Contains(errMsg, "sqlstate 40p01") {
+		return true
+	}
 
 	// Generic transaction/concurrency errors
 	if strings.Contains(errMsg, "concurrent update") ||
@@ -372,10 +396,20 @@ func (r *Repo) runTxWithRetries(ctx context.Context, f func(ctx context.Context)
 			continue
 		}
 
-		logging.Error("Transaction failed",
-			"error", result.err,
-			"attempts", attempt+1,
-			"duration", time.Since(metrics.txStartTime))
+		// Non-retryable business errors (e.g. sql.ErrNoRows from a lookup
+		// inside the tx) are expected control flow for callers — log them
+		// quietly so genuine transaction failures stand out.
+		if errors.Is(result.err, sql.ErrNoRows) {
+			logging.Debug("Transaction returned business error (not retryable)",
+				"error", result.err,
+				"attempts", attempt+1,
+				"duration", time.Since(metrics.txStartTime))
+		} else {
+			logging.Error("Transaction failed",
+				"error", result.err,
+				"attempts", attempt+1,
+				"duration", time.Since(metrics.txStartTime))
+		}
 		return result.err
 	}
 

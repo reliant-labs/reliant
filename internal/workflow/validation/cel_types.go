@@ -94,6 +94,12 @@ type WorkflowTypeContext struct {
 	// can validate field access on iter.item (e.g., iter.item.has_frontend).
 	// When nil, iter falls back to DynType for backward compatibility.
 	IterItemFields map[string]*FieldInfo
+
+	// GuaranteedBefore maps each node ID to the set of node IDs guaranteed to
+	// have produced an output before that node starts, computed from the edge
+	// graph (see computeGuaranteedBefore). Used to flag nodes.<id> references
+	// to nodes that may not have executed yet (router skips, parallel branches).
+	GuaranteedBefore map[string]map[string]bool
 }
 
 // =============================================================================

@@ -1,0 +1,90 @@
+# Start from founder interview: router skips scrape + research phases
+#
+# REGRESSION for the production failure:
+#   "Step 'founder_interview' config evaluation failed:
+#    workflow.thread.inject.content: ... CEL evaluation error: no such key: scrape_website"
+#
+# The classify router can dispatch directly to founder_interview when the user
+# says research is already done. In that case nodes.scrape_website /
+# nodes.research_competitors / nodes.research_market were never populated, so
+# every cross-phase reference in downstream inject content must be guarded
+# with has() and fall back to reading the pitch-deck-content/ files.
+
+name: start_from_founder_interview
+description: Router dispatches straight to founder_interview; unran phase outputs must not break inject evaluation
+
+inputs:
+  website_url: "https://example.com"
+  deck_purpose: seed
+
+events:
+  # Router skips scrape + research: the user already has research on disk
+  - node: classify
+    output:
+      selected_node: founder_interview
+      reasoning: "Research artifacts already exist — go straight to the interview."
+
+  # Phase 3: Founder interview (guarded inject must evaluate with fallbacks)
+  - node: founder_interview
+    output:
+      response_text: |
+        ## Founder Brief
+        Downloads: 3,200. WAU: 800. Raising $2M seed.
+
+  # Phase 4a: Plan deck
+  - node: plan_deck
+    output:
+      response_text: "Planned 1-slide deck."
+      response:
+        narrative_arc: "Traction-first."
+        slides:
+          - filename: "01-hook.md"
+            title: "3,200 downloads and climbing"
+            purpose: "Hook with traction"
+            key_content: "3,200 downloads, 800 WAU"
+            layout_hint: full-bleed-stat
+            sources: "phase-3-interview/founder-brief.md"
+
+  # Phase 4b: slide_pipeline — parallel loop (black box)
+  - node: slide_pipeline
+    output:
+      _completed: 1
+      _failed: 0
+      _parallel: true
+      _results:
+        "01-hook.md":
+          response_text: "Wrote hook slide."
+
+  # Phase 5: slides_loop inner nodes
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Built slide components."
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+  - node: slides_loop.visual_review
+    output:
+      response_text: "Slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Clean slides."
+        slide_issues: []
+        ai_visual_tells: []
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+
+expect:
+  outcome: completed
+  reached:
+    - classify
+    - founder_interview
+    - plan_deck
+    - slide_pipeline
+    - slides_loop
+    - complete
+  not_reached:
+    - scrape_website
+    - research_competitors
+    - research_market
+    - research_done

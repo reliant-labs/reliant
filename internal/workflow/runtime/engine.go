@@ -279,15 +279,9 @@ func evaluateCELValue(expr string, context map[string]interface{}) (interface{},
 		return nil, fmt.Errorf("CEL evaluation error: %w", err)
 	}
 
-	value := out.Value()
-
-	// CEL returns structpb.NullValue for null/nil, which is an int(0) not Go nil.
-	// Convert it back to Go nil for proper handling downstream.
-	if value != nil && fmt.Sprintf("%T", value) == "structpb.NullValue" {
-		return nil, nil
-	}
-
-	return convertCELToNative(value), nil
+	// convertCELToNative (wfcel.ConvertToNative) maps CEL null — the
+	// structpb.NullValue enum — to Go nil at every nesting level.
+	return convertCELToNative(out.Value()), nil
 }
 
 // EvaluateWorkflowOutputs evaluates workflow output expressions when workflow completes.

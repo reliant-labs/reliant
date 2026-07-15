@@ -9,6 +9,7 @@
 
 import { useMemo } from "react";
 import type { Message } from "../../../api/client";
+import { compareMessagesWithinThread } from "../../../lib/messageOrder";
 import type { WorkflowExecution } from "../ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./threadUtils";
 import { useActiveThreadIds, useActiveThreads } from "../../../store/threadActivityStore";
@@ -222,11 +223,10 @@ export function useMessagesByThread(
       groups.get(thread)!.push(msg);
     }
 
-    // Sort messages within each group by timestamp
+    // Sort messages within each group by the canonical per-thread order
+    // (ordinal — raw createdAt is not trustworthy within a thread)
     for (const [, msgs] of groups) {
-      msgs.sort(
-        (a, b) => new Date(a.createdAt || "").getTime() - new Date(b.createdAt || "").getTime()
-      );
+      msgs.sort(compareMessagesWithinThread);
     }
 
     return groups;

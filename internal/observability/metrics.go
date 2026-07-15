@@ -238,6 +238,32 @@ var (
 	)
 )
 
+// ─── Workflow Reconciler Metrics ────────────────────────────────────────────
+
+var (
+	// ReconcilerAnomaliesTotal counts anomalies the workflow reconciler
+	// detected and/or repaired, labeled by anomaly class:
+	//   stuck_reset              - lost task recovered via workflow reset
+	//   wedge_terminated         - workflow task failing forever; terminated
+	//   lost_workflow_repaired   - workflow gone from Temporal; DB repaired
+	//   progress_stall_detected  - running workflow with no pending work and
+	//                              no history growth past the detection window
+	//   progress_stall_confirmed - stall persisted through the confirmation
+	//                              window; terminated + marked failed
+	//   reset_failed_terminated  - stuck-task reset failed; terminate fallback
+	// Every increment is paired with a Sentry-visible ERROR log; alert on any
+	// sustained non-zero rate.
+	ReconcilerAnomaliesTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "reconciler",
+			Name:      "anomalies_total",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated).",
+		},
+		[]string{"class"},
+	)
+)
+
 // ─── Temporal Metrics ───────────────────────────────────────────────────────
 
 var (
@@ -298,6 +324,8 @@ func initMetrics() {
 		DeadEndErrorsTotal,
 		StreamingErrorsTotal,
 		ToolExecutionErrorsTotal,
+		// Reconciler
+		ReconcilerAnomaliesTotal,
 		// Temporal
 		TemporalWorkflowsTotal,
 		TemporalActivityDuration,

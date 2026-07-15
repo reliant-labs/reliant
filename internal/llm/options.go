@@ -2,6 +2,7 @@
 package llm
 
 import (
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -39,16 +40,30 @@ func WithDisableCache() DriverOption {
 	}
 }
 
+// WithReasoningEffort sets the reasoning/thinking effort level.
+//
+// Accepted levels: "low", "medium", "high", "xhigh". Empty (the UI's "Auto"
+// choice — preferences that don't pin a level store "") and "auto" mean "no
+// explicit preference" and auto-select the default (medium) silently.
+// "off"/"none"/"disabled" normalize to "disabled", which drivers recognize as
+// thinking-off. Only genuinely invalid values warn (with the offending value)
+// before falling back to medium.
 func WithReasoningEffort(effort string) DriverOption {
 	return func(options *DriverOptions) {
-		defaultReasoningEffort := "medium"
-		switch effort {
+		switch normalized := strings.ToLower(strings.TrimSpace(effort)); normalized {
 		case "low", "medium", "high", "xhigh":
-			defaultReasoningEffort = effort
+			options.ReasoningEffort = normalized
+		case "", "auto":
+			// Auto/unset: default without warning.
+			options.ReasoningEffort = "medium"
+		case "off", "none", "disabled":
+			options.ReasoningEffort = "disabled"
 		default:
-			logging.Warn("Invalid reasoning effort, using default: medium")
+			logging.Warn("Invalid reasoning effort, using default",
+				"effort", effort,
+				"default", "medium")
+			options.ReasoningEffort = "medium"
 		}
-		options.ReasoningEffort = defaultReasoningEffort
 	}
 }
 
@@ -102,11 +117,16 @@ func WithAccountMetadata(userID, accountUUID, accountEmail, organizationUUID str
 	}
 }
 
-// WithTokenRefresher sets the OAuth token refresh callback and current token state.
-// The refresher is called when the access token is expired, and should persist new tokens to DB.
-func WithTokenRefresher(refresher func(refreshToken string) (string, time.Time, error), refreshToken string, expiresAt time.Time) DriverOption {
+// WithTokenRefresher sets the OAuth token refresh/reload callbacks and current
+// token state. The refresher is called when the access token is (nearly)
+// expired; it coordinates the refresh (single-flight per user, cross-process
+// via the persisted store) and returns the token state to use. The reloader
+// re-reads the persisted tokens so drivers can recover from a 401 caused by
+// another process rotating the tokens.
+func WithTokenRefresher(refresher func(held OAuthTokens) (OAuthTokens, error), reloader func() (*OAuthTokens, error), refreshToken string, expiresAt time.Time) DriverOption {
 	return func(opts *DriverOptions) {
 		opts.TokenRefresher = refresher
+		opts.TokenReloader = reloader
 		opts.RefreshToken = refreshToken
 		opts.TokenExpiresAt = expiresAt
 	}

@@ -1,0 +1,50 @@
+# De-AI pass converges in a single iteration (internal mocking)
+#
+# The de_ai node is a builtin://get-it-right sub-workflow. This scenario mocks
+# its INTERNAL nodes (de_ai.attempt.*) to verify the editor/reviewer loop:
+# the implementer applies edits, the authenticity reviewer grades "pass" on
+# the first attempt, and the loop exits after one iteration.
+
+name: de_ai_single_pass
+description: De-AI editor runs once, reviewer passes immediately, loop exits
+
+events:
+  - node: context_intake
+    output:
+      response_text: "Existing final blog post artifact is the relevant context."
+
+  - node: classify
+    output:
+      selected_node: de_ai
+      reasoning: "Content is finalized and needs de-AI treatment."
+
+  # Inside get-it-right: the implementer (editor) applies de-AI edits
+  - node: de_ai.attempt.implement
+    output:
+      response_text: "Applied de-AI edits to blog-post.md: removed em-dash pairs, varied sentence rhythm."
+
+  # The authenticity reviewer passes on the first attempt
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Post reads like genuine practitioner writing. Authenticity 4/5."
+
+  - node: reddit_summary
+    output:
+      response_text: "Reddit post written."
+
+expect:
+  outcome: completed
+  reached:
+    - de_ai
+    - de_ai.attempt.implement
+    - de_ai.attempt.review
+    - reddit_summary
+    - validate_artifacts
+    - complete
+  not_reached:
+    - de_ai.attempt.refactor
+    - topic_discovery
+    - writing

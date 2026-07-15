@@ -26,6 +26,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -83,6 +84,11 @@ type daemonClient struct {
 
 	terminalPumps     *terminalPumpTracker
 	processOutputSubs *processOutputSubTracker
+
+	// memWatcher samples the workspace cgroup's memory usage (cloud daemons)
+	// so heartbeats can carry used/limit/pressure telemetry to the gateway.
+	// Inert on hosts without cgroup v2 accounting (macOS, local daemons).
+	memWatcher *cgroupmem.Watcher
 }
 
 type StartOptions struct {
@@ -98,6 +104,12 @@ func Start(ctx context.Context, opts StartOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Watch workspace memory (cgroup v2) for pressure telemetry. Returns
+	// immediately on hosts without cgroup accounting, so this is free for
+	// local/mac daemons. Runs for the daemon's whole lifetime, across
+	// reconnects, in both server and client modes.
+	go client.memWatcher.Run(ctx)
 
 	// If GIT_TOKEN is set (injected by workspace reconciler in cloud mode),
 	// configure git credential-store so all git operations use the token.
@@ -181,6 +193,10 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		daemonName = hostname
 	}
 
+	// Seed the process-wide identity from persisted creds so exec.bg_list can
+	// stamp ProcessInfo.DaemonID even before the RegistrationAck re-asserts it.
+	SetDaemonIdentity(bootCfg.DaemonID)
+
 	return &daemonClient{
 		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
@@ -199,6 +215,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		fsWatchersByPr:    make(map[string]context.CancelFunc),
 		terminalPumps:     newTerminalPumpTracker(),
 		processOutputSubs: newProcessOutputSubTracker(),
+		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
 	}, nil
 }
 
@@ -450,6 +467,9 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			// use (tool execution context, logging).
 			if m.RegistrationAck.DaemonId != "" {
 				d.daemonID = m.RegistrationAck.DaemonId
+				// Publish to the process-wide identity so static command handlers
+				// (e.g. exec.bg_list) can stamp ProcessInfo.DaemonID for preview URLs.
+				SetDaemonIdentity(d.daemonID)
 				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", d.daemonID)
 				// Persist the assigned id per-origin so it survives restarts and
 				// hostname changes; next reconnect re-asserts it in Register.
@@ -642,16 +662,36 @@ func (d *daemonClient) runHeartbeats(ctx context.Context) {
 	ticker := time.NewTicker(transport.DaemonHeartbeatInterval)
 	defer ticker.Stop()
 
+	sendHeartbeat := func(now time.Time) error {
+		hb := &reliantv1.DaemonHeartbeat{Timestamp: now.UnixMilli()}
+		// Piggyback workspace memory telemetry when available (cloud daemons
+		// in a cgroup-limited pod). Fields stay zero on hosts without cgroup
+		// accounting — the gateway treats limit==0 as "not reported".
+		if sample, ok := d.memWatcher.Latest(); ok {
+			hb.MemoryUsedBytes = sample.UsedBytes
+			hb.MemoryLimitBytes = sample.LimitBytes
+			hb.MemoryPressure = sample.Pressure
+		}
+		return d.send(&reliantv1.DaemonMessage{
+			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
+		})
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
-			err := d.send(&reliantv1.DaemonMessage{
-				Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: &reliantv1.DaemonHeartbeat{Timestamp: now.UnixMilli()}},
-			})
-			if err != nil {
+			if err := sendHeartbeat(now); err != nil {
 				logging.Warn(logPrefix+" Failed to send heartbeat", "error", err)
+				return
+			}
+		case <-d.memWatcher.Changed():
+			// Pressure flipped — tell the gateway now instead of waiting up
+			// to a full heartbeat interval. Nil-safe: a nil channel (no
+			// watcher) never fires.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logging.Warn(logPrefix+" Failed to send pressure heartbeat", "error", err)
 				return
 			}
 		}

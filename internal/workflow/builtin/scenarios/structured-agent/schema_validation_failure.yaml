@@ -1,21 +1,23 @@
 # Schema Validation Failure Test: Response data fails JSON Schema validation
 #
-# This scenario tests that structured-agent properly rejects response data
-# that doesn't conform to the JSON Schema, triggering the remind_response flow.
+# This scenario tests that structured-agent keeps looping when the response
+# tool call fails schema validation, and completes once valid data is submitted.
 #
 # Key aspects tested:
-# 1. Schema validation catches missing required fields
-# 2. Schema validation catches type mismatches
-# 3. Schema validation catches constraint violations (min/max, minLength)
-# 4. Failed validation triggers remind_response instead of completing
-# 5. LLM can retry with valid data after seeing the error
+# 1. A failed response tool call (is_error) does NOT count as a structured
+#    response: response_data[tool] stays null, so outputs.completed is false
+# 2. The loop continues — the error tool result is in context, and the LLM
+#    retries with corrected data
+# 3. remind_response does NOT fire (it only fires for text-only responses
+#    with no tool calls at all)
+# 4. Once validation passes, the loop exits with the structured response
 
 name: schema_validation_failure
-description: LLM response fails schema validation, gets reminded, then succeeds with valid data
+description: LLM response fails schema validation twice, then succeeds with valid data
 
 inputs:
   response_tool_name: "submit_review"
-  
+
   response_schema:
     type: object
     required: [verdict, findings]
@@ -43,7 +45,8 @@ events:
           verdict: true
           confidence: 8
 
-  # Response tool execution FAILS validation (missing required field)
+  # Response tool execution FAILS validation (missing required field).
+  # is_error keeps response_data[submit_review] null, so the loop continues.
   - node: agent_loop.execute_tools
     type: tool_result
     tool: submit_review
@@ -51,19 +54,14 @@ events:
     output:
       error: "Response tool schema validation failed: missing required property 'findings'"
 
-  # Iteration 2: Remind LLM about schema requirements
-  - node: agent_loop.remind_response
-    type: inject_message
-    content: "Please call the submit_review tool to provide your structured response. Required fields: verdict (boolean), findings (string, min 10 chars)"
-
-  # Iteration 3: LLM tries again with wrong type
+  # Iteration 2: LLM tries again with wrong type
   - node: agent_loop.call_llm
     type: llm_response
     text: "Let me fix that."
     tool_calls:
       - name: submit_review
         input:
-          verdict: "yes"  # Wrong type - should be boolean
+          verdict: "yes" # Wrong type - should be boolean
           findings: "Code looks good with proper tests"
 
   # Response tool execution FAILS validation (type mismatch)
@@ -74,12 +72,7 @@ events:
     output:
       error: "Response tool schema validation failed: property 'verdict' has type 'string', expected 'boolean'"
 
-  # Iteration 4: Remind again
-  - node: agent_loop.remind_response
-    type: inject_message
-    content: "Please call the submit_review tool to provide your structured response. Note: verdict must be a boolean (true/false), not a string"
-
-  # Iteration 5: LLM provides VALID data
+  # Iteration 3: LLM provides VALID data
   - node: agent_loop.call_llm
     type: llm_response
     text: "Now with the correct schema."
@@ -105,10 +98,12 @@ expect:
     - agent_loop
     - agent_loop.call_llm
     - agent_loop.execute_tools
-    - agent_loop.remind_response  # Triggered due to validation failures
   not_reached:
     - agent_loop.approval
     - agent_loop.compact
+    # remind_response only fires for text-only turns (no tool calls at all);
+    # failed validation retries are driven by the error tool result instead.
+    - agent_loop.remind_response
 
   # Final output should be the valid response
   outputs:

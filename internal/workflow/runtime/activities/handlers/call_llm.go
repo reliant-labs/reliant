@@ -381,6 +381,18 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 	driver := resolved.Driver
 
+	// Capture the concrete model that will serve this completion so the inline
+	// save_message can persist it onto messages.model. This is the resolved
+	// model AFTER tag/selector resolution (e.g. "claude-4.8-opus"), not the raw
+	// "tags:[flagship]" selector. Prefer the registry definition ID; fall back
+	// to the probed model ID when an injected resolver supplied the driver.
+	resolvedModelID := ""
+	if resolved.Definition != nil {
+		resolvedModelID = resolved.Definition.ID
+	} else if resolved.Model.ID != "" {
+		resolvedModelID = string(resolved.Model.ID)
+	}
+
 	if resolved.Definition != nil {
 		activity.GetLogger(ctx).Info("[CallLLM] Resolved model",
 			"selector", modelSelector,
@@ -763,6 +775,7 @@ streamLoop:
 			Text: responseText,
 		},
 		CompactionThreshold: effectiveCompactionThreshold,
+		Model:               resolvedModelID,
 	}
 
 	// When a response_tool is configured, the LLM returns structured data as a
@@ -1931,7 +1944,7 @@ func repairMessageHistory(msgs []message.Message) []message.Message {
 					toolResults = append(toolResults, message.ToolResult{
 						ToolCallID: tc.ID,
 						Name:       tc.Name,
-						Content:    "Tool execution was cancelled before completion. The previous request was interrupted.",
+						Content:    InterruptedToolResultContent,
 						IsError:    true,
 					})
 				}

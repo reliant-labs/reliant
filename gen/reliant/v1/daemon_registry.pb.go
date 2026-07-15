@@ -472,9 +472,18 @@ type DaemonInfo struct {
 	LastHeartbeat *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=last_heartbeat,json=lastHeartbeat,proto3" json:"last_heartbeat,omitempty"`
 	// Type of daemon: "managed" (cloud-hosted) or "self_hosted" (user-run local daemon).
 	// Set at registration time by the daemon registry. Empty/"unknown" if undetermined.
-	DaemonType    string `protobuf:"bytes,9,opt,name=daemon_type,json=daemonType,proto3" json:"daemon_type,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DaemonType string `protobuf:"bytes,9,opt,name=daemon_type,json=daemonType,proto3" json:"daemon_type,omitempty"`
+	// Workspace memory telemetry reported by the daemon's heartbeat (cloud
+	// daemons in a cgroup-limited pod). Stored on the daemon's attachment
+	// (liveness) record, so it is only present while the daemon is attached.
+	// memory_limit_bytes == 0 means "not reported" (local daemons, no cgroup).
+	MemoryUsedBytes  uint64 `protobuf:"varint,10,opt,name=memory_used_bytes,json=memoryUsedBytes,proto3" json:"memory_used_bytes,omitempty"`
+	MemoryLimitBytes uint64 `protobuf:"varint,11,opt,name=memory_limit_bytes,json=memoryLimitBytes,proto3" json:"memory_limit_bytes,omitempty"`
+	// Hysteresis-smoothed pressure bit: asserts at >= 85% of the limit,
+	// clears below 75%.
+	MemoryPressure bool `protobuf:"varint,12,opt,name=memory_pressure,json=memoryPressure,proto3" json:"memory_pressure,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
@@ -570,6 +579,27 @@ func (x *DaemonInfo) GetDaemonType() string {
 	return ""
 }
 
+func (x *DaemonInfo) GetMemoryUsedBytes() uint64 {
+	if x != nil {
+		return x.MemoryUsedBytes
+	}
+	return 0
+}
+
+func (x *DaemonInfo) GetMemoryLimitBytes() uint64 {
+	if x != nil {
+		return x.MemoryLimitBytes
+	}
+	return 0
+}
+
+func (x *DaemonInfo) GetMemoryPressure() bool {
+	if x != nil {
+		return x.MemoryPressure
+	}
+	return false
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -600,7 +630,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"U\n" +
 	"\x14ResumeDaemonResponse\x12\x18\n" +
 	"\aresumed\x18\x01 \x01(\bR\aresumed\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x8a\x03\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x8d\x04\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -612,7 +642,11 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\fconnected_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vconnectedAt\x12A\n" +
 	"\x0elast_heartbeat\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\rlastHeartbeat\x12\x1f\n" +
 	"\vdaemon_type\x18\t \x01(\tR\n" +
-	"daemonType*\x7f\n" +
+	"daemonType\x12*\n" +
+	"\x11memory_used_bytes\x18\n" +
+	" \x01(\x04R\x0fmemoryUsedBytes\x12,\n" +
+	"\x12memory_limit_bytes\x18\v \x01(\x04R\x10memoryLimitBytes\x12'\n" +
+	"\x0fmemory_pressure\x18\f \x01(\bR\x0ememoryPressure*\x7f\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +

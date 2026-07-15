@@ -50,7 +50,6 @@ expect:
     - impl_loop.attempt.test
     - impl_loop.attempt.build
     - impl_loop.attempt.join_checks
-    - impl_loop.attempt.capture_diff
     - impl_loop.attempt.review
     - success
   not_reached:

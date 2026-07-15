@@ -28,6 +28,14 @@ type PauseController struct {
 	// a retryable error (like a rate limit) exhausts Temporal's retry budget.
 	// After calling this, callers should call DoCheckPause to block until resume.
 	RequestPause func()
+
+	// DaemonOffline is the per-run daemon-offline circuit breaker. It rides
+	// on the PauseController because that's the one object DynamicWorkflow
+	// already threads through every executor (main loop, inline workflows,
+	// loop iterations, spawned threads), so consecutive "no daemon connected"
+	// failures are counted across the whole run. nil when not wired
+	// (simulator, tests).
+	DaemonOffline *DaemonOfflineCircuitBreaker
 }
 
 // DoCheckPause calls CheckPause if the receiver and the function are non-nil.
@@ -51,5 +59,15 @@ func (pc *PauseController) GetActivityCtx(fallback workflow.Context) workflow.Co
 func (pc *PauseController) DoRequestPause() {
 	if pc != nil && pc.RequestPause != nil {
 		pc.RequestPause()
+	}
+}
+
+// ObserveDaemonOfflineStep feeds a completed step to the daemon-offline
+// circuit breaker, if one is wired. May block until resume when the breaker
+// decides to pause. The ctx MUST be the calling goroutine's own
+// workflow.Context. Nil-safe on both the receiver and the breaker.
+func (pc *PauseController) ObserveDaemonOfflineStep(callerCtx workflow.Context, activityName string, stepEvent *StepEvent) {
+	if pc != nil && pc.DaemonOffline != nil {
+		pc.DaemonOffline.ObserveStep(callerCtx, activityName, stepEvent)
 	}
 }

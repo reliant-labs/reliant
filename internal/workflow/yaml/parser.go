@@ -99,6 +99,12 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 		case "daemon":
 			wf.Daemon, err = unmarshalCelDaemonSelector(val)
 
+		case "resumeNode", "resume_node":
+			wf.ResumeNode = val.Value
+
+		case "transitionTo", "transition_to":
+			wf.TransitionTo = val.Value
+
 		// Syntactic sugar: sequence: is a shorthand for entry + nodes + edges
 		// for linear chains. See sugar.go for documentation.
 		case "sequence":
@@ -441,6 +447,16 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 			seq.Content = append(seq.Content, scalarNode(s, ""))
 		}
 		m.Content = append(m.Content, scalarNode("entry", ""), seq)
+	}
+
+	// resume_node
+	if wf.ResumeNode != "" {
+		m.Content = append(m.Content, scalarNode("resume_node", ""), scalarNode(wf.ResumeNode, ""))
+	}
+
+	// transition_to
+	if wf.TransitionTo != "" {
+		m.Content = append(m.Content, scalarNode("transition_to", ""), scalarNode(wf.TransitionTo, ""))
 	}
 
 	// nodes

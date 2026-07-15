@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/cel-go/common/types/ref"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -129,47 +128,11 @@ func valueToInterpolatedString(value interface{}) string {
 }
 
 // convertCELToNative recursively converts CEL types to native Go types.
-// CEL's result.Value() returns a Go value but may contain nested ref.Val types
-// (e.g., []ref.Val, map[ref.Val]ref.Val) which don't serialize properly to JSON.
-// This function ensures all CEL internal types are converted to native types.
+// Delegates to the shared wfcel.ConvertToNative normalizer, which also maps
+// CEL null (the structpb.NullValue enum) to Go nil at every nesting level so
+// results are safe for JSON marshaling and structpb.NewStruct/NewValue.
 func convertCELToNative(v interface{}) interface{} {
-	switch val := v.(type) {
-	case ref.Val:
-		// CEL value - extract native and recurse
-		return convertCELToNative(val.Value())
-	case []ref.Val:
-		// Slice of CEL values
-		result := make([]interface{}, len(val))
-		for i, item := range val {
-			result[i] = convertCELToNative(item)
-		}
-		return result
-	case []interface{}:
-		// Slice that might contain CEL values
-		result := make([]interface{}, len(val))
-		for i, item := range val {
-			result[i] = convertCELToNative(item)
-		}
-		return result
-	case map[string]interface{}:
-		// Map that might contain CEL values
-		result := make(map[string]interface{})
-		for k, item := range val {
-			result[k] = convertCELToNative(item)
-		}
-		return result
-	case map[ref.Val]ref.Val:
-		// CEL map type
-		result := make(map[string]interface{})
-		for k, item := range val {
-			keyStr, _ := k.Value().(string)
-			result[keyStr] = convertCELToNative(item)
-		}
-		return result
-	default:
-		// Already native type
-		return v
-	}
+	return wfcel.ConvertToNative(v)
 }
 
 // evaluateCELTemplate evaluates a string that may contain {{...}} template expressions.

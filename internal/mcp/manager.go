@@ -4,6 +4,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,7 +18,39 @@ import (
 const (
 	defaultProjectServerLoadTimeout = 45 * time.Second
 	failedServerRetryCooldown       = 2 * time.Minute
+
+	// chromeDevtoolsMCPVersion pins the chrome-devtools-mcp npm package the
+	// daemon launches for the built-in browser MCP. Bump deliberately.
+	// Docs: https://github.com/ChromeDevTools/chrome-devtools-mcp
+	chromeDevtoolsMCPVersion = "1.6.0"
 )
+
+// systemChromePaths are on-disk locations a system Chrome/Chromium may live.
+// The cloud workspace-base image installs google-chrome-stable and symlinks
+// /usr/local/bin/reliant-chrome (control-plane docker/Dockerfile.workspace-base).
+// Checked in order; first existing binary wins.
+var systemChromePaths = []string{
+	"/usr/local/bin/reliant-chrome",
+	"/usr/bin/google-chrome-stable",
+	"/usr/bin/google-chrome",
+	"/usr/bin/chromium",
+	"/usr/bin/chromium-browser",
+	"/opt/google/chrome/chrome",
+}
+
+// detectSystemChrome returns the path to an installed system browser binary,
+// or "" if none is present. Used to self-gate the built-in chrome-devtools MCP:
+// the daemon advertises a browser tool only on images that actually ship Chrome
+// (cloud/amd64), so it never spawns an MCP that would immediately fail on
+// browser-less images (e.g. the arm64 local-dev image).
+func detectSystemChrome() string {
+	for _, p := range systemChromePaths {
+		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
 
 // Manager manages multiple MCP server connections and aggregates their capabilities
 type Manager struct {
@@ -889,13 +922,36 @@ func (m *Manager) ListProjectTools(projectPath string) (map[string][]Tool, error
 // builtinMCPServers returns MCP servers that ship with Reliant and are always available.
 // These have the lowest priority and can be overridden by user/project config.
 func builtinMCPServers() map[string]config.MCPServer {
-	return map[string]config.MCPServer{
+	servers := map[string]config.MCPServer{
 		"reliant-docs": {
 			Type:    config.MCPHTTP,
 			URL:     "https://reliantlabs.mintlify.app/mcp",
 			Enabled: true,
 		},
 	}
+
+	// chrome-devtools browser MCP — advertised ONLY when a system browser is
+	// present on disk (cloud daemons install google-chrome-stable; the arm64
+	// local-dev image does not). Self-gating keeps browser-less images from
+	// spawning an MCP that would immediately fail. We point at the system binary
+	// via --executablePath so it never downloads its own Chrome, and run
+	// --headless (no display in the pod) --isolated (throwaway profile/session).
+	if chromePath := detectSystemChrome(); chromePath != "" {
+		servers["chrome-devtools"] = config.MCPServer{
+			Type:    config.MCPStdio,
+			Command: "npx",
+			Args: []string{
+				"-y",
+				"chrome-devtools-mcp@" + chromeDevtoolsMCPVersion,
+				"--headless",
+				"--isolated",
+				"--executablePath=" + chromePath,
+			},
+			Enabled: true,
+		}
+	}
+
+	return servers
 }
 
 func (m *Manager) loadProjectServersFromConfig(ctx context.Context, projectPath string) map[string]config.MCPServer {

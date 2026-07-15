@@ -249,8 +249,12 @@ func Run(ctx context.Context, opts Options) error {
 	// PauseService
 	pauseService := v2workflow.NewPauseService(temporalClient, repo)
 
-	// Reconciler (background workflow reconciliation)
-	reconciler := reconciliation.NewReconciler(repo, temporalClient, nil)
+	// Reconciler (background workflow reconciliation). Namespace must match
+	// the Temporal client's so reset (stuck-task recovery) requests land in
+	// the right namespace; task queue defaults to the shared worker queue.
+	reconcilerCfg := reconciliation.DefaultConfig()
+	reconcilerCfg.Namespace = opts.TemporalNamespace
+	reconciler := reconciliation.NewReconciler(repo, temporalClient, reconcilerCfg)
 	reconciler.StartBackgroundReconciliation(ctx)
 	logging.Info("Background reconciler started")
 
