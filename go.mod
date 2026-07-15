@@ -28,8 +28,8 @@ require (
 	github.com/pdfcpu/pdfcpu v0.13.0
 	github.com/pressly/goose/v3 v3.25.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/reliant-labs/forge v0.0.0-20260708034300-a9392db60004
-	github.com/reliant-labs/forge/pkg v0.0.0-20260624040937-ce5dfbd929ed
+	github.com/reliant-labs/forge v0.0.2
+	github.com/reliant-labs/forge/pkg v0.0.2
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	github.com/stretchr/testify v1.11.1
