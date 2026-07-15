@@ -27,8 +27,6 @@ events:
 
   # Approval is granted (approval node outputs status: approved)
   - node: agent_loop.approval
-    type: tool_result
-    tool: approval
     output:
       status: "approved"
 
@@ -52,4 +50,3 @@ expect:
     - agent_loop.approval  # Approval should be reached in manual mode
     - agent_loop.execute_tools
   not_reached:
-    - max_turns_notification

@@ -92,6 +92,13 @@ type SettingStore interface {
 
 	GetClaudeAuthTokens(ctx context.Context, userID string) (*ClaudeAuthTokens, error)
 	SetClaudeAuthTokens(ctx context.Context, userID string, tokens ClaudeAuthTokens) error
+	// CompareAndSwapClaudeAuthTokens persists tokens only if the currently
+	// stored refresh token still equals expectedRefreshToken, i.e. no
+	// concurrent rotation has been persisted since the caller read it.
+	// Returns true when the row was updated. Claude OAuth refresh tokens are
+	// single-use (rotated on every exchange), so a plain last-writer-wins
+	// upsert would let a stale rotation clobber the live token lineage.
+	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens ClaudeAuthTokens) (bool, error)
 	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
 
 	GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error)

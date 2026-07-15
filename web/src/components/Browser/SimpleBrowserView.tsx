@@ -114,6 +114,9 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
       logger.debug("[SimpleBrowserView] Load stopped", { tabId: selectedTab.id });
       updateTabLoading(selectedTab.id, false);
 
+      // Guard: Electron <webview> APIs are absent in plain-browser (web) builds.
+      if (typeof webview.getURL !== "function") return;
+
       // Update URL
       const url = webview.getURL();
       updateTabUrl(selectedTab.id, url);
@@ -155,11 +158,13 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
         url: e.url,
       });
       updateTabUrl(selectedTab.id, e.url);
-      updateTabNavigation(
-        selectedTab.id,
-        webview.canGoBack(),
-        webview.canGoForward()
-      );
+      if (typeof webview.canGoBack === "function") {
+        updateTabNavigation(
+          selectedTab.id,
+          webview.canGoBack(),
+          webview.canGoForward()
+        );
+      }
     };
 
     // Attach listeners
@@ -234,7 +239,7 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
     }
 
     const webview = webviewRefs.current.get(selectedTab.id) as any;
-    if (webview) {
+    if (webview && typeof webview.loadURL === "function") {
       webview.loadURL(url);
     }
     addressBarRef.current?.blur();
@@ -243,21 +248,21 @@ export function SimpleBrowserView({ worktreeId }: SimpleBrowserViewProps) {
   const handleGoBack = () => {
     if (selectedTab?.canGoBack) {
       const webview = webviewRefs.current.get(selectedTab.id) as any;
-      webview?.goBack();
+      if (typeof webview?.goBack === "function") webview.goBack();
     }
   };
 
   const handleGoForward = () => {
     if (selectedTab?.canGoForward) {
       const webview = webviewRefs.current.get(selectedTab.id) as any;
-      webview?.goForward();
+      if (typeof webview?.goForward === "function") webview.goForward();
     }
   };
 
   const handleReload = () => {
     if (selectedTab) {
       const webview = webviewRefs.current.get(selectedTab.id) as any;
-      webview?.reload();
+      if (typeof webview?.reload === "function") webview.reload();
     }
   };
 

@@ -51,6 +51,16 @@ func TestValidateBuiltinWorkflows(t *testing.T) {
 			result := validation.StaticAnalysis(wf, builtinLoader)
 			require.NoError(t, result.AsError(), "Validation failed for %s", entry.Name())
 
+			// Builtins must have ZERO execution-ordering findings, warnings
+			// included: an unguarded nodes.<id> reference to a node that a
+			// router dispatch or parallel branch can skip hard-fails at
+			// runtime with "no such key: <id>" (the pitch-deck
+			// founder_interview incident). Guard with has(nodes.<id>) or
+			// restructure edges.
+			for _, issue := range result.ByCategory(validation.CategoryNodeOrdering) {
+				t.Errorf("node ordering issue in %s: %s", entry.Name(), issue.Error())
+			}
+
 			// Basic sanity checks
 			assert.NotEmpty(t, wf.GetName(), "Workflow name is empty")
 			assert.NotEmpty(t, wf.GetNodes(), "Workflow has no nodes")

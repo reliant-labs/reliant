@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
 
 # Default target
 all: deps fmt vet test build
@@ -137,6 +137,24 @@ test-coverage:
 	$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
 	$(GOCMD) tool cover -html=coverage.out -o coverage.html
 	@echo "$(GREEN)✅ Coverage report generated: coverage.html$(NC)"
+
+## test-e2e: Run hermetic story e2e tests (e2e/stories: real Postgres + ephemeral Temporal dev server + scripted LLM)
+E2E_DATABASE_URL ?= postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable
+test-e2e:
+	@echo "$(YELLOW)Running e2e stories (bringing up Postgres via docker compose)...$(NC)"
+	docker compose up -d postgres
+	DATABASE_URL='$(E2E_DATABASE_URL)' $(GOTEST) -tags e2e -count=1 -timeout=10m -v ./e2e/stories/
+	@echo "$(GREEN)✅ E2E stories complete$(NC)"
+
+## replay-fixtures: Regenerate Temporal replay-compatibility history fixtures (see internal/workflow/runtime/replaytest/fixtures/README.md)
+replay-fixtures:
+	@echo "$(YELLOW)Regenerating replay-compatibility fixtures (Postgres via docker compose + ephemeral Temporal dev server)...$(NC)"
+	@echo "$(YELLOW)NOTE: regenerating accepts a replay break for in-flight runs — read internal/workflow/runtime/replaytest/fixtures/README.md$(NC)"
+	docker compose up -d postgres
+	DATABASE_URL='$(E2E_DATABASE_URL)' $(GOTEST) -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+	@echo "$(YELLOW)Verifying regenerated fixtures replay cleanly against current code...$(NC)"
+	$(GOTEST) -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
+	@echo "$(GREEN)✅ Replay fixtures regenerated and verified — commit fixtures/*.json with your change$(NC)"
 
 
 ## fmt: Format Go code

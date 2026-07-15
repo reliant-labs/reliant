@@ -231,15 +231,9 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map
 		return nil, fmt.Errorf("CEL evaluation error: %w", err)
 	}
 
-	value := out.Value()
-
-	// CEL returns structpb.NullValue for null/nil, which marshals to the number 0.
-	// Convert it back to Go nil for proper handling.
-	if value != nil && fmt.Sprintf("%T", value) == "structpb.NullValue" {
-		return nil, nil
-	}
-
-	return convertCELToNative(value), nil
+	// convertCELToNative (wfcel.ConvertToNative) maps CEL null — the
+	// structpb.NullValue enum — to Go nil at every nesting level.
+	return convertCELToNative(out.Value()), nil
 }
 
 // EvalBool evaluates a direct CEL expression (no {{ }}) as a boolean.

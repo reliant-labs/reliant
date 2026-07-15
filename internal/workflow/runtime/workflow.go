@@ -48,6 +48,26 @@ type WorkflowInput struct {
 	WorkflowName string                 // Required: Which workflow definition to load
 	Inputs       map[string]interface{} // Configuration inputs (NOT trigger data)
 	ExecContext  *ExecutionContext      // Required: Unified execution context
+	// Resume, when non-nil, marks this run as a position-resume of an
+	// interrupted (failed/terminated) predecessor for the same chat. The engine
+	// skips graph entry (and any entry routers) and enters directly at the
+	// resolved resume node, with thread history as conversation truth. See
+	// resolveResumeTarget for target resolution order.
+	Resume *ResumeInput
+}
+
+// ResumeInput carries the position checkpoint of the interrupted predecessor
+// run. A non-nil-but-empty ResumeInput still enables resume mode: the engine
+// falls back to the workflow's resume_node / single top-level loop.
+type ResumeInput struct {
+	// NodeID is the top-level node recorded in the position checkpoint.
+	// May be empty when the predecessor died before entering any node.
+	NodeID string `json:"node_id,omitempty"`
+	// LoopIteration is the loop iteration recorded in the checkpoint when
+	// NodeID is a loop node (0 otherwise). The resumed loop re-enters at this
+	// iteration so max-iteration guards keep counting from where they were;
+	// thread history carries the actual content.
+	LoopIteration int `json:"loop_iteration,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -533,6 +553,42 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	}
 	notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts)
 
+	// STEP 6.9: Resume-at-position. When this run resumes an interrupted
+	// (failed/terminated) predecessor, enter directly at the resolved resume
+	// node instead of graph entry. Thread history is the conversation truth;
+	// node outputs from the prior run are NOT reconstructed, so templated
+	// references to prior nodes must tolerate absence — the has()-guard
+	// execution-order validation (validation/node_order.go) enforces exactly
+	// this for cross-node references. Dangling tool calls at the thread tail
+	// are stubbed by the layered orphan repair in LoadMessagesForLLM before
+	// the first LLM call.
+	resumeTarget, resumeLoopIteration := resolveResumeTarget(wf, input.Resume, logger)
+	var pendingResumeStep *core.TriggeredNode
+	if resumeTarget != nil {
+		logger.Info("[Workflow Runtime] Resume mode: entering directly at resume node",
+			"resumeNode", resumeTarget.GetId(),
+			"resumeNodeType", resumeTarget.GetType(),
+			"loopIteration", resumeLoopIteration,
+			"checkpointNode", input.Resume.NodeID,
+			"yamlOverride", wf.GetResumeNode(),
+		)
+		pendingResumeStep = &core.TriggeredNode{
+			Node: resumeTarget,
+			Event: &core.WorkflowEvent{
+				ID:           fmt.Sprintf("resume-%s", workflowID),
+				WorkflowID:   workflowID,
+				ChatID:       input.ChatID,
+				WorkflowName: input.WorkflowName,
+				StepID:       "", // Synthetic start event targeted at the resume node
+				Data:         input.Inputs,
+			},
+		}
+	} else if input.Resume != nil {
+		logger.Info("[Workflow Runtime] Resume mode requested but no resume target resolved - entering at graph start with thread history",
+			"checkpointNode", input.Resume.NodeID,
+		)
+	}
+
 	// STEP 7: Construct initial event from workflow input
 	// The initial event has StepID="" to indicate workflow start (matches "workflow.started" edge trigger)
 	initialEvent := &core.WorkflowEvent{
@@ -544,7 +600,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		Data:         input.Inputs,
 	}
 
-	events := []*core.WorkflowEvent{initialEvent}
+	var events []*core.WorkflowEvent
+	if pendingResumeStep == nil {
+		events = []*core.WorkflowEvent{initialEvent}
+	}
+	// In resume mode the initial "workflow started" event is suppressed:
+	// entry nodes (including entry routers) must not fire — the resume node
+	// is injected directly into the first batch of triggered steps below.
 	// Track outputs from completed nodes using NodeOutputStore for centralized management
 	nodeOutputStore := NewNodeOutputStore(input.WorkflowName)
 	nodeOutputs := nodeOutputStore.AsMap() // Backwards compatible - existing code can use the map directly
@@ -660,13 +722,69 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		cancelAllActivities()
 	}
 
+	// STEP 8.55: Daemon-offline circuit breaker.
+	// Counts consecutive daemon-targeted step completions that failed with
+	// "no daemon connected" — across the main loop AND inline loop/workflow
+	// executors, because the breaker rides on the shared PauseController and
+	// is observed at the StepExecutor.HandleCompletion chokepoint. At
+	// DaemonOfflinePauseThreshold it pauses the workflow via the same
+	// cooperative pause machinery used for user pause and retry-exhaustion,
+	// with a user-facing chat message. The user resumes by sending a message
+	// (SendMessage routes paused chats through PauseService.ResumeWorkflow).
+	daemonOfflineBreaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
+		logger.Warn("[Workflow Runtime] Pausing: daemon offline for consecutive steps",
+			"workflowID", workflowID,
+			"chatID", input.ChatID,
+			"consecutiveSteps", streak,
+			"threshold", DaemonOfflinePauseThreshold,
+		)
+
+		// Surface a clear, user-facing message BEFORE flipping the pause flag
+		// (the message activity must run on a non-cancelled context).
+		errorCtx := workflow.WithActivityOptions(callerCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				MaximumAttempts: 3,
+			},
+		})
+		var errorResult map[string]interface{}
+		_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", map[string]interface{}{
+			"chat_id":       input.ChatID,
+			"workflow_id":   workflowID,
+			"workflow_name": input.WorkflowName,
+			"error_message": DaemonOfflinePauseMessage,
+			"error_type":    "daemon_offline_pause",
+			"error_summary": DaemonOfflinePauseMessage,
+		}).Get(callerCtx, &errorResult)
+
+		// Update DB status to paused so the UI reflects it and SendMessage
+		// routes through the resume path instead of starting a new workflow.
+		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
+
+		// Signal-based pause: set the pause flag and block until resume.
+		// Mirrors the retry-exhaustion self-pause. We deliberately do NOT
+		// cancel in-flight activities: anything still running either fails
+		// with the same daemon-offline condition or proves the daemon is back.
+		pauseRequested = true
+		checkPause(callerCtx)
+		// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
+		_ = workflow.Sleep(callerCtx, 0)
+
+		// Resumed — update DB status back to running. The breaker's streak is
+		// NOT reset here: if the machine is still down, the next offline step
+		// re-pauses after a single round-trip; any daemon success resets it.
+		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, nil)
+	})
+
 	// makeThreadPauseCtrl creates a per-thread PauseController that inherits
-	// pause/activity-context from the shared one.
+	// pause/activity-context (and the shared daemon-offline breaker) from the
+	// shared one.
 	makeThreadPauseCtrl := func(thread string) *PauseController {
 		return &PauseController{
 			CheckPause:    checkPause,
 			ActivityCtxFn: getActivityCtx,
 			RequestPause:  requestPause,
+			DaemonOffline: daemonOfflineBreaker,
 		}
 	}
 
@@ -675,7 +793,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		CheckPause:    checkPause,
 		ActivityCtxFn: getActivityCtx,
 		RequestPause:  requestPause,
+		DaemonOffline: daemonOfflineBreaker,
 	}
+
+	// STEP 8.65: Replay-versioning gate for position checkpoints.
+	// The checkpoint writes below add new activity commands at node-entry /
+	// loop-iteration boundaries. Histories recorded before this change must
+	// keep replaying WITHOUT those commands, or every in-flight run wedges
+	// with a non-determinism error on deploy (TMPRL1100 — the exact incident
+	// class the checkpoints exist to recover from). GetVersion returns
+	// DefaultVersion when replaying pre-change histories (checkpoints off)
+	// and 1 for new executions (checkpoints on).
+	checkpointsEnabled := workflow.GetVersion(ctx, "position-checkpoints", workflow.DefaultVersion, 1) >= 1
 
 	// STEP 8.7: Create step executor for unified step lifecycle
 	executor := NewStepExecutor(
@@ -719,15 +848,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 
-	// STEP 8.8: Initialize daemon-offline tracker.
-	// Counts consecutive main-loop iterations where every daemon-targeted
-	// activity returned "no daemon connected" and none succeeded. When the
-	// streak meets DaemonOfflineHaltThreshold the workflow halts itself with
-	// a terminal error carrying DaemonOfflineHaltMarker, so the frontend
-	// surfaces a "Reconnect workspace" affordance instead of leaving the user
-	// staring at a stuck thinking indicator.
-	daemonOfflineTracker := NewDaemonOfflineTracker()
-
 	// STEP 9: Main workflow loop
 	for {
 		// Yield to the Temporal scheduler to prevent deadlock detection during replay.
@@ -743,11 +863,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			)
 			return nil, ctx.Err()
 		}
-
-		// Reset per-turn daemon-offline observation flags. Any daemon-targeted
-		// step completion observed BEFORE the next ObserveTurnBoundary call
-		// (at the bottom of the iteration) contributes to THIS turn's verdict.
-		daemonOfflineTracker.Reset()
 
 		// Check for pause signal at step boundary
 		checkPause(ctx)
@@ -773,6 +888,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			return nil, fmt.Errorf("find triggered steps: %w", err)
 		}
 		events = nil // Clear processed events
+
+		// Resume mode: inject the resume node as the first (and only) entry
+		// step, bypassing graph entry / entry routers. Consumed exactly once.
+		if pendingResumeStep != nil {
+			triggeredSteps = append(triggeredSteps, pendingResumeStep)
+			pendingResumeStep = nil
+		}
 
 		// For node routing routers: if edges produced triggered nodes, great. Otherwise,
 		// dynamically dispatch to the selected_node from the router output.
@@ -846,6 +968,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				continue
 			}
 
+			// Position checkpoint: record entry into this top-level node so an
+			// interrupted run can resume here. Loop nodes are excluded — the
+			// loop executor checkpoints per iteration ({loopID, iteration}),
+			// which both marks the position and preserves iteration progress.
+			// Cheap boundary: one write per node entry, never per activity.
+			if checkpointsEnabled && step.Node.GetType() != model.NodeTypeLoop {
+				notifyWorkflowCheckpoint(ctx, input.ChatID, workflowID, step.Node.GetId(), 0)
+			}
+
 			// Handle loop steps - execute inline within this workflow
 			if step.Node.GetType() == model.NodeTypeLoop {
 				contract, contractErr := coreSemantics.RequireContractForNode(step.Node.GetId(), model.NodeTypeLoop)
@@ -917,12 +1048,32 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					// Fail fast - loop executor creation errors should halt the workflow
 					return nil, fmt.Errorf("failed to create loop executor for step %s: %w", step.Node.GetId(), err)
 				}
+				loopStepID := step.Node.GetId()
 				loopExecutor = loopExecutor.WithThreadTracker(threadTracker).
 					WithExecContext(loopExecCtx).
 					WithProjectPath(loopProjectPath).
 					WithPauseController(makeThreadPauseCtrl(loopExecCtx.Thread)).
 					WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
 					WithInvocationContract(contract)
+				// Position checkpoint per loop iteration: {loopID, iteration}
+				// marks the position AND preserves iteration progress so a
+				// resumed run re-enters at the recorded iteration (keeping
+				// max-iteration guards honest). Top-level loops only — nested
+				// loops are not resume targets. Version-gated: pre-change
+				// histories must replay without these commands.
+				if checkpointsEnabled {
+					loopExecutor = loopExecutor.WithIterationCheckpoint(func(iteration int) {
+						notifyWorkflowCheckpoint(ctx, input.ChatID, workflowID, loopStepID, iteration)
+					})
+				}
+
+				// Resume mode: re-enter the resume-target loop at the recorded
+				// iteration. Applied once — subsequent triggers of the same
+				// loop (e.g. via edges) start fresh at iteration 0.
+				if resumeLoopIteration > 0 && resumeTarget != nil && loopStepID == resumeTarget.GetId() {
+					loopExecutor = loopExecutor.WithStartIteration(resumeLoopIteration)
+					resumeLoopIteration = 0
+				}
 
 				// Execute loop inline with retry-on-exhaustion support
 				var loopOutput *reliantv1.LoopOutput
@@ -1537,24 +1688,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				events = append(events, stepEvent.ToEvent())
 
-				// Observe daemon-offline signals from this completed step.
-				// - Step error: e.g. ExecuteRunStep returns the daemon-offline
-				//   error directly when RemoteRunExecutor can't reach the daemon.
-				// - Step output: ExecuteTools wraps daemon-offline into the
-				//   tool_results array (the activity itself succeeds), so we
-				//   scan the payload for daemon-offline markers.
-				if stepEvent.Error != nil {
-					daemonOfflineTracker.ObserveStepError(stepEvent.Error)
-				} else {
-					daemonOfflineTracker.ObserveStepOutput(stepEvent.StepID, stepEvent.Data)
-					// Run steps (ExecuteRunStep) return non-tool_results output
-					// shapes when successful — record them as explicit daemon
-					// liveness signals so a successful run step resets the streak.
-					if running.ActivityName == "ExecuteRunStep" {
-						daemonOfflineTracker.ObserveDaemonSuccess(running.StepID)
-					}
-				}
-
 				// Update thread liveness - mark step as completed
 				if threadTracker != nil && running.StepID != "" {
 					threadTracker.Mapping.MarkStepCompleted(running.StepID)
@@ -1762,36 +1895,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			}
 		}
 
-		// End-of-turn daemon-offline evaluation. This is the seam between
-		// turns — every step completion from this iteration has been
-		// observed; we now decide whether to bump the streak, reset it,
-		// or leave it alone (CallLLM-only turns are neither).
-		//
-		// We deliberately halt LATE in the iteration so users still see the
-		// final tool_result errors and the assistant's last reply in chat
-		// before the workflow terminates. Returning here also exits the
-		// main loop directly, so no subsequent turn will run.
-		streak := daemonOfflineTracker.ObserveTurnBoundary()
-		if streak >= DaemonOfflineHaltThreshold {
-			logger.Error("[Workflow Runtime] Halting: daemon offline for consecutive turns",
-				"workflowID", workflowID,
-				"chatID", input.ChatID,
-				"consecutiveTurns", streak,
-				"threshold", DaemonOfflineHaltThreshold,
-			)
-			haltErr := HaltError(streak)
-			// Surface to the chat-error UI via the same path used by other
-			// terminal workflow errors. The error message embeds
-			// DaemonOfflineHaltMarker so the frontend can render a structured
-			// "Reconnect workspace" affordance instead of a generic toast.
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
-				"daemon_offline_halt", haltErr.Error())
-			// Use NonRetryable so Temporal doesn't retry the workflow on a
-			// halt that the user must remediate (reconnect the daemon).
-			return nil, temporal.NewNonRetryableApplicationError(
-				haltErr.Error(), "DaemonOfflineHalt", haltErr,
-			)
-		}
+		// NOTE: daemon-offline handling happens per step completion inside
+		// StepExecutor.HandleCompletion (see DaemonOfflineCircuitBreaker),
+		// not at the turn boundary. The breaker PAUSES the workflow (resumable
+		// by a user message) instead of the previous terminal halt, and it
+		// also covers inline loop/workflow executors whose step completions
+		// never surface here.
 	}
 }
 
@@ -3183,6 +3292,97 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 			"status", status,
 			"workflowID", workflowID)
 	}
+}
+
+// notifyWorkflowCheckpoint persists the workflow's position checkpoint: the
+// top-level node just entered and, for loop nodes, the loop iteration in
+// flight. Written at cheap boundaries only (node entry / loop iteration), NOT
+// per activity. Fire-and-forget: a failed checkpoint write must never fail the
+// workflow — it only degrades a future resume to the fallback target.
+func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID string, loopIteration int) {
+	logger := workflow.GetLogger(ctx)
+
+	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: 5 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    5 * time.Second,
+			MaximumAttempts:    2,
+		},
+	})
+
+	input := map[string]interface{}{
+		"chat_id":        chatID,
+		"workflow_id":    workflowID,
+		"node_id":        nodeID,
+		"loop_iteration": loopIteration,
+	}
+
+	var result map[string]interface{}
+	if err := workflow.ExecuteActivity(activityCtx, "WorkflowCheckpoint", input).Get(ctx, &result); err != nil {
+		logger.Warn("[Workflow Runtime] Failed to persist position checkpoint",
+			"nodeID", nodeID,
+			"loopIteration", loopIteration,
+			"workflowID", workflowID,
+			"error", err)
+	}
+}
+
+// resolveResumeTarget resolves the node a resumed run should enter directly,
+// bypassing graph entry (and any entry routers, whose re-classification of a
+// resume message is exactly the bug this exists to fix). Resolution order:
+//
+//  1. The workflow's resume_node YAML override, when set and valid.
+//  2. The node recorded in the position checkpoint (resume.NodeID), when it
+//     still exists in the graph (the workflow may have changed since).
+//  3. The workflow's main agent loop: the single top-level loop node, when
+//     exactly one exists.
+//  4. nil — fall back to normal graph entry (fresh start with thread history).
+//
+// Returns the target node and the loop iteration to re-enter at (only
+// meaningful for loop targets; 0 when the target differs from the checkpoint
+// node, since the recorded iteration belongs to the checkpoint node).
+func resolveResumeTarget(wf *reliantv1.Workflow, resume *ResumeInput, logger log.Logger) (*reliantv1.Node, int) {
+	if resume == nil {
+		return nil, 0
+	}
+
+	// 1. Workflow-level YAML override.
+	if rn := wf.GetResumeNode(); rn != "" {
+		if node := model.FindNode(wf, rn); node != nil {
+			iter := 0
+			if resume.NodeID == rn {
+				iter = resume.LoopIteration
+			}
+			return node, iter
+		}
+		logger.Warn("[Workflow Runtime] resume_node references unknown node, ignoring override",
+			"resumeNode", rn)
+	}
+
+	// 2. Position checkpoint.
+	if resume.NodeID != "" {
+		if node := model.FindNode(wf, resume.NodeID); node != nil {
+			return node, resume.LoopIteration
+		}
+		logger.Warn("[Workflow Runtime] Checkpoint node no longer exists in workflow, falling back",
+			"checkpointNode", resume.NodeID)
+	}
+
+	// 3. Main agent loop heuristic: exactly one top-level loop node.
+	var loops []*reliantv1.Node
+	for _, n := range wf.GetNodes() {
+		if n.GetType() == model.NodeTypeLoop {
+			loops = append(loops, n)
+		}
+	}
+	if len(loops) == 1 {
+		return loops[0], 0
+	}
+
+	// 4. Graph start.
+	return nil, 0
 }
 
 // notifyToolCallStatus emits a tool call status update so the UI can show

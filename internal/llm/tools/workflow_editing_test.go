@@ -15,28 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// setupTestDB creates an in-memory database for testing
+// setupTestDB returns this package's isolated, reset-per-test database. It
+// already seeds the shared "test-project" (see db.SetupTestDB), so tests can
+// reference that project ID without creating it themselves.
 func setupTestDB(t *testing.T) (db.Repository, func()) {
 	t.Helper()
-
-	repo := db.NewTestRepo(t)
-
-	// Create test project
-	err := repo.CreateProject(context.Background(), &db.Project{
-		ID:        "test-project",
-		Name:      "Test Project",
-		Path:      "/tmp/test",
-		UserID:    "test-user",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	})
-	require.NoError(t, err)
-
-	cleanup := func() {
-		repo.Close()
-	}
-
-	return repo, cleanup
+	return db.SetupTestDB(t)
 }
 
 // createTestContext creates a tool context with the test user ID

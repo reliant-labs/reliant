@@ -121,7 +121,7 @@ func TestApprovalCreateActivity_EmitsApprovalUpdate(t *testing.T) {
 	// Query chat_updates table to verify the approval update was emitted
 	var count int
 	err = h.DB().QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM chat_updates WHERE chat_id = ? AND update_type = ?`,
+		`SELECT COUNT(*) FROM chat_updates WHERE chat_id = $1 AND update_type = $2`,
 		chatID, int32(db.UpdateTypeApproval),
 	).Scan(&count)
 	require.NoError(t, err)

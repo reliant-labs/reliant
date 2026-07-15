@@ -217,8 +217,9 @@ func Run(ctx context.Context, opts Options) error {
 	analytics.SetClient(analyticsClient)
 	analytics.SetPrivacyChecker(repo)
 
-	// Telemetry (noop — Sentry is optional for workers)
-	telemetry.SetReporter(telemetry.NewNoopReporter())
+	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
+	telemetry.SetReporter(telemetry.NewReporterFromEnv(
+		config.IsDevelopmentEnvironment() || config.IsTestEnvironment()))
 
 	// -----------------------------------------------------------------
 	// 10. Tool execution routing via NATS
@@ -349,6 +350,9 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	analytics.Shutdown()
+
+	// Flush any pending telemetry (Sentry) events before exit.
+	telemetry.Flush(5)
 
 	logging.Info("temporal-worker shut down gracefully")
 	return nil

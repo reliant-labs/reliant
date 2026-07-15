@@ -39,6 +39,16 @@ export const getIsDev = (): boolean => {
 };
 
 /**
+ * Runtime Electron detection. True only when running inside the Electron shell
+ * (the desktop app); false in the plain-browser (web) build. Use this to gate
+ * Electron-only features such as the embedded <webview> browser, which does not
+ * exist in web (there, links open in a new tab via window.open instead).
+ */
+export const isElectron = (): boolean =>
+  typeof window !== "undefined" &&
+  (!!window.electronAPI || !!window.RELIANT_CONFIG?.isElectron);
+
+/**
  * Backwards-compatible snapshot for existing call sites.
  * Prefer getIsDev() in runtime-sensitive paths (auth, transport, storage).
  */

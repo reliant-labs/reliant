@@ -169,6 +169,14 @@ type DaemonAttachment struct {
 	PodPort            *int
 	AttachedAt         time.Time
 	LastStreamActivity time.Time
+	// Workspace memory telemetry from the daemon heartbeat (cloud daemons in
+	// a cgroup-limited pod). MemoryLimitBytes == 0 means "not reported"
+	// (local daemons without cgroup accounting). MemoryPressure is the
+	// daemon's hysteresis-smoothed pressure bit (asserts >= 85% of the
+	// limit, clears below 75%).
+	MemoryUsedBytes  int64
+	MemoryLimitBytes int64
+	MemoryPressure   bool
 }
 
 // DaemonPAT is a personal access token for daemon authentication.
@@ -464,6 +472,10 @@ type WorkflowScenario = core.WorkflowScenario
 
 // StepExecution is an alias to the shared core step-execution model.
 type StepExecution = core.StepExecution
+
+// WorkflowCheckpoint is an alias to the shared core workflow-checkpoint model
+// (position truth for resume-at-position).
+type WorkflowCheckpoint = core.WorkflowCheckpoint
 
 // ============================================================================
 // Node Execution State Types

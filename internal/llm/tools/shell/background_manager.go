@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -23,6 +24,11 @@ import (
 // not persisted (e.g., no chat or worktree association). This is not a real error;
 // it signals that output flushing should be skipped.
 var ErrPersistenceSkipped = errors.New("persistence skipped")
+
+// bgMemReader reads the workspace cgroup's memory accounting for OOM-kill
+// attribution. Inert (all checks answer false) on hosts without cgroup v2
+// memory files — macOS and uncontained local daemons.
+var bgMemReader = cgroupmem.NewReader(cgroupmem.DefaultRoot)
 
 // OutputLine represents a single line of output with its source
 type OutputLine struct {
@@ -68,6 +74,9 @@ type BackgroundProcess struct {
 	outputMu       sync.RWMutex
 	cancelFunc     context.CancelFunc
 	done           chan struct{}
+	// oomSnap captures the workspace cgroup's oom_kill counter at spawn so a
+	// SIGKILLed process can be attributed to the kernel OOM killer on exit.
+	oomSnap cgroupmem.OOMSnapshot
 
 	// Output subscribers (for real-time streaming)
 	subscribers   map[string]chan OutputLineWithSeq // subscriber ID -> channel
@@ -385,10 +394,21 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		subscribers:    make(map[string]chan OutputLineWithSeq),
 	}
 
+	process.oomSnap = bgMemReader.SnapshotOOMKills()
+
 	// Start the command
 	if err := cmd.Start(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	// Steer the kernel OOM killer toward the workload (and its descendants,
+	// which inherit the score) rather than the daemon. No-op outside Linux;
+	// best-effort everywhere.
+	if cmd.Process != nil {
+		if err := osutil.AdjustChildOOMScore(cmd.Process.Pid); err != nil {
+			logging.Debug("Failed to adjust background process oom_score_adj", "pid", cmd.Process.Pid, "error", err)
+		}
 	}
 
 	// Start goroutines to capture output
@@ -508,6 +528,21 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 			exitCode := exitErr.ExitCode()
 			process.ExitCode = &exitCode
 			process.Status = "failed"
+			// Attribute SIGKILL-shaped deaths to the kernel OOM killer when
+			// the workspace cgroup recorded one during the process lifetime.
+			// The message is appended as a synthetic stderr line so anyone
+			// polling the process output (LLM via bg_output, user via RPC)
+			// sees an actionable explanation instead of a silent kill.
+			if oom, msg := bgMemReader.CheckOOMKill(exitCode, process.oomSnap); oom {
+				process.outputSeq++
+				process.combinedOutput = append(process.combinedOutput, OutputLineWithSeq{
+					Type:     "stderr",
+					Text:     msg,
+					Sequence: process.outputSeq,
+				})
+				process.stderr.WriteString(msg + "\n")
+				logging.Warn("Background process OOM-killed", "id", process.ID, "command", process.Command)
+			}
 		} else {
 			process.Status = "failed"
 		}

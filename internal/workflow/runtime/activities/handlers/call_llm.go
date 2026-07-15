@@ -87,14 +87,6 @@ func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFac
 	}
 }
 
-// resolveDriver returns the injected resolver or falls back to the default.
-func (a *CallLLMActivity) resolveDriver(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
-	if a.driverResolver != nil {
-		return a.driverResolver(ctx, userID, prefs, opts...)
-	}
-	return drivers.GetDriver(ctx, userID, prefs, opts...)
-}
-
 // Name returns the activity name for registration
 func (a *CallLLMActivity) Name() string {
 	return "CallLLM"
@@ -122,6 +114,27 @@ func (a *CallLLMActivity) Execute(ctx context.Context, input ActivityInput) (*re
 		return nil, fmt.Errorf("expected call_llm node, got %s", model.NodeType(input.Node))
 	}
 	return a.executeCore(ctx, input.Runtime, args)
+}
+
+// explicitCompactionThresholdIsSet reports whether the CallLLM args carry an
+// explicit, positive compaction threshold literal. A literal <= 0 (or an unset
+// value / CEL expression) is treated as "not set" so the model default can win.
+func explicitCompactionThresholdIsSet(args *reliantv1.CallLLMArgs) bool {
+	ct := args.GetCompactionThreshold()
+	if !model.CelIntIsSet(ct) || model.CelIntIsExpr(ct) {
+		return false
+	}
+	return model.CelIntValue(ct) > 0
+}
+
+// explicitCompactionThresholdArg returns the explicit compaction threshold from
+// the CallLLM args when set to a positive literal, otherwise the global default.
+// The resolved-model default is layered on top of this in executeCore.
+func explicitCompactionThresholdArg(args *reliantv1.CallLLMArgs) int32 {
+	if explicitCompactionThresholdIsSet(args) {
+		return int32(model.CelIntValue(args.GetCompactionThreshold()))
+	}
+	return DefaultCompactionThreshold
 }
 
 // executeCore contains PURE BUSINESS LOGIC only
@@ -277,13 +290,13 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		return nil, fmt.Errorf("model is required - must be provided via workflow inputs")
 	}
 
-	// Resolve model for the LLM call.
-	// When a custom driver resolver is injected (e.g., in tests), skip normal
-	// model resolution since the injected resolver provides its own driver/model.
-	var legacyModel models.Model
-	var modelIDWithDriver string
-	var effectiveTemperature *float64
-	var effectiveThinkingLevel string
+	// effectiveCompactionThreshold is the token count at which the agent loop
+	// triggers compaction for the resolved model. Precedence mirrors
+	// temperature/thinking_level: an explicit CallLLM arg wins, otherwise the
+	// resolved model's default_compaction_threshold, otherwise the global
+	// default. Emitted on CallLLMOutput so the compact edge reads the per-model
+	// value even when the model was selected by tag.
+	effectiveCompactionThreshold := explicitCompactionThresholdArg(args)
 	protoModel := model.CelModelSelectorValue(args.GetModel())
 	modelSelector := models.ModelSelector{}
 	if protoModel != nil {
@@ -292,103 +305,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		modelSelector.Providers = protoModel.GetProviders()
 	}
 
-	if a.driverResolver != nil {
-		// Probe the injected resolver for its model
-		probeDriver, probeErr := a.driverResolver(ctx, chat.UserID, nil)
-		if probeErr != nil {
-			return nil, fmt.Errorf("injected driver resolver failed: %w", probeErr)
-		}
-		legacyModel = probeDriver.Model()
-		modelIDWithDriver = string(legacyModel.ID)
-		// For injected resolvers, use arg values directly (no model defaults available).
-		// Still reconcile against the probed model capabilities so non-reasoning
-		// injected drivers don't receive unsupported reasoning options.
-		effectiveTemperature = celDoubleValuePtr(args.GetTemperature())
-		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
-			effectiveThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
-		}
-		effectiveThinkingLevel = models.ReconcileThinkingLevel(
-			models.ResolveThinkingCapability(models.ModelCapabilities{CanReason: legacyModel.CanReason}),
-			effectiveThinkingLevel,
-		)
-		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
-			"modelID", legacyModel.ID)
-	} else {
-		// Get available drivers to check which providers the user has configured
-		availableDrivers := drivers.GetAvailableDrivers(ctx, chat.UserID)
-
-		// Build availableProviders slice from configured drivers
-		availableProviders := make([]string, 0, len(availableDrivers.Drivers))
-		for driverID, driverConfig := range availableDrivers.Drivers {
-			// Use IsConfigured() which handles both API key drivers and local drivers (BaseURL)
-			if driverConfig.IsConfigured() {
-				availableProviders = append(availableProviders, string(driverID))
-			}
-		}
-
-		// Resolve model using the new registry
-		registry := models.MustGetRegistry()
-		resolved, err := registry.Resolve(modelSelector, availableProviders)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve model: %w. Please check your API key configuration in Settings", err)
-		}
-
-		activity.GetLogger(ctx).Info("[CallLLM] Resolved model",
-			"selector", modelSelector,
-			"modelID", resolved.Definition.ID,
-			"provider", resolved.Provider.Driver)
-
-		// Apply model defaults for unset parameters
-		resolvedDef := resolved.Definition
-
-		// Determine effective temperature: 0.0 means "not set, use model default"
-		if model.CelDoubleIsSet(args.GetTemperature()) && !model.CelDoubleIsExpr(args.GetTemperature()) && model.CelDoubleValue(args.GetTemperature()) != 0.0 {
-			v := model.CelDoubleValue(args.GetTemperature())
-			effectiveTemperature = &v
-		} else if resolvedDef.DefaultTemperature != nil {
-			effectiveTemperature = resolvedDef.DefaultTemperature
-		}
-
-		// Determine effective thinking level: explicit values win, otherwise use the
-		// model default. Then reconcile through the canonical model capability policy
-		// so stale defaults on non-reasoning models disable thinking instead of
-		// failing before a request can be made.
-		if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) && model.CelStringValue(args.GetThinkingLevel()) != "" {
-			effectiveThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
-		} else if resolvedDef.DefaultThinkingLevel != "" {
-			effectiveThinkingLevel = resolvedDef.DefaultThinkingLevel
-		}
-
-		if effectiveThinkingLevel != "" {
-			tl := ThinkingLevel(effectiveThinkingLevel)
-			if !tl.IsValid() {
-				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
-			}
-		}
-		effectiveThinkingLevel = models.ReconcileThinkingLevel(
-			models.ResolveThinkingCapability(resolved.Definition.Capabilities),
-			effectiveThinkingLevel,
-		)
-
-		// Build the model ID string with driver suffix for the driver system
-		modelIDWithDriver = resolved.Definition.ID
-		if resolved.Provider.Driver != "" {
-			modelIDWithDriver = resolved.Definition.ID + "@" + resolved.Provider.Driver
-		}
-
-		// Convert the resolved model definition to a legacy Model for the driver system
-		legacyModel = resolved.Definition.ToModel()
-	}
-
-	// Build preferences for driver selection
-	preferences := models.Preferences{
-		{
-			ModelID:     models.ModelID(modelIDWithDriver),
-			Temperature: effectiveTemperature,
-		},
-	}
-
-	// Load project and project config via provider abstraction
+	// Load project and project config via provider abstraction. This happens
+	// before model/driver resolution so the registry reflects the project's
+	// model config and the working directory can be attached to the driver.
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project: %w", err)
@@ -425,22 +344,71 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		workingDir = worktreePath
 	}
 
-	// Create driver with the resolved model
-	driverOpts := []llm.DriverOption{
-		llm.WithModel(legacyModel),
-		llm.WithSessionID(chat.ID),
-		llm.WithWorkingDirectory(workingDir),
+	// Explicit per-call overrides from workflow args. Zero values mean "use
+	// the model default" — resolveLLMCall (the request-construction path
+	// shared with Compact) layers model defaults and reconciles the thinking
+	// level against model capabilities the same way for every caller.
+	var explicitTemperature *float64
+	// Temperature 0.0 means "not set, use model default"
+	if model.CelDoubleIsSet(args.GetTemperature()) && !model.CelDoubleIsExpr(args.GetTemperature()) && model.CelDoubleValue(args.GetTemperature()) != 0.0 {
+		v := model.CelDoubleValue(args.GetTemperature())
+		explicitTemperature = &v
 	}
+	var explicitThinkingLevel string
+	if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
+		explicitThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
+	}
+	var explicitMaxTokens *int64
 	if model.CelIntIsSet(args.GetMaxTokens()) {
-		driverOpts = append(driverOpts, llm.WithMaxTokens(model.CelIntValue(args.GetMaxTokens())))
-	}
-	if effectiveThinkingLevel != "" {
-		driverOpts = append(driverOpts, llm.WithReasoningEffort(effectiveThinkingLevel))
+		v := model.CelIntValue(args.GetMaxTokens())
+		explicitMaxTokens = &v
 	}
 
-	driver, err := a.resolveDriver(ctx, chat.UserID, preferences, driverOpts...)
+	// Resolve model and driver through the shared request-construction path.
+	// When a custom driver resolver is injected (e.g., in tests), it skips
+	// registry resolution and probes the resolver for its model.
+	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
+		UserID:        chat.UserID,
+		SessionID:     chat.ID,
+		Selector:      modelSelector,
+		Temperature:   explicitTemperature,
+		ThinkingLevel: explicitThinkingLevel,
+		MaxTokens:     explicitMaxTokens,
+		WorkingDir:    workingDir,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to get LLM driver: %w", err)
+		return nil, err
+	}
+	driver := resolved.Driver
+
+	// Capture the concrete model that will serve this completion so the inline
+	// save_message can persist it onto messages.model. This is the resolved
+	// model AFTER tag/selector resolution (e.g. "claude-4.8-opus"), not the raw
+	// "tags:[flagship]" selector. Prefer the registry definition ID; fall back
+	// to the probed model ID when an injected resolver supplied the driver.
+	resolvedModelID := ""
+	if resolved.Definition != nil {
+		resolvedModelID = resolved.Definition.ID
+	} else if resolved.Model.ID != "" {
+		resolvedModelID = string(resolved.Model.ID)
+	}
+
+	if resolved.Definition != nil {
+		activity.GetLogger(ctx).Info("[CallLLM] Resolved model",
+			"selector", modelSelector,
+			"modelID", resolved.Definition.ID,
+			"modelIDWithDriver", resolved.ModelID)
+
+		// Determine effective compaction threshold: an explicit arg (already
+		// captured above) wins; otherwise fall back to the resolved model's
+		// default_compaction_threshold. If neither is set, the global default
+		// (applied by explicitCompactionThresholdArg) stands.
+		if !explicitCompactionThresholdIsSet(args) && resolved.Definition.DefaultCompactionThreshold != nil {
+			effectiveCompactionThreshold = int32(*resolved.Definition.DefaultCompactionThreshold)
+		}
+	} else {
+		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
+			"modelID", resolved.Model.ID)
 	}
 
 	// Get available tools (filtered by tools_config)
@@ -636,11 +604,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"count", len(args.GetMessages()))
 	}
 
-	// Trim history if it would exceed context window limits
-	// This prevents API errors from context overflow by accounting for:
-	// - Message content tokens
-	// - System prompt tokens
-	// - Tool definition tokens (name, description, parameter schema)
 	if err := validateToolNamesForLLMRequest(availableTools); err != nil {
 		activity.GetLogger(ctx).Error("[CallLLM] Tool name invariant violation before LLM request",
 			"chatID", chat.ID,
@@ -650,15 +613,10 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		return nil, fmt.Errorf("tool name invariant violation: %w", err)
 	}
 
-	toolDefs := wrapToolsForEstimation(availableTools)
-	if message.TrimMessagesToFitContextWithFullEstimate(history, systemPrompts, toolDefs) {
-		activity.GetLogger(ctx).Info("[CallLLM] Trimmed history to fit context window",
-			"chatID", chat.ID)
-	}
-
-	// Normalize message roles before sending to LLM driver
-	// Warning, Info, and Agent roles are converted to User for API compatibility
-	history = normalizeRolesForLLM(history)
+	// Standard pre-request history transforms (shared with Compact):
+	// flatten tool blocks when the request carries no tools, trim to fit the
+	// context window, and normalize roles for API compatibility.
+	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools)
 
 	// Inject skill suggestions into the latest user message based on token matching.
 	// Skills come from the synced project config — no filesystem access.
@@ -816,6 +774,8 @@ streamLoop:
 			Role: "assistant",
 			Text: responseText,
 		},
+		CompactionThreshold: effectiveCompactionThreshold,
+		Model:               resolvedModelID,
 	}
 
 	// When a response_tool is configured, the LLM returns structured data as a
@@ -1984,7 +1944,7 @@ func repairMessageHistory(msgs []message.Message) []message.Message {
 					toolResults = append(toolResults, message.ToolResult{
 						ToolCallID: tc.ID,
 						Name:       tc.Name,
-						Content:    "Tool execution was cancelled before completion. The previous request was interrupted.",
+						Content:    InterruptedToolResultContent,
 						IsError:    true,
 					})
 				}
@@ -2017,15 +1977,6 @@ func normalizeRolesForLLM(history []message.Message) []message.Message {
 		}
 	}
 	return result
-}
-
-// celDoubleValuePtr returns a *float64 for the literal value of a CelDouble, or nil if not set/is an expr.
-func celDoubleValuePtr(c *reliantv1.CelDouble) *float64 {
-	if !model.CelDoubleIsSet(c) || model.CelDoubleIsExpr(c) {
-		return nil
-	}
-	v := model.CelDoubleValue(c)
-	return &v
 }
 
 // celStringValuePtr returns a *string for the literal value of a CelString, or nil if not set/is an expr.

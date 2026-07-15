@@ -84,6 +84,7 @@ func evaluateSaveMessageConfig(
 	workflowID string,
 	stepID string,
 	execContext *ExecutionContext,
+	iter *model.IterContext,
 ) (*types.SaveMessageInput, error) {
 	if config == nil {
 		return nil, nil
@@ -95,12 +96,15 @@ func evaluateSaveMessageConfig(
 		inputs = i
 	}
 
-	// Build typed CEL context for save_message evaluation
+	// Build typed CEL context for save_message evaluation. iter is populated when the
+	// save_message runs inside a loop so content templates like "{{iter.iteration}}"
+	// resolve instead of failing CEL compilation (which is swallowed as non-fatal).
 	ctx := &wfcel.PostActivityContext{
 		Output:   activityOutput,
 		Inputs:   inputs,
 		Nodes:    nodeOutputs,
 		Workflow: workflowContextToTyped(workflowContext),
+		Iter:     iter,
 	}
 
 	// Helper to evaluate a CEL expression and return the value
@@ -252,6 +256,28 @@ func evaluateSaveMessageConfig(
 		cost = toFloat64(v)
 	}
 
+	// Auto-extract the resolved model from the activity output (CallLLMOutput.model).
+	// This is the concrete model that served the completion, captured after tag
+	// resolution, so messages.model records the actual model rather than the
+	// "tags:[...]" selector. Mirrors the token_count/cost auto-extraction above.
+	var modelName string
+	if v, ok := activityOutput["model"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			modelName = s
+		}
+	}
+
+	// Auto-extract the agent/workflow identity from the workflow context so
+	// messages.agent records which agent produced the message. Prefer an explicit
+	// agent_name input, falling back to the workflow name (e.g. "builtin://agent",
+	// "get-it-right"). Empty when neither is present.
+	var agentName string
+	if v, ok := workflowContext[workflowContextKeyAgentName].(string); ok && v != "" {
+		agentName = v
+	} else if v, ok := workflowContext[workflowContextKeyName].(string); ok {
+		agentName = v
+	}
+
 	attachments, err := evalStringArray(model.CelStringRaw(config.GetAttachments()))
 	if err != nil {
 		return nil, fmt.Errorf("attachments: %w", err)
@@ -305,6 +331,8 @@ func evaluateSaveMessageConfig(
 		ToolCalls:    toolCalls,
 		TokenCount:   tokenCount,
 		Cost:         cost,
+		Model:        modelName,
+		Agent:        agentName,
 		WorkflowID:   workflowID,
 		Thinking:     thinkingOutput,
 	}, nil
@@ -494,6 +522,18 @@ func executeSaveMessageInline(
 
 	logger := workflow.GetLogger(ctx)
 
+	// When this save_message runs inside a loop iteration, expose the iteration to
+	// CEL as iter.* for both the condition and the content templates. loopNodeID is
+	// the authoritative "in a loop" signal (all callers set it alongside
+	// loopIteration). Without this, templates such as "{{iter.iteration + 1}}" fail
+	// CEL compilation on the undeclared iter variable; that error is logged but
+	// swallowed as non-fatal by the loop executor, so the message is silently never
+	// saved — which is how the get-it-right feedback bridge broke.
+	var iterCtx *model.IterContext
+	if loopNodeID != "" {
+		iterCtx = &model.IterContext{Iteration: loopIteration, Index: loopIteration}
+	}
+
 	// Check condition if specified
 	condStr := model.CelStringRaw(sm.GetCondition())
 	if condStr != "" {
@@ -508,6 +548,7 @@ func executeSaveMessageInline(
 			Inputs:   condInputs,
 			Nodes:    nodeOutputs,
 			Workflow: workflowContextToTyped(workflowContext),
+			Iter:     iterCtx,
 		}
 		conditionResult, err := wfcel.EvaluateTemplate(condStr, condCtx)
 		if err != nil {
@@ -567,6 +608,7 @@ func executeSaveMessageInline(
 		workflowID,
 		nid+"-save", // Step ID with -save suffix to indicate inline save
 		execContext, // Pass through for thread.* namespace access
+		iterCtx,     // Loop iteration for iter.* in content templates
 	)
 	if err != nil {
 		logger.Error("[SaveMessage] Failed to evaluate save_message config",
@@ -665,6 +707,8 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 		ResolvedAttachments:  input.Attachments,
 		TokenCount:           int32(input.TokenCount),
 		Cost:                 input.Cost,
+		ResolvedModel:        input.Model,
+		ResolvedAgent:        input.Agent,
 	}
 
 	// Convert tool calls

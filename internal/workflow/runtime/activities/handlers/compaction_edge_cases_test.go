@@ -430,6 +430,54 @@ func TestCompaction_TableDriven(t *testing.T) {
 	}
 }
 
+// TestFlattenToolContentToText verifies tool_use/tool_result blocks are converted to
+// text so a tool-less request (e.g. the compaction summarization call) carries no
+// tool-call content (which providers reject when no tools= param is present).
+func TestFlattenToolContentToText(t *testing.T) {
+	msgs := []message.Message{
+		{Role: message.User, Parts: []message.ContentPart{
+			message.TextContent{Text: "read the file"},
+		}},
+		{Role: message.Assistant, Parts: []message.ContentPart{
+			message.TextContent{Text: "on it"},
+			message.ToolCall{ID: "t1", Name: "read_file", Input: `{"path":"a.go"}`},
+		}},
+		{Role: message.Tool, Parts: []message.ContentPart{
+			message.ToolResult{ToolCallID: "t1", Name: "read_file", Content: "package main"},
+		}},
+		{Role: message.Tool, Parts: []message.ContentPart{
+			message.ToolResult{ToolCallID: "t2", Name: "read_file", Content: "boom", IsError: true},
+		}},
+		// A bare finish/empty message should be dropped.
+		{Role: message.Assistant, Parts: []message.ContentPart{}},
+	}
+
+	flattened := flattenToolContentToText(msgs)
+
+	// Every part must be plain text — no ToolCall/ToolResult blocks survive.
+	for _, m := range flattened {
+		require.Empty(t, m.ToolCalls(), "tool calls must be flattened to text")
+		require.Empty(t, m.ToolResults(), "tool results must be flattened to text")
+	}
+
+	// The empty assistant message is dropped: user, assistant, tool-result, tool-error.
+	require.Len(t, flattened, 4)
+
+	// Assistant turn keeps its text and records the tool call inline.
+	require.Equal(t, message.Assistant, flattened[1].Role)
+	require.Contains(t, flattened[1].Content().Text, "on it")
+	require.Contains(t, flattened[1].Content().Text, "read_file")
+
+	// Tool-result messages fold into a user turn with the result content.
+	require.Equal(t, message.User, flattened[2].Role)
+	require.Contains(t, flattened[2].Content().Text, "package main")
+
+	// Errors are labeled distinctly.
+	require.Equal(t, message.User, flattened[3].Role)
+	require.Contains(t, flattened[3].Content().Text, "error")
+	require.Contains(t, flattened[3].Content().Text, "boom")
+}
+
 // containsAny checks if s contains any of the substrings
 func containsAny(s string, substrs ...string) bool {
 	for _, substr := range substrs {

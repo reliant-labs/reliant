@@ -3,10 +3,12 @@ package threads
 import (
 	"context"
 	"fmt"
+
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 // DefaultCompactionThreshold is the default token threshold for compaction.
-const DefaultCompactionThreshold = 185000
+const DefaultCompactionThreshold = models.GlobalDefaultCompactionThreshold
 
 // GetContextUsage returns context usage information for a thread.
 // This is used by the UI to show the compaction indicator.
@@ -37,8 +39,44 @@ func (s *Service) GetContextUsage(ctx context.Context, threadID string) (*Contex
 		ThreadID:            threadID,
 		ContextSequence:     maxSeq,
 		ThreadTokenCount:    tokenCount,
-		CompactionThreshold: DefaultCompactionThreshold,
+		CompactionThreshold: int64(s.resolveCompactionThreshold(ctx, threadID, nil)),
 	}, nil
+}
+
+// resolveCompactionThreshold returns the compaction threshold for the model that
+// produced the thread's current token count, mirroring the fork inheritance walk
+// in GetThreadTokenCount so the indicator's denominator tracks the same model
+// the trigger evaluates. Falls back to the global default when no model-bearing
+// message is found.
+func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID string, maxOrdinal *int64) int {
+	if threadID == "" {
+		return models.GlobalDefaultCompactionThreshold
+	}
+
+	maxSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
+	if err != nil {
+		maxSeq = 0
+	}
+
+	msg, err := s.repo.GetLatestMessageWithTokensInThread(ctx, threadID, maxSeq)
+	if err == nil && msg != nil && msg.TokenCount != nil && (maxOrdinal == nil || msg.Ordinal <= *maxOrdinal) {
+		if msg.Model != nil {
+			return models.CompactionThresholdForModel(*msg.Model)
+		}
+		return models.GlobalDefaultCompactionThreshold
+	}
+
+	// No local token-bearing message — follow fork inheritance like GetThreadTokenCount.
+	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
+	if err != nil || thread.ParentThreadID == nil || thread.ForkAtOrdinal == nil {
+		return models.GlobalDefaultCompactionThreshold
+	}
+	parentThreadID := *thread.ParentThreadID
+	if parentThreadID == threadID {
+		return models.GlobalDefaultCompactionThreshold
+	}
+	forkAtOrdinal := *thread.ForkAtOrdinal
+	return s.resolveCompactionThreshold(ctx, parentThreadID, &forkAtOrdinal)
 }
 
 // GetThreadTokenCount returns the context size (token count) for a thread.

@@ -17,16 +17,17 @@ import (
 func setupTestFileSystemService(t *testing.T) (*FileSystemService, string) {
 	t.Helper()
 
-	repo := db.NewTestRepo(t)
-	t.Cleanup(func() {
-		require.NoError(t, repo.DB.Close())
-	})
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
 
+	// SetupTestDB seeds "test-project" at a sentinel path; point it at this
+	// test's temp dir so path-relative file reads resolve there.
 	projectPath := t.TempDir()
 	_, err := repo.DB.ExecContext(
 		context.Background(),
-		`INSERT INTO projects (id, user_id, name, path, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))`,
+		`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
+		 VALUES ($1, $2, $3, $4, NOW(), NOW(), NOW())
+		 ON CONFLICT (id) DO UPDATE SET path = EXCLUDED.path`,
 		"test-project",
 		"test-user",
 		"Test Project",

@@ -78,6 +78,12 @@ type SimulatedEvent struct {
 	// ToolOutput is the tool execution result (for type: tool_result).
 	// Structure depends on the tool being simulated.
 	ToolOutput map[string]interface{} `json:"tool_output,omitempty" yaml:"tool_output,omitempty"`
+
+	// IsError marks a tool_result as failed (for type: tool_result).
+	// Mirrors the real ExecuteTools behavior: the tool result carries the error
+	// content with is_error set, and response_data[tool] stays null — a failed
+	// response tool call does NOT count as a structured response.
+	IsError bool `json:"is_error,omitempty" yaml:"is_error,omitempty"`
 }
 
 // SimToolCall represents a tool call in a simulated LLM response.
@@ -182,6 +188,12 @@ type Expectation struct {
 	// Key is node ID (supports qualified IDs), value is a map of field->expected_value.
 	// Partial matching: only specified fields are checked.
 	NodeOutputs map[string]map[string]interface{} `json:"node_outputs,omitempty" yaml:"node_outputs,omitempty"`
+
+	// Outputs specifies expected values for the workflow's declared outputs.
+	// Keys support dotted paths into structured output values
+	// (e.g., "response.choice": "complete"). Partial matching: only the
+	// specified paths are checked.
+	Outputs map[string]interface{} `json:"outputs,omitempty" yaml:"outputs,omitempty"`
 }
 
 // Scenario defines a complete test case for a workflow.
@@ -276,14 +288,15 @@ const (
 
 // ExecutionDetails contains details about the simulation execution
 type ExecutionDetails struct {
-	NodesReached   []string                          `json:"nodes_reached"`             // All scheduled nodes (completed + skipped + errored)
-	NodesCompleted []string                          `json:"nodes_completed,omitempty"` // Nodes that executed successfully
-	NodesSkipped   []string                          `json:"nodes_skipped,omitempty"`   // Nodes skipped due to false conditions
-	NodeStates     map[string]NodeExecutionState     `json:"node_states,omitempty"`     // Explicit state for each node
-	Outcome        string                            `json:"outcome"`                   // "completed", "error", or "failed"
-	Error          *ErrorDetails                     `json:"error,omitempty"`
-	DurationMs     int64                             `json:"duration_ms"`
-	NodeOutputs    map[string]map[string]interface{} `json:"node_outputs,omitempty"` // Actual outputs from each node
+	NodesReached    []string                          `json:"nodes_reached"`             // All scheduled nodes (completed + skipped + errored)
+	NodesCompleted  []string                          `json:"nodes_completed,omitempty"` // Nodes that executed successfully
+	NodesSkipped    []string                          `json:"nodes_skipped,omitempty"`   // Nodes skipped due to false conditions
+	NodeStates      map[string]NodeExecutionState     `json:"node_states,omitempty"`     // Explicit state for each node
+	Outcome         string                            `json:"outcome"`                   // "completed", "error", or "failed"
+	Error           *ErrorDetails                     `json:"error,omitempty"`
+	DurationMs      int64                             `json:"duration_ms"`
+	NodeOutputs     map[string]map[string]interface{} `json:"node_outputs,omitempty"`     // Actual outputs from each node
+	WorkflowOutputs map[string]interface{}            `json:"workflow_outputs,omitempty"` // Evaluated workflow-level outputs (nil if none declared)
 }
 
 // ErrorDetails contains information about an error that occurred

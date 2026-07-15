@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, type Chat } from "../api/client";
-import { getEventBus } from "../lib/events";
+import { queryClient } from "../lib/query-client";
 import type { CreateChatRequest, UpdateChatRequest } from "../types/api";
 
 // ── Query key factory ───────────────────────────────────────────────────────
@@ -15,6 +15,77 @@ export const chatKeys = {
   search: (projectId: string, query: string) =>
     [...chatKeys.all, "search", projectId, query] as const,
 };
+
+// ── Cache patch helpers ─────────────────────────────────────────────────────
+// GOTCHA: the list cache stores the RAW envelope from api.chatsV2.list
+// ({ chats, lastUserUpdateSequence }) — the `select: (data) => data.chats`
+// transform in useChatList runs on READ, not at cache time. Updaters here must
+// patch `.chats` inside the envelope, not a bare array.
+
+type ChatListEnvelope = {
+  chats: Chat[];
+  total?: number;
+  lastUserUpdateSequence: number;
+};
+
+/**
+ * Surgically patch a chat's fields in both the list and detail caches.
+ * Never creates cache entries — if a cache is empty or the chat isn't
+ * present, that cache is left untouched.
+ */
+export function patchChatCaches(
+  projectId: string | undefined,
+  chatId: string,
+  patch: Partial<Chat>
+): void {
+  if (projectId) {
+    queryClient.setQueryData(
+      chatKeys.list(projectId),
+      (prev: ChatListEnvelope | undefined) => {
+        if (!prev || !prev.chats.some((c) => c.id === chatId)) return prev;
+        return {
+          ...prev,
+          chats: prev.chats.map((c) =>
+            c.id === chatId ? { ...c, ...patch } : c
+          ),
+        };
+      }
+    );
+  }
+  // Also patch the detail cache — ChatHeader reads the title from the detail
+  // query, and patching beats invalidation (no refetch round-trip).
+  queryClient.setQueryData(
+    chatKeys.detail(chatId),
+    (prev: Chat | undefined) => (prev ? { ...prev, ...patch } : prev)
+  );
+}
+
+/**
+ * Remove a chat from the list cache envelope and drop its detail cache.
+ */
+export function removeChatFromListCache(
+  projectId: string | undefined,
+  chatId: string
+): void {
+  if (projectId) {
+    queryClient.setQueryData(
+      chatKeys.list(projectId),
+      (prev: ChatListEnvelope | undefined) => {
+        if (!prev) return prev;
+        const chats = prev.chats.filter((c) => c.id !== chatId);
+        if (chats.length === prev.chats.length) return prev;
+        return {
+          ...prev,
+          chats,
+          ...(prev.total !== undefined
+            ? { total: Math.max(0, prev.total - 1) }
+            : {}),
+        };
+      }
+    );
+  }
+  queryClient.removeQueries({ queryKey: chatKeys.detail(chatId) });
+}
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
@@ -64,13 +135,8 @@ export function useCreateChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (request: CreateChatRequest) => api.chatsV2.create(request),
-    onSuccess: (chat) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-      try {
-        getEventBus().emit("chat:created", { chatId: (chat as Chat).id });
-      } catch {
-        // Event bus may not be initialized — non-fatal
-      }
     },
   });
 }
@@ -79,13 +145,8 @@ export function useDeleteChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => api.chatsV2.delete(chatId),
-    onSuccess: (_data, chatId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.all });
-      try {
-        getEventBus().emit("chat:deleted", { chatId });
-      } catch {
-        // Event bus may not be initialized — non-fatal
-      }
     },
   });
 }
@@ -95,14 +156,9 @@ export function useRenameChat() {
   return useMutation({
     mutationFn: ({ chatId, title }: { chatId: string; title: string }) =>
       api.chatsV2.update(chatId, { title } as UpdateChatRequest),
-    onSuccess: (_data, { chatId, title }) => {
+    onSuccess: (_data, { chatId }) => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
-      try {
-        getEventBus().emit("chat:titleChanged", { chatId, title });
-      } catch {
-        // Event bus may not be initialized — non-fatal
-      }
     },
   });
 }
@@ -111,14 +167,9 @@ export function useArchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => api.chatsV2.archive(chatId),
-    onSuccess: (_data, chatId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
-      try {
-        getEventBus().emit("chat:archived", { chatId });
-      } catch {
-        // Event bus may not be initialized — non-fatal
-      }
     },
   });
 }
@@ -127,14 +178,9 @@ export function useUnarchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => api.chatsV2.unarchive(chatId),
-    onSuccess: (_data, chatId) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
-      try {
-        getEventBus().emit("chat:restored", { chatId });
-      } catch {
-        // Event bus may not be initialized — non-fatal
-      }
     },
   });
 }

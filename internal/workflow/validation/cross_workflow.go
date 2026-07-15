@@ -30,6 +30,16 @@ func validateCrossWorkflow(wf *reliantv1.Workflow, opts *ValidationOptions, resu
 		}
 	}
 
+	// transition_to must resolve to a real workflow (skipped for templated refs
+	// and when no loader is available, e.g. offline structural-only validation).
+	if tt := strings.TrimSpace(wf.GetTransitionTo()); tt != "" &&
+		opts != nil && opts.WorkflowLoader != nil && !containsTemplate(tt) && tt != canonicalWorkflowRef {
+		if _, err := opts.WorkflowLoader(tt); err != nil {
+			result.AddError(CategoryCrossWorkflow, []string{wf.GetName()}, "transition_to",
+				fmt.Sprintf("references unresolvable workflow '%s': %v", tt, err))
+		}
+	}
+
 	program, err := core.Compile(wf, compileOptions)
 	if err != nil {
 		result.AddError(CategoryCrossWorkflow, []string{wf.GetName()}, "",

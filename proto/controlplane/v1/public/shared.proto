@@ -134,6 +134,14 @@ message Daemon {
   // When status / last_status_message most recently changed, as observed by
   // the daemon-gateway.
   google.protobuf.Timestamp last_status_changed_at = 27;
+
+  // OOM-kill tracking (managed daemons). The workspace operator records
+  // OOMKilled terminations of the workspace pod on the Workspace CR status
+  // (debounced on the termination's finishedAt); the workspace state
+  // reconciler mirrors them onto the daemon row. Unset/zero when no OOM kill
+  // has been observed. The UI keys "recent" off last_oom_killed_at.
+  google.protobuf.Timestamp last_oom_killed_at = 28;
+  int32 oom_kill_count = 29;
 }
 
 // Port access control

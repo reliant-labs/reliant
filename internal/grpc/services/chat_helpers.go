@@ -19,6 +19,33 @@ import (
 	"go.temporal.io/api/enums/v1"
 )
 
+// activeWorkflowNameForResume returns the workflow name to (re)start for an
+// EXISTING conversation whose prior run is being resumed or resurrected.
+//
+// The db.Workflow ROW name can go stale after a transition_to handoff: on
+// completion, graduate.go (TransitionChatOnCompletion) permanently switches
+// chat.WorkflowName to the transition target, but it cannot rewrite the
+// finished ROW's name because UpdateWorkflowName is only permitted while the
+// workflow is pending. The chat is therefore the source of truth for the
+// conversation's CURRENT workflow.
+//
+// Preferring chat.WorkflowName ensures a resume/ghost-recovery restarts the
+// workflow the conversation actually moved to (e.g. builtin://agent), NOT the
+// stale one-shot pipeline recorded on the row (e.g. builtin://forge-one-shot),
+// which would re-run the whole build against an already-built project. The
+// normal fresh-start path already reads *chat.WorkflowName, so this keeps the
+// resume path consistent with it. Falls back to the row name only when the
+// chat carries none (defensive; WorkflowName is required at chat creation).
+func activeWorkflowNameForResume(chat *db.Chat, existingWorkflow *db.Workflow) string {
+	if chat != nil && chat.WorkflowName != nil && *chat.WorkflowName != "" {
+		return *chat.WorkflowName
+	}
+	if existingWorkflow != nil {
+		return existingWorkflow.WorkflowName
+	}
+	return ""
+}
+
 // getChatForUser fetches a chat and verifies ownership in a single query.
 // This is the preferred pattern for defense-in-depth ownership checks on chat access.
 // New code should use this instead of separate GetChat + UserID comparison.
@@ -197,9 +224,15 @@ func (s *ChatService) getTemporalWorkflowState(ctx context.Context, workflowID s
 		isRunning = true
 	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
 		mappedStatus = db.WorkflowStatusCompleted
-	case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+	case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+		enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+		// TERMINATED maps to Failed, not Cancelled: termination is a system or
+		// operator kill (reconciler wedge recovery, manual terminate, conflict
+		// policy), never a user cancel — user cancels go through CancelWorkflow
+		// and surface as CANCELED. This distinction is what routes terminated
+		// runs into resume-at-position while user-cancelled runs start fresh.
 		mappedStatus = db.WorkflowStatusFailed
-	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED, enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
+	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
 		mappedStatus = db.WorkflowStatusCancelled
 	case enums.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		// Workflow continued - treat as running since there's a new run

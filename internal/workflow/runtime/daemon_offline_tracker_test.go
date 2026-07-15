@@ -5,336 +5,362 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 )
 
 // ============================================================================
-// Tracker unit tests
+// Test fixtures
 // ============================================================================
 
-func TestDaemonOfflineTracker_NilSafe(t *testing.T) {
-	var tr *DaemonOfflineTracker
+const offlineToolResultContent = "Failed to execute tool on daemon: unavailable: no daemon connected for user"
 
-	// All methods must be no-ops on nil receiver, never panic.
-	tr.Reset()
-	tr.ObserveStepError(errors.New("anything"))
-	tr.ObserveStepOutput("step", map[string]interface{}{})
-	tr.ObserveDaemonSuccess("step")
-	if got := tr.ObserveTurnBoundary(); got != 0 {
-		t.Errorf("nil tracker ObserveTurnBoundary = %d, want 0", got)
-	}
-	if got := tr.ConsecutiveOfflineTurns(); got != 0 {
-		t.Errorf("nil tracker ConsecutiveOfflineTurns = %d, want 0", got)
+func offlineToolResultsEvent() *StepEvent {
+	return &StepEvent{
+		StepID: "execute_tools",
+		Data: map[string]interface{}{
+			"tool_results": []interface{}{
+				map[string]interface{}{
+					"is_error": true,
+					"content":  offlineToolResultContent,
+				},
+			},
+		},
 	}
 }
 
-func TestDaemonOfflineTracker_CounterSemantics(t *testing.T) {
-	// Each "turn" is a Reset+observations+ObserveTurnBoundary cycle.
-	type observation struct {
-		// stepErr is observed via ObserveStepError. Empty = no error.
-		stepErr string
-		// stepOutput is observed via ObserveStepOutput. nil = none.
-		stepOutput map[string]interface{}
-		// daemonSuccess records ObserveDaemonSuccess (e.g. ExecuteRunStep ok).
-		daemonSuccess bool
+func successToolResultsEvent() *StepEvent {
+	return &StepEvent{
+		StepID: "execute_tools",
+		Data: map[string]interface{}{
+			"tool_results": []interface{}{
+				map[string]interface{}{
+					"is_error": false,
+					"content":  `{"stdout":"ok","stderr":"","exit_code":0}`,
+				},
+			},
+		},
+	}
+}
+
+func mixedToolResultsEvent() *StepEvent {
+	return &StepEvent{
+		StepID: "execute_tools",
+		Data: map[string]interface{}{
+			"tool_results": []interface{}{
+				map[string]interface{}{
+					"is_error": true,
+					"content":  offlineToolResultContent,
+				},
+				map[string]interface{}{
+					"is_error": false,
+					"content":  `{"stdout":"partial","stderr":"","exit_code":0}`,
+				},
+			},
+		},
+	}
+}
+
+func nonDaemonErrorResultsEvent() *StepEvent {
+	return &StepEvent{
+		StepID: "execute_tools",
+		Data: map[string]interface{}{
+			"tool_results": []interface{}{
+				map[string]interface{}{
+					"is_error": true,
+					"content":  `Response tool schema validation failed: property "slides" has type "string", want "array"`,
+				},
+			},
+		},
+	}
+}
+
+func callLLMEvent() *StepEvent {
+	return &StepEvent{
+		StepID: "call_llm",
+		Data: map[string]interface{}{
+			"message": map[string]interface{}{"role": "assistant", "text": "thinking..."},
+		},
+	}
+}
+
+// ============================================================================
+// Circuit breaker unit tests
+// ============================================================================
+
+func TestDaemonOfflineCircuitBreaker_NilSafe(t *testing.T) {
+	var b *DaemonOfflineCircuitBreaker
+	// Must be no-ops on nil receiver, never panic.
+	b.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
+	if got := b.ConsecutiveOffline(); got != 0 {
+		t.Errorf("nil breaker ConsecutiveOffline = %d, want 0", got)
 	}
 
-	// One "turn" = a list of observations recorded between Reset and
-	// ObserveTurnBoundary.
-	type turn struct {
-		obs           []observation
-		wantStreakEnd int
+	// A nil PauseController (simulator/tests) must also be a safe no-op.
+	var pc *PauseController
+	pc.ObserveDaemonOfflineStep(nil, "ExecuteTools", offlineToolResultsEvent())
+	(&PauseController{}).ObserveDaemonOfflineStep(nil, "ExecuteTools", offlineToolResultsEvent())
+}
+
+func TestDaemonOfflineCircuitBreaker_CounterAndPauseSemantics(t *testing.T) {
+	type step struct {
+		activityName string
+		event        *StepEvent
 	}
 
-	offlineErr := errors.New("checking daemon status: unavailable: no daemon connected for user")
-	offlineToolResult := map[string]interface{}{
-		"tool_results": []interface{}{
-			map[string]interface{}{
-				"is_error": true,
-				"content":  "Failed to execute tool on daemon: unavailable: no daemon connected for user",
-			},
-		},
-	}
-	successToolResult := map[string]interface{}{
-		"tool_results": []interface{}{
-			map[string]interface{}{
-				"is_error": false,
-				"content":  `{"stdout":"hi","stderr":"","exit_code":0}`,
-			},
-		},
-	}
-	mixedToolResult := map[string]interface{}{
-		"tool_results": []interface{}{
-			map[string]interface{}{
-				"is_error": true,
-				"content":  "Failed to execute tool on daemon: unavailable: no daemon connected for user",
-			},
-			map[string]interface{}{
-				"is_error": false,
-				"content":  `{"stdout":"partial","stderr":"","exit_code":0}`,
-			},
-		},
-	}
-	callLLMOutput := map[string]interface{}{
-		"message": map[string]interface{}{"role": "assistant", "text": "thinking..."},
-	}
+	offline := func() step { return step{"ExecuteTools", offlineToolResultsEvent()} }
 
 	tests := []struct {
-		name  string
-		turns []turn
+		name            string
+		steps           []step
+		wantPauseCount  int
+		wantPauseStreak []int // streak values passed to the pause callback, in order
+		wantFinalStreak int
 	}{
 		{
-			name: "three consecutive daemon-offline turns increments to 3",
-			turns: []turn{
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 1},
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 2},
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 3},
-			},
+			name:            "three consecutive offline steps trigger pause exactly at threshold",
+			steps:           []step{offline(), offline(), offline()},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
 		},
 		{
-			name: "daemon success resets streak mid-flight",
-			turns: []turn{
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 1},
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 2},
-				{obs: []observation{{daemonSuccess: true}}, wantStreakEnd: 0},
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 1},
-			},
+			name:            "below threshold never pauses",
+			steps:           []step{offline(), offline()},
+			wantPauseCount:  0,
+			wantFinalStreak: 2,
 		},
 		{
-			name: "call_llm-only turn doesn't reset streak (no daemon evidence either way)",
-			turns: []turn{
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 1},
-				{obs: []observation{{stepOutput: callLLMOutput}}, wantStreakEnd: 1},
-				{obs: []observation{{stepErr: offlineErr.Error()}}, wantStreakEnd: 2},
+			name: "a successful tool call resets the streak",
+			steps: []step{
+				offline(), offline(),
+				{"ExecuteTools", successToolResultsEvent()},
+				offline(), offline(), offline(),
 			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
 		},
 		{
-			name: "daemon-offline tool_result in execute_tools output increments streak",
-			turns: []turn{
-				{obs: []observation{{stepOutput: offlineToolResult}}, wantStreakEnd: 1},
-				{obs: []observation{{stepOutput: offlineToolResult}}, wantStreakEnd: 2},
+			name: "mixed offline+success step resets the streak (daemon partially back)",
+			steps: []step{
+				offline(), offline(),
+				{"ExecuteTools", mixedToolResultsEvent()},
+				offline(),
 			},
+			wantPauseCount:  0,
+			wantFinalStreak: 1,
 		},
 		{
-			name: "mixed tool_result (one fail + one succeed) resets streak",
-			turns: []turn{
-				{obs: []observation{{stepOutput: offlineToolResult}}, wantStreakEnd: 1},
-				{obs: []observation{{stepOutput: offlineToolResult}}, wantStreakEnd: 2},
-				{obs: []observation{{stepOutput: mixedToolResult}}, wantStreakEnd: 0},
+			name: "call_llm steps between failures do not reset the streak",
+			steps: []step{
+				offline(),
+				{"CallLLM", callLLMEvent()},
+				offline(),
+				{"CallLLM", callLLMEvent()},
+				offline(),
 			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
 		},
 		{
-			name: "successful execute_tools alone doesn't reset (no proof daemon was involved)",
-			turns: []turn{
-				{obs: []observation{{stepOutput: offlineToolResult}}, wantStreakEnd: 1},
-				{obs: []observation{{stepOutput: successToolResult}}, wantStreakEnd: 1},
-				{obs: []observation{{stepOutput: offlineToolResult}}, wantStreakEnd: 2},
+			name: "non-daemon tool errors are neutral (no bump, no reset)",
+			steps: []step{
+				offline(),
+				{"ExecuteTools", nonDaemonErrorResultsEvent()},
+				offline(),
+				{"ExecuteTools", nonDaemonErrorResultsEvent()},
+				offline(),
 			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
 		},
 		{
-			name: "non-daemon error doesn't increment streak",
-			turns: []turn{
-				{obs: []observation{{stepErr: "rate limit 429"}}, wantStreakEnd: 0},
-				{obs: []observation{{stepErr: "rate limit 429"}}, wantStreakEnd: 0},
+			name: "successful run step resets the streak",
+			steps: []step{
+				offline(), offline(),
+				{"ExecuteRunStep", &StepEvent{StepID: "run", Data: map[string]interface{}{"exit_code": float64(0)}}},
+				offline(),
 			},
+			wantPauseCount:  0,
+			wantFinalStreak: 1,
+		},
+		{
+			name: "go-level step errors are neutral (retry-exhaustion machinery owns them)",
+			steps: []step{
+				offline(), offline(),
+				{"ExecuteRunStep", &StepEvent{StepID: "run", Error: errors.New("checking daemon status: unavailable: no daemon connected for user")}},
+				offline(),
+			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
+		},
+		{
+			name: "streak not reset by pausing: next offline step re-pauses after resume",
+			steps: []step{
+				offline(), offline(), offline(), // pause at 3
+				offline(), // resumed, still offline → immediate re-pause at 4
+			},
+			wantPauseCount:  2,
+			wantPauseStreak: []int{3, 4},
+			wantFinalStreak: 4,
+		},
+		{
+			name: "after pause a daemon success resets the streak",
+			steps: []step{
+				offline(), offline(), offline(), // pause at 3
+				{"ExecuteTools", successToolResultsEvent()}, // daemon back
+				offline(),
+			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 1,
+		},
+		{
+			name: "nil event and empty outputs are neutral",
+			steps: []step{
+				offline(),
+				{"ExecuteTools", nil},
+				{"SaveMessage", &StepEvent{StepID: "save", Data: map[string]interface{}{}}},
+				offline(), offline(),
+			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tr := NewDaemonOfflineTracker()
-			for i, turn := range tt.turns {
-				tr.Reset()
-				for _, ob := range turn.obs {
-					if ob.stepErr != "" {
-						tr.ObserveStepError(errors.New(ob.stepErr))
+			var pauseStreaks []int
+			b := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(_ workflow.Context, streak int) {
+				pauseStreaks = append(pauseStreaks, streak)
+			})
+
+			for _, s := range tt.steps {
+				b.ObserveStep(nil, s.activityName, s.event)
+			}
+
+			if len(pauseStreaks) != tt.wantPauseCount {
+				t.Errorf("pause fired %d times (streaks %v), want %d", len(pauseStreaks), pauseStreaks, tt.wantPauseCount)
+			}
+			if tt.wantPauseStreak != nil {
+				for i, want := range tt.wantPauseStreak {
+					if i >= len(pauseStreaks) {
+						break
 					}
-					if ob.stepOutput != nil {
-						tr.ObserveStepOutput(fmt.Sprintf("step-%d", i), ob.stepOutput)
-					}
-					if ob.daemonSuccess {
-						tr.ObserveDaemonSuccess(fmt.Sprintf("step-%d", i))
+					if pauseStreaks[i] != want {
+						t.Errorf("pause call %d fired at streak %d, want %d", i, pauseStreaks[i], want)
 					}
 				}
-				got := tr.ObserveTurnBoundary()
-				if got != turn.wantStreakEnd {
-					t.Errorf("turn %d: streak = %d, want %d", i, got, turn.wantStreakEnd)
-				}
+			}
+			if got := b.ConsecutiveOffline(); got != tt.wantFinalStreak {
+				t.Errorf("final streak = %d, want %d", got, tt.wantFinalStreak)
 			}
 		})
 	}
 }
 
-// ============================================================================
-// HaltError marker check
-// ============================================================================
-
-func TestHaltError_CarriesMarker(t *testing.T) {
-	err := HaltError(3)
-	if err == nil {
-		t.Fatal("HaltError(3) returned nil")
+func TestDaemonOfflineCircuitBreaker_NilPauseCallbackOnlyCounts(t *testing.T) {
+	b := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, nil)
+	for i := 0; i < 5; i++ {
+		b.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
 	}
-	msg := err.Error()
-	if !strings.Contains(msg, DaemonOfflineHaltMarker) {
-		t.Errorf("HaltError message missing marker %q: %s", DaemonOfflineHaltMarker, msg)
-	}
-	if !strings.Contains(msg, "3 consecutive turns") {
-		t.Errorf("HaltError message missing turn count: %s", msg)
+	if got := b.ConsecutiveOffline(); got != 5 {
+		t.Errorf("streak = %d, want 5", got)
 	}
 }
 
 // ============================================================================
-// E2E: workflow halts after threshold via Temporal test env
+// E2E: breaker pauses (blocking) and resumes inside a Temporal workflow
 // ============================================================================
 
-type DaemonOfflineHaltSuite struct {
+type DaemonOfflinePauseSuite struct {
 	suite.Suite
 	testsuite.WorkflowTestSuite
 }
 
-func TestDaemonOfflineHalt(t *testing.T) {
-	suite.Run(t, new(DaemonOfflineHaltSuite))
+func TestDaemonOfflinePause(t *testing.T) {
+	suite.Run(t, new(DaemonOfflinePauseSuite))
 }
 
-// stepActivityForHalt is a fake "step" activity used by the halt test workflow.
-// It returns whatever the test mocks return.
-func stepActivityForHalt(ctx context.Context, mode string) (map[string]interface{}, error) {
+// stepActivityForPause is a fake "step" activity used by the pause test
+// workflow. It is always mocked per-test.
+func stepActivityForPause(ctx context.Context, mode string) (map[string]interface{}, error) {
 	return nil, fmt.Errorf("stub: should be mocked")
 }
 
-// daemonHaltTestWorkflow mirrors the per-turn loop seam in DynamicWorkflow but
-// strips out everything except the daemon-offline tracker and the
-// step-completion observation. Each "turn" runs a single activity whose
-// outcome is determined by the test mock. The workflow halts itself when the
-// tracker's streak meets DaemonOfflineHaltThreshold, returning the same
-// terminal error that the real workflow uses.
-//
-// Returns the streak count at termination so tests can assert the boundary.
-func daemonHaltTestWorkflow(ctx workflow.Context, modes []string) (int, error) {
-	logger := workflow.GetLogger(ctx)
-	tracker := NewDaemonOfflineTracker()
+type daemonPauseTestResult struct {
+	PauseCount  int `json:"pause_count"`
+	FinalStreak int `json:"final_streak"`
+}
 
-	ao := workflow.ActivityOptions{
+// daemonPauseTestWorkflow mirrors the StepExecutor.HandleCompletion seam:
+// each "step" runs one activity and feeds its outcome to the breaker. The
+// pause callback blocks on a "test.resume" signal — the same shape as the
+// real callback, which blocks on the pause epoch until signal.resume.
+func daemonPauseTestWorkflow(ctx workflow.Context, modes []string) (daemonPauseTestResult, error) {
+	pauseCount := 0
+	resumeCh := workflow.GetSignalChannel(ctx, "test.resume")
+
+	breaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
+		pauseCount++
+		// Block until "resumed" — proves the workflow re-enters cleanly and
+		// keeps processing subsequent steps after a breaker-initiated pause.
+		resumeCh.Receive(callerCtx, nil)
+	})
+
+	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
 			MaximumAttempts: 1,
 		},
-	}
-	actCtx := workflow.WithActivityOptions(ctx, ao)
+	})
 
-	for turn := 0; turn < len(modes); turn++ {
-		tracker.Reset()
-
-		var result map[string]interface{}
-		err := workflow.ExecuteActivity(actCtx, stepActivityForHalt, modes[turn]).Get(ctx, &result)
-		if err != nil {
-			tracker.ObserveStepError(err)
-		} else {
-			tracker.ObserveStepOutput(modes[turn], result)
-		}
-
-		streak := tracker.ObserveTurnBoundary()
-		logger.Info("turn complete", "turn", turn, "streak", streak)
-		if streak >= DaemonOfflineHaltThreshold {
-			return streak, HaltError(streak)
-		}
+	for _, mode := range modes {
+		var out map[string]interface{}
+		err := workflow.ExecuteActivity(actCtx, stepActivityForPause, mode).Get(ctx, &out)
+		breaker.ObserveStep(ctx, "ExecuteTools", &StepEvent{
+			StepID: "execute_tools",
+			Data:   out,
+			Error:  err,
+		})
 	}
 
-	return tracker.ConsecutiveOfflineTurns(), nil
+	return daemonPauseTestResult{
+		PauseCount:  pauseCount,
+		FinalStreak: breaker.ConsecutiveOffline(),
+	}, nil
 }
 
-func (s *DaemonOfflineHaltSuite) TestHaltsAfterThresholdConsecutiveOfflineTurns() {
+func (s *DaemonOfflinePauseSuite) TestPausesAtThresholdAndResumesCleanly() {
 	env := s.NewTestWorkflowEnvironment()
 
-	offlineErr := temporal.NewNonRetryableApplicationError(
-		"checking daemon status: unavailable: no daemon connected for user",
-		"DaemonOfflineError",
-		nil,
-	)
-
-	env.OnActivity(stepActivityForHalt, mock.Anything, mock.Anything).Return(
+	env.OnActivity(stepActivityForPause, mock.Anything, mock.Anything).Return(
 		func(ctx context.Context, mode string) (map[string]interface{}, error) {
-			return nil, offlineErr
-		},
-	)
-
-	// Run 5 turns — workflow should halt at turn 3.
-	env.ExecuteWorkflow(daemonHaltTestWorkflow, []string{"offline", "offline", "offline", "offline", "offline"})
-
-	s.True(env.IsWorkflowCompleted())
-	wfErr := env.GetWorkflowError()
-	s.Require().Error(wfErr)
-	s.Contains(wfErr.Error(), DaemonOfflineHaltMarker, "halt error should carry marker for frontend")
-	s.Contains(wfErr.Error(), "3 consecutive turns")
-}
-
-func (s *DaemonOfflineHaltSuite) TestDoesNotHaltBelowThreshold() {
-	env := s.NewTestWorkflowEnvironment()
-
-	callCount := 0
-	env.OnActivity(stepActivityForHalt, mock.Anything, mock.Anything).Return(
-		func(ctx context.Context, mode string) (map[string]interface{}, error) {
-			callCount++
-			// Two offline turns, then success — must NOT halt (threshold is 3).
-			if callCount <= 2 {
-				return nil, fmt.Errorf("checking daemon status: unavailable: no daemon connected for user")
-			}
-			return map[string]interface{}{
-				"tool_results": []interface{}{
-					map[string]interface{}{
-						"is_error": false,
-						"content":  `{"stdout":"ok","stderr":"","exit_code":0}`,
-					},
-					map[string]interface{}{
-						"is_error": true,
-						"content":  "Failed to execute tool on daemon: unavailable: no daemon connected for user",
-					},
-				},
-			}, nil
-		},
-	)
-
-	env.ExecuteWorkflow(daemonHaltTestWorkflow, []string{"offline", "offline", "mixed"})
-
-	s.True(env.IsWorkflowCompleted())
-	s.NoError(env.GetWorkflowError(), "workflow should complete normally without halting")
-
-	var finalStreak int
-	require.NoError(s.T(), env.GetWorkflowResult(&finalStreak))
-	s.Equal(0, finalStreak, "mixed success+offline turn resets streak to 0")
-}
-
-func (s *DaemonOfflineHaltSuite) TestSuccessResetsStreak() {
-	env := s.NewTestWorkflowEnvironment()
-
-	// Sequence: offline, offline, daemon-success, offline, offline → finalStreak 2, no halt.
-	callCount := 0
-	env.OnActivity(stepActivityForHalt, mock.Anything, mock.Anything).Return(
-		func(ctx context.Context, mode string) (map[string]interface{}, error) {
-			callCount++
-			switch callCount {
-			case 1, 2, 4, 5:
-				return nil, fmt.Errorf("checking daemon status: unavailable: no daemon connected for user")
-			case 3:
-				// A clean execute_tools success that also includes one
-				// daemon-offline result inside — the mixed-result case that
-				// proves the daemon is reachable for at least one tool.
+			switch mode {
+			case "offline":
 				return map[string]interface{}{
 					"tool_results": []interface{}{
 						map[string]interface{}{
 							"is_error": true,
-							"content":  "Failed to execute tool on daemon: unavailable: no daemon connected for user",
+							"content":  offlineToolResultContent,
 						},
+					},
+				}, nil
+			case "ok":
+				return map[string]interface{}{
+					"tool_results": []interface{}{
 						map[string]interface{}{
 							"is_error": false,
 							"content":  `{"stdout":"ok","stderr":"","exit_code":0}`,
@@ -342,26 +368,63 @@ func (s *DaemonOfflineHaltSuite) TestSuccessResetsStreak() {
 					},
 				}, nil
 			}
-			return nil, fmt.Errorf("unexpected call %d", callCount)
+			return nil, fmt.Errorf("unexpected mode %s", mode)
 		},
 	)
 
-	env.ExecuteWorkflow(daemonHaltTestWorkflow, []string{"a", "b", "c", "d", "e"})
+	// Steps: 3 offline (→ pause at streak 3), then another offline (→ streak
+	// is NOT reset by pausing, so it re-pauses immediately at 4), then a
+	// success (→ streak resets to 0).
+	env.RegisterDelayedCallback(func() { env.SignalWorkflow("test.resume", nil) }, time.Second)
+	env.RegisterDelayedCallback(func() { env.SignalWorkflow("test.resume", nil) }, 2*time.Second)
+
+	env.ExecuteWorkflow(daemonPauseTestWorkflow, []string{"offline", "offline", "offline", "offline", "ok"})
 
 	s.True(env.IsWorkflowCompleted())
-	s.NoError(env.GetWorkflowError(), "streak reset to 0 in middle turn → never reaches threshold")
+	s.NoError(env.GetWorkflowError(), "breaker pauses must be resumable, not terminal")
 
-	var finalStreak int
-	require.NoError(s.T(), env.GetWorkflowResult(&finalStreak))
-	s.Equal(2, finalStreak, "two offline turns after reset")
+	var result daemonPauseTestResult
+	require.NoError(s.T(), env.GetWorkflowResult(&result))
+	s.Equal(2, result.PauseCount, "pause at streak 3, re-pause at streak 4 after resume")
+	s.Equal(0, result.FinalStreak, "final success resets the streak")
 }
 
-// Keep activity registered so test env doesn't complain about unregistered
-// activity in suites that share the workflow function.
-func init() {
-	// Activities are registered per-env in each suite via env.OnActivity, so
-	// this init is intentionally a no-op. Left as a marker that the
-	// stepActivityForHalt function is the activity-shaped target the
-	// daemonHaltTestWorkflow dispatches through.
-	_ = activity.GetInfo
+func (s *DaemonOfflinePauseSuite) TestDoesNotPauseBelowThreshold() {
+	env := s.NewTestWorkflowEnvironment()
+
+	callCount := 0
+	env.OnActivity(stepActivityForPause, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, mode string) (map[string]interface{}, error) {
+			callCount++
+			if callCount <= 2 {
+				return map[string]interface{}{
+					"tool_results": []interface{}{
+						map[string]interface{}{
+							"is_error": true,
+							"content":  offlineToolResultContent,
+						},
+					},
+				}, nil
+			}
+			// Third step succeeds → reset, never reaches the threshold.
+			return map[string]interface{}{
+				"tool_results": []interface{}{
+					map[string]interface{}{
+						"is_error": false,
+						"content":  `{"stdout":"ok","stderr":"","exit_code":0}`,
+					},
+				},
+			}, nil
+		},
+	)
+
+	env.ExecuteWorkflow(daemonPauseTestWorkflow, []string{"a", "b", "c"})
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+
+	var result daemonPauseTestResult
+	require.NoError(s.T(), env.GetWorkflowResult(&result))
+	s.Equal(0, result.PauseCount, "two offline steps then success must not pause")
+	s.Equal(0, result.FinalStreak)
 }

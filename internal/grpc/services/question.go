@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -198,12 +199,64 @@ func (s *QuestionService) saveUserReplyMessage(ctx context.Context, question *db
 		replyText, _ = response["text"].(string)
 	}
 	if replyText == "" {
+		// The web client's ask_user form submits {"answers":[{question,
+		// selected, freetext}]} — the same shape parseQuestionResponse
+		// (inline_workflow_executor.go) reads for has_feedback. The two must
+		// agree: whenever the workflow sees feedback and loops into another
+		// LLM call, a user message MUST exist in the thread, or the next
+		// call fails with "conversation history ends with assistant
+		// message" and retries to exhaustion.
+		replyText = formatAnswersReply(responseData)
+	}
+	if replyText == "" {
 		return nil
 	}
 
 	_, err := s.database.SaveMessageToThread(ctx, question.ChatID, question.ThreadID,
 		int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), replyText, &question.WorkflowID, nil, nil)
 	return err
+}
+
+// formatAnswersReply extracts a user-visible reply from the ask_user answers
+// payload. Mirrors parseQuestionResponse's feedback semantics: a bare
+// "Continue" selection with no freetext is not feedback and yields "" (no
+// message saved — the workflow exits its loop without another LLM call).
+// Unlike the workflow (which only consumes the first answer), all answered
+// questions are preserved in the saved message.
+func formatAnswersReply(responseData string) string {
+	var payload struct {
+		Answers []struct {
+			Question string   `json:"question"`
+			Selected []string `json:"selected"`
+			Freetext string   `json:"freetext"`
+		} `json:"answers"`
+	}
+	if err := json.Unmarshal([]byte(responseData), &payload); err != nil || len(payload.Answers) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for _, a := range payload.Answers {
+		answer := a.Freetext
+		if answer == "" {
+			selected := make([]string, 0, len(a.Selected))
+			for _, s := range a.Selected {
+				if s != "Continue" {
+					selected = append(selected, s)
+				}
+			}
+			answer = strings.Join(selected, ", ")
+		}
+		if answer == "" {
+			continue
+		}
+		if a.Question != "" && len(payload.Answers) > 1 {
+			parts = append(parts, a.Question+": "+answer)
+		} else {
+			parts = append(parts, answer)
+		}
+	}
+	return strings.Join(parts, "\n")
 }
 
 // stringPtrToString safely dereferences a string pointer

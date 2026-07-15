@@ -31,8 +31,6 @@ events:
 
   # Manual mode: approval is required
   - node: agent_loop.approval
-    type: tool_result
-    tool: approval
     output:
       status: "approved"
 
@@ -55,8 +53,6 @@ events:
 
   # Response tool also needs approval in manual mode
   - node: agent_loop.approval
-    type: tool_result
-    tool: approval
     output:
       status: "approved"
 

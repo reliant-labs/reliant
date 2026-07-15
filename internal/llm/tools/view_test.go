@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -180,16 +181,41 @@ func TestViewBinaryAndPDFDetection(t *testing.T) {
 	dummyContent := []byte("dummy content")
 	binaryContent := append([]byte("prefix"), append([]byte{0x00}, []byte("suffix")...)...)
 
-	t.Run("PDF returns document response", func(t *testing.T) {
-		path := writeFile("foo.pdf", dummyContent)
+	t.Run("small PDF returns whole document", func(t *testing.T) {
+		pdf := buildTestPDF(3)
+		path := writeFile("small.pdf", pdf)
 		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
 		require.NoError(t, err)
 		assert.False(t, resp.IsError, "expected IsError=false for PDF")
 		assert.Equal(t, ToolResponseTypeImage, resp.Type)
 		assert.Contains(t, resp.Content, "PDF file")
+		assert.Contains(t, resp.Content, "3 pages")
 		require.Len(t, resp.BinaryParts, 1)
 		assert.Equal(t, "application/pdf", resp.BinaryParts[0].MIMEType)
-		assert.Equal(t, []byte(dummyContent), resp.BinaryParts[0].Data)
+		assert.Equal(t, pdf, resp.BinaryParts[0].Data)
+	})
+
+	t.Run("large PDF without pages prompts for a range", func(t *testing.T) {
+		pdf := buildTestPDF(PDFAutoInlinePageLimit + 5)
+		path := writeFile("large.pdf", pdf)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path})
+		require.NoError(t, err)
+		assert.False(t, resp.IsError)
+		assert.Equal(t, ToolResponseTypeText, resp.Type)
+		assert.Empty(t, resp.BinaryParts, "large PDF should not inject bytes without a page range")
+		assert.Contains(t, resp.Content, "pages")
+	})
+
+	t.Run("large PDF with pages returns that range", func(t *testing.T) {
+		pdf := buildTestPDF(PDFAutoInlinePageLimit + 5)
+		path := writeFile("ranged.pdf", pdf)
+		resp, err := tool.Execute(ctx, ViewParams{FilePath: path, Pages: "2-4"})
+		require.NoError(t, err)
+		assert.False(t, resp.IsError)
+		assert.Equal(t, ToolResponseTypeImage, resp.Type)
+		require.Len(t, resp.BinaryParts, 1)
+		assert.Equal(t, "application/pdf", resp.BinaryParts[0].MIMEType)
+		assert.Contains(t, resp.Content, "pages 2-4")
 	})
 
 	t.Run("ZIP binary extension detected", func(t *testing.T) {
@@ -265,4 +291,34 @@ func TestViewBinaryAndPDFDetection(t *testing.T) {
 		assert.False(t, resp.IsError, "expected IsError=false for .go file")
 		assert.Contains(t, resp.Content, "package main")
 	})
+}
+
+// buildTestPDF hand-writes a valid PDF with n blank pages for view/pagination tests.
+func buildTestPDF(n int) []byte {
+	var b strings.Builder
+	offsets := []int{}
+	write := func(s string) { b.WriteString(s) }
+	obj := func(id int, body string) {
+		offsets = append(offsets, b.Len())
+		write(fmt.Sprintf("%d 0 obj\n%s\nendobj\n", id, body))
+	}
+	write("%PDF-1.4\n")
+	obj(1, "<< /Type /Catalog /Pages 2 0 R >>")
+	kids := ""
+	for i := 0; i < n; i++ {
+		kids += fmt.Sprintf("%d 0 R ", 3+i)
+	}
+	obj(2, fmt.Sprintf("<< /Type /Pages /Count %d /Kids [%s] >>", n, strings.TrimSpace(kids)))
+	for i := 0; i < n; i++ {
+		obj(3+i, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>")
+	}
+	xrefStart := b.Len()
+	total := 2 + n
+	write(fmt.Sprintf("xref\n0 %d\n", total+1))
+	write("0000000000 65535 f \n")
+	for _, off := range offsets {
+		write(fmt.Sprintf("%010d 00000 n \n", off))
+	}
+	write(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF", total+1, xrefStart))
+	return []byte(b.String())
 }

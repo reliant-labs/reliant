@@ -368,14 +368,22 @@ func (s *ToolsDaemonService) TouchDaemonsForUser(userID string) {
 // publishDaemonHeartbeat publishes an ephemeral daemon heartbeat event
 // through the UserUpdateHub so the frontend knows the daemon is alive.
 // This is NOT persisted to the database — it's a fire-and-forget notification.
-func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, daemonID string, ts time.Time) {
+// When the heartbeat carries workspace memory telemetry (cloud daemons in a
+// cgroup-limited pod), it is included so the UI can react in real time.
+func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, daemonID string, ts time.Time, hb *reliantv1.DaemonHeartbeat) {
 	if s.userUpdateHub == nil {
 		return
 	}
-	data, _ := json.Marshal(map[string]interface{}{
+	payload := map[string]interface{}{
 		"daemon_id":      daemonID,
 		"last_heartbeat": ts.Unix(),
-	})
+	}
+	if hb != nil && hb.MemoryLimitBytes > 0 {
+		payload["memory_used_bytes"] = hb.MemoryUsedBytes
+		payload["memory_limit_bytes"] = hb.MemoryLimitBytes
+		payload["memory_pressure"] = hb.MemoryPressure
+	}
+	data, _ := json.Marshal(payload)
 	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 		Key: userID,
 		Payload: db.UserUpdate{
@@ -595,7 +603,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 
 	// Publish an immediate heartbeat so the frontend knows the daemon is
 	// online without waiting for the first periodic heartbeat (up to 15s).
-	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC())
+	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
 
 	// Send cloud-refactor registration acknowledgment containing config pull hints.
 	regAck := &reliantv1.ServerMessage{
@@ -730,7 +738,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 
 	s.notifyConnected(userID, daemonID)
 	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
-	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC())
+	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
 
 	// Start sender and heartbeat goroutines.
 	go s.runSender(conn)
@@ -815,7 +823,7 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 			}
 
 		case *reliantv1.DaemonMessage_Heartbeat:
-			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC())
+			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC(), m.Heartbeat)
 			// Renew the reachability lease (last_stream_activity) on the
 			// keepalive so an idle-but-connected daemon doesn't decay to
 			// "offline". We write daemon_attachment DIRECTLY here (the gateway
@@ -830,6 +838,16 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 			// (which keys off EventActivity), preserving the exclusion above.
 			if err := s.database.TouchDaemonAttachmentIfNewer(ctx, conn.daemonID, time.Now().UTC()); err != nil {
 				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
+			}
+			// Persist heartbeat-carried workspace memory telemetry on the
+			// attachment record so the daemon registry (and the UI behind it)
+			// can surface memory pressure. limit==0 means the daemon has no
+			// cgroup accounting (local/mac) — nothing to record.
+			if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 {
+				if err := s.database.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
+					int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
+					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
+				}
 			}
 
 		case *reliantv1.DaemonMessage_ProjectDiscovery:
@@ -1180,11 +1198,10 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 		return nil, nil
 	}
 
-	// Refresh git status for existing projects if daemon discovery reports a different value
-	if discovered != nil && discovered.IsGitRepo != project.IsGitRepo {
-		project.IsGitRepo = discovered.IsGitRepo
-		project.UpdatedAt = time.Now().UTC()
-		if updateErr := s.database.UpdateProject(ctx, project, project.UserID); updateErr != nil {
+	// Reconcile the cached git flag against what daemon discovery actually
+	// observed on disk (bidirectional; see reconcileProjectGitRepo).
+	if discovered != nil {
+		if updateErr := reconcileProjectGitRepo(ctx, s.database, project, discovered.IsGitRepo); updateErr != nil {
 			logging.Warn("ensureOwnedProjectForPath: failed to update git status", "error", updateErr, "projectID", project.ID)
 		}
 	}

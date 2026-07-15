@@ -98,7 +98,7 @@ inputs:
 
   lint_log:
     type: string
-    default: ./data/one-ring/lint.log
+    default: ./.reliant/data/one-ring/lint.log
     description: File path for lint output.
 
   test_command:
@@ -108,7 +108,7 @@ inputs:
 
   test_log:
     type: string
-    default: ./data/one-ring/test.log
+    default: ./.reliant/data/one-ring/test.log
     description: File path for test output.
 
   build_command:
@@ -118,7 +118,7 @@ inputs:
 
   build_log:
     type: string
-    default: ./data/one-ring/build.log
+    default: ./.reliant/data/one-ring/build.log
     description: File path for build output.
 
   start_app_command:

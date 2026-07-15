@@ -746,6 +746,7 @@ models:
     providers:
       - driver: gemini
         api_model: gemini-3.1-flash-lite-preview
+    default_compaction_threshold: 900000
 
   - id: gemini-2.5-flash
     name: Gemini 2.5 Flash

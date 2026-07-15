@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/google/cel-go/common/types/ref"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // =============================================================================
@@ -121,7 +122,7 @@ func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
 		return nil, fmt.Errorf("CEL evaluation error: %w", err)
 	}
 
-	return convertToNative(out.Value()), nil
+	return ConvertToNative(out.Value()), nil
 }
 
 // =============================================================================
@@ -182,35 +183,49 @@ func extractTemplates(input string) []templateExpr {
 // VALUE CONVERSION
 // =============================================================================
 
-// convertToNative recursively converts CEL types to native Go types.
+// ConvertToNative recursively converts CEL types to native Go types.
 // CEL's result.Value() may contain nested ref.Val types that don't serialize to JSON.
-func convertToNative(v interface{}) interface{} {
+//
+// Null handling: CEL represents null as types.NullValue, whose native Value() is
+// the structpb.NullValue ENUM (an int32-kinded named type) — not Go nil. That enum
+// is rejected by structpb.NewStruct/NewValue with "proto: invalid type:
+// structpb.NullValue", and it JSON-marshals to the number 0. We normalize it to
+// Go nil here (at every nesting level), which structpb natively represents as
+// NullValue — so null CEL results are legal and representable end-to-end.
+//
+// This is the single shared normalizer for CEL evaluation results; every path
+// that feeds CEL output into structpb.NewStruct/NewValue (loop outputs, workflow
+// outputs, node config resolution, response_data) must go through it.
+func ConvertToNative(v interface{}) interface{} {
 	switch val := v.(type) {
+	case structpb.NullValue:
+		// CEL null → Go nil (see doc comment above).
+		return nil
 	case ref.Val:
-		return convertToNative(val.Value())
+		return ConvertToNative(val.Value())
 	case []ref.Val:
 		result := make([]interface{}, len(val))
 		for i, item := range val {
-			result[i] = convertToNative(item)
+			result[i] = ConvertToNative(item)
 		}
 		return result
 	case []interface{}:
 		result := make([]interface{}, len(val))
 		for i, item := range val {
-			result[i] = convertToNative(item)
+			result[i] = ConvertToNative(item)
 		}
 		return result
 	case map[string]interface{}:
 		result := make(map[string]interface{})
 		for k, item := range val {
-			result[k] = convertToNative(item)
+			result[k] = ConvertToNative(item)
 		}
 		return result
 	case map[ref.Val]ref.Val:
 		result := make(map[string]interface{})
 		for k, item := range val {
 			keyStr, _ := k.Value().(string)
-			result[keyStr] = convertToNative(item)
+			result[keyStr] = ConvertToNative(item)
 		}
 		return result
 	default:

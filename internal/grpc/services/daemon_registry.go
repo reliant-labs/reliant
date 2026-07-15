@@ -70,18 +70,20 @@ func (s *DaemonRegistryService) ListDaemons(
 	return connect.NewResponse(resp), nil
 }
 
-// attachedDaemonSet returns the set of daemon IDs for the user that currently
-// have a fresh daemon_attachment row. Errors are logged and treated as "no
-// daemons attached" so a transient DB hiccup doesn't break list/get responses.
-func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID string) map[string]bool {
-	attachedIDs, err := s.database.ListAttachedDaemonIDsForUser(ctx, userID, daemonAttachmentStaleThreshold)
+// attachedDaemonSet returns the user's fresh daemon_attachment rows keyed by
+// daemon ID. A daemon is attached (routable) iff its entry is non-nil; the
+// row also carries heartbeat-reported memory telemetry. Errors are logged
+// and treated as "no daemons attached" so a transient DB hiccup doesn't
+// break list/get responses.
+func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID string) map[string]*db.DaemonAttachment {
+	attachments, err := s.database.ListFreshDaemonAttachmentsForUser(ctx, userID, daemonAttachmentStaleThreshold)
 	if err != nil {
-		logging.Warn("[DaemonRegistry] Failed to list attached daemon IDs", "error", err, "userID", userID)
-		return map[string]bool{}
+		logging.Warn("[DaemonRegistry] Failed to list attached daemons", "error", err, "userID", userID)
+		return map[string]*db.DaemonAttachment{}
 	}
-	attached := make(map[string]bool, len(attachedIDs))
-	for _, id := range attachedIDs {
-		attached[id] = true
+	attached := make(map[string]*db.DaemonAttachment, len(attachments))
+	for _, att := range attachments {
+		attached[att.DaemonID] = att
 	}
 	return attached
 }
@@ -141,10 +143,10 @@ func (s *DaemonRegistryService) ResolveDaemon(
 			}
 		}
 		// Prefer attached (routable) daemons, but accept any match.
-		if best == nil || attached[d.ID] {
+		if best == nil || attached[d.ID] != nil {
 			best = d
 		}
-		if attached[d.ID] {
+		if attached[d.ID] != nil {
 			break
 		}
 	}
@@ -182,7 +184,7 @@ func (s *DaemonRegistryService) ResumeDaemon(
 	}
 
 	// If the daemon currently has a fresh attachment row, it's already routable.
-	if s.attachedDaemonSet(ctx, userID)[daemon.ID] {
+	if s.attachedDaemonSet(ctx, userID)[daemon.ID] != nil {
 		return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
 	}
 
@@ -195,15 +197,17 @@ func (s *DaemonRegistryService) ResumeDaemon(
 }
 
 // daemonToProto converts a db.Daemon into the proto DaemonInfo. The proto
-// Status field is derived from daemon_attachment freshness (the attached flag)
+// Status field is derived from daemon_attachment freshness (a non-nil att)
 // rather than any column on the daemons row, which is now identity-only.
-func daemonToProto(d *db.Daemon, attached bool) *reliantv1.DaemonInfo {
+// The attachment also carries heartbeat-reported workspace memory telemetry,
+// exposed so the UI can surface memory pressure for live daemons.
+func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo {
 	if d == nil {
 		return &reliantv1.DaemonInfo{}
 	}
 
 	status := reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
-	if attached {
+	if att != nil {
 		status = reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
 	}
 
@@ -221,6 +225,11 @@ func daemonToProto(d *db.Daemon, attached bool) *reliantv1.DaemonInfo {
 	}
 	if d.DaemonType != nil {
 		info.DaemonType = *d.DaemonType
+	}
+	if att != nil && att.MemoryLimitBytes > 0 {
+		info.MemoryUsedBytes = uint64(att.MemoryUsedBytes)
+		info.MemoryLimitBytes = uint64(att.MemoryLimitBytes)
+		info.MemoryPressure = att.MemoryPressure
 	}
 	// ConnectedAt and LastHeartbeat now intentionally left unset — those fields
 	// have been removed from the daemons row. Callers needing freshness should

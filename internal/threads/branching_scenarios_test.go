@@ -30,16 +30,9 @@ func newTestEnv(t *testing.T) *testEnv {
 	t.Helper()
 	repo := db.NewTestRepo(t)
 
-	// Create test project
-	err := repo.CreateProject(context.Background(), &db.Project{
-		ID:        "test-project",
-		Name:      "Test Project",
-		Path:      "/tmp/test",
-		UserID:    "test-user",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
-	})
-	require.NoError(t, err)
+	// NewTestRepo already seeds the shared "test-project" row (ON CONFLICT DO
+	// NOTHING). Re-creating it here would collide (projects_pkey) with the seed
+	// and with every other test in this package that shares the same Postgres DB.
 
 	t.Cleanup(func() { repo.Close() })
 

@@ -28,4 +28,3 @@ expect:
     - agent_loop.execute_tools
     - agent_loop.compact
     # Max turns notification shouldn't appear
-    - max_turns_notification

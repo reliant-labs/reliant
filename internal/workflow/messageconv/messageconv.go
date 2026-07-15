@@ -90,19 +90,24 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 		}
 
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT:
+		// Documents (PDFs) are NOT injected whole — that would flood the context
+		// window. Instead we surface a reference the model can read on demand,
+		// paginated, via the read_attachment tool.
 		if block.Content != nil {
-			attachment, err := LoadAttachment(ctx, chatID, *block.Content, repo)
+			attachmentID := *block.Content
+			attachment, err := LoadAttachment(ctx, chatID, attachmentID, repo)
 			if err != nil {
 				logging.Error("Failed to load document attachment for LLM context",
-					"attachment_id", *block.Content,
+					"attachment_id", attachmentID,
 					"chat_id", chatID,
 					"error", err)
 				return nil
 			}
-			return message.BinaryContent{
-				Path:     attachment.FileName,
-				MIMEType: attachment.MimeType,
-				Data:     attachment.Content,
+			return message.TextContent{
+				Text: fmt.Sprintf(
+					"[Attached document: %s (attachment_id=%s). Use the read_attachment tool with this "+
+						"attachment_id to read it. For PDFs, pass a pages range (e.g. pages=\"1-5\").]",
+					attachment.FileName, attachmentID),
 			}
 		}
 

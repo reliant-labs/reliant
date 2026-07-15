@@ -95,17 +95,49 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 	}
 }
 
-// loadScenariosForWorkflow loads all scenarios from testdata/<workflow>_scenarios.yaml
-// The file can contain multiple YAML documents separated by ---.
+// loadScenariosForWorkflow loads all scenarios for a workflow from BOTH sources:
+//  1. testdata/<workflow>_scenarios.yaml (multi-document or wrapper format)
+//  2. scenarios/<workflow>/*.yaml (one or more scenarios per file)
+//
+// This mirrors the CLI's scenario discovery (findScenariosForWorkflow in
+// cmd/reliant/commands/workflow.go) so `go test` exercises every scenario.
 func loadScenariosForWorkflow(workflowName string) ([]*simulator.Scenario, error) {
-	scenarioFile := "testdata/" + workflowName + "_scenarios.yaml"
+	var allScenarios []*simulator.Scenario
 
-	data, err := builtin.BuiltinScenariosFS.ReadFile(scenarioFile)
-	if err != nil {
-		return nil, err
+	// Co-located testdata file
+	scenarioFile := "testdata/" + workflowName + "_scenarios.yaml"
+	if data, err := builtin.BuiltinScenariosFS.ReadFile(scenarioFile); err == nil {
+		scenarios, err := parseMultiDocYAML(data)
+		if err != nil {
+			return nil, fmt.Errorf("parse %s: %w", scenarioFile, err)
+		}
+		allScenarios = append(allScenarios, scenarios...)
 	}
 
-	return parseMultiDocYAML(data)
+	// scenarios/<workflow>/ directory
+	scenarioDir := "scenarios/" + workflowName
+	if entries, err := builtin.BuiltinScenarioDirsFS.ReadDir(scenarioDir); err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+				continue
+			}
+			data, err := builtin.BuiltinScenarioDirsFS.ReadFile(scenarioDir + "/" + entry.Name())
+			if err != nil {
+				return nil, err
+			}
+			scenarios, err := parseMultiDocYAML(data)
+			if err != nil {
+				return nil, fmt.Errorf("parse %s/%s: %w", scenarioDir, entry.Name(), err)
+			}
+			allScenarios = append(allScenarios, scenarios...)
+		}
+	}
+
+	if len(allScenarios) == 0 {
+		return nil, fmt.Errorf("no scenarios found for workflow %s", workflowName)
+	}
+
+	return allScenarios, nil
 }
 
 // scenarioFile is a wrapper format for scenario files with an array of scenarios
@@ -184,6 +216,27 @@ func TestScenarioFilesAreValid(t *testing.T) {
 
 	if err != nil {
 		t.Logf("Note: testdata directory walk returned error (may be empty): %v", err)
+	}
+}
+
+// TestScenarioDirsMapToWorkflows verifies every scenarios/<name>/ directory
+// corresponds to an existing builtin workflow. Orphaned scenario directories
+// are dead tests that can never run — they must be updated or removed when a
+// workflow is renamed or deleted.
+func TestScenarioDirsMapToWorkflows(t *testing.T) {
+	entries, err := builtin.BuiltinScenarioDirsFS.ReadDir("scenarios")
+	if err != nil {
+		t.Skip("no scenarios directory embedded")
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		workflowFile := entry.Name() + ".yaml"
+		if _, err := builtin.BuiltinWorkflowsFS.ReadFile(workflowFile); err != nil {
+			t.Errorf("scenarios/%s/ has no matching builtin workflow %s — update or remove these scenarios", entry.Name(), workflowFile)
+		}
 	}
 }
 

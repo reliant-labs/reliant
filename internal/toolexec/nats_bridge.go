@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -336,30 +335,39 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			"payload":       resp.Payload,
 			"error_message": resp.ErrorMessage,
 		})
-		// A reply exceeding the NATS server's max_payload fails the publish —
-		// and the old `_ = msg.Respond(...)` DISCARDED that error, so the
-		// caller waited out its full timeout with zero diagnostics (2026-07-09:
-		// worktree.git_changes on a dirty tree marshaled to 1.7MB against the
-		// 1MB default; every call surfaced as a bare "nats: timeout").
-		// Preflight the size so the caller fails fast with a diagnosable
-		// message, and never drop a residual Respond error silently.
-		if max := b.nc.MaxPayload(); max > 0 && int64(len(respData)) > max {
-			logging.Error("[NATSToolBridge] Daemon command reply exceeds NATS max_payload",
+		// A reply exceeding the NATS server's max_payload can't transit as a
+		// single message — and the old `_ = msg.Respond(...)` DISCARDED the
+		// publish error, so the caller waited out its full timeout with zero
+		// diagnostics (2026-07-09: worktree.git_changes / fs.search replies of
+		// 1.7-5.4MB against the 1MB default surfaced as bare "nats: timeout").
+		// publishReply keeps the single-message fast path for small replies
+		// (byte-identical to Respond) and transparently chunks oversize ones;
+		// the router reassembles, so user RPCs get the full payload. Only
+		// beyond the absolute cap do we substitute a structured, actionable
+		// error reply in the same envelope format.
+		chunks, err := publishReply(b.nc, msg.Reply, respData)
+		switch {
+		case errors.Is(err, errReplyExceedsAbsoluteCap):
+			logging.Error("[NATSToolBridge] Daemon command reply exceeds absolute reply cap",
 				"commandType", req.CommandType, "requestID", req.RequestID,
-				"replyBytes", len(respData), "maxPayload", max)
+				"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
 			errResp, _ := json.Marshal(map[string]interface{}{
-				"success": false,
-				"error_message": fmt.Sprintf(
-					"daemon response too large for transport: %d bytes (NATS max_payload %d) — command %s",
-					len(respData), max, req.CommandType),
+				"success":       false,
+				"error_message": oversizeNATSPayloadError("response", len(respData), maxChunkedReplyBytes, oversizeReplyHint),
 			})
-			_ = msg.Respond(errResp)
+			if rerr := msg.Respond(errResp); rerr != nil {
+				logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for daemon command",
+					"commandType", req.CommandType, "requestID", req.RequestID, "error", rerr)
+			}
 			return
-		}
-		if err := msg.Respond(respData); err != nil {
+		case err != nil:
 			logging.Error("[NATSToolBridge] Failed to publish daemon command reply",
 				"commandType", req.CommandType, "requestID", req.RequestID,
 				"replyBytes", len(respData), "error", err)
+		case chunks > 1:
+			logging.Info("[NATSToolBridge] Chunked oversize daemon command reply",
+				"commandType", req.CommandType, "requestID", req.RequestID,
+				"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
 		}
 
 		// NOTE: terminal output forwarding is NOT started here. It is now
@@ -395,7 +403,42 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		}
 
 		respData, _ := json.Marshal(resp)
-		_ = msg.Respond(respData)
+		// Same transparent chunking as daemon.command above — the transport
+		// doesn't decide policy, it just moves the bytes; how much of an
+		// oversize tool result an LLM actually sees is capped at the
+		// tool-result consumption layer (RemoteExecutor). Only beyond the
+		// absolute cap do we substitute a structured error, with Content set
+		// (not just ErrorMessage) because the LLM sees the tool result's
+		// Content — that's what lets the model react by narrowing its search.
+		chunks, err := publishReply(b.nc, msg.Reply, respData)
+		switch {
+		case errors.Is(err, errReplyExceedsAbsoluteCap):
+			logging.Error("[NATSToolBridge] Tool sync reply exceeds absolute reply cap",
+				"toolName", request.ToolName, "requestID", request.RequestID,
+				"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
+			oversizeMsg := oversizeNATSPayloadError("tool result", len(respData), maxChunkedReplyBytes, oversizeReplyHint)
+			errResp, _ := json.Marshal(&ToolExecutionResponse{
+				RequestID:    request.RequestID,
+				Success:      false,
+				IsError:      true,
+				Content:      oversizeMsg,
+				ErrorMessage: oversizeMsg,
+				ErrorCode:    "RESPONSE_TOO_LARGE",
+			})
+			if rerr := msg.Respond(errResp); rerr != nil {
+				logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for tool sync request",
+					"toolName", request.ToolName, "requestID", request.RequestID, "error", rerr)
+			}
+			return
+		case err != nil:
+			logging.Error("[NATSToolBridge] Failed to publish tool sync reply",
+				"toolName", request.ToolName, "requestID", request.RequestID,
+				"replyBytes", len(respData), "error", err)
+		case chunks > 1:
+			logging.Info("[NATSToolBridge] Chunked oversize tool sync reply",
+				"toolName", request.ToolName, "requestID", request.RequestID,
+				"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
+		}
 	}))
 
 	// Store all subscriptions for this daemon.

@@ -181,6 +181,38 @@ func (s *workflowStore) UpdateWorkflowWorkerStopped(ctx context.Context, workflo
 	return s.q.UpdateWorkflowWorkerStopped(ctx, workflowID)
 }
 
+func (s *workflowStore) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *core.WorkflowCheckpoint) error {
+	return s.q.UpsertWorkflowCheckpoint(ctx, pgdb.UpsertWorkflowCheckpointParams{
+		WorkflowID:    checkpoint.WorkflowID,
+		ChatID:        checkpoint.ChatID,
+		NodeID:        checkpoint.NodeID,
+		LoopIteration: checkpoint.LoopIteration,
+	})
+}
+
+func (s *workflowStore) GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*core.WorkflowCheckpoint, error) {
+	row, err := s.q.GetWorkflowCheckpoint(ctx, workflowID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No checkpoint is a normal state (fresh workflow, or already
+			// cleared) — callers treat nil as "no recorded position".
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &core.WorkflowCheckpoint{
+		WorkflowID:    row.WorkflowID,
+		ChatID:        row.ChatID,
+		NodeID:        row.NodeID,
+		LoopIteration: row.LoopIteration,
+		UpdatedAt:     row.UpdatedAt,
+	}, nil
+}
+
+func (s *workflowStore) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
+	return s.q.DeleteWorkflowCheckpoint(ctx, workflowID)
+}
+
 func (s *workflowStore) CreateStepExecution(ctx context.Context, exec *core.StepExecution) error {
 	_, err := s.q.CreateStepExecution(ctx, pgdb.CreateStepExecutionParams{
 		ID:            exec.ID,

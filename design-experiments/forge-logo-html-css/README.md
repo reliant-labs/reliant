@@ -74,7 +74,7 @@ Output: no matches. The primary logo is built from HTML elements and CSS only; `
 UI audit command:
 
 ```bash
-forge ui-audit http://127.0.0.1:4173/?mesh=2 --profile generic --scope '[data-audit="forge-logo-html-css"]' --out /Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit --wait-for '[data-audit="forge-logo-html-css"]' --timeout 30000
+forge ui-audit http://127.0.0.1:4173/?mesh=2 --profile generic --scope '[data-audit="forge-logo-html-css"]' --out ~/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/forge-logo-html-css/ui-audit --wait-for '[data-audit="forge-logo-html-css"]' --timeout 30000
 ```
 
 Result: passed for desktop `1440x900`, tablet `1024x768`, and mobile `390x844` with no findings. Artifacts were written to `design-experiments/forge-logo-html-css/ui-audit/report.json` and `design-experiments/forge-logo-html-css/ui-audit/index.html`.

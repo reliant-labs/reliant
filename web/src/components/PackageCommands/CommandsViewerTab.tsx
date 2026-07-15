@@ -8,6 +8,8 @@ import { useProcessStore, type BackgroundProcess } from "../../store/processStor
 import { useProjectStore } from "../../store/projectStore";
 import { useBrowserStore } from "../../store/browserStore";
 import { useViewerStore } from "../../store/viewerStore";
+import { isElectron } from "../../lib/constants";
+import { openExternalLink } from "../../lib/open-link";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ProcessLogsViewer } from "./ProcessLogsViewer";
 import { TerminalOutput, type ProcessInfo } from "../shared/TerminalOutput";
@@ -805,6 +807,11 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
 
   const handleOpenPort = useCallback(async (port: number) => {
     const url = `http://localhost:${port}`;
+    // Web build has no embedded <webview> — open the preview in a new browser tab.
+    if (!isElectron()) {
+      await openExternalLink(url);
+      return;
+    }
     const projectId = currentProject?.id;
     if (projectId && effectiveWorktreeId) {
       const tabId = await createBrowserTab(effectiveWorktreeId, url, projectId);
@@ -921,10 +928,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
     });
   }, [searchQuery, detectedTypes, commands, matchesSearch]);
 
-  // Auto-open browser tabs for processes with ports when commands appear in search results
+  // Auto-open browser tabs for processes with ports when commands appear in search results.
+  // Desktop-only: this opens the embedded <webview>, which does not exist in web. In web
+  // the user can still open a preview manually (handleOpenPort → new browser tab).
   useEffect(() => {
+    if (!isElectron()) return;
     if (!searchQuery.trim() || !currentProject?.id) return;
-    
+
     const projectId = currentProject.id;
     
     // Find all processes that match the search (check both processes and their associated commands)

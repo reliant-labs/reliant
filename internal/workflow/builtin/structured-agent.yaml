@@ -129,10 +129,15 @@ nodes:
             model: "{{inputs.model}}"
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
+            compaction_threshold: "{{inputs.compaction_threshold}}"
             system_prompt: "{{inputs.system_prompt}}"
-            # Include regular tools, response tool, and spawn
+            # Regular tools + spawn. The response tool must NOT go in the
+            # filter: it is not a registry tool (putting it here only produces
+            # a "Tools in filter not found" warn) — call_llm adds it to the
+            # request from the response_tool block below, independent of the
+            # filter. Same pattern as auditing-agent.yaml.
             tools_config:
-              filter: "{{inputs.tools + [inputs.response_tool_name]}}"
+              filter: "{{inputs.tools}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: mutating
             response_tool:
@@ -199,7 +204,7 @@ nodes:
         - from: execute_tools
           cases:
             - to: compact
-              condition: nodes.execute_tools.thread_token_count > inputs.compaction_threshold
+              condition: nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold
               label: needs_compact
 
       ui:

@@ -274,88 +274,65 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 // HELPERS (private methods)
 // ============================================================================
 
-// generateCompactionSummary generates a summary of messages using the LLM
+// compactionModelTier is the fixed priority list of summarization models.
+// Priority order: Claude (best reasoning) > GPT-5.4 Pro > GPT-5.2 Pro >
+// GPT-5.5/Codex models > Gemini 2.5 Pro.
+// No chat fallback - model is not stored on chat anymore.
+var compactionModelTier = []models.ModelID{
+	models.Claude46Sonnet, // Best: Extended thinking, excellent summarization
+	models.Claude45Sonnet, // Fallback: previous Sonnet generation
+	models.GPT54Pro,       // Very good: Strongest OpenAI reasoning model
+	models.GPT52Pro,       // Very good: Strong general capabilities
+	models.GPT55,          // Very good: Latest GPT-5 generation on OpenAI/Codex
+	models.GPT53Codex,     // Very good: Codex flagship with reasoning
+	models.GPT52Codex,     // Very good: Codex flagship with reasoning
+	models.Gemini25Pro,    // Good: Strong multimodal and reasoning
+}
+
+// generateCompactionSummary generates a summary of messages using the LLM.
+//
+// Only the model tier and the summarization prompt are compaction-specific.
+// The request envelope — thinking configuration, provider options, driver
+// selection, tool-less history sanitization — flows through the same
+// request-construction path as a normal CallLLM turn (resolveLLMCall +
+// prepareHistoryForLLM), so provider constraints are handled in one place.
 func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, messages []message.Message) (string, error) {
 	if len(messages) == 0 {
 		return "", fmt.Errorf("no messages to summarize")
 	}
 
-	// Select the best available model for compaction based on user's API keys
-	// Priority order: Claude (best reasoning) > GPT-5.4 Pro > GPT-5.2 Pro > GPT-5.5/Codex models > Gemini 2.5 Pro
-	// Compaction uses a fixed tier of good summarization models
-	// No chat fallback - model is not stored on chat anymore
-	compactionTier := []models.ModelID{
-		models.Claude46Sonnet, // Best: Extended thinking, excellent summarization
-		models.Claude45Sonnet, // Fallback: previous Sonnet generation
-		models.GPT54Pro,       // Very good: Strongest OpenAI reasoning model
-		models.GPT52Pro,       // Very good: Strong general capabilities
-		models.GPT55,          // Very good: Latest GPT-5 generation on OpenAI/Codex
-		models.GPT53Codex,     // Very good: Codex flagship with reasoning
-		models.GPT52Codex,     // Very good: Codex flagship with reasoning
-		models.Gemini25Pro,    // Good: Strong multimodal and reasoning
-	}
-
-	// Get user's available drivers to check what models they can access
-	availableDrivers := drivers.GetAvailableDrivers(ctx, chat.UserID)
-
-	var selectedModelID models.ModelID
-	var selectedModel models.Model
-	var found bool
-
-	// Try each model in priority order
-	registry := models.MustGetRegistry()
-	for _, modelID := range compactionTier {
-		def, ok := registry.GetDefinition(string(modelID))
-		if !ok {
-			continue // Model not registered
-		}
-
-		// Check if user has access to this model
-		_, hasAccess := models.SelectBestDriver(modelID, availableDrivers)
-		if hasAccess {
-			selectedModelID = modelID
-			selectedModel = def.ToModel()
-			found = true
-			logging.Info("[COMPACTION] 💡 Selected model for summarization",
-				"chatID", chat.ID,
-				"model", modelID,
-				"reason", "best available from tier list")
-			break
-		}
-	}
-
-	if !found {
-		return "", fmt.Errorf("no available models for compaction (user has no API keys configured)")
-	}
-
-	// Use a small temperature for consistent summaries
+	// Use a small temperature for consistent summaries.
 	temperature := 0.3
-	preferences := models.Preferences{
-		{
-			ModelID:     selectedModelID,
-			Temperature: &temperature,
-		},
+	spec := llmCallSpec{
+		UserID:      chat.UserID,
+		SessionID:   chat.ID, // Use chat ID as thread ID for Anthropic
+		Temperature: &temperature,
 	}
 
-	resolve := drivers.GetDriver
-	if a.driverResolver != nil {
-		resolve = a.driverResolver
+	// Pick the summarization model. With an injected resolver (tests) the
+	// resolver supplies its own driver/model, mirroring CallLLM.
+	if a.driverResolver == nil {
+		selector, err := selectCompactionModel(ctx, chat.UserID)
+		if err != nil {
+			return "", err
+		}
+		spec.Selector = selector
+		logging.Info("[COMPACTION] 💡 Selected model for summarization",
+			"chatID", chat.ID,
+			"model", selector.ID,
+			"reason", "best available from tier list")
 	}
-	driver, err := resolve(ctx, chat.UserID, preferences,
-		llm.WithModel(selectedModel),
-		llm.WithReasoningDisabled(), // Disable thinking for compaction - no reasoning budget needed
-		llm.WithMaxTokens(40000),
-		llm.WithSessionID(chat.ID), // Use chat ID as thread ID for Anthropic
-	)
+
+	resolved, err := resolveLLMCall(ctx, a.driverResolver, spec)
 	if err != nil {
-		return "", fmt.Errorf("failed to get LLM driver: %w", err)
+		return "", err
 	}
 
 	compactionPrompts := []string{`You are a specialist at summarizing conversations.`}
 
-	// Add ephemeral system message at the end to trigger summarization
-	// This message is not saved to the DB, only passed to the LLM
-	messagesWithTrigger := append(messages, message.Message{
+	// Add ephemeral user message at the end to trigger summarization.
+	// This message is not saved to the DB, only passed to the LLM.
+	history := append(messages, message.Message{
 		Role: "user",
 		Parts: []message.ContentPart{
 			message.TextContent{
@@ -364,10 +341,15 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		},
 	})
 
+	// Standard pre-request transforms. Summarization is a read-only pass that
+	// passes no tools, so this also flattens tool_use/tool_result blocks to
+	// text (providers reject tool-call blocks on tool-less requests).
+	history = prepareHistoryForLLM(chat.ID, history, compactionPrompts, nil)
+
 	// Call LLM to generate summary using streaming (required for long operations)
 	// We use streaming mode because Anthropic requires it for operations that may take >10 minutes
 	// The accumulator will collect all chunks and return the final response
-	response, err := accumulator.StreamAndAccumulate(ctx, driver, compactionPrompts, messagesWithTrigger, []tools.Tool{})
+	response, err := accumulator.StreamAndAccumulate(ctx, resolved.Driver, compactionPrompts, history, []tools.Tool{})
 	if err != nil {
 		return "", fmt.Errorf("failed to generate summary: %w", err)
 	}
@@ -377,6 +359,22 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 	}
 
 	return response.Content, nil
+}
+
+// selectCompactionModel returns the first tier model that resolves against the
+// user's configured providers, using the same registry resolution a normal
+// CallLLM request uses (deterministic provider choice; the user's own
+// credentials win over the managed reliant driver on priority ties).
+func selectCompactionModel(ctx context.Context, userID string) (models.ModelSelector, error) {
+	availableProviders := configuredProviderIDs(drivers.GetAvailableDrivers(ctx, userID))
+	registry := models.MustGetRegistry()
+	for _, modelID := range compactionModelTier {
+		selector := models.ModelSelector{ID: string(modelID)}
+		if _, err := registry.Resolve(selector, availableProviders); err == nil {
+			return selector, nil
+		}
+	}
+	return models.ModelSelector{}, fmt.Errorf("no available models for compaction (user has no API keys configured)")
 }
 
 // generateTitle generates a concise, meaningful title using the LLM

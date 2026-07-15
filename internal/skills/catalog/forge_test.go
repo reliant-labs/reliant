@@ -158,7 +158,7 @@ func TestLoadFullDefinition_EmitBothRendersByAudience(t *testing.T) {
 			"@forge-only block markers must be absent from a general-audience render")
 		require.NotContains(t, debug.Body, "Forge Debug Tools",
 			"forge-specific section header must be stripped for general audience")
-		require.NotContains(t, debug.Body, "forge run --debug",
+		require.NotContains(t, debug.Body, "forge debug start",
 			"forge CLI commands must be stripped for general audience")
 		// The general methodology must survive the strip.
 		require.Contains(t, debug.Body, "Triage First",
@@ -176,7 +176,7 @@ func TestLoadFullDefinition_EmitBothRendersByAudience(t *testing.T) {
 		require.NotEmpty(t, debug.Body, "debug skill body should be hydrated")
 		require.Contains(t, debug.Body, "Forge Debug Tools",
 			"forge audience must see the forge-specific section header")
-		require.Contains(t, debug.Body, "forge run --debug",
+		require.Contains(t, debug.Body, "forge debug start",
 			"forge audience must see the forge-specific CLI commands")
 		require.Contains(t, debug.Body, "Triage First",
 			"the methodology section must be present in either audience")

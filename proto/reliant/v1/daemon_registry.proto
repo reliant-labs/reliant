@@ -73,6 +73,15 @@ message DaemonInfo {
   // Type of daemon: "managed" (cloud-hosted) or "self_hosted" (user-run local daemon).
   // Set at registration time by the daemon registry. Empty/"unknown" if undetermined.
   string daemon_type = 9;
+  // Workspace memory telemetry reported by the daemon's heartbeat (cloud
+  // daemons in a cgroup-limited pod). Stored on the daemon's attachment
+  // (liveness) record, so it is only present while the daemon is attached.
+  // memory_limit_bytes == 0 means "not reported" (local daemons, no cgroup).
+  uint64 memory_used_bytes = 10;
+  uint64 memory_limit_bytes = 11;
+  // Hysteresis-smoothed pressure bit: asserts at >= 85% of the limit,
+  // clears below 75%.
+  bool memory_pressure = 12;
 }
 
 enum DaemonStatus {

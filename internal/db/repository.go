@@ -186,6 +186,7 @@ type Repository interface {
 
 	GetClaudeAuthTokens(ctx context.Context, userID string) (*core.ClaudeAuthTokens, error)
 	SetClaudeAuthTokens(ctx context.Context, userID string, tokens core.ClaudeAuthTokens) error
+	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error)
 	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
 
 	// Privacy Settings
@@ -215,9 +216,17 @@ type Repository interface {
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
 	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
+	// UpdateDaemonAttachmentMemory records heartbeat-reported workspace memory
+	// telemetry (used/limit/pressure) on the attachment record. No-op when the
+	// row doesn't exist.
+	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
+	// ListFreshDaemonAttachmentsForUser returns the full attachment rows
+	// (including memory telemetry) behind ListAttachedDaemonIDsForUser's
+	// id-only view.
+	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*DaemonAttachment, error)
 	ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error)
 	// ListAllDaemonAttachments returns every live attachment row (any source).
 	// Used by the gateway's /flow-health endpoint to assert the connection
@@ -326,6 +335,11 @@ type Repository interface {
 	// Startup recovery queries
 	ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)
 	ListRootWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)
+	// Position checkpoints (resume-at-position support).
+	// GetWorkflowCheckpoint returns (nil, nil) when no checkpoint exists.
+	UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error
+	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error)
+	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	// Threads - First-class entity for thread hierarchy and fork relationships
 	// Thread type is derived: NULL parent = root, parent in same conversation = sub_agent,
 	// parent in different conversation = branch

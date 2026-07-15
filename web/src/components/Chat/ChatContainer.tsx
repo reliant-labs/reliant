@@ -7,6 +7,7 @@
 
 import { useMemo, useCallback } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { sortMessagesForDisplay } from "../../lib/messageOrder";
 import { ChatPresenter } from "./ChatPresenter";
 import {
   useChat,
@@ -93,25 +94,18 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const isDiscussMode = useDiscussMode(chatId);
   const { data: pendingQuestion } = usePendingQuestion(chatId);
 
-  // Process messages: sort by ordinal and filter out agent messages
+  // Process messages: canonical order (lib/messageOrder), filter out tool messages
   const processedMessages = useMemo(() => {
     if (messages.length === 0) {
       return EMPTY_ARRAY;
     }
 
-    const sorted = [...messages].sort((a, b) => {
-      if (a.ordinal !== undefined && b.ordinal !== undefined) {
-        return Number(a.ordinal) - Number(b.ordinal);
-      }
-      return (
-        new Date(a.createdAt || "").getTime() - new Date(b.createdAt || "").getTime()
-      );
-    });
+    const sorted = sortMessagesForDisplay(messages, chatId || "");
 
     const filtered = sorted.filter((message) => message.role !== MessageRole.TOOL);
 
     return filtered;
-  }, [messages]);
+  }, [messages, chatId]);
 
   // Handle send message
   const handleSendMessage = useCallback(

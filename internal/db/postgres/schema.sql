@@ -178,7 +178,7 @@ CREATE TABLE messages (
     model TEXT,
     agent TEXT,
     token_count BIGINT,
-    cost REAL,
+    cost DOUBLE PRECISION,
     workflow_id TEXT,
     run_id TEXT,
     node_id TEXT,
@@ -419,3 +419,15 @@ CREATE TABLE workflow_scenarios (
     updated_at TIMESTAMP NOT NULL,
     version BIGINT NOT NULL
 );
+-- Position checkpoint for workflow runs (resume-at-position support).
+-- One row per workflow ID; upserted at top-level node entry and per loop
+-- iteration, deleted when the workflow completes or is user-cancelled.
+CREATE TABLE workflow_checkpoints (
+    workflow_id TEXT PRIMARY KEY,
+    chat_id TEXT NOT NULL,
+    node_id TEXT NOT NULL,
+    loop_iteration BIGINT NOT NULL DEFAULT 0,
+    updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX idx_workflow_checkpoints_chat_id ON workflow_checkpoints(chat_id);

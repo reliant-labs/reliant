@@ -100,6 +100,43 @@ func (r *RemoteClient) ReadBinaryFile(ctx context.Context, path string, maxBytes
 	return data, nil
 }
 
+type pdfPageCountRequest struct {
+	Path string `json:"path"`
+}
+
+type pdfPageCountResponse struct {
+	PageCount int `json:"page_count"`
+}
+
+func (r *RemoteClient) PDFPageCount(ctx context.Context, path string) (int, error) {
+	var resp pdfPageCountResponse
+	if err := r.send(ctx, "fs.pdf_page_count", pdfPageCountRequest{Path: path}, &resp, timeoutFSDefault); err != nil {
+		return 0, err
+	}
+	return resp.PageCount, nil
+}
+
+type readPDFPagesRequest struct {
+	Path  string `json:"path"`
+	Pages string `json:"pages"`
+}
+
+type readPDFPagesResponse struct {
+	Data string `json:"data"` // base64-encoded PDF bytes
+}
+
+func (r *RemoteClient) ReadPDFPages(ctx context.Context, path string, pages string) ([]byte, error) {
+	var resp readPDFPagesResponse
+	if err := r.send(ctx, "fs.read_pdf_pages", readPDFPagesRequest{Path: path, Pages: pages}, &resp, timeoutFSDefault); err != nil {
+		return nil, err
+	}
+	data, err := base64.StdEncoding.DecodeString(resp.Data)
+	if err != nil {
+		return nil, fmt.Errorf("remote fs.read_pdf_pages: decode base64: %w", err)
+	}
+	return data, nil
+}
+
 type writeFileRequest struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`

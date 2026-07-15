@@ -315,7 +315,17 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 func (e *StepExecutor) HandleCompletion(running *RunningStep) *StepEvent {
 	// Use StepID for event ID - it's unique within an iteration
 	eventID := fmt.Sprintf("event-%s", running.StepID)
-	return e.handleActivityCompletion(running, eventID)
+	stepEvent := e.handleActivityCompletion(running, eventID)
+
+	// Daemon-offline circuit breaker: observe the outcome AFTER save_message
+	// ran (inside handleActivityCompletion), so the failing tool results are
+	// already persisted to the chat if the breaker decides to pause. This is
+	// the one chokepoint every step completion passes through — main loop,
+	// inline workflows, and loop iterations alike — which is what lets agent
+	// loops trip the breaker. May block until resume.
+	e.pauseCtrl.ObserveDaemonOfflineStep(e.ctx, running.ActivityName, stepEvent)
+
+	return stepEvent
 }
 
 // handleActivityCompletion processes a completed regular activity.

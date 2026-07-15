@@ -30,8 +30,6 @@ events:
 
   # User denies the approval
   - node: agent_loop.approval
-    type: tool_result
-    tool: approval
     output:
       status: "denied"
 
@@ -45,4 +43,3 @@ expect:
     # Tools must NOT execute when approval is denied
     - agent_loop.execute_tools
     - agent_loop.compact
-    - max_turns_notification

@@ -138,6 +138,8 @@ nodes:
             model: "{{inputs.model}}"
             temperature: "{{has(inputs.model.temperature) ? inputs.model.temperature : 0.0}}"
             thinking_level: "{{has(inputs.model.thinking_level) ? inputs.model.thinking_level : ''}}"
+            # 0 = unset → call_llm resolves the threshold from the model default
+            compaction_threshold: "{{has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 0}}"
             system_prompt: >
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
             # Plan mode gets plan-tagged tools only; spawn available in all modes (child inherits preset config)
@@ -198,7 +200,7 @@ nodes:
         - from: execute_tools
           cases:
             - to: compact
-              condition: "nodes.execute_tools.thread_token_count > (has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 185000)"
+              condition: "nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold"
               label: "compact"
 
       ui:

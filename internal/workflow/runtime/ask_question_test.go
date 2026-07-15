@@ -72,6 +72,12 @@ func TestDynamicWorkflowAskQuestionDoesNotScheduleUnregisteredActivity(t *testin
 	)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{"success": true}, nil
+		},
+		activity.RegisterOptions{Name: "WorkflowCheckpoint"},
+	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
 			return map[string]interface{}{}, nil
 		},
 		activity.RegisterOptions{Name: "Cleanup"},

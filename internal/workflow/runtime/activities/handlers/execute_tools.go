@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -651,6 +650,9 @@ func (a *ExecuteToolsActivity) emitToolStatus(ctx context.Context, chatID, conte
 //
 // If a schema is provided, the input is validated against it before returning.
 // This catches LLM errors where required fields are missing from structured responses.
+// Stringified array/object values (a model failure mode where e.g. an array is
+// emitted as a JSON-encoded string) are repaired in place before failing — see
+// internal/llm/tools/schema_repair.go.
 //
 // This mirrors the logic in internal/llm/tools/response_tool.go:Run()
 func executeResponseToolInline(toolCallID, toolName, toolInput string, schema map[string]interface{}) message.ToolResult {
@@ -665,9 +667,10 @@ func executeResponseToolInline(toolCallID, toolName, toolInput string, schema ma
 		}
 	}
 
-	// Validate against schema if provided
+	// Validate against schema if provided, repairing stringified values.
 	if schema != nil {
-		if err := validateResponseToolData(toolInput, schema); err != nil {
+		repairedInput, err := validateResponseToolData(toolName, toolInput, schema)
+		if err != nil {
 			logging.Warn("[ExecuteTools] Response tool data failed schema validation",
 				"tool", toolName,
 				"error", err,
@@ -677,6 +680,18 @@ func executeResponseToolInline(toolCallID, toolName, toolInput string, schema ma
 				Name:       toolName,
 				Content:    fmt.Sprintf("Response tool schema validation failed: %v", err),
 				IsError:    true,
+			}
+		}
+		if repairedInput != toolInput {
+			// A repair fired — re-parse so the repaired values (not the
+			// stringified originals) flow into content/metadata/response_data.
+			if err := json.Unmarshal([]byte(repairedInput), &input); err != nil {
+				return message.ToolResult{
+					ToolCallID: toolCallID,
+					Name:       toolName,
+					Content:    "Invalid JSON input after repair: " + err.Error(),
+					IsError:    true,
+				}
 			}
 		}
 	}
@@ -706,39 +721,17 @@ func executeResponseToolInline(toolCallID, toolName, toolInput string, schema ma
 	}
 }
 
-// validateResponseToolData validates JSON data against a JSON Schema.
-// Returns nil if valid, or an error describing the validation failure.
-func validateResponseToolData(jsonStr string, schema map[string]interface{}) error {
+// validateResponseToolData validates JSON data against a JSON Schema,
+// repairing stringified array/object values before failing (shared helper in
+// internal/llm/tools/schema_repair.go). Returns the (possibly repaired) JSON
+// string; a nil error means the returned JSON validates against the schema.
+func validateResponseToolData(toolName, jsonStr string, schema map[string]interface{}) (string, error) {
 	// Convert schema map to JSON bytes
 	schemaBytes, err := json.Marshal(schema)
 	if err != nil {
-		return fmt.Errorf("failed to marshal schema: %w", err)
+		return jsonStr, fmt.Errorf("failed to marshal schema: %w", err)
 	}
-
-	// Parse the schema using google/jsonschema-go
-	var goSchema gojsonschema.Schema
-	if err := json.Unmarshal(schemaBytes, &goSchema); err != nil {
-		return fmt.Errorf("failed to unmarshal schema: %w", err)
-	}
-
-	// Resolve the schema
-	resolved, err := goSchema.Resolve(nil)
-	if err != nil {
-		return fmt.Errorf("failed to resolve schema: %w", err)
-	}
-
-	// Parse the input JSON
-	var inputData interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &inputData); err != nil {
-		return fmt.Errorf("failed to unmarshal input JSON: %w", err)
-	}
-
-	// Validate
-	if err := resolved.Validate(inputData); err != nil {
-		return err
-	}
-
-	return nil
+	return tools.ValidateJSONWithRepair(toolName, jsonStr, schemaBytes)
 }
 
 // fileMutatingTools is the set of tool names that can modify files on disk.

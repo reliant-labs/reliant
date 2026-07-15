@@ -5,7 +5,7 @@
  * Must be kept in sync with internal/attachment/filetypes.go
  */
 
-export type AttachmentType = 'image' | 'file_reference' | 'unsupported';
+export type AttachmentType = 'image' | 'document' | 'file_reference' | 'unsupported';
 
 // Image extensions supported by Claude API (base64 image blocks)
 export const IMAGE_EXTENSIONS = new Set([
@@ -16,6 +16,12 @@ export const IMAGE_EXTENSIONS = new Set([
   '.webp',
 ]);
 
+// Binary document extensions sent to the LLM natively rather than as extracted
+// text. PDFs are read on demand (and paginated) via the read_attachment tool.
+export const DOCUMENT_EXTENSIONS = new Set([
+  '.pdf',
+]);
+
 // Text file extensions that can be read and sent as text content
 export const TEXT_EXTENSIONS = new Set([
   // Markdown and documentation
@@ -23,7 +29,7 @@ export const TEXT_EXTENSIONS = new Set([
 
   // Data formats
   '.json', '.yaml', '.yml', '.toml', '.xml', '.csv', '.tsv',
-  '.ini', '.conf', '.cfg', '.env', '.properties', '.pdf', '.docx',
+  '.ini', '.conf', '.cfg', '.env', '.properties', '.docx',
 
   // Programming languages
   '.go', '.py', '.js', '.jsx', '.ts', '.tsx', '.rs', '.java', '.kt', '.scala',
@@ -98,6 +104,11 @@ export function getAttachmentType(filename: string): AttachmentType {
     return 'image';
   }
 
+  // Check if it's a binary document (PDF) sent natively / read on demand
+  if (DOCUMENT_EXTENSIONS.has(ext)) {
+    return 'document';
+  }
+
   // Check if it's a text file
   if (TEXT_EXTENSIONS.has(ext)) {
     return 'file_reference';
@@ -158,6 +169,7 @@ export function getAcceptedMimeTypes(): string {
   // Also include common extensions for file picker
   const extensions = [
     ...Array.from(IMAGE_EXTENSIONS),
+    ...Array.from(DOCUMENT_EXTENSIONS),
     ...Array.from(TEXT_EXTENSIONS),
   ];
 

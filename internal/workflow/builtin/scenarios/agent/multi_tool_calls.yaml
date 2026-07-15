@@ -54,4 +54,3 @@ expect:
   not_reached:
     - agent_loop.approval
     - agent_loop.compact
-    - max_turns_notification

@@ -32,20 +32,20 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 
 	result := newInterceptors(timeout, auth)
 	// forge's DefaultMiddlewares produces 5 (Recovery, RequestID, Logging, Tracing, Metrics)
-	// + Extras: ErrorReporterInterceptor, timeout, auth = 8 total
-	require.Len(t, result, 8)
-	// The last three are the reliant-specific Extras in order.
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[5])
-	require.Same(t, timeout, result[6])
-	require.Same(t, auth, result[7])
+	// + Extras: SlowRPCWatchdogInterceptor, ErrorReporterInterceptor, timeout, auth = 9 total
+	require.Len(t, result, 9)
+	// The last four are the reliant-specific Extras in order.
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[6])
+	require.Same(t, timeout, result[7])
+	require.Same(t, auth, result[8])
 }
 
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, (*interceptors.AuthInterceptor)(nil))
-	// forge's 5 + ErrorReporterInterceptor + timeout = 7 (nil auth skipped)
-	require.Len(t, result, 7)
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[5])
-	require.Same(t, timeout, result[6])
+	// forge's 5 + SlowRPCWatchdogInterceptor + ErrorReporterInterceptor + timeout = 8 (nil auth skipped)
+	require.Len(t, result, 8)
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[6])
+	require.Same(t, timeout, result[7])
 }
