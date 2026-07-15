@@ -49,6 +49,7 @@ Reliant server components.`,
 	root.AddCommand(newWorkflowCmd())
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
+	root.AddCommand(newPreviewURLCmd())
 
 	return root
 }

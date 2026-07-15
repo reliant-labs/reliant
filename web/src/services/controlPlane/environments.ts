@@ -140,6 +140,13 @@ export async function deleteDaemon(daemonId: string): Promise<void> {
 
 // ── Port access ─────────────────────────────────────────────────────────────
 
+// Shared React Query key for a daemon's port-access rules. Exported so every
+// surface that reads or mutates rules (the Settings → Environments panel AND
+// the header DetectedPortsChip one-click-public toggle) keys the same cache
+// entry — a "Make public" in the chip invalidates the panel and vice-versa.
+export const portAccessRulesQueryKey = (daemonId: string) =>
+  ["cp", "environments", "ports", daemonId] as const;
+
 export async function listPortAccessRules(daemonId: string): Promise<PortAccessRule[]> {
   const res = await getControlPlaneClient(DaemonService).listPortAccessRules({ daemonId });
   return res.rules;
@@ -162,6 +169,20 @@ export async function setPortAccess(args: {
 
 export async function removePortAccess(daemonId: string, port: number): Promise<void> {
   await getControlPlaneClient(DaemonService).removePortAccess({ daemonId, port });
+}
+
+// ── Default port access (workspace-level) ────────────────────────────────────
+// The policy the preview proxy applies to a listening port that has NO explicit
+// per-port rule. AUTHENTICATED (safe: only the owner) is the global default;
+// PUBLIC opts the whole workspace into zero-click sharing (every unruled port
+// reachable by URL). Explicit per-port rules always override this. Read the
+// current value from getDaemon(...).daemon.defaultPortAccess.
+export async function setDefaultPortAccess(args: {
+  daemonId: string;
+  defaultAccessMode: PortAccessMode;
+}): Promise<Daemon | undefined> {
+  const res = await getControlPlaneClient(DaemonService).setDefaultPortAccess(args);
+  return res.daemon;
 }
 
 // ── Compute subscription (plan-gated size picker) ───────────────────────────

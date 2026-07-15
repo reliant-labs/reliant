@@ -231,6 +231,9 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 		info.MemoryLimitBytes = uint64(att.MemoryLimitBytes)
 		info.MemoryPressure = att.MemoryPressure
 	}
+	if att != nil {
+		info.DetectedPorts = att.DetectedPorts
+	}
 	// ConnectedAt and LastHeartbeat now intentionally left unset — those fields
 	// have been removed from the daemons row. Callers needing freshness should
 	// consult daemon_attachment.

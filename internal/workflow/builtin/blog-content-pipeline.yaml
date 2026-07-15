@@ -387,6 +387,11 @@ inputs:
       A paragraph where every sentence seems optimized instead of simply written
     description: LLM colloquialism patterns to avoid (injected into agent context)
 
+# On completion the chat permanently switches to a plain interactive agent so a
+# user message after the handoff continues the conversation instead of restarting
+# the pipeline (the "final checkpoint").
+transition_to: builtin://agent
+
 entry: [context_intake]
 
 nodes:
@@ -1578,6 +1583,67 @@ nodes:
 
         Style guide and colloquialisms are injected via workflow inputs.
 
+        I'll render the post and start a preview so you can read it in the browser.
+
+  # ==========================================================================
+  # Handoff — render the final post and hand the user a live preview URL
+  # ==========================================================================
+  # A plain agent (no deliverable schema). Renders the finished markdown post to a
+  # simple HTML page, serves it as a BACKGROUND process on a known port, and hands
+  # the user the deterministic preview URL. Forced to auto mode so the handoff is
+  # seamless. After it finishes the chat transitions to a plain interactive agent
+  # (transition_to), so the user can keep asking for edits.
+  - id: handoff
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: general
+    passthrough: [model]
+    args:
+      tools: "{{inputs.tools}}"
+      mode: auto
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Preview the Post & Hand It Off
+
+          The blog post is final. Render it to a simple HTML page and start a local
+          preview so the user can read it in the browser. Do NOT rewrite the content —
+          just render, serve, and confirm it's up.
+
+          **Step 1: Find the post.** List `blog-output/` and pick the most recently
+          modified post directory (the slug). The publication-ready markdown is at
+          `blog-output/<slug>/final/blog-post.md`.
+
+          **Step 2: Render it to HTML.** Convert the markdown to a single self-contained
+          `blog-output/<slug>/final/index.html` (any Markdown renderer available —
+          `pandoc`, a tiny Python `markdown` script, or a small node script). Name it
+          `index.html` so the server serves it at the root URL. Include the images
+          referenced from `phase-4.5-visuals/` so the preview is complete.
+
+          **Step 3: Serve it in the BACKGROUND on port 8000, bound to 0.0.0.0.**
+          Use the shell tool with `run_in_background: true` so it survives past this turn —
+          do NOT block on it. It MUST bind to `0.0.0.0` (not `127.0.0.1`) or the proxy can't
+          reach it and there is no preview URL:
+          ```bash
+          cd blog-output/<slug>/final && python3 -m http.server 8000 --bind 0.0.0.0
+          ```
+
+          **Step 4: Confirm it's serving** (`bash_list` / `bash_output` on the background pid;
+          a `curl -sS -o /dev/null -w '%{http_code}' http://localhost:8000/` is a secondary
+          check). Then get the preview URL: run `reliant preview-url 8000` — it prints the
+          authoritative proxied URL for port 8000 (also surfaced as a `Preview URL (port 8000):
+          ...` line in the `bash_list` / `bash_output` result). Do NOT invent a URL. Post it as
+          a markdown link:
+
+          **[Read your post](<the URL from `reliant preview-url 8000`>)**
+
+          If no proxied URL is available (a local run), fall back to `http://localhost:8000/`.
+          Then briefly tell the user the post is live and ask what they'd like to change —
+          the conversation stays open for edits.
+
 edges:
   - from: context_intake
     default: classify
@@ -1600,3 +1666,5 @@ edges:
     default: validate_artifacts
   - from: validate_artifacts
     default: complete
+  - from: complete
+    default: handoff

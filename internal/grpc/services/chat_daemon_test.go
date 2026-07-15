@@ -7,9 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -167,6 +167,13 @@ func TestInjectSessionDaemonID(t *testing.T) {
 		chat := &db.Chat{ActiveDaemonID: &daemonID}
 		injectSessionDaemonID(inputs, chat)
 		assert.Equal(t, daemonID, inputs["session_daemon_id"])
+
+		// The preview URL is deliberately NOT threaded through workflow inputs.
+		// A handoff/terminal node runs inside the session daemon and discovers its
+		// own preview URL at runtime (`reliant preview-url <port>` /
+		// RELIANT_PREVIEW_URL_TEMPLATE), so nothing preview-related is injected here.
+		_, exists := inputs["preview_url_template"]
+		assert.False(t, exists, "preview_url_template must not be injected into workflow inputs")
 	})
 
 	t.Run("skips when nil", func(t *testing.T) {

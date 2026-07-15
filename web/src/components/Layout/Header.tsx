@@ -22,6 +22,7 @@ import { useShortcutsStore } from "../../store/shortcutsStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
 import { DaemonStatusDot } from "./DaemonStatusDot";
+import { DetectedPortsChip } from "./DetectedPortsChip";
 import { isDev } from "../../lib/constants";
 import { openExternalLink } from "../../lib/open-link";
 import { useTitleBarChrome } from "../../hooks/useTitleBarChrome";
@@ -257,6 +258,9 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
               </Tooltip>
             )}
 
+
+            {/* Detected workspace ports (open preview) */}
+            {!projectPickerMode && <DetectedPortsChip />}
 
             {/* Daemon status */}
             {!projectPickerMode && <DaemonStatusDot />}

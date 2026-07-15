@@ -220,6 +220,10 @@ type Repository interface {
 	// telemetry (used/limit/pressure) on the attachment record. No-op when the
 	// row doesn't exist.
 	UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error
+	// UpdateDaemonAttachmentPorts records heartbeat-reported detected listener
+	// ports (the in-pod preview surface) on the attachment record. No-op when
+	// the row doesn't exist.
+	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)

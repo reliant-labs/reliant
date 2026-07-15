@@ -69,15 +69,9 @@ const STARTER_OPTIONS: StarterOption[] = [
     icon: Palette,
     label: "Create a landing page",
     description:
-      "Review-loop workflow that iterates until the page feels polished.",
-    workflowId: "builtin://get-it-right",
-    workflowParams: {
-      mode: "auto",
-      ask: true,
-      review_instructions:
-        "Evaluate visual quality, responsiveness, accessibility, copy clarity, and brand consistency.",
-    },
-    selectedPresets: { default: "ux" },
+      "Scopes the page, then chains a copy pass and a visual-design pass before handing you a live preview.",
+    workflowId: "builtin://landing-page",
+    workflowParams: { mode: "auto", ask: true },
     accent: "fuchsia",
   },
   {

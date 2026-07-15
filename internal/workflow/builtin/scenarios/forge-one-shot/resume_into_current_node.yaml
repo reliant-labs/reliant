@@ -1,0 +1,50 @@
+# Resume-into-current-node (Task 4) on a real multi-get-it-right chain.
+#
+# The user paused while the FINAL get-it-right loop (production_polish) was
+# running, then sent a message. Resume must re-enter production_polish — the
+# currently-active node — and continue to the launch_preview handoff. It must NOT
+# restart from scope/scaffold or re-run the earlier get-it-right passes.
+#
+# Mirrors the runtime resume-at-checkpoint path (resolveResumeTarget /
+# resume_test.go TestDynamicWorkflow_Resume_EntersAtCheckpointNode): a new run
+# begins at the checkpointed node, earlier node outputs are not reconstructed, so
+# the workflow's cross-phase edge refs are all has()-guarded. start_at models it.
+
+name: resume_into_current_node
+description: Pausing during production_polish resumes into that node, not from node zero
+
+start_at: production_polish
+
+# Earlier phases already ran in the paused run; their outputs are not
+# reconstructed on resume. production_polish's outbound edges reference only
+# nodes.production_polish, so no upstream state is needed to proceed.
+state:
+  scaffold_and_verify:
+    strategy: pass
+  frontend_polish:
+    strategy: pass
+
+events:
+  - node: production_polish
+    output:
+      response_text: "Production polish resumed from where it paused and completed."
+      strategy: pass
+      eval_strategy: pass
+      stuck: false
+      iterations: 4
+
+  - node: launch_preview
+    output:
+      response_text: "App started; posted the preview URL."
+
+expect:
+  outcome: completed
+  reached:
+    - production_polish
+    - launch_preview
+    - success
+  not_reached:
+    - scope_conversation
+    - scaffold_and_verify
+    - frontend_polish
+    - mvp_backend

@@ -209,3 +209,30 @@ func TestCELContextBuilder_ImplementsCELEvaluator(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, boolResult)
 }
+
+// TestPreviewURLTemplateResolvesInInject verifies a TERMINAL/HANDOFF node's
+// inject/save_message content can template the session's preview URL. The
+// preview_url_template input is injected at chat-send time (see
+// services.injectSessionDaemonID); here we confirm it resolves in a node's
+// content string, including substituting a concrete port via CEL's string
+// .replace (ext.Strings) — the shape a workflow author writes.
+func TestPreviewURLTemplateResolvesInInject(t *testing.T) {
+	builder := NewCELContextBuilder().
+		WithWorkflow("wf-1", "test-workflow").
+		WithInputs(map[string]interface{}{
+			"preview_url_template": "https://{port}-abc123.workspaces.reliantapi.com",
+		})
+
+	var eval wfcel.CELEvaluator = builder
+
+	// Pure lookup — the raw template with its {port} placeholder.
+	tmpl, err := eval.EvalString("{{ inputs.preview_url_template }}")
+	require.NoError(t, err)
+	assert.Equal(t, "https://{port}-abc123.workspaces.reliantapi.com", tmpl)
+
+	// Realistic inject/save_message content: interpolate a resolved URL for the
+	// detected port into a deliverable message.
+	msg, err := eval.EvalString(`Your app is live at {{ inputs.preview_url_template.replace("{port}", "3000") }}`)
+	require.NoError(t, err)
+	assert.Equal(t, "Your app is live at https://3000-abc123.workspaces.reliantapi.com", msg)
+}

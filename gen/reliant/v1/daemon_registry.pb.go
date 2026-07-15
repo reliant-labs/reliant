@@ -482,8 +482,13 @@ type DaemonInfo struct {
 	// Hysteresis-smoothed pressure bit: asserts at >= 85% of the limit,
 	// clears below 75%.
 	MemoryPressure bool `protobuf:"varint,12,opt,name=memory_pressure,json=memoryPressure,proto3" json:"memory_pressure,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// TCP ports detected listening on loopback/wildcard inside the workspace
+	// (from the daemon heartbeat, stored on the attachment record like the
+	// memory telemetry above). The UI renders these as preview affordances.
+	// Empty for local daemons and while nothing is listening.
+	DetectedPorts []uint32 `protobuf:"varint,13,rep,packed,name=detected_ports,json=detectedPorts,proto3" json:"detected_ports,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
@@ -600,6 +605,13 @@ func (x *DaemonInfo) GetMemoryPressure() bool {
 	return false
 }
 
+func (x *DaemonInfo) GetDetectedPorts() []uint32 {
+	if x != nil {
+		return x.DetectedPorts
+	}
+	return nil
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -630,7 +642,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"U\n" +
 	"\x14ResumeDaemonResponse\x12\x18\n" +
 	"\aresumed\x18\x01 \x01(\bR\aresumed\x12#\n" +
-	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\x8d\x04\n" +
+	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\"\xb4\x04\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -646,7 +658,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x11memory_used_bytes\x18\n" +
 	" \x01(\x04R\x0fmemoryUsedBytes\x12,\n" +
 	"\x12memory_limit_bytes\x18\v \x01(\x04R\x10memoryLimitBytes\x12'\n" +
-	"\x0fmemory_pressure\x18\f \x01(\bR\x0ememoryPressure*\x7f\n" +
+	"\x0fmemory_pressure\x18\f \x01(\bR\x0ememoryPressure\x12%\n" +
+	"\x0edetected_ports\x18\r \x03(\rR\rdetectedPorts*\x7f\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +

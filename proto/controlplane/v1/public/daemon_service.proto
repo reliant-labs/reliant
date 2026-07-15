@@ -26,6 +26,13 @@ service DaemonService {
   rpc RemovePortAccess(RemovePortAccessRequest) returns (RemovePortAccessResponse) {}
   rpc ListPortAccessRules(ListPortAccessRulesRequest) returns (ListPortAccessRulesResponse) {}
 
+  // SetDefaultPortAccess sets the workspace-level default port-access mode
+  // (Daemon.default_port_access) — the policy the preview proxy applies to
+  // ports that have no explicit PortAccessRule. Only the daemon owner may call
+  // it. Only AUTHENTICATED and PUBLIC are valid; a PUBLIC default makes every
+  // unruled listening port world-reachable by URL.
+  rpc SetDefaultPortAccess(SetDefaultPortAccessRequest) returns (SetDefaultPortAccessResponse) {}
+
   // GetCurrentDaemonImage returns the container image the control-plane would
   // assign to a freshly created managed daemon right now. The UI compares it
   // to each daemon's Daemon.image to render an "update available" affordance
@@ -139,6 +146,19 @@ message ListPortAccessRulesRequest {
 
 message ListPortAccessRulesResponse {
   repeated PortAccessRule rules = 1;
+}
+
+message SetDefaultPortAccessRequest {
+  string daemon_id = 1;
+  // default_access_mode must be PORT_ACCESS_MODE_AUTHENTICATED or
+  // PORT_ACCESS_MODE_PUBLIC. TOKEN/UNSPECIFIED are rejected (a default has no
+  // token to carry).
+  PortAccessMode default_access_mode = 2;
+}
+
+message SetDefaultPortAccessResponse {
+  // The updated daemon, with default_port_access reflecting the new value.
+  Daemon daemon = 1;
 }
 
 message GetCurrentDaemonImageRequest {}

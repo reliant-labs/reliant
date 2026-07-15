@@ -115,6 +115,12 @@ message DaemonHeartbeat {
   uint64 memory_used_bytes = 2; // cgroup memory.current
   uint64 memory_limit_bytes = 3; // cgroup memory.max (0 = unlimited/unknown)
   bool memory_pressure = 4; // hysteresis-smoothed: asserts >= 85% of limit, clears < 75%
+  // TCP ports with a LISTEN socket on loopback/wildcard inside the workspace
+  // netns (deduped v4/v6, sorted, daemon's own ports excluded) — the set the
+  // in-pod preview forwarder can reach. Piggybacked here the same way the
+  // memory fields are; empty for daemons without /proc/net/tcp (macOS,
+  // local daemons) and for local daemons that don't run the port watcher.
+  repeated uint32 detected_ports = 5;
 }
 
 // ============================================

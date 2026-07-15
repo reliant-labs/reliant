@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/netports"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -89,6 +91,12 @@ type daemonClient struct {
 	// so heartbeats can carry used/limit/pressure telemetry to the gateway.
 	// Inert on hosts without cgroup v2 accounting (macOS, local daemons).
 	memWatcher *cgroupmem.Watcher
+
+	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
+	// sockets so heartbeats can carry the detected ports (the preview
+	// affordance in the UI). Only set for pod-hosted daemons — nil for
+	// local daemons, and all accessors are nil-safe.
+	portWatcher *netports.Watcher
 }
 
 type StartOptions struct {
@@ -114,6 +122,51 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// If GIT_TOKEN is set (injected by workspace reconciler in cloud mode),
 	// configure git credential-store so all git operations use the token.
 	setupGitCredentials()
+
+	// Preview forwarder: in-pod reverse proxy that lets the workspace-proxy
+	// reach loopback-bound user dev servers (see preview_forwarder.go). Runs
+	// only where a pod-facing surface exists: cloud pods set
+	// DAEMON_FRONTEND_PORT (workspace-controller pod spec), and server-mode
+	// daemons are always pod-hosted. Local/mac daemons skip it — nothing
+	// routes to their loopback, and binding :9191 could collide with the
+	// docker-compose daemon-gateway on dev machines. Startup failure is
+	// logged, never fatal: a broken preview surface must not take down tool
+	// execution.
+	if os.Getenv("DAEMON_FRONTEND_PORT") != "" || opts.BootstrapConfig.ServerMode {
+		// Reserve the daemon's own RPC listen port so a preview URL can never
+		// route into the Connect/gRPC surface (the forwarder adds its own
+		// bound port automatically).
+		rpcPort := opts.BootstrapConfig.ListenPort
+		if rpcPort == 0 {
+			rpcPort = 9190
+		}
+		forwarder := NewPreviewForwarder(rpcPort)
+		if err := forwarder.Start(previewListenAddr(os.Getenv)); err != nil {
+			logging.Warn(logPrefix+" preview forwarder failed to start (previews of loopback-bound servers will 502)", "error", err)
+		} else {
+			logging.Info(logPrefix+" preview forwarder started", "addr", forwarder.Addr().String())
+			go func() {
+				<-ctx.Done()
+				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = forwarder.Shutdown(shutdownCtx)
+			}()
+		}
+
+		// Detect listening user ports (loopback/wildcard LISTEN sockets) and
+		// piggyback them on heartbeats — same lifecycle as the forwarder they
+		// feed, and same pod-only gate: on a local dev machine the listener
+		// table is the user's whole machine, which is noise (and none of it
+		// is proxy-reachable anyway). Inert without /proc/net/tcp.
+		previewPort := DefaultPreviewPort
+		if addr := previewListenAddr(os.Getenv); strings.HasPrefix(addr, ":") {
+			if p, err := strconv.Atoi(addr[1:]); err == nil {
+				previewPort = p
+			}
+		}
+		client.portWatcher = netports.NewWatcher(netports.DefaultPollInterval, rpcPort, previewPort)
+		go client.portWatcher.Run(ctx)
+	}
 
 	if opts.BootstrapConfig.ServerMode {
 		logging.Info(logPrefix+" Starting in server mode (listening for gateway)",
@@ -672,6 +725,11 @@ func (d *daemonClient) runHeartbeats(ctx context.Context) {
 			hb.MemoryLimitBytes = sample.LimitBytes
 			hb.MemoryPressure = sample.Pressure
 		}
+		// Piggyback detected listener ports (pod-hosted daemons only; the
+		// watcher is nil-safe and ok stays false until the first scan).
+		if ports, ok := d.portWatcher.Latest(); ok {
+			hb.DetectedPorts = ports
+		}
 		return d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		})
@@ -692,6 +750,14 @@ func (d *daemonClient) runHeartbeats(ctx context.Context) {
 			// watcher) never fires.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logging.Warn(logPrefix+" Failed to send pressure heartbeat", "error", err)
+				return
+			}
+		case <-d.portWatcher.Changed():
+			// Listener set changed — surface the new port (or its
+			// disappearance) immediately so the UI preview affordance tracks
+			// dev-server starts without a heartbeat-interval lag.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logging.Warn(logPrefix+" Failed to send port-change heartbeat", "error", err)
 				return
 			}
 		}

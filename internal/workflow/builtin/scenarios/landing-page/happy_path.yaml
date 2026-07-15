@@ -1,0 +1,53 @@
+# Happy path: the full content → style → handoff chain.
+#
+# scope_conversation → content_pass (get-it-right, content lens) →
+# style_pass (get-it-right, style lens) → handoff. Both review loops pass, so
+# the workflow reaches the handoff and never routes to stuck/failed.
+
+name: happy_path
+description: scope → content-loop → style-loop → handoff, all reviews pass
+
+inputs:
+  mode: auto
+  ask: false
+
+events:
+  - node: scope_conversation
+    output:
+      response_text: "Scoped the landing page and wrote LANDING_PLAN.md."
+
+  # Content lens (get-it-right sub-workflow, black-box mocked)
+  - node: content_pass
+    output:
+      response_text: "Copy and structure in place."
+      strategy: pass
+      eval_strategy: pass
+      review_grade: pass
+      stuck: false
+      iterations: 2
+
+  # Style lens (get-it-right sub-workflow, black-box mocked)
+  - node: style_pass
+    output:
+      response_text: "Visual design polished."
+      strategy: pass
+      eval_strategy: pass
+      review_grade: pass
+      stuck: false
+      iterations: 3
+
+  # Handoff agent: serves the page and posts the preview URL
+  - node: handoff
+    output:
+      response_text: "Your landing page is live at the preview URL."
+
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - content_pass
+    - style_pass
+    - handoff
+  not_reached:
+    - stuck
+    - failed
