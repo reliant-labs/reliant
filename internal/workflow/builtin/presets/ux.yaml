@@ -21,4 +21,4 @@ params:
   - component_library
   model:
     tags: [flagship]
-    thinking: high
+    thinking_level: high
