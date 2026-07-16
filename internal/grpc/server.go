@@ -155,7 +155,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService := services.NewScenarioService(database, router)
-	packageCommandsService := services.NewPackageCommandsService(database)
+	// PackageCommands is a browser-facing workspace service: on a cloud daemon
+	// (router != nil) its filesystem discovery must run on the daemon, so it uses
+	// the proxy. Without this it silently returned an empty command list because
+	// discovery ran against the api-server's filesystem. See pickPackageCommandsService.
+	packageCommandsService := pickPackageCommandsService(router, database)
 
 	streamingService := services.NewStreamingService(database, cfg.StreamingHub, cfg.UserUpdateHub, cfg.ChatUpdateHub)
 
