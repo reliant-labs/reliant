@@ -12,6 +12,10 @@ NC='\033[0m' # No Color
 
 echo -e "${YELLOW}Running pre-commit hooks...${NC}"
 
+# Block commits that introduce locally-forbidden strings (patterns in the
+# gitignored .forbidden-strings file; no-op if that file is absent).
+"$(git rev-parse --show-toplevel)/.githooks/check-forbidden-strings.sh"
+
 # Check if Makefile exists
 if [ ! -f Makefile ]; then
     echo -e "${RED}Error: Makefile not found${NC}"

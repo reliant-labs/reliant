@@ -321,3 +321,5 @@ goroutines.txt
 console.logs
 
 web/data
+# Local-only patterns for the forbidden-strings pre-commit guard (never committed)
+.forbidden-strings
