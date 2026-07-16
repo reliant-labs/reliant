@@ -21,6 +21,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/observability"
+	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -842,6 +843,59 @@ func TestReconciler_StuckActivity_TerminateFallbackOnResetError(t *testing.T) {
 	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
 	require.Len(t, repo.savedMessages, 1)
 	assert.Contains(t, repo.savedMessages[0].content, "automatic recovery was attempted")
+}
+
+// A workflow that keeps re-sticking at the same point (history not growing) is
+// reset only up to the bounded-guard limit; beyond it the reconciler stops
+// resetting and terminates + marks failed (routing the next user message to the
+// coarse restart), instead of resetting forever.
+func TestReconciler_StuckActivity_ResetGuardBoundsRepeatedResets(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			// HistoryLength defaults to 0 and never grows → no forward progress.
+			"wf-1": {resp: makeStuckActivityDescribeResp("run-1", "act-1", 5*time.Minute)},
+		},
+		historyEvents: makeHistoryWithActivity("act-1"),
+	}
+	tempClient.setPollersActive(true)
+
+	// stuckTestConfig(2): the debounce confirms on the SECOND consecutive
+	// poller-active pass. Two passes per confirmation is the reliable pattern
+	// (the first sets firstObserved, the second confirms after real wall-clock
+	// elapsed) — a single-pass confirmation is flaky against the 1ns test window.
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	reconciler.SetResetGuard(v2workflow.NewResetAttemptGuard(2))
+	wf := runningWorkflow()
+
+	exhaustedBefore := anomalyCount(anomalyResetAttemptsExhausted)
+
+	// confirmOnce runs the observe pass then the confirm pass, returning the
+	// confirming pass's result. Each successful reset clears the observation, so
+	// every confirmation restarts the two-pass debounce.
+	confirmOnce := func() *ReconciliationResult {
+		reconciler.ReconcileWorkflow(context.Background(), wf) // observe
+		return reconciler.ReconcileWorkflow(context.Background(), wf)
+	}
+
+	// The guard allows 2 resets without progress.
+	for i := 1; i <= 2; i++ {
+		result := confirmOnce()
+		require.NoError(t, result.Error)
+		assert.True(t, result.RecoveredByReset, "confirmation %d should reset", i)
+	}
+	require.Len(t, tempClient.resetCalls, 2)
+	assert.Empty(t, tempClient.terminateCalls, "no terminate while resets still allowed")
+
+	// Third confirmation: guard exhausted → skip reset, terminate + mark failed.
+	result := confirmOnce()
+	require.NoError(t, result.Error)
+	assert.False(t, result.RecoveredByReset)
+	assert.Len(t, tempClient.resetCalls, 2, "no 3rd reset once the guard gives up")
+	require.Len(t, tempClient.terminateCalls, 1, "bounded workflow is terminated")
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, exhaustedBefore+1, anomalyCount(anomalyResetAttemptsExhausted),
+		"the reset_attempts_exhausted anomaly is recorded")
 }
 
 func TestReconciler_StuckWorkflowTask_ResetToLastWorkflowTaskCompleted(t *testing.T) {

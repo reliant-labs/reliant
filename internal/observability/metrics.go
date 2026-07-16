@@ -251,6 +251,8 @@ var (
 	//   progress_stall_confirmed - stall persisted through the confirmation
 	//                              window; terminated + marked failed
 	//   reset_failed_terminated  - stuck-task reset failed; terminate fallback
+	//   reset_attempts_exhausted - reset-attempt guard gave up (repeated resets
+	//                              made no progress); terminate + coarse-restart
 	// Every increment is paired with a Sentry-visible ERROR log; alert on any
 	// sustained non-zero rate.
 	ReconcilerAnomaliesTotal = prometheus.NewCounterVec(
@@ -258,7 +260,7 @@ var (
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted).",
 		},
 		[]string{"class"},
 	)

@@ -60,13 +60,13 @@ func isPreviewablePort(p daemon.PortInfo) bool {
 // that env var. This function is the fallback used where that env is NOT
 // reachable — most importantly the workflow engine, which runs in the worker
 // process (not the daemon container) and so rebuilds the template from the same
-// RELIANT_PROXY_HOST / WORKSPACE_BASE_DOMAIN config the proxy is configured with.
+// PROXY_HOST / WORKSPACE_BASE_DOMAIN config the proxy is configured with.
 //
 // It mirrors the URL-builder SELECTION in
 // control-plane/internal/app/providers.go so the template can't drift from what
 // the gateway actually serves:
 //
-//	RELIANT_PROXY_HOST set   -> path-based dev builder (DevPathURLBuilder):
+//	PROXY_HOST set           -> path-based dev builder (DevPathURLBuilder):
 //	                            http://<proxyHost>/proxy/<daemonID>/{port}/
 //	WORKSPACE_BASE_DOMAIN set -> subdomain builder (SubdomainURLBuilder) with
 //	                            optional WORKSPACE_URL_SCHEME (default https) and
@@ -81,7 +81,7 @@ func PreviewURLTemplate(env config.Environment, daemonID string) string {
 		return ""
 	}
 	// PROXY_HOST wins → path-based routing (local k3d without wildcard DNS).
-	if host := os.Getenv("RELIANT_PROXY_HOST"); host != "" {
+	if host := os.Getenv("PROXY_HOST"); host != "" {
 		return fmt.Sprintf("http://%s/proxy/%s/{port}/", host, daemonID)
 	}
 	base := os.Getenv("WORKSPACE_BASE_DOMAIN")

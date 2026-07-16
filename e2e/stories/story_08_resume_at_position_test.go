@@ -101,13 +101,19 @@ edges:
 //
 // This is the pitch-deck incident test: the prior run finished phase one
 // (plan_step) and was interrupted inside phase two (work_loop, iteration 1).
-// The resumed run must enter work_loop directly at the recorded iteration —
-// the scripted LLM proves no re-planning happened (no PHASE-ONE-PLANNER
-// request after resume) — and the dangling tool call left by the kill must be
-// stubbed as "interrupted / outcome unknown" before the first resumed LLM
-// call.
+// Because the terminated execution still has replayable history, SendMessage
+// takes the RESET-AND-REPLAY path (not the coarse fresh-restart-with-
+// checkpoint): the run resets to the last decision point and replays, re-
+// entering work_loop directly at iteration 1 — the scripted LLM proves no
+// re-planning happened (no PHASE-ONE-PLANNER request after resume). Reset-and-
+// replay re-executes the interrupted activity FRESH (the mid-flight `sleep`
+// tool re-runs to a real result), rather than leaving a dangling tool call to
+// be stubbed.
 func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
-	t.Parallel()
+	// Not t.Parallel(): reset-and-replay re-runs the interrupted `sleep` tool on
+	// the resumed run, so this story is CPU/worker-heavy. Running it in the serial
+	// phase (before the parallel batch) keeps the shared dev-server/worker from
+	// saturating and tripping the harness completion wait under load.
 
 	script := NewScriptedLLM(
 		// Phase one: planning turn, no tools -> plan_step completes.
@@ -122,7 +128,7 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 		// with the tool_use persisted but no tool_result.
 		Turn{
 			Text:      "Working on step two.",
-			ToolCalls: []message.ToolCall{ToolCall("call-sleep", tools.ShellToolName, `{"command":"sleep 10"}`)},
+			ToolCalls: []message.ToolCall{ToolCall("call-sleep", tools.ShellToolName, `{"command":"sleep 3"}`)},
 		},
 	)
 
@@ -219,7 +225,7 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 
 	// 5. Thread continuity: the resumed LLM call sees the prior run's plan
 	//    output and the user's resume message.
-	var sawPlan, sawContinue, sawStub bool
+	var sawPlan, sawContinue, sawSleepResult bool
 	for _, m := range resumedCall.Messages {
 		for _, tc := range m.TextContents() {
 			if strings.Contains(tc.Text, "Plan ready: do the work.") {
@@ -229,21 +235,23 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 				sawContinue = true
 			}
 		}
-		// 6. The dangling tool call from the killed run (call-sleep had no
-		//    recorded result) must be stubbed as interrupted/outcome-unknown
-		//    before the first resumed LLM call.
+		// 6. Reset-and-replay re-executes the interrupted activity FRESH. The
+		//    kill landed while call-sleep was mid-flight (tool_use persisted, no
+		//    result); the resumed run re-runs execute_tools rather than leaving a
+		//    dangling tool call, so by the first resumed LLM call the tool has a
+		//    real (non-error) result — not an "interrupted / outcome unknown"
+		//    stub.
 		for _, tr := range m.ToolResults() {
 			if tr.ToolCallID == "call-sleep" {
-				sawStub = true
-				assert.True(t, tr.IsError, "interruption stub must be error-shaped")
-				assert.Contains(t, tr.Content, "interrupted",
-					"stub must say the tool call was interrupted")
+				sawSleepResult = true
+				assert.False(t, tr.IsError,
+					"reset-and-replay re-runs the interrupted tool fresh, so its result is a real success, not an interruption stub")
 			}
 		}
 	}
 	assert.True(t, sawPlan, "resumed history must carry the prior run's plan message")
 	assert.True(t, sawContinue, "resumed history must end with the user's resume message")
-	assert.True(t, sawStub, "dangling tool call from the killed run must get a stub tool_result")
+	assert.True(t, sawSleepResult, "the interrupted tool call must be resolved by re-running it fresh on the resumed run")
 
 	// 7. Completion clears the position checkpoint — the NEXT message starts
 	//    a fresh run at graph entry.
