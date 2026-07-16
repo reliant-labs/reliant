@@ -151,6 +151,11 @@ events:
       stdout: ""
       stderr: ""
 
+  # Phase 7: Handoff — serve the deck and post the preview URL
+  - node: handoff
+    output:
+      response_text: "Deck started; posted the preview URL."
+
 expect:
   outcome: completed
   reached:
@@ -163,3 +168,4 @@ expect:
     - slide_pipeline
     - slides_loop
     - complete
+    - handoff

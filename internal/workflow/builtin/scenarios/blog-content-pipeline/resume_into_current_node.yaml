@@ -1,0 +1,50 @@
+# Resume-into-current-node (Task 4): pausing during the de-AI (style/voice) loop
+# re-enters it via resume, not a restart.
+#
+# The user paused while the de_ai get-it-right loop — the style/voice pass — was
+# running, then sent a message. Resume must re-enter de_ai (the currently-active
+# node) and continue to the handoff. It must NOT restart from context_intake or
+# re-run writing/evaluation/etc.
+#
+# This is the resume-at-checkpoint mechanism (start_at models resolveResumeTarget /
+# resume_test.go): a new run begins directly at the checkpointed node. The de_ai
+# loop re-derives its state from the assembled post on disk, so no upstream node
+# outputs need reconstructing — which is why the pipeline's cross-phase refs are
+# all has()-guarded. (blog also has a router-based start_from_de_ai scenario; this
+# one exercises the resume/start_at path specifically.)
+
+name: resume_into_current_node
+description: Pausing during the de-AI (style) loop resumes into de_ai, not from node zero
+
+start_at: de_ai
+
+events:
+  - node: de_ai
+    output:
+      response_text: "De-AI voice pass resumed from where it paused and completed."
+      review_grade: pass
+      eval_strategy: pass
+      strategy: pass
+      iterations: 3
+
+  - node: reddit_summary
+    output:
+      response_text: "Reddit summary written."
+
+expect:
+  outcome: completed
+  reached:
+    - de_ai
+    - reddit_summary
+    - validate_artifacts
+    - complete
+    - handoff
+  not_reached:
+    - context_intake
+    - classify
+    - topic_discovery
+    - research_brief
+    - writing
+    - evaluation
+    - visual_generation
+    - distribution

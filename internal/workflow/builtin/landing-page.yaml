@@ -1,0 +1,376 @@
+name: landing-page
+apiVersion: "0.0.5"
+description: |
+  Build a polished landing page by chaining two get-it-right review loops and
+  ending in a plain handoff agent that serves the page and hands the user a URL.
+
+  Phase 1: SCOPE   — a natural conversation to understand the product, audience,
+           message, and brand. Writes LANDING_PLAN.md. Uses scope-conversation
+           (no checks — pure conversation).
+  Phase 2: CONTENT — get-it-right with a CONTENT lens: build the page and iterate
+           on copy, messaging, value proposition, information architecture, and
+           factual accuracy. This is the "is it saying the right thing" gate.
+  Phase 3: STYLE   — get-it-right with a STYLE lens: the visual-design pass. Loads
+           the frontend-design skill and reviews visual hierarchy, responsiveness,
+           brand consistency, and anti-slop rules against the running page.
+  Phase 4: HANDOFF — a plain agent (no deliverable schema) that starts the page on
+           a known port and hands the user the deterministic preview URL, then the
+           chat stays interactive so the user can keep iterating (transition_to).
+
+  The two get-it-right nodes are ordinary sub-workflow nodes chained in sequence —
+  the same pattern forge-migrate and forge-one-shot use. Each carries its own
+  review_instructions (the lens), preset, and retry budget.
+
+# When the pipeline completes the chat permanently transitions to a plain
+# interactive agent, so a user message after the handoff continues the
+# conversation instead of restarting the pipeline (the "final checkpoint").
+transition_to: builtin://agent
+
+entry: [scope_conversation]
+
+inputs:
+  model:
+    type: model
+    description: Model for all phases
+    default:
+      tags: [flagship]
+
+  mode:
+    type: enum
+    ui: toolbar
+    default: auto
+    description: Execution mode for agent steps
+    enum: [manual, auto]
+
+  ask:
+    type: boolean
+    ui: toolbar
+    default: true
+    description: Pause for user review between phases
+
+  working_directory:
+    type: string
+    default: "."
+    description: Working directory for the landing page project
+
+outputs:
+  project_root: "{{inputs.working_directory}}"
+
+nodes:
+  # ─── Phase 1: Scope ─────────────────────────────────────────────────
+  #
+  # Natural conversation to pin down the product, audience, message, and
+  # brand. No checks — this is pure conversation. Writes LANDING_PLAN.md.
+
+  - id: scope_conversation
+    type: workflow
+    ref: builtin://scope-conversation
+    passthrough: [model, mode, ask]
+    args:
+      working_directory: "{{inputs.working_directory}}"
+      question_areas: |
+        **Product & Message:**
+        - What is the product/service, and what is the single most important thing a visitor should understand?
+        - Who is the audience? What problem does this solve for them?
+        - What is the primary call to action? (sign up, buy, book a demo, join waitlist)
+        - Any specific claims, stats, testimonials, or proof points to feature?
+
+        **Brand & Visual Style:**
+        - Do you have an existing site or brand guidelines to match? (share URLs)
+        - Any reference sites whose look you like?
+        - Brand colors, fonts, logo? Overall tone (minimal/bold/corporate/playful)?
+
+        If the user's initial message already covers these, do NOT re-ask. Infer
+        reasonable defaults for anything not mentioned.
+      plan_filename: "LANDING_PLAN.md"
+      plan_template: |
+        - **Message:** the one-sentence value proposition
+        - **Audience:** who it's for and the problem it solves
+        - **Primary CTA:** the single action the page drives toward
+        - **Sections:** the page outline (hero, features, proof, CTA, etc.)
+        - **Proof points:** stats/testimonials/logos to include (with sources if factual)
+        - **Brand & style:** colors, fonts, tone, reference sites
+
+        After writing LANDING_PLAN.md, tell the user the plan is ready and you'll build next.
+      max_questions: 8
+      max_turns: 3
+      context_prompt: |
+        ## Scope a Landing Page
+
+        You are helping the user plan a landing page. The goal is a single,
+        focused page that communicates one clear message and drives one action.
+        Keep scoping tight — a landing page is not a whole app.
+    thread:
+      mode: inherit
+
+  # ─── Phase 2: Content lens (get-it-right) ───────────────────────────
+  #
+  # Build the page and iterate on WHAT IT SAYS: copy, messaging, value
+  # proposition, information architecture, and factual accuracy. The style
+  # comes next — this loop is about substance, not polish.
+
+  - id: content_pass
+    type: workflow
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
+    args:
+      implementer_preset: ux
+      max_retries: 4
+      review_instructions: |
+        You are reviewing the CONTENT of a landing page — what it says, not how it
+        looks. Style is a separate later pass; do NOT fail on visual polish here.
+
+        **Pass if:**
+        - The hero communicates the core value proposition in one clear, specific line
+          (no vague "the future of X" filler)
+        - The page follows LANDING_PLAN.md: message, audience, sections, and the
+          single primary CTA are all present and coherent
+        - Copy is concrete and benefit-led — it speaks to the audience's problem,
+          not a feature dump
+        - Every factual claim (stats, testimonials, logos) matches its source in
+          LANDING_PLAN.md; nothing is invented
+        - Information architecture flows: hero → why it matters → proof → CTA, with
+          no dead ends or duplicated sections
+        - The copy reads like a human wrote it — no AI tells (leverage, seamless,
+          robust, "not just X but Y", "in today's landscape")
+
+        **Do NOT fail because:**
+        - Spacing, color, typography, or responsiveness need work (style pass handles it)
+        - Imagery is placeholder
+
+        **Only fail if:**
+        - The message is unclear or off-plan, the CTA is missing/ambiguous, claims
+          are unsourced or fabricated, or the copy is generic AI slop
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Build the Landing Page — Content First
+
+          Read `LANDING_PLAN.md` in `{{inputs.working_directory}}` — it has the message,
+          audience, sections, CTA, and proof points from the scoping conversation.
+
+          Build the landing page now, but this pass is about SUBSTANCE, not polish:
+          1. Nail the hero: one specific, benefit-led value proposition line
+          2. Write the sections from the plan with concrete, human copy — speak to the
+             audience's problem, not a feature list
+          3. Wire the single primary CTA prominently
+          4. Use only the proof points in LANDING_PLAN.md — never invent stats or quotes
+          5. Keep the information architecture clean: hero → why → proof → CTA
+
+          Structure the project so it can be served locally (a single `index.html`, or a
+          Vite/Next project — your call based on the plan). A rough visual is fine here;
+          the next pass polishes the design.
+
+          Work in `{{inputs.working_directory}}`.
+    save_message:
+      display_style: success
+      role: assistant
+      content: |
+        ## Content Pass Complete
+        The landing page copy and structure are in place ({{has(output.iterations) ? output.iterations : '?'}} iteration(s)).
+        Next: a visual-design pass to make it look as good as it reads.
+
+  # ─── Phase 3: Style lens (get-it-right) ─────────────────────────────
+  #
+  # The visual-design pass. Loads the frontend-design skill and reviews the
+  # RUNNING page for visual hierarchy, responsiveness, brand consistency, and
+  # anti-slop rules. The implementer serves the page and audits it visually.
+
+  - id: style_pass
+    type: workflow
+    ref: builtin://get-it-right
+    passthrough: [model, mode, ask]
+    args:
+      implementer_preset: ux
+      max_retries: 5
+      app_port: 4321
+      start_app_command: "cd {{inputs.working_directory}} && python3 -m http.server 4321 --bind 0.0.0.0"
+      review_instructions: |
+        You are reviewing the VISUAL DESIGN of a landing page. The copy is already
+        locked from the content pass — do NOT re-litigate messaging. Judge how it LOOKS.
+
+        Load the design discipline before reviewing — do not review from memory:
+        `reliant forge skill load frontend/design` (frontend-design). Judge against it.
+
+        **Pass if:**
+        - Clear visual hierarchy: the hero headline and primary CTA dominate; the eye
+          is led down the page in the intended order
+        - Type scale has a real floor and range — body text is comfortably readable,
+          headings are decisively larger; no timid, samey sizing
+        - Restrained, deliberate color and type system — brand colors from LANDING_PLAN.md,
+          not arbitrary defaults; consistent spacing rhythm
+        - Fully responsive: nothing overflows, truncates, or collapses on mobile widths;
+          verified at narrow and wide viewports
+        - Accessible: text contrast meets WCAG AA (4.5:1); interactive elements are obvious
+        - It looks like a real, shipped product page
+
+        **Anti-slop — fail if you see the AI look:**
+        - Generic centered-everything with three identical feature cards in a row
+        - Decorative gradient blobs, corner accent lines, or emoji-as-icons everywhere
+        - Perfectly symmetric layouts with no focal point or hierarchy
+        - Hand-drawn/inline SVG blobs standing in for real design
+
+        **Visual verification is REQUIRED before passing:** the page must be served and
+        audited via Chrome DevTools (screenshot AND accessibility snapshot) at mobile and
+        desktop widths. A snapshot alone cannot catch visual/CSS issues.
+    thread:
+      mode: fork
+      inject:
+        role: user
+        content: |
+          ## Visual-Design Pass
+
+          The landing page in `{{inputs.working_directory}}` has locked copy and structure
+          from the content pass. Make it look like a real, shipped product page.
+
+          **Load the design discipline first — do not design from memory:**
+          ```bash
+          reliant forge skill load frontend/design
+          ```
+          Follow it for every visual decision: declared type/color system, scale floors,
+          restrained color, no hand-drawn SVGs. If this prompt disagrees with the skill,
+          the skill wins.
+
+          **Focus (do NOT rewrite the copy):**
+          1. Visual hierarchy — hero headline and primary CTA must dominate
+          2. Type scale with a real floor and range; consistent spacing rhythm
+          3. Brand colors/fonts from LANDING_PLAN.md, applied deliberately
+          4. Full responsiveness — verify mobile and desktop widths
+          5. Contrast and accessibility (WCAG AA)
+
+          **Visual Verification (REQUIRED before finishing):**
+          Serve the page on port 4321 bound to `0.0.0.0` (e.g. a static server for a plain
+          `index.html`, or the framework dev server with `--host 0.0.0.0`), then use Chrome
+          DevTools to `take_screenshot` AND `take_snapshot` at narrow and wide viewports,
+          and check `list_console_messages`. Do not finish without both screenshot and
+          snapshot evidence at both widths.
+
+          Work in `{{inputs.working_directory}}`.
+    save_message:
+      display_style: success
+      role: assistant
+      content: |
+        ## Style Pass Complete
+        The visual design is polished ({{has(output.iterations) ? output.iterations : '?'}} iteration(s)).
+        Next: I'll start the page so you can open it.
+
+  # ─── Phase 4: Handoff ───────────────────────────────────────────────
+  #
+  # A plain agent (no deliverable schema). Starts the finished page as a
+  # BACKGROUND process on a KNOWN port and hands the user the deterministic
+  # preview URL. Forced to auto mode so the handoff is seamless. After it
+  # finishes the chat transitions to a plain interactive agent (transition_to),
+  # so the user's next message continues iterating on the page.
+
+  - id: handoff
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: ux
+    passthrough: [model]
+    args:
+      mode: auto
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Serve the Landing Page & Hand It Off
+
+          The landing page is built and polished. Start it as a BACKGROUND process and
+          give the user a link to open it. Do NOT change code, add features, or redesign —
+          just run it and confirm it's up.
+
+          **Step 1: Free port 4321 FIRST.** The style pass served the page on 4321 and
+          nothing stopped that server, so a stale process may still be bound there. If you
+          skip this, your new server fails to bind ("address already in use") but a `curl` to
+          4321 still returns 200 from the OLD process — you would hand off a stale build and
+          never know. Kill any lingering server on 4321 BEFORE starting yours (do this first,
+          or you will kill the fresh server you are about to start):
+          ```bash
+          pkill -f 'http.server.*4321' 2>/dev/null || true
+          # if the style pass used a framework dev server instead, free the port directly:
+          fuser -k 4321/tcp 2>/dev/null || true
+          ```
+
+          **Step 2: Start the page in the BACKGROUND on port 4321, bound to 0.0.0.0.**
+          Use the shell tool with `run_in_background: true` so the server survives past this
+          turn — do NOT block on it. It MUST bind to `0.0.0.0` (not `127.0.0.1`), or the
+          proxy cannot reach it and there is no preview URL. For a plain `index.html`:
+          ```bash
+          cd {{inputs.working_directory}} && python3 -m http.server 4321 --bind 0.0.0.0
+          ```
+          For a framework dev server, pass its host/port flags to bind `0.0.0.0:4321`.
+
+          **Step 3: Confirm YOUR server is the one serving.** Check the background process you
+          just started (`bash_list`, or `bash_output` on its pid) — its output must show a
+          successful start and NOT "address already in use". A 200 from
+          `curl -sS -o /dev/null -w '%{http_code}' http://localhost:4321/` is only a
+          secondary check: a stale server answers 200 too, so it proves nothing on its own —
+          the fresh process's own output is what confirms the CURRENT build is live. If the
+          bind failed, repeat Step 1 to free the port and start again.
+
+          **Step 4: Get the preview URL and hand it to the user.** Run
+          `reliant preview-url 4321` — it prints the authoritative, externally-reachable URL
+          for port 4321 (the same URL also appears as a `Preview URL (port 4321): ...` line in
+          the `bash_list` / `bash_output` result from Step 3). Do NOT invent or guess a URL.
+          Post it as a markdown link:
+
+          **[Open your landing page](<the URL from `reliant preview-url 4321`>)**
+
+          If no proxied URL is available (a local run), fall back to `http://localhost:4321/`.
+          Then briefly tell the user the page is live and ask what they'd like to change —
+          the conversation stays open for edits.
+
+          Work in `{{inputs.working_directory}}`.
+
+  # ─── Terminal Nodes ─────────────────────────────────────────────────
+
+  - id: stuck
+    type: save_message
+    display_style: warning
+    args:
+      role: assistant
+      content: |
+        ## Stopped — Needs a Hand
+
+        A pass hit a problem outside the page itself (tooling or environment) and was
+        escalated, so the workflow stopped. See the feedback above. The project is at
+        `{{inputs.working_directory}}`.
+
+  - id: failed
+    type: save_message
+    display_style: warning
+    args:
+      role: assistant
+      content: |
+        ## Didn't Fully Pass
+
+        A pass didn't clear its review after the allotted attempts, so the workflow
+        stopped. Review the issues above. The project is at `{{inputs.working_directory}}`.
+
+edges:
+  - from: scope_conversation
+    default: content_pass
+
+  - from: content_pass
+    cases:
+      - to: stuck
+        condition: "has(nodes.content_pass.stuck) && nodes.content_pass.stuck == true"
+        label: content_stuck
+      - to: failed
+        condition: "nodes.content_pass.strategy != 'pass'"
+        label: content_failed
+    default: style_pass
+
+  - from: style_pass
+    cases:
+      - to: stuck
+        condition: "has(nodes.style_pass.stuck) && nodes.style_pass.stuck == true"
+        label: style_stuck
+      - to: failed
+        condition: "nodes.style_pass.strategy != 'pass'"
+        label: style_failed
+    default: handoff

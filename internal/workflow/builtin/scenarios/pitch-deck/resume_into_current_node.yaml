@@ -1,0 +1,65 @@
+# Resume-into-current-node (Task 4): pausing during the STYLE loop re-enters it.
+#
+# The user paused while the slides build/visual-review loop (slides_loop — the
+# style pass) was running, then sent a message. Resume must re-enter slides_loop —
+# the currently-active node — and continue to the summary and handoff. It must NOT
+# restart from scrape/research/plan/slide_pipeline.
+#
+# Mirrors the runtime resume-at-checkpoint path (resolveResumeTarget /
+# resume_test.go): a new run begins at the checkpointed node, earlier node outputs
+# are not reconstructed, and the loop re-derives its state from files/thread on
+# disk. start_at models that mid-graph entry. The slides_loop inner nodes read the
+# markdown/brand files from disk, so no upstream node state is required.
+
+name: resume_into_current_node
+description: Pausing during the slides (style) loop resumes into slides_loop, not from node zero
+
+start_at: slides_loop
+
+events:
+  - node: slides_loop.build_slides
+    output:
+      response_text: "Rebuilt React slides after resume."
+
+  - node: slides_loop.start_dev_server
+    output:
+      exit_code: 0
+      stdout: "Dev server started on http://localhost:5174"
+      stderr: ""
+
+  - node: slides_loop.visual_review
+    output:
+      response_text: "Slides pass visual review."
+      response:
+        verdict: pass
+        summary: "Clean, on-brand slides."
+        slide_issues: []
+        brand_consistency: "Colors match."
+        layout_issues: []
+        ai_visual_tells: []
+        typography_issues: []
+      completed: true
+
+  - node: slides_loop.stop_dev_server
+    output:
+      exit_code: 0
+      stdout: ""
+      stderr: ""
+
+  # Phase 7: Handoff — serve the deck and post the preview URL
+  - node: handoff
+    output:
+      response_text: "Deck started; posted the preview URL."
+
+expect:
+  outcome: completed
+  reached:
+    - slides_loop
+    - complete
+    - handoff
+  not_reached:
+    - scrape_website
+    - research_competitors
+    - founder_interview
+    - plan_deck
+    - slide_pipeline

@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -12,9 +13,9 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -41,6 +42,163 @@ func (s *ChatService) resumeInputForInterruptedRun(ctx context.Context, workflow
 		NodeID:        cp.NodeID,
 		LoopIteration: int(cp.LoopIteration),
 	}
+}
+
+// saveInterruptedResumeMessages persists the system + user messages for a resume
+// of an interrupted (Failed/Terminated) run. It runs BEFORE the reset-and-replay
+// so the resumed run reads them at its next LLM boundary (LoadMessagesForLLM
+// always reads live DB state). The saved user-message ID is returned (empty when
+// there is no user content) and reused if the resume falls back to the coarse
+// restart, so messages are persisted exactly once either way.
+func (s *ChatService) saveInterruptedResumeMessages(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SendMessageRequest],
+	thread, workflowID string,
+	systemMessages []*reliantv1.InputMessage,
+	userContent string,
+	hasUserContent bool,
+) (string, error) {
+	for _, sysMsg := range systemMessages {
+		if _, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
+			return "", connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
+		}
+	}
+	if hasUserContent || len(req.Msg.Attachments) > 0 {
+		savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
+		if err != nil {
+			return "", connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
+		}
+		return savedMsg.ID, nil
+	}
+	return "", nil
+}
+
+// markResumeAnswer wraps a plain user message that is being delivered as a
+// question answer to RESUME a canceled/failed workflow (the reset-and-replay
+// recovery path), so the resumed LLM knows its tool-call "answer" is actually a
+// post-failure resume, not a direct answer. A normal live form-answer to a
+// still-running workflow is NOT wrapped. The format is a fixed contract.
+func markResumeAnswer(userMessage string) string {
+	return "<system> workflow was canceled or failed. user resumed with message</system>: " + userMessage
+}
+
+// questionResumeResponseData builds the response_data delivered to a parked
+// ask_question's signal so the workflow's parseQuestionResponse reads answer as
+// the answer's freetext (feedback). Used only for the plain-message resume path.
+func questionResumeResponseData(answer string) (string, error) {
+	payload := map[string]interface{}{
+		"answers": []map[string]interface{}{
+			{"question": "", "selected": []string{}, "freetext": answer},
+		},
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// resumeFailedQuestionWorkflow resumes a Failed/Terminated workflow that died
+// while parked on an unanswered ask_question, by delivering the user's plain
+// message as the (marked) question answer. PauseService.SignalWithRecovery
+// reset-replays the dead run and re-sends signal.question.<id> on the new run,
+// so the rebuilt run re-parks on the same question channel and receives it —
+// preserving nested inline state (loop iteration, active sub-threads) that the
+// coarse restart would lose.
+//
+// Returns (response, resumed, presavedMessageID). When resumed is false the
+// caller falls back to the coarse restart; the question has already been
+// resolved and the message saved (presavedMessageID), so the caller reuses it.
+func (s *ChatService) resumeFailedQuestionWorkflow(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SendMessageRequest],
+	chat *db.Chat,
+	existingWorkflow *db.Workflow,
+	question *db.Question,
+	targetThread, userID, userContent string,
+	systemMessages []*reliantv1.InputMessage,
+) (*connect.Response[reliantv1.SendMessageResponse], bool, string) {
+	workflowID := existingWorkflow.ID
+
+	// The delivered answer carries the resume marker; the raw message is the
+	// user's text. Both go into the thread/answer so the resumed LLM sees the
+	// resume context.
+	marked := markResumeAnswer(userContent)
+	responseData, err := questionResumeResponseData(marked)
+	if err != nil {
+		logging.Error("Failed to build question resume response data", "error", err, "questionID", question.ID)
+		return nil, false, ""
+	}
+
+	// Resolve the DB question (so it is no longer pending regardless of outcome)
+	// and persist the messages so the resumed run reads them at its next LLM
+	// boundary.
+	if err := s.database.ResolveQuestion(ctx, question.ID, &responseData); err != nil {
+		logging.Warn("Failed to resolve question during resume", "error", err, "questionID", question.ID)
+	}
+	if err := s.database.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
+		QuestionID: question.ID,
+		ChatID:     question.ChatID,
+		WorkflowID: question.WorkflowID,
+		StepID:     question.StepID,
+		Status:     "resolved",
+	}); err != nil {
+		logging.Warn("Failed to emit question update during resume", "error", err, "questionID", question.ID)
+	}
+
+	// Persist to the QUESTION's thread — the thread the parked ask_question (and
+	// the resumed run's next LLM call within it) reads — so the marker reaches
+	// the LLM. For a nested/forked ask loop this is the sub-thread, not the root.
+	answerThread := question.ThreadID
+	if answerThread == "" {
+		answerThread = targetThread
+	}
+	for _, sysMsg := range systemMessages {
+		if _, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, answerThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
+			logging.Warn("Failed to save system message during question resume", "error", err)
+		}
+	}
+	presavedID := ""
+	if savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, answerThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), marked, &workflowID, req.Msg.Attachments, nil); err != nil {
+		logging.Warn("Failed to save resume message during question resume", "error", err)
+	} else {
+		presavedID = savedMsg.ID
+	}
+
+	// Deliver the answer. SignalWithRecovery reset-replays the dead run (honoring
+	// the reset guard) and re-sends the signal on the new run.
+	signalData := map[string]interface{}{
+		"status":        "resolved",
+		"response_data": responseData,
+	}
+	if err := s.pauseService.SignalWithRecovery(ctx, question.TemporalWorkflowID, "signal.question."+question.ID, signalData); err != nil {
+		logging.Info("Question-parked workflow not reset-resumable - coarse restart at position",
+			"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "error", err)
+		return nil, false, presavedID
+	}
+
+	if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+		logging.Warn("Failed to mark workflow running after question resume", "error", err, "workflowID", workflowID)
+	}
+	newRunID := ""
+	if st, e := s.getTemporalWorkflowState(ctx, workflowID); e == nil && st.Exists {
+		newRunID = st.RunID
+		s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, st.RunID)
+	}
+
+	logging.Info("Question-parked workflow reset-and-resumed via answer (precise nested resume)",
+		"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "newRunID", newRunID)
+
+	workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+	go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
+	return connect.NewResponse(&reliantv1.SendMessageResponse{
+		ChatId:         req.Msg.ChatId,
+		WorkflowId:     workflowID,
+		RunId:          newRunID,
+		Status:         "processing",
+		WorkflowStatus: &workflowStatus,
+		MessageId:      presavedID,
+	}), true, presavedID
 }
 
 // resurrectGhostWorkflow handles the case where a workflow exists in DB as running/paused
@@ -244,11 +402,18 @@ func (s *ChatService) SendMessage(
 	// Resume-at-position state, populated when the prior run for this chat was
 	// interrupted (failed/terminated/lost) rather than completed or
 	// user-cancelled. Decision table for the new-run start below:
-	//   failed / terminated / wedged / lost  -> resume at checkpointed position
-	//   completed                            -> fresh start
-	//   user-cancelled                       -> fresh start (thread history only)
+	//   failed / terminated / wedged  -> reset-and-replay (precise) when Temporal
+	//                                     has replayable history; else coarse
+	//                                     resume at checkpointed position
+	//   completed                     -> fresh start
+	//   user-cancelled                -> fresh start (thread history only)
 	var resumeInput *v2.ResumeInput
 	var resumeThread string
+	// Set when a resume branch already persisted the incoming messages (e.g. the
+	// reset-and-replay path saves them before reset, then falls back to coarse
+	// restart) so the new-run flow below does not double-save them.
+	var resumeMessagesSaved bool
+	var resumePresavedMessageID string
 
 	// Check workflow status to decide: resume paused, send to running, or start new
 	// This must happen atomically to avoid race conditions
@@ -602,11 +767,97 @@ func (s *ChatService) SendMessage(
 					return nil, connect.NewError(connect.CodeFailedPrecondition,
 						fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
 				}
-				// Failed/terminated/wedged run: the new run RESUMES AT POSITION
-				// (a resume should be a resume, not a full restart). The engine
-				// enters directly at the checkpointed node instead of graph
-				// entry, so entry routers never re-classify the user's
-				// "continue" message. Fall through to start the new run.
+
+				// A run that died parked on an unanswered ask_question wakes on
+				// signal.question.<id>, not signal.resume. Deliver the user's plain
+				// message as the (marked) question answer via reset-and-replay so it
+				// resumes PRECISELY (the rebuilt run re-parks on the same question
+				// channel and receives it) instead of coarse-restarting the loop.
+				var pendingQuestion *db.Question
+				if temporalErr == nil && temporalState.Exists && !temporalState.IsRunning {
+					pendingQuestion, _ = s.database.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
+				}
+				if pendingQuestion != nil && pendingQuestion.TemporalWorkflowID != "" && hasUserContent {
+					targetThread := existingWorkflow.Thread
+					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
+						targetThread = *req.Msg.TargetThread
+					}
+					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages)
+					if resumed {
+						return resp, nil
+					}
+					// Guard-exhausted / not reset-resumable: the question is already
+					// resolved and messages saved — fall through to coarse restart.
+					resumeMessagesSaved = true
+					resumePresavedMessageID = presavedID
+					resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+					resumeThread = existingWorkflow.Thread
+					break
+				}
+
+				// Failed/terminated/wedged run with a CLOSED Temporal execution
+				// that still has replayable history: prefer RESET-AND-REPLAY. The
+				// new run replays the recorded history, which rebuilds the entire
+				// (possibly nested) engine stack — so a run that died
+				// mid-nested-get-it-right resumes at the SAME review iteration
+				// with reviewer feedback intact, instead of the coarse
+				// flat-checkpoint restart that can only re-enter a TOP-LEVEL node
+				// and restarts the nested loop at iteration 0. We fall back to the
+				// coarse restart only when Temporal has nothing to replay (ghost),
+				// the bounded guard has given up (deterministic failure), or the run
+				// was parked on an unanswered question (handled above).
+				if temporalErr == nil && temporalState.Exists && !temporalState.IsRunning && pendingQuestion == nil {
+					targetThread := existingWorkflow.Thread
+					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
+						targetThread = *req.Msg.TargetThread
+					}
+					// Persist messages BEFORE reset so the resumed run reads them.
+					presavedID, saveErr := s.saveInterruptedResumeMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					if saveErr != nil {
+						return nil, saveErr
+					}
+					resumeMessagesSaved = true
+					resumePresavedMessageID = presavedID
+
+					newRunID, resumeErr := s.pauseService.ResumeInterruptedWorkflow(ctx, workflowID, req.Msg.ChatId)
+					if resumeErr == nil {
+						s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, newRunID)
+						logging.Info("Interrupted workflow reset-and-resumed (precise nested resume)",
+							"chatID", req.Msg.ChatId,
+							"workflowID", workflowID,
+							"newRunID", newRunID,
+						)
+						workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+						go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
+						return connect.NewResponse(&reliantv1.SendMessageResponse{
+							ChatId:         req.Msg.ChatId,
+							WorkflowId:     workflowID,
+							RunId:          newRunID,
+							Status:         "processing",
+							WorkflowStatus: &workflowStatus,
+							MessageId:      presavedID,
+						}), nil
+					}
+					if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) {
+						logging.Info("Interrupted workflow not reset-resumable - coarse restart at position",
+							"chatID", req.Msg.ChatId,
+							"workflowID", workflowID,
+							"reason", resumeErr,
+						)
+					} else {
+						logging.Error("Reset-and-replay of interrupted workflow failed - coarse restart at position",
+							"chatID", req.Msg.ChatId,
+							"workflowID", workflowID,
+							"error", resumeErr,
+						)
+					}
+					// Messages already saved; fall through to the coarse restart.
+				}
+
+				// Coarse resume-at-position: the new run enters directly at the
+				// checkpointed node instead of graph entry, so entry routers never
+				// re-classify the user's "continue" message. Used when there is no
+				// replayable history (ghost) or the reset guard gave up.
 				resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
 				resumeThread = existingWorkflow.Thread
 				logging.Info("Interrupted workflow detected - new run will resume at position",
@@ -740,24 +991,29 @@ func (s *ChatService) SendMessage(
 	}
 
 	// Save messages BEFORE starting workflow for consistency
-	// System messages first, then user message
-	for _, sysMsg := range systemMessages {
-		_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
-		if err != nil {
-			logging.Error("Failed to save system message for new workflow", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message"))
-		}
-	}
-
-	// Save user message to thread (message is saved BEFORE workflow starts)
+	// System messages first, then user message.
+	// A resume branch (reset-and-replay fallback) may have already persisted the
+	// messages before its reset attempt — skip re-saving so they aren't doubled.
 	var savedMessageID string
-	if hasUserContent || len(req.Msg.Attachments) > 0 {
-		savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-		if err != nil {
-			logging.Error("Failed to save message for new workflow", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message"))
+	if resumeMessagesSaved {
+		savedMessageID = resumePresavedMessageID
+	} else {
+		for _, sysMsg := range systemMessages {
+			_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
+			if err != nil {
+				logging.Error("Failed to save system message for new workflow", "error", err, "chatID", req.Msg.ChatId)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message"))
+			}
 		}
-		savedMessageID = savedMsg.ID
+
+		if hasUserContent || len(req.Msg.Attachments) > 0 {
+			savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
+			if err != nil {
+				logging.Error("Failed to save message for new workflow", "error", err, "chatID", req.Msg.ChatId)
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message"))
+			}
+			savedMessageID = savedMsg.ID
+		}
 	}
 
 	// Validate workflow inputs before starting

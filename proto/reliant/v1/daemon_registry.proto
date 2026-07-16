@@ -82,6 +82,11 @@ message DaemonInfo {
   // Hysteresis-smoothed pressure bit: asserts at >= 85% of the limit,
   // clears below 75%.
   bool memory_pressure = 12;
+  // TCP ports detected listening on loopback/wildcard inside the workspace
+  // (from the daemon heartbeat, stored on the attachment record like the
+  // memory telemetry above). The UI renders these as preview affordances.
+  // Empty for local daemons and while nothing is listening.
+  repeated uint32 detected_ports = 13;
 }
 
 enum DaemonStatus {

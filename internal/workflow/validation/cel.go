@@ -1039,6 +1039,23 @@ func BuildWorkflowTypeContext(wf *reliantv1.Workflow, loader WorkflowLoader) *Wo
 		}
 	}
 
+	// Reserved system inputs (chat_id, workflow_id, unique_activity_id) are
+	// engine-provided execution-context values the runtime injects unconditionally,
+	// so they are always present. Declare them as typed, first-class members of the
+	// type context (unless the workflow explicitly declared an input of the same
+	// name, which then wins) so a template can reference e.g. `inputs.chat_id` and
+	// have it type-check — while an undeclared `inputs.<name>` still errors. See
+	// reservedSystemInputTypes; keep in sync with workflow.RuntimeInjectedInputs.
+	for name, kind := range reservedSystemInputTypes {
+		if _, declared := ctx.InputFields[name]; declared {
+			continue
+		}
+		if _, declared := ctx.InputGroups[name]; declared {
+			continue
+		}
+		ctx.InputFields[name] = &FieldInfo{Name: name, Kind: kind}
+	}
+
 	// Extract node types and output fields
 	extendedOutputNodes := make(map[string]bool)
 	for _, node := range wf.GetNodes() {

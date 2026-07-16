@@ -177,6 +177,11 @@ type DaemonAttachment struct {
 	MemoryUsedBytes  int64
 	MemoryLimitBytes int64
 	MemoryPressure   bool
+	// DetectedPorts are the loopback/wildcard LISTEN ports the daemon
+	// reported in its heartbeat (what the in-pod preview forwarder can
+	// reach). JSON-encoded in the detected_ports column. Nil/empty when
+	// nothing is listening or the daemon doesn't report (local daemons).
+	DetectedPorts []uint32
 }
 
 // DaemonPAT is a personal access token for daemon authentication.

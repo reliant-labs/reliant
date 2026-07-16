@@ -142,6 +142,15 @@ message Daemon {
   // has been observed. The UI keys "recent" off last_oom_killed_at.
   google.protobuf.Timestamp last_oom_killed_at = 28;
   int32 oom_kill_count = 29;
+
+  // default_port_access is the workspace-level access policy the preview proxy
+  // applies to a listening port that has NO explicit PortAccessRule. It travels
+  // with the workspace. PORT_ACCESS_MODE_AUTHENTICATED (the safe default) means
+  // only the owner / owning-org member can reach an unruled port;
+  // PORT_ACCESS_MODE_PUBLIC opts the whole workspace into "every port shareable
+  // by URL by default". Explicit per-port rules always override this. Set via
+  // DaemonService.SetDefaultPortAccess.
+  PortAccessMode default_port_access = 30;
 }
 
 // Port access control

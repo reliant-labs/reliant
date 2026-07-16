@@ -73,6 +73,7 @@ expect:
     - mvp_verify
     - mvp_done
     - production_polish
+    - launch_preview
     - success
   not_reached:
     - stuck

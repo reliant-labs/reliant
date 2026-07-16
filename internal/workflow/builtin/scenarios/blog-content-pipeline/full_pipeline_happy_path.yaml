@@ -80,3 +80,4 @@ expect:
     - reddit_summary
     - validate_artifacts
     - complete
+    - handoff

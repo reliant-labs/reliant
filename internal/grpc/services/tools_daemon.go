@@ -131,6 +131,12 @@ type daemonConnection struct {
 	// processOutputSubs tracks subscribers for process output, keyed by processID.
 	processOutputSubsMu sync.Mutex
 	processOutputSubs   map[string][]chan *toolexec.ProcessOutputEvent
+
+	// lastDetectedPortsKey is the encoding of the last heartbeat-reported
+	// detected-ports set persisted to daemon_attachment. Heartbeats arrive
+	// every 15s but the port set rarely changes; caching the last write
+	// avoids a per-heartbeat UPDATE. Only the receive loop touches it.
+	lastDetectedPortsKey string
 }
 
 // NewToolsDaemonService creates a new ToolsDaemonService.
@@ -382,6 +388,15 @@ func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, d
 		payload["memory_used_bytes"] = hb.MemoryUsedBytes
 		payload["memory_limit_bytes"] = hb.MemoryLimitBytes
 		payload["memory_pressure"] = hb.MemoryPressure
+	}
+	if hb != nil {
+		// Always included (may be empty) so the UI can clear its preview
+		// affordance when the last detected listener goes away.
+		ports := hb.DetectedPorts
+		if ports == nil {
+			ports = []uint32{}
+		}
+		payload["detected_ports"] = ports
 	}
 	data, _ := json.Marshal(payload)
 	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
@@ -847,6 +862,22 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 				if err := s.database.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
 					int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
 					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
+				}
+			}
+			// Persist heartbeat-carried detected listener ports on the
+			// attachment record (same flow as the memory telemetry above) so
+			// the daemon registry can surface preview affordances. Written
+			// only when the set changed — heartbeats are 15s apart but port
+			// churn is rare. UpsertDaemonAttachment resets the column on
+			// re-attach, matching the empty initial cache key here.
+			if hb := m.Heartbeat; hb != nil {
+				portsKey := fmt.Sprint(hb.DetectedPorts)
+				if portsKey != conn.lastDetectedPortsKey {
+					if err := s.database.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
+						logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
+					} else {
+						conn.lastDetectedPortsKey = portsKey
+					}
 				}
 			}
 

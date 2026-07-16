@@ -78,7 +78,12 @@ interface GlobalUpdatesState {
   
   // Last known daemon heartbeat (unix seconds). Set via DAEMON_HEARTBEAT events.
   daemonLastSeen: number | null;
-  
+
+  // Detected listener ports per daemon (from heartbeat detected_ports —
+  // loopback/wildcard LISTEN sockets inside a cloud workspace). Drives the
+  // "Open preview" affordance next to the daemon status dot.
+  daemonDetectedPorts: Record<string, number[]>;
+
   // Currently subscribed chat ID for detail events
   subscribedChatId: string | null;
   
@@ -106,6 +111,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
   connectionStatus: "disconnected",
   lastSequence: 0,
   daemonLastSeen: null,
+  daemonDetectedPorts: {},
   subscribedChatId: null,
   wsService: null,
 
@@ -265,6 +271,20 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
             const ts = data.last_heartbeat as number;
             set({ daemonLastSeen: ts });
             setDaemonLastSeen(ts);
+          }
+          // detected_ports is present (possibly empty) on real heartbeats and
+          // absent on synthetic connection events — only update when carried,
+          // so a reconnect blip doesn't clear a still-valid port set.
+          if (data?.daemon_id && Array.isArray(data.detected_ports)) {
+            const daemonId = data.daemon_id as string;
+            const ports = (data.detected_ports as number[]).filter((p) => Number.isFinite(p));
+            set((state) => {
+              const prev = state.daemonDetectedPorts[daemonId];
+              if (prev && prev.length === ports.length && prev.every((p, i) => p === ports[i])) {
+                return state; // unchanged — avoid re-render churn every 15s
+              }
+              return { daemonDetectedPorts: { ...state.daemonDetectedPorts, [daemonId]: ports } };
+            });
           }
           try { getEventBus().emit("daemon:heartbeat"); } catch { /* bus not ready */ }
           break;

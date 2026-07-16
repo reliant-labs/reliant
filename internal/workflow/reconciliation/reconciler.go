@@ -92,6 +92,18 @@ type Reconciler struct {
 	// transition guards duplicate terminal actions.
 	progressMu           sync.Mutex
 	progressObservations map[string]*progressObservation
+
+	// resetGuard bounds reset-and-replay attempts per workflow so a
+	// deterministically-failing run is not reset forever. Optional (nil = always
+	// allow); shared with the PauseService resume path via SetResetGuard so both
+	// resetters count against a single per-workflow bound.
+	resetGuard *v2workflow.ResetAttemptGuard
+}
+
+// SetResetGuard installs the shared reset-attempt guard (see
+// v2workflow.ResetAttemptGuard). Nil-safe: an unset guard always allows resets.
+func (r *Reconciler) SetResetGuard(g *v2workflow.ResetAttemptGuard) {
+	r.resetGuard = g
 }
 
 // stuckObservation tracks one workflow's stuck task across reconcile passes.
@@ -123,6 +135,7 @@ const (
 	anomalyProgressStallDetected  = "progress_stall_detected"
 	anomalyProgressStallConfirmed = "progress_stall_confirmed"
 	anomalyResetFailedTerminated  = "reset_failed_terminated"
+	anomalyResetAttemptsExhausted = "reset_attempts_exhausted"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -807,34 +820,57 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// and the queue entry is gone). Recover by resetting the workflow
 		// to just before the lost task was scheduled: Temporal replays and
 		// re-issues it, and the workflow simply continues.
-		if err := r.recoverStuckWorkflowByReset(ctx, wf, temporalState); err == nil {
-			r.clearStuckObservation(wf.ID)
-			r.recordAnomaly(stats, anomalyStuckReset)
-			result.RecoveredByReset = true
-			return result
-		} else { //nolint:revive // keep err scoped to the recovery attempt
-			logging.Warn("[Reconciler] Workflow reset failed - falling back to terminate",
-				"error", err,
+		//
+		// Bounded guard: a workflow that keeps re-sticking at the same point
+		// without forward progress (a deterministic problem reset cannot fix)
+		// must not be reset forever. Once the guard gives up, skip the reset and
+		// go straight to terminate + mark failed (routing the next user message
+		// to the coarse restart, which runs current code with no old history).
+		resetSkippedByGuard := !r.resetGuard.Allow(wf.ID, temporalState.HistoryLength)
+		if !resetSkippedByGuard {
+			if err := r.recoverStuckWorkflowByReset(ctx, wf, temporalState); err == nil {
+				r.resetGuard.Record(wf.ID, temporalState.HistoryLength)
+				r.clearStuckObservation(wf.ID)
+				r.recordAnomaly(stats, anomalyStuckReset)
+				result.RecoveredByReset = true
+				return result
+			} else { //nolint:revive // keep err scoped to the recovery attempt
+				logging.Warn("[Reconciler] Workflow reset failed - falling back to terminate",
+					"error", err,
+					"workflowID", wf.ID,
+					"chatID", wf.ChatID,
+					"stuckTaskType", temporalState.StuckTaskType,
+					"stuckActivityID", temporalState.StuckActivityID,
+				)
+			}
+		}
+
+		terminateDetail := "reset recovery failed"
+		if resetSkippedByGuard {
+			terminateDetail = "reset-attempt guard exhausted (repeated resets made no progress)"
+			logging.Error("[Reconciler] Reset-attempt guard exhausted for stuck workflow - terminating and marking as failed",
+				"workflowID", wf.ID,
+				"chatID", wf.ChatID,
+				"stuckTaskType", temporalState.StuckTaskType,
+				"resetAttempts", r.resetGuard.Attempts(wf.ID),
+			)
+			r.recordAnomaly(stats, anomalyResetAttemptsExhausted)
+		} else {
+			logging.Error("[Reconciler] Workflow is stuck and reset failed - terminating and marking as failed",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"stuckTaskType", temporalState.StuckTaskType,
 				"stuckActivityID", temporalState.StuckActivityID,
+				"stuckActivityType", temporalState.StuckActivityType,
+				"stuckDuration", temporalState.StuckDuration,
 			)
+			r.recordAnomaly(stats, anomalyResetFailedTerminated)
 		}
-
-		logging.Error("[Reconciler] Workflow is stuck and reset failed - terminating and marking as failed",
-			"workflowID", wf.ID,
-			"chatID", wf.ChatID,
-			"stuckTaskType", temporalState.StuckTaskType,
-			"stuckActivityID", temporalState.StuckActivityID,
-			"stuckActivityType", temporalState.StuckActivityType,
-			"stuckDuration", temporalState.StuckDuration,
-		)
-		r.recordAnomaly(stats, anomalyResetFailedTerminated)
+		r.resetGuard.Clear(wf.ID)
 
 		// Terminate the stuck workflow in Temporal so it's no longer "running"
 		// This prevents any confusion where DB says failed but Temporal says running
-		terminateReason := fmt.Sprintf("Workflow stuck: %s task in Scheduled state for %v (reset recovery failed)", temporalState.StuckTaskType, temporalState.StuckDuration)
+		terminateReason := fmt.Sprintf("Workflow stuck: %s task in Scheduled state for %v (%s)", temporalState.StuckTaskType, temporalState.StuckDuration, terminateDetail)
 		if err := r.tempClient.TerminateWorkflow(ctx, wf.ID, "", terminateReason); err != nil {
 			logging.Warn("[Reconciler] Failed to terminate stuck workflow in Temporal",
 				"error", err,
@@ -1330,6 +1366,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		// Nothing running: any leftover debounce/streak entries are moot.
 		r.pruneStuckObservations(nil)
 		r.pruneProgressObservations(nil)
+		r.resetGuard.Prune(nil)
 		return 0, nil
 	}
 
@@ -1378,6 +1415,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	}
 	r.pruneStuckObservations(runningIDs)
 	r.pruneProgressObservations(runningIDs)
+	r.resetGuard.Prune(runningIDs)
 
 	// One summary line per pass when anything anomalous was found; silence
 	// when clean. The per-anomaly detail is in the ERROR logs above.

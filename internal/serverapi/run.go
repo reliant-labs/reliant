@@ -246,8 +246,15 @@ func Run(ctx context.Context, opts Options) error {
 		},
 	)
 
+	// Shared reset-attempt guard: bounds reset-and-replay attempts per workflow
+	// so a deterministically-failing run is not reset forever. Shared between the
+	// user-driven resume path (PauseService) and the reconciler's automatic
+	// stuck-task recovery so both count against one per-workflow bound.
+	resetGuard := v2workflow.NewResetAttemptGuard(v2workflow.DefaultMaxResetAttempts)
+
 	// PauseService
 	pauseService := v2workflow.NewPauseService(temporalClient, repo)
+	pauseService.SetResetGuard(resetGuard)
 
 	// Reconciler (background workflow reconciliation). Namespace must match
 	// the Temporal client's so reset (stuck-task recovery) requests land in
@@ -255,6 +262,7 @@ func Run(ctx context.Context, opts Options) error {
 	reconcilerCfg := reconciliation.DefaultConfig()
 	reconcilerCfg.Namespace = opts.TemporalNamespace
 	reconciler := reconciliation.NewReconciler(repo, temporalClient, reconcilerCfg)
+	reconciler.SetResetGuard(resetGuard)
 	reconciler.StartBackgroundReconciliation(ctx)
 	logging.Info("Background reconciler started")
 

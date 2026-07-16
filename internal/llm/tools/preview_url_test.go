@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestIsPubliclyBoundPort(t *testing.T) {
+func TestIsPreviewablePort(t *testing.T) {
 	cases := []struct {
 		addr string
 		want bool
@@ -19,18 +19,23 @@ func TestIsPubliclyBoundPort(t *testing.T) {
 		{"[::]", true},
 		{"*", true},
 		{"", true},
-		{"127.0.0.1", false},
-		{"localhost", false},
-		{"::1", false},
+		// Loopback binds are previewable via the in-pod preview forwarder
+		// (the forwarder dials 127.0.0.1/::1 inside the pod netns).
+		{"127.0.0.1", true},
+		{"localhost", true},
+		{"::1", true},
+		{"[::1]", true},
+		// A specific non-loopback interface bind is not routed by the
+		// forwarder (it only dials loopback) nor guaranteed pod-reachable.
 		{"192.168.1.5", false},
 	}
 	for _, c := range cases {
-		got := isPubliclyBoundPort(daemon.PortInfo{Address: c.addr, State: "LISTEN"})
+		got := isPreviewablePort(daemon.PortInfo{Address: c.addr, State: "LISTEN"})
 		require.Equalf(t, c.want, got, "addr=%q", c.addr)
 	}
 
 	// Non-LISTEN sockets are never previewable even on a wildcard bind.
-	require.False(t, isPubliclyBoundPort(daemon.PortInfo{Address: "0.0.0.0", State: "ESTABLISHED"}))
+	require.False(t, isPreviewablePort(daemon.PortInfo{Address: "0.0.0.0", State: "ESTABLISHED"}))
 }
 
 func TestProxyPreviewURL(t *testing.T) {
@@ -51,7 +56,7 @@ func TestProxyPreviewURL(t *testing.T) {
 
 func TestPreviewURLsForProcess(t *testing.T) {
 	t.Setenv("RELIANT_ENV", "dev")
-	t.Setenv("RELIANT_PROXY_HOST", "")
+	t.Setenv("PROXY_HOST", "")
 
 	// Remote daemon, dev-server on 0.0.0.0 → proxied preview line.
 	remote := &daemon.ProcessInfo{
@@ -65,13 +70,16 @@ func TestPreviewURLsForProcess(t *testing.T) {
 		[]string{"Preview URL (port 3000): http://localhost:28080/proxy/daemon-abc/3000/"},
 		previewURLsForProcess(remote))
 
-	// 127.0.0.1-only bind is not previewable → skipped (agent must rebind).
+	// 127.0.0.1-only bind IS previewable: the in-pod preview forwarder
+	// terminates preview traffic inside the pod netns and dials loopback.
 	loopbackOnly := &daemon.ProcessInfo{
 		Status:   "running",
 		DaemonID: "daemon-abc",
 		Ports:    []daemon.PortInfo{{Port: 3000, Address: "127.0.0.1", State: "LISTEN"}},
 	}
-	require.Nil(t, previewURLsForProcess(loopbackOnly))
+	require.Equal(t,
+		[]string{"Preview URL (port 3000): http://localhost:28080/proxy/daemon-abc/3000/"},
+		previewURLsForProcess(loopbackOnly))
 
 	// Not running → nothing surfaced.
 	stopped := &daemon.ProcessInfo{
@@ -91,14 +99,14 @@ func TestPreviewURLsForProcess(t *testing.T) {
 		[]string{"Preview URL (port 5173): http://localhost:5173/"},
 		previewURLsForProcess(local))
 
-	// Mixed ports: only the public one is surfaced, deduped.
+	// Mixed ports: both loopback and wildcard binds surface, deduped by port.
 	mixed := &daemon.ProcessInfo{
 		Status:   "running",
 		DaemonID: "daemon-abc",
 		Ports: []daemon.PortInfo{
-			{Port: 8080, Address: "127.0.0.1", State: "LISTEN"},
+			{Port: 8080, Address: "192.168.1.5", State: "LISTEN"},
 			{Port: 3000, Address: "0.0.0.0", State: "LISTEN"},
-			{Port: 3000, Address: "0.0.0.0", State: "LISTEN"},
+			{Port: 3000, Address: "127.0.0.1", State: "LISTEN"},
 		},
 	}
 	require.Equal(t,

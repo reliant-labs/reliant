@@ -1143,8 +1143,9 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	if att.LastStreamActivity.IsZero() {
 		att.LastStreamActivity = now
 	}
-	// Re-attachment resets memory telemetry: a new stream means a fresh
-	// daemon session, and readings from the previous one are stale.
+	// Re-attachment resets memory telemetry and detected ports: a new stream
+	// means a fresh daemon session, and readings from the previous one are
+	// stale.
 	query := `
 		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
 		VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -1157,7 +1158,8 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 			last_stream_activity = EXCLUDED.last_stream_activity,
 			memory_used_bytes = 0,
 			memory_limit_bytes = 0,
-			memory_pressure = FALSE
+			memory_pressure = FALSE,
+			detected_ports = '[]'
 	`
 	query = r.bindQuery(query)
 	if _, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity); err != nil {
@@ -1199,6 +1201,30 @@ func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string
 	return nil
 }
 
+// UpdateDaemonAttachmentPorts records the heartbeat-reported detected
+// listener ports on the attachment (liveness) record. Mirrors
+// UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't
+// exist, and it deliberately does NOT touch last_stream_activity — the lease
+// renewal stays with TouchDaemonAttachmentIfNewer.
+func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	if ports == nil {
+		ports = []uint32{}
+	}
+	encoded, err := json.Marshal(ports)
+	if err != nil {
+		return fmt.Errorf("encoding detected ports: %w", err)
+	}
+	query := `UPDATE daemon_attachment SET detected_ports = ? WHERE daemon_id = ?`
+	query = r.bindQuery(query)
+	if _, err := r.DB.ExecContext(ctx, query, string(encoded), daemonID); err != nil {
+		return fmt.Errorf("updating daemon attachment ports: %w", err)
+	}
+	return nil
+}
+
 func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
@@ -1231,7 +1257,7 @@ func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThresho
 
 // attachmentColumns is the shared SELECT column list matching
 // listAttachments' scan order.
-const attachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure`
+const attachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports`
 
 func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
 	return r.listAttachments(ctx, `
@@ -1279,12 +1305,13 @@ func (r *Repo) listAttachments(ctx context.Context, query string, args ...any) (
 	var result []*DaemonAttachment
 	for rows.Next() {
 		var (
-			att     DaemonAttachment
-			source  string
-			podIP   sql.NullString
-			podPort sql.NullInt64
+			att           DaemonAttachment
+			source        string
+			podIP         sql.NullString
+			podPort       sql.NullInt64
+			detectedPorts string
 		)
-		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity, &att.MemoryUsedBytes, &att.MemoryLimitBytes, &att.MemoryPressure); err != nil {
+		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity, &att.MemoryUsedBytes, &att.MemoryLimitBytes, &att.MemoryPressure, &detectedPorts); err != nil {
 			return nil, fmt.Errorf("scanning attachment: %w", err)
 		}
 		att.Source = DaemonAttachmentSource(source)
@@ -1295,6 +1322,11 @@ func (r *Repo) listAttachments(ctx context.Context, query string, args ...any) (
 		if podPort.Valid {
 			v := int(podPort.Int64)
 			att.PodPort = &v
+		}
+		// detected_ports is JSON-encoded; a decode failure degrades to "no
+		// ports" rather than failing the liveness read.
+		if detectedPorts != "" && detectedPorts != "[]" {
+			_ = json.Unmarshal([]byte(detectedPorts), &att.DetectedPorts)
 		}
 		result = append(result, &att)
 	}

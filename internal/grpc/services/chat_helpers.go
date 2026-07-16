@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -401,6 +401,13 @@ func extractMessagesFromInput(messages []*reliantv1.InputMessage) (userContent s
 
 // injectSessionDaemonID adds the session's active daemon to workflow inputs.
 // This is a runtime-injected input that flows through to daemon resolution.
+//
+// The preview URL is deliberately NOT injected here. A handoff/terminal node runs
+// INSIDE the session's daemon container, which already knows its own preview URL
+// (RELIANT_PREVIEW_URL_TEMPLATE env var; forge surfaces it directly for the
+// forge-one-shot flow). The agent discovers it at runtime rather than having it
+// threaded through the workflow input plane — that keeps preview delivery out of
+// the CEL/input-schema layer entirely.
 func injectSessionDaemonID(inputs map[string]interface{}, chat *db.Chat) {
 	if chat != nil && chat.ActiveDaemonID != nil && *chat.ActiveDaemonID != "" {
 		inputs["session_daemon_id"] = *chat.ActiveDaemonID

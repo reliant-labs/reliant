@@ -19,6 +19,17 @@ description: |
   and founder interview. Includes parallel per-slide write+review pipeline and
   visual review via puppeteer screenshots + image attachments.
 
+  Structure: research/interview/plan (setup) → per-slide write+review (CONTENT:
+  narrative/message/accuracy) → build + visual review loop (STYLE: visual design,
+  anti-slop, scale floors) → handoff (serve the built deck, hand the user a live
+  preview URL). When the pipeline completes the chat transitions to a plain
+  interactive agent so a follow-up message keeps iterating on the deck.
+
+# On completion the chat permanently switches to a plain interactive agent so a
+# user message after the handoff continues the conversation instead of restarting
+# the pipeline (the "final checkpoint").
+transition_to: builtin://agent
+
 entry: [classify]
 
 inputs:
@@ -1503,9 +1514,60 @@ nodes:
         ```
 
         ### Next Steps
+        - I'll start the deck now so you can open it in the browser
         - Check any claims marked [needs verification]
-        - Run the deck: `cd {{inputs.pitch_deck_dir}} && npm install && npm run dev`
         - Practice the speaker notes out loud — edit anything that doesn't sound like you
+
+  # ==========================================================================
+  # PHASE 7: Handoff — serve the deck and hand the user a live preview URL
+  # ==========================================================================
+  # A plain agent (no deliverable schema). Starts the built React deck as a
+  # BACKGROUND process on its dev port and hands the user the deterministic
+  # preview URL, then confirms it's up. Forced to auto mode so the handoff is
+  # seamless regardless of pipeline mode. After it finishes the chat transitions
+  # to a plain interactive agent (transition_to), so the user can keep iterating.
+  - id: handoff
+    type: workflow
+    ref: builtin://agent
+    presets:
+      default: implementer
+    passthrough: [model]
+    args:
+      tools: "{{inputs.tools}}"
+      mode: auto
+    thread:
+      mode: inherit
+      inject:
+        role: user
+        content: |
+          ## Serve the Deck & Hand It Off
+
+          The React pitch deck in `{{inputs.pitch_deck_dir}}/` is built and visually
+          reviewed. Start it as a BACKGROUND process and give the user a link to open it.
+          Do NOT change slides, restyle, or add features — just run it and confirm it's up.
+
+          **Step 1: Start the dev server in the BACKGROUND on port 5174, bound to 0.0.0.0.**
+          Use the shell tool with `run_in_background: true` so it survives past this turn —
+          do NOT block on it. It MUST bind to `0.0.0.0` (not `127.0.0.1`) or the proxy can't
+          reach it and there is no preview URL:
+          ```bash
+          cd {{inputs.pitch_deck_dir}} && npm install && npm run dev -- --host 0.0.0.0 --port 5174
+          ```
+
+          **Step 2: Confirm it's actually serving.** Give it a moment, then verify via
+          `bash_list` / `bash_output` (or `curl -sS -o /dev/null -w '%{http_code}'
+          http://localhost:5174/`). If it isn't up, fix the bind/port and retry.
+
+          **Step 3: Get the preview URL and hand it to the user.** Run
+          `reliant preview-url 5174` — it prints the authoritative proxied URL for port 5174
+          (also surfaced as a `Preview URL (port 5174): ...` line in the `bash_list` /
+          `bash_output` result). Do NOT invent or guess a URL. Post it as a markdown link:
+
+          **[Open your pitch deck](<the URL from `reliant preview-url 5174`>)**
+
+          If no proxied URL is available (a local run), fall back to `http://localhost:5174/`.
+          Then briefly tell the user the deck is live and ask what they'd like to change —
+          the conversation stays open for edits.
 
 edges:
   # Router: entering at the research phase must start BOTH parallel research
@@ -1543,9 +1605,13 @@ edges:
   - from: slide_pipeline
     default: slides_loop
 
-  # Phase 6: Done
+  # Phase 6: Summary
   - from: slides_loop
     default: complete
+
+  # Phase 7: Handoff — serve the deck and post the preview URL
+  - from: complete
+    default: handoff
 
 outputs:
   content_verdict: "{{has(nodes.slide_pipeline) ? 'slide pipeline completed' : 'unknown'}}"

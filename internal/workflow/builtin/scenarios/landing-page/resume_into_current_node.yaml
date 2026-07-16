@@ -1,0 +1,49 @@
+# Resume-into-current-node (Task 4): pausing mid-chain re-enters the ACTIVE node.
+#
+# The user paused while the STYLE get-it-right loop was running and sent a
+# message. Resume must land back in style_pass — the currently-active node — and
+# continue from there to the handoff. It must NOT restart from scope_conversation
+# or re-run the already-completed content_pass.
+#
+# This mirrors the runtime's resume-at-checkpoint behavior (resolveResumeTarget in
+# internal/workflow/runtime/workflow.go, proven in resume_test.go
+# TestDynamicWorkflow_Resume_EntersAtCheckpointNode): a new run begins directly at
+# the checkpointed node with only thread history carried — earlier-phase node
+# outputs are NOT reconstructed, which is exactly why cross-phase references must
+# be has()-guarded. start_at models that mid-graph entry.
+
+name: resume_into_current_node
+description: Pausing during the style loop resumes into style_pass, not from node zero
+
+start_at: style_pass
+
+# Earlier phases ran in the prior (paused) run. On resume their node outputs are
+# not reconstructed; only what style_pass needs to proceed matters, and its edges
+# reference only nodes.style_pass, so no upstream state is required.
+state:
+  content_pass:
+    strategy: pass
+    eval_strategy: pass
+
+events:
+  - node: style_pass
+    output:
+      response_text: "Style loop resumed from where it paused and completed."
+      strategy: pass
+      eval_strategy: pass
+      review_grade: pass
+      stuck: false
+      iterations: 4
+
+  - node: handoff
+    output:
+      response_text: "Your landing page is live at the preview URL."
+
+expect:
+  outcome: completed
+  reached:
+    - style_pass
+    - handoff
+  not_reached:
+    - scope_conversation
+    - content_pass

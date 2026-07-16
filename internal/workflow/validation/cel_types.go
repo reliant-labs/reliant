@@ -8,6 +8,29 @@ import (
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 )
 
+// reservedSystemInputTypes are engine-provided execution-context values that the
+// workflow runtime injects UNCONDITIONALLY (internal/workflow/runtime/workflow.go),
+// so they are guaranteed present in the inputs map at execution time. They are
+// declared here as typed, first-class members of every workflow's CEL type context
+// (see BuildWorkflowTypeContext) so a template can reference e.g. `inputs.chat_id`
+// and have it type-check as a string — while an undeclared `inputs.<name>` still
+// errors. Hard validation is preserved: these are known typed keywords, not a
+// blanket loosening.
+//
+// Only UNCONDITIONALLY-injected names belong here. Conditionally-injected engine
+// values (session_daemon_id, project_path, spawned_by) are deliberately NOT
+// referenceable in CEL: they may be absent at runtime, so a template reference
+// would be a foot-gun. Anything a node needs that isn't always present should be
+// discovered by the agent at runtime (e.g. reading the daemon env), never threaded
+// through the input plane. Keep the always-present subset in sync with
+// workflow.RuntimeInjectedInputs (internal/workflow/constants.go); duplicated here
+// to avoid an import cycle (that package imports validation).
+var reservedSystemInputTypes = map[string]reflect.Kind{
+	"chat_id":            reflect.String,
+	"workflow_id":        reflect.String,
+	"unique_activity_id": reflect.String,
+}
+
 // =============================================================================
 // FIELD INFO — local replacement for v3.FieldInfo
 // =============================================================================

@@ -71,6 +71,7 @@ import {
   getDaemon,
   listDaemons,
   listPortAccessRules,
+  portAccessRulesQueryKey,
   removePortAccess,
   resumeEnvironment,
   setPortAccess,
@@ -83,7 +84,9 @@ import {
 const QK = {
   daemons: ["cp", "environments", "list"] as const,
   daemon: (id: string) => ["cp", "environments", "detail", id] as const,
-  ports: (id: string) => ["cp", "environments", "ports", id] as const,
+  // Shared with the header DetectedPortsChip's one-click-public toggle so a
+  // "Make public" there invalidates this panel's rules query and vice-versa.
+  ports: portAccessRulesQueryKey,
   computeSub: ["cp", "environments", "computeSubscription"] as const,
 };
 

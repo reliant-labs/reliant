@@ -179,6 +179,10 @@ func (l *resumeTestLogger) Error(string, ...interface{}) {}
 type resumeEnvRecorder struct {
 	executedNodes []string
 	checkpoints   []capturedCheckpoint
+	// llmCalls records each CallLLM execution with the nested loop iteration it
+	// ran under (RuntimeContext.LoopIteration), so nested-loop tests can assert
+	// which iteration a node ran in.
+	llmCalls []capturedCheckpoint
 }
 
 type capturedCheckpoint struct {
@@ -230,6 +234,10 @@ func setupResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, yamlSt
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
 			rec.executedNodes = append(rec.executedNodes, input.Node.GetId())
+			rec.llmCalls = append(rec.llmCalls, capturedCheckpoint{
+				nodeID:    input.Node.GetId(),
+				iteration: input.Runtime.LoopIteration,
+			})
 			return map[string]interface{}{"response_text": "ok"}, nil
 		},
 		activity.RegisterOptions{Name: "CallLLM"},
@@ -371,4 +379,132 @@ func TestDynamicWorkflow_ResumeLoop_ReentersAtCheckpointedIteration(t *testing.T
 	assert.Equal(t, []capturedCheckpoint{
 		{nodeID: "agent_loop", iteration: 2},
 	}, rec.checkpoints, "the resumed loop re-checkpoints from the recorded iteration, keeping max-iteration guards honest")
+}
+
+// ============================================================================
+// Nested-loop (get-it-right-shaped) resume: Finding-1 regression coverage
+// ============================================================================
+
+// resumeNestedLoopYAML mirrors get-it-right's structure: a top-level workflow
+// node ("gir") whose INLINE sub-workflow's top node is a loop ("attempt") whose
+// body ("work") calls the LLM. Because sub-workflows run INLINE in the parent's
+// single Temporal execution, the nested loop's iteration counter lives in the
+// parent run's goroutine stack — which is exactly why reset-and-replay of the
+// parent rebuilds it, and why the FLAT position checkpoint (top-level node only)
+// cannot.
+const resumeNestedLoopYAML = `
+name: resume-test
+entry: [gir]
+nodes:
+  - id: gir
+    type: workflow
+    inline:
+      name: inner
+      entry: [attempt]
+      nodes:
+        - id: attempt
+          type: loop
+          while: iter.iteration < 3
+          inline:
+            entry: [work]
+            nodes:
+              - id: work
+                type: call_llm
+`
+
+// workIterations returns the nested loop iteration of every `work` CallLLM.
+func workIterations(rec *resumeEnvRecorder) []int {
+	var iters []int
+	for _, c := range rec.llmCalls {
+		if c.nodeID == "work" {
+			iters = append(iters, c.iteration)
+		}
+	}
+	return iters
+}
+
+// The nested loop runs inline in the parent run, and the FLAT checkpoint records
+// only the TOP-LEVEL node — never the nested loop node or its iteration. This is
+// the structural reason the coarse fresh-restart-with-checkpoint cannot express
+// a mid-nested-get-it-right position (Finding-1's root cause).
+func TestDynamicWorkflow_NestedLoop_FlatCheckpointOmitsNestedIteration(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	rec := setupResumeEnv(t, env, resumeNestedLoopYAML)
+
+	env.ExecuteWorkflow(DynamicWorkflow, resumeWorkflowInput("chat-nested-fresh", nil))
+
+	require.NoError(t, env.GetWorkflowError())
+	assert.Equal(t, []int{0, 1, 2}, workIterations(rec),
+		"the nested loop executes inline within the parent Temporal run")
+
+	require.NotEmpty(t, rec.checkpoints)
+	for _, cp := range rec.checkpoints {
+		assert.Equal(t, "gir", cp.nodeID,
+			"only the top-level workflow node is flat-checkpointed; the nested loop is invisible to it")
+	}
+}
+
+// Coarse resume can only name the TOP-LEVEL node ("gir") in the flat checkpoint;
+// there is no field to carry the nested loop iteration, so the resumed run
+// re-enters gir and the nested loop restarts from iteration 0 — the Finding-1
+// regression. Reset-and-replay (exercised end-to-end against a live Temporal
+// server in e2e/stories/story_10_nested_loop_resume_test.go) is what preserves
+// the nested iteration instead; this test pins the coarse path's limitation that
+// motivated the fix.
+func TestDynamicWorkflow_NestedLoop_CoarseResumeRestartsNestedAtZero(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	rec := setupResumeEnv(t, env, resumeNestedLoopYAML)
+
+	env.ExecuteWorkflow(DynamicWorkflow, resumeWorkflowInput("chat-nested-coarse", &ResumeInput{NodeID: "gir"}))
+
+	require.NoError(t, env.GetWorkflowError())
+	assert.Equal(t, []int{0, 1, 2}, workIterations(rec),
+		"coarse resume at the top-level node restarts the nested loop at iteration 0 — the flat checkpoint cannot resume mid-nested-loop")
+}
+
+// The nested-resume fix is engine-level, so it applies to ANY nested loop — not
+// only the get-it-right (loop-inside-a-workflow-node) shape. This uses a PLAIN
+// loop-nested-in-loop and shows the same structural fact: the flat checkpoint
+// records only the TOP-LEVEL loop ("outer"), never the inner loop's iteration,
+// which is why only reset-and-replay can resume the inner loop precisely.
+const resumeGenericNestedLoopYAML = `
+name: resume-test
+entry: [outer]
+nodes:
+  - id: outer
+    type: loop
+    while: iter.iteration < 2
+    inline:
+      entry: [inner]
+      nodes:
+        - id: inner
+          type: loop
+          while: iter.iteration < 3
+          inline:
+            entry: [work]
+            nodes:
+              - id: work
+                type: call_llm
+`
+
+func TestDynamicWorkflow_GenericNestedLoop_FlatCheckpointOmitsInnerIteration(t *testing.T) {
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	rec := setupResumeEnv(t, env, resumeGenericNestedLoopYAML)
+
+	env.ExecuteWorkflow(DynamicWorkflow, resumeWorkflowInput("chat-generic-nested", nil))
+
+	require.NoError(t, env.GetWorkflowError())
+	// 2 outer iterations × 3 inner iterations = 6 inline work executions.
+	assert.Len(t, workIterations(rec), 6, "the inner loop runs inline within each outer iteration")
+
+	// Every flat checkpoint is the TOP-LEVEL loop ("outer"); the inner loop's
+	// iteration is never captured — the generic root cause of Finding-1.
+	require.NotEmpty(t, rec.checkpoints)
+	for _, cp := range rec.checkpoints {
+		assert.Equal(t, "outer", cp.nodeID,
+			"only the top-level loop is flat-checkpointed; the inner loop iteration is invisible")
+	}
 }
