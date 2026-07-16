@@ -105,7 +105,7 @@ The project was served locally and inspected in Chrome DevTools at `http://127.0
 Command:
 
 ```bash
-forge ui-audit http://127.0.0.1:4179/?v=3 --profile diagram --scope '[data-audit="workflow-diagram-react-flow"]' --out /Users/user/.reliant/worktrees/00e933a0b4ee/feat/nw-wf/design-experiments/workflow-diagram-react/ui-audit --wait-for '.react-flow__node' --timeout 30000
+forge ui-audit http://127.0.0.1:4179/?v=3 --profile diagram --scope '[data-audit="workflow-diagram-react-flow"]' --out design-experiments/workflow-diagram-react/ui-audit --wait-for '.react-flow__node' --timeout 30000
 ```
 
 Result: passed with warnings and wrote artifacts to `ui-audit/report.json`, `ui-audit/index.html`, viewport screenshots, annotated screenshots, and DOM JSON files.

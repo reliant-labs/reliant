@@ -24,7 +24,7 @@ This iteration of Claude is Claude Fable 5, the first model in Anthropic's new C
 
 # Environment
 You have been invoked in the following environment: 
- - Primary working directory: /Users/user/src/reliant-labs/reliant
+ - Primary working directory: /path/to/project
  - Is a git repository: true
  - Platform: darwin
  - Shell: zsh
@@ -38,7 +38,7 @@ You have been invoked in the following environment:
 # Scratchpad Directory
 
 IMPORTANT: Always use this scratchpad directory for temporary files instead of `/tmp` or other system temp directories:
-`/private/tmp/claude-501/-Users-user-src-reliant-labs-reliant/e3ad70e6-908f-4c80-bffd-2af79ea2de30/scratchpad`
+`/tmp/scratchpad`
 
 Use this directory for ALL temporary file needs:
 - Storing intermediate results or data during multi-step tasks
