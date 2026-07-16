@@ -4,6 +4,7 @@ import {
   ChevronDown,
   Folder,
   FileText,
+  Loader2,
   Copy,
   Scissors,
   ClipboardPaste,
@@ -44,6 +45,8 @@ interface FileTreeItemProps {
   // Controlled expansion/focus from parent
   focusedPath?: string | null;
   expandedPaths?: Set<string>;
+  // Directories currently fetching their children (for per-node spinners).
+  loadingPaths?: Set<string>;
   onExpand?: (path: string) => void;
   onCollapse?: (path: string) => void;
   // Hoisted modal callback
@@ -115,6 +118,7 @@ export const FileTreeItem = memo(function FileTreeItem({
   worktreeId,
   focusedPath,
   expandedPaths,
+  loadingPaths,
   onExpand,
   onCollapse,
   onFileOperation,
@@ -146,6 +150,11 @@ export const FileTreeItem = memo(function FileTreeItem({
   const isDirectory = node.type === "directory";
   const isSelected = selectedFile?.path === node.path;
   const isFocused = focusedPath === node.path;
+  // A directory shows a chevron only when it has children: the backend hint, or
+  // (for eagerly-loaded/full-tree data) already-present children.
+  const hasChildren = node.hasChildren ?? ((node.children?.length ?? 0) > 0);
+  // True while this directory's children are being lazily fetched (none yet).
+  const isLoadingChildren = (loadingPaths?.has(node.path) ?? false) && node.children === undefined;
 
   // Collapse all folders when collapseKey changes (for internal state only)
   useEffect(() => {
@@ -551,17 +560,21 @@ export const FileTreeItem = memo(function FileTreeItem({
             }
           }}
         >
-        {/* Expand/collapse icon for directories */}
-        {isDirectory && (
+        {/* Expand/collapse icon — only for directories that have children.
+            While the children are lazily loading, show a spinner in its place. */}
+        {isDirectory && hasChildren ? (
           <span className="w-4 h-4 flex items-center justify-center text-muted-foreground">
-            {effectiveIsExpanded ? (
+            {isLoadingChildren ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : effectiveIsExpanded ? (
               <ChevronDown className="w-3.5 h-3.5" />
             ) : (
               <ChevronRight className="w-3.5 h-3.5" />
             )}
           </span>
+        ) : (
+          <span className="w-4" />
         )}
-        {!isDirectory && <span className="w-4" />}
 
         {/* File/folder icon */}
         <span className="w-4 h-4 flex items-center justify-center flex-shrink-0">
@@ -672,6 +685,17 @@ export const FileTreeItem = memo(function FileTreeItem({
         </div>
       )}
 
+      {/* Per-node loading state while a lazily-expanded directory fetches. */}
+      {isDirectory && effectiveIsExpanded && isLoadingChildren && (
+        <div
+          className="flex items-center gap-2 px-2 py-1 text-xs font-mono text-muted-foreground"
+          style={{ paddingLeft: `${(level + 1) * 0.75}rem` }}
+        >
+          <Loader2 className="w-3 h-3 animate-spin" />
+          <span>Loading…</span>
+        </div>
+      )}
+
       {/* Render children for expanded directories */}
       {isDirectory && effectiveIsExpanded && filteredChildren && (
         <div>
@@ -689,6 +713,7 @@ export const FileTreeItem = memo(function FileTreeItem({
               worktreeId={worktreeId}
               focusedPath={focusedPath}
               expandedPaths={expandedPaths}
+              loadingPaths={loadingPaths}
               onExpand={onExpand}
               onCollapse={onCollapse}
               onFileOperation={onFileOperation}
