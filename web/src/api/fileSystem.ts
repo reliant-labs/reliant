@@ -10,7 +10,7 @@ import { triggerGitStatusRefresh } from "../store/gitStatusStore";
 export type { SearchResult, SearchMatch, SearchFilesResult, ReplaceResult, ReplaceInFilesResult, FilePreviewInfo, FileViewerKindValue } from "./filesystem-grpc";
 
 export interface FileSystemAPI {
-  getFileTree: (path?: string, showHidden?: boolean, worktreeId?: string) => Promise<FileNode[]>;
+  getFileTree: (path?: string, showHidden?: boolean, worktreeId?: string, depth?: number) => Promise<FileNode[]>;
   getFileContent: (path: string, worktreeId?: string) => Promise<string>;
   saveFileContent: (path: string, content: string, worktreeId?: string) => Promise<void>;
   getFileMetadata: (path: string, worktreeId?: string) => Promise<FileMetadata>;
@@ -38,15 +38,17 @@ export interface FileMetadata {
  * @param path - Optional path to start from (default: root)
  * @param showHidden - Optional flag to show hidden files (default: false)
  * @param worktreeId - Optional worktree ID to scope the file tree
+ * @param depth - Levels of children to return below `path`: 0 = unlimited (full
+ *   recursive tree, back-compat default), N = N levels (1 = immediate children)
  * @returns Promise resolving to an array of FileNode
  */
-export async function getFileTree(path: string = "/", showHidden: boolean = false, worktreeId?: string): Promise<FileNode[]> {
+export async function getFileTree(path: string = "/", showHidden: boolean = false, worktreeId?: string, depth: number = 0): Promise<FileNode[]> {
   const currentProject = useProjectStore.getState().currentProject;
   if (!currentProject) {
     return [];
   }
 
-  return await filesystemGrpc.getFileTree(currentProject.id, path, showHidden, worktreeId);
+  return await filesystemGrpc.getFileTree(currentProject.id, path, showHidden, worktreeId, undefined, depth);
 }
 
 /**

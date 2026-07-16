@@ -137,13 +137,18 @@ func (FileViewerKind) EnumDescriptor() ([]byte, []int) {
 
 // FileNode represents a file or directory in the tree
 type FileNode struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Type          FileNodeType           `protobuf:"varint,3,opt,name=type,proto3,enum=reliant.v1.FileNodeType" json:"type,omitempty"`
-	Children      []*FileNode            `protobuf:"bytes,4,rep,name=children,proto3" json:"children,omitempty"`
-	Size          *int64                 `protobuf:"varint,5,opt,name=size,proto3,oneof" json:"size,omitempty"`
-	Modified      *string                `protobuf:"bytes,6,opt,name=modified,proto3,oneof" json:"modified,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Name     string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Path     string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Type     FileNodeType           `protobuf:"varint,3,opt,name=type,proto3,enum=reliant.v1.FileNodeType" json:"type,omitempty"`
+	Children []*FileNode            `protobuf:"bytes,4,rep,name=children,proto3" json:"children,omitempty"`
+	Size     *int64                 `protobuf:"varint,5,opt,name=size,proto3,oneof" json:"size,omitempty"`
+	Modified *string                `protobuf:"bytes,6,opt,name=modified,proto3,oneof" json:"modified,omitempty"`
+	// has_children is a hint for DIRECTORY nodes: true when the directory has at
+	// least one entry (respecting show_hidden). Lets the UI render an expand
+	// chevron for lazily-loaded directories without fetching their children.
+	// Only meaningful when children are not eagerly included (depth-limited walks).
+	HasChildren   bool `protobuf:"varint,7,opt,name=has_children,json=hasChildren,proto3" json:"has_children,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -218,6 +223,13 @@ func (x *FileNode) GetModified() string {
 		return *x.Modified
 	}
 	return ""
+}
+
+func (x *FileNode) GetHasChildren() bool {
+	if x != nil {
+		return x.HasChildren
+	}
+	return false
 }
 
 // FileMetadata contains detailed information about a file or directory
@@ -406,12 +418,20 @@ func (x *FilePreviewInfo) GetIsEditable() bool {
 }
 
 type GetFileTreeRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`                                     // Optional path to start from (default: root "/")
-	ShowHidden    bool                   `protobuf:"varint,3,opt,name=show_hidden,json=showHidden,proto3" json:"show_hidden,omitempty"`      // Whether to show hidden files
-	WorktreeId    *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"` // Optional worktree to scope the tree
-	ChatId        *string                `protobuf:"bytes,5,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`             // Optional chat to resolve worktree from
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId  string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Path       string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`                                     // Optional path to start from (default: root "/")
+	ShowHidden bool                   `protobuf:"varint,3,opt,name=show_hidden,json=showHidden,proto3" json:"show_hidden,omitempty"`      // Whether to show hidden files
+	WorktreeId *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"` // Optional worktree to scope the tree
+	ChatId     *string                `protobuf:"bytes,5,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`             // Optional chat to resolve worktree from
+	// depth bounds how many levels of children are returned below `path`:
+	//
+	//	0 = unlimited (full recursive tree — back-compat default)
+	//	N = N levels of descendants (e.g. 1 = immediate children only)
+	//
+	// Directory nodes at the depth boundary carry has_children instead of
+	// eagerly-included children, enabling VS Code-style lazy loading.
+	Depth         int32 `protobuf:"varint,6,opt,name=depth,proto3" json:"depth,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -479,6 +499,13 @@ func (x *GetFileTreeRequest) GetChatId() string {
 		return *x.ChatId
 	}
 	return ""
+}
+
+func (x *GetFileTreeRequest) GetDepth() int32 {
+	if x != nil {
+		return x.Depth
+	}
+	return 0
 }
 
 type GetFileTreeResponse struct {
@@ -2298,14 +2325,15 @@ var File_reliant_v1_filesystem_proto protoreflect.FileDescriptor
 const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/filesystem.proto\x12\n" +
-	"reliant.v1\"\xe2\x01\n" +
+	"reliant.v1\"\x85\x02\n" +
 	"\bFileNode\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12,\n" +
 	"\x04type\x18\x03 \x01(\x0e2\x18.reliant.v1.FileNodeTypeR\x04type\x120\n" +
 	"\bchildren\x18\x04 \x03(\v2\x14.reliant.v1.FileNodeR\bchildren\x12\x17\n" +
 	"\x04size\x18\x05 \x01(\x03H\x00R\x04size\x88\x01\x01\x12\x1f\n" +
-	"\bmodified\x18\x06 \x01(\tH\x01R\bmodified\x88\x01\x01B\a\n" +
+	"\bmodified\x18\x06 \x01(\tH\x01R\bmodified\x88\x01\x01\x12!\n" +
+	"\fhas_children\x18\a \x01(\bR\vhasChildrenB\a\n" +
 	"\x05_sizeB\v\n" +
 	"\t_modified\"\xb6\x01\n" +
 	"\fFileMetadata\x12\x12\n" +
@@ -2325,7 +2353,7 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\tmime_type\x18\x06 \x01(\tR\bmimeType\x12\x1b\n" +
 	"\tis_binary\x18\a \x01(\bR\bisBinary\x12\x1f\n" +
 	"\vis_editable\x18\b \x01(\bR\n" +
-	"isEditable\"\xc8\x01\n" +
+	"isEditable\"\xde\x01\n" +
 	"\x12GetFileTreeRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -2334,7 +2362,8 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"showHidden\x12$\n" +
 	"\vworktree_id\x18\x04 \x01(\tH\x00R\n" +
 	"worktreeId\x88\x01\x01\x12\x1c\n" +
-	"\achat_id\x18\x05 \x01(\tH\x01R\x06chatId\x88\x01\x01B\x0e\n" +
+	"\achat_id\x18\x05 \x01(\tH\x01R\x06chatId\x88\x01\x01\x12\x14\n" +
+	"\x05depth\x18\x06 \x01(\x05R\x05depthB\x0e\n" +
 	"\f_worktree_idB\n" +
 	"\n" +
 	"\b_chat_id\"A\n" +

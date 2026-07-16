@@ -105,11 +105,26 @@ const pendingFileTreeRequests = new Map<string, Promise<FileNode[]>>();
 // ============================================
 
 function protoFileNodeToFrontend(proto: ProtoFileNode): FileNode {
+  const isDir = proto.type === FileNodeType.DIRECTORY;
+
+  // Distinguish "not yet loaded" from "loaded and empty". A depth-limited walk
+  // returns directory nodes at the boundary with no children but has_children
+  // set — leave those children undefined so the tree lazily fetches on expand.
+  let children: FileNode[] | undefined;
+  if (proto.children && proto.children.length > 0) {
+    children = proto.children.map(protoFileNodeToFrontend);
+  } else if (isDir && !proto.hasChildren) {
+    children = []; // genuinely empty directory (loaded)
+  } else {
+    children = undefined; // a file, or a boundary directory to lazily load
+  }
+
   return {
     name: proto.name,
     path: proto.path,
-    type: proto.type === FileNodeType.DIRECTORY ? "directory" : "file",
-    children: proto.children?.map(protoFileNodeToFrontend),
+    type: isDir ? "directory" : "file",
+    children,
+    hasChildren: isDir ? proto.hasChildren : undefined,
     size: proto.size !== undefined ? Number(proto.size) : undefined,
     modified: proto.modified,
   };
@@ -206,11 +221,14 @@ export const filesystemGrpc = {
     path: string = "/",
     showHidden: boolean = false,
     worktreeId?: string,
-    chatId?: string
+    chatId?: string,
+    depth: number = 0
   ): Promise<FileNode[]> {
     // Always fetch with showHidden=true so all callers share one in-flight request.
     // Callers that want hidden files filtered get the result filtered client-side.
-    const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}`;
+    // depth is part of the key so a depth-2 root fetch and a depth-1 subdir fetch
+    // never collide (0 = full recursive tree — back-compat default).
+    const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}:${depth}`;
 
     let promise = pendingFileTreeRequests.get(cacheKey);
     if (!promise) {
@@ -223,6 +241,7 @@ export const filesystemGrpc = {
             showHidden: true,
             worktreeId,
             chatId,
+            depth,
           });
           const response = await client.getFileTree(request);
           const files = response.files.map(protoFileNodeToFrontend);

@@ -80,6 +80,11 @@ message FileNode {
   repeated FileNode children = 4;
   optional int64 size = 5;
   optional string modified = 6;
+  // has_children is a hint for DIRECTORY nodes: true when the directory has at
+  // least one entry (respecting show_hidden). Lets the UI render an expand
+  // chevron for lazily-loaded directories without fetching their children.
+  // Only meaningful when children are not eagerly included (depth-limited walks).
+  bool has_children = 7;
 }
 
 // FileMetadata contains detailed information about a file or directory
@@ -113,6 +118,12 @@ message GetFileTreeRequest {
   bool show_hidden = 3; // Whether to show hidden files
   optional string worktree_id = 4; // Optional worktree to scope the tree
   optional string chat_id = 5; // Optional chat to resolve worktree from
+  // depth bounds how many levels of children are returned below `path`:
+  //   0 = unlimited (full recursive tree — back-compat default)
+  //   N = N levels of descendants (e.g. 1 = immediate children only)
+  // Directory nodes at the depth boundary carry has_children instead of
+  // eagerly-included children, enabling VS Code-style lazy loading.
+  int32 depth = 6;
 }
 
 message GetFileTreeResponse {
