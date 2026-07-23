@@ -43,6 +43,8 @@ func newWorkflowCmd() *cobra.Command {
 	cmd.AddCommand(newWorkflowRunCmd())
 	cmd.AddCommand(newWorkflowFollowCmd())
 	cmd.AddCommand(newWorkflowScenarioCmd())
+	cmd.AddCommand(newWorkflowNodeCmd())
+	cmd.AddCommand(newWorkflowAnalyzeCmd())
 
 	// Live supervision surface (Connect RPCs + context credential; no DB).
 	cmd.AddCommand(newWorkflowWatchCmd())
