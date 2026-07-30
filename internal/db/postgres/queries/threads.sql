@@ -1,8 +1,9 @@
 -- name: CreateThread :one
 INSERT INTO threads (
     id, conversation_id, parent_thread_id, fork_at_ordinal, 
-    fork_at_context_window_id, workflow_id, title, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    fork_at_context_window_id, workflow_id, title, created_at,
+    origin, origin_node_id, status
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetThread :one
@@ -41,6 +42,23 @@ UPDATE threads SET
     fork_at_context_window_id = $2
 WHERE id = $3
 RETURNING *;
+
+-- name: UpdateThreadStatus :one
+-- Record thread lifecycle. Replaces the "thread:<node>" workflow records that
+-- used to carry this: threads own their own start/finish now.
+-- completed_at is only meaningful for terminal statuses; callers pass NULL
+-- when moving a thread back to running.
+UPDATE threads SET
+    status = $1,
+    completed_at = $2
+WHERE id = $3
+RETURNING *;
+
+-- name: ListThreadsByOrigin :many
+-- Threads in a conversation with a given origin (e.g. every spawn thread).
+SELECT * FROM threads
+WHERE conversation_id = $1 AND origin = $2
+ORDER BY created_at ASC;
 
 -- name: DeleteThread :exec
 DELETE FROM threads WHERE id = $1;

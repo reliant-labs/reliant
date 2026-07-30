@@ -3600,6 +3600,20 @@ func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkA
 	return r.threads.UpdateThreadForkPoint(ctx, threadID, forkAtOrdinal, forkAtContextWindowID)
 }
 
+func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
+	return r.threads.UpdateThreadStatus(ctx, threadID, status, completedAt)
+}
+
+func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {
+	if conversationID == "" {
+		return nil, fmt.Errorf("conversation ID cannot be empty")
+	}
+	return r.threads.ListThreadsByOrigin(ctx, conversationID, origin)
+}
+
 func (r *Repo) DeleteThread(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("thread ID cannot be empty")

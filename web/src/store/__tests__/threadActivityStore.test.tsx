@@ -85,17 +85,17 @@ describe("useIsThreadActive (characterization)", () => {
     expect(result.current).toBe(true);
   });
 
-  it("thread metadata records (thread:/fork: names) are ignored", () => {
+  // Thread lifecycle now lives on the threads table, so "thread:"/"fork:"
+  // workflow records no longer exist and the store no longer filters on the
+  // name. A record with such a name is just a running thread.
+  it("no longer special-cases thread:/fork: workflow names", () => {
     useActivityStore.getState().setActivity(CHAT, ChatActivity.RUNNING);
     useThreadActivityStore
       .getState()
-      .setThreads(CHAT, [
-        buildThread({ workflow_name: "thread:child" }),
-        buildThread({ id: "wf-2", workflow_name: "fork:other", thread: "t2" }),
-      ]);
+      .setThreads(CHAT, [buildThread({ workflow_name: "thread:child" })]);
 
     const { result } = renderHook(() => useIsThreadActive(CHAT, CHILD));
-    expect(result.current).toBe(false);
+    expect(result.current).toBe(true);
   });
 
   it("completed thread record → NOT active even when chat RUNNING", () => {
@@ -110,13 +110,12 @@ describe("useIsThreadActive (characterization)", () => {
 });
 
 describe("useActiveThreadIds", () => {
-  it("collects running/active non-metadata thread ids when chat is running", () => {
+  it("collects running/active thread ids when chat is running", () => {
     useActivityStore.getState().setActivity(CHAT, ChatActivity.RUNNING);
     useThreadActivityStore.getState().setThreads(CHAT, [
       buildThread({}),
       buildThread({ id: "wf-2", thread: "t2", status: "active" }),
       buildThread({ id: "wf-3", thread: "t3", status: "completed" }),
-      buildThread({ id: "wf-4", thread: "t4", workflow_name: "thread:x" }),
     ]);
 
     const { result } = renderHook(() => useActiveThreadIds(CHAT));

@@ -482,6 +482,26 @@ type Workflow = core.Workflow
 // Thread is an alias to the shared core thread model.
 type Thread = core.Thread
 
+// ThreadOrigin is an alias to the shared core thread-origin type.
+type ThreadOrigin = core.ThreadOrigin
+
+// Thread origins — how a thread came to exist.
+const (
+	ThreadOriginMain  = core.ThreadOriginMain
+	ThreadOriginSpawn = core.ThreadOriginSpawn
+	ThreadOriginFork  = core.ThreadOriginFork
+	ThreadOriginNode  = core.ThreadOriginNode
+)
+
+// Thread lifecycle statuses, mirroring CHAT_WORKFLOW_STATUS.
+const (
+	ThreadStatusRunning   = core.ThreadStatusRunning
+	ThreadStatusCompleted = core.ThreadStatusCompleted
+	ThreadStatusFailed    = core.ThreadStatusFailed
+	ThreadStatusCancelled = core.ThreadStatusCancelled
+	ThreadStatusExpired   = core.ThreadStatusExpired
+)
+
 // ContextWindow is an alias to the shared core context-window model.
 type ContextWindow = core.ContextWindow
 

@@ -139,6 +139,8 @@ type psRow struct {
 	ParentThread  string `json:"parent_thread,omitempty"`
 	Node          string `json:"node,omitempty"`
 	SpawnedByNode string `json:"spawned_by_node,omitempty"`
+	// Origin is how the thread was created: "main", "spawn", "fork", "node".
+	Origin string `json:"origin,omitempty"`
 	GateKind      string `json:"gate_kind,omitempty"`   // question | approval | pause
 	Gate          string `json:"gate,omitempty"`        // step/node that raised the wait marker
 	GatePrompt    string `json:"gate_prompt,omitempty"` // short summary of the gate
@@ -182,6 +184,7 @@ type psChatMarkers struct {
 	approvalsByExec  map[string][]*db.Approval // approval.TemporalWorkflowID -> pending approvals
 	lastActivity     map[string]time.Time      // workflow.Thread -> newest message
 	parentThread     map[string]string         // threads.id -> threads.parent_thread_id, the spawn tree
+	originByThread   map[string]string         // threads.id -> threads.origin ("spawn", "node", "fork", "main")
 	// backoffByThread is the provider-backoff marker per thread: waiting_since is
 	// set while the thread is asleep in a provider retry ladder, and the
 	// cumulative counters persist after it wakes.
@@ -242,6 +245,7 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 		approvalsByExec:  map[string][]*db.Approval{},
 		lastActivity:     map[string]time.Time{},
 		parentThread:     map[string]string{},
+		originByThread:   map[string]string{},
 		backoffByThread:  map[string]db.ProviderBackoff{},
 	}
 
@@ -281,6 +285,7 @@ func loadPsChatMarkers(ctx context.Context, repo *db.Repo, chatID string) (psCha
 		if t.ParentThreadID != nil && *t.ParentThreadID != "" {
 			m.parentThread[t.ID] = *t.ParentThreadID
 		}
+		m.originByThread[t.ID] = t.Origin
 	}
 
 	return m, nil
@@ -425,6 +430,7 @@ func buildPsRows(workflows []*db.Workflow, markers map[string]psChatMarkers, nod
 		if rep.SpawnedByNodeID != nil {
 			row.SpawnedByNode = *rep.SpawnedByNodeID
 		}
+		row.Origin = markers[g.chatID].originByThread[g.thread]
 		// Backoff detail is reported from THIS thread's own marker, whether or not
 		// the thread is parked right now: the cumulative wait is the answer to
 		// "why did this unit produce so little", and it outlives the wait itself.
@@ -707,7 +713,12 @@ func printPsRows(w io.Writer, rows []psRow) {
 	fmt.Fprintln(tw, "CHAT/EXEC\tTHREAD\tWORKFLOW\tSTATE\tNODE\tWAITING ON\tSINCE\tAGE")
 	for _, r := range rows {
 		name := r.WorkflowName
-		if r.SpawnedByNode != "" {
+		// A spawn is named by its origin — there is no node behind it. A
+		// node-created thread names the node that made it.
+		switch {
+		case r.Origin == "spawn":
+			name = fmt.Sprintf("%s (spawn)", name)
+		case r.SpawnedByNode != "":
 			name = fmt.Sprintf("%s (spawn:%s)", name, r.SpawnedByNode)
 		}
 		state := r.State

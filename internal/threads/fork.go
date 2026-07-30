@@ -60,6 +60,8 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 		WorkflowID:            workflowID,
 		Title:                 opts.Title,
 		CreatedAt:             now(),
+		Origin:                db.ThreadOriginFork,
+		Status:                db.ThreadStatusRunning,
 	}
 
 	createdThread, err := s.repo.CreateThread(ctx, thread)

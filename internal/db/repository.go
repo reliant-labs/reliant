@@ -393,6 +393,8 @@ type Repository interface {
 	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtOrdinal *int64, forkAtContextWindowID *string) (*Thread, error)
+	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error)
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, conversationID string) error
 	CountThreadsInConversation(ctx context.Context, conversationID string) (int64, error)

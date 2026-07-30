@@ -2405,7 +2405,7 @@ func executeSpawnInline(
 		ThreadMode:       threadMode,
 		ForkFromThread:   forkedFrom,
 		ParentThread:     parentThread,
-		SpawnedByNodeID:  "spawn_tool",
+		Origin:           model.ThreadOriginSpawn,
 		InjectMessage:    injectMsg,
 		Logger:           logger,
 	}); err != nil {
@@ -2494,7 +2494,7 @@ func executeSpawnInline(
 	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "started", parentWorkflowID, config.childThread, &workflowStatusOpts{
 		Title:               config.presetName,
 		ThreadTitle:         threadTitle,
-		SpawnedByNodeID:     "spawn_tool",
+		Origin:              model.ThreadOriginSpawn,
 		SpawnedByToolCallID: config.toolCallID,
 	})
 
@@ -3173,7 +3173,11 @@ type workflowStatusOpts struct {
 	ThreadTitle         string // Human-readable title for the thread (stored in threads table)
 	SpawnedByToolCallID string
 	SpawnedByNodeID     string // Node ID that spawned this child workflow
-	LoopIteration       *int64 // Iteration index when spawned by a loop node
+	// Origin is how the thread came to exist (db.ThreadOrigin*). Sent on the
+	// status update so the live UI classifies a thread the same way a reload
+	// does — before the execution tree is refetched, the stream is all it has.
+	Origin        string
+	LoopIteration *int64 // Iteration index when spawned by a loop node
 	// Resumed marks a "started" notification that follows a self-pause resume
 	// (as opposed to a workflow/spawn starting). The activity un-pauses the
 	// chat's workflow rows chat-wide for it — a resume un-parks the ENTIRE
@@ -3239,6 +3243,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.SpawnedByNodeID != "" {
 			input["spawned_by_node_id"] = opts.SpawnedByNodeID
+		}
+		if opts.Origin != "" {
+			input["origin"] = opts.Origin
 		}
 		if opts.LoopIteration != nil {
 			input["loop_iteration"] = *opts.LoopIteration

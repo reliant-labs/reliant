@@ -44,8 +44,6 @@ FROM workflows w
 LEFT JOIN chats c    ON c.id = w.chat_id
 LEFT JOIN projects p ON p.id = c.project_id
 WHERE w.parent_id IS NULL
-  AND w.workflow_name NOT LIKE 'thread:%'
-  AND w.workflow_name NOT LIKE 'fork:%'
 ORDER BY w.created_at DESC
 LIMIT :'lim';
 SQL

@@ -738,9 +738,6 @@ func (s *ChatService) buildWorkflowExecutionTree(
 		MessageCount: 0, // TODO: count messages by thread
 	}
 
-	// Add thread statuses from static analysis
-	proto.ThreadStatuses = s.getThreadStatusesForWorkflow(wf, stepsByWorkflow[wf.ID])
-
 	if wf.ParentID != nil {
 		proto.ParentId = wf.ParentID
 	}
@@ -753,7 +750,8 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	if wf.Outcome != nil && *wf.Outcome != "" {
 		proto.Outcome = wf.Outcome
 	}
-	// Populate ForkedFromThread, ParentThread, and ThreadTitle from Thread table (single source of truth)
+	// Populate Origin, ForkedFromThread, ParentThread, and ThreadTitle from the
+	// Thread table (single source of truth for thread identity).
 	if thread, err := s.database.GetThread(context.Background(), wf.Thread); err == nil && thread != nil {
 		if thread.ParentThreadID != nil {
 			// ForkedFromThread: only for actual forks (have fork metadata)
@@ -766,6 +764,8 @@ func (s *ChatService) buildWorkflowExecutionTree(
 		if thread.Title != nil {
 			proto.ThreadTitle = thread.Title
 		}
+		proto.Origin = thread.Origin
+		proto.OriginNodeId = thread.OriginNodeID
 	}
 	if wf.LoopIteration != nil {
 		iteration := int32(*wf.LoopIteration)
@@ -823,17 +823,4 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	return proto
 }
 
-// getThreadStatusesForWorkflow returns simple thread status based on workflow running state.
-// With the simplified thread model, all threads are active while workflow is running.
-func (s *ChatService) getThreadStatusesForWorkflow(wf *db.Workflow, _ []*db.StepExecution) []*reliantv1.ThreadStatus {
-	// Return simple root thread status
-	// IsActive is true because this is only called for active workflows
-	actualUUID := wf.Thread
-	return []*reliantv1.ThreadStatus{
-		{
-			LogicalName: string(v2.ThreadRoot),
-			IsActive:    true,
-			ActualUuid:  &actualUUID,
-		},
-	}
-}
+

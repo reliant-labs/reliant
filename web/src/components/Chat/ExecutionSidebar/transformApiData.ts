@@ -12,6 +12,7 @@ import type {
   StepExecution,
   WorkflowStatus,
   StepStatus,
+  ThreadOrigin,
 } from "./types";
 
 /**
@@ -28,6 +29,8 @@ export function transformWorkflowExecution(
     parentId: data.parentId,
     threadTitle: data.threadTitle,
     spawnedByNodeId: data.spawnedByNodeId,
+    origin: data.origin as ThreadOrigin | undefined,
+    originNodeId: data.originNodeId,
     forkedFromThread: data.forkedFromThread,
     parentThread: data.parentThread,
     createdAt: new Date(data.createdAt).getTime(),

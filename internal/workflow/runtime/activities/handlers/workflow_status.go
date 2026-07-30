@@ -37,7 +37,12 @@ type WorkflowStatusInput struct {
 	Title               string              `json:"title,omitempty"`                   // Title/prompt (for child workflows, shown in UI swim lane header)
 	SpawnedByToolCallID string              `json:"spawned_by_tool_call_id,omitempty"` // Tool call ID that spawned this workflow
 	SpawnedByNodeID     string              `json:"spawned_by_node_id,omitempty"`      // Node ID that spawned this child workflow
-	LoopIteration       *int64              `json:"loop_iteration,omitempty"`          // Iteration index when spawned by a loop node
+	// Origin is how the thread came to exist ("spawn", "node", "fork", "main").
+	// Carried on the status update so a live UI classifies a thread the same
+	// way a reload does — the stream is the only source before the execution
+	// tree is refetched.
+	Origin        string `json:"origin,omitempty"`
+	LoopIteration *int64 `json:"loop_iteration,omitempty"` // Iteration index when spawned by a loop node
 	RouterDecision      *RouterDecisionInfo `json:"router_decision,omitempty"`         // Routing decision metadata (set when spawned by a router node)
 	Resumed             bool                `json:"resumed,omitempty"`                 // "started" follows a self-pause resume: un-pause the chat's workflow rows chat-wide
 	// Outcome is the run's VERDICT — "success" or "failure" — as declared by the
@@ -430,6 +435,9 @@ func (a *WorkflowStatusActivity) emitThreadUpdate(ctx context.Context, input Wor
 	if input.SpawnedByNodeID != "" {
 		updateData["spawned_by_node_id"] = input.SpawnedByNodeID
 	}
+	if input.Origin != "" {
+		updateData["origin"] = input.Origin
+	}
 	if input.RouterDecision != nil {
 		updateData["router_decision"] = map[string]string{
 			"workflow": input.RouterDecision.Workflow,
@@ -585,6 +593,9 @@ func (a *WorkflowStatusActivity) emitThreadStatusUpdate(ctx context.Context, inp
 	}
 	if input.SpawnedByNodeID != "" {
 		updateData["spawned_by_node_id"] = input.SpawnedByNodeID
+	}
+	if input.Origin != "" {
+		updateData["origin"] = input.Origin
 	}
 	if input.SpawnedByToolCallID != "" {
 		updateData["spawned_by_tool_call_id"] = input.SpawnedByToolCallID

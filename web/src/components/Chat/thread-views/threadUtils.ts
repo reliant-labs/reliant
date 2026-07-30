@@ -3,6 +3,20 @@
  */
 
 import type { ActiveThreadUpdate, RouterDecisionInfo } from "../../../types/streaming";
+import type { ThreadOrigin } from "../ExecutionSidebar/types";
+
+/**
+ * Whether a thread was created by the spawn tool.
+ *
+ * Origin is stored on the thread (threads.origin), so this is a lookup rather
+ * than an inference. It replaces comparing a workflow row's spawnedByNodeId
+ * against the sentinel "spawn_tool": that field records WHICH node produced a
+ * workflow, and a thread has more than one workflow row associated with it, so
+ * the answer depended on which row a reader happened to look at last.
+ */
+export function isSpawnOrigin(origin: ThreadOrigin | undefined): boolean {
+  return origin === "spawn";
+}
 
 /**
  * Generate a consistent color for a thread based on its ID
