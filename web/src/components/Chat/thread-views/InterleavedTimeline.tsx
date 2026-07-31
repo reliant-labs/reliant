@@ -29,12 +29,12 @@ import type {
   InfoUpdate,
   RunOutputUpdate,
 } from "../../../types/streaming";
-import type { WorkflowExecution, StepExecution } from "../ExecutionSidebar/types";
+import type { WorkflowExecution, StepExecution, ThreadOrigin } from "../ExecutionSidebar/types";
 import { cn } from "../../../lib/utils";
 import { sortMessagesForDisplay } from "../../../lib/messageOrder";
 import { getActivitySteps } from "./activityIndicators";
 import { ActivityIndicator } from "./ActivityIndicator";
-import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads } from "./threadUtils";
+import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreads } from "../../../store/threadActivityStore";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
@@ -67,8 +67,6 @@ interface InterleavedTimelineProps {
 }
 
 /** Minimal info needed for rendering - derived from WorkflowExecution */
-/** Thread creation mechanism */
-type ThreadOrigin = "fork" | "new" | "main";
 
 interface RouterDecision {
   workflow: string;
@@ -82,7 +80,7 @@ interface WorkflowDisplay {
   color: string;
   parentThread?: string;
   isMain: boolean;
-  /** How this thread was created: fork (inherits context), new (fresh), or main */
+  /** How this thread was created — read from threads.origin via the API. */
   origin: ThreadOrigin;
   /** Whether this thread was created by the spawn tool (not a workflow node) */
   isSpawn: boolean;
@@ -126,9 +124,10 @@ function buildWorkflowLookups(
 
   function index(wf: WorkflowExecution, treeParentThread?: string) {
     byId.set(wf.id, wf);
-    // Prefer workflows with spawnedByNodeId for thread lookup
-    const existing = byThread.get(wf.thread);
-    if (!existing || wf.spawnedByNodeId) {
+    // First workflow on a thread wins. Thread-level facts (name, origin) come
+    // from the threads table and are identical across every workflow sharing
+    // the thread, so later rows have nothing to add.
+    if (!byThread.has(wf.thread)) {
       byThread.set(wf.thread, wf);
     }
 
@@ -144,11 +143,10 @@ function buildWorkflowLookups(
       }
     }
 
-    // Determine thread origin: fork (has forkedFromThread), new (child but not fork), or main
-    let origin: ThreadOrigin = "main";
-    if (!isMain) {
-      origin = wf.forkedFromThread ? "fork" : "new";
-    }
+    // Origin comes from the threads table; fall back only when a thread
+    // predates the column and the API sent nothing.
+    const origin: ThreadOrigin =
+      wf.origin ?? (isMain ? "main" : wf.forkedFromThread ? "fork" : "node");
 
     // Use authoritative parentThread from backend (thread table), fall back to tree-derived
     const parentThread = wf.parentThread || treeParentThread;
@@ -161,7 +159,7 @@ function buildWorkflowLookups(
       parentThread,
       isMain,
       origin,
-      isSpawn: wf.spawnedByNodeId === "spawn_tool",
+      isSpawn: isSpawnOrigin(origin),
     });
 
     for (const child of wf.children) {
@@ -308,8 +306,12 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         if (at.thread_title && existing.name === "Thread") {
           existing.name = formatNodeId(at.thread_title);
         }
-        if (at.spawned_by_node_id === "spawn_tool") {
-          existing.isSpawn = true;
+        // The stream carries origin for threads whose execution tree has not
+        // been refetched yet. It agrees with the persisted value rather than
+        // repairing it — both now read the same field.
+        if (at.origin) {
+          existing.origin = at.origin;
+          existing.isSpawn = isSpawnOrigin(at.origin);
         }
       }
     }
@@ -369,14 +371,16 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         const activeThread = activeThreads.find(at => at.thread === thread);
         const resolvedName = !isMain ? resolveThreadNameFromActiveThreads(thread, activeThreads) : undefined;
         const routerDec = !isMain ? resolveRouterDecisionFromActiveThreads(thread, activeThreads) : undefined;
+        const streamedOrigin =
+          activeThread?.origin ?? (isMain ? "main" : "node");
         display = {
           id: thread,
           thread,
           name: isMain ? "Main" : (resolvedName || "Thread"),
           color: getThreadColor(thread, isMain),
           isMain,
-          origin: isMain ? "main" : "new",
-          isSpawn: activeThread?.spawned_by_node_id === "spawn_tool",
+          origin: streamedOrigin,
+          isSpawn: isSpawnOrigin(streamedOrigin),
           routerDecision: routerDec,
         };
         displays.set(thread, display);

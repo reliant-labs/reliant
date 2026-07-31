@@ -47,6 +47,27 @@ const (
 	ThreadModeFork    = "fork"
 )
 
+// Thread origin constants. These mirror db.ThreadOrigin*, duplicated here so
+// the workflow model does not depend on the db package. Origin answers HOW a
+// thread was created; it is deliberately separate from the node ID that
+// created it, which answers WHICH node.
+const (
+	ThreadOriginMain  = "main"
+	ThreadOriginSpawn = "spawn"
+	ThreadOriginFork  = "fork"
+	ThreadOriginNode  = "node"
+)
+
+// ThreadOriginForMode maps a thread mode to the origin of the thread it
+// creates. A fork is self-describing through its fork metadata; every other
+// mode handled by the inline executor is a graph node creating a thread.
+func ThreadOriginForMode(mode string) string {
+	if mode == ThreadModeFork {
+		return ThreadOriginFork
+	}
+	return ThreadOriginNode
+}
+
 // Message role constants.
 const (
 	RoleUser      = "user"

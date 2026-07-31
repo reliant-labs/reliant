@@ -27,6 +27,13 @@ type CreateWorkflowWithThreadInput struct {
 	ThreadTitle  *string `json:"thread_title,omitempty"`
 	ParentThread *string `json:"parent_thread,omitempty"` // Parent thread for non-fork child threads (e.g., spawn)
 
+	// Origin records HOW the thread was created ("spawn", "node", "fork",
+	// "main"). This is the field readers use to tell a spawn thread from a
+	// graph-node thread; SpawnedByNodeID above answers a different question
+	// (which node produced the workflow) and must not be overloaded for it.
+	Origin       *string `json:"origin,omitempty"`
+	OriginNodeID *string `json:"origin_node_id,omitempty"`
+
 	// Fork configuration (optional)
 	ForkFromThread *string `json:"fork_from_thread,omitempty"`
 }
@@ -117,6 +124,10 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		ThreadTitle:    input.ThreadTitle,
 		ParentThread:   input.ParentThread,
 		ForkFromThread: input.ForkFromThread,
+		OriginNodeID:   input.OriginNodeID,
+	}
+	if input.Origin != nil {
+		opts.Origin = *input.Origin
 	}
 
 	// Call the threads service to create workflow and thread atomically

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -60,8 +61,35 @@ func (s *threadStore) GetThreadWithParent(ctx context.Context, id string) (*core
 		WorkflowID:            nullStringToPtr(result.WorkflowID),
 		Title:                 nullStringToPtr(result.Title),
 		CreatedAt:             result.CreatedAt,
+		Origin:                result.Origin,
+		OriginNodeID:          nullStringToPtr(result.OriginNodeID),
+		Status:                result.Status,
+		CompletedAt:           threadNullTimeToPtr(result.CompletedAt),
 	}
 	return thread, nullStringToPtr(result.ParentConversationID), nil
+}
+
+func (s *threadStore) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*core.Thread, error) {
+	result, err := s.q.UpdateThreadStatus(ctx, pgdb.UpdateThreadStatusParams{
+		ID:          threadID,
+		Status:      status,
+		CompletedAt: threadPtrToNullTime(completedAt),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to update thread status: %w", err)
+	}
+	return threadFromPG(result), nil
+}
+
+func (s *threadStore) ListThreadsByOrigin(ctx context.Context, conversationID string, origin core.ThreadOrigin) ([]*core.Thread, error) {
+	results, err := s.q.ListThreadsByOrigin(ctx, pgdb.ListThreadsByOriginParams{
+		ConversationID: conversationID,
+		Origin:         origin,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list threads by origin: %w", err)
+	}
+	return threadsFromPG(results), nil
 }
 
 func (s *threadStore) ListThreadsByConversation(ctx context.Context, conversationID string) ([]*core.Thread, error) {
@@ -220,7 +248,25 @@ func threadFromPG(st pgdb.Thread) *core.Thread {
 		WorkflowID:            nullStringToPtr(st.WorkflowID),
 		Title:                 nullStringToPtr(st.Title),
 		CreatedAt:             st.CreatedAt,
+		Origin:                st.Origin,
+		OriginNodeID:          nullStringToPtr(st.OriginNodeID),
+		Status:                st.Status,
+		CompletedAt:           threadNullTimeToPtr(st.CompletedAt),
 	}
+}
+
+func threadPtrToNullTime(t *time.Time) sql.NullTime {
+	if t == nil {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Time: *t, Valid: true}
+}
+
+func threadNullTimeToPtr(nt sql.NullTime) *time.Time {
+	if !nt.Valid {
+		return nil
+	}
+	return &nt.Time
 }
 
 func threadsFromPG(rows []pgdb.Thread) []*core.Thread {
@@ -232,6 +278,20 @@ func threadsFromPG(rows []pgdb.Thread) []*core.Thread {
 }
 
 func threadToCreateParams(t *core.Thread) pgdb.CreateThreadParams {
+	origin := t.Origin
+	if origin == "" {
+		// origin is NOT NULL. A caller that forgot to set it is a bug, but
+		// defaulting is better than a constraint violation at the driver: a
+		// thread with a parent is far more likely a spawn than a root.
+		origin = core.ThreadOriginNode
+		if t.ParentThreadID == nil {
+			origin = core.ThreadOriginMain
+		}
+	}
+	status := t.Status
+	if status == 0 {
+		status = core.ThreadStatusRunning
+	}
 	return pgdb.CreateThreadParams{
 		ID:                    t.ID,
 		ConversationID:        t.ConversationID,
@@ -241,6 +301,9 @@ func threadToCreateParams(t *core.Thread) pgdb.CreateThreadParams {
 		WorkflowID:            ptrToNullString(t.WorkflowID),
 		Title:                 ptrToNullString(t.Title),
 		CreatedAt:             t.CreatedAt,
+		Origin:                origin,
+		OriginNodeID:          ptrToNullString(t.OriginNodeID),
+		Status:                status,
 	}
 }
 

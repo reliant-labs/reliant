@@ -84,8 +84,9 @@ DELETE FROM workflows WHERE chat_id = $1;
 -- Returns 'running' if ANY real workflow (root or child) is running.
 -- Returns 'paused' if ANY real workflow is paused (and none running).
 -- Otherwise returns the most recent root workflow's status.
--- NOTE: Excludes thread metadata records ("thread:*" and "fork:*") - these track
--- thread lifecycle, not workflow execution. They complete when their owning workflow completes.
+-- Every row in workflows is now a real workflow execution: thread lifecycle
+-- lives on threads.status, so the "thread:*"/"fork:*" name filters this query
+-- used to carry are gone along with the records they excluded.
 SELECT
     w.chat_id,
     CASE
@@ -93,15 +94,11 @@ SELECT
             SELECT 1 FROM workflows w3
             WHERE w3.chat_id = w.chat_id
               AND w3.status = 2
-              AND w3.workflow_name NOT LIKE 'thread:%'
-              AND w3.workflow_name NOT LIKE 'fork:%'
         ) THEN 2
         WHEN EXISTS (
             SELECT 1 FROM workflows w4
             WHERE w4.chat_id = w.chat_id
               AND w4.status = 6
-              AND w4.workflow_name NOT LIKE 'thread:%'
-              AND w4.workflow_name NOT LIKE 'fork:%'
         ) THEN 6
         ELSE w.status
     END AS status

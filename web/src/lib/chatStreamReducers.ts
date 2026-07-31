@@ -138,6 +138,8 @@ export function mergeActiveThreads(
         ...update,
         thread_title: update.thread_title || prev.thread_title,
         spawned_by_node_id: update.spawned_by_node_id || prev.spawned_by_node_id,
+        origin: update.origin || prev.origin,
+        origin_node_id: update.origin_node_id || prev.origin_node_id,
         spawned_by_tool_call_id:
           update.spawned_by_tool_call_id || prev.spawned_by_tool_call_id,
         router_decision: update.router_decision || prev.router_decision,

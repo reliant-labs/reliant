@@ -79,6 +79,13 @@ type CreateThreadOpts struct {
 	ID             string  // Optional - generated if empty
 	ConversationID string  // Required
 	Title          *string // Optional
+
+	// Origin records how the thread was created. Defaults to ThreadOriginMain,
+	// since a thread created through this entry point has no parent.
+	Origin db.ThreadOrigin
+	// OriginNodeID names the creating graph node; only meaningful for
+	// ThreadOriginNode.
+	OriginNodeID *string
 }
 
 // ForkThreadOpts contains options for forking a thread.
@@ -101,6 +108,13 @@ type CreateWorkflowWithThreadOpts struct {
 	ChatID       string  // Required - the conversation this thread belongs to
 	ThreadTitle  *string // Optional human-readable title
 	ParentThread *string // Optional - parent thread ID for non-fork child threads (e.g., spawn)
+
+	// Origin records how the thread was created — see db.ThreadOrigin. The
+	// fork paths override this to ThreadOriginFork, since fork metadata is
+	// self-describing. Defaults to ThreadOriginNode when unset.
+	Origin db.ThreadOrigin
+	// OriginNodeID names the creating graph node; only set for ThreadOriginNode.
+	OriginNodeID *string
 
 	// Fork configuration (mutually exclusive - set at most one)
 	// ForkFromMessage: Fork from a specific message (extracts thread, CW, ordinal internally)
@@ -238,7 +252,11 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 				}
 			} else {
 				// Create new thread — set parent if this is a child thread (e.g., spawn)
-				thread, cw, err = s.createThreadInternal(txCtx, opts.ChatID, threadID, opts.ThreadTitle, opts.ParentThread, &workflowID)
+				origin := opts.Origin
+				if origin == "" {
+					origin = db.ThreadOriginNode
+				}
+				thread, cw, err = s.createThreadInternal(txCtx, opts.ChatID, threadID, opts.ThreadTitle, opts.ParentThread, &workflowID, origin, opts.OriginNodeID)
 				if err != nil {
 					return fmt.Errorf("failed to create thread: %w", err)
 				}

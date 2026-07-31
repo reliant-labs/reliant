@@ -663,7 +663,11 @@ CREATE TABLE public.threads (
     fork_at_context_window_id text,
     workflow_id text,
     created_at timestamp with time zone NOT NULL,
-    title text
+    title text,
+    origin text NOT NULL,
+    origin_node_id text,
+    status integer DEFAULT 2 NOT NULL,
+    completed_at timestamp with time zone
 );
 
 --
@@ -1358,6 +1362,12 @@ CREATE INDEX idx_task_deps_to ON public.task_dependencies USING btree (to_task_i
 --
 
 CREATE INDEX idx_task_deps_type ON public.task_dependencies USING btree (dependency_type);
+
+--
+-- Name: idx_threads_origin; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_threads_origin ON public.threads USING btree (conversation_id, origin);
 
 --
 -- Name: idx_user_updates_chat; Type: INDEX; Schema: public; Owner: -

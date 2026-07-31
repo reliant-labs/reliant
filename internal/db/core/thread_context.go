@@ -5,6 +5,36 @@ import (
 	"time"
 )
 
+// ThreadOrigin describes how a thread came to exist. It answers a different
+// question than Workflow.SpawnedByNodeID, which records WHICH graph node
+// produced a workflow — provenance, not kind. Conflating the two is what
+// previously forced readers to string-match a node-ID field against the
+// sentinel "spawn_tool" to recognize a spawn.
+type ThreadOrigin = string
+
+const (
+	// ThreadOriginMain is the chat's root thread. It has no parent.
+	ThreadOriginMain ThreadOrigin = "main"
+	// ThreadOriginSpawn is a thread created by the spawn tool.
+	ThreadOriginSpawn ThreadOrigin = "spawn"
+	// ThreadOriginFork is a thread forked from a parent at a given ordinal.
+	ThreadOriginFork ThreadOrigin = "fork"
+	// ThreadOriginNode is a thread created by a workflow graph node; the node
+	// is named by Thread.OriginNodeID (which may be nil for threads migrated
+	// from before origins were recorded).
+	ThreadOriginNode ThreadOrigin = "node"
+)
+
+// Thread lifecycle statuses. These mirror CHAT_WORKFLOW_STATUS so a thread's
+// state is directly comparable to its workflow's.
+const (
+	ThreadStatusRunning   int32 = 2
+	ThreadStatusCompleted int32 = 3
+	ThreadStatusFailed    int32 = 4
+	ThreadStatusCancelled int32 = 5
+	ThreadStatusExpired   int32 = 7
+)
+
 // Thread represents a conversation thread with optional fork relationships.
 type Thread struct {
 	ID                    string    `json:"id"`
@@ -15,6 +45,17 @@ type Thread struct {
 	WorkflowID            *string   `json:"workflow_id,omitempty"`
 	Title                 *string   `json:"title,omitempty"`
 	CreatedAt             time.Time `json:"created_at"`
+
+	// Origin is how this thread was created; see ThreadOrigin.
+	Origin ThreadOrigin `json:"origin"`
+	// OriginNodeID names the graph node that created the thread. Set only for
+	// ThreadOriginNode, where the node ID is genuine provenance.
+	OriginNodeID *string `json:"origin_node_id,omitempty"`
+
+	// Status is the thread's lifecycle state, owned by the thread itself
+	// rather than by a synthetic "thread:<node>" workflow record.
+	Status      int32      `json:"status"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 // ContextWindow represents an atomic unit for LLM context.
@@ -39,6 +80,8 @@ type ThreadStore interface {
 	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtOrdinal *int64, forkAtContextWindowID *string) (*Thread, error)
+	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error)
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, conversationID string) error
 	CountThreadsInConversation(ctx context.Context, conversationID string) (int64, error)

@@ -20,14 +20,6 @@ import { useIsChatRunning } from "./activityStore";
 const EMPTY_ARRAY: ActiveThreadUpdate[] = [];
 const EMPTY_SET = new Set<string>();
 
-/**
- * Check if a workflow name is a thread metadata record (not a real workflow)
- */
-function isThreadMetadataRecord(workflowName?: string): boolean {
-  if (!workflowName) return false;
-  return workflowName.startsWith("thread:") || workflowName.startsWith("fork:");
-}
-
 // ============================================================================
 // Store
 // ============================================================================
@@ -110,7 +102,6 @@ export function useActiveThreadIds(chatId: string): Set<string> {
 
     const activeIds = new Set<string>();
     for (const thread of threads) {
-      if (isThreadMetadataRecord(thread.workflow_name)) continue;
       if (
         (thread.status === "running" || thread.status === "active") &&
         thread.thread
@@ -153,7 +144,6 @@ export function useIsThreadActive(
 
     // Specific child thread - check activeThreads
     for (const thread of threads) {
-      if (isThreadMetadataRecord(thread.workflow_name)) continue;
       if (
         (thread.status === "running" || thread.status === "active") &&
         thread.thread === threadId
@@ -179,7 +169,6 @@ export function useChatCurrentActivity(chatId: string): string | null {
     if (!isRunning) return null;
     const threads = state.threads[chatId] || [];
     for (const thread of threads) {
-      if (isThreadMetadataRecord(thread.workflow_name)) continue;
       if (
         (thread.status === "running" || thread.status === "active") &&
         thread.current_activity

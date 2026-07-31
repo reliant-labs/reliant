@@ -1514,30 +1514,24 @@ func (e *InlineWorkflowExecutor) emitThreadCreated() {
 		},
 	})
 
-	threadWorkflowID := DeterministicWorkflowID(e.workflowID, e.nodeID+"-thread-"+e.execContext.Thread)
-	input := map[string]interface{}{
-		"workflow_id":        threadWorkflowID,
-		"chat_id":            e.chatID,
-		"workflow_name":      "thread:" + e.nodeID,
-		"status":             "started",
-		"parent_workflow_id": e.workflowID,
-		"thread":             e.execContext.Thread,
-		"thread_mode":        string(e.execContext.ThreadMode),
-		"spawned_by_node_id": e.nodeID,
-	}
-
-	// Add thread title: use execContext.ThreadTitle if set, otherwise default to node ID
+	// Thread title: use execContext.ThreadTitle if set, otherwise the node ID.
 	threadTitle := e.execContext.ThreadTitle
 	if threadTitle == "" {
 		threadTitle = e.nodeID
 	}
-	if threadTitle != "" {
-		input["thread_title"] = threadTitle
-	}
 
-	// Add forked_from_thread if this is a fork
-	if e.execContext.ThreadMode == model.ThreadModeFork && e.execContext.ForkedFrom != "" {
-		input["forked_from_thread"] = e.execContext.ForkedFrom
+	// A fork is self-describing through its fork metadata; anything else this
+	// executor creates was created by a graph node.
+	origin := model.ThreadOriginForMode(e.execContext.ThreadMode)
+
+	input := map[string]interface{}{
+		"chat_id":      e.chatID,
+		"thread_id":    e.execContext.Thread,
+		"status":       "started",
+		"workflow_id":  e.workflowID,
+		"node_id":      e.nodeID,
+		"thread_title": threadTitle,
+		"origin":       origin,
 	}
 
 	// Add router decision metadata if this thread was created by a router node
@@ -1552,7 +1546,7 @@ func (e *InlineWorkflowExecutor) emitThreadCreated() {
 	// This is critical for parallel execution - blocking here causes
 	// "trying to block on coroutine which is already blocked" errors
 	// when multiple inline workflows run concurrently.
-	_ = workflow.ExecuteActivity(activityCtx, "WorkflowStatus", input)
+	_ = workflow.ExecuteActivity(activityCtx, "ThreadStatus", input)
 }
 
 // emitThreadCompleted emits a thread_completed event for threads owned by this node.
@@ -1583,17 +1577,15 @@ func (e *InlineWorkflowExecutor) emitThreadCompleted() {
 		},
 	})
 
-	threadWorkflowID := DeterministicWorkflowID(e.workflowID, e.nodeID+"-thread-"+e.execContext.Thread)
 	input := map[string]interface{}{
-		"workflow_id":        threadWorkflowID,
-		"chat_id":            e.chatID,
-		"workflow_name":      "thread:" + e.nodeID,
-		"status":             "completed",
-		"parent_workflow_id": e.workflowID,
-		"thread":             e.execContext.Thread,
+		"chat_id":     e.chatID,
+		"thread_id":   e.execContext.Thread,
+		"status":      "completed",
+		"workflow_id": e.workflowID,
+		"node_id":     e.nodeID,
 	}
 
 	// Fire-and-forget: don't block waiting for the result.
 	// This is critical for parallel execution.
-	_ = workflow.ExecuteActivity(activityCtx, "WorkflowStatus", input)
+	_ = workflow.ExecuteActivity(activityCtx, "ThreadStatus", input)
 }

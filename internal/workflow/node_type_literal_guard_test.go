@@ -123,6 +123,10 @@ func TestNoRawNodeTypeLiteralsInProductionFiles(t *testing.T) {
 		"runtime/activities/handlers/workflow_status.go": {
 			"workflow": {},
 		},
+		// Same router_decision JSON map key, on the thread-lifecycle activity.
+		"runtime/activities/handlers/thread_status.go": {
+			"workflow": {},
+		},
 		// Well-known input key for loop iteration context, not a node type.
 		"runtime/loop_executor_parallel.go": {
 			"loop": {},

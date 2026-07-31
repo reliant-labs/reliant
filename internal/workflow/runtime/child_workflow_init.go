@@ -29,7 +29,12 @@ type ChildWorkflowInitOpts struct {
 	ForkFromThread   string // Only used when ThreadMode == model.ThreadModeFork
 	ParentThread     string // Parent thread ID for tracking lineage (set for both fork and new)
 	SpawnedByNodeID  string
-	LoopIteration    *int64
+	// Origin is how the thread came to exist ("spawn", "node", "fork", "main")
+	// — see db.ThreadOrigin. Distinct from SpawnedByNodeID, which records which
+	// graph node produced the workflow.
+	Origin        string
+	OriginNodeID  string
+	LoopIteration *int64
 	InjectMessage    *InjectMessageConfig // nil if no inject message
 	Logger           log.Logger
 }
@@ -97,6 +102,12 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 	}
 	if opts.SpawnedByNodeID != "" {
 		createInput["spawned_by_node_id"] = opts.SpawnedByNodeID
+	}
+	if opts.Origin != "" {
+		createInput["origin"] = opts.Origin
+	}
+	if opts.OriginNodeID != "" {
+		createInput["origin_node_id"] = opts.OriginNodeID
 	}
 	if opts.LoopIteration != nil {
 		createInput["loop_iteration"] = *opts.LoopIteration

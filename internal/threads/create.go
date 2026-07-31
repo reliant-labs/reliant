@@ -10,15 +10,25 @@ import (
 // CreateThread creates a new root thread (no fork) with an initial context window.
 // Returns the created Thread and its initial ContextWindow.
 func (s *Service) CreateThread(ctx context.Context, opts CreateThreadOpts) (*db.Thread, *db.ContextWindow, error) {
-	return s.createThreadInternal(ctx, opts.ConversationID, opts.ID, opts.Title, nil, nil)
+	origin := opts.Origin
+	if origin == "" {
+		origin = db.ThreadOriginMain
+	}
+	return s.createThreadInternal(ctx, opts.ConversationID, opts.ID, opts.Title, nil, nil, origin, opts.OriginNodeID)
 }
 
 // createThreadInternal creates a thread with an initial context window.
 // parentThreadID and workflowID are optional internal parameters used by
 // CreateWorkflowWithThread to set lineage and workflow atomically.
-func (s *Service) createThreadInternal(ctx context.Context, conversationID, id string, title *string, parentThreadID *string, workflowID *string) (*db.Thread, *db.ContextWindow, error) {
+// origin records HOW the thread was created and is required — it is the field
+// readers use to tell a spawn from a graph-node thread, and guessing it after
+// the fact is exactly the ambiguity this column exists to remove.
+func (s *Service) createThreadInternal(ctx context.Context, conversationID, id string, title *string, parentThreadID *string, workflowID *string, origin db.ThreadOrigin, originNodeID *string) (*db.Thread, *db.ContextWindow, error) {
 	if conversationID == "" {
 		return nil, nil, fmt.Errorf("conversation ID is required")
+	}
+	if origin == "" {
+		return nil, nil, fmt.Errorf("thread origin is required")
 	}
 
 	threadID := generateID(id)
@@ -30,6 +40,9 @@ func (s *Service) createThreadInternal(ctx context.Context, conversationID, id s
 		WorkflowID:     workflowID,
 		Title:          title,
 		CreatedAt:      now(),
+		Origin:         origin,
+		OriginNodeID:   originNodeID,
+		Status:         db.ThreadStatusRunning,
 	}
 
 	createdThread, err := s.repo.CreateThread(ctx, thread)

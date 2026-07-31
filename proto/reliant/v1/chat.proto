@@ -664,9 +664,18 @@ message WorkflowExecution {
   optional int32 iteration = 11;         // For loop iterations
   optional string spawned_by_node_id = 12; // Node ID that spawned this child workflow
   optional string forked_from_thread = 13; // Thread this was forked from (if fork, not new)
-  repeated ThreadStatus thread_statuses = 14; // Thread liveness information
+  reserved 14; // was thread_statuses — a hardcoded is_active:true stub no client read
   optional string thread_title = 15; // Human-readable title for the thread
   optional string parent_thread = 16; // Parent thread ID (set for both fork and new child threads)
+  // Origin is HOW this workflow's thread came to exist: "main", "spawn",
+  // "fork", or "node". Read from the threads table, which owns thread
+  // identity. This is what distinguishes a spawned sub-agent from a thread
+  // created by a graph node — spawned_by_node_id above answers a different
+  // question (WHICH node produced the workflow) and must not be overloaded
+  // to answer this one.
+  string origin = 18;
+  // Node that created the thread, when origin is "node".
+  optional string origin_node_id = 19;
   // Outcome is the run's own verdict — "success" or "failure" — stamped by the
   // terminal node it reached (Node.outcome). Empty when the workflow declared
   // no outcome, which is NOT a failure: it means the workflow never said.
@@ -674,16 +683,6 @@ message WorkflowExecution {
   // against it), outcome is whether the work passed. A run that routes to a
   // `failed` node has status=completed and outcome=failure.
   optional string outcome = 17;
-}
-
-// ThreadStatus represents the liveness state of a thread
-message ThreadStatus {
-  string logical_name = 1;       // Logical thread name (e.g., "thread:step_id" or "thread:root")
-  optional string actual_uuid = 2;   // Actual thread UUID (if resolved)
-  bool is_active = 3;            // True if thread is still accepting messages
-  optional string owner_step_id = 4; // Step that created this thread (empty for root)
-  repeated string writers = 5;   // Step IDs that can write to this thread
-  optional string last_writer = 6;   // Last writer in execution order (thread closes after this)
 }
 
 // GetThreadWorkflowInputsRequest fetches workflow inputs for a specific thread

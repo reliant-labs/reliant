@@ -2,6 +2,7 @@
 // Type definitions for gRPC streaming updates
 
 import type { Message as ProtoMessage } from "../gen/reliant/v1/chat_pb";
+import type { ThreadOrigin } from "../components/Chat/ExecutionSidebar/types";
 import type {
   NodeExecutionEventType,
   WorkflowExecutionEventType,
@@ -57,6 +58,13 @@ export interface ActiveThreadUpdate {
   current_activity_started_at?: string;
   spawned_by_tool_call_id?: string;
   spawned_by_node_id?: string;
+  /**
+   * How the thread came to exist ("main" | "spawn" | "fork" | "node"),
+   * mirroring threads.origin. This is what identifies a spawned sub-agent;
+   * spawned_by_node_id records which node produced the workflow.
+   */
+  origin?: ThreadOrigin;
+  origin_node_id?: string;
   thread_title?: string;
   router_decision?: RouterDecisionInfo;
   created_at: string;

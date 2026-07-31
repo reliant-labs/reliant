@@ -11,7 +11,7 @@ import { useMemo } from "react";
 import type { Message } from "../../../api/client";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
 import type { WorkflowExecution } from "../ExecutionSidebar/types";
-import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./threadUtils";
+import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreadIds, useActiveThreads } from "../../../store/threadActivityStore";
 import { useIsChatRunning } from "../../../store/activityStore";
 
@@ -31,21 +31,6 @@ export interface ThreadInfo {
   parentThread?: string;
 }
 
-
-/**
- * Check if a workflow record is a thread metadata record (not real workflow execution).
- * 
- * Thread records are created by fork() and new() CEL functions:
- * - "thread:*" - New naming (threads owned by steps, properly complete)
- * - "fork:*" - Legacy naming (for backwards compatibility)
- * 
- * These record thread creation/completion and inheritance relationships,
- * but are not actual workflow executions. They should be skipped when
- * building the thread list since the actual threads are derived from messages.
- */
-function isThreadMetadataRecord(workflowName: string): boolean {
-  return workflowName.startsWith("thread:") || workflowName.startsWith("fork:");
-}
 
 /**
  * Derive thread list from WorkflowExecution tree + message counts.
@@ -87,16 +72,6 @@ export function useThreads(
     function processWorkflow(wf: WorkflowExecution, treeParentThread?: string) {
       if (seenThreads.has(wf.thread)) return;
 
-      // Skip thread metadata records - they track thread lifecycle, not workflow execution
-      // The actual threads are derived from messages on those threads
-      if (isThreadMetadataRecord(wf.workflowName)) {
-        // Still process children though
-        for (const child of wf.children) {
-          processWorkflow(child, treeParentThread);
-        }
-        return;
-      }
-      
       seenThreads.add(wf.thread);
 
       const isMain = wf.thread === chatId || wf.thread === "0";
@@ -131,7 +106,7 @@ export function useThreads(
         messageCount: messageCounts.get(wf.thread) || 0,
         isMain,
         isActive: threadIsActive,
-        isSpawn: wf.spawnedByNodeId === "spawn_tool",
+        isSpawn: isSpawnOrigin(wf.origin),
         color: getThreadColor(wf.thread, isMain),
         firstMessageAt: firstTimestamps.get(wf.thread),
         parentThread,
@@ -184,7 +159,7 @@ export function useThreads(
         messageCount: count,
         isMain,
         isActive: threadIsActive,
-        isSpawn: activeThread?.spawned_by_node_id === "spawn_tool",
+        isSpawn: isSpawnOrigin(activeThread?.origin),
         color: getThreadColor(threadId, isMain),
         firstMessageAt: firstTimestamps.get(threadId),
       });
