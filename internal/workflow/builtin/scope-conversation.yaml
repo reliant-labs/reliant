@@ -65,6 +65,28 @@ inputs:
     default: ""
     description: Additional context to inject (e.g. what the framework gives for free)
 
+  tools:
+    type: tools
+    default: ["tag:default", "ask_user"]
+    description: |
+      Tools the scoping agent gets. `ask_user` is what drives the conversation, so
+      keep it in any override. Add `tag:web` (websearch + fetch) when the caller
+      wants the agent to research an unfamiliar domain before it writes the plan.
+
+  skills:
+    type: array
+    default: ["general-agent"]
+    description: |
+      Skills preloaded before the first turn. The default mirrors what the `general`
+      preset supplies, because a node arg overrides the preset rather than merging
+      with it — so an override must re-list what it still wants.
+
+      Scoping freezes the vocabulary every later phase builds on: entity and field
+      names, enum values, which fields the server owns, which lists need filters.
+      A caller whose plan feeds a code generator should preload that generator's
+      skills here, so those decisions are made against the real constraints instead
+      of being rewritten downstream.
+
 nodes:
   - id: conversation
     type: workflow
@@ -73,7 +95,8 @@ nodes:
       default: general
     passthrough: [model, mode, ask]
     args:
-      tools: ["tag:default", "ask_user"]
+      tools: "{{inputs.tools}}"
+      skills: "{{inputs.skills}}"
     thread:
       mode: inherit
       inject:

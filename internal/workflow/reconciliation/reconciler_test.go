@@ -173,6 +173,16 @@ type mockRepo struct {
 	pendingQuestions map[string]*db.Question   // chatID -> pending question
 	pendingApprovals map[string][]*db.Approval // chatID -> pending approvals
 	questionErr      error                     // forced error for GetPendingQuestionByChatID
+	workflowsByChat  map[string][]*db.Workflow // chatID -> all workflow rows (paused-row exclusion)
+
+	// Orphaned-descendant reap: rows the repair claims to have repaired, a
+	// forced error, and how many times the pass invoked it. callOrder records
+	// the repo calls a pass makes, in order, so a test can assert the reap
+	// happens BEFORE the pass lists the workflows it will adjudicate.
+	reapRows  int64
+	reapErr   error
+	reapCalls int
+	callOrder []string
 }
 
 type savedMessage struct {
@@ -188,7 +198,14 @@ func newMockRepo() *mockRepo {
 		workflowsByStatus: make(map[db.WorkflowStatus][]*db.Workflow),
 		pendingQuestions:  make(map[string]*db.Question),
 		pendingApprovals:  make(map[string][]*db.Approval),
+		workflowsByChat:   make(map[string][]*db.Workflow),
 	}
+}
+
+func (m *mockRepo) ListWorkflowsByChat(_ context.Context, chatID string) ([]*db.Workflow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.workflowsByChat[chatID], nil
 }
 
 func (m *mockRepo) GetPendingQuestionByChatID(_ context.Context, chatID string) (*db.Question, error) {
@@ -246,7 +263,19 @@ func (m *mockRepo) SaveMessageToThread(_ context.Context, chatID, thread string,
 }
 
 func (m *mockRepo) ListWorkflowsByStatus(_ context.Context, status db.WorkflowStatus) ([]*db.Workflow, error) {
-	return m.workflowsByStatus[status], nil
+	m.mu.Lock()
+	m.callOrder = append(m.callOrder, "list-"+status.String())
+	out := m.workflowsByStatus[status]
+	m.mu.Unlock()
+	return out, nil
+}
+
+func (m *mockRepo) ReapOrphanedWorkflowDescendants(_ context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reapCalls++
+	m.callOrder = append(m.callOrder, "reap")
+	return m.reapRows, m.reapErr
 }
 
 // --- Helper to build DescribeWorkflowExecution responses ---
@@ -1081,6 +1110,41 @@ func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
 	assert.Contains(t, repo.savedMessages[0].content, "will resume where it left off when you send a message")
 }
 
+func TestReconciler_WedgedWorkflowTask_PausedWorkflow_TerminatedAndMarkedFailed(t *testing.T) {
+	// A PAUSED workflow whose replay wedges (deploy changed determinism while
+	// it was parked) can never process its resume signal — it must be
+	// terminated and marked failed exactly like a running wedge, or it burns
+	// workflow-task retries forever and the chat is permanently dead.
+	repo := newMockRepo()
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+	wf := runningWorkflow()
+	wf.Status = db.WorkflowStatusPaused
+
+	// First pass observes; second confirms (the paused status must not clear
+	// the wedge debounce streak between passes).
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.False(t, result.WasStale, "first pass must only observe")
+	assert.Empty(t, tempClient.terminateCalls, "first pass must not terminate")
+
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.True(t, result.WasStale)
+	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+
+	assert.Empty(t, tempClient.resetCalls, "wedge recovery must NOT attempt a reset")
+	require.Len(t, tempClient.terminateCalls, 1)
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	require.Len(t, repo.savedMessages, 1)
+}
+
 func TestReconciler_WedgedWorkflowTask_BelowThreshold_NoAction(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := &mockReconcilerTemporalClient{
@@ -1431,6 +1495,45 @@ func TestReconciler_ProgressWatchdog_PendingApprovalExcluded(t *testing.T) {
 	assert.Empty(t, repo.savedMessages)
 }
 
+func TestReconciler_ProgressWatchdog_PausedDescendantExcluded(t *testing.T) {
+	// A nested self-pause (retry exhaustion inside a spawned inline workflow)
+	// parks the whole execution. The pause writer marks paused status
+	// chat-wide, but if only nested rows got it and the root stayed running
+	// (the invariant violation behind the 429-pause-terminated incident), the
+	// paused descendant row must still keep the watchdog from terminating a
+	// legitimately parked workflow.
+	repo := newMockRepo()
+	parentID := "wf-1"
+	repo.workflowsByChat["chat-1"] = []*db.Workflow{
+		{ID: "wf-1", ChatID: "chat-1", Status: db.WorkflowStatusRunning},
+		{ID: "wf-spawn", ChatID: "chat-1", ParentID: &parentID, Status: db.WorkflowStatusPaused},
+	}
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeQuiescentDescribeResp("run-1", 42)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	detectedBefore := anomalyCount("progress_stall_detected")
+	reconciler := NewReconciler(repo, tempClient, progressTestConfig(2))
+	wf := runningWorkflow()
+
+	for i := 0; i < 6; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d: pause-parked workflow is not a stall", i)
+	}
+
+	assert.Empty(t, tempClient.terminateCalls, "must never terminate a pause-parked workflow")
+	assert.Empty(t, repo.updatedStatuses)
+	assert.Empty(t, repo.savedMessages)
+	assert.Equal(t, detectedBefore, anomalyCount("progress_stall_detected"),
+		"pause-parked workflow must not even be reported as a stall")
+	assert.Equal(t, 0, reconciler.progressObservationCount(),
+		"exclusion at a threshold crossing clears the streak")
+}
+
 func TestReconciler_ProgressWatchdog_ExclusionCheckError_Holds(t *testing.T) {
 	// If the wait-marker check fails, the watchdog must neither report nor
 	// act (unknown exclusion state), and must not clear the streak.
@@ -1682,4 +1785,36 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 		require.True(t, result.WasStale)
 		assert.Equal(t, before+1, anomalyCount("reset_failed_terminated"))
 	})
+}
+
+func TestReconcileRunningWorkflows_IncludesPausedWedgedZombie(t *testing.T) {
+	// The background pass must fetch PAUSED workflows too: reconcileWorkflow's
+	// paused-specific repairs (stale-paused repair, paused-wedge terminate)
+	// are unreachable otherwise. Regression for the dev zombies that retried
+	// a wedged workflow task at attempt 450+ for days while paused.
+	repo := newMockRepo()
+	zombie := runningWorkflow()
+	zombie.Status = db.WorkflowStatusPaused
+	repo.workflowsByStatus[db.WorkflowStatusPaused] = []*db.Workflow{zombie}
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
+		},
+	}
+	tempClient.setPollersActive(true)
+
+	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
+
+	// First pass observes, second confirms — both through the background
+	// entry point, which must pick the paused row up each time.
+	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+	assert.Empty(t, tempClient.terminateCalls, "first pass must only observe")
+
+	_, errs = reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+
+	require.Len(t, tempClient.terminateCalls, 1, "paused wedged zombie must be terminated by the background pass")
+	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
+	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
 }

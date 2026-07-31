@@ -9,6 +9,7 @@ package schema
 func init() {
 	FieldDescriptions["ask_question.metadata"] = "JSON metadata with question text and options"
 	FieldDescriptions["call_llm.model"] = "Model selector using tags (e.g. flagship) or explicit ID"
+	FieldDescriptions["call_llm.skills"] = "Namespaced skill paths to preload for this call (seeded as skill tool-interactions)"
 	FieldDescriptions["call_llm.system_prompt"] = "System message for this LLM call"
 	FieldDescriptions["call_llm.temperature"] = "Temperature (0-1) controls randomness"
 	FieldDescriptions["call_llm.thinking_level"] = "Extended thinking level for complex reasoning"

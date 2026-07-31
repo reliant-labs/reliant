@@ -444,3 +444,110 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 			"Workflow should be running after re-emitting 'started' status")
 	})
 }
+
+func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
+	// A self-pause (retry exhaustion, daemon-offline breaker) parks the ENTIRE
+	// Temporal execution, but the notifying executor may be a nested spawn
+	// whose workflow_id is not the root row. The "paused" write must land
+	// chat-wide — the root row is what SendMessage's resume routing and the
+	// reconciler's progress-watchdog pause exclusion consult. The "started"
+	// notify with Resumed=true is the mirror: it must un-pause chat-wide.
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	rootWorkflowID := uuid.New().String()
+	spawnWorkflowID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
+		ID:           rootWorkflowID,
+		ChatID:       chatID,
+		WorkflowName: "builtin://agent",
+		Thread:       chatID,
+		Status:       db.WorkflowStatusRunning,
+	}))
+	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
+		ID:           spawnWorkflowID,
+		ParentID:     &rootWorkflowID,
+		ChatID:       chatID,
+		WorkflowName: "builtin://agent",
+		Thread:       spawnWorkflowID,
+		Status:       db.WorkflowStatusRunning,
+	}))
+
+	activity := NewWorkflowStatusActivity(h.Repo())
+
+	t.Run("nested paused marks the root row paused too", func(t *testing.T) {
+		var output WorkflowStatusOutput
+		err := h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+			ChatID:       chatID,
+			WorkflowID:   spawnWorkflowID,
+			WorkflowName: "builtin://agent",
+			Status:       "paused",
+		}, &output)
+		require.NoError(t, err)
+
+		spawn, err := h.Repo().GetWorkflow(ctx, spawnWorkflowID)
+		require.NoError(t, err)
+		assert.Equal(t, db.WorkflowStatusPaused, spawn.Status)
+
+		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
+		require.NoError(t, err)
+		assert.Equal(t, db.WorkflowStatusPaused, root.Status,
+			"self-pause must mark the ROOT row paused: SendMessage resume routing and the stall watchdog key off it")
+	})
+
+	t.Run("nested resumed started un-pauses chat-wide", func(t *testing.T) {
+		var output WorkflowStatusOutput
+		err := h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+			ChatID:       chatID,
+			WorkflowID:   spawnWorkflowID,
+			WorkflowName: "builtin://agent",
+			Status:       "started",
+			Resumed:      true,
+		}, &output)
+		require.NoError(t, err)
+
+		spawn, err := h.Repo().GetWorkflow(ctx, spawnWorkflowID)
+		require.NoError(t, err)
+		assert.Equal(t, db.WorkflowStatusRunning, spawn.Status)
+
+		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
+		require.NoError(t, err)
+		assert.Equal(t, db.WorkflowStatusRunning, root.Status,
+			"post-resume started must un-park the whole chat, not just the notifying row")
+	})
+
+	t.Run("plain spawn started does not un-pause a paused chat", func(t *testing.T) {
+		// Re-pause, then send a NON-resumed "started" for the spawn: only the
+		// spawn's own row may change. A stale spawn-start notify must never
+		// undo a chat-wide pause.
+		var output WorkflowStatusOutput
+		require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+			ChatID:       chatID,
+			WorkflowID:   spawnWorkflowID,
+			WorkflowName: "builtin://agent",
+			Status:       "paused",
+		}, &output))
+
+		require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+			ChatID:           chatID,
+			WorkflowID:       spawnWorkflowID,
+			WorkflowName:     "builtin://agent",
+			Status:           "started",
+			ParentWorkflowID: rootWorkflowID,
+		}, &output))
+
+		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
+		require.NoError(t, err)
+		assert.Equal(t, db.WorkflowStatusPaused, root.Status,
+			"a non-resumed started must not un-pause the root row")
+	})
+}

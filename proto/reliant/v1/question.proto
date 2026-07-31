@@ -45,4 +45,8 @@ message QuestionInfo {
   string status = 5;
   string created_at = 6;
   optional string metadata = 7;
+  // Thread that raised the question. The questions row has always carried it;
+  // omitting it here made every RPC consumer chat-scoped, so a supervision view
+  // over several spawned threads could not say WHICH one is waiting.
+  string thread_id = 8;
 }

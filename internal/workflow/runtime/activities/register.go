@@ -206,6 +206,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowCheckpointActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewWorkflowErrorActivity(deps.Repo))
 	v2.RegisterLifecycleActivity(registry, handlers.NewCleanupActivity(deps.Repo))
+	v2.RegisterLifecycleActivity(registry, handlers.NewEmitStreamFinalizedActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewCreateWorkflowWithThreadActivity(deps.Threads))
 
 	// ========================================================================

@@ -138,6 +138,12 @@ func int32DisplayStyleToProto(value *int32) *reliantv1.DisplayStyle {
 }
 
 func (r *Repo) SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*Message, error) {
+	return r.SaveMessageToThreadWithID(ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle, "")
+}
+
+// SaveMessageToThreadWithID is SaveMessageToThread with a caller-supplied
+// message id (delta identity protocol). Empty messageID generates a uuid.
+func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chatID cannot be empty")
 	}
@@ -184,6 +190,9 @@ func (r *Repo) SaveMessageToThread(ctx context.Context, chatID, thread string, r
 		// Create the message
 		now := time.Now().UTC()
 		msgID := uuid.New().String()
+		if messageID != "" {
+			msgID = messageID
+		}
 		msg := &Message{
 			ID:              msgID,
 			ChatID:          chatID,
@@ -1532,8 +1541,8 @@ func (r *Repo) CreateDaemonPAT(ctx context.Context, pat *DaemonPAT) error {
 	}
 
 	query := `
-		INSERT INTO daemon_pats (id, user_id, daemon_id, token_hash, token_prefix, name, ephemeral, expires_at, revoked_at, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+		INSERT INTO daemon_pats (id, user_id, user_email, daemon_id, kind, token_hash, token_prefix, name, ephemeral, expires_at, revoked_at, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
 	`
 	query = r.bindQuery(query)
 
@@ -1547,10 +1556,17 @@ func (r *Repo) CreateDaemonPAT(ctx context.Context, pat *DaemonPAT) error {
 		daemonID = &pat.DaemonID
 	}
 
+	kind := pat.Kind
+	if kind == "" {
+		kind = DaemonPATKindDaemon
+	}
+
 	_, err := r.DB.ExecContext(ctx, query,
 		pat.ID,
 		pat.UserID,
+		pat.UserEmail,
 		daemonID,
+		kind,
 		pat.TokenHash,
 		pat.TokenPrefix,
 		pat.Name,
@@ -1571,7 +1587,7 @@ func (r *Repo) GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*
 	}
 
 	query := `
-		SELECT id, user_id, COALESCE(daemon_id, ''), token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
+		SELECT id, user_id, user_email, COALESCE(daemon_id, ''), kind, token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
 		FROM daemon_pats
 		WHERE token_hash = ? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
 	`
@@ -1588,7 +1604,9 @@ func (r *Repo) GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*
 	err := r.DB.QueryRowContext(ctx, query, tokenHash).Scan(
 		&pat.ID,
 		&pat.UserID,
+		&pat.UserEmail,
 		&pat.DaemonID,
+		&pat.Kind,
 		&pat.TokenHash,
 		&pat.TokenPrefix,
 		&pat.Name,
@@ -1614,19 +1632,38 @@ func (r *Repo) GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*
 }
 
 func (r *Repo) ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*DaemonPAT, error) {
+	return r.listDaemonPATs(ctx, userID, "")
+}
+
+// ListDaemonPATsByUserIDAndKind returns the user's PATs of the given kind
+// (DaemonPATKindDaemon or DaemonPATKindAPI), newest first.
+func (r *Repo) ListDaemonPATsByUserIDAndKind(ctx context.Context, userID, kind string) ([]*DaemonPAT, error) {
+	if kind == "" {
+		return nil, fmt.Errorf("kind cannot be empty")
+	}
+	return r.listDaemonPATs(ctx, userID, kind)
+}
+
+// listDaemonPATs lists a user's PATs, optionally filtered by kind ("" = all).
+func (r *Repo) listDaemonPATs(ctx context.Context, userID, kind string) ([]*DaemonPAT, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
 	query := `
-		SELECT id, user_id, COALESCE(daemon_id, ''), token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
+		SELECT id, user_id, user_email, COALESCE(daemon_id, ''), kind, token_hash, token_prefix, name, ephemeral, expires_at, last_used_at, revoked_at, created_at
 		FROM daemon_pats
 		WHERE user_id = ?
-		ORDER BY created_at DESC
 	`
+	args := []any{userID}
+	if kind != "" {
+		query += ` AND kind = ?`
+		args = append(args, kind)
+	}
+	query += ` ORDER BY created_at DESC`
 	query = r.bindQuery(query)
 
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	rows, err := r.DB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list daemon PATs for user %s: %w", userID, err)
 	}
@@ -1645,7 +1682,9 @@ func (r *Repo) ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*Da
 		if err := rows.Scan(
 			&pat.ID,
 			&pat.UserID,
+			&pat.UserEmail,
 			&pat.DaemonID,
+			&pat.Kind,
 			&pat.TokenHash,
 			&pat.TokenPrefix,
 			&pat.Name,
@@ -1687,6 +1726,36 @@ func (r *Repo) RevokeDaemonPAT(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// RevokeDaemonPATByUserID marks the token revoked, scoped by owner and kind so
+// a caller can never revoke another user's token (or cross kinds between the
+// api and daemon management surfaces). Returns true when a live token
+// transitioned to revoked.
+func (r *Repo) RevokeDaemonPATByUserID(ctx context.Context, userID, id, kind string) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user ID cannot be empty")
+	}
+	if id == "" {
+		return false, fmt.Errorf("pat ID cannot be empty")
+	}
+	if kind == "" {
+		return false, fmt.Errorf("kind cannot be empty")
+	}
+
+	query := `UPDATE daemon_pats SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND user_id = ? AND kind = ? AND revoked_at IS NULL`
+	query = r.bindQuery(query)
+
+	res, err := r.DB.ExecContext(ctx, query, id, userID, kind)
+	if err != nil {
+		return false, fmt.Errorf("failed to revoke daemon PAT %s: %w", id, err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// The statement succeeded; the driver just couldn't report the count.
+		return false, nil
+	}
+	return n > 0, nil
 }
 
 func (r *Repo) RevokeDaemonPATsByUserID(ctx context.Context, userID string, ephemeralOnly bool) error {
@@ -3299,6 +3368,15 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 	})
 }
 
+// SetWorkflowOutcome records the run's verdict — the outcome declared by the
+// terminal node it reached. Distinct from UpdateWorkflowStatus: status is the
+// Temporal-owned lifecycle and gets reconciled back from Temporal, so it cannot
+// carry "the work did not pass". No chat-activity emit: the outcome does not
+// change whether the chat is busy, only what the finished run means.
+func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
+	return r.workflows.SetWorkflowOutcome(ctx, id, outcome)
+}
+
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
 // is not already Running, transition it to Running and emit an activity event.
 // Designed to be called from the activity wrapper so that any Temporal activity
@@ -3338,11 +3416,19 @@ func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName s
 	return r.workflows.UpdateWorkflowName(ctx, id, workflowName)
 }
 
-// CompleteChildWorkflows marks all child workflow records owned by a parent as completed.
-// Called when a workflow reaches a terminal state to cascade to all children
-// (spawn children, thread records, etc.) that are still running.
-func (r *Repo) CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error {
-	return r.workflows.CompleteChildWorkflows(ctx, parentWorkflowID)
+// CascadeTerminalStatusToDescendants moves every descendant workflow record
+// owned by a parent to the terminal status the parent itself reached. Called
+// when a workflow ends, to drain the children (spawn children, thread records,
+// etc.) that are still running or paused.
+func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status WorkflowStatus) error {
+	return r.workflows.CascadeTerminalStatusToDescendants(ctx, parentWorkflowID, status)
+}
+
+// ReapOrphanedWorkflowDescendants ends running/paused workflows whose parent is
+// already terminal, at the terminal ancestor's status, returning the number of
+// rows repaired. See the Repository interface for why the backstop is needed.
+func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error) {
+	return r.workflows.ReapOrphanedWorkflowDescendants(ctx)
 }
 
 func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {

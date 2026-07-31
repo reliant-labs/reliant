@@ -10,7 +10,11 @@ vi.mock("../../api/client", () => ({
 
 describe("activityStore", () => {
   beforeEach(() => {
-    useActivityStore.setState({ activities: new Map() });
+    useActivityStore.setState({
+      entries: new Map(),
+      activities: new Map(),
+      maxSeenSeq: 0,
+    });
   });
 
   // ---- setActivity ---------------------------------------------------------
@@ -48,22 +52,19 @@ describe("activityStore", () => {
     expect(stateAfter.activities.get("chat-1")).toBe(ChatActivity.IDLE);
   });
 
-  // ---- setActivities -------------------------------------------------------
+  // ---- applyListActivities -------------------------------------------------
 
-  it("setActivities replaces all activities", () => {
-    useActivityStore.getState().setActivity("chat-1", ChatActivity.RUNNING);
-
+  it("applyListActivities merges server activities under the watermark", () => {
     const bulk = new Map<string, ChatActivity>([
       ["chat-2", ChatActivity.AWAITING_INPUT],
       ["chat-3", ChatActivity.IDLE],
     ]);
-    useActivityStore.getState().setActivities(bulk);
+    useActivityStore.getState().applyListActivities(bulk, 5);
 
     const activities = useActivityStore.getState().activities;
-    expect(activities).toBe(bulk);
-    expect(activities.has("chat-1")).toBe(false);
     expect(activities.get("chat-2")).toBe(ChatActivity.AWAITING_INPUT);
     expect(activities.get("chat-3")).toBe(ChatActivity.IDLE);
+    expect(useActivityStore.getState().maxSeenSeq).toBe(5);
   });
 
   // ---- removeActivity ------------------------------------------------------

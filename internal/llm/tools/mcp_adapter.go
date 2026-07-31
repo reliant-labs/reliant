@@ -101,14 +101,16 @@ func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolRe
 		return NewTextErrorResponse("MCP runtime is not configured for this execution"), nil
 	}
 
+	session := mcpSessionKey(toolCtx)
+
 	var (
 		result *mcp.ToolResult
 		err    error
 	)
 	if strings.TrimSpace(a.projectPath) != "" {
-		result, err = runtime.ProjectCallTool(a.projectPath, a.serverName, a.tool.Name, arguments)
+		result, err = runtime.ProjectCallTool(session, a.projectPath, a.serverName, a.tool.Name, arguments)
 	} else {
-		result, err = runtime.CallTool(a.serverName, a.tool.Name, arguments)
+		result, err = runtime.CallTool(session, a.serverName, a.tool.Name, arguments)
 	}
 	if err != nil {
 		logging.Error("MCP tool execution failed",
@@ -119,6 +121,22 @@ func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolRe
 	}
 
 	return a.convertResult(result), nil
+}
+
+// mcpSessionKey identifies the caller whose view of a stateful MCP server must
+// stay private. It is the agent THREAD, not the chat: the workflow engine fans
+// out several threads inside one chat and it is exactly those siblings that
+// were clobbering each other's browser page (see internal/mcp/session.go).
+// ChatID is the fallback for a tool call made outside a workflow thread, where
+// there is one caller per chat and the chat IS the session.
+func mcpSessionKey(toolCtx *rctx.ToolContext) string {
+	if toolCtx == nil {
+		return ""
+	}
+	if thread := strings.TrimSpace(toolCtx.Thread); thread != "" {
+		return thread
+	}
+	return strings.TrimSpace(toolCtx.ChatID)
 }
 
 func (a *MCPToolAdapter) parseSchema() {

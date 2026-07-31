@@ -1,28 +1,26 @@
 # Test scenarios for forge-one-shot.yaml workflow
 #
-# Five-phase workflow:
-#   scope_conversation → scaffold_and_verify → frontend_polish → frontend_done →
-#   mvp_backend (single agent) → mvp_verify (run: generate+build) → mvp_done →
-#   production_polish → success
+# Pipeline (current node graph):
+#   scaffold_and_verify → build_mvp → build_done → launch_preview → success
 #
-# scaffold_and_verify and production_polish are get-it-right loops (emit strategy/stuck).
-# mvp_backend is a single agent pass; mvp_verify is the fail-loud build gate.
+# The build is structured SCAFFOLD → FAN-OUT → SYNTHESIS → REVIEW:
+#   scaffold_and_verify lays the whole substrate SERIALLY (review off — the
+#   generate/lint/test/build gate IS the gate). build_mvp then fans out parallel
+#   per-seam units, synthesizes, and runs the get-it-right review WITH TEETH — so
+#   scaffold_and_verify and build_mvp are both get-it-right loops (emit
+#   strategy/eval_strategy/stuck). build_done is the success marker after the build;
+#   launch_preview then starts the finished app and posts its URL as the run's last
+#   step, so the pipeline ends on a link the user can open.
 #
 # Failure / escalation paths (collapsed terminals):
-#   get-it-right stuck (tooling/env)      → stuck
-#   scaffold/production strategy != pass  → failed
-#   mvp_verify exit_code != 0             → failed
+#   get-it-right stuck (tooling/env)   → stuck
+#   scaffold/build != pass             → failed
 
 ---
 name: happy_path
-description: All phases pass. Full pipeline to success.
+description: All phases pass. Full pipeline through the preview handoff to success.
 
 events:
-  - node: scope_conversation
-    output:
-      message: "FORGE_PLAN.md written. Ready to scaffold."
-      response_text: "I've written FORGE_PLAN.md with the project spec."
-
   - node: scaffold_and_verify
     output:
       strategy: "pass"
@@ -33,46 +31,31 @@ events:
       lint_exit: 0
       build_exit: 0
 
-  - node: frontend_polish
+  # Fan-out → synthesis → teethed review: parallel per-seam units landed together and
+  # were verified by the get-it-right gate (backend generate/lint/test/build AND every
+  # frontend build), against a rubric that also covers hardening.
+  - node: build_mvp
     output:
       strategy: "pass"
       eval_strategy: "pass"
       review_grade: "pass"
-      review_feedback: "Frontend polished with working CRUD integration."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
-  - node: mvp_backend
-    output:
-      response_text: "Core features implemented. Ran forge generate + build; green."
-
-  - node: mvp_verify
-    output:
-      exit_code: 0
-
-  - node: production_polish
-    output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "All features complete, tests pass, production ready."
+      review_feedback: "Per-seam frontend + backend fanned out, synthesized, and verified live; build green."
       iterations: 3
       lint_exit: 0
       test_exit: 0
       build_exit: 0
 
+  # The finished app is launched and its URL posted as the last step of the run.
+  - node: launch_preview
+    output:
+      response_text: "Orders, billing, and the ops dashboard are live.\n\n**[Open your app](https://preview.example/3000)**"
+
 expect:
   outcome: completed
   reached:
-    - scope_conversation
     - scaffold_and_verify
-    - frontend_polish
-    - frontend_done
-    - mvp_backend
-    - mvp_verify
-    - mvp_done
-    - production_polish
+    - build_mvp
+    - build_done
     - launch_preview
     - success
   not_reached:
@@ -84,11 +67,6 @@ name: scaffold_fails
 description: Scoping passes but scaffold phase fails verification. No other phases run.
 
 events:
-  - node: scope_conversation
-    output:
-      message: "FORGE_PLAN.md written."
-      response_text: "Plan is ready."
-
   - node: scaffold_and_verify
     output:
       strategy: "continue"
@@ -102,29 +80,20 @@ events:
 expect:
   outcome: completed
   reached:
-    - scope_conversation
     - scaffold_and_verify
     - failed
   not_reached:
-    - frontend_polish
-    - frontend_done
-    - mvp_backend
-    - mvp_verify
-    - mvp_done
-    - production_polish
+    - build_mvp
+    - build_done
+    - launch_preview
     - success
     - stuck
 
 ---
 name: mvp_build_fails
-description: Scaffold and frontend pass, but the MVP pass leaves a broken build. Fails loud, no production.
+description: Scaffold passes, but the fan-out/synthesis build fails verification. Fails loud, no preview.
 
 events:
-  - node: scope_conversation
-    output:
-      message: "FORGE_PLAN.md written."
-      response_text: "Plan is ready."
-
   - node: scaffold_and_verify
     output:
       strategy: "pass"
@@ -135,101 +104,26 @@ events:
       lint_exit: 0
       build_exit: 0
 
-  - node: frontend_polish
-    output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Frontend polished."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
-  - node: mvp_backend
-    output:
-      response_text: "Implemented features but hit a build error I could not resolve."
-
-  - node: mvp_verify
-    output:
-      exit_code: 1
-
-expect:
-  outcome: completed
-  reached:
-    - scope_conversation
-    - scaffold_and_verify
-    - frontend_polish
-    - frontend_done
-    - mvp_backend
-    - mvp_verify
-    - failed
-  not_reached:
-    - mvp_done
-    - production_polish
-    - success
-    - stuck
-
----
-name: production_fails
-description: All phases pass except production polish (strategy != pass).
-
-events:
-  - node: scope_conversation
-    output:
-      message: "FORGE_PLAN.md written."
-      response_text: "Plan is ready."
-
-  - node: scaffold_and_verify
-    output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Scaffold complete."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
-  - node: frontend_polish
-    output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Frontend polished."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
-  - node: mvp_backend
-    output:
-      response_text: "MVP features done. Build green."
-
-  - node: mvp_verify
-    output:
-      exit_code: 0
-
-  - node: production_polish
+  # The build phase leaves a broken build after its retries — strategy != pass routes
+  # straight to the failed terminal; build_done and the preview never run.
+  - node: build_mvp
     output:
       strategy: "continue"
       eval_strategy: "continue"
       review_grade: "fail"
-      review_feedback: "Remaining features incomplete after max retries."
-      iterations: 5
+      review_feedback: "Implemented features but hit a build error I could not resolve."
+      iterations: 7
       lint_exit: 0
-      test_exit: 1
-      build_exit: 0
+      build_exit: 1
 
 expect:
   outcome: completed
   reached:
-    - scope_conversation
     - scaffold_and_verify
-    - frontend_polish
-    - frontend_done
-    - mvp_backend
-    - mvp_verify
-    - mvp_done
-    - production_polish
+    - build_mvp
     - failed
   not_reached:
-    - stuck
+    - build_done
+    - launch_preview
     - success
+    - stuck

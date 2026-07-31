@@ -1,18 +1,36 @@
 /**
  * useExecutionStatus - Hook for building workflow execution status map
- * 
+ *
  * Maps workflow node IDs to their execution status for visual highlighting.
- * 
- * STATUS SOURCES (in priority order):
- * 1. Child workflows (via spawnedByNodeId) - for non-inline child workflows
- * 2. Spawned steps (via loopNodeId) - for inline loops AND inline workflow nodes
- * 3. Direct step executions (via stepId matching) - for action nodes
- * 4. Position inference - next node after last completed is likely running
+ *
+ * SOURCE-OF-TRUTH SPLIT (Phase 2):
+ * - STATUS (running / completed / failed) is authoritative from the
+ *   node_execution STREAM (chatStore.nodeExecutions, reduced by
+ *   useNodeExecutionStatus). The server mints a stable identity per node
+ *   execution and both streams live events and persists them (so historical
+ *   chats replay them on snapshot). This replaces the old GUESSWORK that
+ *   inferred status by matching step-id prefixes and by position ("the node
+ *   after the last completed one is probably running").
+ * - STRUCTURE stays tree-derived: node existence, loop iteration steps/counts,
+ *   child-workflow drilling, and step-output linkage all come from the fetched
+ *   WorkflowExecution tree, which the stream does not carry.
+ *
+ * FALLBACK: when a node has no stream event yet (initial load before the first
+ * node_execution arrives, or a very old chat whose events predate the persisted
+ * stream), status falls back to a FACTUAL tree derivation from that node's own
+ * executions (its child workflow, its spawned loop steps, or its direct step
+ * records). The fallback deliberately does NOT re-introduce position inference —
+ * a node with no evidence of execution simply has no status.
  */
 
 import { useMemo } from 'react'
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import type { WorkflowExecution, StepExecution } from '../../Chat/ExecutionSidebar/types'
+import {
+  useNodeExecutionStatus,
+  nodeExecutionKey,
+  type StreamNodeStatus,
+} from './useNodeExecutionStatus'
 
 /**
  * Loop execution info for a specific loop node
@@ -45,11 +63,19 @@ function deriveStatusFromSteps(steps: StepExecution[]): NodeExecutionStatus | un
 }
 
 /**
- * Build execution status map from WorkflowExecution
+ * Build the execution status result.
+ *
+ * STATUS comes from `streamStatusByKey` (the reduced node_execution stream,
+ * keyed by `${execution.id}:${nodeId}`) — this is authoritative. STRUCTURE
+ * (loop iteration grouping, child-workflow linkage) still comes from the tree.
+ * When a node has no stream status yet, we fall back to a FACTUAL tree
+ * derivation from that node's own executions. There is NO position inference:
+ * a node with neither a stream event nor its own execution record has no status.
  */
 function buildExecutionStatusResult(
-  execution?: WorkflowExecution,
-  workflowNodeIds?: string[]
+  execution: WorkflowExecution | undefined,
+  workflowNodeIds: string[] | undefined,
+  streamStatusByKey: Record<string, StreamNodeStatus>,
 ): ExecutionStatusResult {
   const emptyResult: ExecutionStatusResult = { statusMap: {}, loopInfo: {} }
   if (!execution) {
@@ -60,11 +86,14 @@ function buildExecutionStatusResult(
   const loopInfo: Record<string, LoopExecutionInfo> = {}
   const nodeIdSet = new Set(workflowNodeIds || [])
   const nodeOrder = workflowNodeIds || []
+  const workflowId = execution.id
 
-  // Workflow start node is always completed once we have an execution
+  // Workflow start node is always completed once we have an execution.
   statusMap['workflow'] = 'completed'
 
-  // 1. Build child workflow map (for non-inline child workflows)
+  // --- STRUCTURE maps (tree-derived; the stream does not carry these) ---
+
+  // 1. Child workflow map (non-inline child workflows), linked by spawnedByNodeId.
   const childWorkflowByNode = new Map<string, WorkflowExecution>()
   for (const child of execution.children) {
     if (child.spawnedByNodeId) {
@@ -75,8 +104,8 @@ function buildExecutionStatusResult(
     }
   }
 
-  // 2. Build spawned steps map (for inline execution - loops AND workflow nodes)
-  // Key insight: loopNodeId tracks the parent node for ALL inline execution
+  // 2. Spawned steps map (inline execution — loops AND workflow nodes), linked
+  //    by loopNodeId which tracks the parent node for all inline execution.
   const spawnedStepsByNode = new Map<string, StepExecution[]>()
   for (const step of execution.steps) {
     if (step.loopNodeId && nodeIdSet.has(step.loopNodeId)) {
@@ -86,64 +115,28 @@ function buildExecutionStatusResult(
     }
   }
 
-  // 3. Build direct step completion map (for action nodes)
-  const completedSteps = new Map<string, { time: number; failed: boolean }>()
+  // 3. Direct step map (action nodes), linked by step→node id (see
+  //    resolveStepToNode — deterministic LINKAGE, not a status guess). Used only
+  //    for the tree fallback when the stream has no status for the node yet.
+  const directStepByNode = new Map<string, { failed: boolean; running: boolean }>()
   for (const step of execution.steps) {
     const resolvedNodeId = resolveStepToNode(step.stepId, nodeIdSet)
     if (resolvedNodeId) {
-      const existing = completedSteps.get(resolvedNodeId)
-      const stepFailed = step.status === 'failed'
-      if (!existing || step.createdAt > existing.time) {
-        completedSteps.set(resolvedNodeId, { 
-          time: step.createdAt, 
-          failed: stepFailed || (existing?.failed ?? false)
-        })
-      }
+      const existing = directStepByNode.get(resolvedNodeId) || { failed: false, running: false }
+      directStepByNode.set(resolvedNodeId, {
+        failed: existing.failed || step.status === 'failed',
+        running: existing.running || step.status === 'running',
+      })
     }
   }
 
-  // Find last completed index for position-based inference
-  let lastCompletedIndex = -1
-  let lastCompletedTime = 0
-  
-  for (const [nodeId, info] of completedSteps) {
-    const idx = nodeOrder.indexOf(nodeId)
-    if (idx >= 0 && info.time > lastCompletedTime) {
-      lastCompletedIndex = idx
-      lastCompletedTime = info.time
-    }
-  }
-  
-  for (const [nodeId, child] of childWorkflowByNode) {
-    const idx = nodeOrder.indexOf(nodeId)
-    if (idx >= 0 && child.status === 'running' && idx > lastCompletedIndex) {
-      lastCompletedIndex = idx - 1
-    } else if (idx >= 0 && child.createdAt > lastCompletedTime) {
-      lastCompletedIndex = idx
-      lastCompletedTime = child.createdAt
-    }
-  }
-  
-  for (const [nodeId, steps] of spawnedStepsByNode) {
-    const idx = nodeOrder.indexOf(nodeId)
-    const latestStep = steps.reduce((a, b) => a.createdAt > b.createdAt ? a : b)
-    if (idx >= 0 && latestStep.createdAt > lastCompletedTime) {
-      lastCompletedIndex = idx
-      lastCompletedTime = latestStep.createdAt
-    }
-  }
-
-  const workflowIsRunning = execution.status === 'running'
-  const workflowFailed = execution.status === 'failed'
-
-  // Assign status to each node
-  for (let i = 0; i < nodeOrder.length; i++) {
-    const nodeId = nodeOrder[i]
-    const childWorkflow = childWorkflowByNode.get(nodeId)
+  // --- Per-node status + loop info ---
+  for (const nodeId of nodeOrder) {
     const spawnedSteps = spawnedStepsByNode.get(nodeId)
-    const directCompletion = completedSteps.get(nodeId)
 
-    // Build loop info from spawned steps (groups by iteration)
+    // Build loop info from spawned steps (groups by iteration). STRUCTURE — the
+    // node_execution stream does not carry per-iteration step grouping, so this
+    // stays tree-derived.
     if (spawnedSteps && spawnedSteps.length > 0) {
       const byIteration = new Map<number, StepExecution[]>()
       for (const step of spawnedSteps) {
@@ -152,16 +145,16 @@ function buildExecutionStatusResult(
         iterSteps.push(step)
         byIteration.set(iter, iterSteps)
       }
-      
+
       // Only populate loopInfo if there are multiple iterations (actual loop)
       if (byIteration.size > 1 || (byIteration.size === 1 && byIteration.has(0) === false)) {
         const iterations = Array.from(byIteration.keys()).sort((a, b) => a - b)
-        const iterationStatuses = iterations.map(iter => 
+        const iterationStatuses = iterations.map(iter =>
           deriveStatusFromSteps(byIteration.get(iter) || []) || 'pending'
         )
         const runningIdx = iterationStatuses.findIndex(s => s === 'running')
         const completedCount = iterationStatuses.filter(s => s === 'completed').length
-        
+
         loopInfo[nodeId] = {
           nodeId,
           currentIteration: runningIdx >= 0 ? runningIdx : undefined,
@@ -172,37 +165,42 @@ function buildExecutionStatusResult(
       }
     }
 
-    // Determine node status (priority order)
+    // STATUS: stream is authoritative. Fall back to factual tree derivation only
+    // when the stream has no event for this node yet.
+    const streamStatus = streamStatusByKey[nodeExecutionKey(workflowId, nodeId)]
+    if (streamStatus) {
+      statusMap[nodeId] = streamStatus
+      continue
+    }
+
+    // --- Factual tree fallback (no position inference) ---
+    const childWorkflow = childWorkflowByNode.get(nodeId)
+    const directStep = directStepByNode.get(nodeId)
     if (childWorkflow) {
-      // Non-inline child workflow
       statusMap[nodeId] = childWorkflow.status === 'cancelled' ? 'failed' :
                           childWorkflow.status as NodeExecutionStatus
     } else if (spawnedSteps && spawnedSteps.length > 0) {
-      // Inline execution (loop or workflow node)
-      const derivedStatus = deriveStatusFromSteps(spawnedSteps) || 'running'
-      statusMap[nodeId] = derivedStatus
-    } else if (directCompletion) {
-      // Action node with direct step execution
-      statusMap[nodeId] = directCompletion.failed ? 'failed' : 'completed'
-    } else if (workflowIsRunning && (i === lastCompletedIndex + 1 || (i === 0 && lastCompletedIndex === -1))) {
-      // Position-based inference: next node after last completed
-      statusMap[nodeId] = 'running'
+      statusMap[nodeId] = deriveStatusFromSteps(spawnedSteps) || 'running'
+    } else if (directStep) {
+      if (directStep.failed) statusMap[nodeId] = 'failed'
+      else if (directStep.running) statusMap[nodeId] = 'running'
+      else statusMap[nodeId] = 'completed'
     }
-  }
-
-  // If workflow failed but no node marked failed, mark the last active node
-  if (workflowFailed && !Object.values(statusMap).includes('failed')) {
-    const lastNode = nodeOrder[Math.max(0, lastCompletedIndex)]
-    if (lastNode) {
-      statusMap[lastNode] = 'failed'
-    }
+    // else: no stream event and no execution record → no status (was position
+    // inference before Phase 2; deliberately removed).
   }
 
   return { statusMap, loopInfo }
 }
 
 /**
- * Resolve a step ID to a workflow node ID
+ * Resolve a step ID to a workflow node ID.
+ *
+ * This is deterministic step→node LINKAGE (structure), NOT a status guess: it
+ * connects a StepExecution record (whose id may be suffixed, e.g.
+ * "call_llm-save") back to the diagram node ("call_llm") so the details panel
+ * can list a node's steps and the tree fallback can read a node's own step
+ * status. Node STATUS itself comes from the node_execution stream, not from here.
  */
 function resolveStepToNode(stepId: string, nodeIds: Set<string>): string | null {
   if (nodeIds.has(stepId)) return stepId
@@ -222,28 +220,38 @@ function resolveStepToNode(stepId: string, nodeIds: Set<string>): string | null 
 }
 
 /**
- * Hook to compute execution status map for workflow nodes
+ * Hook to compute execution status map for workflow nodes.
+ *
+ * `chatId` connects the diagram to the authoritative node_execution stream
+ * (chatStore.nodeExecutions). When omitted (or null), status derives purely
+ * from the tree fallback — used by call sites without a chat context.
  */
 export function useExecutionStatus(
   execution?: WorkflowExecution,
-  nodeIds?: string[]
+  nodeIds?: string[],
+  chatId?: string | null,
 ): Record<string, NodeExecutionStatus> {
+  const { statusByKey } = useNodeExecutionStatus(chatId ?? null)
   return useMemo(
-    () => buildExecutionStatusResult(execution, nodeIds).statusMap,
-    [execution, nodeIds]
+    () => buildExecutionStatusResult(execution, nodeIds, statusByKey).statusMap,
+    [execution, nodeIds, statusByKey]
   )
 }
 
 /**
- * Hook to compute extended execution status including loop iteration info
+ * Hook to compute extended execution status including loop iteration info.
+ *
+ * See useExecutionStatus for the `chatId` / stream-source contract.
  */
 export function useExtendedExecutionStatus(
   execution?: WorkflowExecution,
-  nodeIds?: string[]
+  nodeIds?: string[],
+  chatId?: string | null,
 ): ExecutionStatusResult {
+  const { statusByKey } = useNodeExecutionStatus(chatId ?? null)
   return useMemo(
-    () => buildExecutionStatusResult(execution, nodeIds),
-    [execution, nodeIds]
+    () => buildExecutionStatusResult(execution, nodeIds, statusByKey),
+    [execution, nodeIds, statusByKey]
   )
 }
 

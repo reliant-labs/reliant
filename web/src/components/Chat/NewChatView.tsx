@@ -5,6 +5,7 @@ import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
 import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only — also subscribed via selector below
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
+import { useChatList } from "../../hooks/chat-queries";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
@@ -70,8 +71,14 @@ export function NewChatView({
   // hasn't picked a starter yet. Returning users get the cards inline, never a
   // modal. The post-tour modal variant is mounted separately in ModernApp and
   // is not affected by this gate.
-  const chatsCount = useChatStore((state) => state.chats.size);
-  const chatsLoaded = useChatStore((state) => state.hasLoaded);
+  const chatsListProjectId = useProjectStore((state) => state.currentProject?.id);
+  const { data: chatsList, isSuccess: chatsQuerySucceeded } =
+    useChatList(chatsListProjectId);
+  const chatsCount = chatsList?.length ?? 0;
+  // hasLoaded (Zustand) still gates the first-run experience; combine with the
+  // list query having resolved so we never flash the empty state pre-fetch.
+  const chatsLoaded =
+    useChatStore((state) => state.hasLoaded) && chatsQuerySucceeded;
   const hasNoChatsInProject = chatsLoaded && chatsCount === 0;
   const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
   const lockChatInput = hasNoChatsInProject && !hasPickedStarter;

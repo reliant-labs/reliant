@@ -33,6 +33,7 @@ type NATSHub struct {
 	// metrics
 	publishCount   atomic.Uint64
 	dropCount      atomic.Uint64
+	coalesceCount  atomic.Uint64
 	subscribeCount atomic.Uint64
 }
 
@@ -43,7 +44,7 @@ type NATSSubscription struct {
 	events chan StreamingDelta
 	cancel context.CancelFunc // stops the consumer goroutine
 	hub    *NATSHub
-	once   sync.Once // guards channel close
+	once   sync.Once // guards deregister
 }
 
 // Events returns the channel to receive streaming deltas.
@@ -51,9 +52,12 @@ func (s *NATSSubscription) Events() <-chan StreamingDelta {
 	return s.events
 }
 
-// Unsubscribe removes this subscriber from the hub and stops the consumer.
+// Unsubscribe stops the subscription. It only signals cancellation; the
+// consume loop (the sole sender) observes the cancel, unhooks itself, and
+// closes the events channel. Keeping the close on the sender side means a
+// blocking delivery can never race a close and panic.
 func (s *NATSSubscription) Unsubscribe() {
-	s.hub.unsubscribe(s)
+	s.cancel()
 }
 
 // NewNATSHub creates a new NATS JetStream streaming hub.
@@ -155,9 +159,30 @@ func (h *NATSHub) Subscribe(ctx context.Context, chatID string) Subscription {
 	return sub
 }
 
+// deliver sends a delta to the subscriber, blocking until the consumer accepts
+// it or the subscription is torn down. This is the backpressure path: a slow
+// consumer slows the reader (JetStream buffers upstream) instead of losing
+// events. Returns false if ctx was cancelled, signalling the caller to exit.
+func (h *NATSHub) deliver(ctx context.Context, sub *NATSSubscription, delta StreamingDelta) bool {
+	select {
+	case sub.events <- delta:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 // consumeLoop reads messages from a NATS ordered consumer and forwards them to the subscription channel.
 func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
-	defer h.unsubscribe(sub)
+	// The consume loop is the sole sender on sub.events, so it owns the close:
+	// deregister (idempotent) unhooks the subscriber and stops the consumer,
+	// then — because the loop has returned and no send is in flight — we close
+	// the channel exactly once. External Unsubscribe only signals via cancel;
+	// it never closes, so a blocking deliver can't race a close and panic.
+	defer func() {
+		h.deregister(sub)
+		close(sub.events)
+	}()
 
 	consumer, err := h.js.OrderedConsumer(ctx, natsStreamName, jetstream.OrderedConsumerConfig{
 		FilterSubjects: []string{natsSubjectPfx + sub.chatID},
@@ -186,7 +211,26 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 		iter.Stop()
 	}()
 
+	// pending holds a coalesced run of content-text deltas that could not be
+	// delivered immediately because the consumer's channel was full. We only
+	// ever carry when the channel is full — i.e. the consumer is behind, not
+	// idle — so a merged chunk is always flushed by the next delta or by the
+	// structural delta (content_block_stop / message_stop) that ends every
+	// message. Structural deltas are never carried or dropped: losing one
+	// corrupts the rendered message (orphaned tool calls, stuck placeholders).
+	var pending *StreamingDelta
+
 	for {
+		// Opportunistically flush a carried chunk the moment the consumer has
+		// room, without blocking the reader.
+		if pending != nil {
+			select {
+			case sub.events <- *pending:
+				pending = nil
+			default:
+			}
+		}
+
 		msg, err := iter.Next()
 		if err != nil {
 			// Iterator stopped (context cancelled or connection closed) — exit cleanly
@@ -209,23 +253,66 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 			continue
 		}
 
-		select {
-		case sub.events <- delta:
-			// delivered
-		default:
-			h.dropCount.Add(1)
-			observability.StreamingErrorsTotal.WithLabelValues("slow_consumer").Inc()
-			logging.Warn("[NATSHub] Dropped event (slow consumer)",
-				"chatID", sub.chatID[:min(8, len(sub.chatID))],
-				"subscriberID", sub.id,
-				"deltaType", delta.DeltaType)
+		// Fast path: consumer keeping up — hand the delta off without blocking.
+		// Only taken when nothing is carried, so ordering is preserved.
+		if pending == nil {
+			select {
+			case sub.events <- delta:
+				span.End()
+				continue
+			default:
+			}
+		}
+
+		if delta.coalescible() {
+			// Merge into the carried chunk when they target the same block; the
+			// consumer catches up with one larger send instead of a backlog.
+			if pending != nil && pending.canCoalesceWith(delta) {
+				merged := pending.coalesce(delta)
+				pending = &merged
+				h.coalesceCount.Add(1)
+				observability.StreamingErrorsTotal.WithLabelValues("coalesced").Inc()
+				span.End()
+				continue
+			}
+			// A carried chunk for a different block/thread must land before this
+			// one — flush it (blocking) to preserve order, then carry the new one.
+			if pending != nil {
+				if !h.deliver(ctx, sub, *pending) {
+					span.End()
+					return
+				}
+				pending = nil
+			}
+			d := delta
+			pending = &d
+			span.End()
+			continue
+		}
+
+		// Structural delta: flush any carried text first (order), then deliver
+		// this one. Both block so nothing is lost — the reader slows and
+		// JetStream buffers upstream instead of dropping events.
+		if pending != nil {
+			if !h.deliver(ctx, sub, *pending) {
+				span.End()
+				return
+			}
+			pending = nil
+		}
+		if !h.deliver(ctx, sub, delta) {
+			span.End()
+			return
 		}
 		span.End()
 	}
 }
 
-// unsubscribe removes a subscriber from the hub, stops its consumer, and closes the channel.
-func (h *NATSHub) unsubscribe(sub *NATSSubscription) {
+// deregister unhooks a subscriber from the hub and stops its consumer. It does
+// NOT close sub.events — the consume loop owns that, closing after it returns
+// so no send can be in flight. Idempotent: safe to call from both the loop's
+// teardown and (defensively) elsewhere.
+func (h *NATSHub) deregister(sub *NATSSubscription) {
 	sub.once.Do(func() {
 		// Cancel the consumer goroutine context
 		sub.cancel()
@@ -244,8 +331,6 @@ func (h *NATSHub) unsubscribe(sub *NATSSubscription) {
 				h.subscribers.Delete(sub.chatID)
 			}
 		}
-
-		close(sub.events)
 
 		logging.Debug("[NATSHub] Subscriber unsubscribed",
 			"chatID", sub.chatID[:min(8, len(sub.chatID))],
@@ -292,6 +377,7 @@ func (h *NATSHub) Stats() HubStats {
 	return HubStats{
 		TotalPublished:   h.publishCount.Load(),
 		TotalDropped:     h.dropCount.Load(),
+		TotalCoalesced:   h.coalesceCount.Load(),
 		TotalSubscribers: h.subscribeCount.Load(),
 		ActiveChats:      activeChats,
 	}

@@ -12,6 +12,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -96,13 +97,29 @@ func (s *QuestionService) ResolveQuestion(
 	}), nil
 }
 
-// GetPendingQuestion returns the current pending question for a chat
+// GetPendingQuestion returns the current pending question for a chat.
+//
+// The chat is verified to exist and be the caller's BEFORE the question lookup,
+// which is the difference between "there is no gate" and "that is not a chat".
+// Without the check both collapse into an empty-but-successful response, and
+// the CLI renders it as "No open questions." with exit 0 — a clean-looking
+// answer that is simply false. Someone supervising a run reads that and walks
+// away from a workflow that is parked on a question. Every other supervision
+// RPC (GetWorkflowExecutions, GetChatUpdates) already verifies; this one was
+// the hole.
 func (s *QuestionService) GetPendingQuestion(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPendingQuestionRequest],
 ) (*connect.Response[reliantv1.GetPendingQuestionResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
 	if req.Msg.ChatId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+
+	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
+	if err != nil || chat == nil || chat.UserID != userID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
 	question, err := s.database.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
@@ -130,6 +147,7 @@ func questionToProto(q *db.Question) *reliantv1.QuestionInfo {
 		QuestionId: q.ID,
 		ChatId:     q.ChatID,
 		WorkflowId: q.WorkflowID,
+		ThreadId:   q.ThreadID,
 		StepId:     q.StepID,
 		Status:     questionStatusString(q.Status),
 		CreatedAt:  q.CreatedAt.Format(time.RFC3339),

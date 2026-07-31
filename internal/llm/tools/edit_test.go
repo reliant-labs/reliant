@@ -48,13 +48,9 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 2",
-					NewString: "line TWO",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 2",
+			NewString: "line TWO",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -69,13 +65,9 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line TWO",
-					NewString: "line 2 updated",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line TWO",
+			NewString: "line 2 updated",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -103,13 +95,9 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 2",
-					NewString: "line TWO",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 2",
+			NewString: "line TWO",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -141,13 +129,9 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 2",
-					NewString: "line TWO",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 2",
+			NewString: "line TWO",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -155,6 +139,142 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 
 		assert.False(t, response.IsError, "Expected success since AI was last to write, got: %s", response.Content)
 		assert.Contains(t, response.Content, "Content replaced in file")
+	})
+}
+
+// TestEditToolFlatSchema exercises the flat single-edit schema directly:
+// happy-path replacement, replace_all, non-unique old_string, not-found, and
+// file creation — all with top-level params (no edits array).
+func TestEditToolFlatSchema(t *testing.T) {
+	tool := &editTool{}
+	chatID := "test-chat"
+	thread := "0"
+
+	t.Run("Happy path single replacement", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "happy.txt")
+		require.NoError(t, os.WriteFile(testFile, []byte("alpha\nbeta\ngamma"), 0644))
+		defer ClearFileRecordsForThread(chatID, thread)
+
+		ctx := newTestToolContext(t, tempDir, chatID, thread)
+		params := EditParams{
+			FilePath:  testFile,
+			OldString: "beta",
+			NewString: "BETA",
+		}
+
+		response, err := tool.Execute(ctx, params)
+		require.NoError(t, err)
+		assert.False(t, response.IsError, "expected success, got: %s", response.Content)
+		assert.Contains(t, response.Content, "Content replaced in file")
+
+		got, err := os.ReadFile(testFile)
+		require.NoError(t, err)
+		assert.Equal(t, "alpha\nBETA\ngamma", string(got))
+	})
+
+	t.Run("replace_all replaces every occurrence", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "replaceall.txt")
+		require.NoError(t, os.WriteFile(testFile, []byte("x = foo\ny = foo\nz = foo"), 0644))
+		defer ClearFileRecordsForThread(chatID, thread)
+
+		ctx := newTestToolContext(t, tempDir, chatID, thread)
+		params := EditParams{
+			FilePath:   testFile,
+			OldString:  "foo",
+			NewString:  "bar",
+			ReplaceAll: true,
+		}
+
+		response, err := tool.Execute(ctx, params)
+		require.NoError(t, err)
+		assert.False(t, response.IsError, "expected success, got: %s", response.Content)
+
+		got, err := os.ReadFile(testFile)
+		require.NoError(t, err)
+		assert.Equal(t, "x = bar\ny = bar\nz = bar", string(got))
+	})
+
+	t.Run("Non-unique old_string without replace_all fails", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "dup.txt")
+		require.NoError(t, os.WriteFile(testFile, []byte("foo\nfoo\nfoo"), 0644))
+		defer ClearFileRecordsForThread(chatID, thread)
+
+		ctx := newTestToolContext(t, tempDir, chatID, thread)
+		params := EditParams{
+			FilePath:  testFile,
+			OldString: "foo",
+			NewString: "bar",
+		}
+
+		response, err := tool.Execute(ctx, params)
+		require.NoError(t, err)
+		assert.True(t, response.IsError, "expected error for non-unique old_string")
+		assert.Contains(t, response.Content, "appears multiple times")
+
+		// File must be untouched.
+		got, err := os.ReadFile(testFile)
+		require.NoError(t, err)
+		assert.Equal(t, "foo\nfoo\nfoo", string(got))
+	})
+
+	t.Run("old_string not found fails", func(t *testing.T) {
+		tempDir := t.TempDir()
+		testFile := filepath.Join(tempDir, "missing.txt")
+		require.NoError(t, os.WriteFile(testFile, []byte("alpha\nbeta"), 0644))
+		defer ClearFileRecordsForThread(chatID, thread)
+
+		ctx := newTestToolContext(t, tempDir, chatID, thread)
+		params := EditParams{
+			FilePath:  testFile,
+			OldString: "does-not-exist",
+			NewString: "whatever",
+		}
+
+		response, err := tool.Execute(ctx, params)
+		require.NoError(t, err)
+		assert.True(t, response.IsError, "expected error for not-found old_string")
+		assert.Contains(t, response.Content, "old_string not found in file")
+	})
+
+	t.Run("Empty file_path fails", func(t *testing.T) {
+		tempDir := t.TempDir()
+		defer ClearFileRecordsForThread(chatID, thread)
+
+		ctx := newTestToolContext(t, tempDir, chatID, thread)
+		params := EditParams{
+			OldString: "a",
+			NewString: "b",
+		}
+
+		response, err := tool.Execute(ctx, params)
+		require.NoError(t, err)
+		assert.True(t, response.IsError, "expected error for empty file_path")
+		assert.Contains(t, response.Content, "file_path is required")
+	})
+
+	t.Run("Create new file with empty old_string", func(t *testing.T) {
+		tempDir := t.TempDir()
+		newFile := filepath.Join(tempDir, "created.txt")
+		defer ClearFileRecordsForThread(chatID, thread)
+
+		ctx := newTestToolContext(t, tempDir, chatID, thread)
+		params := EditParams{
+			FilePath:  newFile,
+			OldString: "",
+			NewString: "brand new contents",
+		}
+
+		response, err := tool.Execute(ctx, params)
+		require.NoError(t, err)
+		assert.False(t, response.IsError, "expected success creating a file, got: %s", response.Content)
+		assert.Contains(t, response.Content, "File created")
+
+		got, err := os.ReadFile(newFile)
+		require.NoError(t, err)
+		assert.Equal(t, "brand new contents", string(got))
 	})
 }
 
@@ -183,13 +303,9 @@ func TestEditToolThreadIsolation(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread1)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 2",
-					NewString: "line TWO (thread 1)",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 2",
+			NewString: "line TWO (thread 1)",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -202,13 +318,9 @@ func TestEditToolThreadIsolation(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread2)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 1",
-					NewString: "line ONE (thread 2)",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 1",
+			NewString: "line ONE (thread 2)",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -223,13 +335,9 @@ func TestEditToolThreadIsolation(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread2)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line ONE (thread 2)",
-					NewString: "line ONE UPDATED (thread 2)",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line ONE (thread 2)",
+			NewString: "line ONE UPDATED (thread 2)",
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -258,13 +366,9 @@ func TestEditToolDeleteContentModifiedCheck(t *testing.T) {
 		ctx := newTestToolContext(t, tempDir, chatID, thread)
 
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 2\n",
-					NewString: "", // Empty string means delete
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 2\n",
+			NewString: "", // Empty string means delete
 		}
 
 		response, err := tool.Execute(ctx, params)
@@ -279,13 +383,9 @@ func TestEditToolDeleteContentModifiedCheck(t *testing.T) {
 
 		// line 2 was already deleted by the previous test, so delete line 3
 		params := EditParams{
-			Edits: []EditOperation{
-				{
-					FilePath:  testFile,
-					OldString: "line 3",
-					NewString: "",
-				},
-			},
+			FilePath:  testFile,
+			OldString: "line 3",
+			NewString: "",
 		}
 
 		response, err := tool.Execute(ctx, params)

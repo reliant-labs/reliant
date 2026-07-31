@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -166,6 +167,20 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 		thread = "0"
 	}
 
+	// The rest is a read-modify-write on filePath, and tool calls in one
+	// assistant message run concurrently — hold the path lock across it so two
+	// line edits to the same file cannot both splice the same starting content.
+	// Line numbers make this especially unforgiving: a lost write here also means
+	// the surviving edit was computed against line numbers that no longer hold.
+	// See file_concurrency.go.
+	return withPathLock(rctx, filePath, func() (ToolResponse, error) {
+		return e.editLinesLocked(rctx, params, wd, filePath, chatID, thread)
+	})
+}
+
+// editLinesLocked performs the read-modify-write. Callers must hold the path
+// lock for filePath.
+func (e *editLinesTool) editLinesLocked(rctx *rctx.ToolContext, params EditLinesParams, wd, filePath, chatID, thread string) (ToolResponse, error) {
 	// Validate file exists and has been read
 	stat, err := rctx.Daemon.StatFile(rctx.Context, filePath)
 	if err != nil {
@@ -187,7 +202,7 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 	}
 
 	oldContent := fc.Content
-	lines := strings.Split(oldContent, "\n")
+	lines, terminated := splitLines(oldContent)
 	totalLines := len(lines)
 
 	// Validate line numbers
@@ -214,7 +229,7 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 		if endIdx+1 < len(lines) {
 			newLines = append(newLines, lines[endIdx+1:]...)
 		}
-		newContent = strings.Join(newLines, "\n")
+		newContent = joinLines(newLines, terminated)
 
 	case "insert_before":
 		// Insert new content before startIdx
@@ -222,7 +237,7 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 		newLines = append(newLines, lines[:startIdx]...)
 		newLines = append(newLines, newContentLines...)
 		newLines = append(newLines, lines[startIdx:]...)
-		newContent = strings.Join(newLines, "\n")
+		newContent = joinLines(newLines, terminated)
 
 	case "insert_after":
 		// Insert new content after startIdx
@@ -232,7 +247,7 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 		if startIdx+1 < len(lines) {
 			newLines = append(newLines, lines[startIdx+1:]...)
 		}
-		newContent = strings.Join(newLines, "\n")
+		newContent = joinLines(newLines, terminated)
 
 	case "delete":
 		// Delete lines from startIdx to endIdx (inclusive)
@@ -240,7 +255,7 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 		if endIdx+1 < len(lines) {
 			newLines = append(newLines, lines[endIdx+1:]...)
 		}
-		newContent = strings.Join(newLines, "\n")
+		newContent = joinLines(newLines, terminated)
 	}
 
 	if oldContent == newContent {
@@ -251,7 +266,11 @@ func (e *editLinesTool) Execute(rctx *rctx.ToolContext, params EditLinesParams) 
 	diffText, additions, removals := diff.GenerateDiff(oldContent, newContent, filePath, wd)
 
 	// Write file
-	if _, err = rctx.Daemon.WriteFile(rctx.Context, filePath, newContent); err != nil {
+	if err = writeFileGuarded(rctx, filePath, oldContent, newContent); err != nil {
+		var conflict *ConcurrentModificationError
+		if errors.As(err, &conflict) {
+			return NewTextErrorResponse(conflict.Error()), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 

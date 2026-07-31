@@ -136,6 +136,7 @@ const (
 	anomalyProgressStallConfirmed = "progress_stall_confirmed"
 	anomalyResetFailedTerminated  = "reset_failed_terminated"
 	anomalyResetAttemptsExhausted = "reset_attempts_exhausted"
+	anomalyOrphanDescendantReaped = "orphan_descendant_reaped"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -723,11 +724,16 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	result.TemporalStatus = temporalState.Status
 
-	// Any pass that finds the workflow NOT stuck/wedged-and-running clears its
-	// debounce state: the tracked task was picked up (or completed, or the
-	// workflow paused), so a later stuck observation starts a fresh
-	// confirmation window.
-	if (!temporalState.HasStuckTask && !temporalState.HasWedgedWorkflowTask) || wf.Status != db.WorkflowStatusRunning {
+	// Any pass that finds the workflow NOT stuck/wedged clears its debounce
+	// state: the tracked task was picked up (or completed), so a later stuck
+	// observation starts a fresh confirmation window. A wedged task keeps its
+	// streak for PAUSED workflows too — the wedge detector below handles
+	// paused executions (a wedged replay can never process its resume) — but
+	// the stuck-task path stays running-only, so a paused stuck observation
+	// still clears.
+	notWedgedOrStuck := !temporalState.HasStuckTask && !temporalState.HasWedgedWorkflowTask
+	pausedForWedge := wf.Status == db.WorkflowStatusPaused && temporalState.HasWedgedWorkflowTask
+	if notWedgedOrStuck || (wf.Status != db.WorkflowStatusRunning && !pausedForWedge) {
 		r.clearStuckObservation(wf.ID)
 	}
 
@@ -750,7 +756,14 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// no matter where we reset to. Instead: terminate with a clear reason,
 	// mark failed in the DB (which routes the next user message into
 	// resume-at-position), and tell the user how to continue.
-	if temporalState.HasWedgedWorkflowTask && wf.Status == db.WorkflowStatusRunning {
+	//
+	// PAUSED workflows are included: a paused execution whose replay wedges
+	// (deploy changes determinism while it is parked) can never process its
+	// resume signal — without this it retries the workflow task forever and
+	// the chat is permanently unrecoverable. A healthy paused workflow has NO
+	// pending workflow task, so it can never trip this detector.
+	if temporalState.HasWedgedWorkflowTask &&
+		(wf.Status == db.WorkflowStatusRunning || wf.Status == db.WorkflowStatusPaused) {
 		if !r.observeTask(ctx, wf, wedgeObservationTaskType, "", pollers) {
 			// Not yet confirmed (pollers absent, or debounce still counting).
 			return result
@@ -1170,7 +1183,10 @@ const (
 // distinguishes them is the durable DB wait marker each park point writes
 // BEFORE parking:
 //   - pause (user pause, retry-exhaustion, daemon-offline breaker) marks the
-//     workflow status paused, so it never enters the running reconcile set;
+//     workflow status paused CHAT-WIDE (root row included), so it never
+//     enters the running reconcile set; a paused row under a still-running
+//     root (a pause writer violating that invariant) is caught by
+//     awaitingUserInput as a last line of defense;
 //   - ask_question/ask_user writes a pending questions row (status=1) via the
 //     QuestionCreate activity, keyed by chat;
 //   - tool approvals write a pending approvals row via ApprovalCreate.
@@ -1235,9 +1251,18 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 }
 
 // awaitingUserInput reports whether the workflow's chat has a durable
-// user-input wait marker: a pending question (ask_question / ask_user) or a
-// pending tool approval. These are the signal-parked waits whose Temporal
-// footprint is indistinguishable from a silent stall.
+// user-input wait marker: a pending question (ask_question / ask_user), a
+// pending tool approval, or a paused workflow row. These are the
+// signal-parked waits whose Temporal footprint is indistinguishable from a
+// silent stall.
+//
+// The paused-row check is defense in depth: a self-pause propagates paused
+// status chat-wide (root row included), which keeps the workflow out of the
+// stall watchdog via the wf.Status gate. A paused NESTED row under a running
+// root therefore means some pause writer violated that invariant — treat the
+// chat as legitimately parked (never terminate a workflow that is parked
+// waiting for signal.resume), but log it as an ERROR so the violation is
+// visible instead of silently masking the watchdog.
 func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bool, error) {
 	question, err := r.repo.GetPendingQuestionByChatID(ctx, wf.ChatID)
 	if err != nil {
@@ -1250,7 +1275,28 @@ func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bo
 	if err != nil {
 		return false, fmt.Errorf("checking pending approvals: %w", err)
 	}
-	return len(approvals) > 0, nil
+	if len(approvals) > 0 {
+		return true, nil
+	}
+	chatWorkflows, err := r.repo.ListWorkflowsByChat(ctx, wf.ChatID)
+	if err != nil {
+		return false, fmt.Errorf("checking paused chat workflows: %w", err)
+	}
+	var pausedIDs []string
+	for _, cw := range chatWorkflows {
+		if cw.Status == db.WorkflowStatusPaused {
+			pausedIDs = append(pausedIDs, cw.ID)
+		}
+	}
+	if len(pausedIDs) > 0 {
+		logging.Error("[Reconciler] Progress watchdog: running root workflow has paused descendant rows - treating as pause-parked, not a stall (pause writer failed to mark the root row)",
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+			"pausedWorkflowIDs", pausedIDs,
+		)
+		return true, nil
+	}
+	return false, nil
 }
 
 // clearProgressObservation drops the watchdog streak for a workflow.
@@ -1352,22 +1398,97 @@ func (r *Reconciler) findResetPoint(ctx context.Context, workflowID string, stat
 	return lastWorkflowTaskCompleted, nil
 }
 
-// ReconcileRunningWorkflows reconciles all workflows with status='running'.
-// This is the main entry point for background reconciliation.
+// reapOrphanedDescendants ends every running/paused workflow whose parent is
+// already terminal — at the terminal ancestor's own status, so a repaired
+// cancel does not read as a repaired success — and returns how many rows it
+// moved.
+//
+// It is the one repair the per-workflow loop structurally cannot make.
+// reconcileWorkflow returns immediately for any workflow with a parent_id,
+// because a child's lifecycle belongs to its parent — a premise that holds only
+// while the parent's terminal transition cascades to it. A TerminateWorkflow
+// breaks that premise: it is a hard kill, so the workflow's completion handler
+// never runs and the cascade its terminal-status activity would have performed
+// never happens. Every terminate path has this
+// shape — CancelChat's user cancel, and this reconciler's own wedge, stuck-task
+// and progress-stall terminations. The subtree is then stranded at running (2)
+// or paused (6) with nothing on any code path that will ever revisit it, and
+// `workflow ps` (which filters on status alone) keeps reporting the dead rows
+// as live runs next to real ones.
+//
+// Every caller still cascades for itself. This is the backstop that keeps one
+// forgotten call site from being permanent, and it needs no Temporal lookup: a
+// child of a terminal parent is dead by exactly the rule
+// CascadeTerminalStatusToDescendants already enforces on the write path, read
+// in the other direction.
+//
+// Runs BEFORE the pass lists workflows, so a row known dead is never
+// adjudicated as a live one.
+func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passStats) (int, error) {
+	reaped, err := r.repo.ReapOrphanedWorkflowDescendants(ctx)
+	if err != nil {
+		logging.Error("[Reconciler] Failed to reap orphaned workflow descendants", "error", err)
+		return 0, fmt.Errorf("failed to reap orphaned workflow descendants: %w", err)
+	}
+	if reaped == 0 {
+		return 0, nil
+	}
+	for i := int64(0); i < reaped; i++ {
+		r.recordAnomaly(stats, anomalyOrphanDescendantReaped)
+	}
+	logging.Error("[Reconciler] Reaped orphaned workflow descendants — a terminal parent did not cascade",
+		"rows", reaped,
+	)
+	return int(reaped), nil
+}
+
+// ReconcileRunningWorkflows reconciles all workflows with status running OR
+// paused. This is the main entry point for background reconciliation.
+//
+// Paused workflows MUST be in the pass: reconcileWorkflow's paused-specific
+// repairs (paused row whose Temporal execution ended → repair to terminal;
+// paused execution whose replay is wedged → terminate + mark failed) are
+// unreachable otherwise — a paused zombie then burns workflow-task retries
+// forever with no path back to a usable chat.
 // Returns the number of workflows reconciled and any errors encountered.
 func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled int, errors []error) {
-	// Get all running workflows from DB
+	// One passStats per pass: anomalies are aggregated into a single summary
+	// line, emitted on every exit path (the reap below repairs rows even on a
+	// pass where nothing is left running).
+	stats := &passStats{}
+	defer func() {
+		// One summary line per pass when anything anomalous was found; silence
+		// when clean. The per-anomaly detail is in the ERROR logs.
+		if total, summary := stats.snapshot(); total > 0 {
+			logging.Info("[Reconciler] Anomalies this pass",
+				"total", total,
+				"byClass", summary,
+			)
+		}
+	}()
+
+	reaped, reapErr := r.reapOrphanedDescendants(ctx, stats)
+	reconciled += reaped
+	if reapErr != nil {
+		errors = append(errors, reapErr)
+	}
+
 	allWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.WorkflowStatusRunning)
 	if err != nil {
-		return 0, []error{fmt.Errorf("failed to list running workflows: %w", err)}
+		return reconciled, append(errors, fmt.Errorf("failed to list running workflows: %w", err))
 	}
+	pausedWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.WorkflowStatusPaused)
+	if err != nil {
+		return reconciled, append(errors, fmt.Errorf("failed to list paused workflows: %w", err))
+	}
+	allWorkflows = append(allWorkflows, pausedWorkflows...)
 
 	if len(allWorkflows) == 0 {
 		// Nothing running: any leftover debounce/streak entries are moot.
 		r.pruneStuckObservations(nil)
 		r.pruneProgressObservations(nil)
 		r.resetGuard.Prune(nil)
-		return 0, nil
+		return reconciled, errors
 	}
 
 	logging.Info("[Reconciler] Reconciling workflows",
@@ -1377,9 +1498,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// Reconcile each workflow in parallel (with limited concurrency).
 	// One pollerState per pass: the poller check is fetched lazily on the
 	// first stuck observation and cached for every other workflow this pass.
-	// One passStats per pass: anomalies are aggregated into a single summary.
 	pollers := &pollerState{}
-	stats := &passStats{}
 	const maxConcurrency = 10
 	sem := make(chan struct{}, maxConcurrency)
 	var wg sync.WaitGroup
@@ -1408,7 +1527,8 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 
 	wg.Wait()
 
-	// Drop debounce/streak entries for workflows no longer running.
+	// Drop debounce/streak entries for workflows no longer in the pass
+	// (running or paused).
 	runningIDs := make(map[string]bool, len(allWorkflows))
 	for _, wf := range allWorkflows {
 		runningIDs[wf.ID] = true
@@ -1416,15 +1536,6 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	r.pruneStuckObservations(runningIDs)
 	r.pruneProgressObservations(runningIDs)
 	r.resetGuard.Prune(runningIDs)
-
-	// One summary line per pass when anything anomalous was found; silence
-	// when clean. The per-anomaly detail is in the ERROR logs above.
-	if total, summary := stats.snapshot(); total > 0 {
-		logging.Info("[Reconciler] Anomalies this pass",
-			"total", total,
-			"byClass", summary,
-		)
-	}
 
 	if reconciled > 0 {
 		logging.Info("[Reconciler] Reconciliation complete",

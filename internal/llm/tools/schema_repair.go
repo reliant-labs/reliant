@@ -26,7 +26,8 @@ import (
 //   - It only rewrites a string value when the schema at that exact position
 //     expects an array or object (never when the schema accepts a string).
 //   - It walks the schema recursively (properties, items,
-//     additionalProperties), so nested stringified values are repaired too.
+//     additionalProperties), so nested stringified values are repaired too
+//     (e.g. a stringified array at $.deck.slides).
 //   - Double-encoded values (a JSON string whose content is itself a JSON
 //     string) are unwrapped by a single bounded repair (see unwrapToType /
 //     maxUnwrapDepth) — one repair per path, never a repair-of-a-repair.
@@ -135,7 +136,7 @@ func resolveSchemaJSON(schemaJSON []byte) (*gojsonschema.Resolved, error) {
 // JSON) and replaces string values with their parsed JSON when the schema
 // expects an array or object at that position — including the root value.
 // Returns the (possibly replaced) value and the list of repaired paths
-// ("$", "$.slides", "$.config.edits", "$.items[2]", ...).
+// ("$", "$.slides", "$.deck.slides", "$.items[2]", ...).
 func repairStringifiedJSON(value interface{}, schema map[string]interface{}) (interface{}, []string) {
 	var repairedPaths []string
 	out := repairValueAgainstSchema(value, schema, "$", &repairedPaths)

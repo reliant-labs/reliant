@@ -48,8 +48,8 @@ expect:
     - demo_step
 
 ---
-# Plan mode for read-only analysis
-name: plan_mode_readonly
+# Plan mode for analysis
+name: plan_mode_tools
 description: Demo step runs with plan mode restricting to plan-tagged tools
 inputs:
   mode: "plan"

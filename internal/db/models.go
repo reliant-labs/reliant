@@ -184,11 +184,27 @@ type DaemonAttachment struct {
 	DetectedPorts []uint32
 }
 
-// DaemonPAT is a personal access token for daemon authentication.
+// DaemonPAT kinds. One table (daemon_pats) and one token format (rlnt_pat_)
+// back every personal access token; the kind discriminates what a token may
+// authenticate. Kind separation is enforced at validation time: the gRPC auth
+// interceptor accepts kind='api' only, the gateway PAT validator accepts
+// kind='daemon' only.
+const (
+	// DaemonPATKindDaemon authenticates daemon <-> gateway streams.
+	DaemonPATKindDaemon = "daemon"
+	// DaemonPATKindAPI authenticates regular user API requests through the
+	// same middleware path as JWTs.
+	DaemonPATKindAPI = "api"
+)
+
+// DaemonPAT is a personal access token (rlnt_pat_ format). Despite the legacy
+// name, the table holds every PAT kind — see DaemonPATKind* above.
 type DaemonPAT struct {
 	ID          string
 	UserID      string
+	UserEmail   string // Email captured at mint time (api kind) so PAT auth resolves the same claims JWTs do
 	DaemonID    string // Bound daemon ID (empty for unbound/general-purpose PATs)
+	Kind        string // DaemonPATKindDaemon (default) or DaemonPATKindAPI
 	TokenHash   string // SHA-256 hex digest of the raw token
 	TokenPrefix string // First 8 chars of raw token for display in UI
 	Name        string // Human-readable label ("Sean's MacBook", "CI runner")

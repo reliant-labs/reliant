@@ -25,6 +25,12 @@ type DiscoverInput struct {
 	// or "." entries are treated as the project root and ignored (the project
 	// root is always scanned). Nil/empty means single-repo legacy behavior.
 	RepoSources []string
+	// ExcludeGlobalRoots drops the user-home discovery roots (~/.reliant,
+	// ~/.claude, ~/.codex) from the scan, leaving only what the project and
+	// the shipped catalogs supply. Set by SkillPathsForProject so validation
+	// judges a workflow against a reproducible set rather than whatever
+	// happens to be installed on one developer's machine.
+	ExcludeGlobalRoots bool
 }
 
 type root struct {
@@ -404,12 +410,10 @@ func builtinSkills(loadFullDefinitions bool) []Definition {
 // discoverAll discovers all skills (including nested) from all roots.
 func discoverAll(input DiscoverInput) Snapshot {
 	result := Snapshot{
-		ByName:       make(map[string]Definition),
-		ShadowedBy:   make(map[string]string),
-		ShadowedFrom: make(map[string]string),
+		ByName: make(map[string]Definition),
 	}
 
-	roots := discoveryRoots(input.ProjectPath, input.RepoSources)
+	roots := discoveryRoots(input.ProjectPath, input.RepoSources, input.ExcludeGlobalRoots)
 	for _, r := range roots {
 		defs := listSkillDefinitions(r.Path)
 		for _, def := range defs {
@@ -486,8 +490,31 @@ func discoverAll(input DiscoverInput) Snapshot {
 		}
 		return result.Diagnostics[i].Path < result.Diagnostics[j].Path
 	})
+	sort.Slice(result.Shadowed, func(i, j int) bool { return result.Shadowed[i].Key < result.Shadowed[j].Key })
+
+	reportShadowed(result.Shadowed)
 
 	return result
+}
+
+// reportShadowed says out loud that a skill arrived from two producers.
+//
+// Discovery has always known this and recorded it into two maps that nothing
+// ever read, so a project holding two copies of `service-layer` — one of them a
+// generated render that tells the reader it may be stale — produced no signal
+// anywhere. Warn, not Debug: two copies of one skill is a fact about the
+// project that someone has to act on, and the losing copy is dropped silently
+// either way.
+func reportShadowed(shadowed []ShadowedSkill) {
+	for _, s := range shadowed {
+		slog.Warn("[Skills] skill delivered by two producers; one copy is being dropped",
+			"skill", s.Key,
+			"using", s.WinnerPath,
+			"using_scope", string(s.WinnerScope),
+			"dropped", s.LoserPath,
+			"dropped_scope", string(s.LoserScope),
+			"contents_differ", s.BytesDiffer)
+	}
 }
 
 // Discover discovers only top-level skills (depth 1). Nested skills are discovered on demand.
@@ -496,10 +523,9 @@ func Discover(input DiscoverInput) Snapshot {
 
 	// Filter to top-level skills only (no "/" in SkillPath, or builtin skills).
 	result := Snapshot{
-		ByName:       make(map[string]Definition, len(all.ByName)),
-		ShadowedBy:   all.ShadowedBy,
-		ShadowedFrom: all.ShadowedFrom,
-		Diagnostics:  all.Diagnostics,
+		ByName:      make(map[string]Definition, len(all.ByName)),
+		Diagnostics: all.Diagnostics,
+		Shadowed:    all.Shadowed,
 	}
 	for key, def := range all.ByName {
 		if isTopLevelSkill(def) {
@@ -518,26 +544,6 @@ func Discover(input DiscoverInput) Snapshot {
 // DiscoverAll discovers all skills including nested ones. Used for search.
 func DiscoverAll(input DiscoverInput) Snapshot {
 	return discoverAll(input)
-}
-
-// DiscoverChildren returns immediate child skills of the given parent skill path.
-// For example, DiscoverChildren(input, "go") returns skills like "go/error-handling", "go/defer".
-func DiscoverChildren(input DiscoverInput, parentPath string) []Definition {
-	all := discoverAll(input)
-	prefix := parentPath + "/"
-	var children []Definition
-	for _, def := range all.Definitions {
-		if !strings.HasPrefix(def.SkillPath, prefix) {
-			continue
-		}
-		// Only immediate children: no additional "/" after the prefix.
-		remainder := def.SkillPath[len(prefix):]
-		if !strings.Contains(remainder, "/") {
-			children = append(children, def)
-		}
-	}
-	sortDefinitions(children)
-	return children
 }
 
 // computeSkillPath computes the hierarchical path of a skill relative to its discovery root.
@@ -601,30 +607,6 @@ func cloneDefinition(in Definition) Definition {
 	return out
 }
 
-func cloneSnapshot(in Snapshot) Snapshot {
-	out := Snapshot{
-		Definitions:  make([]Definition, 0, len(in.Definitions)),
-		ByName:       make(map[string]Definition, len(in.ByName)),
-		Diagnostics:  make([]skillscore.Diagnostic, len(in.Diagnostics)),
-		ShadowedBy:   make(map[string]string, len(in.ShadowedBy)),
-		ShadowedFrom: make(map[string]string, len(in.ShadowedFrom)),
-	}
-	for _, definition := range in.Definitions {
-		out.Definitions = append(out.Definitions, cloneDefinition(definition))
-	}
-	for key, definition := range in.ByName {
-		out.ByName[key] = cloneDefinition(definition)
-	}
-	copy(out.Diagnostics, in.Diagnostics)
-	for k, v := range in.ShadowedBy {
-		out.ShadowedBy[k] = v
-	}
-	for k, v := range in.ShadowedFrom {
-		out.ShadowedFrom[k] = v
-	}
-	return out
-}
-
 func shouldReplace(existing Definition, candidate Definition) bool {
 	if candidate.Scope.Priority() != existing.Scope.Priority() {
 		return candidate.Scope.Priority() < existing.Scope.Priority()
@@ -633,19 +615,29 @@ func shouldReplace(existing Definition, candidate Definition) bool {
 }
 
 func mergeDefinition(result *Snapshot, definition Definition) {
-	if existing, ok := result.ByName[definition.NormalizedKey]; ok {
-		if shouldReplace(existing, definition) {
-			result.ShadowedBy[existing.Path] = definition.Path
-			result.ShadowedFrom[definition.Path] = existing.Path
-			result.ByName[definition.NormalizedKey] = definition
-		} else {
-			result.ShadowedBy[definition.Path] = existing.Path
-			result.ShadowedFrom[existing.Path] = definition.Path
-		}
+	existing, ok := result.ByName[definition.NormalizedKey]
+	if !ok {
+		result.ByName[definition.NormalizedKey] = definition
 		return
 	}
 
-	result.ByName[definition.NormalizedKey] = definition
+	winner, loser := existing, definition
+	if shouldReplace(existing, definition) {
+		winner, loser = definition, existing
+		result.ByName[definition.NormalizedKey] = definition
+	}
+
+	result.Shadowed = append(result.Shadowed, ShadowedSkill{
+		Key:         definition.NormalizedKey,
+		WinnerPath:  winner.Path,
+		WinnerScope: winner.Scope,
+		LoserPath:   loser.Path,
+		LoserScope:  loser.Scope,
+		// Only claimed when both bodies are actually in hand. A metadata-only
+		// discovery has no bytes to compare and must not report a difference it
+		// did not observe.
+		BytesDiffer: winner.Body != "" && loser.Body != "" && winner.Body != loser.Body,
+	})
 }
 
 // scopedRoots returns the standard skill discovery roots scoped to a single
@@ -661,8 +653,11 @@ func scopedRoots(base, source string) []root {
 	}
 }
 
-func discoveryRoots(projectPath string, repoSources []string) []root {
-	homeDir, _ := os.UserHomeDir()
+func discoveryRoots(projectPath string, repoSources []string, excludeGlobal bool) []root {
+	var homeDir string
+	if !excludeGlobal {
+		homeDir, _ = os.UserHomeDir()
+	}
 
 	// Project-root scope is always scanned. Nested repos are added via
 	// repoSources; "." or "" entries collapse into the project root and are

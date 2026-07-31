@@ -26,6 +26,55 @@ type ProcessOutputEvent struct {
 	ExitCode   int32
 }
 
+// Transport-failure error codes. These say the tool NEVER RAN — the request
+// did not complete a round trip to a daemon. They are emitted only by the
+// transport itself:
+//
+//	ErrorCodeDaemonUnreached — RemoteExecutor, when the router call failed
+//	                           (no daemon connected, NATS timeout, ...)
+//	ErrorCodeDaemonRoundTrip — the NATS bridge, when the gateway could not
+//	                           complete the round trip (the connection holding
+//	                           the request closed under it)
+//
+// Everything the TOOL reports about its own execution — including a command
+// that exited non-zero — comes back Success=true / IsError=false with the exit
+// code inside the payload, or with a tool-owned code (EXECUTION_ERROR,
+// PARSE_ERROR, TOOL_NOT_FOUND, CANCELLED). That is the whole distinction
+// IsTransportErrorCode draws, and it is what keeps "the daemon vanished" from
+// being recorded as "your lint failed".
+const (
+	ErrorCodeDaemonUnreached = "DAEMON_EXECUTION_ERROR"
+	ErrorCodeDaemonRoundTrip = "DAEMON_ERROR"
+)
+
+// IsTransportErrorCode reports whether an ErrorCode means the tool never ran,
+// as opposed to ran-and-failed. Callers that turn a tool result into a
+// command verdict MUST branch on this: a lane that never ran is not a lane
+// that failed, and must not consume a retry or be reported as a lint/test/build
+// failure.
+func IsTransportErrorCode(code string) bool {
+	switch code {
+	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip:
+		return true
+	default:
+		return false
+	}
+}
+
+// TransportError says a tool request never reached a daemon. It exists so
+// callers that would otherwise flatten a failure into an exit code can tell
+// "never ran" from "ran and failed" with errors.As rather than by scanning a
+// message.
+type TransportError struct {
+	Code    string // one of the transport-failure codes above
+	Command string // the command that never ran, for the operator
+	Detail  string // the transport's own message
+}
+
+func (e *TransportError) Error() string {
+	return "daemon transport failure (" + e.Code + "): the command never ran: " + e.Detail
+}
+
 // ToolExecutionResponse is the synchronous response from a daemon tool execution.
 type ToolExecutionResponse struct {
 	RequestID    string `json:"request_id"`
@@ -65,6 +114,13 @@ type DaemonRouter interface {
 
 	// SendDaemonCommand sends a generic command to the user's daemon and waits for a response.
 	SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+
+	// SendDaemonCommandToDaemon sends a generic command to a SPECIFIC daemon id,
+	// bypassing default resolution. Use when the target daemon is already known
+	// so a multi-command operation and any recorded owner id all agree on one
+	// daemon (e.g. every worktree.create for a worktree, plus the daemon_id
+	// persisted on the row).
+	SendDaemonCommandToDaemon(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 
 	// ResolveDaemonID returns the daemon id that SendDaemonCommand would route
 	// to for this user (connected/local preferred, then control plane, then DB

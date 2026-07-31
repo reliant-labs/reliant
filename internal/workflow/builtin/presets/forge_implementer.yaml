@@ -1,0 +1,53 @@
+name: forge_implementer
+description: "Implementation specialist for a single seam of a Forge app — same tier as `implementer`, but ships with the component-library tool a Forge fan-out unit is required to use, so it never spends a turn loading it. Deliberately has NO browser: see the tools note below."
+tag: agent
+params:
+  model:
+    tags: [moderate]
+  # Methodology is DELIVERED, not chosen. A skill a unit must decide to load
+  # costs initiative before its value is known, and that fails in practice:
+  # across a full fan-out, `forge project capabilities` was run by nobody, the
+  # forge-libraries skill was loaded by nobody while three units each ran a
+  # full-disk `find` for the answer it contains, and `component_library` was in
+  # the tool list below AND named in every unit brief and got zero calls.
+  #
+  # forge-libraries opens by telling the unit to run `forge project libraries` —
+  # the live index of where forge/pkg resolves for this project and what each
+  # package is for — so the first thing a unit knows is how to ask rather than
+  # search.
+  skills:
+    - forge-libraries
+  # tag:default plus the component library (the charter requires a unit to search
+  # for a component before hand-rolling one).
+  #
+  # `load_tool` returns "available on your NEXT turn", so a tool an agent is
+  # certain to need costs it a whole turn to acquire — and a leaf that has to pay
+  # that before it can verify anything is a leaf that stops verifying. Presets are
+  # the mechanism for a known toolset; a deferred tool should be for the ones a
+  # run might not need at all.
+  #
+  # NO BROWSER, deliberately — do not add one back.
+  #
+  # A fan-out unit runs CONCURRENTLY with up to eight siblings against one
+  # working tree, one dev server and one API. What the browser shows a unit is
+  # therefore not attributable to that unit: the bundle it renders contains its
+  # siblings' half-finished edits to shared components, and the API it calls does
+  # not yet contain their handlers. A green screenshot does not mean your page
+  # works and a red one does not mean you broke it.
+  #
+  # It is also the slowest tool in the box, and it becomes a DEBUGGER the moment
+  # a unit hits a runtime defect with nothing else that can observe runtime
+  # behavior — re-submitting one form dozens of times to bisect a bug a
+  # four-line test would name in under a second.
+  #
+  # So: a unit that needs to know how something BEHAVES writes a test. A test is
+  # attributable to the unit that wrote it, runs in milliseconds, survives into
+  # the repo, and re-runs for free. Visual verification is the get-it-right
+  # review's job — it runs after the wave has quiesced, is the only role that can
+  # attribute what it sees, and holds the full chrome grant plus a schema that
+  # rejects a review submitting no snapshots.
+  tools:
+    - tag:default
+    - component_library
+  spawn_presets:
+    - researcher

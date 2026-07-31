@@ -201,6 +201,7 @@ func chatToCreateParams(chat *core.Chat) pgdb.CreateChatParams {
 		CreatedAt:       chat.CreatedAt,
 		UpdatedAt:       chat.UpdatedAt,
 		LastActive:      chat.LastActive,
+		ActiveDaemonID:  chatPtrToNullString(chat.ActiveDaemonID),
 	}
 }
 

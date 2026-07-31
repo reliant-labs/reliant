@@ -293,7 +293,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 			IsError:      true,
 			Content:      fmt.Sprintf("Failed to execute tool on daemon: %s", err.Error()),
 			ErrorMessage: err.Error(),
-			ErrorCode:    "DAEMON_EXECUTION_ERROR",
+			ErrorCode:    ErrorCodeDaemonUnreached,
 			StartTime:    startTime,
 			EndTime:      time.Now(),
 		}, nil

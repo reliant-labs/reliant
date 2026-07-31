@@ -1,14 +1,14 @@
 name: planner
-description: Strategic planner who orchestrates research and synthesizes actionable implementation plans. Does not have access to modify files - creates plans only, not code
+description: Strategic planner who orchestrates research and synthesizes actionable implementation plans. Focused on producing plans rather than writing code.
 tag: agent
-recommended_skills:
-  - planning-methodology
 params:
+  skills:
+    - planning-methodology
   spawn_presets:
   - researcher
   tools:
   - view          # Quick file checks when needed
-  - tag:search    # grep, glob for quick lookups
+  - tag:shell     # search the codebase via the shell tool (rg/grep/find)
   - create_plan   # Document the final plan
   model:
     tags: [flagship]

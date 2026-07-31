@@ -90,6 +90,9 @@ func messageToProto(m *db.Message, blocks []*db.MessageContentBlock, attachments
 	if m.WorkflowID != nil {
 		proto.WorkflowId = m.WorkflowID
 	}
+	if m.NodeID != nil {
+		proto.NodeId = m.NodeID
+	}
 	if m.DisplayStyle != nil {
 		proto.DisplayStyle = m.DisplayStyle
 	}

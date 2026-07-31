@@ -810,6 +810,10 @@ func (r *fakeMCPDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (stri
 	return "test-daemon-id", nil
 }
 
+func (r *fakeMCPDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *fakeMCPDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
 	switch commandType {
 	case "mcp.server_status":

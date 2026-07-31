@@ -422,9 +422,9 @@ expect:
     - agent_loop.approval
 
 ---
-# Plan mode uses plan-tagged tools only
-name: plan_mode_readonly
-description: Plan mode restricts to read-only tools for planning
+# Plan mode uses plan-tagged tools plus the shell tool (for search)
+name: plan_mode_tools
+description: Plan mode restricts to planning tools (plan-tagged + shell for search)
 inputs:
   mode: plan
 events:

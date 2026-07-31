@@ -42,6 +42,11 @@ type SaveMessageInput struct {
 	// Extended thinking support - contains both content and signature
 	Thinking ThinkingOutput `json:"thinking,omitempty" reliant:"desc=Extended thinking content and signature (for multi-turn thinking preservation)"`
 
+	// AssistantMessageID is the pre-allocated message id to persist an
+	// assistant message under (delta identity protocol). Only honored when
+	// Role resolves to "assistant"; empty keeps uuid generation.
+	AssistantMessageID string `json:"assistant_message_id,omitempty" reliant:"-"`
+
 	// InjectFiles carries binary file data for inject file attachments.
 	// These are loaded eagerly at inject construction time and stored as DB attachments
 	// at save time, then referenced as IMAGE or DOCUMENT content blocks.

@@ -32,10 +32,10 @@ func (c *GeminiClient) Name() string {
 }
 
 func NewClient(opts llm.DriverOptions) (*GeminiClient, error) {
-	// Use streaming HTTP client with DNS resilience, ResponseHeaderTimeout (2min),
-	// and idle stream timeout (5min). Do NOT use Client.Timeout — it applies to
-	// the entire request including body reads and would kill long-running streams.
-	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{APIKey: opts.ApiKey, Backend: genai.BackendGeminiAPI, HTTPClient: llm.StreamingHTTPClient()})
+	client, err := llm.NewGenAISDKClient(context.Background(), &genai.ClientConfig{
+		APIKey:  opts.ApiKey,
+		Backend: genai.BackendGeminiAPI,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Gemini client: %w", err)
 	}

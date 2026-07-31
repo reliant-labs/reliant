@@ -1,12 +1,11 @@
 name: git
 description: Git specialist for commits, branching, and version control operations - loads conflict-resolver skill for complex conflicts
 tag: agent
-recommended_skills:
-  - git-operations
 params:
+  skills:
+    - git-operations
   tools:
-  - tag:shell     # Git operations
+  - tag:shell     # Git operations + search the codebase (rg/grep/find)
   - view          # Read configs, check files
-  - tag:search    # Find conventions, configs
   model:
     tags: [fast]

@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -101,10 +102,14 @@ func (s *DaemonTokenService) RevokeDaemonToken(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token_id is required"))
 	}
 
-	// auth.MustGetUserID ensures the caller is authenticated
-	_ = auth.MustGetUserID(ctx)
+	userID := auth.MustGetUserID(ctx)
 
-	if err := s.patService.RevokePAT(ctx, req.Msg.TokenId); err != nil {
+	// Owner- and kind-scoped: only the caller's own daemon-kind tokens are
+	// reachable (api-kind tokens are managed via TokenService).
+	if err := s.patService.RevokePAT(ctx, userID, req.Msg.TokenId); err != nil {
+		if errors.Is(err, pat.ErrTokenNotFound) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("revoking token: %w", err))
 	}
 

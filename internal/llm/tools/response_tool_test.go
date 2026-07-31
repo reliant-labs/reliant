@@ -3,6 +3,7 @@ package tools
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -33,8 +34,13 @@ func TestResponseTool_BasicUsage(t *testing.T) {
 		t.Errorf("Expected name 'test_response', got '%s'", tool.Name())
 	}
 
-	if tool.Description() != "A test response tool" {
-		t.Errorf("Expected description 'A test response tool', got '%s'", tool.Description())
+	// The description carries the caller's text plus the completion warning that
+	// keeps a model from posting a plan/placeholder and ending its turns early.
+	if !strings.HasPrefix(tool.Description(), "A test response tool") {
+		t.Errorf("Expected description to start with 'A test response tool', got '%s'", tool.Description())
+	}
+	if !strings.Contains(tool.Description(), "IMMEDIATELY ENDS ALL your turns") {
+		t.Errorf("Expected description to carry the completion warning, got '%s'", tool.Description())
 	}
 
 	schema := tool.ParamSchema()

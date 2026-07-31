@@ -62,6 +62,12 @@ inputs:
     ui: hidden
     description: Hidden compatibility input for agent-style presets
 
+  skills:
+    type: array
+    default: []
+    ui: hidden
+    description: Hidden compatibility input for agent-style presets
+
   import_memory:
     type: boolean
     default: true

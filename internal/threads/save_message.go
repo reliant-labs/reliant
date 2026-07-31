@@ -69,6 +69,11 @@ type SaveMessageOpts struct {
 	// Idempotency (for Temporal activity retries)
 	ActivityID    *string
 	AttemptNumber int32
+
+	// MessageID, when non-empty, is the pre-allocated id to persist the
+	// message under (delta identity protocol — streamed deltas were stamped
+	// with this id, so the saved row must match). Empty generates a uuid.
+	MessageID string
 }
 
 // SaveMessageResult contains the result of saving a message.
@@ -165,6 +170,9 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 
 		timestamp := now()
 		messageID := uuid.New().String()
+		if opts.MessageID != "" {
+			messageID = opts.MessageID
+		}
 
 		// Create message
 		msg := &db.Message{

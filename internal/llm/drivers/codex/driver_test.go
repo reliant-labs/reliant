@@ -508,10 +508,10 @@ func TestBuildParams_PrunesDuplicateToolNamesDeterministically(t *testing.T) {
 	}
 }
 
-func TestBuildParams_ForcesResponseToolChoice(t *testing.T) {
-	client := &CodexClient{}
-	messages := []message.Message{{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "route this"}}}}
-	responseTool := llmtools.NewResponseTool(llmtools.ResponseToolDefinition{
+// routingResponseTool is the shape the forced-choice behavior was written for:
+// a router node, whose only tool is the response tool.
+func routingResponseTool() llmtools.Tool {
+	return llmtools.NewResponseTool(llmtools.ResponseToolDefinition{
 		Name:        "node_routing_decision",
 		Description: "Select the node to route to",
 		Schema: map[string]interface{}{
@@ -521,20 +521,65 @@ func TestBuildParams_ForcesResponseToolChoice(t *testing.T) {
 			},
 		},
 	})
+}
 
-	params, err := client.buildParams([]string{"system prompt"}, messages, []llmtools.Tool{
-		stubTool{name: "ordinary_tool"},
-		responseTool,
-	})
+func TestBuildParams_ForcesResponseToolChoiceWhenItIsTheOnlyTool(t *testing.T) {
+	// A router has nothing to do but answer, so pinning takes nothing away and
+	// saves a turn.
+	client := &CodexClient{}
+	messages := []message.Message{{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "route this"}}}}
+
+	params, err := client.buildParams([]string{"system prompt"}, messages, []llmtools.Tool{routingResponseTool()})
 	if err != nil {
 		t.Fatalf("buildParams returned error: %v", err)
 	}
 
 	if params.ToolChoice.OfFunctionTool == nil {
-		t.Fatalf("expected response tool to force a named function tool choice")
+		t.Fatalf("a sole response tool should force a named function tool choice")
 	}
 	if got := params.ToolChoice.OfFunctionTool.Name; got != "node_routing_decision" {
 		t.Fatalf("forced tool choice = %q, want node_routing_decision", got)
+	}
+}
+
+// TestBuildParams_ToolsBesideAResponseToolStayCallable is the regression that
+// matters. tool_choice applies to EVERY request in the turn loop, so pinning it
+// to the response tool while ordinary tools are present means the model must
+// answer on turn one and can never call them.
+//
+// Born red. A reviewer node granted 22 tools — shell, view, 13 chrome-devtools
+// — to boot the app and inspect it before grading could call none of them. It
+// submitted a `stuck` verdict in 18 seconds stating that it had been "required
+// to submit immediately before starting the app or using any inspection
+// tools", and failed a run whose gate was green (10 linters, 48 frontend
+// tests, `go test -race`, 2 builds).
+func TestBuildParams_ToolsBesideAResponseToolStayCallable(t *testing.T) {
+	client := &CodexClient{}
+	messages := []message.Message{{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "review this"}}}}
+
+	params, err := client.buildParams([]string{"system prompt"}, messages, []llmtools.Tool{
+		stubTool{name: "bash"},
+		stubTool{name: "view"},
+		llmtools.NewResponseTool(llmtools.ResponseToolDefinition{
+			Name:        "submit_evaluation",
+			Description: "Submit the review verdict",
+			Schema: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{"grade": map[string]interface{}{"type": "string"}},
+			},
+		}),
+	})
+	if err != nil {
+		t.Fatalf("buildParams returned error: %v", err)
+	}
+
+	if params.ToolChoice.OfFunctionTool != nil {
+		t.Fatalf("pinning tool_choice to %q makes the other %d tools uncallable — an agent "+
+			"handed tools must be able to act before it answers",
+			params.ToolChoice.OfFunctionTool.Name, len(params.Tools)-1)
+	}
+	if !params.ToolChoice.OfToolChoiceMode.Valid() || params.ToolChoice.OfToolChoiceMode.Value != responses.ToolChoiceOptionsAuto {
+		t.Fatalf("expected auto tool choice, got %#v", params.ToolChoice)
 	}
 }
 

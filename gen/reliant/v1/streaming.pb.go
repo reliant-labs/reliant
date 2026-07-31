@@ -45,6 +45,10 @@ const (
 	ChatUpdateType_CHAT_UPDATE_TYPE_STREAMING_DELTA    ChatUpdateType = 16
 	ChatUpdateType_CHAT_UPDATE_TYPE_SKILL_INVOCATION   ChatUpdateType = 17
 	ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION           ChatUpdateType = 18
+	// Emitted exactly once per pre-allocated assistant message id when its
+	// stream reaches a terminal state (completed / aborted / cancelled), so
+	// consumers can retire streaming placeholders (delta identity protocol).
+	ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED ChatUpdateType = 19
 )
 
 // Enum value maps for ChatUpdateType.
@@ -68,6 +72,7 @@ var (
 		16: "CHAT_UPDATE_TYPE_STREAMING_DELTA",
 		17: "CHAT_UPDATE_TYPE_SKILL_INVOCATION",
 		18: "CHAT_UPDATE_TYPE_QUESTION",
+		19: "CHAT_UPDATE_TYPE_STREAM_FINALIZED",
 	}
 	ChatUpdateType_value = map[string]int32{
 		"CHAT_UPDATE_TYPE_UNSPECIFIED":        0,
@@ -88,6 +93,7 @@ var (
 		"CHAT_UPDATE_TYPE_STREAMING_DELTA":    16,
 		"CHAT_UPDATE_TYPE_SKILL_INVOCATION":   17,
 		"CHAT_UPDATE_TYPE_QUESTION":           18,
+		"CHAT_UPDATE_TYPE_STREAM_FINALIZED":   19,
 	}
 )
 
@@ -2003,7 +2009,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x16WorkflowExecutionEvent\x12E\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2&.reliant.v1.WorkflowExecutionEventTypeR\teventType\x12>\n" +
-	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xe5\x04\n" +
+	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\x8c\x05\n" +
 	"\x0eChatUpdateType\x12 \n" +
 	"\x1cCHAT_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_MESSAGE\x10\x01\x12\x1d\n" +
@@ -2023,7 +2029,8 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x18CHAT_UPDATE_TYPE_REFETCH\x10\x0f\x12$\n" +
 	" CHAT_UPDATE_TYPE_STREAMING_DELTA\x10\x10\x12%\n" +
 	"!CHAT_UPDATE_TYPE_SKILL_INVOCATION\x10\x11\x12\x1d\n" +
-	"\x19CHAT_UPDATE_TYPE_QUESTION\x10\x12\"\x04\b\f\x10\f*\xc1\x06\n" +
+	"\x19CHAT_UPDATE_TYPE_QUESTION\x10\x12\x12%\n" +
+	"!CHAT_UPDATE_TYPE_STREAM_FINALIZED\x10\x13\"\x04\b\f\x10\f*\xc1\x06\n" +
 	"\x0eUserUpdateType\x12 \n" +
 	"\x1cUSER_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"USER_UPDATE_TYPE_CHAT_STATE_CHANGE\x10\x01\x12(\n" +

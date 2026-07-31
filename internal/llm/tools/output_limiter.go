@@ -9,17 +9,98 @@ import (
 )
 
 const (
-	// MaxOutputSize is the maximum size of tool output in bytes
-	// 16KB ≈ 4K tokens - prevents single tool calls from consuming too much context
-	// Code is denser than prose (~3 chars/token vs 4), so we use a conservative limit
-	MaxOutputSize = 16_000
+	// MaxOutputSize is the maximum size of tool output in bytes.
+	// 24KB ≈ 6K tokens — prevents a single tool call from consuming too much
+	// context. Code is denser than prose (~3 chars/token vs 4), so the byte
+	// figure is the conservative one to reason about.
+	MaxOutputSize = 24_000
 
-	// TruncationWarningThreshold is when we start warning about large outputs
-	TruncationWarningThreshold = 12_000
+	// TruncationWarningThreshold is when we start warning about large outputs:
+	// three quarters of the ceiling, so the warning arrives with room to act
+	// rather than at the cliff edge.
+	TruncationWarningThreshold = 18_000
 
 	// PaginationChunkSize is the size of chunks for paginated responses
 	PaginationChunkSize = 8_000
+
+	// MaxSkillBodySize is the delivered-size ceiling for one skill load. It
+	// binds BOTH skill-delivery paths — the skill tool's own action=load
+	// result (capped by the ToolWrapper) and the body call_llm seeds into the
+	// prompt as a preloaded skill — so a preloaded skill and a hand-loaded
+	// skill are byte-identical no matter how large the source file is.
+	//
+	// It equals MaxOutputSize. A skill is authored content with a known
+	// publishing budget — forge renders its shipped SKILL.md files against
+	// this same number — so a separate, larger ceiling here would only move
+	// the cliff while making every skill silently more expensive on every
+	// turn of every run. The fix for an oversize skill is to split it at the
+	// source, which is what the truncation notice tells the reader to do.
+	MaxSkillBodySize = MaxOutputSize
 )
+
+// CapSkillContent enforces MaxSkillBodySize on the text delivered for a skill
+// load and reports whether anything was dropped.
+//
+// Truncation is never silent. When content is dropped the returned text ends
+// with an explicit, unmissable notice stating how many bytes went missing and
+// telling the reader to open the skill file on disk for the tail. That tail is
+// exactly where the skill tool appends its sub-skill, related-skill and
+// suggested-tools pointers, so a quiet cut does not merely shorten a skill —
+// it severs the links to the rest of the skill tree.
+//
+// Callers are expected to log when this fires: an oversize skill is a
+// publishing defect to fix at the source, not a condition to absorb silently.
+func CapSkillContent(content string) (string, bool) {
+	if len(content) <= MaxSkillBodySize {
+		return content, false
+	}
+
+	// The notice's own length depends on the numbers it reports, which depend
+	// on how much head survives. Shrink the head until head+notice fits.
+	keep := MaxSkillBodySize
+	for i := 0; i < 8; i++ {
+		notice := skillTruncationNotice(len(content), len(content)-keep)
+		if keep+len(notice) <= MaxSkillBodySize {
+			break
+		}
+		keep = MaxSkillBodySize - len(notice)
+	}
+	if keep < 0 {
+		keep = 0
+	}
+
+	// Cut on a line boundary so the surviving text ends as readable markdown
+	// rather than mid-token — but never give up more than half the budget.
+	head := content[:keep]
+	if idx := strings.LastIndexByte(head, '\n'); idx > keep/2 {
+		head = head[:idx+1]
+	}
+
+	notice := skillTruncationNotice(len(content), len(content)-len(head))
+	for len(head) > 0 && len(head)+len(notice) > MaxSkillBodySize {
+		head = head[:len(head)-1]
+		notice = skillTruncationNotice(len(content), len(content)-len(head))
+	}
+	return head + notice, true
+}
+
+// skillTruncationNotice renders the marker appended to a truncated skill.
+func skillTruncationNotice(total, dropped int) string {
+	return fmt.Sprintf(`
+
+=== SKILL TRUNCATED: %d OF %d BYTES WERE DROPPED ===
+The text above is only the first %d bytes of this skill. It does NOT end where
+it appears to end. Everything after that point was not delivered — including,
+if this skill has them, its sub-skill list, related-skill pointers and
+suggested-tools list.
+To recover the missing content, read the skill's SKILL.md directly from disk
+(look under .claude/skills/ or .reliant/skills/) instead of relying on this
+result, and treat any instruction that seems to be cut off as incomplete.
+This skill exceeds the %d-byte delivery budget and should be split at its
+source into smaller skills.
+=== END SKILL TRUNCATION NOTICE ===
+`, dropped, total, total-dropped, MaxSkillBodySize)
+}
 
 // OutputLimitError is returned when output exceeds the maximum allowed size
 type OutputLimitError struct {
@@ -72,6 +153,16 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 		return output
 	}
 
+	// Skills are the one tool output where a cut tail changes meaning rather
+	// than just costing detail, so they get their own loud notice and skip the
+	// generic head/tail machinery entirely. Returning early also guarantees the
+	// bytes here are identical to the ones call_llm seeds for a preloaded
+	// skill, which calls CapSkillContent directly.
+	if toolName == ToolSkill {
+		capped, _ := CapSkillContent(output)
+		return capped
+	}
+
 	// Calculate how much to keep
 	keepSize := MaxOutputSize - 500 // Leave room for warning message
 
@@ -88,32 +179,6 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 				output[len(output)-tailSize:]
 		} else {
 			truncated = output[:keepSize]
-		}
-
-	case "grep", "glob", "ls":
-		// For file listings, truncate at the end
-		lines := strings.Split(output, "\n")
-		var result strings.Builder
-		currentSize := 0
-		linesIncluded := 0
-
-		for _, line := range lines {
-			lineSize := len(line) + 1 // +1 for newline
-			if currentSize+lineSize > keepSize {
-				break
-			}
-			if linesIncluded > 0 {
-				result.WriteString("\n")
-			}
-			result.WriteString(line)
-			currentSize += lineSize
-			linesIncluded++
-		}
-
-		truncated = result.String()
-		if linesIncluded < len(lines) {
-			truncated += fmt.Sprintf("\n\n... [TRUNCATED - Showing %d of %d results] ...",
-				linesIncluded, len(lines))
 		}
 
 	case "fetch":
@@ -134,10 +199,6 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 		switch toolName {
 		case "view":
 			warning += " Use offset parameter to read remaining content."
-		case "grep":
-			warning += " Use more specific pattern or path, or use files_with_matches mode."
-		case "glob", "ls":
-			warning += " Use more specific pattern or path."
 		default:
 			warning += " Consider using more specific parameters."
 		}
@@ -153,29 +214,17 @@ func getToolSpecificSuggestions(toolName string) []string {
 	case "view":
 		return []string{
 			"Use offset and limit parameters to read specific sections",
-			"Use grep to find specific content before reading",
+			"Search the file with 'rg pattern <file>' to locate content before reading",
 			"Consider reading only the relevant portion of the file",
 		}
 	case "bash", "powershell", "bash_output":
 		return []string{
-			"Use head, tail, or grep to filter command output",
+			"Use head, tail, or a narrower pattern to filter command output",
+			"When searching, bound the results: 'rg -l' for filenames only, or 'rg -m 20'",
+			"Scope the search to a subdirectory rather than the whole worktree",
 			"Redirect verbose output to /dev/null if not needed",
 			"Use summary flags (e.g., --summary, --brief) when available",
 			"Consider breaking the command into smaller, focused operations",
-		}
-	case "grep":
-		return []string{
-			"Use more specific search patterns",
-			"Limit search to specific file types with --type flag",
-			"Use --files-with-matches mode instead of content mode",
-			"Specify a smaller search path",
-			"Use head_limit parameter to limit results",
-		}
-	case "glob", "ls":
-		return []string{
-			"Use more specific patterns to match fewer files",
-			"Limit search depth with appropriate glob patterns",
-			"Search in a more specific directory",
 		}
 	case "fetch":
 		return []string{

@@ -8,6 +8,7 @@ import {
 import { WorktreeStatus } from '../gen/reliant/v1/worktree_pb';
 import { toast } from '../lib/toast-manager';
 import { useChatStore } from './chatStore';
+import { getChatFromCache } from '../hooks/chat-queries';
 import { useChatNavigationStore } from './chatNavigationStore';
 import { useWorkspaceStateStore } from './workspaceStateStore';
 import { useBrowserStore } from './browserStore';
@@ -131,7 +132,7 @@ type ArchivedWorktreeActiveChatSnapshot = {
 function getArchivedWorktreeActiveChatSnapshot(worktreeId: string): ArchivedWorktreeActiveChatSnapshot {
   const chatStore = useChatStore.getState();
   const activeChatId = chatStore.activeChatId;
-  const activeChat = activeChatId ? chatStore.chats.get(activeChatId) : null;
+  const activeChat = activeChatId ? getChatFromCache(activeChatId) : null;
 
   return {
     activeChatId,
@@ -150,7 +151,7 @@ async function clearArchivedWorktreeActiveChat(
   const chatStore = useChatStore.getState();
   if (chatStore.activeChatId !== activeChatId) return;
 
-  const activeChat = chatStore.chats.get(activeChatId);
+  const activeChat = getChatFromCache(activeChatId);
   const shouldClearActiveChat =
     activeChatWasInWorktree ||
     activeChat?.worktreeId === worktreeId ||

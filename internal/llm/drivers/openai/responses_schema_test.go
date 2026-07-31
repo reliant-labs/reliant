@@ -17,7 +17,7 @@ import (
 //
 // Current known constraints (based on API errors):
 // - Every object schema must explicitly set: additionalProperties=false
-// - If a schema has properties, it must include required containing *every* property key
+// - required must not name a key that is absent from properties
 func TestExtractUpstreamCorrelationHeaders(t *testing.T) {
 	t.Run("returns empty values when response is nil", func(t *testing.T) {
 		requestID, proxymanID := extractUpstreamCorrelationHeaders(nil)
@@ -79,7 +79,7 @@ func TestResponsesToolSchemaNormalization(t *testing.T) {
 		if err := json.Unmarshal(b, &m); err != nil {
 			t.Fatalf("unmarshal params: %v", err)
 		}
-		assertObjectSchemaStrict(t, m, "parameters["+itoa(i)+"]")
+		assertObjectSchemaValid(t, m, "parameters["+itoa(i)+"]")
 	}
 
 	// Explicit regression assertion for the MCP-style fallback schema path.
@@ -102,10 +102,10 @@ func TestResponsesToolSchemaNormalization(t *testing.T) {
 	}
 }
 
-func assertObjectSchemaStrict(t *testing.T, schema map[string]any, path string) {
+func assertObjectSchemaValid(t *testing.T, schema map[string]any, path string) {
 	t.Helper()
 
-	// If this looks like an object schema, enforce the strict invariants.
+	// If this looks like an object schema, enforce the object invariants.
 	if schema["type"] == "object" || schema["properties"] != nil {
 		ap, ok := schema["additionalProperties"]
 		if !ok {
@@ -117,32 +117,25 @@ func assertObjectSchemaStrict(t *testing.T, schema map[string]any, path string) 
 
 		props, _ := schema["properties"].(map[string]any)
 		if props != nil {
-			if _, ok := schema["required"].([]any); !ok {
-				// json unmarshalling gives []any for arrays
-				// also accept []string (if produced directly)
-				if _, ok2 := schema["required"].([]string); !ok2 {
-					t.Fatalf("%s: required must be present when properties exist", path)
-				}
-			}
-
-			// required must include every key in properties (OpenAI Responses requirement)
-			requiredSet := map[string]bool{}
+			// required is a subset of properties: OpenAI Responses rejects an
+			// entry naming a property that does not exist, but a tool is free to
+			// declare parameters optional (and must be, or the model can never
+			// omit one).
+			var names []string
 			switch r := schema["required"].(type) {
 			case []any:
 				for _, v := range r {
 					if s, ok := v.(string); ok {
-						requiredSet[s] = true
+						names = append(names, s)
 					}
 				}
 			case []string:
-				for _, s := range r {
-					requiredSet[s] = true
-				}
+				names = append(names, r...)
 			}
 
-			for k := range props {
-				if !requiredSet[k] {
-					t.Fatalf("%s: required is missing property key %q", path, k)
+			for _, name := range names {
+				if _, ok := props[name]; !ok {
+					t.Fatalf("%s: required names %q which is not a property", path, name)
 				}
 			}
 		}
@@ -152,14 +145,14 @@ func assertObjectSchemaStrict(t *testing.T, schema map[string]any, path string) 
 	if props, ok := schema["properties"].(map[string]any); ok {
 		for k, v := range props {
 			if child, ok := v.(map[string]any); ok {
-				assertObjectSchemaStrict(t, child, path+".properties."+k)
+				assertObjectSchemaValid(t, child, path+".properties."+k)
 			}
 		}
 	}
 
 	// Recurse into array items
 	if items, ok := schema["items"].(map[string]any); ok {
-		assertObjectSchemaStrict(t, items, path+".items")
+		assertObjectSchemaValid(t, items, path+".items")
 	}
 
 	// Recurse into combinators
@@ -167,7 +160,7 @@ func assertObjectSchemaStrict(t *testing.T, schema map[string]any, path string) 
 		if arr, ok := schema[key].([]any); ok {
 			for i, v := range arr {
 				if child, ok := v.(map[string]any); ok {
-					assertObjectSchemaStrict(t, child, path+"."+key+"["+itoa(i)+"]")
+					assertObjectSchemaValid(t, child, path+"."+key+"["+itoa(i)+"]")
 				}
 			}
 		}

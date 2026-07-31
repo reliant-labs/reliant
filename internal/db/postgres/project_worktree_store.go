@@ -204,6 +204,7 @@ func (s *worktreeStore) CreateWorktree(ctx context.Context, worktree *core.Workt
 		UpdatedAt:    worktree.UpdatedAt,
 		LastActive:   worktree.LastActive,
 		DeletedAt:    projectPtrToNullTime(worktree.DeletedAt),
+		DaemonID:     ptrToNullString(worktree.DaemonID),
 	})
 }
 
@@ -369,6 +370,7 @@ func worktreeFromPG(row pgdb.Worktree) *core.Worktree {
 		BaseBranches:    decodeBaseBranches(row.BaseBranches),
 		ProjectID:       row.ProjectID,
 		ChatID:          nullStringToPtr(row.ChatID),
+		DaemonID:        nullStringToPtr(row.DaemonID),
 		Status:          row.Status,
 		IsMain:          row.IsMain,
 		CreatedAt:       row.CreatedAt,

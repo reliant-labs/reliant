@@ -63,6 +63,14 @@ build: generate-all
 	@echo "$(GREEN)✅ Build complete: $(BINARY_PATH)$(NC)"
 
 
+## build-dev-cli: Build reliant-dev, the internal forensics CLI (reads the DB directly)
+build-dev-cli:
+	@echo "$(YELLOW)Building reliant-dev...$(NC)"
+	@mkdir -p $(BUILD_DIR)
+	CGO_ENABLED=$(CGO_ENABLED) $(GOBUILD) -o $(BUILD_DIR)/reliant-dev ./tools/reliant-dev
+	@echo "$(GREEN)✅ Build complete: $(BUILD_DIR)/reliant-dev$(NC)"
+
+
 ## build-all: Build for multiple platforms
 build-all: generate-all
 	@echo "$(YELLOW)Building for multiple platforms...$(NC)"

@@ -38,7 +38,7 @@ func TestHandleWorkflowCompletion(t *testing.T) {
 func completionTestWorkflow(ctx workflow.Context, mode string) (result *WorkflowResult, retErr error) {
 	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	defer func() {
-		handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr)
+		handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "")
 	}()
 
 	switch mode {
@@ -360,45 +360,14 @@ func cleanupStub(ctx context.Context, input map[string]interface{}) (map[string]
 // error, then succeeds. The call count is tracked via the closure in the test.
 // We use a mock in the test instead.
 
-// autoPauseWorkflow simulates the core DynamicWorkflow pattern:
+// autoPauseWorkflow simulates the core DynamicWorkflow pattern using the REAL
+// pause machinery (newPauseCoordinator — the same code DynamicWorkflow wires
+// up), not a hand-rolled replica:
 // 1. Execute activity
 // 2. If RetryExhausted (activity failed after retries), emit paused status, self-pause, wait for resume
 // 3. On resume, emit started status, retry the step
-func autoPauseWorkflow(ctx workflow.Context, failCount int) (string, error) {
-	var pauseRequested bool
-	pauseCh := workflow.GetSignalChannel(ctx, "signal.pause")
-	resumeCh := workflow.GetSignalChannel(ctx, "signal.resume")
-
-	activityCtx, cancelAllActivities := workflow.WithCancel(ctx)
-	var pauseEpoch int
-
-	checkPause := func(callerCtx workflow.Context) {
-		for pauseCh.ReceiveAsync(nil) {
-			pauseRequested = true
-		}
-		if pauseRequested {
-			cancelAllActivities()
-			myEpoch := pauseEpoch
-			_ = workflow.Await(callerCtx, func() bool { return pauseEpoch > myEpoch })
-		}
-	}
-
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		for {
-			resumeCh.Receive(gCtx, nil)
-			pauseRequested = false
-			activityCtx, cancelAllActivities = workflow.WithCancel(ctx)
-			pauseEpoch++
-		}
-	})
-
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		for {
-			pauseCh.Receive(gCtx, nil)
-			pauseRequested = true
-			cancelAllActivities()
-		}
-	})
+func autoPauseWorkflow(ctx workflow.Context, holdResume bool) (string, error) {
+	pc := newPauseCoordinator(ctx, "wf-test", pauseOptions{HoldResume: holdResume})
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
@@ -409,22 +378,19 @@ func autoPauseWorkflow(ctx workflow.Context, failCount int) (string, error) {
 		},
 	}
 
-	callNumber := 0
-
 	for attempt := 0; attempt < 5; attempt++ {
-		checkPause(ctx)
+		pc.CheckPause(ctx)
 
-		stepCtx := workflow.WithActivityOptions(activityCtx, ao)
+		stepCtx := workflow.WithActivityOptions(pc.ActivityCtx(), ao)
 		var result string
 		err := workflow.ExecuteActivity(stepCtx, StepActivity, "call_llm").Get(ctx, &result)
 		if err == nil {
 			return result, nil
 		}
-		callNumber++
 
 		var canceledErr *temporal.CanceledError
 		if errors.As(err, &canceledErr) {
-			checkPause(ctx)
+			pc.CheckPause(ctx)
 			continue
 		}
 
@@ -436,10 +402,9 @@ func autoPauseWorkflow(ctx workflow.Context, failCount int) (string, error) {
 			"status": "paused",
 		}).Get(ctx, nil)
 
-		// Self-pause and block
-		pauseRequested = true
-		cancelAllActivities()
-		checkPause(ctx)
+		// Self-pause and block (mirrors the retry-exhaustion executors)
+		pc.RequestPause()
+		pc.CheckPause(ctx)
 
 		// Resumed! Emit "started" status
 		_ = workflow.ExecuteActivity(statusCtx, workflowStatusStub, map[string]interface{}{
@@ -488,7 +453,7 @@ func (s *RateLimitAutoPauseSuite) TestRateLimitCausesAutoPause_ResumeRetries() {
 		env.SignalWorkflow("signal.resume", nil)
 	}, 200*time.Millisecond)
 
-	env.ExecuteWorkflow(autoPauseWorkflow, 1)
+	env.ExecuteWorkflow(autoPauseWorkflow, true)
 
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError(), "Workflow should complete successfully after resume")
@@ -541,7 +506,7 @@ func (s *RateLimitAutoPauseSuite) TestRateLimitPause_WithoutResume_StaysBlocked(
 		env.CancelWorkflow()
 	}, 500*time.Millisecond)
 
-	env.ExecuteWorkflow(autoPauseWorkflow, 1)
+	env.ExecuteWorkflow(autoPauseWorkflow, true)
 
 	s.True(env.IsWorkflowCompleted())
 	s.Error(env.GetWorkflowError(), "Workflow should not complete without resume")
@@ -586,7 +551,7 @@ func (s *RateLimitAutoPauseSuite) TestMultiplePauseResumeCycles() {
 		env.SignalWorkflow("signal.resume", nil)
 	}, 1000*time.Millisecond)
 
-	env.ExecuteWorkflow(autoPauseWorkflow, 2)
+	env.ExecuteWorkflow(autoPauseWorkflow, true)
 
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError(), "Workflow should complete after multiple pause/resume cycles")
@@ -608,4 +573,150 @@ func (s *RateLimitAutoPauseSuite) TestMultiplePauseResumeCycles() {
 	}
 	s.Equal(2, pauseCount, "Should emit 'paused' twice for two rate limit failures")
 	s.Equal(2, startedCount, "Should emit 'started' twice for two resumes")
+}
+
+// =============================================================================
+// Resume-before-pause-arm race (reset-and-replay resume swallow)
+// =============================================================================
+//
+// When a self-paused workflow is recovered via reset-and-replay, the resume
+// signal is appended to history at reset time and can be consumed by the
+// resume coordinator BEFORE the replayed retry-exhaustion branch re-arms the
+// pause. These tests pin the fix (a resume with no armed pause is HELD until
+// one arms) and the legacy behavior old histories must keep on replay.
+
+// holdReleaseWorkflow is the minimal expression of the race: the resume
+// signal is delivered while nothing is paused, and the pause arms later.
+func holdReleaseWorkflow(ctx workflow.Context, holdResume bool) (string, error) {
+	pc := newPauseCoordinator(ctx, "wf-test", pauseOptions{HoldResume: holdResume})
+	// Give the delayed resume signal time to arrive before the pause arms.
+	_ = workflow.Sleep(ctx, 10*time.Millisecond)
+	pc.RequestPause()
+	pc.CheckPause(ctx)
+	// A test-harness CancelWorkflow unblocks CheckPause's Await; surface it
+	// as an error so "still parked at cancel time" is distinguishable from a
+	// genuine resume.
+	if ctx.Err() != nil {
+		return "", temporal.NewCanceledError("still parked when cancelled")
+	}
+	return "resumed", nil
+}
+
+func (s *RateLimitAutoPauseSuite) TestResumeBeforePauseArm_HoldReleasesPause() {
+	env := s.NewTestWorkflowEnvironment()
+
+	// Resume arrives BEFORE the pause arms (the reset-and-replay ordering).
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow("signal.resume", nil)
+	}, 1*time.Millisecond)
+
+	env.ExecuteWorkflow(holdReleaseWorkflow, true)
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError(),
+		"a resume that arrives before the pause arms must be held and release it")
+	var result string
+	s.NoError(env.GetWorkflowResult(&result))
+	s.Equal("resumed", result)
+}
+
+func (s *RateLimitAutoPauseSuite) TestResumeBeforePauseArm_LegacyConsumesResume_StaysParked() {
+	// Pre-resume-hold histories replay with holdResume=false and must keep
+	// the old behavior: the early resume is consumed as a no-op and the
+	// later pause parks the workflow.
+	env := s.NewTestWorkflowEnvironment()
+
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow("signal.resume", nil)
+	}, 1*time.Millisecond)
+	env.RegisterDelayedCallback(func() {
+		env.CancelWorkflow()
+	}, 500*time.Millisecond)
+
+	env.ExecuteWorkflow(holdReleaseWorkflow, false)
+
+	s.True(env.IsWorkflowCompleted())
+	s.Error(env.GetWorkflowError(),
+		"legacy behavior: the early resume is spent and the pause parks the workflow")
+}
+
+func (s *RateLimitAutoPauseSuite) TestStaleResumeThenUserPause_PauseSticks() {
+	// A held resume must NOT undo a user pause that arrives after it: the
+	// explicit signal.pause discards the stale queued resume.
+	env := s.NewTestWorkflowEnvironment()
+
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow("signal.resume", nil)
+	}, 1*time.Millisecond)
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow("signal.pause", nil)
+	}, 2*time.Millisecond)
+	env.RegisterDelayedCallback(func() {
+		env.CancelWorkflow()
+	}, 500*time.Millisecond)
+
+	env.ExecuteWorkflow(func(ctx workflow.Context) (string, error) {
+		pc := newPauseCoordinator(ctx, "wf-test", pauseOptions{HoldResume: true})
+		// Let the stale resume and then the user pause be delivered.
+		_ = workflow.Sleep(ctx, 10*time.Millisecond)
+		pc.CheckPause(ctx)
+		if ctx.Err() != nil {
+			return "", temporal.NewCanceledError("still parked when cancelled")
+		}
+		return "resumed", nil
+	})
+
+	s.True(env.IsWorkflowCompleted())
+	s.Error(env.GetWorkflowError(),
+		"the user pause must stick: the stale held resume is discarded, not applied to it")
+}
+
+func (s *RateLimitAutoPauseSuite) TestRateLimitAutoPause_ResumeBeforeArm_RetriesAndCompletes() {
+	// Full-loop version of the race: the resume lands while CallLLM is still
+	// burning its retry attempts, i.e. before the retry-exhaustion branch
+	// arms the pause. The held resume must release that pause so the step is
+	// retried and the workflow completes — the exact shape of the
+	// reset-and-replay recovery of a rate-limit self-pause.
+	env := s.NewTestWorkflowEnvironment()
+
+	callCount := 0
+	env.OnActivity(StepActivity, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, stepName string) (string, error) {
+			callCount++
+			if callCount <= 2 {
+				return "", temporal.NewApplicationError(
+					"429 Too Many Requests", "RateLimitError",
+				)
+			}
+			return "completed:" + stepName, nil
+		},
+	)
+
+	var capturedStatuses []string
+	env.OnActivity(workflowStatusStub, mock.Anything, mock.Anything).Return(
+		func(ctx context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+			if status, ok := input["status"].(string); ok {
+				capturedStatuses = append(capturedStatuses, status)
+			}
+			return map[string]interface{}{"success": true}, nil
+		},
+	)
+
+	// First activity attempt fails at ~0ms, the retry fires at ~100ms and
+	// exhaustion arms the pause after it. 1ms lands the resume before that.
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow("signal.resume", nil)
+	}, 1*time.Millisecond)
+
+	env.ExecuteWorkflow(autoPauseWorkflow, true)
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError(),
+		"held resume must release the retry-exhaustion pause and let the step retry")
+
+	var result string
+	s.NoError(env.GetWorkflowResult(&result))
+	s.Equal("completed:call_llm", result)
+	s.Contains(capturedStatuses, "paused")
+	s.Contains(capturedStatuses, "started")
 }

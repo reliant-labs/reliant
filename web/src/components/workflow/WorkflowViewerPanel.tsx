@@ -36,6 +36,8 @@ interface NavigationLevel {
 interface WorkflowViewerPanelProps {
   /** Project ID for fetching workflow */
   projectId: string
+  /** Chat ID — connects the diagram to the authoritative node_execution stream */
+  chatId?: string | null
   /** Workflow name to display */
   workflowName: string
   /** Current execution state (optional) */
@@ -58,6 +60,7 @@ interface WorkflowViewerPanelProps {
 
 export function WorkflowViewerPanel({
   projectId,
+  chatId,
   workflowName,
   execution,
   onClose,
@@ -275,6 +278,7 @@ export function WorkflowViewerPanel({
           workflow={currentLevel.workflow}
           execution={currentLevel.execution}
           projectId={projectId}
+          chatId={chatId}
           workflowName={currentLevel.workflowName}
           onClose={navStack.length === 1 ? onClose : undefined}
           onNodeClick={onNodeClick}

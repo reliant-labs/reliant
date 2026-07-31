@@ -19,40 +19,50 @@ func TestExpandToolFilter(t *testing.T) {
 			filter:            []string{},
 			mcpTools:          []string{"mcp__test__foo"},
 			expectContains:    []string{},
-			expectNotContains: []string{"view", "edit", ShellToolName, "grep", "mcp__test__foo"},
+			expectNotContains: []string{"view", "edit", ShellToolName, "mcp__test__foo"},
 		},
 		{
 			name:           "tag:default returns default tools",
 			filter:         []string{"tag:default"},
 			mcpTools:       []string{"mcp__test__foo"},
-			expectContains: []string{"view", "edit", ShellToolName, "grep"},
+			expectContains: []string{"view", "edit", ShellToolName},
 		},
 		{
 			name:              "tag:file expands to file tools",
 			filter:            []string{"tag:file"},
 			mcpTools:          []string{},
 			expectContains:    []string{"view", "write", "edit", "find_replace", "move_code"},
-			expectNotContains: []string{ShellToolName, "grep"},
+			expectNotContains: []string{ShellToolName},
 		},
 		{
-			name:              "tag:search expands to search tools",
+			// With the dedicated grep/glob tools removed, the shell IS the search
+			// path, so tag:search must resolve to it — otherwise the tag expands
+			// to nothing and every preset referencing it silently loses search.
+			// What keeps this from re-becoming a disk scan is shell_search_guard,
+			// not the tag.
+			name:              "tag:search resolves to the shell",
 			filter:            []string{"tag:search"},
 			mcpTools:          []string{},
-			expectContains:    []string{"grep", "glob"},
-			expectNotContains: []string{"view", ShellToolName},
+			expectContains:    []string{ShellToolName},
+			expectNotContains: []string{"view", "write", "edit"},
 		},
 		{
+			// The shell is deliberately NOT in tag:readonly. The shell is
+			// readonly-TIER for permission purposes (it is the only search path,
+			// so readonly agents must be able to load it), but the readonly TAG
+			// still means "cannot mutate", and a shell plainly can. Keeping the
+			// tag honest is what lets `tag:readonly` stay a meaningful filter.
 			name:              "tag:readonly excludes write tools",
 			filter:            []string{"tag:readonly"},
 			mcpTools:          []string{},
-			expectContains:    []string{"view", "grep", "glob", "fetch", "websearch", "get_plan", "list_tasks"},
+			expectContains:    []string{"view", "fetch", "websearch", "get_plan", "list_tasks"},
 			expectNotContains: []string{"write", "edit", "find_replace", ShellToolName, "worktree", "move_code"},
 		},
 		{
 			name:              "tag:plan includes planning mode tools",
 			filter:            []string{"tag:plan"},
 			mcpTools:          []string{},
-			expectContains:    []string{"view", "grep", "glob", "fetch", "websearch", "create_plan", "update_plan", "get_plan", "list_tasks", "add_task", "update_task", "add_dependency", "remove_dependency", "list_ready_tasks"},
+			expectContains:    []string{"view", "fetch", "websearch", "create_plan", "update_plan", "get_plan", "list_tasks", "add_task", "update_task", "add_dependency", "remove_dependency", "list_ready_tasks"},
 			expectNotContains: []string{"write", "edit", "find_replace", ShellToolName, "worktree", "move_code"},
 		},
 		{
@@ -80,7 +90,7 @@ func TestExpandToolFilter(t *testing.T) {
 			name:              "mix tags and specific tools",
 			filter:            []string{"tag:search", ShellToolName, "view"},
 			mcpTools:          []string{},
-			expectContains:    []string{"grep", "glob", ShellToolName, "view"},
+			expectContains:    []string{ShellToolName, "view"},
 			expectNotContains: []string{"write", "edit"},
 		},
 		{
@@ -88,14 +98,14 @@ func TestExpandToolFilter(t *testing.T) {
 			filter:            []string{"view", "edit", ShellToolName},
 			mcpTools:          []string{},
 			expectContains:    []string{"view", "edit", ShellToolName},
-			expectNotContains: []string{"grep", "write"},
+			expectNotContains: []string{"write"},
 		},
 		{
 			name:              "duplicate tool from tag and explicit name",
 			filter:            []string{"tag:file", "view", "edit"},
 			mcpTools:          []string{},
 			expectContains:    []string{"view", "edit", "write", "find_replace", "move_code"},
-			expectNotContains: []string{ShellToolName, "grep"},
+			expectNotContains: []string{ShellToolName},
 		},
 	}
 
@@ -135,7 +145,7 @@ func TestMatchGlob(t *testing.T) {
 		{"mcp_*", "mcp__serena__find", true},
 		{"mcp_*", ShellToolName, false},
 		{"*search", "websearch", true},
-		{"*search", "grep", false},
+		{"*search", "view", false},
 		{"mcp__serena__*", "mcp__serena__find", true},
 		{"mcp__serena__*", "mcp__chrome__click", false},
 		{"bas?", ShellToolName, true}, // "bash" matches "bas?" on Unix
@@ -213,8 +223,7 @@ func TestTagDefault(t *testing.T) {
 	// Default tools should include the focused set for general-purpose work
 	expectedDefaults := []string{
 		"view", "write", "edit", "find_replace", // file
-		"grep", "glob", // search
-		ShellToolName,        // execution (platform-specific: bash on Unix, powershell on Windows)
+		ShellToolName,        // execution + search (platform-specific: bash on Unix, powershell on Windows)
 		"fetch", "websearch", // web
 		"create_plan",                           // planning (update_plan, get_plan deferred)
 		"list_tasks", "add_task", "update_task", // tasks (dependency tools deferred)
@@ -261,7 +270,7 @@ func TestTagReadOnly(t *testing.T) {
 
 	// Truly read-only tools that should be included
 	expectedReadOnly := []string{
-		"view", "grep", "glob", // file/search reading
+		"view",                     // file reading
 		"bash_list", "bash_output", // execution listing
 		"fetch", "websearch", // web reading
 		"get_plan", "list_tasks", // planning reading (not create/update)
@@ -308,7 +317,7 @@ func TestTagPlan(t *testing.T) {
 
 	// Tools that should be available in planning mode
 	expectedPlan := []string{
-		"view", "grep", "glob", // file/search reading
+		"view",                     // file reading
 		"bash_list", "bash_output", // execution listing
 		"fetch", "websearch", // web reading
 		"create_plan", "update_plan", "get_plan", // planning tools
@@ -587,7 +596,7 @@ func TestExpandToolFilterMCPTags(t *testing.T) {
 			name:         "include default exclude mcp",
 			filter:       []string{"tag:default", "!tag:mcp"},
 			mcpToolNames: []string{"mcp__server__tool1"},
-			wantIncluded: []string{"view", "edit", "grep"}, // some default tools
+			wantIncluded: []string{"view", "edit", ShellToolName}, // some default tools
 			wantExcluded: []string{"mcp__server__tool1"},
 		},
 		{

@@ -75,8 +75,13 @@ message PresetInfo {
   // Whether this preset is hidden from the preset picker by default
   bool is_hidden = 8;
 
-  // Skill names recommended when this preset is active
-  repeated string recommended_skills = 9;
+  // Field 9 (recommended_skills) removed — recommended skills moved into
+  // params["skills"] (the unified skill param) so they flow through the same
+  // preset param application (ApplyToInputs + mergePresetParams) as every other
+  // input, and children spawned from a chat no longer inherit the parent chat's
+  // recommended skills.
+  reserved 9;
+  reserved "recommended_skills";
 }
 
 // ListPresetsRequest is the request for ListPresets.

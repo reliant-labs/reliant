@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/reliant-labs/forge/components"
+	"github.com/reliant-labs/forge/pkg/components"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 

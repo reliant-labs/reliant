@@ -147,7 +147,10 @@ func TestBuildSpawnChildInputs_NoParentInputs(t *testing.T) {
 	assert.False(t, hasModel)
 }
 
-func TestBuildSpawnChildInputs_StringModel_NormalizedToObject(t *testing.T) {
+func TestBuildSpawnChildInputs_StringModelNotInherited(t *testing.T) {
+	// The parent's model must NOT be forwarded to the child. A spawned agent runs
+	// under its own preset, whose declared model must win; forwarding the parent
+	// model here would clobber the preset (node args override preset params).
 	inputs := map[string]interface{}{
 		"mode":  "auto",
 		"model": "gpt-5.3-codex",
@@ -156,72 +159,28 @@ func TestBuildSpawnChildInputs_StringModel_NormalizedToObject(t *testing.T) {
 	result := buildSpawnChildInputs(inputs)
 
 	assert.Equal(t, "auto", result["mode"])
-	// String model values are normalized to objects at the spawn boundary
-	assert.Equal(t, map[string]interface{}{"id": "gpt-5.3-codex"}, result["model"])
+	_, hasModel := result["model"]
+	assert.False(t, hasModel, "parent model must not be inherited; the child's preset supplies the model")
 }
 
-func TestBuildSpawnChildInputs_ObjectModel(t *testing.T) {
+func TestBuildSpawnChildInputs_ObjectModelNotInherited(t *testing.T) {
+	// Same rule for a rich model selector (id/providers/thinking/etc.): the child
+	// inherits none of it, so its preset's model + thinking stay authoritative.
 	selector := map[string]interface{}{
-		"id":        "gpt-5.3-codex",
-		"providers": []interface{}{"codex"},
+		"id":             "gpt-5.3-codex",
+		"providers":      []interface{}{"codex"},
+		"thinking_level": "high",
 	}
 	inputs := map[string]interface{}{
 		"mode":  "auto",
 		"model": selector,
-	}
-
-	result := buildSpawnChildInputs(inputs)
-
-	assert.Equal(t, "auto", result["mode"])
-	modelObj, ok := result["model"].(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, "gpt-5.3-codex", modelObj["id"])
-	assert.Equal(t, []interface{}{"codex"}, modelObj["providers"])
-
-	// Verify deep copy (mutating source should not affect child inputs)
-	selector["id"] = "mutated"
-	assert.Equal(t, "gpt-5.3-codex", modelObj["id"])
-}
-
-func TestBuildSpawnChildInputs_ObjectModelWithNestedConfig(t *testing.T) {
-	// Model now carries temperature, thinking_level, compaction_threshold as nested keys.
-	// Verify the entire model config is deep-copied to the child.
-	selector := map[string]interface{}{
-		"tags":                 []interface{}{"flagship"},
-		"temperature":          0.8,
-		"thinking_level":       "high",
-		"compaction_threshold": 150000,
-	}
-	inputs := map[string]interface{}{
-		"mode":  "auto",
-		"model": selector,
-	}
-
-	result := buildSpawnChildInputs(inputs)
-
-	modelObj, ok := result["model"].(map[string]interface{})
-	assert.True(t, ok)
-	assert.Equal(t, []interface{}{"flagship"}, modelObj["tags"])
-	assert.Equal(t, 0.8, modelObj["temperature"])
-	assert.Equal(t, "high", modelObj["thinking_level"])
-	assert.Equal(t, 150000, modelObj["compaction_threshold"])
-
-	// Verify deep copy — mutating nested source should not affect child
-	selector["temperature"] = 0.1
-	assert.Equal(t, 0.8, modelObj["temperature"])
-}
-
-func TestBuildSpawnChildInputs_EmptyStringModelIgnored(t *testing.T) {
-	inputs := map[string]interface{}{
-		"mode":  "auto",
-		"model": "",
 	}
 
 	result := buildSpawnChildInputs(inputs)
 
 	assert.Equal(t, "auto", result["mode"])
 	_, hasModel := result["model"]
-	assert.False(t, hasModel)
+	assert.False(t, hasModel, "parent model selector must not be inherited by the spawned child")
 }
 
 func TestBuildFinalToolResult_WithMessageAndResults(t *testing.T) {

@@ -384,6 +384,9 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				gCtx, step.Node, iterNodeOutputs, iterInputs,
 				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
+				// Parallel iterations run concurrently, so there is no "previous
+				// iteration" to expose as `outputs` — only `iter`.
+				&LoopScope{Iter: &model.IterContext{Iteration: index, Index: index, Item: resolvedItem, Key: key}},
 			)
 			if condErr != nil {
 				result.Error = condErr
@@ -708,6 +711,8 @@ func (e *InlineLoopExecutor) buildParallelIterationInputs(
 	if len(e.subWorkflow.GetInputs()) > 0 {
 		iterInputs = ApplyDefaultsForRuntime(iterInputs, e.subWorkflow.GetInputs())
 	}
+	// An unattended run stays unattended in every parallel branch. See unattended.go.
+	propagateUnattended(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": index}
 	iterInputs["iter"] = model.BuildParallelIterContext(index, item, key)
 	return iterInputs, nil

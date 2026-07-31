@@ -489,6 +489,7 @@ func ExecuteSaveMessageForNode(
 		loopNodeID,
 		loopIteration,
 		execContext, // Pass through for thread.* namespace access in CEL
+		"",          // No pre-allocated assistant message id in this path
 	)
 }
 
@@ -513,6 +514,7 @@ func executeSaveMessageInline(
 	loopNodeID string,
 	loopIteration int,
 	execContext *ExecutionContext,
+	preallocatedMessageID string,
 ) (map[string]interface{}, error) {
 	sm := node.GetSaveMessage()
 	if sm == nil {
@@ -627,6 +629,9 @@ func executeSaveMessageInline(
 	}
 
 	saveInput := evalResult
+	// Delta identity: persist the assistant message under its pre-allocated
+	// streaming id. The activity honors this only when Role is "assistant".
+	saveInput.AssistantMessageID = preallocatedMessageID
 
 	// Inject loop context if executing within a loop
 	if loopNodeID != "" {
@@ -649,10 +654,11 @@ func executeSaveMessageInline(
 
 	// Build structured input: RuntimeContext + proto Node.
 	rtx := types.RuntimeContext{
-		ChatID:     saveInput.ChatID,
-		Thread:     saveInput.Thread,
-		WorkflowID: saveInput.WorkflowID,
-		StepID:     saveInput.StepID,
+		ChatID:             saveInput.ChatID,
+		Thread:             saveInput.Thread,
+		WorkflowID:         saveInput.WorkflowID,
+		StepID:             saveInput.StepID,
+		AssistantMessageID: saveInput.AssistantMessageID,
 	}
 	if saveInput.LoopNodeID != "" {
 		rtx.LoopNodeID = saveInput.LoopNodeID

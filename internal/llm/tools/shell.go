@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -17,13 +18,54 @@ import (
 // - Unix/macOS/Linux: bash -c
 // - Windows: powershell.exe -NoProfile -Command
 type ShellParams struct {
-	Command         string            `json:"command" jsonschema:"required,description=The command to execute"`
+	Command string `json:"command" jsonschema:"required,description=The command to execute"`
+	// Description is model-authored prose describing what Command does. It is
+	// never executed, never inspected, and never affects dispatch — it exists so
+	// a reader (UI, transcript, audit) can see the intent of a command without
+	// parsing shell. Optional: an older transcript or a model that omits it
+	// still runs, so nothing may depend on it being present.
+	//
+	// Its schema description is attached in JSONSchemaExtend, not in a struct
+	// tag: the tag parser treats the value as a literal, so a `\n` written there
+	// reaches the model as a backslash-n rather than a line break, which would
+	// run the multi-line examples together into one unreadable paragraph.
+	Description     string            `json:"description,omitempty"`
 	Timeout         int               `json:"timeout,omitempty" jsonschema:"description=Optional timeout in milliseconds (max 600000)"`
 	RunInBackground bool              `json:"run_in_background,omitempty" jsonschema:"description=Run the command in the background and return immediately"`
 	Env             map[string]string `json:"env,omitempty" jsonschema:"description=Environment variables to set for this command execution"`
 	MaxOutput       int               `json:"max_output,omitempty" jsonschema:"description=Maximum bytes of output to collect (default: 16000)"`
 	TailLines       int               `json:"tail_lines,omitempty" jsonschema:"description=Only return last N lines of output"`
 	Repo            string            `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo to run the command in: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Omit in single-repo projects. The system prompt lists available repos when this matters."`
+}
+
+// shellDescriptionParamDoc is the schema description for ShellParams.Description.
+// It lives here as a Go string rather than in a struct tag because it needs real
+// line breaks: the jsonschema tag parser copies the tag verbatim, so a `\n`
+// written in a tag arrives at the model as the two characters backslash-n and
+// collapses these examples into one run-on paragraph.
+const shellDescriptionParamDoc = `Clear, concise description of what this command does in active voice. Never use words like "complex" or "risk" in the description - just describe what it does.
+
+For simple commands (git, npm, standard CLI tools), keep it brief (5-10 words):
+- ls → "List files in current directory"
+- git status → "Show working tree status"
+- npm install → "Install package dependencies"
+
+For commands that are harder to parse at a glance (piped commands, obscure flags, etc.), add enough context to clarify what it does:
+- find . -name "*.tmp" -exec rm {} \; → "Find and delete all .tmp files recursively"
+- git reset --hard origin/main → "Discard all local changes and match remote main"
+- curl -s url | jq '.data[]' → "Fetch JSON from URL and extract data array elements"`
+
+// JSONSchemaExtend attaches the multi-line description doc after the reflector
+// has built the schema from the struct tags. invopop/jsonschema calls this for
+// any type implementing the hook, which is what lets the prose above keep its
+// line breaks.
+func (ShellParams) JSONSchemaExtend(s *jsonschema.Schema) {
+	if s.Properties == nil {
+		return
+	}
+	if prop, ok := s.Properties.Get("description"); ok {
+		prop.Description = shellDescriptionParamDoc
+	}
 }
 
 // ShellPermissionsParams is used for permission checking
@@ -36,12 +78,57 @@ type ShellPermissionsParams struct {
 
 // ShellResponseMetadata contains metadata about the shell execution
 type ShellResponseMetadata struct {
-	StartTime    int64  `json:"start_time"`
-	EndTime      int64  `json:"end_time"`
-	ProcessID    string `json:"process_id,omitempty"` // For background processes
-	OutputSize   int    `json:"output_size,omitempty"`
-	Truncated    bool   `json:"truncated,omitempty"`
-	OriginalSize int    `json:"original_size,omitempty"` // Size before truncation
+	StartTime int64  `json:"start_time"`
+	EndTime   int64  `json:"end_time"`
+	ProcessID string `json:"process_id,omitempty"` // For background processes
+	// CommandDurationMs is how long the command itself ran, as measured on the
+	// machine that ran it. StartTime/EndTime bracket the whole tool call, so
+	// the pair answers "was the command slow, or was getting to it slow?" —
+	// unconditionally and for every call, because metadata is persisted but
+	// never sent to a model, so recording it costs nothing that matters.
+	CommandDurationMs int64 `json:"command_duration_ms,omitempty"`
+	OutputSize        int   `json:"output_size,omitempty"`
+	Truncated         bool  `json:"truncated,omitempty"`
+	OriginalSize      int   `json:"original_size,omitempty"` // Size before truncation
+}
+
+// Thresholds for reporting a transport/command clock disagreement to the model.
+// Both must be met: the absolute floor keeps sub-second scheduling jitter
+// silent, and the relative floor keeps ordinary overhead silent on a long
+// command, where the same absolute gap means nothing.
+const (
+	transportGapFloorMs  = 1000
+	transportGapMinShare = 10 // gap must be at least 1/10th of the whole call
+)
+
+// bashTransportTiming returns a timing block when the wall-clock cost of the
+// tool call materially exceeds the command's own runtime, and nil when the two
+// clocks agree.
+//
+// The policy is "report the disagreement, not the number". A duration attached
+// to every shell result is charged to the model's context on every call and
+// re-sent on every subsequent turn, and it carries no decision for the
+// overwhelming majority of calls where nothing is wrong — it is exactly the
+// kind of always-present field a reader learns to skip, which is how it fails
+// to be noticed on the one call that mattered. A field that appears only when
+// two independently measured clocks contradict each other is self-selecting
+// evidence: its presence is the finding.
+func bashTransportTiming(wallMs, commandMs int64) *BashTiming {
+	if commandMs <= 0 {
+		// Nothing to compare against: an executor that does not measure the
+		// command cannot support a claim about where the time went.
+		return nil
+	}
+	gap := wallMs - commandMs
+	if gap < transportGapFloorMs || gap*transportGapMinShare < wallMs {
+		return nil
+	}
+	return &BashTiming{
+		WallMs:    wallMs,
+		CommandMs: commandMs,
+		Note: "wall_ms is what this tool call cost end to end; command_ms is how long the " +
+			"command itself ran. The difference is transport and queueing, not the command.",
+	}
 }
 
 type shellTool struct{}
@@ -86,8 +173,27 @@ func shellDescriptionCommon() string {
 # ❌ WHEN NOT TO USE THIS TOOL
 - File editing → Use Edit/Write tools
 - File reading → Use View tool
-- Searching files → Use Grep/Glob tools
-- Directory listing → Use LS tool
+
+# 🔎 SEARCHING THE CODEBASE
+This tool IS the search tool — there is no separate grep/glob tool. Prefer
+ripgrep, and keep every search SCOPED YOURSELF; nothing scopes it for you:
+- Use 'rg' when available, falling back to 'grep -r' / 'find' when it is not.
+- ALWAYS search from a relative path ('rg pattern .', 'rg pattern internal/'),
+  never an absolute root.
+- Exclude vendored trees, which are large and rarely what you want:
+  rg --glob '!node_modules' --glob '!.git' --glob '!dist' --glob '!vendor'
+  ('rg' already honours .gitignore, which usually covers these.)
+- Bound the results: 'rg -l' for filenames only, 'rg -m 20', or pipe to 'head'.
+  An unbounded match dump can exhaust the output budget on a large repo.
+
+# 🚫 NEVER SCAN THE FILESYSTEM
+Commands like 'find / -name ...', 'find ~ ...' or 'grep -r ... /usr' are REFUSED
+before they run: they read the whole machine, take minutes, and starve every
+other agent on this disk.
+- To find something in the project → search a relative path, as above.
+- To find a DEPENDENCY's source on disk → ask the package manager, do not scan:
+  'go list -m -f "{{.Dir}}" <module>', 'go env GOMODCACHE', 'npm root'.
+- If you truly need a filesystem search, name a specific directory.
 
 # Output Processing
 - Default output limit is 16000 bytes (use max_output to customize)
@@ -98,7 +204,7 @@ Usage notes:
 - The command argument is required.
 - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
 - Use 'run_in_background: true' to run long-running commands in the background. You can then use BashOutput to check output, BashKill to terminate, and BashList to see all running processes.
-- VERY IMPORTANT: You MUST avoid using shell in favor of other tools whenever possible, ie: commands like 'find' and 'grep'. Instead use Grep, Glob, or Agent tools to search. You MUST avoid read tools like 'cat', 'head', 'tail', and 'ls', and use FileRead and LS tools to read files.
+- Searching the codebase IS a use of this tool (prefer 'rg', scoped to a relative path — see above). For reading whole files, prefer the View tool over 'cat'/'head'/'tail'.
 - VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
 - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
 
@@ -170,6 +276,12 @@ func (s *shellTool) RequiresPermission(params ShellParams) (bool, error) {
 func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolResponse, error) {
 	if rctx.Daemon == nil {
 		return NewTextErrorResponse("command execution requires a connected daemon"), nil
+	}
+
+	// Refuse filesystem-wide scans before dispatch rather than letting them run
+	// to the timeout. See shell_search_guard.go.
+	if refusal := unscopedSearchRefusal(params.Command); refusal != "" {
+		return NewTextErrorResponse(refusal), nil
 	}
 
 	// params.Timeout is in milliseconds per the JSON schema
@@ -274,20 +386,30 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		stderr += "Command was aborted before completion"
 	}
 
+	// Ensure the JSON-encoded result fits the global output budget. Otherwise the
+	// generic tool_wrapper truncation head+tail-cuts the JSON *string*, corrupting
+	// the envelope (and appending a misleading "use offset parameter" hint the
+	// foreground bash tool doesn't support). Fitting it here keeps the model's
+	// tool result valid JSON.
+	stdout, stderr = fitBashOutputToBudget(stdout, stderr, exitCode, MaxOutputSize)
+
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
 
+	endTime := time.Now()
 	metadata := ShellResponseMetadata{
-		StartTime:    startTime.UnixMilli(),
-		EndTime:      time.Now().UnixMilli(),
-		OutputSize:   len(stdout) + len(stderr),
-		Truncated:    wasTruncated,
-		OriginalSize: originalStdoutSize + originalStderrSize,
+		StartTime:         startTime.UnixMilli(),
+		EndTime:           endTime.UnixMilli(),
+		CommandDurationMs: result.DurationMs,
+		OutputSize:        len(stdout) + len(stderr),
+		Truncated:         wasTruncated,
+		OriginalSize:      originalStdoutSize + originalStderrSize,
 	}
 
 	output := BashOutput{
 		Stdout:   stdout,
 		Stderr:   stderr,
 		ExitCode: exitCode,
+		Timing:   bashTransportTiming(endTime.Sub(startTime).Milliseconds(), result.DurationMs),
 	}
 	outputJSON, _ := json.Marshal(output)
 
@@ -314,6 +436,43 @@ func truncateOutputWithLimit(content string, limit int) string {
 
 	truncatedLinesCount := countShellLines(content[halfLength : len(content)-halfLength])
 	return fmt.Sprintf("%s\n\n... [%d lines truncated] ...\n\n%s", start, truncatedLinesCount, end)
+}
+
+// fitBashOutputToBudget shrinks stdout/stderr (head+tail, always re-truncating
+// from the passed-in strings so markers never compound) until the JSON-encoded
+// BashOutput fits within budget bytes.
+//
+// The per-stream caps applied earlier bound stdout and stderr individually, but
+// their sum plus the JSON envelope and escaping can still exceed MaxOutputSize —
+// at which point tool_wrapper's generic truncation cuts through the JSON string
+// and corrupts the envelope. Keeping the encoded result under budget means the
+// wrapper leaves it untouched and the model always receives valid JSON.
+//
+// Encoded length grows monotonically with content length, so scaling content
+// down by the overflow ratio converges in a few iterations; the bounded loop and
+// 1-byte floor guarantee termination.
+func fitBashOutputToBudget(stdout, stderr string, exitCode, budget int) (string, string) {
+	encodedLen := func(o, e string) int {
+		b, _ := json.Marshal(BashOutput{Stdout: o, Stderr: e, ExitCode: exitCode})
+		return len(b)
+	}
+	if encodedLen(stdout, stderr) <= budget {
+		return stdout, stderr
+	}
+
+	o, e := stdout, stderr
+	for i := 0; i < 12; i++ {
+		enc := encodedLen(o, e)
+		if enc <= budget {
+			break
+		}
+		scale := float64(budget) / float64(enc) * 0.9
+		newO := max(int(float64(len(o))*scale), 1)
+		newE := max(int(float64(len(e))*scale), 1)
+		o = truncateOutputWithLimit(stdout, newO)
+		e = truncateOutputWithLimit(stderr, newE)
+	}
+	return o, e
 }
 
 // getTailLines returns the last n lines of content

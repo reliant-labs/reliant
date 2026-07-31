@@ -57,6 +57,18 @@ type streamProcessingState struct {
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
 	upstreamProxymanID string // Provider response header x-proxyman-id (if available)
+
+	// Delta identity: pre-allocated assistant message id (from
+	// RuntimeContext.AssistantMessageID) and the per-message monotonically
+	// increasing sequence stamped onto every published delta. Both zero when
+	// the caller didn't pre-allocate (legacy histories).
+	messageID string
+	streamSeq int64
+
+	// inProviderBackoff records that this thread has an OPEN provider-backoff
+	// marker, so the marker is cleared exactly once — on the first event that
+	// proves the provider answered — rather than on every streamed delta.
+	inProviderBackoff bool
 }
 
 // ============================================================================
@@ -293,9 +305,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// effectiveCompactionThreshold is the token count at which the agent loop
 	// triggers compaction for the resolved model. Precedence mirrors
 	// temperature/thinking_level: an explicit CallLLM arg wins, otherwise the
-	// resolved model's default_compaction_threshold, otherwise the global
-	// default. Emitted on CallLLMOutput so the compact edge reads the per-model
-	// value even when the model was selected by tag.
+	// threshold is DERIVED from the resolved model's real context window
+	// (models.CompactionThresholdFraction × max_context_window), with a per-model
+	// explicit override honored if declared, otherwise the global default when the
+	// window is unknown. Emitted on CallLLMOutput so the compact edge reads the
+	// per-model value even when the model was selected by tag.
 	effectiveCompactionThreshold := explicitCompactionThresholdArg(args)
 	protoModel := model.CelModelSelectorValue(args.GetModel())
 	modelSelector := models.ModelSelector{}
@@ -399,17 +413,45 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"modelID", resolved.Definition.ID,
 			"modelIDWithDriver", resolved.ModelID)
 
-		// Determine effective compaction threshold: an explicit arg (already
-		// captured above) wins; otherwise fall back to the resolved model's
-		// default_compaction_threshold. If neither is set, the global default
-		// (applied by explicitCompactionThresholdArg) stands.
-		if !explicitCompactionThresholdIsSet(args) && resolved.Definition.DefaultCompactionThreshold != nil {
-			effectiveCompactionThreshold = int32(*resolved.Definition.DefaultCompactionThreshold)
+		// Determine effective compaction threshold: an explicit per-node arg
+		// (already captured above) wins; otherwise it is DERIVED from the
+		// resolved model's REAL context window for the SELECTED provider
+		// (CompactionThresholdFraction × EffectiveContextWindow), with a per-model
+		// explicit override honored if the definition declares one. Using the
+		// provider-effective window is what makes a small-window provider (e.g.
+		// "@codex", which caps GPT-5.x far below its platform window) compact
+		// before it overflows. See models.CompactionThresholdForProvider.
+		if !explicitCompactionThresholdIsSet(args) {
+			effectiveCompactionThreshold = int32(models.CompactionThresholdForProvider(resolved.Definition, resolved.ProviderDriver))
 		}
 	} else {
 		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
 			"modelID", resolved.Model.ID)
+
+		// No registry definition (injected driver resolver, e.g. in tests):
+		// derive the threshold from the resolved model's context window when it
+		// is known, otherwise the global default stands. An explicit per-node
+		// arg still wins.
+		if !explicitCompactionThresholdIsSet(args) {
+			effectiveCompactionThreshold = int32(models.DeriveCompactionThreshold(int(resolved.Model.ContextWindow)))
+		}
 	}
+
+	// Observability: record whether extended reasoning is engaged for this call
+	// and at what effort. GPT/codex (and every reasoning driver) only emit
+	// reasoning when the request carries a reasoning-effort param, which is
+	// derived from the effective, capability-reconciled thinking level
+	// (resolved.ThinkingLevel → llm.WithReasoningEffort in resolveLLMCall). An
+	// empty thinking level on a reasoning model still engages reasoning at the
+	// driver's medium default. Logging this here lets a run confirm reasoning was
+	// actually requested (no token values or secrets are logged).
+	activity.GetLogger(ctx).Info("[CallLLM] Reasoning",
+		"chatID", chat.ID,
+		"modelID", resolvedModelID,
+		"provider", resolved.ProviderDriver,
+		"canReason", resolved.Model.CanReason,
+		"thinkingLevel", resolved.ThinkingLevel,
+		"engaged", resolved.Model.CanReason)
 
 	// Get available tools (filtered by tools_config)
 	var availableTools []tools.Tool
@@ -429,7 +471,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				"message":        fmt.Sprintf("Some MCP servers failed to start: %v. Tools from these servers will be unavailable.", toolsResult.FailedMCPServers),
 				"failed_servers": toolsResult.FailedMCPServers,
 				"thread":         thread,
-			})
+			}, nil)
 		}
 
 		// Add spawn tools from tools_config.spawn
@@ -535,6 +577,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		toolCalls:         []message.ToolCall{},
 		tokenCount:        0,
 		workingDir:        workingDir,
+		messageID:         rtx.AssistantMessageID,
 	}
 
 	// Setup cancellation context
@@ -562,14 +605,70 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			prefix = append(prefix, memMsgs...)
 		}
 	}
-	if skillMsgs := a.loadRecommendedSkillMessages(ctx, chat, projectCfg); len(skillMsgs) > 0 {
-		prefix = append(prefix, skillMsgs...)
-		activity.GetLogger(ctx).Info("[CallLLM] Injected recommended skill messages",
-			"chatID", chat.ID,
-			"count", len(skillMsgs))
-	}
 	if len(prefix) > 0 {
 		history = append(prefix, history...)
+	}
+
+	// Preloaded skills for THIS call_llm node, declared on args.skills (the
+	// unified skill param — presets feed it through their own `skills` param, and
+	// a node can also declare it directly for per-phase preloading). The resolved
+	// skills are seeded as ONE user turn that reproduces each body verbatim under
+	// an explicit harness attribution, where the body is byte-identical to the
+	// agent loading the skill by hand (tools.LoadSkillForInjection reuses the
+	// skill tool's own resolver). The model reads a preloaded skill as something
+	// the harness handed it, NOT as a tool call it made — see
+	// preloadedSkillsPreamble for the run that made that distinction load-bearing.
+	// The turn is EPHEMERAL — re-seeded each turn, never persisted, so the
+	// Anthropic prompt cache dedups the repeated prefix.
+	//
+	// The seed is spliced in immediately AFTER the first user turn in history, so
+	// it sits next to the brief that named the skills. The requested-vs-injected
+	// counts are logged whenever skills were requested (even when zero resolve) so
+	// a silent no-op — a path that doesn't resolve against the catalog, or a
+	// skills arg that never resolved from CEL to a literal — shows up in the logs
+	// instead of looking like the agent simply chose to load the same skills by
+	// hand.
+	requestedSkills := model.CelStringListValue(args.GetSkills())
+	// The skills whose bodies this call actually seeded. Read again further
+	// down by injectSkillSuggestions, which must not tell the model to load
+	// what the seed just told it not to.
+	var preloadedSkillNames []string
+	if len(requestedSkills) > 0 {
+		seededMsgs, injectedSkills, oversizedSkills, missingSkills := buildSeededSkillMessages(projectCfg, requestedSkills)
+		preloadedSkillNames = injectedSkills
+		catalogSize := 0
+		if projectCfg != nil {
+			catalogSize = len(projectCfg.Skills)
+		}
+		// A miss has two causes and only one is worth failing over — see
+		// preloadSkillMissError, which is where that split lives and is tested.
+		if err := preloadSkillMissError(catalogSize, requestedSkills, missingSkills); err != nil {
+			return nil, err
+		}
+		if len(missingSkills) > 0 {
+			activity.GetLogger(ctx).Warn("[CallLLM] Preloaded skills do not exist in this project's catalog",
+				"chatID", chat.ID,
+				"missing", missingSkills,
+				"requested", len(requestedSkills),
+				"catalogSize", catalogSize)
+		}
+		if len(seededMsgs) > 0 {
+			history = insertSeededMessagesAfterFirstUserTurn(history, seededMsgs)
+		}
+		activity.GetLogger(ctx).Info("[CallLLM] Preload skills",
+			"chatID", chat.ID,
+			"requested", len(requestedSkills),
+			"injected", len(injectedSkills),
+			"skills", requestedSkills,
+			"catalogSize", catalogSize)
+		// Oversize skills degrade every turn that preloads them, so they are
+		// surfaced as a warning rather than folded into the info line.
+		if len(oversizedSkills) > 0 {
+			activity.GetLogger(ctx).Warn("[CallLLM] Preloaded skills exceed delivery budget and were truncated",
+				"chatID", chat.ID,
+				"skills", oversizedSkills,
+				"budgetBytes", tools.MaxSkillBodySize)
+		}
 	}
 
 	// Append injected messages to history (for ad-hoc LLM calls like filtering)
@@ -615,21 +714,23 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 	// Standard pre-request history transforms (shared with Compact):
 	// flatten tool blocks when the request carries no tools, trim to fit the
-	// context window, and normalize roles for API compatibility.
-	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools)
+	// context window, and normalize roles for API compatibility. The trim
+	// backstop threshold scales with the resolved model's real context window
+	// for the SELECTED provider (a small-window provider like "@codex" caps the
+	// model below its platform window), matching the compaction trigger above.
+	effectiveContextWindow := resolved.Model.ContextWindow
+	if resolved.Definition != nil {
+		effectiveContextWindow = int64(models.EffectiveContextWindow(resolved.Definition, resolved.ProviderDriver))
+	}
+	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, effectiveContextWindow)
 
 	// Inject skill suggestions into the latest user message based on token matching.
 	// Skills come from the synced project config — no filesystem access.
-	if projectCfg != nil && len(projectCfg.Skills) > 0 {
-		if latestUserText := getLatestUserMessageText(history); latestUserText != "" {
-			suggestions := suggest.Suggest(projectCfg.Skills, latestUserText, 5)
-			if len(suggestions) > 0 {
-				reminder := buildSkillSuggestionReminder(suggestions)
-				injectReminderIntoLastUserMessage(history, reminder)
-				activity.GetLogger(ctx).Debug("[CallLLM] Injected skill suggestions",
-					"chatID", chat.ID,
-					"count", len(suggestions))
-			}
+	if projectCfg != nil {
+		if n := injectSkillSuggestions(history, projectCfg.Skills, preloadedSkillNames); n > 0 {
+			activity.GetLogger(ctx).Debug("[CallLLM] Injected skill suggestions",
+				"chatID", chat.ID,
+				"count", n)
 		}
 	}
 
@@ -656,6 +757,17 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}
 	}
 
+	// Delta identity: open the stream with a message_start carrying the
+	// pre-allocated id. A retry re-streams under the same id, and this marker
+	// tells consumers to reset any partially rendered blocks for it.
+	if streamState.messageID != "" {
+		a.writeStreamingDelta(ctx, chat.ID, "message_start", map[string]interface{}{
+			"thread": thread,
+			"role":   "assistant",
+			"model":  resolvedModelID,
+		}, streamState)
+	}
+
 	// Stream response with cancellation support
 	llmCallStart := time.Now()
 	eventChan := driver.StreamResponse(streamCtx, systemPrompts, history, availableTools)
@@ -675,7 +787,7 @@ streamLoop:
 			a.writeStreamingDelta(ctx, chat.ID, "stream_cancelled", map[string]interface{}{
 				"reason": "user_cancelled",
 				"thread": thread,
-			})
+			}, streamState)
 
 			streamErr = errors.New("streaming cancelled by user")
 			break streamLoop
@@ -699,7 +811,7 @@ streamLoop:
 				a.writeStreamingDelta(ctx, chat.ID, "stream_cancelled", map[string]interface{}{
 					"reason": "user_cancelled",
 					"thread": thread,
-				})
+				}, streamState)
 				streamErr = errors.New("streaming cancelled by user")
 				break streamLoop
 			default:
@@ -722,6 +834,11 @@ streamLoop:
 			}
 		}
 	}
+
+	// A cancelled stream closes the channel without a further event, so the
+	// backoff marker would otherwise outlive the call that opened it and report a
+	// dead thread as parked. Uses ctx, not streamCtx, which may already be dead.
+	a.releaseProviderBackoff(ctx, thread, streamState)
 
 	// Track LLM call completion for analytics.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
@@ -776,6 +893,8 @@ streamLoop:
 		},
 		CompactionThreshold: effectiveCompactionThreshold,
 		Model:               resolvedModelID,
+		MessageId:           streamState.messageID,
+		LastStreamSeq:       streamState.streamSeq,
 	}
 
 	// When a response_tool is configured, the LLM returns structured data as a
@@ -915,6 +1034,21 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		mcpToolNames[i] = t.Name()
 	}
 
+	// Record the connected MCP tools (name + description) so load_tool can
+	// search them by keyword and verify availability before loading — enabling
+	// progressive discovery of MCP tools (e.g. chrome-devtools) that aren't in
+	// the static built-in registry.
+	if chat != nil {
+		mcpToolInfos := make([]tools.MCPToolInfo, 0, len(mcpTools))
+		for _, t := range mcpTools {
+			mcpToolInfos = append(mcpToolInfos, tools.MCPToolInfo{
+				Name:        t.Name(),
+				Description: t.Description(),
+			})
+		}
+		tools.GetLoadedToolsStore().SetAvailableMCPTools(chat.ID, mcpToolInfos)
+	}
+
 	// Expand tool filter with spawn support
 	filterResult := tools.ExpandToolFilterWithSpawn(toolFilter, mcpToolNames)
 
@@ -980,6 +1114,27 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		}
 		logWarn("[CallLLM] Tools in filter not found",
 			"tools", unfound)
+	}
+
+	// load_tool must be available to EVERY tool-enabled agent so any preset —
+	// including restrictive read-only ones like code_reviewer whose filter omits
+	// tag:default — can discover and load additional tools on demand, built-in or
+	// MCP (e.g. an agent whose instructions require chrome-devtools can load
+	// mcp__chrome-devtools__* even though its filter never listed them). load_tool
+	// is read-only and each load is permission-gated per target tool, so granting
+	// it universally never escalates privileges. Skip only if the filter already
+	// pulled it in (via tag:default or an explicit entry).
+	loadToolPresent := false
+	for _, t := range toolsList {
+		if t.Name() == tools.ToolLoadTool {
+			loadToolPresent = true
+			break
+		}
+	}
+	if !loadToolPresent {
+		if lt := projectScopedToolsFactory.LoadTool(); lt != nil {
+			toolsList = append(toolsList, lt)
+		}
 	}
 
 	sort.Slice(toolsList, func(i, j int) bool {
@@ -1063,6 +1218,8 @@ func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, co
 	presetList := strings.Join(presetDescriptions, "\n")
 
 	description := fmt.Sprintf(`Spawn a sub-workflow to delegate tasks. The spawned workflow runs in a separate thread and its result will be returned to you.
+
+PARALLELISM — spawns are SYNCHRONOUS, not async: a single spawn call BLOCKS until that sub-workflow finishes and returns. To run sub-agents IN PARALLEL you MUST emit MULTIPLE spawn calls in a SINGLE assistant turn (one tool-use block containing several spawn tool_calls) — they then execute concurrently and all results come back together. If you spawn one, wait for its result, then spawn the next, they run SERIALLY (slow). So batch every independent unit of work into ONE turn and spawn them all at once.
 
 Available presets:
 %s
@@ -1287,6 +1444,16 @@ func (s *BlockStreamState) GetThinkingBlockPosition() int {
 
 // processStreamEvent dispatches stream events to their appropriate handlers
 func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string, thread string, event llm.DriverEvent, state *streamProcessingState) error {
+	// A driver announces a provider retry BEFORE it sleeps; anything else it
+	// sends is proof the provider answered. Recording on the one and releasing on
+	// the other keeps the marker true at every instant, at two writes per backoff
+	// episode rather than one per delta.
+	if event.Type == llm.EventRetryWait {
+		a.recordProviderBackoff(ctx, chatID, thread, event.Retry, state)
+		return nil
+	}
+	a.releaseProviderBackoff(ctx, thread, state)
+
 	switch event.Type {
 	case llm.EventContentStart:
 		a.handleContentStart(ctx, chatID, thread, event, state)
@@ -1308,6 +1475,72 @@ func (a *CallLLMActivity) processStreamEvent(ctx context.Context, chatID string,
 	return nil
 }
 
+// backoffLogger is the subset of both loggers this file's backoff path uses.
+type backoffLogger interface {
+	Warn(msg string, keyvals ...interface{})
+	Error(msg string, keyvals ...interface{})
+}
+
+// providerBackoffLogger returns the Temporal activity logger when there is one
+// and the process logger otherwise. activity.GetLogger PANICS outside an
+// activity context, which would make the backoff path untestable anywhere but
+// in a live worker — and an observability fix that cannot be tested is not one.
+func providerBackoffLogger(ctx context.Context) backoffLogger {
+	if activity.IsActivity(ctx) {
+		return activity.GetLogger(ctx)
+	}
+	return slog.Default()
+}
+
+// recordProviderBackoff writes the durable marker that says THIS thread is
+// parked in a provider retry ladder, before the driver takes the wait.
+//
+// This is the only evidence the ladder produces. It runs inside one Temporal
+// activity attempt, so nothing else moves while it waits: no message, no step
+// execution, no workflow status change, nothing on the update feed. Measured on
+// forge-one-shot run b7aa4056, eight of ten fan-out units spent ~113s of their
+// ~129s life here and every supervisor — human and agent — read it as the model
+// thinking and concluded fan-out was broken.
+//
+// Failures are logged, never returned: an unobservable backoff is bad, but
+// failing the LLM call because its observability write failed is worse.
+func (a *CallLLMActivity) recordProviderBackoff(ctx context.Context, chatID, thread string, wait *llm.RetryWait, state *streamProcessingState) {
+	if wait == nil || thread == "" {
+		return
+	}
+	log := providerBackoffLogger(ctx)
+	log.Warn("[CallLLM] Provider backoff",
+		"chatID", chatID,
+		"thread", thread,
+		"attempt", wait.Attempt,
+		"maxAttempts", wait.MaxAttempts,
+		"delayMs", wait.Delay.Milliseconds(),
+		"statusCode", wait.StatusCode,
+		"reason", wait.Reason)
+
+	if err := a.repo.RecordProviderBackoff(ctx, chatID, thread,
+		wait.Attempt, wait.MaxAttempts, wait.StatusCode, wait.Reason, wait.Delay, time.Now()); err != nil {
+		log.Error("[CallLLM] Failed to record provider backoff marker",
+			"chatID", chatID, "thread", thread, "error", err)
+		return
+	}
+	state.inProviderBackoff = true
+}
+
+// releaseProviderBackoff clears an open backoff marker once the provider has
+// answered. Cheap and idempotent: the flag means the DB is touched twice per
+// backoff episode, not once per streamed delta.
+func (a *CallLLMActivity) releaseProviderBackoff(ctx context.Context, thread string, state *streamProcessingState) {
+	if state == nil || !state.inProviderBackoff {
+		return
+	}
+	state.inProviderBackoff = false
+	if err := a.repo.ClearProviderBackoff(ctx, thread, time.Now()); err != nil {
+		providerBackoffLogger(ctx).Error("[CallLLM] Failed to clear provider backoff marker",
+			"thread", thread, "error", err)
+	}
+}
+
 // handleContentStart handles the start of a new content block
 func (a *CallLLMActivity) handleContentStart(ctx context.Context, chatID string, thread string, _ llm.DriverEvent, state *streamProcessingState) {
 	// Start tracking a new text block
@@ -1319,7 +1552,7 @@ func (a *CallLLMActivity) handleContentStart(ctx context.Context, chatID string,
 		"block_index": len(state.textParts) - 1,
 		"block_type":  "text",
 		"thread":      thread,
-	})
+	}, state)
 }
 
 // handleContentDelta handles content delta events (text streaming)
@@ -1341,7 +1574,7 @@ func (a *CallLLMActivity) handleContentDelta(ctx context.Context, chatID string,
 		"block_index": currentBlockIndex,
 		"delta":       event.Content,
 		"thread":      thread,
-	})
+	}, state)
 }
 
 // handleThinkingDelta handles thinking delta events (extended thinking streaming)
@@ -1361,7 +1594,7 @@ func (a *CallLLMActivity) handleThinkingDelta(ctx context.Context, chatID string
 			"block_index": thinkingPos,
 			"block_type":  "thinking",
 			"thread":      thread,
-		})
+		}, state)
 	}
 
 	// Append to thinking content
@@ -1372,7 +1605,7 @@ func (a *CallLLMActivity) handleThinkingDelta(ctx context.Context, chatID string
 		"block_index": thinkingPos,
 		"delta":       event.Thinking,
 		"thread":      thread,
-	})
+	}, state)
 }
 
 // handleToolUseStart handles the start of a tool use block
@@ -1397,7 +1630,7 @@ func (a *CallLLMActivity) handleToolUseStart(ctx context.Context, chatID string,
 				"name":   event.ToolCall.Name,
 				"status": "preparing", // LLM is writing tool request
 			},
-		})
+		}, state)
 	}
 }
 
@@ -1414,7 +1647,7 @@ func (a *CallLLMActivity) handleToolUseStop(ctx context.Context, chatID string, 
 		"block_index": toolBlockPos,
 		"status":      "requested", // LLM finished writing tool request
 		"thread":      thread,
-	})
+	}, state)
 }
 
 // handleComplete handles the completion event with token usage and final tool calls
@@ -1588,6 +1821,52 @@ func getLatestUserMessageText(history []message.Message) string {
 	return ""
 }
 
+// injectSkillSuggestions scores the project's skill catalog against the last
+// user message and appends the top matches to it as a system-reminder,
+// returning how many were suggested.
+//
+// It is a NO-OP when this call preloaded skills, and that is the whole reason
+// the decision lives in one named function instead of inline at the call site.
+//
+// The suggester reads the LAST user message and writes back into it. On a
+// forked thread the preload seed IS the last user message — the brief is the
+// only other user turn and it comes first, tool results carry role Tool, so the
+// seed holds that position from turn one onward. Scoring skill BODIES is not a
+// ranking anyone asked for: suggest.Suggest weighs a skill's own name triple and
+// every body repeats its name, so the preloaded skills win their own contest.
+// The reminder is then appended to the seed itself, and the model reads
+// "ALREADY SATISFIED. Do not load it again" immediately followed by "use the
+// skill tool to load if needed" naming those same skills. That is the stimulus
+// preloadedSkillsPreamble exists to prevent, arriving from the other side.
+//
+// Skipping — rather than subtracting the preloaded names from the result — is
+// deliberate. Subtraction removes the literal contradiction and keeps a ranking
+// computed over harness prose the user never wrote, and skills the brief never
+// asked for, endorsed directly beneath a block saying the loaded ones are
+// right, read as a correction just as loudly. A node that declares its skills
+// has already answered the question the suggester asks; the suggester is the
+// fallback for a turn where nobody did.
+//
+// It also leaves the seed byte-identical. The seed is spliced at a stable early
+// offset so the prompt cache reuses it; a catalog-dependent suffix appended to
+// it breaks that prefix on every turn, and does so hardest while the catalog is
+// still filling — which is exactly when the seed matters most.
+func injectSkillSuggestions(history []message.Message, catalog []cfgpkg.StoredSkill, preloaded []string) int {
+	if len(catalog) == 0 || len(preloaded) > 0 {
+		return 0
+	}
+	latestUserText := getLatestUserMessageText(history)
+	if latestUserText == "" {
+		return 0
+	}
+	suggestions := suggest.Suggest(catalog, latestUserText, 5)
+	if len(suggestions) == 0 {
+		return 0
+	}
+	injectReminderIntoLastUserMessage(history, buildSkillSuggestionReminder(suggestions))
+	return len(suggestions)
+}
+
 // buildSkillSuggestionReminder formats suggested skills as a system-reminder block.
 func buildSkillSuggestionReminder(suggestions []suggest.Suggested) string {
 	var sb strings.Builder
@@ -1686,86 +1965,206 @@ func formatRepoMemoryMessages(repoMemories map[string]string) []message.Message 
 	return msgs
 }
 
-// loadRecommendedSkillMessages loads skill bodies for the recommended_skills
-// specified in the chat's active preset(s) and returns them as system messages.
-// Returns nil when no recommended skills are found or none resolve to known skills.
-func (a *CallLLMActivity) loadRecommendedSkillMessages(ctx context.Context, chat *db.Chat, projectCfg *cfgpkg.Config) []message.Message {
-	if chat == nil || projectCfg == nil || len(chat.SelectedPresets) == 0 || len(projectCfg.Skills) == 0 {
+// preloadedSkillsPreamble opens the seeded turn by naming who loaded these
+// skills. It is the whole reason the seed is not shaped as a tool interaction:
+// a fabricated assistant(tool_call) is indistinguishable to the model from one
+// it issued itself, so a unit whose brief named skills it never "called"
+// concluded it had erred — measured on run b7aa4056, where two fan-out units
+// spent their entire lives on "That loaded the wrong skill. Let me load the
+// correct ones specified in the brief." and "I loaded the wrong skill by
+// mistake." The attribution must be explicit, and it must pre-empt the specific
+// wrong conclusion, not merely avoid asserting the right one.
+const preloadedSkillsPreamble = `<preloaded-skills>
+The Reliant harness loaded the following skills into this conversation before
+your turn began. You did NOT call the skill tool for them and you do not need
+to — their full contents are reproduced verbatim below, exactly as the skill
+tool would have returned them.
+
+If your instructions name any skill listed here, that instruction is ALREADY
+SATISFIED. Do not load it again, and do not read its absence from your own tool
+calls as a mistake you need to correct.
+`
+
+// preloadSkillMissError decides whether preloaded skills that did not resolve
+// fail the call, and returns nil when the call must proceed instead.
+//
+// A miss has two causes, and only one of them is worth failing over.
+//
+// An EMPTY catalog is TRANSIENT: the project-config snapshot has not filled
+// yet. One run went 37 -> 86 -> 114 entries across three consecutive turns,
+// silently dropping `db` and `forge/proto` from the very turns that chose the
+// proto surface and authored the migrations. Erroring here lets Temporal retry,
+// and the next attempt is warm — the failure repairs itself and the node gets
+// what it asked for.
+//
+// A NON-EMPTY catalog that does not hold the path is PERMANENT. No number of
+// retries conjures the skill, so failing would spend the whole retry budget to
+// kill a run over what is usually a charter typo. The caller warns instead, and
+// the seed tells the model exactly what it did not get (see
+// buildSeededSkillMessages) so it proceeds knowingly rather than either
+// assuming guidance it lacks or hunting a skill that does not exist.
+func preloadSkillMissError(catalogSize int, requested, missing []string) error {
+	if len(missing) == 0 || catalogSize > 0 {
 		return nil
 	}
-
-	// Load stored presets from the project config record for preset resolution.
-	var storedPresets []cfgpkg.StoredPreset
-	if chat.ProjectID != "" && a.repo != nil {
-		record, err := a.repo.GetProjectConfigRecord(ctx, chat.ProjectID)
-		if err == nil {
-			storedPresets, _ = cfgpkg.ParseStoredPresets(record.ProjectPresetsJSON)
-		}
-	}
-
-	// Collect unique recommended skill names from all active presets.
-	seen := make(map[string]bool)
-	var skillNames []string
-	for _, presetName := range chat.SelectedPresets {
-		if presetName == "" {
-			continue
-		}
-		p := loadPresetForSkills(storedPresets, presetName)
-		if p == nil {
-			continue
-		}
-		for _, name := range p.RecommendedSkills {
-			if !seen[name] {
-				seen[name] = true
-				skillNames = append(skillNames, name)
-			}
-		}
-	}
-
-	if len(skillNames) == 0 {
-		return nil
-	}
-
-	// Resolve each skill name to a StoredSkill and build a system message.
-	var msgs []message.Message
-	for _, name := range skillNames {
-		skill := cfgpkg.FindStoredSkillByPath(projectCfg.Skills, name)
-		if skill == nil || strings.TrimSpace(skill.Body) == "" {
-			continue
-		}
-		msgs = append(msgs, message.Message{
-			Role:  message.System,
-			Parts: []message.ContentPart{message.TextContent{Text: "# Skill: " + skill.Name + "\n\n" + skill.Body}},
-		})
-	}
-	return msgs
+	return fmt.Errorf(
+		"preload skills: skill catalog is empty, so none of the %d requested skills resolved (%v) — "+
+			"the project config snapshot has not filled yet; retrying",
+		len(requested), missing)
 }
 
-// loadPresetForSkills loads a preset by name from stored project presets or builtins.
-// Returns nil if not found. This is a lightweight helper for skill injection only.
-func loadPresetForSkills(storedPresets []cfgpkg.StoredPreset, name string) *preset.Preset {
-	// Try stored project presets first.
-	sp := cfgpkg.FindStoredPresetByName(storedPresets, name)
-	if sp != nil {
-		p, err := preset.ParsePreset([]byte(sp.YAMLContent), name)
-		if err == nil {
-			return p
+// buildSeededSkillMessages resolves each requested skill path against the project
+// skill catalog and returns the preloaded-skill seed: a single user turn that
+// reproduces each resolved skill's body verbatim under an explicit harness
+// attribution (preloadedSkillsPreamble).
+//
+// The body comes from the skill tool's OWN resolver
+// (tools.LoadSkillForInjection), so the bytes a preloaded skill delivers are
+// identical to the bytes the agent would get by loading it by hand — only the
+// envelope around them differs, and it differs on purpose.
+//
+// Skills are deduped by resolved skill name (two paths that resolve to the same
+// skill inject once); empty-body / unresolvable paths are skipped.
+//
+// Each body is passed through tools.CapSkillContent — the SAME ceiling the
+// ToolWrapper applies when the agent loads a skill by hand. Without it the two
+// delivery paths disagree: a hand-load of an oversize skill arrives capped
+// while the seed injects the whole file, so the preloaded copy is both larger
+// than the model would ever get on its own and permanently resident in the
+// cached prefix of every turn. Capping here keeps the seeded body byte-identical
+// to the hand-loaded one, and CapSkillContent's notice makes any drop explicit
+// to the model instead of letting a skill quietly end mid-sentence.
+//
+// The turn is a USER turn, not a System one: the OpenAI-compatible driver family
+// (reliant, openai, openrouter) has no message.System case in ConvertMessages
+// and drops System history messages on the floor, so a System-role seed would be
+// a silent no-op on the very provider this preload exists to serve.
+//
+// Returns the seeded messages, the list of injected skill names, the names of
+// any skills that had to be truncated, and the requested paths that did NOT
+// resolve.
+//
+// The missing list is the important return. A preload that silently delivers a
+// subset is a guard that cannot fail: the node runs, the model answers, and the
+// only trace is a count in an INFO line nobody reads. Measured on one run — the
+// first three LLM turns of the scaffold phase logged `requested=6 injected=2
+// catalogSize=37`, then 86, then 114. The catalog was still filling, and the
+// turns that chose the proto surface and the migrations ran without `db` or
+// `forge/proto`. Nothing failed and nothing said so.
+//
+// A miss has two causes that want opposite handling, and the caller classifies
+// them by catalog state (preloadSkillMissError) rather than this function
+// guessing. The half that lands here is the permanent one: a warm catalog that
+// does not hold the path is not retryable, so the run proceeds — and the seed
+// below TELLS THE MODEL what it did not get, so it works knowingly instead of
+// either assuming the guidance or burning turns trying to load a skill that
+// does not exist.
+func buildSeededSkillMessages(projectCfg *cfgpkg.Config, skillPaths []string) (msgsOut []message.Message, injected []string, oversized []string, missing []string) {
+	if len(skillPaths) == 0 {
+		return nil, nil, nil, nil
+	}
+	// A nil or empty catalog is the cold-catalog case, not "nothing was asked
+	// for" — every requested path is missing and the caller must treat it as
+	// such rather than reading zero-injected as success. No seed is emitted:
+	// the caller is about to fail and retry, and a notice the model never sees
+	// is not worth building.
+	if projectCfg == nil || len(projectCfg.Skills) == 0 {
+		return nil, nil, nil, append([]string(nil), skillPaths...)
+	}
+
+	var injectedNames []string
+	var oversizedNames []string
+	var missingPaths []string
+	seen := make(map[string]bool)
+
+	// Deterministic order (the requested order, deduped) so the seeded turn is
+	// byte-stable across turns and the Anthropic prompt cache reuses it.
+	var b strings.Builder
+	b.WriteString(preloadedSkillsPreamble)
+
+	for _, path := range skillPaths {
+		name, body, ok := tools.LoadSkillForInjection(projectCfg.Skills, path)
+		if !ok {
+			missingPaths = append(missingPaths, path)
+			continue
+		}
+		if seen[name] {
+			// Two paths resolving to the same skill inject once. Not missing.
+			continue
+		}
+		seen[name] = true
+		injectedNames = append(injectedNames, name)
+
+		capped, wasTruncated := tools.CapSkillContent(body)
+		if wasTruncated {
+			oversizedNames = append(oversizedNames, name)
+		}
+
+		fmt.Fprintf(&b, "\n<skill name=%q path=%q>\n", name, path)
+		b.WriteString(capped)
+		b.WriteString("\n</skill>\n")
+	}
+
+	// Name what was asked for and not delivered, inside the seed the model
+	// reads. Without this the model sees a preload that silently covers less
+	// than its brief promised, and its two options are both bad: assume the
+	// guidance it was told it had, or spend turns hunting a skill that is not
+	// there. Neither is recoverable from a log line.
+	//
+	// The notice must also cancel the preamble for these paths. The preamble
+	// says any skill listed here is ALREADY SATISFIED — true of the bodies
+	// above it, and exactly the wrong conclusion for a skill that never
+	// arrived, so the two must not be left to sit side by side unreconciled.
+	if len(missingPaths) > 0 {
+		fmt.Fprintf(&b, "\n<unavailable>\nThese skills were requested for you and are NOT available: %s.\n"+
+			"Nothing was reproduced for them above, so the ALREADY SATISFIED note does not"+
+			" cover them. They do not exist in this project's skill catalog, so do not try to"+
+			" load them — the skill tool will fail the same way. Proceed without them and say"+
+			" so if a decision genuinely needed one.\n</unavailable>\n",
+			strings.Join(missingPaths, ", "))
+	}
+
+	// Past the cold-catalog gate every requested path either resolved or was
+	// recorded missing, so a warm catalog always has something to say: bodies,
+	// the unavailable notice, or both. There is no silent-nil case left.
+	b.WriteString("</preloaded-skills>")
+
+	return []message.Message{{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: b.String()}},
+	}}, injectedNames, oversizedNames, missingPaths
+}
+
+// insertSeededMessagesAfterFirstUserTurn splices `seeded` in immediately after
+// the first user turn (a User or Agent role message — Agent normalizes to User
+// for the API) in history, pinning the seed to a stable early offset for
+// prompt-cache reuse and placing it directly after the brief that names the
+// skills. If history has no user turn to anchor to, the seed is dropped: a
+// preload with nothing to attach to is the case the requested-vs-injected log
+// line exists to make visible.
+func insertSeededMessagesAfterFirstUserTurn(history []message.Message, seeded []message.Message) []message.Message {
+	if len(seeded) == 0 {
+		return history
+	}
+	for i, msg := range history {
+		if msg.Role == message.User || msg.Role == message.Agent {
+			out := make([]message.Message, 0, len(history)+len(seeded))
+			out = append(out, history[:i+1]...)
+			out = append(out, seeded...)
+			out = append(out, history[i+1:]...)
+			return out
 		}
 	}
-	// Fall back to builtin presets.
-	data, err := builtin.BuiltinPresetsFS.ReadFile("presets/" + name + ".yaml")
-	if err == nil {
-		p, err := preset.ParsePreset(data, name)
-		if err == nil {
-			return p
-		}
-	}
-	return nil
+	return history
 }
 
 // writeStreamingDelta publishes a streaming delta event to the in-memory hub
-// This replaces the previous DB-based streaming_delta writes for better performance
-func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string, deltaType string, deltaData map[string]interface{}) {
+// This replaces the previous DB-based streaming_delta writes for better performance.
+// When state carries a pre-allocated message id, the delta is stamped with that
+// id and the next monotonically increasing stream_seq (delta identity
+// protocol). Pass a nil state for non-message deltas (e.g. mcp_warning) —
+// those stay id-less.
+func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string, deltaType string, deltaData map[string]interface{}, state *streamProcessingState) {
 	if a.hub == nil {
 		return
 	}
@@ -1773,9 +2172,12 @@ func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string
 	// This prevents race conditions where streaming continues after cancellation status is emitted.
 	// Allow "stream_cancelled" deltas through so the UI knows streaming stopped.
 	if deltaType != "stream_cancelled" && ctx.Err() != nil {
-		activity.GetLogger(ctx).Info("[STREAMING_DELTA] Dropping delta - context cancelled",
-			"delta_type", deltaType,
-			"chat_id", chatID)
+		func() {
+			defer func() { _ = recover() }() // safe outside activity context (tests)
+			activity.GetLogger(ctx).Info("[STREAMING_DELTA] Dropping delta - context cancelled",
+				"delta_type", deltaType,
+				"chat_id", chatID)
+		}()
 		return
 	}
 
@@ -1784,6 +2186,14 @@ func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string
 	// Build streaming delta from deltaData
 	delta := streaming.StreamingDelta{
 		DeltaType: streaming.DeltaType(deltaType),
+	}
+
+	// Stamp delta identity centrally: every message delta carries the
+	// pre-allocated id plus a strictly increasing per-message sequence.
+	if state != nil && state.messageID != "" {
+		state.streamSeq++
+		delta.MessageID = state.messageID
+		delta.StreamSeq = state.streamSeq
 	}
 
 	// Extract known fields from deltaData

@@ -560,7 +560,7 @@ function WorkflowBuilderInner({
   // Handle "Cancel Chat & Exit" from active chat modal
   const handleCancelChatAndExit = useCallback(() => {
     if (builderChatId) {
-      unsubscribeFromChatDetails();
+      unsubscribeFromChatDetails(builderChatId);
     }
     setShowActiveChatModal(false);
     // Fall through to modifications check

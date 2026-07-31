@@ -27,6 +27,31 @@ var (
 	ErrInvalidPublicKey = errors.New("invalid public key")
 )
 
+// IsCredentialRejection reports whether err is the credential's own verdict —
+// verification RAN and the token was rejected (unknown, malformed, wrong kind,
+// revoked, expired, bad signature).
+//
+// Every OTHER error from a validator means verification never happened: the
+// token store was unreachable, a query deadline blew, a JWKS fetch failed.
+// Those must not be reported as a rejection. A caller that reports them as one
+// tells the operator their credential was refused and to mint a new one, which
+// cannot fix an unreachable dependency and buries the only real signal — this
+// is not hypothetical; a Postgres stall surfaced to the CLI as
+// "the API token stored in context "default" was rejected ... run
+// 'reliant auth token create'".
+//
+// ErrInvalidPublicKey is deliberately NOT a rejection: it covers server
+// misconfiguration and JWKS fetch failure, which are ours, not the caller's.
+//
+// A new rejection sentinel belongs in this list. That is the whole point of
+// having one predicate instead of an errors.Is chain at each call site.
+func IsCredentialRejection(err error) bool {
+	return errors.Is(err, ErrInvalidToken) ||
+		errors.Is(err, ErrExpiredToken) ||
+		errors.Is(err, ErrInvalidSignature) ||
+		errors.Is(err, ErrInvalidAPIKey)
+}
+
 // JWTClaims represents the JWT claims from Supabase
 type JWTClaims struct {
 	Sub   string `json:"sub"`   // User ID

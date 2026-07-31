@@ -39,6 +39,14 @@ type WorkflowStatusInput struct {
 	SpawnedByNodeID     string              `json:"spawned_by_node_id,omitempty"`      // Node ID that spawned this child workflow
 	LoopIteration       *int64              `json:"loop_iteration,omitempty"`          // Iteration index when spawned by a loop node
 	RouterDecision      *RouterDecisionInfo `json:"router_decision,omitempty"`         // Routing decision metadata (set when spawned by a router node)
+	Resumed             bool                `json:"resumed,omitempty"`                 // "started" follows a self-pause resume: un-pause the chat's workflow rows chat-wide
+	// Outcome is the run's VERDICT — "success" or "failure" — as declared by the
+	// terminal node the graph reached (Node.outcome). It is orthogonal to Status:
+	// a run that routes to a `failed` node has Status "completed" (the Temporal
+	// execution really did finish) and Outcome "failure". Empty means the
+	// workflow declared no outcome, and the stored value is left untouched —
+	// absence is not failure.
+	Outcome string `json:"outcome,omitempty"`
 }
 
 // WorkflowStatusOutput is the output from WorkflowStatus activity
@@ -101,6 +109,16 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 		"workflow_name": input.WorkflowName,
 		"status":        input.Status,
 		"timestamp":     time.Now().UTC().Format(time.RFC3339),
+		// Parentage travels with the event so a consumer can tell a ROOT
+		// terminal from a child's without a second lookup. `workflow follow`
+		// needs exactly this to know when the run it is following has ended.
+		"parent_workflow_id": input.ParentWorkflowID,
+	}
+	// The verdict travels on the same event as the terminal status so a live
+	// follower learns "ended, did not pass" at the boundary itself rather than
+	// having to go re-read the run afterwards.
+	if input.Outcome != "" {
+		updateData["outcome"] = input.Outcome
 	}
 
 	// Marshal update data
@@ -141,6 +159,19 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input WorkflowStatusInput) error {
 	switch input.Status {
 	case "started":
+		// Post-resume notification: a resume un-parks the ENTIRE Temporal
+		// execution, so un-pause the chat's workflow rows chat-wide (the
+		// mirror of the "paused" chat-wide propagation below). The row-level
+		// handling below still creates/updates the notifying workflow's row.
+		if input.Resumed && input.ChatID != "" {
+			if err := a.repo.ResumeWorkflowsByChat(ctx, input.ChatID); err != nil {
+				logging.Warn("[WorkflowStatus] Failed to resume chat workflows after self-pause resume",
+					"chatID", input.ChatID,
+					"workflowID", input.WorkflowID,
+					"error", err)
+			}
+		}
+
 		// Check if workflow already exists (e.g., branched chat with pending status)
 		existingWorkflow, err := a.repo.GetWorkflow(ctx, input.WorkflowID)
 		if err == nil && existingWorkflow != nil {
@@ -254,6 +285,14 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
 				return err
 			}
+			// The verdict lands in the SAME commit as the terminal status. Two
+			// writes would leave a window where the run reads as a plain
+			// COMPLETED — precisely the false green this field exists to close.
+			if input.Outcome != "" {
+				if err := a.repo.SetWorkflowOutcome(txCtx, input.WorkflowID, input.Outcome); err != nil {
+					return err
+				}
+			}
 			// Only the chat's active root workflow transitions the chat; a
 			// completing child (spawn/fork) must never switch the chat out from
 			// under its parent.
@@ -282,7 +321,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		a.clearCheckpoint(ctx, input.WorkflowID)
 		// Cascade completion to any thread records owned by this workflow
 		// Thread records ("thread:*") are created by fork()/new() in action configs
-		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
+		return a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCompleted)
 
 	case "failed":
 		// NOTE: the position checkpoint is intentionally KEPT on failure — it
@@ -290,7 +329,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
 			return err
 		}
-		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
+		return a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusFailed)
 
 	case "cancelled":
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
@@ -299,13 +338,25 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// User-cancelled runs start fresh on the next message — drop the
 		// checkpoint (resume-at-position applies only to failed/terminated).
 		a.clearCheckpoint(ctx, input.WorkflowID)
-		return a.repo.CompleteChildWorkflows(ctx, input.WorkflowID)
+		return a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCancelled)
 
 	case "paused":
-		// Self-pause: workflow is pausing itself (e.g., due to rate limit exhaustion).
-		// Update DB status so the UI reflects the paused state and SendMessage
-		// routes through the resume path instead of starting a new workflow.
-		return a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusPaused)
+		// Self-pause: workflow is pausing itself (e.g., due to rate limit
+		// exhaustion or the daemon-offline breaker). A self-pause parks the
+		// ENTIRE Temporal execution — every nested inline workflow shares the
+		// root execution's pause flag — but the notifying executor may be a
+		// nested spawn/loop whose workflow_id is not the root row. The paused
+		// status must land chat-wide (root row included): the root row is what
+		// SendMessage's resume routing and the reconciler's progress-watchdog
+		// pause exclusion consult. Leaving it "running" hides the pause from
+		// both — the watchdog then terminates a legitimately parked workflow.
+		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusPaused); err != nil {
+			return err
+		}
+		if input.ChatID != "" {
+			return a.repo.PauseRunningWorkflowsByChat(ctx, input.ChatID)
+		}
+		return nil
 
 	default:
 		// Unknown status - skip tracking

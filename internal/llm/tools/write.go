@@ -4,6 +4,7 @@ package tools
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/diff"
@@ -108,10 +109,29 @@ func (w *writeTool) Execute(rctx *rctx.ToolContext, params WriteParams) (ToolRes
 		thread = "0"
 	}
 
+	// Serialize against the other file tools. Write replaces the file wholesale,
+	// so there is no earlier content this write was derived from and nothing to
+	// verify at write time — but the stat, the unchanged-content read and the
+	// write below must not interleave with an edit to the same path, or the
+	// mod-time guard and the unread-overwrite diff are both computed from a file
+	// that changed underneath them. See file_concurrency.go.
+	return withPathLock(rctx, filePath, func() (ToolResponse, error) {
+		return w.writeLocked(rctx, params, filePath, workingDir, chatID, thread)
+	})
+}
+
+// writeLocked performs the stat/compare/write. Callers must hold the path lock
+// for filePath.
+func (w *writeTool) writeLocked(rctx *rctx.ToolContext, params WriteParams, filePath, workingDir, chatID, thread string) (ToolResponse, error) {
 	stat, err := rctx.Daemon.StatFile(rctx.Context, filePath)
 	if err != nil {
 		return ToolResponse{}, fmt.Errorf("error checking file: %w", err)
 	}
+
+	// unreadOverwrite records that an existing file was overwritten without a
+	// prior read in this thread. When true, the result surfaces a compact diff so
+	// the model can see (and repair) an unintended clobber.
+	unreadOverwrite := false
 
 	if stat.Exists {
 		if stat.IsDir {
@@ -120,13 +140,25 @@ func (w *writeTool) Execute(rctx *rctx.ToolContext, params WriteParams) (ToolRes
 
 		modTime := stat.ModTime
 		lastAwareness := getLastAwarenessTime(chatID, thread, filePath)
-		// Write overwrites the entire file — require prior read to prevent blind overwrites
-		if lastAwareness.IsZero() {
-			return NewTextErrorResponse(fmt.Sprintf("file %s exists but has not been read yet. Write overwrites the entire file — use the View tool first to confirm you want to replace its contents.", filePath)), nil
-		}
-		if modTime.After(lastAwareness) {
+
+		// Concurrent-modification guard (multi-agent data-loss protection): if the
+		// file changed on disk AFTER we last saw it, hard-error. This stays strict.
+		// Only meaningful when we hold a prior awareness timestamp — an unread file
+		// (zero awareness) is handled by the soft path below.
+		if !lastAwareness.IsZero() && modTime.After(lastAwareness) {
 			return NewTextErrorResponse(fmt.Sprintf("file %s has been modified since it was last read (mod time: %s, last aware: %s). Multiple agents or humans may be making edits simultaneously — re-read the file before editing to avoid overwriting their changes.",
 				filePath, modTime.Format(time.RFC3339), lastAwareness.Format(time.RFC3339))), nil
+		}
+
+		// Read-before-write: the file exists but was never read in this thread.
+		// Rather than blocking the write, proceed with the overwrite and surface a
+		// compact diff in the result (below) so the model sees what it replaced and
+		// can repair a mistaken clobber with a follow-up Edit. Record awareness so
+		// subsequent writes in this thread are covered by the concurrent-mod guard
+		// above.
+		if lastAwareness.IsZero() {
+			recordFileAwareness(chatID, thread, filePath)
+			unreadOverwrite = true
 		}
 
 		// Check if content is unchanged by reading current content
@@ -166,6 +198,14 @@ func (w *writeTool) Execute(rctx *rctx.ToolContext, params WriteParams) (ToolRes
 	}
 
 	result := fmt.Sprintf("File successfully written: %s", displayPath)
+	if unreadOverwrite {
+		// The file was overwritten without a prior read. Metadata never reaches
+		// the model, so include a compact diff directly in the visible content.
+		result += fmt.Sprintf(
+			"\n\nNOTE: %s existed but had not been read in this thread, so its entire contents were replaced. "+
+				"Review the diff below — if this clobbered content you intended to keep, use the Edit tool to restore it.\n\n%s",
+			displayPath, compactDiff(diffText))
+	}
 	result = fmt.Sprintf("<result>\n%s\n</result>", result)
 	return WithResponseMetadata(NewTextResponse(result),
 		WriteResponseMetadata{
@@ -174,4 +214,26 @@ func (w *writeTool) Execute(rctx *rctx.ToolContext, params WriteParams) (ToolRes
 			Removals:  removals,
 		},
 	), nil
+}
+
+// compactDiff returns a length-bounded form of a unified diff suitable for
+// inclusion in the model-visible tool result. A full clobber can produce a very
+// large diff; cap it so the result stays compact while still showing the model
+// what was replaced.
+func compactDiff(diffText string) string {
+	const maxLines = 60
+
+	trimmed := strings.TrimRight(diffText, "\n")
+	if trimmed == "" {
+		return "(no textual diff available)"
+	}
+
+	lines := strings.Split(trimmed, "\n")
+	if len(lines) <= maxLines {
+		return trimmed
+	}
+
+	omitted := len(lines) - maxLines
+	return strings.Join(lines[:maxLines], "\n") +
+		fmt.Sprintf("\n... (%d more diff line(s) omitted; full diff retained in tool metadata)", omitted)
 }

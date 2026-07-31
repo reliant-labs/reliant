@@ -56,6 +56,13 @@ type resolvedLLMCall struct {
 	// injected resolver supplied the model.
 	Definition *models.ModelDefinition
 
+	// ProviderDriver is the driver of the provider the registry selected to
+	// serve this call (e.g. "codex", "anthropic"). Empty when an injected
+	// resolver supplied the model. Context management derives the model's REAL
+	// window from this provider, since a provider can serve a smaller window
+	// than the model-wide capability (see models.EffectiveContextWindow).
+	ProviderDriver string
+
 	// ThinkingLevel is the effective, capability-reconciled thinking level.
 	// Empty means the model cannot reason and the driver omits thinking.
 	ThinkingLevel string
@@ -80,6 +87,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	var legacyModel models.Model
 	var definition *models.ModelDefinition
 	var modelIDForDriver string
+	var providerDriver string
 	effectiveTemperature := spec.Temperature
 	effectiveThinkingLevel := spec.ThinkingLevel
 
@@ -136,6 +144,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		// Build the model ID string with driver suffix so driver resolution
 		// uses the exact provider the registry picked (deterministic).
 		modelIDForDriver = resolvedDef.ID
+		providerDriver = resolved.Provider.Driver
 		if resolved.Provider.Driver != "" {
 			modelIDForDriver = resolvedDef.ID + "@" + resolved.Provider.Driver
 		}
@@ -176,12 +185,13 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	}
 
 	return &resolvedLLMCall{
-		Driver:        driver,
-		Model:         legacyModel,
-		ModelID:       modelIDForDriver,
-		Definition:    definition,
-		ThinkingLevel: effectiveThinkingLevel,
-		Temperature:   effectiveTemperature,
+		Driver:         driver,
+		Model:          legacyModel,
+		ModelID:        modelIDForDriver,
+		Definition:     definition,
+		ProviderDriver: providerDriver,
+		ThinkingLevel:  effectiveThinkingLevel,
+		Temperature:    effectiveTemperature,
 	}, nil
 }
 
@@ -206,14 +216,19 @@ func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
 //     param, so any request sent without tools (the compaction summarization
 //     call, a call_llm node with tools disabled) must not carry them.
 //  2. Trim history to fit the context window, accounting for system prompts
-//     and tool definitions.
+//     and tool definitions. The backstop threshold is derived from the model's
+//     real context window (contextWindow) so it scales per-model and sits above
+//     the compaction threshold; pass 0 when the window is unknown to fall back
+//     to the fixed legacy threshold.
 //  3. Normalize internal roles (agent -> user) to API-compatible roles.
-func prepareHistoryForLLM(chatID string, history []message.Message, systemPrompts []string, availableTools []tools.Tool) []message.Message {
+func prepareHistoryForLLM(chatID string, history []message.Message, systemPrompts []string, availableTools []tools.Tool, contextWindow int64) []message.Message {
 	if len(availableTools) == 0 {
 		history = flattenToolContentToText(history)
 	}
-	if message.TrimMessagesToFitContextWithFullEstimate(history, systemPrompts, wrapToolsForEstimation(availableTools)) {
-		logging.Info("[LLMRequest] Trimmed history to fit context window", "chatID", chatID)
+	if message.TrimMessagesToFitContextWindow(history, systemPrompts, wrapToolsForEstimation(availableTools), contextWindow) {
+		logging.Info("[LLMRequest] Trimmed history to fit context window",
+			"chatID", chatID,
+			"contextWindow", contextWindow)
 	}
 	return normalizeRolesForLLM(history)
 }

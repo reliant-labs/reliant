@@ -31,6 +31,13 @@ type recordingWorktreeDaemonRouter struct {
 	timeouts map[string]int32
 }
 
+// CreateWorktree pins the whole fan-out to one daemon, so it routes through
+// SendDaemonCommandToDaemon. Embedding alone would send that to the base
+// router's SendDaemonCommand, which knows nothing about worktree.create.
+func (r *recordingWorktreeDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *recordingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	if r.timeouts == nil {
 		r.timeouts = make(map[string]int32)
@@ -68,6 +75,10 @@ func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _,
 func (r *worktreeTestDaemonRouter) SendKillProcess(_ context.Context, _, _ string) error {
 	return nil
 }
+func (r *worktreeTestDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *worktreeTestDaemonRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
 	switch commandType {
 	case "worktree.validate_path":
@@ -220,6 +231,53 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 
 	assert.Equal(t, worktreeDaemonCommandTimeoutMs, router.timeouts["worktree.create"])
 	assert.Greater(t, router.timeouts["worktree.create"], int32(30_000))
+}
+
+// TestCreateWorktreePersistsOwningDaemon verifies the worktree row records the
+// daemon that created it (router.ResolveDaemonID), so tool execution for a
+// worktree-bound chat can later route back to the machine holding the checkout.
+func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
+	repo := db.NewTestRepo(t)
+
+	router := &recordingWorktreeDaemonRouter{}
+	svc := NewWorktreeService(repo, nil, router)
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{
+		ID:         projectID,
+		UserID:     userID,
+		Name:       "Test Project",
+		Path:       t.TempDir(),
+		IsGitRepo:  true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}))
+	require.NoError(t, repo.CreateRepo(context.Background(), &core.Repo{
+		ID:           uuid.New().String(),
+		ProjectID:    projectID,
+		Name:         "root",
+		RelativePath: ".",
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}))
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	resp, err := svc.CreateWorktree(ctx, connect.NewRequest(&reliantv1.CreateWorktreeRequest{
+		ProjectId: projectID,
+		Name:      "owned-worktree",
+		Branch:    "owned-worktree",
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, resp.Msg.Worktree)
+
+	// The mock router's ResolveDaemonID returns "test-daemon-id".
+	stored, err := repo.GetWorktree(ctx, resp.Msg.Worktree.Id)
+	require.NoError(t, err)
+	require.NotNil(t, stored.DaemonID, "worktree must record its owning daemon")
+	assert.Equal(t, "test-daemon-id", *stored.DaemonID)
 }
 
 func setupTestWorktreeServiceForRevert(t *testing.T) (*WorktreeService, string, string) {

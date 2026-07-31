@@ -24,6 +24,7 @@ var SupportedModels = []models.ModelID{
 	models.VertexClaude48Opus,
 	models.VertexClaude5Sonnet,
 	models.VertexClaude5Fable,
+	models.VertexClaude5Opus,
 }
 
 // createClient is the driver factory function for the registry

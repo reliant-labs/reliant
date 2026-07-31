@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
+	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
 func init() {
@@ -35,6 +36,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	var req daemon.RunCommandRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	// Name a bad working directory before spawning, or the kernel's ENOENT
+	// comes back attributed to the shell binary instead of the directory.
+	if wdErr := osutil.ValidateWorkingDir(req.WorkingDir); wdErr != nil {
+		msg := wdErr.Error()
+		return json.Marshal(daemon.CommandResult{ExitCode: 1, Stderr: msg, Combined: msg})
 	}
 
 	timeoutMs := req.TimeoutMs
@@ -70,6 +78,14 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
+	// A bytes.Buffer stdout means os/exec reads through an OS pipe, and
+	// cmd.Wait() blocks until the LAST holder of that pipe exits — which is not
+	// the shell if the shell spawned something that outlives it. Bound that
+	// wait, or a finished command hangs for a grandchild's lifetime and
+	// TimeoutMs stops bounding anything. Shared with LocalClient.RunCommand so
+	// the two paths cannot bound it differently.
+	cmd.WaitDelay = daemon.ExecWaitDelay
+
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
@@ -84,45 +100,20 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	}
 	duration := time.Since(start)
 
+	// Shared with LocalClient.RunCommand so the two exec paths cannot drift on
+	// what a failure looks like — see daemon.ClassifyExecOutcome.
+	outcome := daemon.ClassifyExecOutcome(err, execCtx.Err(), stderrBuf.String(), memReader, oomSnap)
+
 	resp := daemon.CommandResult{
-		Stdout:     stdoutBuf.String(),
-		Stderr:     stderrBuf.String(),
-		DurationMs: duration.Milliseconds(),
+		Stdout:           stdoutBuf.String(),
+		Stderr:           outcome.Stderr,
+		DurationMs:       duration.Milliseconds(),
+		ExitCode:         outcome.ExitCode,
+		TimedOut:         outcome.TimedOut,
+		OOMKilled:        outcome.OOMKilled,
+		OutputIncomplete: outcome.OutputIncomplete,
 	}
-
-	if err != nil {
-		if execCtx.Err() == context.DeadlineExceeded {
-			resp.TimedOut = true
-		}
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			resp.ExitCode = exitErr.ExitCode()
-		} else {
-			resp.ExitCode = 1
-			resp.Stderr = fmt.Sprintf("%s\n%s", resp.Stderr, err.Error())
-		}
-		// A SIGKILL-shaped failure (exit -1: shell itself killed; exit 137:
-		// shell reports a killed child) that coincides with an oom_kill in the
-		// container cgroup gets the structured out-of-memory explanation. The
-		// message rides Stderr so the LLM tool result and user RPC consumers
-		// both see actionable text, plus a flag for programmatic handling.
-		// Timeouts also SIGKILL — TimedOut keeps precedence in consumers.
-		if !resp.TimedOut {
-			if oom, msg := memReader.CheckOOMKill(resp.ExitCode, oomSnap); oom {
-				resp.OOMKilled = true
-				if resp.Stderr != "" {
-					resp.Stderr += "\n"
-				}
-				resp.Stderr += msg
-			}
-		}
-	}
-
-	// Build combined output
-	if resp.Stderr != "" {
-		resp.Combined = resp.Stdout + resp.Stderr
-	} else {
-		resp.Combined = resp.Stdout
-	}
+	resp.Combined = daemon.CombineOutput(resp.Stdout, resp.Stderr)
 
 	return json.Marshal(resp)
 }

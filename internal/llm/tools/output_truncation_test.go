@@ -126,114 +126,6 @@ func TestViewToolLongLineTruncation(t *testing.T) {
 	})
 }
 
-// TestGrepContentModeTruncation tests that grep content mode truncates long matched lines
-func TestGrepContentModeTruncation(t *testing.T) {
-	tempDir := t.TempDir()
-
-	tool := &grepTool{}
-	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-msg")
-
-	t.Run("Long matched lines are truncated in content mode", func(t *testing.T) {
-		// Create a file with long lines containing the search pattern
-		testFile := filepath.Join(tempDir, "longlines.go")
-		shortLine := "// This is a short comment with PATTERN"
-		longLine := "const longVar = \"PATTERN " + strings.Repeat("x", 500) + "\""
-		content := shortLine + "\n" + longLine + "\n// end"
-		require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
-
-		params := GrepParams{
-			Pattern:    "PATTERN",
-			Path:       tempDir,
-			OutputMode: "content",
-		}
-		response, err := tool.Execute(ctx, params)
-		require.NoError(t, err)
-
-		output := response.Content
-
-		// Should contain the pattern
-		assert.Contains(t, output, "PATTERN", "Should find the pattern")
-
-		// Long line should be truncated with char count
-		assert.Contains(t, output, "chars total",
-			"Long matched lines should show total char count when truncated")
-	})
-
-	t.Run("Short matched lines are not truncated", func(t *testing.T) {
-		testFile := filepath.Join(tempDir, "shortlines.go")
-		content := "// Line with KEYWORD here\nfunc test() { KEYWORD }\n"
-		require.NoError(t, os.WriteFile(testFile, []byte(content), 0644))
-
-		params := GrepParams{
-			Pattern:    "KEYWORD",
-			Path:       tempDir,
-			OutputMode: "content",
-		}
-		response, err := tool.Execute(ctx, params)
-		require.NoError(t, err)
-
-		// Short lines should not have truncation indicator
-		assert.NotContains(t, response.Content, "chars total",
-			"Short lines should not show truncation indicator")
-	})
-}
-
-// TestGrepResultLimitTruncation tests that grep results are limited properly
-func TestGrepResultLimitTruncation(t *testing.T) {
-	tempDir := t.TempDir()
-
-	tool := &grepTool{}
-	worktree := &rctx.WorktreeInfo{ID: "test", Path: tempDir}
-	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient()).WithMessageID("test-msg")
-
-	t.Run("Results limited to defaultResultLimit", func(t *testing.T) {
-		// Create many files with the pattern
-		for i := 0; i < 300; i++ {
-			fileName := filepath.Join(tempDir, fmt.Sprintf("file%03d.txt", i))
-			content := fmt.Sprintf("File %d contains SEARCHTERM here", i)
-			require.NoError(t, os.WriteFile(fileName, []byte(content), 0644))
-		}
-
-		params := GrepParams{
-			Pattern:    "SEARCHTERM",
-			Path:       tempDir,
-			OutputMode: "files_with_matches",
-		}
-		response, err := tool.Execute(ctx, params)
-		require.NoError(t, err)
-
-		// Should indicate truncation
-		assert.Contains(t, response.Content, "truncated",
-			"Should indicate results are truncated when exceeding limit")
-
-		// Should have metadata about truncation
-		assert.NotEmpty(t, response.Metadata, "Should have metadata")
-	})
-
-	t.Run("HeadLimit parameter is respected", func(t *testing.T) {
-		params := GrepParams{
-			Pattern:    "SEARCHTERM",
-			Path:       tempDir,
-			OutputMode: "files_with_matches",
-			HeadLimit:  10,
-		}
-		response, err := tool.Execute(ctx, params)
-		require.NoError(t, err)
-
-		// Count the number of file paths in output
-		lines := strings.Split(response.Content, "\n")
-		fileCount := 0
-		for _, line := range lines {
-			if strings.HasPrefix(line, "file") && strings.HasSuffix(line, ".txt") {
-				fileCount++
-			}
-		}
-
-		assert.LessOrEqual(t, fileCount, 10,
-			"Should respect HeadLimit parameter, got %d files", fileCount)
-	})
-}
 
 // TestTruncationMessagesContainGuidance tests that truncation messages include actionable hints
 func TestTruncationMessagesContainGuidance(t *testing.T) {
@@ -245,10 +137,10 @@ func TestTruncationMessagesContainGuidance(t *testing.T) {
 			"View truncation message should mention offset parameter")
 	})
 
-	t.Run("Grep truncation message indicates truncation", func(t *testing.T) {
+	t.Run("Shell search truncation message indicates truncation", func(t *testing.T) {
 		// Need output larger than MaxOutputSize (16KB) to trigger truncation
 		largeOutput := strings.Repeat("some/path/to/file.go\n", 1500) // ~30KB
-		result := TruncateOutput("grep", largeOutput, true)
+		result := TruncateOutput("bash", largeOutput, true)
 
 		// The result should be truncated (smaller than original)
 		assert.Less(t, len(result), len(largeOutput),
@@ -258,7 +150,7 @@ func TestTruncationMessagesContainGuidance(t *testing.T) {
 		resultLower := strings.ToLower(result)
 		assert.True(t,
 			strings.Contains(resultLower, "truncated") || strings.Contains(resultLower, "results"),
-			"Grep truncation should indicate results were truncated")
+			"Shell truncation should indicate output was truncated")
 	})
 
 	t.Run("Head+tail truncation shows bytes omitted", func(t *testing.T) {
@@ -272,30 +164,48 @@ func TestTruncationMessagesContainGuidance(t *testing.T) {
 	})
 }
 
-// TestOutputLimitsConstants verifies the limit constants are set correctly
+// TestOutputLimitsConstants pins the RELATIONSHIPS between the output limits,
+// not their values.
+//
+// It used to assert each constant equalled a literal repeated from the source.
+// That kind of test cannot fail for any reason except someone deliberately
+// changing the number it copies, and then it fails every time — so it reports
+// a tuning decision as a defect and teaches the next person to edit the test
+// until it is quiet. The values are a judgement about context cost and are
+// meant to move.
+//
+// What must NOT move is how they relate: a warning has to arrive before the
+// cliff, a skill has to be delivered under the same ceiling as any other tool
+// result, and head+tail truncation needs enough room to leave two useful ends.
 func TestOutputLimitsConstants(t *testing.T) {
-	t.Run("MaxOutputSize is 16KB", func(t *testing.T) {
-		assert.Equal(t, 16_000, MaxOutputSize,
-			"MaxOutputSize should be 16KB (16000 bytes) to limit token usage (~4K tokens)")
+	t.Run("the warning threshold arrives before the ceiling", func(t *testing.T) {
+		assert.Less(t, TruncationWarningThreshold, MaxOutputSize,
+			"a warning at or past the ceiling fires only once output is already cut")
+		assert.Greater(t, TruncationWarningThreshold, MaxOutputSize/2,
+			"a warning below half the ceiling fires on ordinary output and gets ignored")
 	})
 
-	t.Run("MaxReadSize is 16KB", func(t *testing.T) {
-		assert.Equal(t, 16*1024, MaxReadSize,
-			"MaxReadSize should be 16KB to match MaxOutputSize")
+	t.Run("a skill is delivered under the same ceiling as any tool result", func(t *testing.T) {
+		assert.Equal(t, MaxOutputSize, MaxSkillBodySize,
+			"a preloaded skill and a hand-loaded skill must be byte-identical, and both "+
+				"ride the general tool-output ceiling")
 	})
 
-	t.Run("DefaultReadLimit is 300 lines", func(t *testing.T) {
-		assert.Equal(t, 300, DefaultReadLimit,
-			"DefaultReadLimit should be 300 lines to reduce context consumption")
+	t.Run("head+tail truncation has room for two useful ends", func(t *testing.T) {
+		// TruncateOutput reserves 500 bytes for its notice and splits the
+		// remainder. Below a few KB the halves stop carrying enough to read.
+		assert.Greater(t, MaxOutputSize-500, 2_000,
+			"the head+tail strategy needs room to leave a readable head AND tail")
 	})
 
-	t.Run("MaxLineLength is 500 chars", func(t *testing.T) {
-		assert.Equal(t, 500, MaxLineLength,
-			"MaxLineLength should be 500 chars to prevent single-line abuse")
+	t.Run("a single read cannot exceed what a tool result can carry", func(t *testing.T) {
+		assert.LessOrEqual(t, MaxReadSize, MaxOutputSize,
+			"a read that outgrows the output ceiling is truncated twice, and the second "+
+				"cut is the one nobody accounted for")
 	})
 
-	t.Run("TruncationWarningThreshold is 12KB", func(t *testing.T) {
-		assert.Equal(t, 12_000, TruncationWarningThreshold,
-			"TruncationWarningThreshold should be 12KB (75% of MaxOutputSize)")
+	t.Run("per-line and per-read limits stay positive", func(t *testing.T) {
+		assert.Greater(t, DefaultReadLimit, 0, "a non-positive read limit returns nothing")
+		assert.Greater(t, MaxLineLength, 0, "a non-positive line length truncates every line to nothing")
 	})
 }

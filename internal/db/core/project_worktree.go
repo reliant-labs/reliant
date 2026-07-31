@@ -74,14 +74,20 @@ type CleanupMetadata struct {
 //	worktree.BaseBranches[repo_id] -> worktree.BaseBranch -> daemon
 //	auto-detect (gh -> git remote show -> main/master probe).
 type Worktree struct {
-	ID              string
-	Name            string
-	Path            string
-	Branch          string
-	BaseBranch      string
-	BaseBranches    map[string]string
-	ProjectID       string
-	ChatID          *string
+	ID           string
+	Name         string
+	Path         string
+	Branch       string
+	BaseBranch   string
+	BaseBranches map[string]string
+	ProjectID    string
+	ChatID       *string
+	// DaemonID is the daemon that physically created and owns this worktree's
+	// on-disk git checkouts (~/.reliant/worktrees/<id>/). Tool execution for a
+	// worktree-bound chat must route to this daemon; the path exists nowhere
+	// else. Nil for pre-existing rows and single-daemon setups, in which case
+	// callers fall back to default daemon resolution.
+	DaemonID        *string
 	Status          int32
 	IsMain          bool
 	CreatedAt       time.Time

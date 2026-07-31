@@ -31,25 +31,6 @@ func deckPlanSchema() []byte {
 }
 
 func TestValidateJSONWithRepair(t *testing.T) {
-	editsSchema := []byte(`{
-		"type": "object",
-		"required": ["edits"],
-		"properties": {
-			"edits": {
-				"type": "array",
-				"items": {
-					"type": "object",
-					"required": ["file_path"],
-					"properties": {
-						"file_path":  {"type": "string"},
-						"old_string": {"type": "string"},
-						"new_string": {"type": "string"}
-					}
-				}
-			}
-		}
-	}`)
-
 	tests := []struct {
 		name       string
 		toolName   string
@@ -73,14 +54,6 @@ func TestValidateJSONWithRepair(t *testing.T) {
 			schema:     deckPlanSchema(),
 			wantErr:    false,
 			wantOutput: `{"slides": [{"title": "Intro", "bullets": ["a", "b"]}]}`,
-		},
-		{
-			name:       "stringified array is repaired (the edit tool edits shape)",
-			toolName:   "edit",
-			input:      `{"edits": "[{\"file_path\": \"/a.go\", \"old_string\": \"x\", \"new_string\": \"y\"}]"}`,
-			schema:     editsSchema,
-			wantErr:    false,
-			wantOutput: `{"edits": [{"file_path": "/a.go", "old_string": "x", "new_string": "y"}]}`,
 		},
 		{
 			name:     "stringified object is repaired",
@@ -118,8 +91,8 @@ func TestValidateJSONWithRepair(t *testing.T) {
 			toolName: "submit_note",
 			// `note` looks like JSON but the schema says string — it must stay
 			// a string. Validation fails because required `slides` is missing.
-			input:  `{"note": "[1, 2, 3]"}`,
-			schema: []byte(`{"type": "object", "required": ["note", "slides"], "properties": {"note": {"type": "string"}, "slides": {"type": "array"}}}`),
+			input:   `{"note": "[1, 2, 3]"}`,
+			schema:  []byte(`{"type": "object", "required": ["note", "slides"], "properties": {"note": {"type": "string"}, "slides": {"type": "array"}}}`),
 			wantErr: true,
 		},
 		{

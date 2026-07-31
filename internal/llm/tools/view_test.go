@@ -65,21 +65,21 @@ func TestViewToolLimitLogic(t *testing.T) {
 		},
 		{
 			name:          "Read from offset with remaining lines",
-			offset:        80,
+			offset:        81,
 			limit:         10,
 			expectMoreMsg: true,
 			description:   "Should show more lines message when offset + limit < total lines",
 		},
 		{
 			name:          "Read from offset without remaining lines",
-			offset:        90,
+			offset:        91,
 			limit:         10,
 			expectMoreMsg: false,
 			description:   "Should not show more lines message when offset + limit >= total lines",
 		},
 		{
 			name:          "Read from high offset",
-			offset:        95,
+			offset:        96,
 			limit:         10,
 			expectMoreMsg: false,
 			description:   "Should not show more lines message when offset near end of file",
@@ -321,4 +321,46 @@ func buildTestPDF(n int) []byte {
 	}
 	write(fmt.Sprintf("trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF", total+1, xrefStart))
 	return []byte(b.String())
+}
+
+// TestViewReturnsTheFirstLine pins the CONTENT this tool returns, which nothing
+// asserted before — view_test.go checked only truncation messages, which is why
+// an off-by-one in the offset contract survived unnoticed.
+//
+// `offset` is 1-based: offset 1 is the first line of the file. It used to be a
+// zero-based skip while the output was numbered one-based, so `offset: 1`
+// silently dropped line 1 and numbered the rest correctly — nothing in the
+// rendered output looked wrong. Measured in one run: 455 of ~520 reads passed
+// `offset: 1`, and one cost a scaffolded file its `"use client";` directive when
+// the agent composed the file back from what it had read.
+func TestViewReturnsTheFirstLine(t *testing.T) {
+	dir := t.TempDir()
+	tool := &viewTool{}
+	worktree := &rctx.WorktreeInfo{ID: "test", Path: dir}
+	ctx := rctx.NewToolContext(context.Background(), "test-chat", "0", nil, worktree).WithDaemon(daemon.NewLocalClient())
+
+	for _, tc := range []struct {
+		name    string
+		content string
+		offset  int
+		want    string
+	}{
+		// The literal production hazard: a Next.js client component.
+		{"offset 1 keeps the directive", "\"use client\";\n\nexport const x = 1;\n", 1, "\"use client\";"},
+		// A one-line file must not render as empty. Four correctly-emitted
+		// .down.sql files read as empty this way and were hand-rewritten.
+		{"single line file", "DROP TABLE products;\n", 1, "DROP TABLE products;"},
+		// Omitted offset arrives as 0 and must mean the same thing.
+		{"offset 0 clamps to the start", "package main\n\nfunc main() {}\n", 0, "package main"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(dir, "f.txt")
+			require.NoError(t, os.WriteFile(path, []byte(tc.content), 0o644))
+
+			resp, err := tool.Execute(ctx, ViewParams{FilePath: path, Offset: tc.offset})
+			require.NoError(t, err)
+			assert.Contains(t, resp.Content, tc.want,
+				"line 1 is missing — `offset: %d` must start AT line %d, not skip it", tc.offset, tc.offset)
+		})
+	}
 }

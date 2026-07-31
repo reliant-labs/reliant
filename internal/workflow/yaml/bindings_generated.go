@@ -16,6 +16,7 @@ const yamlKeyCondition = "condition"
 const yamlKeyTimeout = "timeout"
 const yamlKeySaveMessage = "save_message"
 const yamlKeyDaemon = "daemon"
+const yamlKeyOutcome = "outcome"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -27,6 +28,7 @@ var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"condition":    {},
 	"daemon":       {},
 	"id":           {},
+	"outcome":      {},
 	"save_message": {},
 	"timeout":      {},
 	"type":         {},
@@ -69,6 +71,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"messages":             {},
 			"model":                {},
 			"response_tool":        {},
+			"skills":               {},
 			"system_prompt":        {},
 			"temperature":          {},
 			"thinking_level":       {},

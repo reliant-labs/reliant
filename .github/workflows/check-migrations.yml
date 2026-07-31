@@ -161,10 +161,20 @@ jobs:
         run: |
           goose -dir internal/db/migrations/postgres postgres "$DATABASE_URL" up
 
-      - name: Validate Postgres-generated SQL exists
+      - name: Validate schema.sql agrees with the migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
         run: |
-          test -f internal/db/postgres/schema.sql
-          echo "✅ Postgres schema file present"
+          go test ./internal/db/ -run 'TestSchemaSQL' -count=1 -v 2>&1 | tee /tmp/drift.log
+          # These guards skip themselves when DATABASE_URL is unset, and a skip
+          # still exits 0. Assert they ran, or a misconfigured env here would
+          # report green having compared nothing.
+          for t in TestSchemaSQLMatchesMigrations TestSchemaSQLColumnsMatchMigrations; do
+            grep -q -- "--- PASS: $t" /tmp/drift.log || {
+              echo "::error::$t did not run — the drift guard verified nothing"
+              exit 1
+            }
+          done
 
       - name: Summary
         if: always()

@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# wf-list — recent reliant workflow executions (root workflows only).
+set -euo pipefail
+cd "$(dirname "$0")" && source ./_lib.sh
+
+usage() {
+  cat <<'EOF'
+Usage: wf-list [-n COUNT]
+
+List recent workflow executions (root workflows; thread/fork records excluded).
+Columns: execution id, workflow name, status, started, completed, chat title, project.
+
+Options:
+  -n COUNT   Number of executions to show (default 10)
+  -h, --help Show this help
+
+Environment:
+  RELIANT_DB_URL  Postgres DSN (default: postgres://postgres:postgres@127.0.0.1:5434/reliant)
+
+Read-only: connects with default_transaction_read_only=on.
+EOF
+}
+
+limit=10
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -n) limit="${2:?-n requires a value}"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "error: unknown argument '$1'" >&2; usage >&2; exit 1 ;;
+  esac
+done
+case "$limit" in (*[!0-9]*|'') echo "error: -n must be a positive integer" >&2; exit 1 ;; esac
+
+run_sql -P pager=off -v lim="$limit" <<SQL
+SELECT
+  w.id                                        AS execution_id,
+  w.workflow_name                             AS workflow,
+  $(wf_status_expr w.status)                  AS status,
+  to_char(w.created_at,   'MM-DD HH24:MI:SS') AS started,
+  coalesce(to_char(w.completed_at, 'MM-DD HH24:MI:SS'), '-') AS completed,
+  left(coalesce(c.title, ''), 40)             AS chat,
+  coalesce(p.name, '?')                       AS project
+FROM workflows w
+LEFT JOIN chats c    ON c.id = w.chat_id
+LEFT JOIN projects p ON p.id = c.project_id
+WHERE w.parent_id IS NULL
+  AND w.workflow_name NOT LIKE 'thread:%'
+  AND w.workflow_name NOT LIKE 'fork:%'
+ORDER BY w.created_at DESC
+LIMIT :'lim';
+SQL

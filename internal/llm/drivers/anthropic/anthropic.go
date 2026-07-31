@@ -31,10 +31,6 @@ func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 	clientOptions := []option.RequestOption{}
 	clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey))
 
-	// Use streaming HTTP client with DNS resilience, ResponseHeaderTimeout (2min),
-	// and idle stream timeout (5min) to detect silent hangs during streaming.
-	clientOptions = append(clientOptions, option.WithHTTPClient(llm.StreamingHTTPClient()))
-
 	if opts.UseBedrock {
 		clientOptions = append(clientOptions, bedrock.WithLoadDefaultConfig(context.Background()))
 	}
@@ -45,8 +41,8 @@ func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 }
 
 // NewAnthropicClientWithOptions builds an Anthropic Messages client with extra
-// SDK request options appended after the defaults (streaming HTTP client, and
-// x-api-key from opts.ApiKey when non-empty).
+// SDK request options appended after the defaults (x-api-key from opts.ApiKey
+// when non-empty; the streaming HTTP client comes from llm.NewAnthropicSDKClient).
 //
 // It exists so other drivers can reuse the full Anthropic Messages serialization
 // (message/tool conversion, streaming, thinking) while pointing the SDK at a
@@ -55,9 +51,7 @@ func NewAnthropicClient(opts llm.DriverOptions) *AnthropicClient {
 // where auth is `authorization: Bearer <gho_>` (supplied via a WithHeader option)
 // rather than x-api-key.
 func NewAnthropicClientWithOptions(opts llm.DriverOptions, extra ...option.RequestOption) *AnthropicClient {
-	clientOptions := []option.RequestOption{
-		option.WithHTTPClient(llm.StreamingHTTPClient()),
-	}
+	clientOptions := []option.RequestOption{}
 	if opts.ApiKey != "" {
 		clientOptions = append(clientOptions, option.WithAPIKey(opts.ApiKey))
 	}

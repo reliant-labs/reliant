@@ -184,6 +184,25 @@ func buildRegistry(models []ModelDefinition) (*ModelRegistry, error) {
 	for i := range models {
 		model := &reg.models[i]
 
+		// Registry-level thinking floor: a reasoning-capable model must always
+		// carry a non-empty DefaultThinkingLevel so that when a call_llm node or
+		// preset leaves thinking_level UNSET, resolution falls back to a real
+		// level (the model's preferred, typically "medium") instead of silently
+		// disabling extended thinking. This is the single choke point every
+		// definition passes through (embedded defaults AND user-configured
+		// models), so the floor applies to ALL workflows.
+		//
+		// Precedence is preserved: an explicit per-model default_thinking_level
+		// wins (only an empty value is filled), and node/preset thinking_level
+		// overrides still win downstream — resolveLLMCall applies the model
+		// default only when no explicit level was supplied. Non-reasoning models
+		// are left untouched, so thinking stays off for them.
+		if model.DefaultThinkingLevel == "" {
+			if cap := ResolveThinkingCapability(model.Capabilities); cap.SupportsThinking {
+				model.DefaultThinkingLevel = cap.DefaultLevel
+			}
+		}
+
 		// Check for duplicate IDs
 		if _, exists := reg.byID[model.ID]; exists {
 			return nil, fmt.Errorf("duplicate model ID: %s", model.ID)

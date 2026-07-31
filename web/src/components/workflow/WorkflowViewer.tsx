@@ -46,6 +46,8 @@ interface WorkflowViewerProps {
   execution?: WorkflowExecution
   /** Project ID for fetching sub-workflows when expanding loops */
   projectId?: string
+  /** Chat ID — connects the diagram to the authoritative node_execution stream */
+  chatId?: string | null
   /** Workflow name (for editing - should match the identifier used to fetch the workflow) */
   workflowName?: string
   /** Callback when a node is clicked (for viewing details) */
@@ -84,6 +86,7 @@ function WorkflowViewerInner({
   workflow,
   execution,
   projectId,
+  chatId,
   workflowName,
   onNodeClick,
   onClose,
@@ -129,8 +132,10 @@ function WorkflowViewerInner({
     [workflow]
   )
 
-  // Build execution status map using the extended hook (includes loop info)
-  const { statusMap: executionStatus, loopInfo } = useExtendedExecutionStatus(execution, workflowNodeIds)
+  // Build execution status map using the extended hook (includes loop info).
+  // Node STATUS is authoritative from the node_execution stream (via chatId);
+  // loop STRUCTURE stays tree-derived from `execution`.
+  const { statusMap: executionStatus, loopInfo } = useExtendedExecutionStatus(execution, workflowNodeIds, chatId)
   
   
   // Get loop iteration steps for expanded loops

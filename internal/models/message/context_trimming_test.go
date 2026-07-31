@@ -188,6 +188,62 @@ func TestTrimMessagesToFitContextWithFullEstimate_TrimsLastMessage(t *testing.T)
 	}
 }
 
+func TestDeriveSafeContextTokens(t *testing.T) {
+	tests := []struct {
+		name          string
+		contextWindow int64
+		want          int
+	}{
+		{name: "unknown window falls back to legacy fixed threshold", contextWindow: 0, want: SafeContextTokens},
+		{name: "negative window falls back to legacy fixed threshold", contextWindow: -1, want: SafeContextTokens},
+		{name: "1M window backstop is 95%", contextWindow: 1_000_000, want: 950_000},
+		{name: "200k window backstop is 95%", contextWindow: 200_000, want: 190_000},
+		{name: "400k window backstop is 95%", contextWindow: 400_000, want: 380_000},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := deriveSafeContextTokens(tc.contextWindow); got != tc.want {
+				t.Errorf("deriveSafeContextTokens(%d) = %d, want %d", tc.contextWindow, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTrimMessagesToFitContextWindow_ModelAwareBackstop is the regression test
+// for the forge-one-shot degradation: a ~400k-token context on a 1M-window model
+// must NOT be trimmed, because the trim backstop (95% of 1M = 950k) sits well
+// above it. The legacy model-unaware path (window=0, fixed 195k) would trim the
+// same context, which is exactly the premature head/tail-shredding the model
+// reported as "session severely degraded".
+func TestTrimMessagesToFitContextWindow_ModelAwareBackstop(t *testing.T) {
+	// ~1.6M chars / 4 = ~400k tokens — below the 950k backstop of a 1M window,
+	// but above the legacy 195k fixed threshold.
+	largeContent := strings.Repeat("x", 1_600_000)
+	newMessages := func() []Message {
+		return []Message{
+			{Role: User, Parts: []ContentPart{TextContent{Text: "earlier message"}}},
+			{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "tc_1", Name: "bash", Content: largeContent}}},
+		}
+	}
+
+	// Model-aware: 1M window → backstop 950k → 400k context is NOT trimmed.
+	if trimmed := TrimMessagesToFitContextWindow(newMessages(), nil, nil, 1_000_000); trimmed {
+		t.Error("1M-window model should NOT trim a ~400k-token context (compaction, at 85%, is the primary mechanism)")
+	}
+
+	// Legacy model-unaware path (window unknown) trims the same context at 195k —
+	// the pre-fix behavior we are moving away from.
+	if trimmed := TrimMessagesToFitContextWindow(newMessages(), nil, nil, 0); !trimmed {
+		t.Error("legacy fixed-threshold path should still trim a ~400k-token context")
+	}
+
+	// A small window (200k) DOES engage the backstop for the same oversized
+	// context, confirming the backstop still protects small-window models.
+	if trimmed := TrimMessagesToFitContextWindow(newMessages(), nil, nil, 200_000); !trimmed {
+		t.Error("200k-window model should trim a ~400k-token context (exceeds 190k backstop)")
+	}
+}
+
 func TestTrimMessagesToFitContextWithFullEstimate_PreservesHeadAndTail(t *testing.T) {
 	// Create content with recognizable head and tail
 	head := "HEAD_MARKER_" + strings.Repeat("a", 1000)

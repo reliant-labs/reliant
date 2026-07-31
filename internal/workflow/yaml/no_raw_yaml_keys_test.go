@@ -38,7 +38,7 @@ func TestNoRawCoreYAMLKeyLiteralsInParserCodecFiles(t *testing.T) {
 		}
 		content := string(contentBytes)
 
-		coreKeys := []string{"id", "type", "condition", "thread", "timeout", "save_message", "args", "from", "cases", "default", "to", "label"}
+		coreKeys := []string{"id", "type", "condition", "thread", "timeout", "save_message", "outcome", "args", "from", "cases", "default", "to", "label"}
 		for _, key := range coreKeys {
 			matches := regexp.MustCompile(`"`+regexp.QuoteMeta(key)+`"`).FindAllStringIndex(content, -1)
 			if len(matches) == 0 {

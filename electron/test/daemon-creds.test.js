@@ -11,9 +11,13 @@ const {
   upsertEntry,
   deleteEntry,
   mintDaemonPAT,
+  sessionNeedsRefresh,
+  refreshSupabaseSession,
   ensureDaemonPATForOrigin,
   MINT_RPC_PATH,
   MINT_MAX_ATTEMPTS,
+  REFRESH_TOKEN_PATH,
+  TOKEN_EXPIRY_MARGIN_S,
 } = require('../src/daemon-creds');
 
 // ----------------------------------------------------------------------------
@@ -795,5 +799,399 @@ test('ensureDaemonPATForOrigin: skips mint when existing entry sub matches curre
     // File contents unchanged.
     const after = JSON.parse(fs.readFileSync(file, 'utf8'));
     assert.deepEqual(after['https://reliantapi.com'], seedEntry);
+  });
+});
+// ----------------------------------------------------------------------------
+// sessionNeedsRefresh — staleness detection
+// ----------------------------------------------------------------------------
+//
+// `expires_at` is unix SECONDS. The margin (TOKEN_EXPIRY_MARGIN_S) treats
+// about-to-expire tokens as stale so the mint doesn't race the expiry.
+// A session with no usable expires_at is "unknown", NOT stale — the
+// 401-triggered reactive refresh handles those.
+
+test('sessionNeedsRefresh: expired token → true', () => {
+  const nowMs = 1_700_000_000_000;
+  const session = { expires_at: nowMs / 1000 - 100 };
+  assert.equal(sessionNeedsRefresh(session, nowMs), true);
+});
+
+test('sessionNeedsRefresh: token expiring inside the margin → true', () => {
+  const nowMs = 1_700_000_000_000;
+  const session = { expires_at: nowMs / 1000 + TOKEN_EXPIRY_MARGIN_S / 2 };
+  assert.equal(sessionNeedsRefresh(session, nowMs), true);
+});
+
+test('sessionNeedsRefresh: fresh token → false', () => {
+  const nowMs = 1_700_000_000_000;
+  const session = { expires_at: nowMs / 1000 + 3600 };
+  assert.equal(sessionNeedsRefresh(session, nowMs), false);
+});
+
+test('sessionNeedsRefresh: missing/garbage expires_at → false (unknown, not stale)', () => {
+  assert.equal(sessionNeedsRefresh({}, 1_700_000_000_000), false);
+  assert.equal(sessionNeedsRefresh(null, 1_700_000_000_000), false);
+  assert.equal(sessionNeedsRefresh({ expires_at: 'soon' }, 1_700_000_000_000), false);
+  assert.equal(sessionNeedsRefresh({ expires_at: 0 }, 1_700_000_000_000), false);
+});
+
+// ----------------------------------------------------------------------------
+// refreshSupabaseSession — GoTrue exchange + session-shape normalization
+// ----------------------------------------------------------------------------
+
+test('refreshSupabaseSession: posts refresh_token to GoTrue and merges the new session', async () => {
+  let seenUrl;
+  let seenInit;
+  const oldSession = {
+    access_token: 'jwt-stale',
+    refresh_token: 'rt-old',
+    expires_at: 1_000,
+    user: { id: 'user-1', email: 'u@example.com' },
+  };
+  const before = Math.floor(Date.now() / 1000);
+  const result = await withFetchStub(
+    async (url, init) => {
+      seenUrl = url;
+      seenInit = init;
+      // GoTrue omits expires_at here — the helper must derive it from expires_in.
+      return jsonResponse(200, {
+        access_token: 'jwt-fresh',
+        refresh_token: 'rt-new',
+        token_type: 'bearer',
+        expires_in: 3600,
+        user: { id: 'user-1', email: 'u@example.com' },
+      });
+    },
+    () =>
+      refreshSupabaseSession({
+        authUrl: 'https://proj.supabase.co/',
+        anonKey: 'anon-key-1',
+        session: oldSession,
+      })
+  );
+
+  // Endpoint + credential assertions. Trailing slash on authUrl must not
+  // produce a `//auth` path.
+  assert.equal(seenUrl, `https://proj.supabase.co${REFRESH_TOKEN_PATH}`);
+  assert.equal(seenInit.method, 'POST');
+  assert.equal(seenInit.headers['Content-Type'], 'application/json');
+  assert.equal(seenInit.headers.apikey, 'anon-key-1');
+  assert.deepEqual(JSON.parse(seenInit.body), { refresh_token: 'rt-old' });
+
+  // Session-shape assertions: rotated tokens, derived expires_at, user kept.
+  assert.equal(result.access_token, 'jwt-fresh');
+  assert.equal(result.refresh_token, 'rt-new');
+  assert.equal(result.token_type, 'bearer');
+  assert.ok(
+    result.expires_at >= before + 3600 && result.expires_at <= before + 3601,
+    `expires_at should be derived from expires_in (got ${result.expires_at})`
+  );
+  assert.deepEqual(result.user, { id: 'user-1', email: 'u@example.com' });
+});
+
+test('refreshSupabaseSession: keeps old refresh_token when GoTrue omits a rotated one', async () => {
+  const result = await withFetchStub(
+    async () =>
+      jsonResponse(200, {
+        access_token: 'jwt-fresh',
+        expires_at: 2_000_000_000,
+      }),
+    () =>
+      refreshSupabaseSession({
+        authUrl: 'https://proj.supabase.co',
+        anonKey: 'anon-key-1',
+        session: { access_token: 'jwt-stale', refresh_token: 'rt-old', user: { id: 'u1' } },
+      })
+  );
+  assert.equal(result.refresh_token, 'rt-old', 'must never brick the store on a missing rotation');
+  assert.equal(result.expires_at, 2_000_000_000, 'explicit expires_at wins over derivation');
+  assert.deepEqual(result.user, { id: 'u1' }, 'user carried forward when response omits it');
+});
+
+test('refreshSupabaseSession: non-2xx throws with status', async () => {
+  await withFetchStub(
+    async () => jsonResponse(400, { error: 'invalid_grant' }),
+    async () => {
+      await assert.rejects(
+        () =>
+          refreshSupabaseSession({
+            authUrl: 'https://proj.supabase.co',
+            anonKey: 'anon-key-1',
+            session: { refresh_token: 'rt-revoked' },
+          }),
+        /HTTP 400/
+      );
+    }
+  );
+});
+
+test('refreshSupabaseSession: 200 missing access_token throws', async () => {
+  await withFetchStub(
+    async () => jsonResponse(200, { refresh_token: 'rt-new' }),
+    async () => {
+      await assert.rejects(
+        () =>
+          refreshSupabaseSession({
+            authUrl: 'https://proj.supabase.co',
+            anonKey: 'anon-key-1',
+            session: { refresh_token: 'rt-old' },
+          }),
+        /missing access_token/
+      );
+    }
+  );
+});
+
+test('refreshSupabaseSession: missing provider config / refresh_token throws synchronously', async () => {
+  await assert.rejects(
+    () => refreshSupabaseSession({ authUrl: '', anonKey: '', session: { refresh_token: 'x' } }),
+    /not configured/
+  );
+  await assert.rejects(
+    () =>
+      refreshSupabaseSession({
+        authUrl: 'https://proj.supabase.co',
+        anonKey: 'anon-key-1',
+        session: {},
+      }),
+    /no refresh_token/
+  );
+});
+
+// ----------------------------------------------------------------------------
+// ensureDaemonPATForOrigin — session refresh orchestration
+// ----------------------------------------------------------------------------
+//
+// The cold-launch bug this exists for: the disk session's access token has
+// outlived its ~1h TTL, so minting with it verbatim 401s, the daemon spawns
+// credential-less, falls into its interactive OAuth flow, and the app shows
+// "No machine connected". These tests pin the refresh-then-mint orchestration
+// and its fallbacks. Call order is asserted via the sequence stub's URL log.
+
+const AUTH_PROVIDER = {
+  authUrl: 'https://proj.supabase.co',
+  anonKey: 'anon-key-1',
+};
+const REFRESH_URL = `https://proj.supabase.co${REFRESH_TOKEN_PATH}`;
+const MINT_URL = `https://reliantapi.com${MINT_RPC_PATH}`;
+
+function expiredSession(overrides = {}) {
+  return {
+    access_token: 'jwt-stale',
+    refresh_token: 'rt-1',
+    expires_at: Math.floor(Date.now() / 1000) - 100,
+    user: { id: 'user-1' },
+    ...overrides,
+  };
+}
+
+function freshSession(overrides = {}) {
+  return expiredSession({
+    access_token: 'jwt-live',
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    ...overrides,
+  });
+}
+
+test('ensureDaemonPATForOrigin: expired session → refresh, persist, mint with FRESH token', async () => {
+  await withFakeHome(async (home) => {
+    const saved = [];
+    const authStorage = {
+      loadStoredAuth: () => expiredSession(),
+      saveAuth: (s) => {
+        saved.push(s);
+        return true;
+      },
+    };
+    const { stub, calls } = makeSequenceFetch([
+      jsonResponse(200, {
+        access_token: 'jwt-fresh',
+        refresh_token: 'rt-2',
+        expires_in: 3600,
+        user: { id: 'user-1' },
+      }),
+      jsonResponse(200, { token: 'rlnt_pat_after_refresh' }),
+    ]);
+    await withFetchStub(stub, () =>
+      ensureDaemonPATForOrigin({
+        authStorage,
+        apiUrl: 'https://reliantapi.com',
+        gatewayUrl: '',
+        authUrl: AUTH_PROVIDER.authUrl,
+        authAnonKey: AUTH_PROVIDER.anonKey,
+      })
+    );
+
+    // Call order: GoTrue refresh FIRST, then the mint.
+    assert.deepEqual(calls.urls, [REFRESH_URL, MINT_URL]);
+    // The mint must carry the REFRESHED token, not the stale one.
+    assert.equal(calls.inits[1].headers.Authorization, 'Bearer jwt-fresh');
+
+    // Rotated session persisted so the renderer inherits rt-2, not rt-1.
+    assert.equal(saved.length, 1, 'refreshed session must be persisted exactly once');
+    assert.equal(saved[0].access_token, 'jwt-fresh');
+    assert.equal(saved[0].refresh_token, 'rt-2');
+
+    // And the PAT landed in daemon.json.
+    const store = JSON.parse(
+      fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
+    );
+    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_after_refresh');
+    assert.equal(store['https://reliantapi.com'].sub, 'user-1');
+  });
+});
+
+test('ensureDaemonPATForOrigin: fresh session → mints directly, NO refresh call', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = {
+      loadStoredAuth: () => freshSession(),
+      saveAuth: () => {
+        throw new Error('saveAuth must not be called when no refresh happens');
+      },
+    };
+    const { stub, calls } = makeSequenceFetch([
+      jsonResponse(200, { token: 'rlnt_pat_no_refresh' }),
+    ]);
+    await withFetchStub(stub, () =>
+      ensureDaemonPATForOrigin({
+        authStorage,
+        apiUrl: 'https://reliantapi.com',
+        gatewayUrl: '',
+        authUrl: AUTH_PROVIDER.authUrl,
+        authAnonKey: AUTH_PROVIDER.anonKey,
+      })
+    );
+    assert.deepEqual(calls.urls, [MINT_URL], 'must go straight to the mint');
+    assert.equal(calls.inits[0].headers.Authorization, 'Bearer jwt-live');
+    const store = JSON.parse(
+      fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
+    );
+    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_no_refresh');
+  });
+});
+
+test('ensureDaemonPATForOrigin: fresh-looking token but mint 401s → refresh + retry once', async () => {
+  await withFakeHome(async (home) => {
+    const saved = [];
+    const authStorage = {
+      loadStoredAuth: () => freshSession(), // expires_at lies (revoked / clock skew)
+      saveAuth: (s) => {
+        saved.push(s);
+        return true;
+      },
+    };
+    const { stub, calls } = makeSequenceFetch([
+      jsonResponse(401, { code: 'unauthenticated', message: 'invalid or expired token' }),
+      jsonResponse(200, {
+        access_token: 'jwt-fresh',
+        refresh_token: 'rt-2',
+        expires_in: 3600,
+        user: { id: 'user-1' },
+      }),
+      jsonResponse(200, { token: 'rlnt_pat_after_401_retry' }),
+    ]);
+    await withFetchStub(stub, () =>
+      ensureDaemonPATForOrigin({
+        authStorage,
+        apiUrl: 'https://reliantapi.com',
+        gatewayUrl: '',
+        authUrl: AUTH_PROVIDER.authUrl,
+        authAnonKey: AUTH_PROVIDER.anonKey,
+      })
+    );
+    assert.deepEqual(calls.urls, [MINT_URL, REFRESH_URL, MINT_URL]);
+    assert.equal(calls.inits[2].headers.Authorization, 'Bearer jwt-fresh');
+    assert.equal(saved.length, 1);
+    const store = JSON.parse(
+      fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
+    );
+    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_after_401_retry');
+  });
+});
+
+test('ensureDaemonPATForOrigin: 401 with NO refresh config → single attempt, swallowed (pre-existing behavior)', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = { loadStoredAuth: () => expiredSession() };
+    const { stub, calls } = makeSequenceFetch([
+      jsonResponse(401, { code: 'unauthenticated' }),
+      // Sentinel — a second call means an unwanted refresh/retry fired.
+      jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+    ]);
+    await withFetchStub(stub, () =>
+      ensureDaemonPATForOrigin({
+        authStorage,
+        apiUrl: 'https://reliantapi.com',
+        gatewayUrl: '',
+        // authUrl / authAnonKey deliberately absent (OSS build, no config).
+      })
+    );
+    assert.deepEqual(calls.urls, [MINT_URL], 'no refresh possible → exactly one mint attempt');
+    assert.equal(
+      fs.existsSync(path.join(home, '.reliant', 'daemon.json')),
+      false,
+      'failed mint must not write daemon.json'
+    );
+  });
+});
+
+test('ensureDaemonPATForOrigin: pre-mint refresh fails → falls back to stored token, no second refresh on 401', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = { loadStoredAuth: () => expiredSession() };
+    const { stub, calls } = makeSequenceFetch([
+      jsonResponse(500, { error: 'gotrue down' }), // refresh attempt
+      jsonResponse(401, { code: 'unauthenticated' }), // mint with the stale token
+      // Sentinel — a third call means the consumed refresh was retried.
+      jsonResponse(200, { token: 'rlnt_pat_should_not_reach' }),
+    ]);
+    await withFetchStub(stub, () =>
+      ensureDaemonPATForOrigin({
+        authStorage,
+        apiUrl: 'https://reliantapi.com',
+        gatewayUrl: '',
+        authUrl: AUTH_PROVIDER.authUrl,
+        authAnonKey: AUTH_PROVIDER.anonKey,
+      })
+    );
+    assert.deepEqual(
+      calls.urls,
+      [REFRESH_URL, MINT_URL],
+      'one refresh attempt total — the 401 path must not retry a refresh that already failed'
+    );
+    assert.equal(calls.inits[1].headers.Authorization, 'Bearer jwt-stale');
+    assert.equal(fs.existsSync(path.join(home, '.reliant', 'daemon.json')), false);
+  });
+});
+
+test('ensureDaemonPATForOrigin: saveAuth blowing up does not block the mint (never-throw contract)', async () => {
+  await withFakeHome(async (home) => {
+    const authStorage = {
+      loadStoredAuth: () => expiredSession(),
+      saveAuth: () => {
+        throw new Error('keychain locked');
+      },
+    };
+    const { stub, calls } = makeSequenceFetch([
+      jsonResponse(200, {
+        access_token: 'jwt-fresh',
+        refresh_token: 'rt-2',
+        expires_in: 3600,
+        user: { id: 'user-1' },
+      }),
+      jsonResponse(200, { token: 'rlnt_pat_despite_persist_failure' }),
+    ]);
+    await withFetchStub(stub, () =>
+      ensureDaemonPATForOrigin({
+        authStorage,
+        apiUrl: 'https://reliantapi.com',
+        gatewayUrl: '',
+        authUrl: AUTH_PROVIDER.authUrl,
+        authAnonKey: AUTH_PROVIDER.anonKey,
+      })
+    );
+    assert.deepEqual(calls.urls, [REFRESH_URL, MINT_URL]);
+    const store = JSON.parse(
+      fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
+    );
+    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_despite_persist_failure');
   });
 });

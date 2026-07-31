@@ -37,7 +37,8 @@ var (
 	UpdateTypeInfo              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
 	UpdateTypeWarning           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING
 	UpdateTypeRefetch           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH
-	UpdateTypeQuestion          UpdateType = 18 // CHAT_UPDATE_TYPE_QUESTION (proto codegen pending)
+	UpdateTypeQuestion          UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION
+	UpdateTypeStreamFinalized   UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED
 )
 
 // ============================================================================
@@ -114,12 +115,45 @@ type QuestionUpdate struct {
 	QuestionID string     `json:"question_id"`
 	ChatID     string     `json:"chat_id"`
 	WorkflowID string     `json:"workflow_id"`
-	StepID     string     `json:"step_id"`
-	Status     string     `json:"status"`
-	Metadata   string     `json:"metadata,omitempty"`
+	// ThreadID is the thread that raised the question. Without it a supervision
+	// surface reading this feed can see THAT a gate opened but not which of a
+	// run's fanned-out threads is waiting.
+	ThreadID string `json:"thread_id"`
+	StepID   string `json:"step_id"`
+	Status   string `json:"status"`
+	Metadata string `json:"metadata,omitempty"`
 }
 
 func (u QuestionUpdate) Type() UpdateType { return UpdateTypeQuestion }
+
+// ============================================================================
+// STREAM FINALIZED UPDATES
+// ============================================================================
+
+// StreamFinalizedReason is the terminal state a message stream reached.
+type StreamFinalizedReason string
+
+const (
+	StreamFinalizedCompleted StreamFinalizedReason = "completed"
+	StreamFinalizedAborted   StreamFinalizedReason = "aborted"
+	StreamFinalizedCancelled StreamFinalizedReason = "cancelled"
+)
+
+// StreamFinalizedUpdate marks that the stream for a pre-allocated assistant
+// message id reached a terminal state (delta identity protocol). Emitted
+// exactly once per allocated id — the core invariant is "every allocated id
+// is eventually finalized" — so consumers can retire streaming placeholders.
+// UpdateTypeName is the string discriminator inside the data JSON (the typed
+// column carries the proto enum).
+type StreamFinalizedUpdate struct {
+	UpdateTypeName string                `json:"update_type"` // Always "stream_finalized"
+	MessageID      string                `json:"message_id"`
+	Thread         string                `json:"thread,omitempty"`
+	Reason         StreamFinalizedReason `json:"reason"`
+	LastStreamSeq  int64                 `json:"last_stream_seq,omitempty"`
+}
+
+func (u StreamFinalizedUpdate) Type() UpdateType { return UpdateTypeStreamFinalized }
 
 // ============================================================================
 // ENTITY ID GENERATORS

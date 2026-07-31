@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useChatStore } from "../../store/chatStore";
-import { useChat } from "../../hooks/chat-queries";
+import { useChat, seedChatDetail, patchChatCaches } from "../../hooks/chat-queries";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -218,12 +217,12 @@ export function useChatInputState({
       try {
         const workflowName = workflow ?? effectiveDefaultWorkflow;
         const updatedChat = await chatGrpc.update(chatId, { workflow_name: workflowName });
-        // Update the chat store with the new workflow name
-        // This matches the pattern used by renameChat in chatStore.ts
-        useChatStore.setState((state) => {
-          const newChats = new Map(state.chats);
-          newChats.set(chatId, updatedChat);
-          return { chats: newChats };
+        // Home the updated chat into the React Query caches (the single source
+        // of truth): replace the detail entry and patch workflowName in the
+        // list so the sidebar stays in sync.
+        seedChatDetail(updatedChat);
+        patchChatCaches(currentProjectId, chatId, {
+          workflowName: updatedChat.workflowName,
         });
       } catch (error) {
         console.error("Failed to update workflow:", error);

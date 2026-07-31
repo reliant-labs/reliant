@@ -1,33 +1,36 @@
 # Resume-into-current-node (Task 4) on a real multi-get-it-right chain.
 #
-# The user paused while the FINAL get-it-right loop (production_polish) was
-# running, then sent a message. Resume must re-enter production_polish — the
-# currently-active node — and continue to the launch_preview handoff. It must NOT
-# restart from scope/scaffold or re-run the earlier get-it-right passes.
+# The user paused while the FINAL get-it-right loop (build_mvp) was running, then
+# sent a message. Resume must re-enter build_mvp — the currently-active node — and
+# continue through build_done to the launch_preview handoff. It must NOT restart
+# from scope/scaffold or re-run scaffold_and_verify.
 #
 # Mirrors the runtime resume-at-checkpoint path (resolveResumeTarget /
 # resume_test.go TestDynamicWorkflow_Resume_EntersAtCheckpointNode): a new run
 # begins at the checkpointed node, earlier node outputs are not reconstructed, so
 # the workflow's cross-phase edge refs are all has()-guarded. start_at models it.
+#
+# The simulator models start_at by firing the target's PREDECESSOR completion event
+# (here scaffold_and_verify) and evaluating its outbound edges, rather than entering
+# build_mvp directly the way real runtime resume does. scaffold_and_verify's edges
+# route on nodes.scaffold_and_verify alone, so the `state` below is all the upstream
+# state needed to land on build_mvp.
 
 name: resume_into_current_node
-description: Pausing during production_polish resumes into that node, not from node zero
+description: Pausing during build_mvp resumes into that node, not from node zero
 
-start_at: production_polish
+start_at: build_mvp
 
-# Earlier phases already ran in the paused run; their outputs are not
-# reconstructed on resume. production_polish's outbound edges reference only
-# nodes.production_polish, so no upstream state is needed to proceed.
+# The scaffold phase already ran in the paused run; its outputs are not
+# reconstructed on resume.
 state:
   scaffold_and_verify:
     strategy: pass
-  frontend_polish:
-    strategy: pass
 
 events:
-  - node: production_polish
+  - node: build_mvp
     output:
-      response_text: "Production polish resumed from where it paused and completed."
+      response_text: "The build resumed from where it paused and completed."
       strategy: pass
       eval_strategy: pass
       stuck: false
@@ -35,16 +38,16 @@ events:
 
   - node: launch_preview
     output:
-      response_text: "App started; posted the preview URL."
+      response_text: "Started the finished build and posted the preview URL."
 
 expect:
   outcome: completed
   reached:
-    - production_polish
+    - build_mvp
+    - build_done
     - launch_preview
     - success
   not_reached:
-    - scope_conversation
     - scaffold_and_verify
-    - frontend_polish
-    - mvp_backend
+    - stuck
+    - failed

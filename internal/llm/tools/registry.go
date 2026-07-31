@@ -18,11 +18,6 @@ const (
 	ToolFindReplace    = "find_replace"
 	ToolReadAttachment = "read_attachment"
 
-	// Search tools
-	ToolGrep = "grep"
-	ToolGlob = "glob"
-	ToolLs   = "ls"
-
 	// Execution tools
 	// Note: ToolShell is not a constant - use ShellToolName from shell_name_*.go
 	ToolBashList   = "bash_list"
@@ -426,17 +421,38 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
 		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
 
-		// Search tools
-		{ToolGrep, (*ToolsFactory).Grep, []ToolTag{TagSearch, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
-		{ToolGlob, (*ToolsFactory).Glob, []ToolTag{TagSearch, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
+		// Search: there are no dedicated grep/glob LLM tools. Agents search with
+		// the shell (ripgrep preferred, degrading to grep -r/find). The shell
+		// therefore carries TagSearch so `tag:search` still resolves to a real
+		// search path for existing presets and user configs.
+		//
+		// The scoped-search guarantees the deleted tools provided — repo-rooted,
+		// node_modules/.git/dist/vendor excluded, bounded results — are NOT
+		// provided by the shell. What survives is shell_search_guard.go, which
+		// refuses filesystem-wide and home-wide scans before dispatch; that guard
+		// is the only thing standing between an agent and a `find /`, so it must
+		// stay whether or not the search tools exist.
 
 		// Execution tools - platform-specific shell tool (bash on Unix, PowerShell on Windows)
 		// Use tag:shell to get the appropriate shell tool for any platform.
 		// These MUST run on the daemon — they need the user's filesystem/project context.
-		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashList, (*ToolsFactory).BashList, []ToolTag{TagExecution, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashOutput, (*ToolsFactory).BashOutput, []ToolTag{TagExecution, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashKill, (*ToolsFactory).BashKill, []ToolTag{TagExecution, TagDefault}, ToolRunsOnDaemon},
+		//
+		// `tag:shell` carries the whole SHELL FAMILY, not just the shell tool. The
+		// shell tool's own description tells the model: "Use 'run_in_background: true'
+		// ... You can then use BashOutput to check output, BashKill to terminate, and
+		// BashList to see all running processes." Granting the shell without those
+		// three therefore hands an agent instructions for tools it does not have —
+		// which is exactly how a reviewer holding `tag:shell` was ordered to read a
+		// dev server's port out of `bash_output`, found no such tool, and filed an
+		// evidence-free `stuck`. They are also useless on their own: nothing can be
+		// in `bash_list` for an agent that cannot start a process. Keeping the tag
+		// whole is what stops the next prompt from drifting the same way — and
+		// `!tag:shell` correspondingly removes the family, which is what an author
+		// excluding the shell means.
+		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagDefault}, ToolRunsOnDaemon},
+		{ToolBashList, (*ToolsFactory).BashList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolBashOutput, (*ToolsFactory).BashOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolBashKill, (*ToolsFactory).BashKill, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
 
 		// Network tools — routed to daemon so HTTP requests originate from the user's machine
 		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},

@@ -26,6 +26,7 @@ These fields are available on **all** node types. They provide shared functional
 | `timeout` | string | No |  |
 | `save_message` | SaveMessageConfig | No |  |
 | `daemon` | CelDaemonSelector | No |  |
+| `outcome` | string | No |  |
 
 ### Thread Configuration
 
@@ -116,6 +117,7 @@ Send a prompt to a language model and get a response
 | `temperature` | number | No | 0.7 | Temperature (0-1) controls randomness (range: 0-2) |
 | `thinking_level` | string | No | none | Extended thinking level for complex reasoning (enum: none\|low\|medium\|high\|xhigh) |
 | `system_prompt` | string | No | - | System message for this LLM call |
+| `skills` | array | No | - | Namespaced skill paths to preload for this call (seeded as skill tool-interactions) |
 
 ### Outputs
 
@@ -126,6 +128,10 @@ Send a prompt to a language model and get a response
 | `upstream_request_id` | string | - |
 | `upstream_proxyman_id` | string | - |
 | `cost` | number | - |
+| `compaction_threshold` | integer | - |
+| `model` | string | - |
+| `message_id` | string | - |
+| `last_stream_seq` | integer | - |
 
 ---
 
@@ -159,24 +165,6 @@ Create a git worktree for isolated development
 | `base_branch` | string | - |
 | `repo_id` | string | - |
 | `status` | string | - |
-
----
-
-## Delete Worktree
-
-Delete a git worktree and clean up its resources
-
-### Inputs
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `name` | string | Yes | - | - |
-
-### Outputs
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `deleted` | boolean | - |
 
 ---
 

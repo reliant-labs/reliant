@@ -163,6 +163,10 @@ type RunningStep struct {
 	Event        *core.WorkflowEvent // Triggering event
 	Future       workflow.Future
 	EvalResult   *reliantv1.Node // Resolved node for save_message thread resolution
+	// PreallocatedMessageID is the assistant message id minted before a
+	// call_llm dispatch (delta identity protocol); "" for other step types
+	// and for pre-gate histories.
+	PreallocatedMessageID string
 }
 
 // removeRunningStep removes a step from the slice using pointer comparison.
@@ -256,6 +260,19 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	var future workflow.Future
 	var activityName string
 
+	// Delta identity: mint the assistant message id BEFORE dispatching a
+	// call_llm activity so retries re-stream under the same id. Gated on
+	// GetVersion inside preallocateAssistantMessageID — replaying pre-change
+	// histories yields "" and adds no commands.
+	preallocatedMessageID := ""
+	if stepType == model.NodeTypeCallLLM {
+		thread := ""
+		if e.execContext != nil {
+			thread = e.execContext.Thread
+		}
+		preallocatedMessageID = preallocateAssistantMessageID(e.ctx, e.chatID, thread)
+	}
+
 	switch stepType {
 	case model.NodeTypeWorkflow:
 		// NOTE: workflow nodes are now handled inline by InlineWorkflowExecutor.
@@ -286,7 +303,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	default:
 		// All other types are activities (e.g., call_llm, save_message, execute_tools)
 		if isActivityType(stepType) {
-			future, activityName = e.startAction(node, evalResult)
+			future, activityName = e.startAction(node, evalResult, preallocatedMessageID)
 		} else {
 			e.logger.Error("[StepExecutor] Unknown step type", "stepType", stepType, "stepID", node.GetId())
 			future = e.executeFailActivity("unknown step type: " + stepType)
@@ -296,13 +313,14 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 
 	// Use StepID as canonical identifier - ActivityID kept for logging/backwards compat
 	return &RunningStep{
-		ActivityID:   node.GetId(), // Set to StepID for backwards compat
-		StepID:       node.GetId(),
-		ActivityName: activityName,
-		Node:         node,
-		Event:        event,
-		Future:       future,
-		EvalResult:   evalResult, // Store for save_message thread resolution
+		ActivityID:            node.GetId(), // Set to StepID for backwards compat
+		StepID:                node.GetId(),
+		ActivityName:          activityName,
+		Node:                  node,
+		Event:                 event,
+		Future:                future,
+		EvalResult:            evalResult, // Store for save_message thread resolution
+		PreallocatedMessageID: preallocatedMessageID,
 	}
 }
 
@@ -341,6 +359,10 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 				"activityID", running.ActivityID,
 				"stepID", running.StepID,
 			)
+			// Delta identity: the stream under this id is dead. A pause-retry
+			// re-Start()s the step and mints a fresh id, so finalize this one
+			// now (no-op when no id was pre-allocated).
+			emitStreamFinalized(e.ctx, e.chatID, running.PreallocatedMessageID, e.threadForFinalize(), streamReasonCancelled, 0)
 			return &StepEvent{
 				ID:           eventID,
 				WorkflowID:   e.workflowID,
@@ -366,6 +388,9 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 			)
 			// For heartbeat timeouts during pause, this means the activity didn't exit cleanly
 			// within WorkerStopTimeout (2s). Log this for debugging but proceed with retry.
+			// Delta identity: finalize before the caller pauses; the retry
+			// after resume re-Start()s with a fresh id.
+			emitStreamFinalized(e.ctx, e.chatID, running.PreallocatedMessageID, e.threadForFinalize(), streamReasonAborted, 0)
 			return &StepEvent{
 				ID:             eventID,
 				WorkflowID:     e.workflowID,
@@ -387,6 +412,9 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 			"error", err,
 			"errorType", fmt.Sprintf("%T", err),
 		)
+		// Delta identity: finalize before the caller pauses (aborted). The
+		// retry after resume re-Start()s the step with a fresh id.
+		emitStreamFinalized(e.ctx, e.chatID, running.PreallocatedMessageID, e.threadForFinalize(), streamReasonAborted, 0)
 		return &StepEvent{
 			ID:             eventID,
 			WorkflowID:     e.workflowID,
@@ -411,6 +439,13 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		e.executeSaveMessage(running, normalizedOutput)
 	}
 
+	// Delta identity: success-path finalize marker. Fires AFTER the save
+	// attempt but is NOT gated on the save succeeding (executeSaveMessage
+	// swallows errors) — the marker's contract is "no more deltas under this
+	// id". No-op when no id was pre-allocated.
+	emitStreamFinalized(e.ctx, e.chatID, running.PreallocatedMessageID, e.threadForFinalize(),
+		streamReasonCompleted, extractLastStreamSeq(normalizedOutput))
+
 	return &StepEvent{
 		ID:           eventID,
 		WorkflowID:   e.workflowID,
@@ -419,6 +454,14 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		StepID:       running.StepID,
 		Data:         normalizedOutput,
 	}
+}
+
+// threadForFinalize returns the thread to record on stream_finalized markers.
+func (e *StepExecutor) threadForFinalize() string {
+	if e.execContext != nil {
+		return e.execContext.Thread
+	}
+	return ""
 }
 
 func (e *StepExecutor) getRawOutput(running *RunningStep) (map[string]interface{}, error) {
@@ -473,6 +516,7 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 		e.loopNodeID,
 		e.loopIteration,
 		e.execContext, // Pass execContext for thread.* namespace access
+		running.PreallocatedMessageID,
 	)
 	if err != nil {
 		e.logger.Error("[StepExecutor] Inline save_message failed",
@@ -572,6 +616,7 @@ func (e *StepExecutor) startFailedStep(node *reliantv1.Node, event *core.Workflo
 func (e *StepExecutor) startAction(
 	node *reliantv1.Node,
 	evalResult *reliantv1.Node,
+	preallocatedMessageID string,
 ) (workflow.Future, string) {
 	activityName := nodeTypeToActivityName(node.GetType())
 
@@ -628,6 +673,7 @@ func (e *StepExecutor) startAction(
 
 	// Build structured input: pass the proto Node directly for proper protojson roundtrip
 	rtx := e.buildRuntimeContext(node)
+	rtx.AssistantMessageID = preallocatedMessageID
 	input := types.ActivityInput{Runtime: rtx, Node: evalResult}
 
 	future := workflow.ExecuteActivity(e.activityOptions(node), activityName, input)
@@ -656,6 +702,7 @@ func (e *StepExecutor) startAskQuestion(node *reliantv1.Node, evalResult *relian
 			LoopNodeID:    e.loopNodeID,
 			LoopIteration: e.loopIteration,
 			Metadata:      metadata,
+			Unattended:    IsUnattended(e.workflowInputs),
 			Logger:        workflow.GetLogger(gCtx),
 		})
 		if err != nil {
@@ -741,14 +788,12 @@ func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
 		}
 	}
 
-	// HeartbeatTimeout controls how quickly Temporal detects a dead activity.
-	// We heartbeat every 500ms (registry.go), so the server sees regular heartbeats.
-	// Using 30s gives enough room for worker restarts (Air hot-reload: compile + boot
-	// typically takes 5-15s) without Temporal marking the activity as dead.
+	// HeartbeatTimeout controls how quickly Temporal detects a worker that died
+	// without releasing its activities; see activityHeartbeatTimeout (registry.go).
 	// Let Temporal auto-generate ActivityID for deterministic replay.
 	return workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
 		StartToCloseTimeout: timeout,
-		HeartbeatTimeout:    30 * time.Second,
+		HeartbeatTimeout:    activityHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,

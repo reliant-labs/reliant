@@ -443,6 +443,11 @@ func handleMCPListTools(_ context.Context, payload []byte) ([]byte, error) {
 // --- mcp.call_tool ---
 
 type mcpCallToolRequest struct {
+	// SessionKey identifies the caller whose view of a stateful MCP server must
+	// stay private (the agent thread). Absent — from an older caller, or a CLI
+	// with no thread — it degrades to the shared client, which is how every
+	// non-session-scoped server behaves anyway. See internal/mcp/session.go.
+	SessionKey  string                 `json:"session_key,omitempty"`
 	ProjectPath string                 `json:"project_path"`
 	ServerName  string                 `json:"server_name"`
 	ToolName    string                 `json:"tool_name"`
@@ -472,9 +477,9 @@ func handleMCPCallTool(_ context.Context, payload []byte) ([]byte, error) {
 		err    error
 	)
 	if req.ProjectPath != "" {
-		result, err = mcpMgr.ProjectCallTool(req.ProjectPath, req.ServerName, req.ToolName, req.Arguments)
+		result, err = mcpMgr.ProjectCallTool(req.SessionKey, req.ProjectPath, req.ServerName, req.ToolName, req.Arguments)
 	} else {
-		result, err = mcpMgr.CallTool(req.ServerName, req.ToolName, req.Arguments)
+		result, err = mcpMgr.CallTool(req.SessionKey, req.ServerName, req.ToolName, req.Arguments)
 	}
 	if err != nil {
 		return json.Marshal(mcpCallToolResponse{Error: err.Error()})

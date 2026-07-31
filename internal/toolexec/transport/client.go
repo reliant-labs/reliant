@@ -46,6 +46,18 @@ func NewDaemonHTTPClient(cfg bootstrap.DaemonBootstrapConfig) (*http.Client, str
 		return nil, "", err
 	}
 
+	// The transport is the single choke point where a gateway URL becomes a
+	// dial, so normalization lands here: every caller gets a URL http2 can
+	// actually dial, or a named error, never a silent non-connection.
+	baseURL := cfg.GRPCURL
+	if !cfg.ServerMode {
+		normalized, err := cfg.GatewayURL()
+		if err != nil {
+			return nil, "", err
+		}
+		baseURL = normalized
+	}
+
 	wrap := func(rt http.RoundTripper) *http.Client {
 		return &http.Client{Transport: daemonAuthRoundTripper{next: rt, authToken: cfg.AuthToken}, Timeout: 0}
 	}
@@ -60,21 +72,21 @@ func NewDaemonHTTPClient(cfg bootstrap.DaemonBootstrapConfig) (*http.Client, str
 				return LocalhostDialContext(ctx, network, addr)
 			},
 		}
-		return wrap(tr), cfg.GRPCURL, nil
+		return wrap(tr), baseURL, nil
 	case bootstrap.TLSModeTLS:
 		tr := &http2.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: false, MinVersion: tls.VersionTLS12},
 			ReadIdleTimeout: 60 * time.Second,
 			PingTimeout:     15 * time.Second,
 		}
-		return wrap(tr), cfg.GRPCURL, nil
+		return wrap(tr), baseURL, nil
 	case bootstrap.TLSModeInsecureTLSSkipVerify:
 		tr := &http2.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
 			ReadIdleTimeout: 60 * time.Second,
 			PingTimeout:     15 * time.Second,
 		}
-		return wrap(tr), cfg.GRPCURL, nil
+		return wrap(tr), baseURL, nil
 	default:
 		return nil, "", fmt.Errorf("unsupported TLS mode: %q", cfg.TLSMode)
 	}

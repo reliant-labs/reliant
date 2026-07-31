@@ -1,0 +1,178 @@
+#!/usr/bin/env bash
+# wf-wait — block until a workflow execution's node-state fingerprint changes.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./_lib.sh
+
+usage() {
+  cat <<'EOF'
+Usage: wf-wait <execution-id> [--interval SECS] [--timeout SECS]
+               [--show] [--baseline FILE]
+
+Blocks until the execution's observable node state changes, then prints WHAT
+changed (key: old -> new) and exits. Designed to be backgrounded by a
+supervisor so it wakes exactly at judgment points.
+
+The fingerprint covers:
+  wf:<id>          status of the root workflow and every descendant (threads,
+                   spawns) — catches node-thread start/finish, pause/resume
+  checkpoint       current resume-at-position node (+ loop iteration)
+  step:<id>        count of recorded step executions per step (build/lint/...)
+  event:<node>     latest node_execution event type per node
+  questions_open / approvals_open   pending human-input gates
+
+Exit codes:
+  0  state changed (diff printed)
+  2  execution reached a terminal state (completed/failed/cancelled/expired) —
+     printed; also exits 2 immediately if already terminal at start
+  3  timeout with no change
+  1  usage or database error
+
+Options:
+  --interval SECS  Poll interval (default 10)
+  --timeout SECS   Give up after this long (default 7200)
+  --show           Print the current fingerprint and exit 0 (no waiting)
+  --baseline FILE  Diff against a fingerprint previously saved with --show
+                   instead of capturing a fresh one (lets a restarted
+                   supervisor resume waiting without missing a transition)
+
+Environment:
+  RELIANT_DB_URL  Postgres DSN (default: postgres://postgres:postgres@127.0.0.1:5434/reliant)
+
+Read-only: connects with default_transaction_read_only=on.
+EOF
+}
+
+interval=10 timeout=7200 show=0 baseline_file="" exec_arg=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --interval) interval="${2:?}"; shift 2 ;;
+    --timeout)  timeout="${2:?}";  shift 2 ;;
+    --show)     show=1; shift ;;
+    --baseline) baseline_file="${2:?}"; shift 2 ;;
+    -h|--help)  usage; exit 0 ;;
+    -*) echo "error: unknown option '$1'" >&2; usage >&2; exit 1 ;;
+    *)  [ -n "$exec_arg" ] && { usage >&2; exit 1; }; exec_arg="$1"; shift ;;
+  esac
+done
+[ -n "$exec_arg" ] || { usage >&2; exit 1; }
+case "$interval$timeout" in (*[!0-9]*) echo "error: --interval/--timeout must be integers" >&2; exit 1 ;; esac
+
+wid=$(resolve_execution_id "$exec_arg")
+
+# fingerprint — sorted "key|value" lines describing all observable node state.
+fingerprint() {
+  run_sql -At -v wid="$wid" <<'SQL'
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT line FROM (
+  SELECT 'wf:' || w.id || CASE WHEN w.spawned_by_node_id IS NOT NULL
+           THEN ' (' || w.workflow_name || ')' ELSE '' END
+         || '|' ||
+         CASE w.status WHEN 1 THEN 'pending' WHEN 2 THEN 'running'
+           WHEN 3 THEN 'completed' WHEN 4 THEN 'failed' WHEN 5 THEN 'cancelled'
+           WHEN 6 THEN 'paused' WHEN 7 THEN 'expired'
+           ELSE 'status='||w.status END AS line
+  FROM workflows w WHERE w.id IN (SELECT id FROM fam)
+  UNION ALL
+  SELECT 'checkpoint|' || cp.node_id || '@iter' || cp.loop_iteration
+  FROM workflow_checkpoints cp WHERE cp.workflow_id = :'wid'
+  UNION ALL
+  SELECT 'step:' || s.step_id || '|' || count(*)
+  FROM step_executions s WHERE s.workflow_id IN (SELECT id FROM fam)
+  GROUP BY s.step_id
+  UNION ALL
+  SELECT 'event:' || (d->>'node_id') || '|' || last_event FROM (
+    SELECT DISTINCT ON (cu.data::jsonb->>'node_id')
+      cu.data::jsonb AS d, cu.data::jsonb->>'event_type' AS last_event
+    FROM chat_updates cu
+    WHERE cu.chat_id = (SELECT chat_id FROM workflows WHERE id = :'wid')
+      AND cu.update_type = 9
+      AND cu.data::jsonb->>'workflow_id' IN (SELECT id FROM fam)
+    ORDER BY cu.data::jsonb->>'node_id', cu.sequence_number DESC
+  ) latest
+  UNION ALL
+  SELECT 'questions_open|' || count(*) FROM questions q
+  WHERE q.workflow_id = :'wid' AND q.status = 1
+  UNION ALL
+  SELECT 'approvals_open|' || count(*) FROM approvals a
+  WHERE a.chat_id = (SELECT chat_id FROM workflows WHERE id = :'wid')
+    AND a.status = 1
+) t ORDER BY line;
+SQL
+}
+
+root_status() {
+  run_sql -At -v wid="$wid" <<'SQL'
+SELECT status FROM workflows WHERE id = :'wid';
+SQL
+}
+
+status_name() {
+  case "$1" in
+    1) echo pending ;; 2) echo running ;; 3) echo completed ;; 4) echo failed ;;
+    5) echo cancelled ;; 6) echo paused ;; 7) echo expired ;; *) echo "status=$1" ;;
+  esac
+}
+
+is_terminal() { case "$1" in 3|4|5|7) return 0 ;; *) return 1 ;; esac; }
+
+# print_diff OLD_FILE NEW_FILE — human-readable "key: old -> new" lines.
+print_diff() {
+  awk -F'|' '
+    NR == FNR      { old[$1] = $2; next }
+                   { new[$1] = $2; seen[$1] = 1
+                     if (!($1 in old))          printf "+ %s: %s\n", $1, $2
+                     else if (old[$1] != $2)    printf "~ %s: %s -> %s\n", $1, old[$1], $2 }
+    END            { for (k in old) if (!(k in seen)) printf "- %s: %s\n", k, old[k] }
+  ' "$1" "$2"
+}
+
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/wf-wait.XXXXXX")
+trap 'rm -rf "$tmpdir"' EXIT
+
+if [ "$show" -eq 1 ]; then
+  fingerprint
+  exit 0
+fi
+
+st=$(root_status)
+if is_terminal "$st"; then
+  echo "TERMINAL: execution $wid is already $(status_name "$st")"
+  exit 2
+fi
+
+if [ -n "$baseline_file" ]; then
+  sort "$baseline_file" > "$tmpdir/base"
+else
+  fingerprint > "$tmpdir/base"
+fi
+
+deadline=$(( $(date +%s) + timeout ))
+while :; do
+  now=$(date +%s)
+  [ "$now" -ge "$deadline" ] && { echo "TIMEOUT: no state change in ${timeout}s for $wid"; exit 3; }
+  remaining=$(( deadline - now ))
+  sleep "$(( interval < remaining ? interval : remaining ))"
+
+  fingerprint > "$tmpdir/cur"
+  if ! cmp -s "$tmpdir/base" "$tmpdir/cur"; then
+    echo "CHANGED: $wid"
+    print_diff "$tmpdir/base" "$tmpdir/cur"
+    st=$(root_status)
+    if is_terminal "$st"; then
+      echo "TERMINAL: execution $wid is $(status_name "$st")"
+      exit 2
+    fi
+    exit 0
+  fi
+  st=$(root_status)
+  if is_terminal "$st"; then
+    # Terminal without a fingerprint diff shouldn't happen (status is in the
+    # fingerprint) but guard anyway.
+    echo "TERMINAL: execution $wid is $(status_name "$st")"
+    exit 2
+  fi
+done

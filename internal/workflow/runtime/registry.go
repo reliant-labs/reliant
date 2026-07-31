@@ -233,6 +233,43 @@ func categorizeError(err error) string {
 	return "unknown"
 }
 
+const (
+	// activityHeartbeatInterval is how often ActivityWrapper heartbeats while an
+	// activity runs. With MaxHeartbeatThrottleInterval=500ms on the worker
+	// (internal/workersetup), every tick reaches the server, so a server-side
+	// cancellation propagates within ~500ms.
+	activityHeartbeatInterval = 500 * time.Millisecond
+
+	// activityHeartbeatTimeout is how long Temporal waits for a heartbeat before
+	// declaring the activity dead and re-dispatching it. It is the recovery time
+	// for a worker that died WITHOUT releasing its activities — SIGKILL, OOM,
+	// crash, or an air rebuild that orphaned the process. A worker that exits
+	// cleanly reports the failure itself and never reaches this deadline.
+	//
+	// It deliberately does NOT need to cover a rebuild: a restarted worker is a
+	// new worker and never reclaims the old activity task, so stretching this
+	// only lengthens the dead air before the retry can start. Sizing is against
+	// the heartbeat cadence instead — 20 consecutive missed heartbeats — which
+	// leaves ample margin for a machine pinned by `go build`.
+	activityHeartbeatTimeout = 10 * time.Second
+)
+
+// workerStopped reports whether the activity worker has begun shutting down.
+// The SDK closes this channel at the top of Worker.Stop(), so a closed channel
+// means any error the activity produced after that point is shutdown fallout
+// rather than a real failure of the work.
+func workerStopped(ch <-chan struct{}) bool {
+	if ch == nil {
+		return false
+	}
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
+}
+
 // isTerminal checks if an error is terminal (non-retryable)
 func isTerminal(err error) bool {
 	if err == nil {
@@ -314,6 +351,40 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		maxAttempts = info.RetryPolicy.MaximumAttempts
 	}
 
+	// Worker shutdown (air hot-reload, k8s rollout) must unwind the activity
+	// NOW, not when the activity context is cancelled.
+	//
+	// The SDK's ordering is the trap (sdk/internal/internal_worker.go
+	// activityWorker.Stop -> baseWorker.Stop): Stop() closes the worker-stop
+	// channel FIRST, then waits WorkerStopTimeout for in-flight activities, and
+	// only cancels the background context that parents every activity ctx AFTER
+	// that wait has already expired. So an activity that watches only ctx.Done()
+	// learns about the shutdown at the exact moment the worker has given up on
+	// it and is exiting — too late to report anything. Nothing reaches the
+	// server, the activity task is abandoned mid-flight, and Temporal has to sit
+	// out the whole HeartbeatTimeout before it can re-dispatch. That stall is
+	// the "activity Heartbeat timeout" seen after every hot reload.
+	//
+	// Cancelling our own derived context off the stop channel inverts that: the
+	// activity unwinds within its normal cancellation latency (~100ms), and the
+	// worker is still alive to report the failure, so Temporal re-dispatches on
+	// the next backoff instead of after the heartbeat deadline.
+	workerStopCh := activity.GetWorkerStopChannel(ctx)
+	ctx, cancelForWorkerStop := context.WithCancel(ctx)
+	defer cancelForWorkerStop()
+	if workerStopCh != nil {
+		go func() {
+			select {
+			case <-workerStopCh:
+				logging.Info("[ActivityWrapper] Worker stopping, cancelling activity for fast re-dispatch",
+					"activityType", activityType,
+					"activityID", activityID)
+				cancelForWorkerStop()
+			case <-ctx.Done():
+			}
+		}()
+	}
+
 	// Extract step_id - try from input first, fall back to parsing activityID
 	// The workflow engine uses activityID format "stepID-timestamp" (e.g., "tally-1234567890")
 	inputInfo := extractActivityInputInfo(input)
@@ -354,16 +425,16 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	startTime := time.Now()
 
 	// Emit node execution "started" event for UI streaming
-	w.emitNodeExecutionEvent(ctx, "started", stepID, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
+	w.emitNodeExecutionEvent(ctx, "started", false, stepID, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
 
-	// Start heartbeat goroutine for fast cancellation detection
-	// Heartbeats every 500ms. With MaxHeartbeatThrottleInterval=500ms on the worker,
-	// every call reaches the server and cancellation propagates within ~500ms.
+	// Start heartbeat goroutine for fast cancellation detection.
+	// See activityHeartbeatInterval / activityHeartbeatTimeout for the cadence
+	// and the deadline it is sized against.
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat() // Stop heartbeat when activity completes
 
 	go func() {
-		ticker := time.NewTicker(500 * time.Millisecond)
+		ticker := time.NewTicker(activityHeartbeatInterval)
 		defer ticker.Stop()
 
 		for {
@@ -428,7 +499,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			endTime := time.Now()
 			duration := endTime.Sub(startTime).Milliseconds()
 			errMsg := panicErr.Error()
-			w.emitNodeExecutionEvent(ctx, "failed", stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &duration, nil, &errMsg)
+			w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &duration, nil, &errMsg)
 
 			// Re-panic to propagate to Temporal
 			panic(r)
@@ -442,6 +513,29 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Calculate execution duration
 	endTime := time.Now()
 	durationMs := endTime.Sub(startTime).Milliseconds()
+
+	// The worker going away is infrastructure churn, not a failure of this step,
+	// and whatever error the activity unwound with describes the cancellation
+	// rather than the cause. Rewrite it to an explicitly retryable
+	// WorkerShutdown error so it can never be mistaken for a user pause: a
+	// context.Canceled surfacing as a Temporal CanceledError would park the
+	// chat until the user manually resumes. Skip the chat-visible error event
+	// and Sentry too — the user should see the step retry, not a red error for a
+	// rebuild they triggered.
+	if execErr != nil && workerStopped(workerStopCh) {
+		logging.Info("[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
+			"activityType", activityType,
+			"activityID", activityID,
+			"attemptNumber", attemptNumber,
+			"durationMs", durationMs,
+			"error", execErr)
+		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, execErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		return zeroOutput, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("worker shut down while running %s; retrying on the next worker", activityType),
+			"WorkerShutdown",
+			execErr,
+		)
+	}
 
 	if execErr != nil {
 		// Use Warn for non-terminal errors (e.g. YAML validation failures,
@@ -485,7 +579,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 
 		// Emit node execution "failed" event for UI streaming
 		errMsg := execErr.Error()
-		w.emitNodeExecutionEvent(ctx, "failed", stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
+		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 
 		return zeroOutput, execErr
 	}
@@ -503,7 +597,8 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Emit node execution "completed" event for UI streaming
 	// Try to extract exit_code from result for run steps
 	var exitCode *int
-	if resultMap := toMapInterface(result); resultMap != nil {
+	resultMap := toMapInterface(result)
+	if resultMap != nil {
 		if ec, ok := resultMap["exit_code"]; ok {
 			switch v := ec.(type) {
 			case float64:
@@ -517,7 +612,9 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			}
 		}
 	}
-	w.emitNodeExecutionEvent(ctx, "completed", stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, exitCode, nil)
+	// `skipped` is stamped on the output by the activity that records the skip,
+	// so this reads the output rather than matching on an activity name.
+	w.emitNodeExecutionEvent(ctx, "completed", model.IsSkippedOutput(resultMap), stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, exitCode, nil)
 
 	return result, nil
 }
@@ -626,11 +723,44 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		"attemptNumber", attemptNumber)
 }
 
+// nodeStatusFor is the node's state, given the lifecycle event that produced it
+// and whether the node was skipped.
+//
+// The two are different questions and only the second can say a node did not
+// run. A skipped node's activity completes normally, so eventType alone reports
+// it as COMPLETED — which is why NodeStatusSkipped sat in the proto and in
+// db.models with nothing ever assigning it, and why `workflow watch` printed
+// "✓ node review completed" for a reviewer that was configured off.
+func nodeStatusFor(eventType string, skipped bool) db.NodeExecutionStatus {
+	if skipped {
+		return db.NodeStatusSkipped
+	}
+	switch eventType {
+	case "started":
+		return db.NodeStatusRunning
+	case "completed":
+		return db.NodeStatusCompleted
+	case "failed":
+		return db.NodeStatusFailed
+	case "cancelled":
+		return db.NodeStatusCancelled
+	default:
+		return db.NodeStatusRunning
+	}
+}
+
 // emitNodeExecutionEvent emits a node execution event for UI streaming.
 // This is a best-effort write - it will not fail the activity if the write fails.
 func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 	ctx context.Context,
 	eventType string,
+	// skipped marks a node whose condition evaluated false. Its activity ran to
+	// completion — so the LIFECYCLE event really is "completed" — but the node's
+	// work never happened. Those are two different facts and the event carries
+	// both: event_type is the lifecycle, status is the verdict. Reporting only
+	// the lifecycle is how `workflow watch` printed "✓ node review completed"
+	// for a reviewer that never ran.
+	skipped bool,
 	nodeID string,
 	nodeType string,
 	chatID string,
@@ -651,20 +781,7 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 		return
 	}
 
-	// Determine node status from event type
-	var status db.NodeExecutionStatus
-	switch eventType {
-	case "started":
-		status = db.NodeStatusRunning
-	case "completed":
-		status = db.NodeStatusCompleted
-	case "failed":
-		status = db.NodeStatusFailed
-	case "cancelled":
-		status = db.NodeStatusCancelled
-	default:
-		status = db.NodeStatusRunning
-	}
+	status := nodeStatusFor(eventType, skipped)
 
 	// Determine node type from activity type (strip V2_ prefix if present)
 	cleanNodeType := strings.TrimPrefix(nodeType, "")
@@ -873,62 +990,8 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflow
 		return
 	}
 
-	// Marshal output to JSON
-	var outputJSON sql.NullString
-	if output != nil {
-		if jsonBytes, err := json.Marshal(output); err == nil {
-			outputJSON = sql.NullString{String: string(jsonBytes), Valid: true}
-		}
-	}
-
-	// Extract exit_code if available in output
-	var exitCode sql.NullInt64
-	if output != nil {
-		if outputMap := toMapInterface(output); outputMap != nil {
-			if ec, ok := outputMap["exit_code"]; ok {
-				switch v := ec.(type) {
-				case int:
-					exitCode = sql.NullInt64{Int64: int64(v), Valid: true}
-				case int64:
-					exitCode = sql.NullInt64{Int64: v, Valid: true}
-				case float64:
-					exitCode = sql.NullInt64{Int64: int64(v), Valid: true}
-				}
-			}
-		}
-	}
-
-	// Determine success based on error and exit_code
-	var success sql.NullBool
-	if execErr != nil {
-		success = sql.NullBool{Bool: false, Valid: true}
-	} else if exitCode.Valid {
-		success = sql.NullBool{Bool: exitCode.Int64 == 0, Valid: true}
-	} else {
-		success = sql.NullBool{Bool: true, Valid: true}
-	}
-
-	// Build loop context fields
-	var loopNodeIDSQL sql.NullString
-	var loopIterationSQL sql.NullInt64
-	if loopNodeID != "" {
-		loopNodeIDSQL = sql.NullString{String: loopNodeID, Valid: true}
-		loopIterationSQL = sql.NullInt64{Int64: int64(loopIteration), Valid: true}
-	}
-
-	exec := &db.StepExecution{
-		ID:            uuid.New().String(),
-		WorkflowID:    workflowID,
-		StepID:        stepID,
-		ActivityName:  activityType,
-		OutputJSON:    outputJSON,
-		ExitCode:      exitCode,
-		Success:       success,
-		DurationMs:    sql.NullInt64{Int64: durationMs, Valid: true},
-		LoopNodeID:    loopNodeIDSQL,
-		LoopIteration: loopIterationSQL,
-		CreatedAt:     time.Now(),
-	}
+	exec := buildStepExecution(workflowID, stepID, activityType, output, execErr, durationMs, loopNodeID, loopIteration)
+	verdict := recordedVerdict{ExitCode: exec.ExitCode, Success: exec.Success}
 
 	// Use a background context with timeout for the DB write.
 	// The activity context may be cancelled or about to be cancelled,
@@ -949,9 +1012,99 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflow
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType,
-			"success", success.Bool,
+			"success", verdict.Success.Bool,
 			"durationMs", durationMs)
 	}
+}
+
+// buildStepExecution assembles the step_executions row for one activity
+// outcome. Split out from writeStepExecution so what the row CLAIMS is
+// testable without a database — the claim is the part that was wrong.
+func buildStepExecution(workflowID, stepID, activityType string, output interface{}, execErr error, durationMs int64, loopNodeID string, loopIteration int) *db.StepExecution {
+	// Marshal the output once and reuse it for both the stored JSON and the
+	// verdict, instead of round-tripping through encoding/json twice.
+	var outputJSON sql.NullString
+	var outputMap map[string]interface{}
+	if output != nil {
+		if jsonBytes, err := json.Marshal(output); err == nil {
+			outputJSON = sql.NullString{String: string(jsonBytes), Valid: true}
+			_ = json.Unmarshal(jsonBytes, &outputMap)
+		}
+	}
+
+	verdict := deriveRecordedVerdict(outputMap, execErr)
+
+	var loopNodeIDSQL sql.NullString
+	var loopIterationSQL sql.NullInt64
+	if loopNodeID != "" {
+		loopNodeIDSQL = sql.NullString{String: loopNodeID, Valid: true}
+		loopIterationSQL = sql.NullInt64{Int64: int64(loopIteration), Valid: true}
+	}
+
+	return &db.StepExecution{
+		ID:            uuid.New().String(),
+		WorkflowID:    workflowID,
+		StepID:        stepID,
+		ActivityName:  activityType,
+		OutputJSON:    outputJSON,
+		ExitCode:      verdict.ExitCode,
+		Success:       verdict.Success,
+		DurationMs:    sql.NullInt64{Int64: durationMs, Valid: true},
+		LoopNodeID:    loopNodeIDSQL,
+		LoopIteration: loopIterationSQL,
+		// No .UTC(): created_at is timestamptz, so the offset is preserved and
+		// normalized on the way in and a local time stores the same instant.
+		// This site is where the two-basis bug was found — it wrote local time
+		// into a `timestamp without time zone` column while workflows wrote UTC
+		// into another — and adding one more .UTC() would have left the next
+		// call site free to make the same mistake.
+		CreatedAt: time.Now(),
+	}
+}
+
+// recordedVerdict is what a step_executions row records about whether the step
+// passed: the exit code when there is one, and success.
+//
+// A skipped node is NOT distinguished here. It does not need to be: the row
+// already carries an exact discriminator — activity_name = SkippedStep and
+// output_json = {"skipped": true} — and adding a third state to `success` would
+// mean a reader had to learn a new encoding beside a discriminator that already
+// exists. The fix for "a skip reads as a pass" belongs where readers actually
+// look, which is the node execution event (see emitNodeExecutionEvent) and the
+// `workflow status` renderer.
+type recordedVerdict struct {
+	ExitCode sql.NullInt64
+	Success  sql.NullBool
+}
+
+// deriveRecordedVerdict decides what a step execution row claims about its step,
+// from the activity's already-marshalled output map and its error.
+//
+// outputMap is the activity output as JSON sees it; nil when the activity
+// produced no output (the error path) or produced something that is not a JSON
+// object.
+func deriveRecordedVerdict(outputMap map[string]interface{}, execErr error) recordedVerdict {
+	var v recordedVerdict
+	if ec, ok := outputMap["exit_code"]; ok {
+		switch n := ec.(type) {
+		case int:
+			v.ExitCode = sql.NullInt64{Int64: int64(n), Valid: true}
+		case int64:
+			v.ExitCode = sql.NullInt64{Int64: n, Valid: true}
+		case float64:
+			v.ExitCode = sql.NullInt64{Int64: int64(n), Valid: true}
+		}
+	}
+
+	switch {
+	case execErr != nil:
+		v.Success = sql.NullBool{Bool: false, Valid: true}
+	case v.ExitCode.Valid:
+		v.Success = sql.NullBool{Bool: v.ExitCode.Int64 == 0, Valid: true}
+	default:
+		v.Success = sql.NullBool{Bool: true, Valid: true}
+	}
+	return v
 }
 
 // NOTE: writeActivityUpdate has been removed.

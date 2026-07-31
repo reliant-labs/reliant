@@ -164,6 +164,9 @@ func validateStructure(wf *reliantv1.Workflow, result *Result) {
 		// Validate timeout format if specified
 		validateNodeTimeout(node, nodePath, result)
 
+		// Validate the declared run outcome if specified
+		validateNodeOutcome(node, nodePath, result)
+
 		// Validate response_tool schema if present
 		validateResponseToolSchema(node, nodePath, result)
 
@@ -498,6 +501,18 @@ func validateInlineWorkflow(wf *reliantv1.Workflow, basePath []string, result *R
 
 		// Per-node-type validation
 		validateNodeArgs(node, nodePath, result)
+
+		// An inline block (a loop body, or an inline sub-workflow) is executed
+		// by the inline executor, which does not run the run's outcome. A
+		// declaration here would look right and do nothing — the exact failure
+		// mode the field exists to prevent — so reject it instead. Put the
+		// terminal node on the OWNING graph, or in a referenced workflow, which
+		// gets its own execution and its own recorded outcome.
+		if node.GetOutcome() != "" {
+			result.AddErrorWithSuggestion(CategoryStructure, nodePath, "outcome",
+				"outcome cannot be declared inside an inline workflow",
+				"declare it on a node of the workflow's own graph (or in a referenced workflow, which records its own outcome)")
+		}
 
 		validateInlineWorkflows(node, nodePath, result)
 	}
@@ -854,6 +869,26 @@ func validateNodeTimeout(node *reliantv1.Node, nodePath []string, result *Result
 	if duration < 0 {
 		result.AddError(CategoryStructure, nodePath, "timeout",
 			fmt.Sprintf("timeout cannot be negative: '%s'", timeoutStr))
+	}
+}
+
+// =============================================================================
+// OUTCOME VALIDATION
+// =============================================================================
+
+// validateNodeOutcome rejects an outcome value the runtime cannot record. The
+// whole point of the field is that a supervisor can trust it, so a typo
+// ("fail", "failed") must be a load-time error rather than a node that silently
+// stamps nothing and lets a red run report success.
+func validateNodeOutcome(node *reliantv1.Node, nodePath []string, result *Result) {
+	outcome := node.GetOutcome()
+	if outcome == "" {
+		return
+	}
+	if !model.IsValidOutcome(outcome) {
+		result.AddErrorWithSuggestion(CategoryStructure, nodePath, "outcome",
+			fmt.Sprintf("unknown outcome %q", outcome),
+			fmt.Sprintf("valid outcomes are: %s", strings.Join(model.ValidOutcomes, ", ")))
 	}
 }
 

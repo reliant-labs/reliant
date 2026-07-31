@@ -1,7 +1,9 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { useChatNavigationStore } from "../chatNavigationStore";
 import { useProjectStore } from "../projectStore";
 import { useWorktreeStore } from "../worktreeStore";
+import { chatKeys } from "../../hooks/chat-queries";
+import { queryClient } from "../../lib/query-client";
 
 const selectChatMock = vi.fn();
 const chatStoreGetStateMock = vi.hoisted(() => vi.fn());
@@ -14,11 +16,11 @@ vi.mock("../chatStore", () => ({
 
 describe("chatNavigationStore worktree-aware navigation", () => {
   beforeEach(() => {
+    queryClient.clear();
     selectChatMock.mockReset();
     chatStoreGetStateMock.mockReset();
     chatStoreGetStateMock.mockReturnValue({
       activeChatId: null,
-      chats: new Map(),
       selectChat: selectChatMock,
       clearCurrentChat: vi.fn(),
     });
@@ -78,6 +80,10 @@ describe("chatNavigationStore worktree-aware navigation", () => {
     });
   });
 
+  afterEach(() => {
+    queryClient.clear();
+  });
+
   it("switches worktree context before selecting the next chat", async () => {
     const nextChat = {
       id: "chat-2",
@@ -99,9 +105,15 @@ describe("chatNavigationStore worktree-aware navigation", () => {
 
     chatStoreGetStateMock.mockReturnValue({
       activeChatId: null,
-      chats: new Map([[nextChat.id, nextChat]]),
       selectChat: selectChatMock,
       clearCurrentChat: vi.fn(),
+    });
+
+    // Chats are sourced from the React Query list cache (single source of truth).
+    queryClient.setQueryData(chatKeys.list("project-1"), {
+      chats: [nextChat],
+      total: 1,
+      lastUserUpdateSequence: 1,
     });
 
     await useChatNavigationStore.getState().navigateNext();

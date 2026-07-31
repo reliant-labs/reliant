@@ -2,8 +2,8 @@
 INSERT INTO worktrees (
     id, name, path, branch, base_branch, project_id, chat_id,
     status, is_main, created_at, updated_at, last_active, deleted_at,
-    base_branches
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+    base_branches, daemon_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
 
 -- name: GetWorktree :one
 SELECT * FROM worktrees WHERE id = $1;

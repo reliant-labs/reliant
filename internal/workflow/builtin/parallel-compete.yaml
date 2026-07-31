@@ -57,9 +57,9 @@ inputs:
         description: Temperature for implementers
       compaction_threshold:
         type: integer
-        default: 185000
-        min: 10000
-        description: Token count to trigger context compaction
+        default: 0
+        min: 0
+        description: Token count to trigger context compaction (0 = derive from the model's context window)
       max_turns:
         type: integer
         default: 200
@@ -94,6 +94,13 @@ inputs:
         multi: true
         default: []
         description: Presets available for implementer's spawn tool (empty = spawn disabled)
+      skills:
+        type: array
+        default: []
+        description: |
+          Namespaced skill paths (e.g. "forge/getting-started") to preload into each
+          implementer agent's context before the first turn, so it works from the
+          source-of-truth skills instead of loading them by hand.
 
 nodes:
   # Prompt improvement - ephemeral call, saves improved result to main thread
@@ -176,6 +183,7 @@ nodes:
             system_prompt: "{{inputs.implementer.system_prompt}}"
             thinking_level: "{{inputs.implementer.thinking_level}}"
             spawn_presets: "{{inputs.implementer.spawn_presets}}"
+            skills: "{{inputs.implementer.skills}}"
 
       edges:
         - from: create_wt

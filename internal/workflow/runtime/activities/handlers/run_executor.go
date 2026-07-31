@@ -120,7 +120,21 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	}
 
 	if result.IsError {
-		// Tool reported an error — treat as non-zero exit
+		// A transport failure is NOT a command verdict. Reporting it as exit 1
+		// with empty stdout is indistinguishable from a real lint/test/build
+		// failure, so a gate "fails" on work that was never attempted, burns a
+		// retry, and points the agent at a log file that was never written (or
+		// worse, at the previous iteration's). Surface it as an error so the
+		// activity's retry policy — not the workflow's attempt budget — owns it.
+		if toolexec.IsTransportErrorCode(result.ErrorCode) {
+			return "", "", -1, false, &toolexec.TransportError{
+				Code:    result.ErrorCode,
+				Command: command,
+				Detail:  result.Content,
+			}
+		}
+		// The tool itself reported an error (bad input, tool not found, …):
+		// that IS a verdict about this command.
 		return "", result.Content, 1, false, nil
 	}
 
@@ -176,6 +190,13 @@ func resolveRunExecutorContext(ctx context.Context, repo db.Repository, chatID s
 		}
 		execCtx.WorktreeID = worktree.ID
 		execCtx.WorktreePath = worktree.Path
+		// A worktree's checkouts exist on disk only on the daemon that created
+		// it. Pin execution there so a worktree-bound (e.g. branch) chat runs
+		// against its actual branch, not a default daemon that lacks the path.
+		// A node/workflow-level selector still overrides this (see run_step.go).
+		if worktree.DaemonID != nil && *worktree.DaemonID != "" {
+			execCtx.DaemonSelector = &toolexec.DaemonSelector{ID: *worktree.DaemonID}
+		}
 	}
 
 	return execCtx, nil

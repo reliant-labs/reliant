@@ -120,6 +120,37 @@ func CelCoalesceFunction() cel.EnvOption {
 	return wfcel.CelCoalesceFunction()
 }
 
+// LoopScope carries the loop namespaces a node condition is evaluated against when
+// the node runs inside a loop iteration: `iter` (which iteration this is) and
+// `outputs` (the PREVIOUS iteration's declared loop outputs). Nil outside a loop.
+//
+// Without it a node's `condition` could see strictly less than the very same node's
+// config templates, which EvaluateNodeConfig already resolves against iter/outputs.
+// That asymmetry failed SILENTLY rather than loudly: EdgeEvalContext.Namespaces()
+// declares `iter` and `outputs` unconditionally, so `outputs.foo` in a condition
+// compiled fine and then evaluated against an empty map — every has() guard false,
+// every branch taken as if the first iteration. A condition is the one place a
+// workflow can say "skip this node THIS time round", so it is exactly the place
+// that needs to know which time round it is.
+type LoopScope struct {
+	Iter    *model.IterContext
+	Outputs map[string]interface{}
+}
+
+func (s *LoopScope) iter() *model.IterContext {
+	if s == nil {
+		return nil
+	}
+	return s.Iter
+}
+
+func (s *LoopScope) outputs() map[string]interface{} {
+	if s == nil {
+		return nil
+	}
+	return s.Outputs
+}
+
 // evaluateNodeCondition evaluates a node's condition field to determine if it should execute.
 // Returns (shouldExecute bool, error).
 func evaluateNodeCondition(
@@ -127,6 +158,7 @@ func evaluateNodeCondition(
 	nodeOutputs map[string]interface{},
 	workflowInputs map[string]interface{},
 	workflowContext map[string]interface{},
+	scope *LoopScope,
 ) (bool, error) {
 	conditionExpr := model.ConditionExpr(node)
 	if conditionExpr == "" {
@@ -143,6 +175,8 @@ func evaluateNodeCondition(
 		Nodes:    nodeOutputs,
 		Inputs:   workflowInputs,
 		Workflow: workflowContextToTyped(workflowContext),
+		Iter:     scope.iter(),
+		Outputs:  scope.outputs(),
 	}
 	return wfcel.EvaluateBool(conditionExpr, ctx)
 }
@@ -163,6 +197,7 @@ func skipNodeIfConditionFalse(
 	chatID string,
 	workflowName string,
 	logger log.Logger,
+	scope *LoopScope,
 ) (skipped bool, skipEvent *core.WorkflowEvent, err error) {
 	condExpr := model.ConditionExpr(node)
 	if condExpr == "" {
@@ -170,7 +205,7 @@ func skipNodeIfConditionFalse(
 	}
 
 	workflowContext := buildWorkflowContext(workflowID, workflowName, chatID, workflowInputs)
-	shouldExecute, err := evaluateNodeCondition(node, nodeOutputs, workflowInputs, workflowContext)
+	shouldExecute, err := evaluateNodeCondition(node, nodeOutputs, workflowInputs, workflowContext, scope)
 	if err != nil {
 		return false, nil, fmt.Errorf("node condition evaluation failed for %s: %w", node.GetId(), err)
 	}
@@ -192,7 +227,7 @@ func skipNodeIfConditionFalse(
 		},
 	})
 	var skipResult map[string]interface{}
-	_ = workflow.ExecuteActivity(skipCtx, "SkippedStep", map[string]interface{}{
+	_ = workflow.ExecuteActivity(skipCtx, model.ActivitySkippedStep, map[string]interface{}{
 		"workflow_id": workflowID,
 		"chat_id":     chatID,
 		"step_id":     node.GetId(),

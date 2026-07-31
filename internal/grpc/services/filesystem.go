@@ -82,8 +82,54 @@ func (s *FileSystemService) validatePath(basePath, requestedPath string) (string
 	return absFullPath, nil
 }
 
-// buildFileTree builds a file tree from a directory
-func (s *FileSystemService) buildFileTree(fsPath string, relativePath string, showHidden bool) ([]*reliantv1.FileNode, error) {
+// treeUnlimited is the remaining-depth sentinel meaning "recurse without bound".
+const treeUnlimited = -1
+
+// treeSkipDirs are directory names never shown in the file tree.
+var treeSkipDirs = map[string]bool{
+	"node_modules": true,
+	"dist":         true,
+	"__pycache__":  true,
+	".git":         true,
+}
+
+// treeIncludeEntry reports whether a directory entry should appear in the tree,
+// applying the always-skipped noise dirs and the show_hidden dotfile rule. The
+// same predicate backs the walk and the has_children probe so the expand
+// chevron always matches what an expand would actually reveal.
+func treeIncludeEntry(name string, isDir, showHidden bool) bool {
+	if isDir && treeSkipDirs[name] {
+		return false
+	}
+	if !showHidden && strings.HasPrefix(name, ".") {
+		return false
+	}
+	return true
+}
+
+// dirHasVisibleChildren reports whether dir holds at least one entry that would
+// be shown in the tree (respecting show_hidden), short-circuiting on the first
+// match. Used to set the has_children hint at the depth boundary without walking
+// the subtree.
+func (s *FileSystemService) dirHasVisibleChildren(dir string, showHidden bool) bool {
+	entries, err := s.fs.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if treeIncludeEntry(e.Name(), e.IsDir(), showHidden) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildFileTree performs a live, depth-limited walk of a directory. remainingDepth
+// caps how many more levels of children to descend: treeUnlimited (-1) recurses
+// fully; N>0 descends N levels (1 = immediate children only). Sizes/mtimes come
+// from a live stat of each entry. Directory nodes at the boundary carry
+// HasChildren instead of eagerly-loaded Children, powering lazy expansion.
+func (s *FileSystemService) buildFileTree(fsPath string, relativePath string, showHidden bool, remainingDepth int) ([]*reliantv1.FileNode, error) {
 	entries, err := s.fs.ReadDir(fsPath)
 	if err != nil {
 		return nil, err
@@ -91,20 +137,13 @@ func (s *FileSystemService) buildFileTree(fsPath string, relativePath string, sh
 
 	var nodes []*reliantv1.FileNode
 	for _, entry := range entries {
-		// Skip common ignore patterns (always skip these)
-		if entry.Name() == "node_modules" ||
-			entry.Name() == "dist" ||
-			entry.Name() == "__pycache__" {
+		name := entry.Name()
+		if !treeIncludeEntry(name, entry.IsDir(), showHidden) {
 			continue
 		}
 
-		// Skip hidden files unless showHidden is true
-		if !showHidden && strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-
-		entryPath := filepath.Join(fsPath, entry.Name())
-		relPath := filepath.Join(relativePath, entry.Name())
+		entryPath := filepath.Join(fsPath, name)
+		relPath := filepath.Join(relativePath, name)
 
 		info, err := entry.Info()
 		if err != nil {
@@ -112,23 +151,31 @@ func (s *FileSystemService) buildFileTree(fsPath string, relativePath string, sh
 		}
 
 		node := &reliantv1.FileNode{
-			Name: entry.Name(),
-			Path: relPath,
+			Name:     name,
+			Path:     relPath,
+			Modified: proto.String(info.ModTime().Format(time.RFC3339)),
 		}
 
 		if entry.IsDir() {
 			node.Type = reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
-			// Recursively build children
-			children, err := s.buildFileTree(entryPath, relPath, showHidden)
-			if err == nil {
-				node.Children = children
+			// Descend when unlimited or more than one level remains; otherwise
+			// this is the boundary — record whether a chevron is warranted.
+			if remainingDepth == treeUnlimited || remainingDepth > 1 {
+				childDepth := remainingDepth
+				if remainingDepth > 0 {
+					childDepth = remainingDepth - 1
+				}
+				children, err := s.buildFileTree(entryPath, relPath, showHidden, childDepth)
+				if err == nil {
+					node.Children = children
+				}
+				node.HasChildren = len(node.Children) > 0
+			} else {
+				node.HasChildren = s.dirHasVisibleChildren(entryPath, showHidden)
 			}
 		} else {
 			node.Type = reliantv1.FileNodeType_FILE_NODE_TYPE_FILE
-			size := info.Size()
-			node.Size = proto.Int64(size)
-			modTime := info.ModTime().Format(time.RFC3339)
-			node.Modified = proto.String(modTime)
+			node.Size = proto.Int64(info.Size())
 		}
 
 		nodes = append(nodes, node)
@@ -198,8 +245,14 @@ func (s *FileSystemService) GetFileTree(
 		return nil, err
 	}
 
-	// Build file tree
-	files, err := s.buildFileTree(absFullPath, requestedPath, req.Msg.ShowHidden)
+	// Build file tree from a live, depth-limited walk. Depth 0 keeps the full
+	// recursive tree (back-compat); N returns N levels of children below path.
+	depth := treeUnlimited
+	if req.Msg.Depth > 0 {
+		depth = int(req.Msg.Depth)
+	}
+
+	files, err := s.buildFileTree(absFullPath, requestedPath, req.Msg.ShowHidden, depth)
 	if err != nil {
 		logging.Error("Failed to read directory", "error", err, "path", absFullPath)
 		return nil, connect.NewError(connect.CodeInternal, err)

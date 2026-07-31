@@ -68,6 +68,7 @@ type StreamingHub interface {
 type HubStats struct {
 	TotalPublished   uint64
 	TotalDropped     uint64
+	TotalCoalesced   uint64
 	TotalSubscribers uint64
 	ActiveChats      int
 }

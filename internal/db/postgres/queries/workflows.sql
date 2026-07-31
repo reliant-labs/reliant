@@ -56,6 +56,16 @@ UPDATE workflows SET
 WHERE id = $2 AND status = $3
 RETURNING *;
 
+-- name: SetWorkflowOutcome :one
+-- Record the run's verdict (Node.outcome of the terminal node it reached).
+-- Written once at completion and never reconciled from Temporal, unlike status:
+-- a graph that routes to its `failed` node is a COMPLETED Temporal execution,
+-- so the verdict has nowhere else to live.
+UPDATE workflows SET
+    outcome = $1
+WHERE id = $2
+RETURNING *;
+
 -- name: UpdateWorkflowName :one
 -- Update workflow name (only allowed when status is pending)
 UPDATE workflows SET
@@ -101,16 +111,73 @@ WHERE w.parent_id IS NULL
 ORDER BY w.created_at DESC
 LIMIT 1;
 
--- name: CompleteChildWorkflows :exec
--- Complete all child workflow records owned by a parent workflow.
--- Called when a workflow reaches a terminal state to cascade completion to all
+-- name: CascadeTerminalStatusToDescendants :exec
+-- Move every DESCENDANT workflow record owned by a parent to the terminal
+-- status the parent itself reached. Called when a workflow ends, to drain the
 -- children (spawn children, thread records, etc.) that are not yet terminal.
--- Matches running (2) and paused (6) children — prevents orphaned children
--- from keeping the chat permanently stuck as "active".
-UPDATE workflows 
-SET status = 3, completed_at = NOW()
-WHERE parent_id = $1 
-  AND status IN (2, 6);
+--
+-- The status is the caller's, not a constant. Writing a fixed "completed" here
+-- laundered every terminated run into a finished one: a cancel terminated 23
+-- descendants mid-flight and recorded all 23 as COMPLETED, so any later count
+-- of completed units over-counted by the whole subtree. A descendant of a
+-- cancelled run was cancelled; a descendant of a failed run did not complete
+-- either. CHAT_WORKFLOW_STATUS already distinguishes them (3=completed,
+-- 4=failed, 5=cancelled, 7=expired) — nothing new needs inventing, the write
+-- just has to stop discarding what it knows.
+--
+-- Recursive: a spawn's own spawns (grandchildren and deeper) must end too — a
+-- one-level cascade leaves them running/paused forever, which keeps the chat
+-- permanently "active" in chats_with_activity and (for paused rows) permanently
+-- exempt from the progress watchdog.
+-- Matches running (2) and paused (6) descendants.
+WITH RECURSIVE descendants AS (
+    SELECT c.id FROM workflows c WHERE c.parent_id = $1
+    UNION ALL
+    SELECT g.id FROM workflows g
+    JOIN descendants d ON g.parent_id = d.id
+)
+UPDATE workflows AS t
+SET status = $2, completed_at = NOW()
+FROM descendants
+WHERE t.id = descendants.id
+  AND t.status IN (2, 6);
+
+-- name: ReapOrphanedWorkflowDescendants :execrows
+-- Enforce the invariant CascadeTerminalStatusToDescendants asserts from the
+-- other direction: a workflow whose PARENT is terminal is not running.
+--
+-- CascadeTerminalStatusToDescendants only runs when the write path that moved a
+-- parent to a terminal status remembers to call it. Several do not, and each
+-- omission strands the whole subtree at running (2) / paused (6) forever:
+-- nothing else ever revisits those rows, because the reconciler skips every
+-- workflow with a parent_id (its lifecycle is the parent's job) and
+-- `workflow ps` filters on status alone, so the orphans are reported as live
+-- runs next to real ones.
+--
+-- The known omissions this repairs are TerminateWorkflow paths. A terminate is
+-- a hard kill: the workflow's own completion handler never runs, so the
+-- cascade its terminal-status activity would have performed never happens.
+-- Every caller is expected to cascade for itself — this is the backstop that
+-- keeps one forgotten call site from stranding rows permanently.
+--
+-- Anchored on ANY terminal parent, not just roots, so a terminal mid-tree
+-- spawn drains its own subtree. Inherits the terminal ANCESTOR's status, which
+-- is what the direct cascade writes, so a row reaped here stays
+-- indistinguishable from one cascaded there — including the distinction
+-- between a run that finished and one that was terminated.
+WITH RECURSIVE descendants AS (
+    SELECT c.id, p.status AS terminal_status FROM workflows c
+    JOIN workflows p ON c.parent_id = p.id
+    WHERE p.status IN (3, 4, 5, 7)
+    UNION ALL
+    SELECT g.id, d.terminal_status FROM workflows g
+    JOIN descendants d ON g.parent_id = d.id
+)
+UPDATE workflows AS t
+SET status = descendants.terminal_status, completed_at = NOW()
+FROM descendants
+WHERE t.id = descendants.id
+  AND t.status IN (2, 6);
 
 -- name: ListWorkflowsByStatus :many
 -- List all workflows with a specific status (e.g., 2=running, 6=paused).

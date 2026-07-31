@@ -108,6 +108,52 @@ function findNodeByPath(nodes: FileNode[], path: string): FileNode | null {
   return null;
 }
 
+// reconcileChildren merges a freshly-fetched child list against the previous one
+// so that still-expanded subdirectories keep their already-loaded grandchildren
+// (avoids a collapse-flash while those subtrees refetch). A directory that is no
+// longer expanded drops back to "not loaded" (undefined) so re-expanding it
+// fetches fresh data instead of showing a stale subtree.
+function reconcileChildren(
+  next: FileNode[],
+  prev: FileNode[] | undefined,
+  expanded: Set<string>
+): FileNode[] {
+  if (!prev || prev.length === 0) return next;
+  const prevByPath = new Map(prev.map((c) => [c.path, c] as const));
+  return next.map((child) => {
+    if (child.type === "directory" && child.children === undefined && expanded.has(child.path)) {
+      const old = prevByPath.get(child.path);
+      if (old && old.children !== undefined) {
+        return { ...child, children: old.children };
+      }
+    }
+    return child;
+  });
+}
+
+// setChildrenAtPath immutably replaces the children of the node at `path` (or the
+// whole tree when `path` is the root), reconciling against the existing subtree.
+function setChildrenAtPath(
+  tree: FileNode[],
+  path: string,
+  newChildren: FileNode[],
+  expanded: Set<string>
+): FileNode[] {
+  if (path === "/" || path === "") {
+    return reconcileChildren(newChildren, tree, expanded);
+  }
+  return tree.map((node) => {
+    if (node.path === path) {
+      return { ...node, children: reconcileChildren(newChildren, node.children, expanded) };
+    }
+    // Only descend into the subtree that contains `path`.
+    if (node.children && node.children.length > 0 && path.startsWith(node.path + "/")) {
+      return { ...node, children: setChildrenAtPath(node.children, path, newChildren, expanded) };
+    }
+    return node;
+  });
+}
+
 // Get parent path from a path
 function getParentPath(path: string): string | null {
   const lastSlash = path.lastIndexOf('/');
@@ -150,6 +196,12 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // instead of a red error while the daemon comes online (up to 60s).
   const [connecting, setConnecting] = useState(false);
   const connectingSinceRef = useRef<number | null>(null);
+  // Lazy directory loading: which directories are currently fetching children
+  // (for per-node spinners), and an in-flight guard to dedupe concurrent loads.
+  const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
+  const inflightRef = useRef<Set<string>>(new Set());
+  // Mirror of expandedPaths readable from callbacks/refresh without stale closures.
+  const expandedPathsRef = useRef<Set<string>>(new Set());
   const [newItemName, setNewItemName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -173,6 +225,9 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // Use controlled or internal state
   const focusedPath = controlledFocusedPath !== undefined ? controlledFocusedPath : internalFocusedPath;
   const expandedPaths = controlledExpandedPaths !== undefined ? controlledExpandedPaths : internalExpandedPaths;
+  // Keep a ref mirror so loadChildren/refresh read the latest expansion without
+  // being re-created on every expand.
+  expandedPathsRef.current = expandedPaths;
 
   const setFocusedPath = useCallback((path: string | null) => {
     if (onFocusedPathChange) {
@@ -190,6 +245,34 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     }
   }, [onExpandedPathsChange]);
 
+  // Fetch a single directory's immediate children (depth-limited) and merge them
+  // into the tree. Used for lazy expansion (depth 1) and, from refresh, to
+  // re-read the currently-visible directories. Deduped per-path via inflightRef.
+  const loadChildren = useCallback(async (path: string, depth: number) => {
+    if (inflightRef.current.has(path)) return;
+    inflightRef.current.add(path);
+    setLoadingPaths((prev) => {
+      const next = new Set(prev);
+      next.add(path);
+      return next;
+    });
+    try {
+      const children = await getFileTree(path, showHidden, worktreeId, depth);
+      setTree((prev) => setChildrenAtPath(prev, path, children, expandedPathsRef.current));
+    } catch (err) {
+      // A directory removed between expand and fetch: its parent refetch already
+      // drops it from the tree, so swallow the error here.
+      console.debug("[FileTree] failed to load children for", path, err);
+    } finally {
+      inflightRef.current.delete(path);
+      setLoadingPaths((prev) => {
+        const next = new Set(prev);
+        next.delete(path);
+        return next;
+      });
+    }
+  }, [showHidden, worktreeId]);
+
   // Define loadFileTree early so it can be used in useImperativeHandle
   const loadFileTree = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -198,8 +281,12 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     setError(null);
 
     try {
-      const tree = await getFileTree("/", showHidden, worktreeId);
-      setTree(tree);
+      // Initial/root load fetches two levels (VS Code style): the top level plus
+      // one level of preloaded children so the first expand is instant. Deeper
+      // directories load lazily on expand. Reconcile against the existing tree so
+      // a refresh doesn't collapse already-expanded subtrees.
+      const rootChildren = await getFileTree("/", showHidden, worktreeId, 2);
+      setTree((prev) => reconcileChildren(rootChildren, prev, expandedPathsRef.current));
       setConnecting(false);
       connectingSinceRef.current = null;
     } catch (err) {
@@ -238,6 +325,34 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     return () => clearInterval(id);
   }, [connecting, loadFileTree]);
 
+  // Lazily fetch children for any expanded directory that hasn't loaded them yet
+  // (children === undefined). Covers every expansion path — click, keyboard,
+  // context menu, restored-across-tab-switch — with one uniform trigger.
+  useEffect(() => {
+    for (const path of expandedPaths) {
+      const node = findNodeByPath(tree, path);
+      if (
+        node &&
+        node.type === "directory" &&
+        node.children === undefined &&
+        (node.hasChildren ?? true) &&
+        !inflightRef.current.has(path)
+      ) {
+        void loadChildren(path, 1);
+      }
+    }
+  }, [expandedPaths, tree, loadChildren]);
+
+  // Refresh only the currently-visible directories (root + expanded), not the
+  // whole recursive tree. Each directory is refetched so files removed on disk
+  // disappear; expanded subtrees are preserved (and themselves refreshed) so the
+  // tree doesn't collapse under the user.
+  const refresh = useCallback(async () => {
+    await loadChildren("/", 2);
+    const expanded = Array.from(expandedPathsRef.current);
+    await Promise.all(expanded.map((p) => loadChildren(p, 1)));
+  }, [loadChildren]);
+
   // Build visible paths for navigation
   const visiblePaths = buildVisiblePaths(tree, expandedPaths, searchQuery);
 
@@ -268,14 +383,14 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
     refresh: async () => {
-      // Silent refresh - no loading spinner
-      await loadFileTree(false);
+      // Silent refresh — refetch only the visible/expanded directories.
+      await refresh();
     },
     focus: () => {
       containerRef.current?.focus();
     },
     syncToActiveFile,
-  }), [syncToActiveFile, loadFileTree]);
+  }), [syncToActiveFile, refresh]);
 
   // Handle PageUp/PageDown globally when file tree is visible
   // This catches Fn+Up/Down even when container doesn't have focus
@@ -1007,6 +1122,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
           worktreeId={worktreeId}
           focusedPath={focusedPath}
           expandedPaths={expandedPaths}
+          loadingPaths={loadingPaths}
           onExpand={handleExpand}
           onCollapse={handleCollapse}
           onFileOperation={handleFileOperation}

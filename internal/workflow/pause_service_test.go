@@ -97,6 +97,7 @@ type mockPauseRepo struct {
 
 	updatedStatuses map[string]db.WorkflowStatus
 	updateErr       error
+	cascadedStatus  db.WorkflowStatus
 }
 
 func newMockPauseRepo() *mockPauseRepo {
@@ -113,7 +114,8 @@ func (m *mockPauseRepo) UpdateWorkflowStatus(_ context.Context, id string, statu
 	return nil
 }
 
-func (m *mockPauseRepo) CompleteChildWorkflows(_ context.Context, _ string) error {
+func (m *mockPauseRepo) CascadeTerminalStatusToDescendants(_ context.Context, _ string, status db.WorkflowStatus) error {
+	m.cascadedStatus = status
 	return nil
 }
 

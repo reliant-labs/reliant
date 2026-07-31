@@ -232,6 +232,12 @@ type CommandResult struct {
 	// workspace cgroup during the command's lifetime). The actionable
 	// explanation is appended to Stderr/Combined so all consumers surface it.
 	OOMKilled bool `json:"oom_killed,omitempty"`
+	// OutputIncomplete is true when the command finished but a process it
+	// spawned outlived it holding the output pipe open, so collection stopped
+	// at ExecWaitDelay instead of at EOF. Stdout/Stderr are complete up to that
+	// point and ExitCode is the command's own. The explanation is appended to
+	// Stderr/Combined so all consumers surface it.
+	OutputIncomplete bool `json:"output_incomplete,omitempty"`
 }
 
 // OutputOpts controls how background process output is retrieved.

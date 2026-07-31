@@ -183,6 +183,9 @@ type resumeEnvRecorder struct {
 	// ran under (RuntimeContext.LoopIteration), so nested-loop tests can assert
 	// which iteration a node ran in.
 	llmCalls []capturedCheckpoint
+	// statuses records every WorkflowStatus notification the run emitted, so a
+	// test can assert what the run REPORTED about itself — not just what it did.
+	statuses []map[string]interface{}
 }
 
 type capturedCheckpoint struct {
@@ -208,7 +211,8 @@ func setupResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, yamlSt
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, _ map[string]interface{}) (interface{}, error) {
+		func(_ context.Context, input map[string]interface{}) (interface{}, error) {
+			rec.statuses = append(rec.statuses, input)
 			return nil, nil
 		},
 		activity.RegisterOptions{Name: "WorkflowStatus"},

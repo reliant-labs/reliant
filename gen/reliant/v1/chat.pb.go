@@ -749,6 +749,7 @@ type Message struct {
 	WorkflowId     *string                `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"` // Workflow that produced this message (for handoff detection)
 	DisplayStyle   *DisplayStyle          `protobuf:"varint,17,opt,name=display_style,json=displayStyle,proto3,enum=reliant.v1.DisplayStyle,oneof" json:"display_style,omitempty"`
 	SequenceNumber int64                  `protobuf:"varint,18,opt,name=sequence_number,json=sequenceNumber,proto3" json:"sequence_number,omitempty"` // Streaming sync sequence number for tracking
+	NodeId         *string                `protobuf:"bytes,19,opt,name=node_id,json=nodeId,proto3,oneof" json:"node_id,omitempty"`                    // Workflow node/step that produced this message (for per-node supervision)
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -900,6 +901,13 @@ func (x *Message) GetSequenceNumber() int64 {
 		return x.SequenceNumber
 	}
 	return 0
+}
+
+func (x *Message) GetNodeId() string {
+	if x != nil && x.NodeId != nil {
+		return *x.NodeId
+	}
+	return ""
 }
 
 // ContentBlock represents a granular message content piece
@@ -4183,8 +4191,15 @@ type WorkflowExecution struct {
 	ThreadStatuses   []*ThreadStatus        `protobuf:"bytes,14,rep,name=thread_statuses,json=threadStatuses,proto3" json:"thread_statuses,omitempty"`               // Thread liveness information
 	ThreadTitle      *string                `protobuf:"bytes,15,opt,name=thread_title,json=threadTitle,proto3,oneof" json:"thread_title,omitempty"`                  // Human-readable title for the thread
 	ParentThread     *string                `protobuf:"bytes,16,opt,name=parent_thread,json=parentThread,proto3,oneof" json:"parent_thread,omitempty"`               // Parent thread ID (set for both fork and new child threads)
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Outcome is the run's own verdict — "success" or "failure" — stamped by the
+	// terminal node it reached (Node.outcome). Empty when the workflow declared
+	// no outcome, which is NOT a failure: it means the workflow never said.
+	// Orthogonal to status: status is the lifecycle (Temporal-owned, reconciled
+	// against it), outcome is whether the work passed. A run that routes to a
+	// `failed` node has status=completed and outcome=failure.
+	Outcome       *string `protobuf:"bytes,17,opt,name=outcome,proto3,oneof" json:"outcome,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkflowExecution) Reset() {
@@ -4325,6 +4340,13 @@ func (x *WorkflowExecution) GetThreadTitle() string {
 func (x *WorkflowExecution) GetParentThread() string {
 	if x != nil && x.ParentThread != nil {
 		return *x.ParentThread
+	}
+	return ""
+}
+
+func (x *WorkflowExecution) GetOutcome() string {
+	if x != nil && x.Outcome != nil {
+		return *x.Outcome
 	}
 	return ""
 }
@@ -4776,7 +4798,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rworktree_name\x18\x02 \x01(\tH\x00R\fworktreeName\x88\x01\x01\x123\n" +
 	"\x13worktree_deleted_at\x18\x03 \x01(\tH\x01R\x11worktreeDeletedAt\x88\x01\x01B\x10\n" +
 	"\x0e_worktree_nameB\x16\n" +
-	"\x14_worktree_deleted_at\"\x89\x06\n" +
+	"\x14_worktree_deleted_at\"\xb3\x06\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x18\n" +
@@ -4798,13 +4820,16 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\vworkflow_id\x18\x10 \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12B\n" +
 	"\rdisplay_style\x18\x11 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x05R\fdisplayStyle\x88\x01\x01\x12'\n" +
-	"\x0fsequence_number\x18\x12 \x01(\x03R\x0esequenceNumberB\b\n" +
+	"\x0fsequence_number\x18\x12 \x01(\x03R\x0esequenceNumber\x12\x1c\n" +
+	"\anode_id\x18\x13 \x01(\tH\x06R\x06nodeId\x88\x01\x01B\b\n" +
 	"\x06_modelB\b\n" +
 	"\x06_agentB\x0f\n" +
 	"\r_input_tokensB\x10\n" +
 	"\x0e_output_tokensB\x0e\n" +
 	"\f_workflow_idB\x10\n" +
-	"\x0e_display_styleJ\x04\b\x05\x10\x06\"\xa9\x03\n" +
+	"\x0e_display_styleB\n" +
+	"\n" +
+	"\b_node_idJ\x04\b\x05\x10\x06\"\xa9\x03\n" +
 	"\fContentBlock\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\x05R\x05index\x120\n" +
@@ -5121,7 +5146,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\b_successB\x0e\n" +
 	"\f_duration_msB\x0f\n" +
 	"\r_loop_node_idB\x11\n" +
-	"\x0f_loop_iteration\"\xad\x06\n" +
+	"\x0f_loop_iteration\"\xd8\x06\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -5140,7 +5165,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12forked_from_thread\x18\r \x01(\tH\x04R\x10forkedFromThread\x88\x01\x01\x12A\n" +
 	"\x0fthread_statuses\x18\x0e \x03(\v2\x18.reliant.v1.ThreadStatusR\x0ethreadStatuses\x12&\n" +
 	"\fthread_title\x18\x0f \x01(\tH\x05R\vthreadTitle\x88\x01\x01\x12(\n" +
-	"\rparent_thread\x18\x10 \x01(\tH\x06R\fparentThread\x88\x01\x01B\f\n" +
+	"\rparent_thread\x18\x10 \x01(\tH\x06R\fparentThread\x88\x01\x01\x12\x1d\n" +
+	"\aoutcome\x18\x11 \x01(\tH\aR\aoutcome\x88\x01\x01B\f\n" +
 	"\n" +
 	"_parent_idB\x0f\n" +
 	"\r_completed_atB\f\n" +
@@ -5149,7 +5175,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x13_spawned_by_node_idB\x15\n" +
 	"\x13_forked_from_threadB\x0f\n" +
 	"\r_thread_titleB\x10\n" +
-	"\x0e_parent_thread\"\x8f\x02\n" +
+	"\x0e_parent_threadB\n" +
+	"\n" +
+	"\b_outcome\"\x8f\x02\n" +
 	"\fThreadStatus\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12$\n" +
 	"\vactual_uuid\x18\x02 \x01(\tH\x00R\n" +

@@ -1,0 +1,76 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// TokenService manages user API tokens: rlnt_pat_ personal access tokens of
+// kind='api' that authenticate CLI and automation requests through the same
+// interceptor path as a Supabase JWT. It is the Connect replacement for the
+// former POST/GET/DELETE /api/v1/tokens JSON surface; the single mint/list/
+// revoke/validate implementation lives in internal/pat.Service, and these
+// handlers are thin wrappers over it.
+//
+// Auth:
+//   - CreateToken requires an interactive session (a Supabase JWT). A PAT
+//     cannot mint a PAT — you bootstrap an API token from a browser login.
+//     The interceptor accepts both JWTs and api-kind PATs, so this rule is
+//     enforced in the handler by rejecting PAT bearers. (Mirrors the
+//     DaemonTokenService rule that token issuance is session-authed.)
+//   - ListTokens and RevokeToken accept either credential (JWT or api-kind
+//     PAT) and are strictly owner- and kind-scoped: a caller only ever sees
+//     or revokes their own api-kind tokens. This lets a headless CI caller
+//     that holds only a PAT inspect and rotate its own tokens without a
+//     browser login, while never being able to escalate by minting new ones.
+service TokenService {
+  // CreateToken mints a new api-kind PAT for the authenticated user and
+  // returns the raw token exactly once (it is never retrievable again).
+  // Session-authed (JWT) only.
+  rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {}
+
+  // ListTokens returns metadata for every api-kind token owned by the caller.
+  // Token secrets and hashes are never returned.
+  rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {}
+
+  // RevokeToken marks one of the caller's api-kind tokens revoked. Subsequent
+  // uses of that token fail auth.
+  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse) {}
+}
+
+// CreateTokenRequest is the CreateToken input.
+message CreateTokenRequest {
+  string name = 1;         // Human-readable token name (required, must be unique among the caller's active tokens)
+  int64 ttl_seconds = 2;   // Lifetime in seconds; 0 (or absent) means the token never expires
+}
+
+// TokenInfo is the metadata view of an api-kind token. It never carries the
+// raw secret or the stored hash. Timestamps are RFC 3339; empty means unset.
+message TokenInfo {
+  string id = 1;
+  string name = 2;
+  string token_prefix = 3;  // First chars for display (e.g. "rlnt_pat_AbCd...")
+  string created_at = 4;
+  string last_used_at = 5;  // empty if never used
+  string expires_at = 6;    // empty if no expiry
+  string revoked_at = 7;    // empty if active
+}
+
+// CreateTokenResponse carries the new token's metadata plus the raw secret,
+// which is returned exactly once.
+message CreateTokenResponse {
+  TokenInfo info = 1;
+  string token = 2;  // Raw PAT — display once, cannot be retrieved again
+}
+
+message ListTokensRequest {}
+
+message ListTokensResponse {
+  repeated TokenInfo tokens = 1;
+}
+
+message RevokeTokenRequest {
+  string id = 1;  // ID of the token to revoke
+}
+
+message RevokeTokenResponse {}

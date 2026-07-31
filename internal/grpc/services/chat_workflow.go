@@ -747,6 +747,12 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	if wf.SpawnedByNodeID != nil {
 		proto.SpawnedByNodeId = wf.SpawnedByNodeID
 	}
+	// The run's verdict, beside its lifecycle status: a run that ran to its
+	// `failed` terminal node is Status=COMPLETED, Outcome=failure, and a
+	// supervisor must be able to tell that from a run that built the app.
+	if wf.Outcome != nil && *wf.Outcome != "" {
+		proto.Outcome = wf.Outcome
+	}
 	// Populate ForkedFromThread, ParentThread, and ThreadTitle from Thread table (single source of truth)
 	if thread, err := s.database.GetThread(context.Background(), wf.Thread); err == nil && thread != nil {
 		if thread.ParentThreadID != nil {

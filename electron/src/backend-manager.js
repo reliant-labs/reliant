@@ -44,6 +44,7 @@ class BackendManager {
     this.instanceId = null; // Unique identifier for this instance (used in dev mode for process identification)
     this.devBinaryPath = null; // Resolved dev-mode binary path (set by resolveDevBinary / getBinaryPath)
     this.devProcessSearchPattern = null; // Pattern used by orphan cleanup to grep ps output in dev mode
+    this.lastDaemonState = null; // Last runtime record checkHealth() read (see daemon-state.json)
 
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
@@ -172,12 +173,39 @@ class BackendManager {
     }
 
     // Pass data directory
-    const dataDir = this.isDevelopment
-      ? './data'
-      : path.join(app.getPath('userData'), 'data');
-    args.push('--data-dir', dataDir);
+    args.push('--data-dir', this.daemonDataDir());
 
     return args;
+  }
+
+  /**
+   * The daemon's data directory — the exact path handed to `--data-dir` above.
+   * Single definition so every reader of what the daemon writes there (the
+   * runtime record, orphan cleanup) is resolved from the same value the daemon
+   * was told to write to, and cannot drift from it.
+   */
+  daemonDataDir() {
+    return this.isDevelopment
+      ? './data'
+      : path.join(app.getPath('userData'), 'data');
+  }
+
+  /**
+   * Read the daemon's runtime record, <data-dir>/daemon-state.json, written by
+   * internal/toolexec/daemonstate. Returns null when it is absent, truncated,
+   * or unparseable — a record that cannot be read is simply not evidence of a
+   * running daemon, and the caller polls again.
+   */
+  readDaemonState() {
+    try {
+      const raw = fs.readFileSync(
+        path.join(this.daemonDataDir(), 'daemon-state.json'),
+        'utf8'
+      );
+      return JSON.parse(raw);
+    } catch (error) {
+      return null;
+    }
   }
 
   /**
@@ -419,26 +447,38 @@ class BackendManager {
     const { execSync } = require('child_process');
     
     // Determine data directory (same logic as when starting backend)
-    const dataDir = this.isDevelopment
-      ? './data'
-      : path.join(app.getPath('userData'), 'data');
-    
-    // Check both the old backend lock file and the daemon PID file
+    const dataDir = this.daemonDataDir();
+
+    // Two records can name an orphaned process: the legacy monolith's bare-PID
+    // lock, and the daemon's JSON runtime record. Each states its PID in its own
+    // shape, so each carries its own reader — parsing JSON with parseInt yields
+    // NaN, which this loop treats as a corrupt file and DELETES.
+    //
+    // `daemon.lock` is deliberately absent. It is an OS advisory lock whose PID
+    // line exists for humans reading the file (daemonstate/lock.go); the claim
+    // lives on the open file description, so unlinking it out from under a live
+    // daemon hands the next one a fresh inode to lock and quietly defeats the
+    // one-daemon-per-data-dir guarantee.
     const lockFiles = [
-      path.join(dataDir, '.reliant-backend.lock'),
-      path.join(dataDir, 'daemon.pid'),
+      { path: path.join(dataDir, '.reliant-backend.lock'), readPid: (raw) => parseInt(raw, 10) },
+      { path: path.join(dataDir, 'daemon-state.json'), readPid: (raw) => JSON.parse(raw).pid },
     ];
-    
-    for (const lockFilePath of lockFiles) {
+
+    for (const { path: lockFilePath, readPid } of lockFiles) {
       try {
         if (!fs.existsSync(lockFilePath)) {
           continue;
         }
-        
+
         // Read PID from lock file
         const content = fs.readFileSync(lockFilePath, 'utf8').trim();
-        const pid = parseInt(content, 10);
-        
+        let pid;
+        try {
+          pid = readPid(content);
+        } catch (e) {
+          pid = NaN;
+        }
+
         if (isNaN(pid) || pid <= 0) {
           log.debug('[BackendManager] Invalid PID in lock file:', content);
           // Remove invalid lock file
@@ -661,13 +701,14 @@ class BackendManager {
       const checkReady = async () => {
         // Check if we've exceeded timeout
         if (Date.now() - startTime > actualTimeout) {
-          reject(new Error(`Daemon failed to become ready within ${actualTimeout}ms`));
+          reject(new Error(
+            `Daemon failed to become ready within ${actualTimeout}ms — ${this.describeDaemonState()}`
+          ));
           return;
         }
 
-        // The daemon doesn't expose a local HTTP health endpoint.
-        // Check readiness by verifying the process is still alive and
-        // the daemon PID file has been written (indicating successful startup).
+        // The daemon doesn't expose a local HTTP health endpoint; readiness is
+        // read out of the runtime record it publishes. See checkHealth().
         try {
           const isReady = await this.checkHealth();
           if (isReady) {
@@ -689,41 +730,69 @@ class BackendManager {
   }
 
   /**
-   * Check if the daemon process is healthy.
-   * The daemon in client mode doesn't expose a local HTTP endpoint.
-   * We check that the process is still running and the PID file exists
-   * (written by the daemon on successful startup).
+   * Check whether the spawned daemon is ready to serve tool calls.
+   *
+   * In dial-out mode the daemon binds no local port, so there is nothing to
+   * probe over HTTP. It publishes its liveness in <data-dir>/daemon-state.json
+   * instead (internal/toolexec/daemonstate), and two things must hold there:
+   *
+   *   1. the record's `pid` is OUR child — a record left behind by an earlier
+   *      run must never read as this process being up; and
+   *   2. the gateway stream is established (`connected`), the only state in
+   *      which the daemon can actually serve a tool call.
+   *
+   * (2) is what a bare process-and-PID-file check could never give. The record
+   * exists from startup onward carrying `stream: "connecting"`, so treating its
+   * mere presence as readiness reports a daemon still stuck in registration as
+   * ready — the false positive that used to hide a credential-less daemon
+   * dropping into its interactive OAuth flow.
+   *
+   * Server mode is the exception: there the daemon accepts gateway dial-ins
+   * rather than making one, so `listening` is its healthy steady state and
+   * waiting for `connected` would never return.
    */
   checkHealth() {
     return new Promise((resolve) => {
       // If no process, not healthy
       if (!this.process || this.process.killed) {
+        this.lastDaemonState = null;
         resolve(false);
         return;
       }
 
-      // Check if the daemon has written its PID file (indicates successful startup)
-      const dataDir = this.isDevelopment
-        ? './data'
-        : path.join(app.getPath('userData'), 'data');
-      const pidFile = path.join(dataDir, 'daemon.pid');
+      const state = this.readDaemonState();
+      this.lastDaemonState = state;
 
-      try {
-        if (fs.existsSync(pidFile)) {
-          const content = fs.readFileSync(pidFile, 'utf8').trim();
-          const pid = parseInt(content, 10);
-          // PID file exists and contains a valid PID matching our process
-          if (pid === this.process.pid) {
-            resolve(true);
-            return;
-          }
-        }
-      } catch (error) {
-        // PID file not yet written or not readable
+      // No record yet, or one belonging to some other (earlier) daemon.
+      if (!state || state.pid !== this.process.pid) {
+        resolve(false);
+        return;
       }
 
-      resolve(false);
+      resolve(
+        state.server_mode
+          ? state.stream === 'listening' || state.stream === 'connected'
+          : state.stream === 'connected'
+      );
     });
+  }
+
+  /**
+   * One-line account of the last runtime record checkHealth() saw, for the
+   * startup-timeout error. "Never wrote a record", "still connecting", and
+   * "connected then dropped" are three different failures; the message should
+   * name which one happened instead of making the reader go find the file.
+   */
+  describeDaemonState() {
+    const state = this.lastDaemonState;
+    if (!state) {
+      return 'no runtime record written — the daemon exited or never started';
+    }
+    if (this.process && state.pid !== this.process.pid) {
+      return `runtime record belongs to pid ${state.pid}, not our daemon (pid ${this.process.pid})`;
+    }
+    const detail = state.stream_detail ? `: ${state.stream_detail}` : '';
+    return `gateway stream is "${state.stream || 'unknown'}"${detail}`;
   }
 
   async start() {
@@ -1028,6 +1097,17 @@ class BackendManager {
       authStorage: this.authStorage,
       apiUrl: this.apiUrl,
       gatewayUrl: this.gatewayUrl || process.env.RELIANT_GATEWAY_URL || '',
+      // GoTrue provider for the pre-mint session refresh. Same precedence
+      // family as the rest of the config: the daemon-side names
+      // (RELIANT_AUTH_*, what `reliant daemon start` itself reads for its
+      // OAuth flow) win over the renderer-side VITE_SUPABASE_* pair; both
+      // come from the closed deploy config (dev-electron Taskfile env /
+      // packaged build-config.js — loadEnvironment() has already projected
+      // those into process.env by the time start() runs). When neither is
+      // set (OSS build, no hosted config) the refresh is disabled and the
+      // mint uses the stored token as before.
+      authUrl: process.env.RELIANT_AUTH_URL || process.env.VITE_SUPABASE_URL || '',
+      authAnonKey: process.env.RELIANT_AUTH_KEY || process.env.VITE_SUPABASE_ANON_KEY || '',
       logger: log,
     });
   }

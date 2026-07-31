@@ -13,11 +13,11 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/sdk/client"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -52,6 +52,28 @@ func NewWorktreeService(database db.Repository, tempClient client.Client, daemon
 // the response, with the default (mutation) timeout budget.
 func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}) error {
 	return s.sendWorktreeDaemonCommandTimeout(ctx, userID, commandType, payload, resp, worktreeDaemonCommandTimeoutMs)
+}
+
+// sendWorktreeDaemonCommandToDaemon pins a worktree command to a SPECIFIC
+// daemon. Worktree creation issues one command per nested repo; all must land
+// on the same daemon that will own the worktree on disk (and whose id is
+// recorded on the worktree row), so callers resolve the daemon once and pass
+// it here rather than letting each command re-resolve a default.
+func (s *WorktreeService) sendWorktreeDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}) error {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	respBytes, err := s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payloadBytes, worktreeDaemonCommandTimeoutMs)
+	if err != nil {
+		return fmt.Errorf("daemon command %s: %w", commandType, err)
+	}
+	if resp != nil {
+		if err := json.Unmarshal(respBytes, resp); err != nil {
+			return fmt.Errorf("unmarshal response for %s: %w", commandType, err)
+		}
+	}
+	return nil
 }
 
 // sendWorktreeDaemonCommandTimeout is sendWorktreeDaemonCommand with an
@@ -296,6 +318,19 @@ func (s *WorktreeService) CreateWorktree(
 		return nil, err
 	}
 
+	// Resolve the owning daemon ONCE up front. Every per-repo worktree.create
+	// (and the rollback/force-cleanup commands) must target this same daemon so
+	// the worktree's N nested checkouts all land on one machine, and that id is
+	// recorded on the row for tool execution to route back to (a branch chat's
+	// worktree exists on disk only here). Fail fast if no daemon is reachable —
+	// creating a worktree row that points at a directory on no daemon is worse
+	// than a clear up-front error.
+	ownerDaemonID, err := s.daemonRouter.ResolveDaemonID(ctx, userID)
+	if err != nil {
+		logging.Error("Failed to resolve daemon for worktree creation", "error", err, "userID", userID)
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to create worktree: %w", err))
+	}
+
 	globalBase := ""
 	if req.Msg.BaseBranch != nil {
 		globalBase = *req.Msg.BaseBranch
@@ -333,7 +368,7 @@ func (s *WorktreeService) CreateWorktree(
 	rollback := func(reason error) error {
 		for _, s2 := range successes {
 			repoPath := filepath.Join(project.Path, s2.repo.RelativePath)
-			_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
 				"project_path":  repoPath,
 				"worktree_path": s2.worktreePath,
 			}, nil)
@@ -360,7 +395,7 @@ func (s *WorktreeService) CreateWorktree(
 
 		if req.Msg.Force {
 			// Stale-branch cleanup; the workspace dir itself is fresh per UUID.
-			_ = s.sendWorktreeDaemonCommand(ctx, userID, "worktree.force_cleanup", map[string]string{
+			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.force_cleanup", map[string]string{
 				"project_path":  repoPath,
 				"worktree_path": "",
 				"branch":        req.Msg.Branch,
@@ -385,7 +420,7 @@ func (s *WorktreeService) CreateWorktree(
 			Error        string `json:"error,omitempty"`
 		}
 
-		err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create", createReq{
+		err := s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.create", createReq{
 			ProjectPath: repoPath,
 			WorkspaceID: workspaceID,
 			SubPath:     repo.RelativePath,
@@ -464,6 +499,7 @@ func (s *WorktreeService) CreateWorktree(
 		BaseBranches: baseBranches,
 		ProjectID:    project.ID,
 		ChatID:       chatID,
+		DaemonID:     &ownerDaemonID,
 		Status:       int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -1043,6 +1079,15 @@ func (s *WorktreeService) ImportWorktree(
 		return nil, err
 	}
 
+	// Resolve the daemon that will validate (and therefore owns on disk) the
+	// imported worktree, so the same id is recorded on the row and tool
+	// execution routes back to the machine the checkout actually lives on.
+	ownerDaemonID, err := s.daemonRouter.ResolveDaemonID(ctx, userID)
+	if err != nil {
+		logging.Error("Failed to resolve daemon for worktree import", "error", err, "userID", userID)
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to import worktree: %w", err))
+	}
+
 	// Validate path exists and is a git worktree via daemon
 	var importResp struct {
 		Valid      bool   `json:"valid"`
@@ -1051,7 +1096,7 @@ func (s *WorktreeService) ImportWorktree(
 		BaseBranch string `json:"base_branch"`
 		Error      string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp); err != nil {
+	if err := s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp); err != nil {
 		logging.Error("Failed to validate import path via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate path"))
 	}
@@ -1112,6 +1157,7 @@ func (s *WorktreeService) ImportWorktree(
 		BaseBranch: baseBranch,
 		ProjectID:  req.Msg.ProjectId,
 		ChatID:     chatID,
+		DaemonID:   &ownerDaemonID,
 		Status:     int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
 		CreatedAt:  now,
 		UpdatedAt:  now,

@@ -245,7 +245,6 @@ browser-data/
 # gen/controlplane/ stays ignored — internal-only, regenerated from
 # proto/controlplane/v1/admin.proto via `buf generate`.
 gen/controlplane/
-web/src/gen/
 nul
 dev/
 

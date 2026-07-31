@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -50,10 +51,12 @@ func parseDisplayStyle(s string) int32 {
 	}
 }
 
-// DefaultCompactionThreshold is the default token count at which context compaction triggers.
-// This is 80% of 200k context window = 160k tokens.
-// This should match the compaction_threshold in agent.yaml configurations.
-const DefaultCompactionThreshold = 185000
+// DefaultCompactionThreshold is the FALLBACK token count at which context
+// compaction triggers when a per-node arg is unset and the model's real context
+// window is unknown. Known models derive their threshold from the real window
+// (models.CompactionThresholdFraction × max_context_window); this constant is the
+// single-source floor, shared with models.GlobalDefaultCompactionThreshold.
+const DefaultCompactionThreshold = models.GlobalDefaultCompactionThreshold
 
 // SaveMessageActivity atomically saves user, assistant, tool, or system messages.
 // This is a thin wrapper around threads.Service.SaveMessage that handles
@@ -138,6 +141,14 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		attachments = append(attachments, attID)
 	}
 
+	// Delta identity: persist the assistant message under its pre-allocated
+	// streaming id. Assistant-only — other roles never streamed deltas, and a
+	// misconfigured id on them would collide with the assistant row.
+	fixedMessageID := ""
+	if protoArgs.GetResolvedRole() == "assistant" {
+		fixedMessageID = rtx.AssistantMessageID
+	}
+
 	result, err := a.threads.SaveMessage(ctx, threads.SaveMessageOpts{
 		ChatID:        rtx.ChatID,
 		Thread:        rtx.Thread,
@@ -156,6 +167,7 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 		StepID:        rtx.StepID,
 		ActivityID:    &activityID,
 		AttemptNumber: info.Attempt,
+		MessageID:     fixedMessageID,
 	})
 	if err != nil {
 		return reliantv1.SaveMessageOutput{}, err

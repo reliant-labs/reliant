@@ -185,7 +185,6 @@ nodes:
     args:
       implementer_preset: ux
       max_retries: 5
-      app_port: 4321
       start_app_command: "cd {{inputs.working_directory}} && python3 -m http.server 4321 --bind 0.0.0.0"
       review_instructions: |
         You are reviewing the VISUAL DESIGN of a landing page. The copy is already
@@ -331,6 +330,7 @@ nodes:
   - id: stuck
     type: save_message
     display_style: warning
+    outcome: failure
     args:
       role: assistant
       content: |
@@ -343,6 +343,7 @@ nodes:
   - id: failed
     type: save_message
     display_style: warning
+    outcome: failure
     args:
       role: assistant
       content: |

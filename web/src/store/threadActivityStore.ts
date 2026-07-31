@@ -78,6 +78,13 @@ export function useActiveThreads(chatId: string): ActiveThreadUpdate[] {
  * Get the set of active thread IDs for a chat.
  * Use this for ThreadTabs to determine which tabs show activity pulse.
  *
+ * Gated internally on the chat-level authority (activityStore): when the
+ * chat is not RUNNING/AWAITING_INPUT the set is empty, regardless of what
+ * per-thread records say. Thread records persist across pause/idle (they
+ * carry names/titles for the timeline) and their status can lag the
+ * chat-level IDLE event — the gate ensures every consumer sees the same
+ * answer as the sidebar dot instead of a transiently-diverging one.
+ *
  * NOTE: To avoid infinite loops from useSyncExternalStore detecting
  * unstable selector results, we:
  * 1. Get the raw threads array from store (stable reference)
@@ -85,6 +92,7 @@ export function useActiveThreads(chatId: string): ActiveThreadUpdate[] {
  * 3. Use a ref to cache and return stable Set references
  */
 export function useActiveThreadIds(chatId: string): Set<string> {
+  const isRunning = useIsChatRunning(chatId);
   const threads = useThreadActivityStore(
     (state) => state.threads[chatId] || EMPTY_ARRAY,
   );
@@ -95,6 +103,7 @@ export function useActiveThreadIds(chatId: string): Set<string> {
   });
 
   return useMemo(() => {
+    if (!isRunning) return EMPTY_SET;
     if (threads === cacheRef.current.threads) {
       return cacheRef.current.result;
     }
@@ -113,7 +122,7 @@ export function useActiveThreadIds(chatId: string): Set<string> {
     const result = activeIds.size > 0 ? activeIds : EMPTY_SET;
     cacheRef.current = { threads, result };
     return result;
-  }, [threads]);
+  }, [isRunning, threads]);
 }
 
 /**
@@ -158,9 +167,16 @@ export function useIsThreadActive(
 
 /**
  * Get the current activity description (e.g., "Thinking", "Running tools").
+ *
+ * Gated internally on the chat-level authority (activityStore): a stale
+ * "running" thread record can no longer surface an activity string after
+ * the chat went IDLE, so the thinking indicator's text and its visibility
+ * (useIsThreadActive) can never disagree.
  */
 export function useChatCurrentActivity(chatId: string): string | null {
+  const isRunning = useIsChatRunning(chatId);
   return useThreadActivityStore((state) => {
+    if (!isRunning) return null;
     const threads = state.threads[chatId] || [];
     for (const thread of threads) {
       if (isThreadMetadataRecord(thread.workflow_name)) continue;
@@ -176,7 +192,15 @@ export function useChatCurrentActivity(chatId: string): string | null {
 }
 
 /**
- * Map activity names to user-friendly display text.
+ * Map workflow activity names to user-friendly display text.
+ *
+ * This is the single client-side map — do not duplicate it in components.
+ * Unknown names deliberately fall back to "Thinking" so new server-side
+ * activities degrade gracefully.
+ *
+ * TODO: replace with server-driven display text (a protocol change: the
+ * thread update would carry a display string instead of the internal
+ * activity handler name, eliminating this V2_-prefixed name zoo).
  */
 export function getActivityDisplayText(activity: string | null): string | null {
   if (!activity) return null;

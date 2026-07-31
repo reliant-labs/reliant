@@ -42,7 +42,7 @@ import { chatGrpc } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
-import { useChat } from "../../hooks/chat-queries";
+import { useChat, getChatFromCache, patchChatCaches } from "../../hooks/chat-queries";
 import { usePendingQuestion } from "../../hooks/approval-queries";
 import { ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
@@ -331,7 +331,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       Record<string, string | null>
     >(() => {
       if (chatId) {
-        const chatObj = useChatStore.getState().chats.get(chatId);
+        const chatObj = getChatFromCache(chatId);
         if (chatObj?.selectedPresets && Object.keys(chatObj.selectedPresets).length > 0) {
           return chatObj.selectedPresets as Record<string, string | null>;
         }
@@ -469,7 +469,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       if (chatId) {
         // Existing chat - restore from storage
         persistedParams = useChatParamsStore.getState().getChatParams(chatId);
-        const chatObj = useChatStore.getState().chats.get(chatId);
+        const chatObj = getChatFromCache(chatId);
 
         // Only load persisted presets if the workflow matches
         // Presets are workflow-specific, so if user switched workflows, don't apply old presets
@@ -1472,14 +1472,13 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                             // Also clear persisted params for this chat
                             if (chatId) {
                               useChatParamsStore.getState().setChatParams(chatId, {});
-                              // Clear selected_presets in chatStore so the useEffect doesn't reload them
-                              useChatStore.setState((state) => {
-                                const existing = state.chats.get(chatId);
-                                if (!existing) return state;
-                                const newChats = new Map(state.chats);
-                                newChats.set(chatId, { ...existing, selectedPresets: {} });
-                                return { chats: newChats };
-                              });
+                              // Clear selected_presets in the RQ cache so the
+                              // useEffect doesn't reload them.
+                              patchChatCaches(
+                                useProjectStore.getState().currentProject?.id,
+                                chatId,
+                                { selectedPresets: {} }
+                              );
                             } else {
                               // New chat: also clear temp params/presets so the
                               // workflow-change effect doesn't reapply stale values

@@ -45,16 +45,56 @@ type DaemonBootstrapConfig struct {
 	ListenPort int // default 9190
 }
 
+// NormalizeGatewayURL maps the gateway address forms an operator can plausibly
+// be handed onto the two schemes the daemon's HTTP/2 transport can actually
+// dial.
+//
+// `forge cluster urls` prints the daemon gateway as grpc://host:port, which is
+// the natural thing to paste into --grpc-url. golang.org/x/net/http2 rejects
+// any scheme other than http/https ("http2: unsupported scheme"), and
+// connect-go surfaces that on a bidi stream as `write envelope: EOF` — so the
+// daemon appeared to start and then silently served nothing. grpc:// is
+// unambiguous (plaintext h2c) and grpcs:// is unambiguous (TLS), so both are
+// accepted and rewritten rather than rejected. Everything else is rejected up
+// front naming the schemes that work: a clear error at startup beats a process
+// that runs forever without a stream.
+func NormalizeGatewayURL(raw string) (string, error) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", fmt.Errorf("missing daemon gateway URL")
+	}
+	parsed, err := url.Parse(trimmed)
+	if err != nil {
+		return "", fmt.Errorf("invalid daemon gateway URL %q: %w", raw, err)
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		return trimmed, nil
+	case "grpc":
+		parsed.Scheme = "http"
+		return parsed.String(), nil
+	case "grpcs":
+		parsed.Scheme = "https"
+		return parsed.String(), nil
+	default:
+		return "", fmt.Errorf(
+			"unsupported daemon gateway URL %q: scheme %q cannot be dialed — use http:// (or grpc://) for plaintext h2c, https:// (or grpcs://) for TLS",
+			raw, parsed.Scheme)
+	}
+}
+
+// GatewayURL returns the dialable gateway URL for this config.
+func (c DaemonBootstrapConfig) GatewayURL() (string, error) {
+	return NormalizeGatewayURL(c.GRPCURL)
+}
+
 func (c DaemonBootstrapConfig) Validate() error {
 	if !c.ServerMode && strings.TrimSpace(c.AuthToken) == "" {
 		return fmt.Errorf("missing required daemon PAT (run 'reliant daemon register' to set up credentials)")
 	}
 	if !c.ServerMode {
-		if strings.TrimSpace(c.GRPCURL) == "" {
-			return fmt.Errorf("missing required RELIANT_DAEMON_GRPC_URL")
-		}
-		if _, err := url.Parse(c.GRPCURL); err != nil {
-			return fmt.Errorf("invalid RELIANT_DAEMON_GRPC_URL: %w", err)
+		if _, err := NormalizeGatewayURL(c.GRPCURL); err != nil {
+			return err
 		}
 	}
 	switch c.TLSMode {

@@ -6,6 +6,16 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
+// ActivitySkippedStep is the activity name a skipped node records under.
+//
+// It is the only thing that survives to a step_executions reader saying "this
+// node did not run": output_json is not sent over the wire (it can be
+// megabytes), so a reader has the activity name and a NULL verdict and nothing
+// else. Emitter and readers share this constant so the two cannot drift — a
+// renamed activity then breaks the build instead of silently turning every
+// skip back into an ordinary-looking row.
+const ActivitySkippedStep = "SkippedStep"
+
 // Standard field names for output maps.
 const (
 	LoopOutputIterationsField = "_iterations"

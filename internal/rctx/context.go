@@ -24,6 +24,11 @@ type WorktreeInfo struct {
 	// Tools that run git commands should use this, not Project.Path,
 	// so they target the correct nested repo.
 	RepoPath string
+	// DaemonID is the daemon that owns this worktree's checkouts on disk.
+	// Tool execution must route here so a worktree-bound chat runs against its
+	// actual branch. Empty for the main checkout (every daemon has it) and for
+	// pre-existing worktree rows created before daemon ownership was recorded.
+	DaemonID string
 }
 
 // ToolContext is a minimal context for tool execution in V2

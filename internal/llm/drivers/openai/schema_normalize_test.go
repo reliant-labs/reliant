@@ -90,6 +90,7 @@ func TestNormalizeResponsesToolSchema_ObjectWithProperties(t *testing.T) {
 			"name":  map[string]any{"type": "string"},
 			"count": map[string]any{"type": "integer"},
 		},
+		"required": []any{"name"},
 	}
 
 	NormalizeResponsesToolSchema(schema)
@@ -104,22 +105,33 @@ func TestNormalizeResponsesToolSchema_ObjectWithProperties(t *testing.T) {
 		t.Errorf("expected additionalProperties=false, got %v", schema["additionalProperties"])
 	}
 
-	// required should contain all property keys
+	// required is the tool's declared list, untouched: 'count' is optional and
+	// must stay optional so the model is allowed to omit it.
 	required, ok := schema["required"].([]any)
 	if !ok {
 		t.Fatal("required should be a slice")
 	}
-	if len(required) != 2 {
-		t.Errorf("expected 2 required fields, got %d", len(required))
+	if len(required) != 1 || required[0] != "name" {
+		t.Errorf("required should be ['name'], got %v", required)
+	}
+}
+
+func TestNormalizeResponsesToolSchema_ObjectWithNoDeclaredRequired(t *testing.T) {
+	// A tool whose parameters are all optional must reach the model that way.
+
+	schema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"name": map[string]any{"type": "string"},
+		},
 	}
 
-	// Check that both name and count are in required
-	requiredSet := make(map[string]bool)
-	for _, r := range required {
-		requiredSet[r.(string)] = true
-	}
-	if !requiredSet["name"] || !requiredSet["count"] {
-		t.Errorf("required should contain 'name' and 'count', got %v", required)
+	NormalizeResponsesToolSchema(schema)
+
+	if raw, ok := schema["required"]; ok {
+		if names := requiredNames(raw); len(names) != 0 {
+			t.Errorf("required should stay empty, got %v", names)
+		}
 	}
 }
 
@@ -134,6 +146,7 @@ func TestNormalizeResponsesToolSchema_NestedObjects(t *testing.T) {
 				"properties": map[string]any{
 					"enabled": map[string]any{"type": "boolean"},
 				},
+				"required": []any{"enabled"},
 			},
 		},
 	}
@@ -167,6 +180,7 @@ func TestNormalizeResponsesToolSchema_ArrayItems(t *testing.T) {
 					"properties": map[string]any{
 						"id": map[string]any{"type": "string"},
 					},
+					"required": []any{"id"},
 				},
 			},
 		},
@@ -208,12 +222,14 @@ func TestNormalizeResponsesToolSchema_Combinators(t *testing.T) {
 						"properties": map[string]any{
 							"str": map[string]any{"type": "string"},
 						},
+						"required": []any{"str"},
 					},
 					map[string]any{
 						"type": "object",
 						"properties": map[string]any{
 							"num": map[string]any{"type": "integer"},
 						},
+						"required": []any{"num"},
 					},
 				},
 			},
@@ -238,7 +254,7 @@ func TestNormalizeResponsesToolSchema_Combinators(t *testing.T) {
 	}
 }
 
-func TestValidateResponsesToolSchemaStrict_RejectsNonObjectItems(t *testing.T) {
+func TestValidateResponsesToolSchema_RejectsNonObjectItems(t *testing.T) {
 	t.Run("direct tuple items", func(t *testing.T) {
 		schema := map[string]any{
 			"type": "object",
@@ -253,7 +269,7 @@ func TestValidateResponsesToolSchemaStrict_RejectsNonObjectItems(t *testing.T) {
 		}
 
 		NormalizeResponsesToolSchema(schema)
-		err := ValidateResponsesToolSchemaStrict(schema)
+		err := ValidateResponsesToolSchema(schema)
 		if err == nil {
 			t.Fatal("expected tuple-style items to be rejected")
 		}
@@ -282,7 +298,7 @@ func TestValidateResponsesToolSchemaStrict_RejectsNonObjectItems(t *testing.T) {
 		}
 
 		NormalizeResponsesToolSchema(schema)
-		err := ValidateResponsesToolSchemaStrict(schema)
+		err := ValidateResponsesToolSchema(schema)
 		if err == nil {
 			t.Fatal("expected non-object items nested under anyOf to be rejected")
 		}

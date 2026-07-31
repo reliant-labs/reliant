@@ -27,6 +27,7 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   const handleApprove = useCallback(() => {
     if (chatId && pendingApprovals.length > 0) {
       batchApproveMutation.mutate({
+        chatId,
         requestIds: pendingApprovals.map((a) => a.id),
       });
     }
@@ -35,6 +36,7 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   const handleDeny = useCallback(() => {
     if (chatId && pendingApprovals.length > 0) {
       batchDenyMutation.mutate({
+        chatId,
         requestIds: pendingApprovals.map((a) => a.id),
       });
     }

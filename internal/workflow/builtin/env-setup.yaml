@@ -1262,6 +1262,7 @@ nodes:
 
   - id: success
     type: save_message
+    outcome: success
     args:
       role: assistant
       content: |

@@ -2,6 +2,8 @@
 package auth
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -111,5 +113,64 @@ func TestDeleteDaemonCredentials_RemovesDaemonID(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("expected nil creds after delete, got %+v", got)
+	}
+}
+
+// TestDaemonCredentials_SubSurvivesGoRewrite pins the Electron↔Go round-trip
+// contract for `sub`: the Electron PAT-mint preflight writes it, Go never
+// sets it, but the daemon's own rewrites of the entry (persisting DaemonID
+// after registration) MUST carry it forward. Before the Sub field existed,
+// Go's struct unmarshal silently dropped the key on every rewrite and the
+// Electron preflight re-minted a fresh PAT on each cold launch.
+func TestDaemonCredentials_SubSurvivesGoRewrite(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const origin = "http://localhost:8090"
+
+	// Simulate the Electron preflight's write: an entry carrying `sub`.
+	path, err := DaemonCredentialsFilePath()
+	if err != nil {
+		t.Fatalf("path: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	seed := `{
+  "http://localhost:8090": {
+    "pat": "rlnt_pat_electron",
+    "server_url": "http://localhost:8090",
+    "gateway_url": "http://localhost:29190",
+    "registered_at": "2026-07-16T17:52:36.477Z",
+    "sub": "user-c2caf4af"
+  }
+}`
+	if err := os.WriteFile(path, []byte(seed), 0600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	// The daemon's post-registration flow: read, set DaemonID, persist.
+	got, err := ReadDaemonCredentials(origin)
+	if err != nil || got == nil {
+		t.Fatalf("read: creds=%v err=%v", got, err)
+	}
+	if got.Sub != "user-c2caf4af" {
+		t.Fatalf("expected sub to unmarshal, got %q", got.Sub)
+	}
+	got.DaemonID = "daemon-assigned-by-server"
+	if err := WriteDaemonCredentials(got); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+
+	// The Electron preflight's next cold-launch read: `sub` must still be
+	// there, or it re-mints unnecessarily.
+	after, err := ReadDaemonCredentials(origin)
+	if err != nil || after == nil {
+		t.Fatalf("read after rewrite: creds=%v err=%v", after, err)
+	}
+	if after.Sub != "user-c2caf4af" {
+		t.Fatalf("sub must survive the daemon's rewrite, got %q", after.Sub)
+	}
+	if after.DaemonID != "daemon-assigned-by-server" {
+		t.Fatalf("daemon_id must persist, got %q", after.DaemonID)
 	}
 }

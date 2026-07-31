@@ -41,9 +41,13 @@ func StreamAndAccumulate(
 		"toolCount", len(tools))
 
 	// Trim messages if they would exceed context window limits
-	// This prevents API errors from context overflow
-	if message.TrimMessagesToFitContextWithFullEstimate(messages, nil, nil) {
-		logging.Info("[ACCUMULATOR] Trimmed messages to fit context window")
+	// This prevents API errors from context overflow. The backstop threshold is
+	// derived from the driver's real model context window (~95% of it), so it
+	// scales per-model and sits above the compaction threshold rather than using
+	// a fixed 200k-window assumption.
+	if message.TrimMessagesToFitContextWindow(messages, nil, nil, driver.Model().ContextWindow) {
+		logging.Info("[ACCUMULATOR] Trimmed messages to fit context window",
+			"contextWindow", driver.Model().ContextWindow)
 	}
 
 	// Accumulate content and tool calls

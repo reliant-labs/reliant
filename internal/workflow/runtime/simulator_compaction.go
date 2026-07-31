@@ -4,14 +4,17 @@ import (
 	"strconv"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-// simDefaultCompactionThreshold mirrors the global fallback in the call_llm
-// handler (handlers.DefaultCompactionThreshold). The simulator can't resolve
-// per-model defaults, so it applies the explicit arg when set and otherwise
-// this global default.
-const simDefaultCompactionThreshold = 185000
+// simDefaultCompactionThreshold mirrors the global FALLBACK in the call_llm
+// handler (handlers.DefaultCompactionThreshold / models.GlobalDefaultCompactionThreshold).
+// At runtime, when no explicit arg is set, the handler DERIVES the threshold from
+// the resolved model's real context window; the simulator works from mock outputs
+// and does not resolve per-model windows, so it applies the explicit arg when set
+// and otherwise this shared global default.
+const simDefaultCompactionThreshold = models.GlobalDefaultCompactionThreshold
 
 // applyCallLLMCompactionThreshold injects the compaction_threshold field onto a
 // call_llm node's mock output, mirroring explicitCompactionThresholdArg in the

@@ -95,7 +95,12 @@ func (t *ResponseTool) Name() string {
 }
 
 func (t *ResponseTool) Description() string {
-	return t.description
+	// Posting a response immediately completes the loop — the agent's turns
+	// end the instant this tool is called. Append a hard warning so the model
+	// does its work FIRST and never posts a plan/placeholder (which otherwise
+	// terminates the loop before any real work happens).
+	return t.description +
+		"\n\nIMPORTANT: Posting a submission/response with this tool IMMEDIATELY ENDS ALL your turns — the loop completes the moment you call it. Only call it when you are genuinely COMPLETE. Do NOT call it to announce a plan, acknowledge the task, or post a placeholder/\"pending\" result — do all the required work first, then call this tool exactly once with your final answer."
 }
 
 func (t *ResponseTool) ParamSchema() *jsonschema.Schema {

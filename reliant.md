@@ -36,7 +36,14 @@ We optimize for **distributed** mode:
   ```
 
 - **Postgres (optional):** set `DATABASE_DRIVER=postgres` + `DATABASE_URL`
-  - Local dev uses shared Docker Postgres at `localhost:5433`
+  - This repo's own `docker-compose.yml` Postgres, published on `localhost:5433`
+    (`make postgres-up`). `scripts/dev.sh` and `make test-e2e` target this one.
+  - Not to be confused with the control-plane dev stack's Postgres on
+    `localhost:5434`, a **separate server** that also hosts a `reliant`
+    database. `reliant-dev workflow analyze` and `scripts/wf-supervise` read
+    that one, because they supervise runs of a control-plane-backed stack. The two
+    ports are not drift — pointing either set at the other's port reads the
+    wrong database.
   - `scripts/dev.sh` / `scripts/dev.ps1` auto-provision a **per-worktree DB**
   ```bash
   PGPASSWORD=postgres psql -h localhost -p 5433 -U postgres -d "$PGDATABASE" -c "\dt"

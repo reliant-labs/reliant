@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -48,71 +47,9 @@ func NewLocalClient() *LocalClient {
 // FileSystem implementation
 // ---------------------------------------------------------------------------
 
-// ReadFile reads a file and returns its content, supporting offset/limit by
-// line counting. It matches the behaviour of the view tool.
+// ReadFile reads a file and returns the requested line window, byte for byte.
 func (c *LocalClient) ReadFile(ctx context.Context, path string, opts *ReadFileOpts) (*FileContent, error) {
-	info, err := os.Stat(path)
-	if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", path, err)
-	}
-	if info.IsDir() {
-		return nil, fmt.Errorf("%s is a directory", path)
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-
-	offset, limit := 0, 0
-	if opts != nil {
-		offset = opts.Offset
-		limit = opts.Limit
-	}
-
-	scanner := bufio.NewScanner(f)
-	// Allow up to 1 MB per line.
-	buf := make([]byte, 0, 64*1024)
-	scanner.Buffer(buf, 1024*1024)
-
-	// Skip lines before offset.
-	currentLine := 0
-	for currentLine < offset && scanner.Scan() {
-		currentLine++
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning %s: %w", path, err)
-	}
-
-	// Read requested lines.
-	var lines []string
-	for scanner.Scan() {
-		if limit > 0 && len(lines) >= limit {
-			break
-		}
-		lines = append(lines, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("scanning %s: %w", path, err)
-	}
-
-	// Count remaining lines for totalLines.
-	remaining := 0
-	for scanner.Scan() {
-		remaining++
-	}
-	totalLines := offset + len(lines) + remaining
-
-	content := strings.Join(lines, "\n")
-	truncated := remaining > 0
-
-	return &FileContent{
-		Content:    content,
-		TotalLines: totalLines,
-		Truncated:  truncated,
-		Size:       info.Size(),
-	}, nil
+	return ReadFileContent(path, opts)
 }
 
 // ReadBinaryFile reads a file's raw bytes up to maxBytes.
@@ -782,6 +719,13 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		return nil, fmt.Errorf("command is required")
 	}
 
+	// Name a bad working directory before spawning, or the kernel's ENOENT
+	// comes back attributed to the shell binary instead of the directory.
+	if wdErr := osutil.ValidateWorkingDir(req.WorkingDir); wdErr != nil {
+		msg := wdErr.Error()
+		return &CommandResult{ExitCode: 1, Stderr: msg, Combined: msg}, nil
+	}
+
 	timeoutMs := req.TimeoutMs
 	if timeoutMs <= 0 {
 		timeoutMs = 60000 // 60s default
@@ -806,6 +750,14 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
+	// A bytes.Buffer stdout means os/exec reads through an OS pipe, and
+	// cmd.Wait() blocks until the LAST holder of that pipe exits — which is not
+	// the shell if the shell spawned something that outlives it. Bound that
+	// wait, or a finished command hangs for a grandchild's lifetime and
+	// TimeoutMs stops bounding anything. Shared with the daemon's exec.run
+	// handler so the two paths cannot bound it differently.
+	cmd.WaitDelay = ExecWaitDelay
+
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
@@ -826,54 +778,20 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	}
 	duration := time.Since(start)
 
-	exitCode := 0
-	timedOut := false
-	oomKilled := false
-	if err != nil {
-		if cmdCtx.Err() == context.DeadlineExceeded {
-			timedOut = true
-		}
-		if ee, ok := err.(*exec.ExitError); ok {
-			exitCode = ee.ExitCode()
-		} else if timedOut {
-			exitCode = 124 // standard timeout exit code
-		} else {
-			exitCode = 1
-		}
-		// A SIGKILL-shaped failure (exit -1: shell itself killed; exit 137:
-		// shell reports a killed child) that coincides with an oom_kill in
-		// the container cgroup gets the structured out-of-memory explanation
-		// appended to stderr, so the LLM tool result and user RPC consumers
-		// both see actionable text. Timeouts keep precedence.
-		if !timedOut {
-			if oom, msg := localMemReader.CheckOOMKill(exitCode, oomSnap); oom {
-				oomKilled = true
-				if stderrBuf.Len() > 0 {
-					stderrBuf.WriteByte('\n')
-				}
-				stderrBuf.WriteString(msg)
-			}
-		}
-	}
+	// Shared with the daemon's exec.run handler so the two exec paths cannot
+	// drift on what a failure looks like — see daemon.ClassifyExecOutcome.
+	outcome := ClassifyExecOutcome(err, cmdCtx.Err(), stderrBuf.String(), localMemReader, oomSnap)
 
 	stdout := stdoutBuf.String()
-	stderr := stderrBuf.String()
-	combined := stdout
-	if stderr != "" {
-		if combined != "" {
-			combined += "\n"
-		}
-		combined += stderr
-	}
-
 	return &CommandResult{
-		ExitCode:   exitCode,
-		Stdout:     stdout,
-		Stderr:     stderr,
-		Combined:   combined,
-		DurationMs: duration.Milliseconds(),
-		TimedOut:   timedOut,
-		OOMKilled:  oomKilled,
+		ExitCode:         outcome.ExitCode,
+		Stdout:           stdout,
+		Stderr:           outcome.Stderr,
+		Combined:         CombineOutput(stdout, outcome.Stderr),
+		DurationMs:       duration.Milliseconds(),
+		TimedOut:         outcome.TimedOut,
+		OOMKilled:        outcome.OOMKilled,
+		OutputIncomplete: outcome.OutputIncomplete,
 	}, nil
 }
 

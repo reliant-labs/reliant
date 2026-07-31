@@ -15,35 +15,11 @@ SELECT * FROM step_executions
 WHERE workflow_id = $1 AND step_id = $2
 ORDER BY created_at ASC;
 
--- name: GetRecentStepExecutions :many
--- Get the N most recent executions of a specific step (for "last N" queries)
-SELECT * FROM step_executions
-WHERE workflow_id = $1 AND step_id = $2
-ORDER BY created_at DESC
-LIMIT $3;
-
 -- name: GetAllStepExecutionsForWorkflow :many
 -- Get all step executions in a workflow (for full history reconstruction)
 SELECT * FROM step_executions
 WHERE workflow_id = $1
 ORDER BY created_at ASC;
-
--- name: CountStepExecutions :one
--- Count executions of a specific step (for size() queries)
-SELECT COUNT(*) FROM step_executions
-WHERE workflow_id = $1 AND step_id = $2;
-
--- name: CountFailedStepExecutions :one
--- Count failed executions of a specific step (for failure counting)
-SELECT COUNT(*) FROM step_executions
-WHERE workflow_id = $1 AND step_id = $2 AND (success = 0 OR exit_code != 0);
-
--- name: GetLastStepExecution :one
--- Get the most recent execution of a specific step (for history[-1] queries)
-SELECT * FROM step_executions
-WHERE workflow_id = $1 AND step_id = $2
-ORDER BY created_at DESC
-LIMIT 1;
 
 -- name: DeleteStepExecutionsForWorkflow :exec
 DELETE FROM step_executions WHERE workflow_id = $1;

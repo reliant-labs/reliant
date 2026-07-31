@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/forge/components"
+	"github.com/reliant-labs/forge/pkg/components"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )

@@ -119,11 +119,6 @@ inputs:
     default: npm run dev
     description: Command to start the application for UX review.
 
-  app_port:
-    type: integer
-    default: 5173
-    description: Port the application runs on (for UX reviewer to connect to).
-
 # Thread design:
 # - Planning forks from main thread (gets user msg). Each sub-step forks again.
 #   Only the final plan is saved to main. Research/criticism stays in forks.
@@ -342,7 +337,6 @@ nodes:
       build_command: "{{'build' in inputs.steps ? inputs.build_command : ''}}"
       build_log: "{{inputs.build_log}}"
       start_app_command: "{{'start_app' in inputs.steps ? inputs.start_app_command : ''}}"
-      app_port: "{{inputs.app_port}}"
     thread:
       mode: fork
       memo: false

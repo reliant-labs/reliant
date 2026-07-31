@@ -89,8 +89,9 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		}
 	}
 
-	// Wrap the transport chain with idle timeout detection.
-	// This ensures streaming responses that go silent for >5min are aborted.
+	// This driver builds its own transport chain (token refresh + lowercase
+	// headers), so it opts out of the client llm.NewAnthropicSDKClient installs
+	// and must re-add the idle timeout itself — the option list is last-wins.
 	customHTTPClient := &http.Client{
 		Transport: llm.WrapWithIdleTimeout(finalTransport),
 	}

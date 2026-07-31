@@ -24,6 +24,8 @@ import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStor
 import { useTourStore } from "../../store/tourStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useChatStore } from "../../store/chatStore";
+import { useProjectStore } from "../../store/projectStore";
+import { useChatList } from "../../hooks/chat-queries";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { trackEvent } from "../../lib/analytics";
 
@@ -348,8 +350,12 @@ export function OnboardingWizard() {
   // On `/workflow`, `/settings`, etc. NewChatView is unmounted, so its
   // portal isn't on screen and we mustn't accidentally block tour steps
   // that target those pages.
-  const chatsLoaded = useChatStore((state) => state.hasLoaded);
-  const chatsCount = useChatStore((state) => state.chats.size);
+  const projectId = useProjectStore((state) => state.currentProject?.id);
+  const { data: chatsList, isSuccess: chatsQuerySucceeded } =
+    useChatList(projectId);
+  const chatsLoaded =
+    useChatStore((state) => state.hasLoaded) && chatsQuerySucceeded;
+  const chatsCount = chatsList?.length ?? 0;
   const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
   const newChatViewMounted =
     location.pathname === "/" || location.pathname.startsWith("/project/");

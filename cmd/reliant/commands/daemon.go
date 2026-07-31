@@ -4,15 +4,13 @@ package commands
 import (
 	"bufio"
 	"context"
-	crypto_tls "crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -26,7 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
-	"github.com/reliant-labs/reliant/internal/toolexec/transport"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/spf13/cobra"
 )
 
@@ -52,7 +50,13 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // 1. Ensures user is logged in (runs OAuth if not)
 // 2. Calls CreateDaemonToken RPC to get a PAT
 // 3. Writes daemon credentials to local file
-func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL string) error {
+//
+// The daemon PAT is minted by, and scoped to, conn's server — the one the
+// resolved context names — so registering never silently targets a different
+// server than the rest of the CLI.
+func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection) error {
+	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
+
 	accessToken, err := auth.ReadAccessTokenFromAuthFile()
 	if err != nil {
 		return fmt.Errorf("reading auth file: %w", err)
@@ -75,7 +79,9 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL strin
 
 	logging.Info("Registering daemon via CreateDaemonToken", "api_url", apiURL, "hostname", hostname)
 
-	httpClient := newRegistrationHTTPClient(accessToken, apiURL)
+	// Registration is JWT-only (a PAT cannot mint a daemon PAT), so the bearer
+	// is the login session rather than the connection's resolved token.
+	httpClient := conn.httpClientWithBearer(accessToken)
 	client := reliantv1connect.NewDaemonTokenServiceClient(httpClient, apiURL)
 
 	resp, err := client.CreateDaemonToken(ctx, connect.NewRequest(&reliantv1.CreateDaemonTokenRequest{
@@ -83,7 +89,7 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL strin
 	}))
 	if err != nil {
 		logging.Error("CreateDaemonToken failed", "error", err, "code", connect.CodeOf(err), "api_url", apiURL)
-		return fmt.Errorf("creating daemon token: %w", err)
+		return conn.annotate(fmt.Errorf("creating daemon token: %w", err))
 	}
 	logging.Info("Daemon token created successfully", "token_id", resp.Msg.GetTokenId())
 
@@ -102,9 +108,26 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL strin
 	credsPath, _ := auth.DaemonCredentialsFilePath()
 	fmt.Fprintln(cmd.OutOrStdout(), "Daemon registered successfully")
 	fmt.Fprintf(cmd.OutOrStdout(), "  Credentials: %s\n", credsPath)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", apiURL)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Gateway:     %s\n", gwURL)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Server:      %s\n", conn.describeServer())
+	fmt.Fprintf(cmd.OutOrStdout(), "  Gateway:     %s\n", conn.describeGateway())
 	return nil
+}
+
+// daemonPATRenewBefore is how far ahead of a stored PAT's known expiry the
+// daemon proactively re-mints, so it never boots on a credential about to lapse
+// mid-run. Only applies to creds that carry an expiry; daemon-kind PATs are
+// non-expiring and are unaffected.
+const daemonPATRenewBefore = 24 * time.Hour
+
+// daemonCredsExpiringSoon reports whether stored creds carry a known expiry that
+// has already lapsed or falls within daemonPATRenewBefore of now. Non-expiring
+// creds (nil creds or nil ExpiresAt — every CreateDaemonToken / managed mint)
+// never expire and always return false.
+func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool {
+	if creds == nil || creds.ExpiresAt == nil {
+		return false
+	}
+	return !creds.ExpiresAt.After(now.Add(daemonPATRenewBefore))
 }
 
 // ensureDaemonCredentials returns existing daemon credentials or creates new ones.
@@ -113,25 +136,42 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, apiURL, gwURL strin
 // If no credentials exist, runs the interactive registration flow: prompts
 // for sign-in (if not already), then mints a PAT via CreateDaemonToken.
 // Most users will instead use `--token` to paste a PAT minted from the web UI.
-func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
+func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection) (*auth.DaemonCredentials, error) {
+	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
+
 	creds, err := auth.ReadDaemonCredentials(apiURL)
 	if err != nil {
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
 	}
 	if creds != nil {
-		// Update gateway URL if it changed (e.g. flag override). The in-memory
-		// creds are authoritative for this boot; persisting the drift back to
-		// disk is an optimization, so a read-only / mounted credentials file
-		// (managed-daemon dial-out mode) must not fail the boot.
-		if gwURL != "" && creds.GatewayURL != gwURL {
-			creds.GatewayURL = gwURL
-			persistDaemonCredentials(creds)
+		// A stored PAT that carries a known expiry and has lapsed (or is about to)
+		// can no longer authenticate the daemon; returning it would fail the
+		// gateway reach-out fatally. Proactively drop it and fall through to
+		// re-mint a fresh — non-expiring — daemon PAT. Non-expiring creds
+		// (ExpiresAt == nil), which is every CreateDaemonToken / managed-daemon
+		// mint, skip this and are returned as-is.
+		if daemonCredsExpiringSoon(creds, time.Now()) {
+			logging.Warn("stored daemon PAT is expired or near expiry — re-minting",
+				"expiresAt", creds.ExpiresAt.Format(time.RFC3339))
+			fmt.Fprintln(cmd.OutOrStdout(), "Daemon credentials expired. Re-registering...")
+			_ = auth.DeleteDaemonCredentials(apiURL)
+			creds = nil
+		} else {
+			// Update gateway URL if it changed (e.g. flag override). The in-memory
+			// creds are authoritative for this boot; persisting the drift back to
+			// disk is an optimization, so a read-only / mounted credentials file
+			// (managed-daemon dial-out mode) must not fail the boot.
+			if gwURL != "" && creds.GatewayURL != gwURL {
+				creds.GatewayURL = gwURL
+				persistDaemonCredentials(creds)
+			}
+			return creds, nil
 		}
-		return creds, nil
+	} else {
+		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
-	if err := registerDaemon(ctx, cmd, apiURL, gwURL); err != nil {
+	if err := registerDaemon(ctx, cmd, conn); err != nil {
 		return nil, fmt.Errorf("daemon registration failed: %w", err)
 	}
 
@@ -185,7 +225,9 @@ func isReadOnlyOrPermissionErr(err error) bool {
 // `syscall.read(2)` and cannot itself be canceled — the goroutine outlives
 // this function in that case, but the process is on its way out so the leak
 // is bounded.
-func credentialsFromToken(ctx context.Context, cmd *cobra.Command, apiURL, gwURL string) (*auth.DaemonCredentials, error) {
+func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connection) (*auth.DaemonCredentials, error) {
+	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
+
 	stat, _ := os.Stdin.Stat()
 	isPiped := (stat.Mode() & os.ModeCharDevice) == 0
 
@@ -254,54 +296,6 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, apiURL, gwURL
 	return creds, nil
 }
 
-// bearerAuthTransport injects a Bearer token into HTTP requests.
-type bearerAuthTransport struct {
-	token string
-	base  http.RoundTripper
-}
-
-func (t *bearerAuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req = req.Clone(req.Context())
-	req.Header.Set("Authorization", "Bearer "+t.token)
-	rt := t.base
-	if rt == nil {
-		rt = http.DefaultTransport
-	}
-	return rt.RoundTrip(req)
-}
-
-// newRegistrationHTTPClient creates an HTTP client for daemon registration RPCs.
-// It injects the bearer token and, for localhost or when RELIANT_SKIP_TLS_VERIFY=1
-// is set, skips TLS certificate verification (self-signed dev certs).
-func newRegistrationHTTPClient(token, serverURL string) *http.Client {
-	tr := &http.Transport{
-		// Resolve *.localhost → 127.0.0.1 for dev multi-worktree setups
-		// where macOS can't resolve subdomain.localhost via DNS.
-		DialContext: transport.LocalhostDialContext,
-	}
-	if shouldSkipTLSVerify(serverURL) {
-		tr.TLSClientConfig = &crypto_tls.Config{InsecureSkipVerify: true} //nolint:gosec // dev only
-	}
-	return &http.Client{
-		Transport: &bearerAuthTransport{token: token, base: tr},
-	}
-}
-
-// shouldSkipTLSVerify returns true when TLS cert verification should be skipped
-// for the given server URL (localhost targets or explicit env override).
-func shouldSkipTLSVerify(serverURL string) bool {
-	if os.Getenv("RELIANT_SKIP_TLS_VERIFY") == "1" {
-		return true
-	}
-	// For localhost URLs, self-signed certs are common in dev
-	for _, prefix := range []string{"https://localhost", "https://127.0.0.1", "https://[::1]"} {
-		if strings.HasPrefix(serverURL, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func newDaemonRegisterCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "register",
@@ -313,8 +307,17 @@ Creates a long-lived access token for the daemon and stores it locally.
 
 After registering, run 'reliant daemon start' to connect.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Registration mints a credential for a specific server; resolve it
+			// the same way every other command does. resolveServer (not
+			// resolveConnection) because registering is how you get a credential
+			// — requiring one first would be circular.
+			conn, err := resolveServer(cmd)
+			if err != nil {
+				return err
+			}
+
 			// Check if already registered
-			creds, err := auth.ReadDaemonCredentials(serverURL)
+			creds, err := auth.ReadDaemonCredentials(conn.ServerURL)
 			if err != nil {
 				return fmt.Errorf("reading daemon credentials: %w", err)
 			}
@@ -327,11 +330,45 @@ After registering, run 'reliant daemon start' to connect.`,
 				return nil
 			}
 
-			return registerDaemon(cmd.Context(), cmd, serverURL, resolveGatewayURL())
+			return registerDaemon(cmd.Context(), cmd, conn)
 		},
 	}
 
 	return cmd
+}
+
+// daemonShutdownGrace bounds the whole graceful shutdown. It is shorter than
+// daemonStopGrace so the daemon's own exit normally beats `daemon stop`'s
+// deadline and stop never has to escalate.
+const daemonShutdownGrace = 10 * time.Second
+
+// watchShutdownSignals turns SIGINT/SIGTERM into cancellation and guarantees
+// the process actually exits.
+//
+//	first signal  → cancel ctx (graceful shutdown)
+//	second signal → exit 130 (the interactive escape hatch)
+//	grace elapses → exit 1
+//
+// The deadline is the part that matters for an unattended daemon, which no one
+// is sitting at a terminal to Ctrl+C twice. Graceful shutdown walks code that
+// can block on a peer that stopped reading, on a child that ignores SIGTERM, or
+// on any future defer nobody audited — and a shutdown path that can hang
+// forever is exactly what makes "signal it and assume" look acceptable in the
+// tools that drive it. Bounding the whole path is cheaper and more durable than
+// proving every step inside it terminates.
+func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.CancelFunc, grace time.Duration, exit func(int)) {
+	<-sigCh
+	fmt.Fprintln(w, "\nShutting down — press Ctrl+C again to force-exit")
+	cancel()
+
+	select {
+	case <-sigCh:
+		fmt.Fprintln(w, "Force-exiting")
+		exit(130)
+	case <-time.After(grace):
+		fmt.Fprintf(w, "Graceful shutdown did not finish within %s — force-exiting\n", grace)
+		exit(1)
+	}
 }
 
 func newDaemonStartCmd() *cobra.Command {
@@ -369,35 +406,16 @@ Credential resolution order:
 
 			logging.Setup(slog.LevelInfo)
 
-			// Manual signal handling so a second Ctrl+C force-exits.
-			//   first  SIGINT/SIGTERM → cancel ctx (graceful shutdown)
-			//   second SIGINT/SIGTERM → os.Exit(130) (escape hatch when a
-			//                            reconnect loop, blocking stdin
-			//                            read, or stuck shutdown defer would
-			//                            otherwise keep the process alive)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			sigCh := make(chan os.Signal, 2)
 			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 			defer signal.Stop(sigCh)
-			go func() {
-				<-sigCh
-				fmt.Fprintln(cmd.ErrOrStderr(), "\nShutting down — press Ctrl+C again to force-exit")
-				cancel()
-				<-sigCh
-				fmt.Fprintln(cmd.ErrOrStderr(), "Force-exiting")
-				os.Exit(130)
-			}()
+			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit)
 
-			// Write PID file for `daemon stop`
-			pidFile := filepath.Join(dataDir, "daemon.pid")
-			if err := os.MkdirAll(filepath.Dir(pidFile), 0755); err != nil {
-				return fmt.Errorf("creating PID file directory: %w", err)
-			}
-			if err := os.WriteFile(pidFile, []byte(strconv.Itoa(os.Getpid())), 0644); err != nil {
-				return fmt.Errorf("writing PID file: %w", err)
-			}
-			defer os.Remove(pidFile)
+			// The daemon runtime publishes the record `daemon status` and
+			// `daemon stop` read (PID, binary identity, gateway-stream state);
+			// see internal/toolexec/daemonstate.
 
 			// Clean up background processes on shutdown.
 			defer shell.GetBackgroundManager().KillAllRunning()
@@ -425,15 +443,23 @@ Credential resolution order:
 			}
 
 			// --- Client mode: resolve credentials for outbound connection ---
+			// resolveServer, not resolveConnection: the daemon authenticates
+			// with its own PAT, so it must not require a CLI credential to
+			// learn which server/gateway it belongs to.
+			conn, err := resolveServer(cmd)
+			if err != nil {
+				return err
+			}
+			logging.Info("Daemon target resolved", "server", conn.describeServer(), "gateway", conn.describeGateway())
+
 			var creds *auth.DaemonCredentials
-			var err error
 			if useToken {
-				creds, err = credentialsFromToken(ctx, cmd, serverURL, resolveGatewayURL())
+				creds, err = credentialsFromToken(ctx, cmd, conn)
 				if err != nil {
 					return err
 				}
 			} else {
-				creds, err = ensureDaemonCredentials(ctx, cmd, serverURL, resolveGatewayURL())
+				creds, err = ensureDaemonCredentials(ctx, cmd, conn)
 				if err != nil {
 					return err
 				}
@@ -446,6 +472,14 @@ Credential resolution order:
 			}
 			if daemonGRPCURL == "" {
 				daemonGRPCURL = fmt.Sprintf("http://localhost:%s", port)
+			}
+
+			// Normalize before the TLS-mode inference below, which keys off the
+			// scheme: `forge cluster urls` prints grpc://host:port, and grpcs://
+			// must imply TLS just as https:// does.
+			daemonGRPCURL, err = bootstrap.NormalizeGatewayURL(daemonGRPCURL)
+			if err != nil {
+				return err
 			}
 
 			// Determine TLS mode: explicit flag/env > cert/key presence > h2c.
@@ -472,7 +506,7 @@ Credential resolution order:
 						TLSMode:    parsedTLSMode,
 						DataDir:    dataDir,
 						Name:       daemonName,
-						ServerURL:  serverURL,
+						ServerURL:  conn.ServerURL,
 						DaemonID:   c.DaemonID,
 						ServerMode: false,
 						ListenPort: listenPort,
@@ -490,8 +524,9 @@ Credential resolution order:
 				// is a real error — don't silently flip into Supabase OAuth, that
 				// would surprise the user who chose to use a specific PAT.
 				if isAuthFail && useToken {
-					_ = auth.DeleteDaemonCredentials(serverURL)
-					return fmt.Errorf("token rejected by gateway (%s) — verify the PAT is correct, not revoked, and matches the --server URL", code.String())
+					_ = auth.DeleteDaemonCredentials(conn.ServerURL)
+					return fmt.Errorf("token rejected by gateway %s (%s) — verify the PAT is correct, not revoked, and was minted by %s",
+						conn.describeGateway(), code.String(), conn.describeServer())
 				}
 
 				// Register flow: stale creds get cleaned up and we re-run the
@@ -499,14 +534,14 @@ Credential resolution order:
 				if isAuthFail {
 					logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
 						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
-					_ = auth.DeleteDaemonCredentials(serverURL)
+					_ = auth.DeleteDaemonCredentials(conn.ServerURL)
 
 					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
-					if regErr := registerDaemon(ctx, cmd, serverURL, resolveGatewayURL()); regErr != nil {
+					if regErr := registerDaemon(ctx, cmd, conn); regErr != nil {
 						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
 					}
 
-					newCreds, readErr := auth.ReadDaemonCredentials(serverURL)
+					newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL)
 					if readErr != nil || newCreds == nil {
 						return fmt.Errorf("failed to read credentials after re-registration")
 					}
@@ -543,46 +578,161 @@ Credential resolution order:
 	return cmd
 }
 
+// daemonProcessAlive reports whether pid names a live process. Signal 0 is the
+// existence check.
+func daemonProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	return process.Signal(syscall.Signal(0)) == nil
+}
+
+// printDaemonRuntimeRecord writes the identifying detail behind the headline:
+// which process, which binary, which gateway, and how long the stream has been
+// in its current state.
+func printDaemonRuntimeRecord(w io.Writer, state daemonstate.State, recordPath string) {
+	now := time.Now().UTC()
+	fmt.Fprintf(w, "  PID:      %d\n", state.PID)
+
+	if state.Executable != "" {
+		binary := state.Executable
+		if !state.BinaryModTime.IsZero() {
+			binary = fmt.Sprintf("%s (built %s, %s ago)",
+				binary,
+				state.BinaryModTime.Local().Format(time.RFC3339),
+				now.Sub(state.BinaryModTime).Round(time.Second))
+		}
+		fmt.Fprintf(w, "  Binary:   %s\n", binary)
+	}
+	if state.Revision != "" {
+		revision := state.Revision
+		if state.Dirty {
+			revision += " (built from a dirty tree)"
+		}
+		fmt.Fprintf(w, "  Revision: %s\n", revision)
+	}
+	if state.GatewayURL != "" {
+		gateway := state.GatewayURL
+		if state.TLSMode != "" {
+			gateway = fmt.Sprintf("%s (%s)", gateway, state.TLSMode)
+		}
+		fmt.Fprintf(w, "  Gateway:  %s\n", gateway)
+	}
+
+	stream := string(state.Stream)
+	if stream == "" {
+		stream = "unknown"
+	}
+	if !state.StreamChangedAt.IsZero() {
+		stream = fmt.Sprintf("%s for %s", stream, now.Sub(state.StreamChangedAt).Round(time.Second))
+	}
+	fmt.Fprintf(w, "  Stream:   %s\n", stream)
+	if !state.Stream.Established() {
+		if state.ConnectedAt.IsZero() {
+			fmt.Fprintln(w, "            never connected since this daemon started")
+		} else {
+			fmt.Fprintf(w, "            last connected %s\n", state.ConnectedAt.Local().Format(time.RFC3339))
+		}
+	}
+	printDaemonStreamStability(w, state, now)
+	if state.StreamDetail != "" {
+		fmt.Fprintf(w, "  Error:    %s\n", state.StreamDetail)
+	}
+	fmt.Fprintf(w, "  Record:   %s\n", recordPath)
+}
+
+// printDaemonStreamStability reports whether the stream has HELD, not just
+// whether it is up right now. An instantaneous sample of a stream that flaps
+// every few seconds says "connected" nearly every time it is taken.
+func printDaemonStreamStability(w io.Writer, state daemonstate.State, now time.Time) {
+	if state.Sessions <= 1 && state.LastDisconnectAt.IsZero() {
+		if state.Stream.Established() {
+			fmt.Fprintf(w, "  Stability: stable — no reconnects since this daemon started\n")
+		}
+		return
+	}
+	verdict := "stable"
+	if !state.Stable(now) {
+		verdict = "UNSTABLE"
+	}
+	fmt.Fprintf(w, "  Stability: %s — %d stream sessions since this daemon started",
+		verdict, state.Sessions)
+	if !state.LastDisconnectAt.IsZero() {
+		fmt.Fprintf(w, ", last dropped %s ago", now.Sub(state.LastDisconnectAt).Round(time.Second))
+	}
+	fmt.Fprintln(w)
+	if verdict == "UNSTABLE" {
+		fmt.Fprintf(w, "             a stream that dropped within the last %s will lose in-flight\n", daemonstate.StabilityWindow)
+		fmt.Fprintln(w, "             tool calls; do not start long work against it")
+	}
+}
+
 func newDaemonStatusCmd() *cobra.Command {
 	var dataDir string
 
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check daemon status",
-		Long:  `Shows the current status of the tools daemon: whether it's running, connected, and its uptime.`,
+		Long: `Reports whether a tools daemon process exists, whether its gateway stream is
+actually established, and which binary it is running.
+
+Tool execution happens inside the daemon, over that stream — a daemon process
+whose stream never came up serves nothing. "Running" therefore means
+"connected", not "a PID exists", and this command exits non-zero whenever the
+stream is not established.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pidFile := filepath.Join(dataDir, "daemon.pid")
-			data, err := os.ReadFile(pidFile)
+			out := cmd.OutOrStdout()
+			recordPath := daemonstate.Path(dataDir)
+
+			state, err := daemonstate.Read(dataDir)
 			if err != nil {
 				if os.IsNotExist(err) {
-					fmt.Fprintln(cmd.OutOrStdout(), "No daemon running (no PID file found)")
-					fmt.Fprintf(cmd.OutOrStdout(), "  PID file: %s\n", pidFile)
+					fmt.Fprintln(out, "No daemon running (no runtime record found)")
+					fmt.Fprintf(out, "  Record:   %s\n", recordPath)
 					return fmt.Errorf("daemon not running")
 				}
-				return fmt.Errorf("reading PID file: %w", err)
+				return fmt.Errorf("reading daemon runtime record: %w", err)
 			}
 
-			pidStr := strings.TrimSpace(string(data))
-			pid, err := strconv.Atoi(pidStr)
-			if err != nil {
-				return fmt.Errorf("invalid PID in %s: %q", pidFile, pidStr)
-			}
-
-			// Check if process is alive (signal 0 = check existence)
-			process, err := os.FindProcess(pid)
-			if err != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "Daemon PID %d not found (stale PID file)\n", pid)
+			if !daemonProcessAlive(state.PID) {
+				fmt.Fprintf(out, "Daemon PID %d is not running (stale runtime record)\n", state.PID)
+				fmt.Fprintf(out, "  Record:   %s\n", recordPath)
 				return fmt.Errorf("daemon not running")
 			}
 
-			if err := process.Signal(syscall.Signal(0)); err != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "Daemon PID %d is not running (stale PID file)\n", pid)
-				return fmt.Errorf("daemon not running")
+			now := time.Now().UTC()
+			switch {
+			case state.Stream == daemonstate.StreamConnected && !state.Stable(now):
+				fmt.Fprintln(out, "Daemon's gateway stream is established but FLAPPING — it is not serving reliably")
+			case state.Stream == daemonstate.StreamConnected:
+				fmt.Fprintln(out, "Daemon is running and its gateway stream is established")
+			case state.Stream == daemonstate.StreamUnknown:
+				fmt.Fprintln(out, "Daemon process exists but its gateway stream state is unknown")
+			default:
+				fmt.Fprintf(out, "Daemon process exists but its gateway stream is NOT established (%s)\n", state.Stream)
 			}
+			printDaemonRuntimeRecord(out, state, recordPath)
 
-			fmt.Fprintln(cmd.OutOrStdout(), "Daemon is running")
-			fmt.Fprintf(cmd.OutOrStdout(), "  PID:      %d\n", pid)
-			fmt.Fprintf(cmd.OutOrStdout(), "  PID file: %s\n", pidFile)
+			if state.Stream == daemonstate.StreamUnknown {
+				return fmt.Errorf("daemon gateway stream state is unknown — it may be serving nothing")
+			}
+			if !state.Stream.Established() {
+				return fmt.Errorf("daemon gateway stream is not established (%s) — it can serve no tool calls", state.Stream)
+			}
+			// Established is not the same as usable. A stream that dropped
+			// moments ago will drop again mid-run and take every in-flight tool
+			// call with it, so exit non-zero: this command is used as a
+			// pre-flight, and a pre-flight that passes on a flapping stream is
+			// worse than no pre-flight.
+			if !state.Stable(now) {
+				return fmt.Errorf(
+					"daemon gateway stream is flapping — %d sessions, last dropped %s ago (needs %s unbroken)",
+					state.Sessions, now.Sub(state.LastDisconnectAt).Round(time.Second), daemonstate.StabilityWindow)
+			}
 			return nil
 		},
 	}
@@ -590,6 +740,120 @@ func newDaemonStatusCmd() *cobra.Command {
 	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
 
 	return cmd
+}
+
+// Stop timings. The daemon force-exits itself at daemonShutdownGrace, so a
+// daemon running current code always beats daemonStopGrace and `stop` never
+// needs to escalate; escalation exists for a daemon so wedged that even its own
+// watchdog cannot run, and for older binaries that have none.
+const (
+	daemonStopGrace = 12 * time.Second
+	daemonKillGrace = 5 * time.Second
+	daemonStopPoll  = 50 * time.Millisecond
+)
+
+// processControl is the seam over signalling and liveness. It exists so the
+// stop path can be tested against a process that survives SIGKILL — the one
+// case where `stop` must refuse to claim success, and a case no real process
+// can be made to reproduce.
+type processControl struct {
+	alive  func(pid int) bool
+	signal func(pid int, sig syscall.Signal) error
+}
+
+func realProcessControl() processControl {
+	return processControl{
+		alive: daemonProcessAlive,
+		signal: func(pid int, sig syscall.Signal) error {
+			process, err := os.FindProcess(pid)
+			if err != nil {
+				return err
+			}
+			return process.Signal(sig)
+		},
+	}
+}
+
+// awaitExit polls until pid is gone or timeout elapses, reporting whether it
+// went. Polling with signal 0 is the ONLY way to observe a non-child process
+// exiting: os.Process.Wait works on children, and against anything else it
+// returns ECHILD in about 20 microseconds. `stop` used to wait on it in a
+// goroutine and discard the error, so the "wait up to 10 seconds" it advertised
+// was a 20-microsecond no-op, the escalation branch behind it was unreachable,
+// and "Daemon stopped" was printed over a daemon that was still running.
+func awaitExit(pc processControl, pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if !pc.alive(pid) {
+			return true
+		}
+		if !time.Now().Before(deadline) {
+			return false
+		}
+		time.Sleep(daemonStopPoll)
+	}
+}
+
+// stopDaemonProcess signals the daemon and does not return success until the
+// process is gone.
+//
+// The runtime record is cleared only once the process is confirmed dead. A
+// missing record over a live process is strictly worse than a stale one: it
+// makes the daemon invisible to `daemon status` (which reports "no daemon
+// running") and to `daemon start` (which then starts a second one against the
+// same gateway identity, and the pair evict each other indefinitely).
+func stopDaemonProcess(w io.Writer, pc processControl, dataDir string, pid int, force bool) error {
+	if pid <= 0 || !pc.alive(pid) {
+		fmt.Fprintf(w, "Daemon PID %d is not running (stale runtime record)\n", pid)
+		return clearDaemonRecord(w, dataDir)
+	}
+
+	sig, verb, grace := syscall.SIGTERM, "Stopping", daemonStopGrace
+	if force {
+		sig, verb, grace = syscall.SIGKILL, "Force killing", daemonKillGrace
+	}
+
+	fmt.Fprintf(w, "%s daemon (PID %d)...\n", verb, pid)
+	if err := pc.signal(pid, sig); err != nil {
+		if !pc.alive(pid) {
+			fmt.Fprintf(w, "Daemon PID %d had already exited\n", pid)
+			return clearDaemonRecord(w, dataDir)
+		}
+		return fmt.Errorf("signalling daemon PID %d with %v: %w", pid, sig, err)
+	}
+
+	if awaitExit(pc, pid, grace) {
+		fmt.Fprintf(w, "Daemon stopped (PID %d exited)\n", pid)
+		return clearDaemonRecord(w, dataDir)
+	}
+
+	if !force {
+		fmt.Fprintf(w, "Daemon PID %d did not exit within %s — escalating to SIGKILL\n", pid, grace)
+		if err := pc.signal(pid, syscall.SIGKILL); err != nil && pc.alive(pid) {
+			return fmt.Errorf("daemon PID %d ignored SIGTERM and could not be killed: %w", pid, err)
+		}
+		if awaitExit(pc, pid, daemonKillGrace) {
+			fmt.Fprintf(w, "Daemon killed (PID %d did not exit on SIGTERM)\n", pid)
+			return clearDaemonRecord(w, dataDir)
+		}
+	}
+
+	// Nothing was cleared. Say what is still true so the next command can act
+	// on it rather than rediscovering it.
+	fmt.Fprintf(w, "Daemon PID %d is STILL RUNNING after SIGKILL\n", pid)
+	fmt.Fprintf(w, "  Record:   %s (kept — a live daemon must stay visible)\n", daemonstate.Path(dataDir))
+	fmt.Fprintf(w, "  It still holds its gateway registration. Starting another daemon now\n")
+	fmt.Fprintf(w, "  would make the two evict each other. Investigate PID %d first.\n", pid)
+	return fmt.Errorf("daemon PID %d is still running after SIGTERM and SIGKILL", pid)
+}
+
+// clearDaemonRecord removes the runtime record of a process confirmed dead.
+func clearDaemonRecord(w io.Writer, dataDir string) error {
+	if err := daemonstate.Clear(dataDir); err != nil {
+		fmt.Fprintf(w, "Warning: could not remove the runtime record: %v\n", err)
+		return fmt.Errorf("removing daemon runtime record: %w", err)
+	}
+	return nil
 }
 
 func newDaemonStopCmd() *cobra.Command {
@@ -601,66 +865,24 @@ func newDaemonStopCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "stop",
 		Short: "Stop the tools daemon",
-		Long:  `Sends a graceful shutdown signal to the running tools daemon. Use --force to kill immediately.`,
+		Long: `Sends a graceful shutdown signal to the running tools daemon and waits for it
+to actually exit. Use --force to SIGKILL immediately.
+
+If the daemon does not exit within the grace period this escalates to SIGKILL,
+and if it survives that, the command exits non-zero and leaves the runtime
+record in place. A daemon reported as stopped while it is still running keeps
+its gateway registration, and the next 'daemon start' then registers a second
+daemon under the same identity — the two evict each other until one is killed.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pidFile := filepath.Join(dataDir, "daemon.pid")
-			data, err := os.ReadFile(pidFile)
+			state, err := daemonstate.Read(dataDir)
 			if err != nil {
 				if os.IsNotExist(err) {
-					fmt.Fprintln(cmd.OutOrStdout(), "No daemon running (no PID file found)")
+					fmt.Fprintln(cmd.OutOrStdout(), "No daemon running (no runtime record found)")
 					return nil
 				}
-				return fmt.Errorf("reading PID file: %w", err)
+				return fmt.Errorf("reading daemon runtime record: %w", err)
 			}
-
-			pidStr := strings.TrimSpace(string(data))
-			pid, err := strconv.Atoi(pidStr)
-			if err != nil {
-				return fmt.Errorf("invalid PID in %s: %q", pidFile, pidStr)
-			}
-
-			process, err := os.FindProcess(pid)
-			if err != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "Daemon PID %d not found\n", pid)
-				_ = os.Remove(pidFile)
-				return nil
-			}
-
-			if force {
-				fmt.Fprintf(cmd.OutOrStdout(), "Force killing daemon (PID %d)...\n", pid)
-				if err := process.Signal(syscall.SIGKILL); err != nil {
-					fmt.Fprintf(cmd.OutOrStdout(), "Process already stopped\n")
-				}
-				_ = os.Remove(pidFile)
-				fmt.Fprintln(cmd.OutOrStdout(), "Daemon killed")
-				return nil
-			}
-
-			fmt.Fprintf(cmd.OutOrStdout(), "Stopping daemon (PID %d)...\n", pid)
-			if err := process.Signal(syscall.SIGTERM); err != nil {
-				fmt.Fprintf(cmd.OutOrStdout(), "Process already stopped\n")
-				_ = os.Remove(pidFile)
-				return nil
-			}
-
-			// Wait for process to exit (up to 10 seconds)
-			done := make(chan struct{})
-			go func() {
-				_, _ = process.Wait()
-				close(done)
-			}()
-
-			select {
-			case <-done:
-				fmt.Fprintln(cmd.OutOrStdout(), "Daemon stopped")
-			case <-time.After(10 * time.Second):
-				fmt.Fprintln(cmd.OutOrStdout(), "Daemon did not stop in 10s, force killing...")
-				_ = process.Signal(syscall.SIGKILL)
-				fmt.Fprintln(cmd.OutOrStdout(), "Daemon killed")
-			}
-
-			_ = os.Remove(pidFile)
-			return nil
+			return stopDaemonProcess(cmd.OutOrStdout(), realProcessControl(), dataDir, state.PID, force)
 		},
 	}
 

@@ -7,6 +7,10 @@ import { isDev } from './constants';
 import { useChatStore } from '../store/chatStore';
 import { useThreadActivityStore } from '../store/threadActivityStore';
 import { useActivityStore, ChatActivity } from '../store/activityStore';
+import { queryClient } from './query-client';
+import { approvalKeys } from '../hooks/approval-queries';
+import { getMessagesFromCache } from '../hooks/message-queries';
+import { ApprovalStatus, type ToolApprovalRequest } from '../api/approval-grpc';
 
 class DebugLogger {
   private logs: string[] = [];
@@ -135,14 +139,16 @@ if (isDev && typeof window !== "undefined") {
       chatId: chatId,
       isActive: (activityState.activities.get(chatId) ?? ChatActivity.IDLE) >= ChatActivity.RUNNING,
       activity: activityState.activities.get(chatId) ?? ChatActivity.IDLE,
-      pendingApprovals: state.pendingApprovals[chatId]?.length || 0,
+      pendingApprovals:
+        (queryClient
+          .getQueryData<ToolApprovalRequest[]>(approvalKeys.list(chatId))
+          ?.filter((a) => a.status === ApprovalStatus.PENDING).length) || 0,
       activeThreads: useThreadActivityStore.getState().threads[chatId]?.length || 0,
       toolCallStates: state.toolCallStates[chatId]?.size || 0,
-      streamingMessages:
-        state.messages[chatId]?.filter(
-          (m) => m.streamingState === StreamingState.STREAMING,
-        ).length || 0,
-      messageCount: state.messages[chatId]?.length || 0,
+      streamingMessages: getMessagesFromCache(chatId).filter(
+        (m) => m.streamingState === StreamingState.STREAMING,
+      ).length,
+      messageCount: getMessagesFromCache(chatId).length,
     };
     console.table(chatState);
     console.log('Full state:', chatState);

@@ -14,21 +14,21 @@ import (
 func TestEvaluateNodeCondition(t *testing.T) {
 	t.Run("empty condition returns true", func(t *testing.T) {
 		node := &reliantv1.Node{Id: "test", Type: "run"}
-		result, err := evaluateNodeCondition(node, nil, nil, nil)
+		result, err := evaluateNodeCondition(node, nil, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result)
 	})
 
 	t.Run("literal true returns true", func(t *testing.T) {
 		node := &reliantv1.Node{Id: "test", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "true"}}
-		result, err := evaluateNodeCondition(node, nil, nil, nil)
+		result, err := evaluateNodeCondition(node, nil, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result)
 	})
 
 	t.Run("literal false returns false", func(t *testing.T) {
 		node := &reliantv1.Node{Id: "test", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "false"}}
-		result, err := evaluateNodeCondition(node, nil, nil, nil)
+		result, err := evaluateNodeCondition(node, nil, nil, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result)
 	})
@@ -39,7 +39,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			"phases": []interface{}{"research", "plan", "implement"},
 		}
 
-		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil)
+		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result)
 	})
@@ -50,7 +50,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			"phases": []interface{}{"research", "plan", "implement"},
 		}
 
-		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil)
+		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result)
 	})
@@ -63,7 +63,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			},
 		}
 
-		result, err := evaluateNodeCondition(node, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(node, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result)
 	})
@@ -76,7 +76,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			},
 		}
 
-		result, err := evaluateNodeCondition(node, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(node, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result)
 	})
@@ -89,7 +89,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			},
 		}
 
-		result, err := evaluateNodeCondition(node, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(node, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result) // Should not execute because previous was skipped
 	})
@@ -100,7 +100,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			"run_tests": true,
 		}
 
-		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil)
+		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result)
 	})
@@ -111,7 +111,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 			"run_tests": false,
 		}
 
-		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil)
+		result, err := evaluateNodeCondition(node, nil, workflowInputs, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result)
 	})
@@ -119,14 +119,14 @@ func TestEvaluateNodeCondition(t *testing.T) {
 	t.Run("invalid CEL expression returns error", func(t *testing.T) {
 		node := &reliantv1.Node{Id: "test", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "this is not valid CEL"}}
 
-		_, err := evaluateNodeCondition(node, nil, nil, nil)
+		_, err := evaluateNodeCondition(node, nil, nil, nil, nil)
 		require.Error(t, err)
 	})
 
 	t.Run("CEL expression that doesn't return boolean returns error", func(t *testing.T) {
 		node := &reliantv1.Node{Id: "test", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "'not a boolean'"}}
 
-		_, err := evaluateNodeCondition(node, nil, nil, nil)
+		_, err := evaluateNodeCondition(node, nil, nil, nil, nil)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "did not return boolean")
 	})
@@ -156,7 +156,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.nodeID, func(t *testing.T) {
 				node := &reliantv1.Node{Id: tc.nodeID, Type: "run", Condition: &reliantv1.DirectCelBool{Expr: tc.condition}}
-				result, err := evaluateNodeCondition(node, nil, workflowInputs, nil)
+				result, err := evaluateNodeCondition(node, nil, workflowInputs, nil, nil)
 				require.NoError(t, err)
 				assert.Equal(t, tc.expected, result)
 			})
@@ -173,7 +173,7 @@ func TestSkippedRunNodeOutputs(t *testing.T) {
 
 		// Downstream node checks lint.exit_code — should work without has() guards
 		downstream := &reliantv1.Node{Id: "deploy", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code == 0"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result, "skipped run node exit_code should be 0")
 	})
@@ -184,7 +184,7 @@ func TestSkippedRunNodeOutputs(t *testing.T) {
 		}
 
 		downstream := &reliantv1.Node{Id: "deploy", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.skipped"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result, "skipped field should still be true")
 	})
@@ -196,7 +196,7 @@ func TestSkippedRunNodeOutputs(t *testing.T) {
 
 		// Accessing exit_code on a skipped non-run node should fail
 		downstream := &reliantv1.Node{Id: "next", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "has(nodes.llm_step.exit_code)"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result, "non-run skipped node should not have exit_code")
 	})
@@ -207,7 +207,7 @@ func TestSkippedRunNodeOutputs(t *testing.T) {
 		}
 
 		downstream := &reliantv1.Node{Id: "check", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.build.stdout == ''"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result, "skipped run node stdout should be empty")
 	})
@@ -223,7 +223,7 @@ func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
 
 		// has(nodes.msg_node.exit_code) should be false
 		downstream := &reliantv1.Node{Id: "next", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "has(nodes.msg_node.exit_code)"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result, "skipped non-run node should NOT have exit_code")
 	})
@@ -237,19 +237,19 @@ func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
 
 		// Check exit_code == 0
 		downstream := &reliantv1.Node{Id: "check1", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code == 0"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result, "skipped run node exit_code should be 0")
 
 		// Check skipped == true
 		downstream2 := &reliantv1.Node{Id: "check2", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.skipped"}}
-		result2, err := evaluateNodeCondition(downstream2, nodeOutputs, nil, nil)
+		result2, err := evaluateNodeCondition(downstream2, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result2, "skipped run node should have skipped == true")
 
 		// Check both coexist: exit_code == 0 && skipped == true
 		downstream3 := &reliantv1.Node{Id: "check3", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code == 0 && nodes.lint.skipped"}}
-		result3, err := evaluateNodeCondition(downstream3, nodeOutputs, nil, nil)
+		result3, err := evaluateNodeCondition(downstream3, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result3, "both exit_code == 0 and skipped should coexist")
 	})
@@ -266,7 +266,7 @@ func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
 
 		// has(nodes.build.skipped) should be false for a real (non-skipped) node
 		downstream := &reliantv1.Node{Id: "next", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "!has(nodes.build.skipped) || !nodes.build.skipped"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result, "non-skipped run node should not have skipped == true")
 	})
@@ -280,7 +280,7 @@ func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
 		}
 
 		downstream := &reliantv1.Node{Id: "fix", Type: "run", Condition: &reliantv1.DirectCelBool{Expr: "nodes.lint.exit_code != 0"}}
-		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil)
+		result, err := evaluateNodeCondition(downstream, nodeOutputs, nil, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result, "skipped run node exit_code != 0 should be false (0 != 0 is false)")
 	})
@@ -349,12 +349,12 @@ edges: []
 		assert.Equal(t, "outputs.exit_code != 0 && iter.iteration + 1 < 5", loopNode.GetLoop().GetWhile().GetExpr())
 
 		workflowInputsFalse := map[string]interface{}{"enable_retries": false}
-		result, err := evaluateNodeCondition(loopNode, nil, workflowInputsFalse, nil)
+		result, err := evaluateNodeCondition(loopNode, nil, workflowInputsFalse, nil, nil)
 		require.NoError(t, err)
 		assert.False(t, result, "Loop should be skipped when enable_retries is false")
 
 		workflowInputsTrue := map[string]interface{}{"enable_retries": true}
-		result, err = evaluateNodeCondition(loopNode, nil, workflowInputsTrue, nil)
+		result, err = evaluateNodeCondition(loopNode, nil, workflowInputsTrue, nil, nil)
 		require.NoError(t, err)
 		assert.True(t, result, "Loop should execute when enable_retries is true")
 	})
