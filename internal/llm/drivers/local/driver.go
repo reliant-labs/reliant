@@ -56,7 +56,7 @@ func NewClient(opts llm.DriverOptions) *LocalClient {
 		}
 	}
 
-	client := openai.NewClient(openaiClientOptions...)
+	client := llm.NewOpenAISDKClient(openaiClientOptions...)
 	return &LocalClient{
 		Options: opts,
 		Client:  client,

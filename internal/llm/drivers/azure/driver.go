@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
-	"github.com/openai/openai-go/v3"
 	"github.com/openai/openai-go/v3/azure"
 	"github.com/openai/openai-go/v3/option"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -46,7 +45,7 @@ func NewClient(opts llm.DriverOptions) *AzureClient {
 
 	base := &openaiPkg.OpenaiClient{
 		Options: opts,
-		Client:  openai.NewClient(reqOpts...),
+		Client:  llm.NewOpenAISDKClient(reqOpts...),
 	}
 
 	return &AzureClient{OpenaiClient: base}

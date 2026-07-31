@@ -1,0 +1,91 @@
+# `stuck` + human feedback must re-enter at REVIEW, not at IMPLEMENT.
+#
+# `stuck` does not mean the code is wrong — it means the REVIEW could not be
+# performed. So the human's answer is addressed to the reviewer. Before the
+# implement-skip condition existed, the only door back into the loop was the
+# iteration entry (`implement`): in a measured run the human replied "Nothing is
+# broken… do not redo the implementation. Just run the review properly this time"
+# and the next attempt spent 9m04s and 31 LLM calls making ZERO edits, because an
+# agent holding write tools was the only thing the workflow could hand it to.
+#
+# The discriminator is `skipped: attempt.implement` on iteration 1. The gate is
+# deliberately NOT skipped with it — "I fixed it, continue" is one of the human's
+# options at that checkpoint, so the environment may have changed and the reviewer
+# must be handed exit codes measured after the human touched it, not before.
+#
+# Flow: implement → gate(green) → review(stuck) → stuck_checkpoint(feedback)
+#       → [iteration 1] implement SKIPPED → gate(green) → review(pass) → done
+
+name: stuck_feedback_rereviews_without_reimplementing
+description: A stuck reviewer plus human feedback re-runs review with no re-implementation, and the pass then ends the loop
+
+inputs:
+  max_retries: 5
+  lint_command: "task lint"
+  test_command: "task test"
+  build_command: "task build"
+  start_app_command: "cd /srv/app && start-the-app"
+
+events:
+  # ── Iteration 0: the build is finished and green; the REVIEW is what fails ──
+  - node: attempt.implement
+    output:
+      response_text: "Implemented every RPC and wired the pages. Ran the suite locally, green."
+
+  - node: attempt.lint
+    output:
+      exit_code: 0
+  - node: attempt.test
+    output:
+      exit_code: 0
+  - node: attempt.build
+    output:
+      exit_code: 0
+
+  - node: attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "stuck"
+        feedback: "I could not obtain the live app URL in this turn, so I could not inspect anything. This is a tooling/execution-order blocker for this review attempt, not evidence that the implementation is incorrect."
+
+  - node: attempt.stuck_checkpoint
+    output:
+      has_feedback: true
+      response: "Nothing is broken. Do not redo the implementation. Just run the review properly this time."
+
+  # ── Iteration 1: NO implement event — the node must be skipped, not mocked ──
+  - node: attempt.lint
+    output:
+      exit_code: 0
+  - node: attempt.test
+    output:
+      exit_code: 0
+  - node: attempt.build
+    output:
+      exit_code: 0
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Started the app myself, read the ephemeral port off its output, snapshotted every page. Correct and complete."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.review
+    - attempt.stuck_checkpoint
+  # Iteration 1 re-enters at review: implement is skipped, the gate is not.
+  skipped:
+    - attempt.implement
+  not_reached:
+    - attempt.refactor
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+      gate_failed: false

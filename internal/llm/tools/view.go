@@ -16,7 +16,7 @@ import (
 
 type ViewParams struct {
 	FilePath string `json:"file_path" jsonschema:"required,description=the file to view"`
-	Offset   int    `json:"offset,omitempty" jsonschema:"description=The line to start reading from, default is 0"`
+	Offset   int    `json:"offset,omitempty" jsonschema:"description=The 1-based line number to start reading from. Line 1 is the first line of the file. Default 1 — omit it to read from the start."`
 	Limit    int    `json:"limit,omitempty" jsonschema:"description=The amount of lines to read, maximum is 256000, and the default (if empty), is 300. Only set the limit for large files."`
 	Pages    string `json:"pages,omitempty" jsonschema:"description=PDF files only. Page range to read (e.g. '1-5'\\, '3'\\, '10-20'). Maximum 20 pages per request. Required for PDFs larger than 10 pages; ignored for non-PDF files."`
 	Repo     string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
@@ -215,9 +215,23 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 		// Still allow reading, but the byte/line limits will protect us
 	}
 
+	// `offset` is 1-BASED: offset 1 is the first line. 0 is accepted and clamped,
+	// so a caller that omits it still reads from the start.
+	//
+	// The reader below takes a zero-based skip, so the conversion happens exactly
+	// ONCE, here. The previous split — zero-based in, one-based line numbers out —
+	// is what made `offset: 1` silently drop line 1 while numbering the rest
+	// correctly, so nothing in the output looked wrong. Measured: 455 of ~520
+	// reads in one run passed `offset: 1`, and one of them cost a scaffolded file
+	// its `"use client";` directive when the agent composed the file back.
+	startLine := params.Offset
+	if startLine < 1 {
+		startLine = 1
+	}
+
 	// Read the file content via daemon
 	fc, err := rctx.Daemon.ReadFile(rctx.Context, filePath, &daemon.ReadFileOpts{
-		Offset: params.Offset,
+		Offset: startLine - 1,
 		Limit:  params.Limit,
 	})
 	if err != nil {
@@ -247,13 +261,15 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 
 	output := "<file>\n"
 	// Format the output with line numbers
-	output += addLineNumbers(content, params.Offset+1)
+	output += addLineNumbers(content, startLine)
 
 	// Build actionable truncation message when not all content was shown
 	hasMore := fc.Truncated || byteLimitReached
 	if hasMore {
 		linesRead := countLines(content)
-		nextOffset := params.Offset + linesRead
+		// 1-based, so this is the LINE NUMBER to resume at — the caller passes it
+		// straight back as `offset` and the seam is exact.
+		nextOffset := startLine + linesRead
 		fileSize := formatFileSize(stat.Size)
 
 		var reason string
@@ -267,7 +283,7 @@ func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolRespo
 			"\n\n--- Truncated: Showing lines %d-%d of %d total (%s, %s) ---\n"+
 				"Use offset=%d to continue reading\n"+
 				"Use grep to find specific lines, then view with offset",
-			params.Offset+1, nextOffset, fc.TotalLines, fileSize, reason,
+			startLine, nextOffset, fc.TotalLines, fileSize, reason,
 			nextOffset,
 		)
 	}
@@ -343,7 +359,9 @@ func addLineNumbers(content string, startLine int) string {
 		return ""
 	}
 
-	lines := strings.Split(content, "\n")
+	// splitLines, not strings.Split: content is byte-exact, so a file ending in
+	// a newline would otherwise gain a phantom numbered blank line at the end.
+	lines, _ := splitLines(content)
 
 	var result []string
 	for i, line := range lines {
@@ -365,21 +383,22 @@ func addLineNumbers(content string, startLine int) string {
 
 // truncateLongLines truncates lines that exceed MaxLineLength.
 func truncateLongLines(content string) string {
-	lines := strings.Split(content, "\n")
+	lines, terminated := splitLines(content)
 	for i, line := range lines {
 		if len(line) > MaxLineLength {
 			lines[i] = line[:MaxLineLength] + "..."
 		}
 	}
-	return strings.Join(lines, "\n")
+	return joinLines(lines, terminated)
 }
 
-// countLines returns the number of lines in content.
+// countLines returns the number of lines in content. A trailing newline
+// terminates the last line rather than starting another, so "a\nb\n" and "a\nb"
+// are both two lines — this feeds the "showing lines X-Y of N" hint and the
+// next offset a paginating view call should ask for.
 func countLines(content string) int {
-	if content == "" {
-		return 0
-	}
-	return strings.Count(content, "\n") + 1
+	lines, _ := splitLines(content)
+	return len(lines)
 }
 
 func isImageFile(filePath string) (bool, string) {

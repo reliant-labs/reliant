@@ -28,7 +28,7 @@ import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
-import { chatKeys, patchChatCaches, removeChatFromListCache } from "../hooks/chat-queries";
+import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache } from "../hooks/chat-queries";
 import { approvalKeys } from "../hooks/approval-queries";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
@@ -53,8 +53,9 @@ let streamWasDisrupted = false;
 
 /**
  * THE single write path for chat metadata updates arriving over the stream:
- * patches the React Query list/detail caches AND the Zustand chats map in one
- * call. Never fabricates entries — unknown chats are left to a list refetch.
+ * patches the React Query list/detail caches (the single source of truth for
+ * Chat objects). Never fabricates entries — unknown chats are left to a list
+ * refetch.
  */
 function applyChatPatch(
   projectId: string | undefined,
@@ -62,13 +63,6 @@ function applyChatPatch(
   patch: Partial<Chat>
 ): void {
   patchChatCaches(projectId, chatId, patch);
-  useChatStore.setState((state) => {
-    const existing = state.chats.get(chatId);
-    if (!existing) return state;
-    const newChats = new Map(state.chats);
-    newChats.set(chatId, { ...existing, ...patch });
-    return { chats: newChats };
-  });
 }
 
 interface GlobalUpdatesState {
@@ -95,7 +89,10 @@ interface GlobalUpdatesState {
   connect: () => void;
   disconnect: () => void;
   subscribeToChatDetails: (chatId: string) => void;
-  unsubscribeFromChatDetails: () => void;
+  // Pass the chat the caller subscribed to. The call is ignored unless that
+  // chat is still the subscribed one, so a late effect cleanup cannot tear
+  // down a subscription that now belongs to a different chat.
+  unsubscribeFromChatDetails: (chatId?: string) => void;
   
   // Internal handlers
   handleUpdate: (updates: UserUpdate[]) => void;
@@ -173,14 +170,27 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
 
   subscribeToChatDetails: (chatId: string) => {
     const state = get();
-    if (state.subscribedChatId === chatId && state.wsService?.isConnected()) {
+    // Trust the service, not this store's flag. subscribedChatId is set
+    // optimistically below, before the connection is known to have
+    // succeeded, so on its own it cannot distinguish "subscribed" from
+    // "tried to subscribe and failed" — and treating the latter as the
+    // former would make every retry a no-op.
+    const serviceHasChat =
+      state.wsService?.getSubscribedChatId() === chatId &&
+      state.wsService?.isConnected();
+    if (state.subscribedChatId === chatId && serviceHasChat) {
       logger.debug(`${LOG_PREFIX} Already subscribed to chat`, { chatId: chatId.slice(0, 8) });
       return;
     }
 
-    // If subscribed but stream is dead, force reconnect
-    if (state.subscribedChatId === chatId && state.wsService && !state.wsService.isConnected()) {
-      logger.info(`${LOG_PREFIX} Stream disconnected, forcing reconnect for chat`, { chatId: chatId.slice(0, 8) });
+    // Subscription is missing or stale — (re)assert it against the service.
+    if (state.wsService) {
+      logger.info(`${LOG_PREFIX} Asserting chat subscription`, {
+        chatId: chatId.slice(0, 8),
+        serviceChatId: state.wsService.getSubscribedChatId()?.slice(0, 8),
+        connected: state.wsService.isConnected(),
+      });
+      set({ subscribedChatId: chatId });
       state.wsService.subscribeToChatDetails(chatId);
       return;
     }
@@ -190,19 +200,33 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       previousChatId: state.subscribedChatId?.slice(0, 8),
     });
 
+    // No service yet. Record the intent and connect; connect() forwards
+    // subscribedChatId into start(), so the subscription rides the initial
+    // connection. connect() may defer if chats have not loaded, in which
+    // case the ModernApp effect connects once they have and picks this up.
     set({ subscribedChatId: chatId });
-
-    if (state.wsService) {
-      state.wsService.subscribeToChatDetails(chatId);
-    } else {
-      // Not connected yet — connect with subscription
-      get().connect();
-    }
+    get().connect();
   },
 
-  unsubscribeFromChatDetails: () => {
+  unsubscribeFromChatDetails: (chatId?: string) => {
     const state = get();
     if (!state.subscribedChatId) return;
+
+    // Ownership check. React effect cleanups run after the next effect body
+    // has already resubscribed, and components unmount while the chat they
+    // referenced is still on screen. Without this, such a cleanup silently
+    // unsubscribes the chat the user is actively viewing: the stream stays
+    // connected and heartbeating (so the liveness watchdog never fires) but
+    // no chat events arrive, and reselecting the same chat is a no-op
+    // because selectChat early-returns on an unchanged activeChatId. The
+    // only escape is opening a different chat.
+    if (chatId !== undefined && chatId !== state.subscribedChatId) {
+      logger.debug(`${LOG_PREFIX} Ignoring stale unsubscribe`, {
+        requested: chatId.slice(0, 8),
+        subscribed: state.subscribedChatId.slice(0, 8),
+      });
+      return;
+    }
 
     const oldChatId = state.subscribedChatId;
     logger.info(`${LOG_PREFIX} Unsubscribing from chat detail events`, {
@@ -433,6 +457,10 @@ function handleChatStateChange(update: UserUpdate) {
     applyChatPatch(projectId, chat_id, { state: nextState });
     // The archived list needs a refetch — we can't construct an ArchivedChat row.
     queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+    // Release the chat's retained memory (messages cache is gcTime: Infinity).
+    // Safe on archive: restoring re-seeds via the useMessages queryFn plus the
+    // fresh stream snapshot on re-subscribe.
+    useChatStore.getState().evictChat(chat_id);
     return;
   }
 
@@ -512,8 +540,8 @@ function handleChatStateChange(update: UserUpdate) {
 
     // Show notification if permission is granted and (not viewing chat OR notifyAlways is enabled)
     if (directPermission === "granted" && (!isViewingThisChat || notifyAlways)) {
-      // Get the chat title from the update or from the chats list
-      const chat = currentChatStore.chats.get(chat_id);
+      // Get the chat title from the update or from the chat cache
+      const chat = getChatFromCache(chat_id);
       const chatTitle = data.title || chat?.title || '';
       
       // Show notification with sound
@@ -546,17 +574,15 @@ function handleChatStateChange(update: UserUpdate) {
           
           logger.warn(`${LOG_PREFIX} Current state`, {
             activeChatId: chatStore.activeChatId?.slice(0, 8),
-            chatsCount: chatStore.chats.size,
             currentProject: projectStore.currentProject?.id?.slice(0, 8),
           });
           
-          // Find the chat object
-          let chat = chatStore.chats.get(id);
+          // Find the chat object in the React Query cache
+          let chat = getChatFromCache(id);
           if (!chat) {
             // Try to reload chats in case it's not in the list yet
             await useChatStore.getState().loadChats();
-            const updatedState = useChatStore.getState();
-            chat = updatedState.chats.get(id);
+            chat = getChatFromCache(id);
             if (!chat) {
               logger.error(`${LOG_PREFIX} Chat not found after reload: ${id.slice(0, 8)}`);
               return;
@@ -720,14 +746,9 @@ function handleChatDeleted(update: UserUpdate) {
   removeChatFromListCache(projectId, chat_id);
   // Deletes can come from the archived list too — refetch it.
   queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
-
-  // Drop from the Zustand map so useActiveChat existence checks don't show a ghost.
-  useChatStore.setState((state) => {
-    if (!state.chats.has(chat_id)) return state;
-    const newChats = new Map(state.chats);
-    newChats.delete(chat_id);
-    return { chats: newChats };
-  });
+  // Release the chat's retained memory (messages cache is gcTime: Infinity,
+  // per-chat Zustand slices have no TTL).
+  useChatStore.getState().evictChat(chat_id);
 }
 
 // ============================================
@@ -745,10 +766,14 @@ function handleChatActivityChanged(update: UserUpdate) {
   logger.info(`${LOG_PREFIX} Chat activity changed`, {
     chatId: chat_id.slice(0, 8),
     activity,
+    seq: update.sequence_number,
   });
 
-  // Single source of truth: update the activity store
-  useActivityStore.getState().setActivity(chat_id, activity);
+  // Single source of truth: update the activity store. The event's sequence
+  // number decides precedence against list/get snapshot writes — no clocks.
+  useActivityStore
+    .getState()
+    .applyStreamActivity(chat_id, activity, update.sequence_number);
 
   // Clear pending approvals when activity goes idle.
   // NOTE: Thread activity is intentionally NOT cleared here. Thread metadata
@@ -757,12 +782,9 @@ function handleChatActivityChanged(update: UserUpdate) {
   // The useIsThreadActive hook returns false when the chat is not RUNNING,
   // so threads won't appear as active.
   if (activity === ChatActivity.IDLE) {
-    useChatStore.setState((state) => ({
-      pendingApprovals: {
-        ...state.pendingApprovals,
-        [chat_id]: [],
-      },
-    }));
+    // Approvals are server data in the React Query cache. On IDLE we don't hold
+    // the resolved approval objects, so reconcile from the server (a genuine
+    // "something changed, refetch" nudge — the one case invalidate is correct).
     queryClient.invalidateQueries({ queryKey: approvalKeys.list(chat_id) });
 
     // IDLE is the authoritative "nothing is streaming" signal. Streaming

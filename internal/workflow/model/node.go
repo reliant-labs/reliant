@@ -21,6 +21,15 @@ func NodeID(n *reliantv1.Node) string {
 	return n.GetId()
 }
 
+// NodeOutcome returns the run verdict this node declares ("success" /
+// "failure"), or "" when it declares none.
+func NodeOutcome(n *reliantv1.Node) string {
+	if n == nil {
+		return ""
+	}
+	return n.GetOutcome()
+}
+
 // ConditionExpr returns the condition expression string, or "" if not set.
 func ConditionExpr(n *reliantv1.Node) string {
 	if n == nil {

@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
 
@@ -40,7 +41,7 @@ func NewSkippedStepActivity() *SkippedStepActivity {
 
 // Name returns the activity name for registration
 func (a *SkippedStepActivity) Name() string {
-	return "SkippedStep"
+	return model.ActivitySkippedStep
 }
 
 // DisplayName returns human-readable name for UI

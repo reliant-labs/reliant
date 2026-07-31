@@ -45,6 +45,14 @@ inputs:
     multi: true
     default: []
     description: Presets available for main agent's spawn tool
+
+  skills:
+    type: array
+    default: []
+    description: |
+      Namespaced skill paths (e.g. "forge/getting-started") to preload into the
+      main agent's context before the first turn, so it works from the source-of-truth
+      skills instead of loading them by hand.
   max_turns:
     type: integer
     default: 0
@@ -53,9 +61,9 @@ inputs:
     max: 500
   compaction_threshold:
     type: integer
-    default: 185000
-    description: Token count to trigger context compaction
-    min: 10000
+    default: 0
+    description: Token count to trigger context compaction (0 = derive from the model's context window)
+    min: 0
 
   ask:
     type: boolean
@@ -123,6 +131,7 @@ nodes:
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
             compaction_threshold: "{{inputs.compaction_threshold}}"
+            skills: "{{inputs.skills}}"
             tools_config:
               filter: "{{inputs.tools}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"

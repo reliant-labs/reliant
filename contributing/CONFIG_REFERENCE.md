@@ -184,7 +184,6 @@ These settings merge across all three config files:
 | `skills.retrieval.maxPromptBytes` | int | Max prompt bytes for retrieved supporting content |
 | `skills.availableSkills.maxCount` | int | Max skills listed in `<available_skills>` section |
 | `skills.availableSkills.maxPromptBytes` | int | Byte cap for rendered `<available_skills>` section |
-| `features.skills_enabled` | bool | Master skills feature gate (default `false`, enable to turn on all skills behavior) |
 
 ---
 

@@ -201,6 +201,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 			QuestionID: questionID,
 			ChatID:     input.ChatID,
 			WorkflowID: input.WorkflowID,
+			ThreadID:   input.ThreadID,
 			StepID:     input.StepID,
 			Status:     "pending",
 			Metadata:   metadata,

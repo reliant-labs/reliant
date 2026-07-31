@@ -2,15 +2,16 @@ name: ux
 description: User experience specialist focused on improving UI/UX design, accessibility,
   and user interactions while staying current with design trends
 tag: agent
-recommended_skills:
-  - ux-design
 params:
+  skills:
+    - ux-design
   spawn_presets:
   - researcher
+  - implementer
+  - ux
+  - general
   tools:
   - fetch
-  - glob
-  - grep
   - view
   - write
   - edit
@@ -19,6 +20,17 @@ params:
   - list_tasks
   - update_task
   - component_library
+  - mcp__chrome-devtools__take_screenshot
+  - mcp__chrome-devtools__take_snapshot
+  - mcp__chrome-devtools__new_page
+  - mcp__chrome-devtools__navigate_page
+  - mcp__chrome-devtools__select_page
+  - mcp__chrome-devtools__list_pages
+  - mcp__chrome-devtools__list_console_messages
+  - mcp__chrome-devtools__click
+  - mcp__chrome-devtools__fill
+  - mcp__chrome-devtools__press_key
+  - mcp__chrome-devtools__evaluate_script
   model:
     tags: [flagship]
-    thinking: high
+    thinking_level: high

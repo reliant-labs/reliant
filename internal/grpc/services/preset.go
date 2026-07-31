@@ -570,13 +570,12 @@ func presetToProto(p *preset.Preset) (*reliantv1.PresetInfo, error) {
 	}
 
 	return &reliantv1.PresetInfo{
-		Name:              p.Name,
-		Description:       p.Description,
-		Params:            params,
-		Source:            p.Source,
-		Tag:               p.Tag,
-		Slug:              strings.ToLower(strings.ReplaceAll(p.Name, " ", "-")),
-		RecommendedSkills: p.RecommendedSkills,
+		Name:        p.Name,
+		Description: p.Description,
+		Params:      params,
+		Source:      p.Source,
+		Tag:         p.Tag,
+		Slug:        strings.ToLower(strings.ReplaceAll(p.Name, " ", "-")),
 	}, nil
 }
 

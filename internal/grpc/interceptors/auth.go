@@ -77,11 +77,33 @@ func (t *sessionTracker) cleanup() {
 	}
 }
 
-// AuthInterceptor provides JWT authentication for gRPC requests
+// patDeniedProcedurePrefix guards the "a PAT cannot mint/revoke PATs" rule on
+// the gRPC surface: PAT-authenticated requests are denied for the whole
+// DaemonTokenService (mint/list/revoke of daemon tokens). Daemon-token
+// management always requires an interactive session. (The api-kind
+// equivalent, TokenService, is not blanket-denied here — it accepts PATs for
+// list/revoke and enforces the JWT-only rule for CreateToken in the handler.
+// MintManagedDaemonToken / RevokeManagedDaemonToken are public to THIS
+// interceptor and gated by the internal-service interceptor instead, so they
+// are unaffected.)
+const patDeniedProcedurePrefix = "/reliant.v1.DaemonTokenService/"
+
+// AuthInterceptor provides JWT authentication for gRPC requests.
+// When apiTokenValidator is set, rlnt_pat_ bearer tokens are prefix-dispatched
+// to it (a DB hash lookup that accepts api-kind PATs ONLY — daemon-kind
+// tokens are rejected) instead of JWT signature verification, resolving to
+// the same claims/identity object — the same middleware path serves both.
 type AuthInterceptor struct {
-	validator      auth.TokenValidator
-	sessionTracker *sessionTracker
-	publicMethods  map[string]bool // Methods that don't require auth
+	validator         auth.TokenValidator
+	apiTokenValidator auth.APITokenValidator // optional; nil disables PAT bearer auth
+	sessionTracker    *sessionTracker
+	publicMethods     map[string]bool // Methods that don't require auth
+}
+
+// SetAPITokenValidator enables api-kind PAT bearer auth on this interceptor.
+// Call before serving.
+func (i *AuthInterceptor) SetAPITokenValidator(v auth.APITokenValidator) {
+	i.apiTokenValidator = v
 }
 
 // NewAuthInterceptor creates a new auth interceptor.
@@ -165,9 +187,45 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			fmt.Errorf("invalid authorization header format"))
 	}
 
-	// Validate token
-	claims, err := i.validator.ValidateToken(tokenString)
+	// Prefix dispatch: rlnt_pat_ bearers are PATs (DB hash lookup accepting
+	// api-kind only), anything else goes through the configured JWT/apikey
+	// validator.
+	isPAT := auth.IsPATFormat(tokenString)
+	var claims *auth.JWTClaims
+	var err error
+	if isPAT {
+		switch {
+		case i.apiTokenValidator == nil:
+			logging.Warn("[gRPC Auth] PAT presented but PAT auth is not enabled",
+				"procedure", procedure)
+			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+				fmt.Errorf("invalid or expired token"))
+		case strings.HasPrefix(procedure, patDeniedProcedurePrefix):
+			// A PAT cannot mint, list, or revoke PATs — token management
+			// requires an interactive session.
+			logging.Warn("[gRPC Auth] PAT presented on a session-only procedure",
+				"procedure", procedure)
+			return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
+				fmt.Errorf("token management requires an interactive session"))
+		}
+		claims, err = i.apiTokenValidator.ValidateAPIToken(ctx, tokenString)
+	} else {
+		claims, err = i.validator.ValidateToken(tokenString)
+	}
 	if err != nil {
+		// Only a credential rejection is Unauthenticated. Anything else — the
+		// token store unreachable, a query deadline, a JWKS fetch failing —
+		// means verification never happened. Reporting that as Unauthenticated
+		// makes every client tell the operator their credential was rejected
+		// and to mint a new one, which cannot fix an unreachable dependency
+		// and destroys the only real signal.
+		if !auth.IsCredentialRejection(err) {
+			logging.Error("[gRPC Auth] Token verification unavailable",
+				"error", err,
+				"procedure", procedure)
+			return nil, nil, "", connect.NewError(connect.CodeUnavailable,
+				fmt.Errorf("token verification unavailable: %w", err))
+		}
 		logging.Warn("[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
@@ -180,8 +238,12 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	ctx = context.WithValue(ctx, auth.UserRoleContextKey, claims.Role)
 	ctx = context.WithValue(ctx, auth.UserEmailContextKey, claims.Email)
 
-	// Store JWT so subsystems (e.g. Reliant LLM driver) can look it up by userID.
-	auth.SetUserJWT(claims.Sub, tokenString)
+	// Store the bearer so subsystems (e.g. Reliant LLM driver) can look it up
+	// by userID. Only JWTs are stored: a PAT is not a Supabase JWT and must
+	// never be forwarded where one is expected.
+	if !isPAT {
+		auth.SetUserJWT(claims.Sub, tokenString)
+	}
 
 	logging.Debug("[gRPC Auth] Authenticated request",
 		"user_id", claims.Sub,
@@ -207,8 +269,9 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 			"email", claims.Email)
 	}
 
-	// Always update the JWT (it refreshes on each request)
-	if rawToken != "" {
+	// Always update the JWT (it refreshes on each request). PATs are never
+	// stored where a JWT is expected.
+	if rawToken != "" && !auth.IsPATFormat(rawToken) {
 		analytics.SetUserJWT(rawToken)
 	}
 

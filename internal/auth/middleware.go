@@ -113,8 +113,28 @@ func NewMiddleware(publicKeyPEM string, jwksURL string) (*Middleware, error) {
 	}
 }
 
-// RequireAuth is a middleware that requires authentication
+// RequireAuth is a middleware that requires authentication via the configured
+// JWT/apikey validator. PAT bearers are rejected here — surfaces that accept
+// api-kind PATs must use RequireAuthOrAPIToken.
 func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
+	return m.requireAuth(next, nil)
+}
+
+// RequireAuthOrAPIToken is RequireAuth extended with api-kind PAT bearers:
+// rlnt_pat_ tokens are prefix-dispatched to v (a DB hash lookup that accepts
+// kind='api' tokens only) instead of the JWT/apikey validator, resolving to
+// the same claims/identity object — mirroring the gRPC AuthInterceptor so the
+// same middleware path serves both credentials.
+func (m *Middleware) RequireAuthOrAPIToken(v APITokenValidator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return m.requireAuth(next, v)
+	}
+}
+
+// requireAuth authenticates the request and forwards it with identity on the
+// context. When patValidator is nil, PAT-format bearers are rejected outright
+// (JWT-only surface) instead of falling through to JWT validation.
+func (m *Middleware) requireAuth(next http.Handler, patValidator APITokenValidator) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Get token from Authorization header first
 		var tokenString string
@@ -135,7 +155,19 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			return
 		}
 
-		claims, err := m.validator.ValidateToken(tokenString)
+		// Prefix dispatch: rlnt_pat_ bearers are PATs (DB hash lookup, api
+		// kind only), anything else goes through the JWT/apikey validator.
+		isPAT := IsPATFormat(tokenString)
+		var claims *JWTClaims
+		var err error
+		switch {
+		case isPAT && patValidator != nil:
+			claims, err = patValidator.ValidateAPIToken(r.Context(), tokenString)
+		case isPAT:
+			err = fmt.Errorf("personal access tokens are not accepted on this endpoint")
+		default:
+			claims, err = m.validator.ValidateToken(tokenString)
+		}
 		if err != nil {
 			logging.Warn("Invalid token", "error", err, "path", r.URL.Path, "method", r.Method)
 			http.Error(w, `{"error": "unauthorized", "message": "Invalid or expired token"}`, http.StatusUnauthorized)
@@ -154,8 +186,11 @@ func (m *Middleware) RequireAuth(next http.Handler) http.Handler {
 			telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
 		}
 
-		// Always update the JWT (it refreshes on each request)
-		analytics.SetUserJWT(tokenString)
+		// Always update the JWT (it refreshes on each request). PATs are never
+		// stored where a JWT is expected.
+		if !isPAT {
+			analytics.SetUserJWT(tokenString)
+		}
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

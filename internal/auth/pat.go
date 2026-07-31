@@ -53,9 +53,21 @@ func IsPATFormat(token string) bool {
 }
 
 // PATValidator validates a raw PAT token and returns the associated user ID.
+// Implementations accept daemon-kind tokens ONLY (api-kind tokens are
+// rejected) — this is the daemon/gateway side of the kind separation.
 type PATValidator interface {
 	// ValidatePAT checks a raw token against the DB. Returns the user ID and
 	// optionally the PAT-bound daemon ID (empty if unbound). Returns an error
-	// if the token is invalid, revoked, or expired.
+	// if the token is invalid, revoked, expired, or not daemon-kind.
 	ValidatePAT(ctx context.Context, rawToken string) (userID string, patID string, daemonID string, err error)
+}
+
+// APITokenValidator validates a raw api-kind PAT bearer and resolves it to
+// the same claims object JWT validation produces. Implementations accept
+// api-kind tokens ONLY (daemon-kind tokens are rejected) — this is the user
+// API side of the kind separation. Implemented by internal/pat.Service
+// (lives outside internal/auth to avoid an import cycle with internal/db,
+// mirroring internal/patauth).
+type APITokenValidator interface {
+	ValidateAPIToken(ctx context.Context, rawToken string) (*JWTClaims, error)
 }

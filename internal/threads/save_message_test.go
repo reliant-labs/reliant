@@ -558,7 +558,7 @@ func TestSaveMessage_ChatUpdate(t *testing.T) {
 			Thread: thread.ID,
 			Role:   int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 			ToolCalls: []ToolCall{
-				{ID: "tc-canonical", Name: "edit", Input: `{"edits":[{"file_path":"a.txt","old_string":"x","new_string":"y"}]}`},
+				{ID: "tc-canonical", Name: "edit", Input: `{"file_path":"a.txt","old_string":"x","new_string":"y"}`},
 			},
 		})
 		if err != nil {

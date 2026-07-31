@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
 
@@ -52,8 +53,14 @@ func (s *daemonServer) ConnectGateway(
 		}},
 	}
 	if err := stream.Send(register); err != nil {
+		d.recordStream(daemonstate.StreamListening, err.Error())
 		return fmt.Errorf("sending registration: %w", err)
 	}
+
+	// In server mode the gateway dials in, so an attached stream is the
+	// established-stream signal (there is no RegistrationAck to wait for).
+	d.recordStream(daemonstate.StreamConnected, "")
+	defer d.recordStream(daemonstate.StreamListening, "gateway stream ended")
 
 	// Set up the send channel and sender goroutine (same pattern as client mode).
 	d.sendCh = make(chan *reliantv1.DaemonMessage, 256)

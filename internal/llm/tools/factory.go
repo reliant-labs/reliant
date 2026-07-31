@@ -131,15 +131,6 @@ func (f *ToolsFactory) FindAndReplace() Tool {
 	return NewFindAndReplaceTool()
 }
 
-// Search tools
-func (f *ToolsFactory) Grep() Tool {
-	return NewGrepTool()
-}
-
-func (f *ToolsFactory) Glob() Tool {
-	return NewGlobTool()
-}
-
 // Execution tools
 
 // Shell returns the unified shell tool (bash on Unix, PowerShell on Windows)

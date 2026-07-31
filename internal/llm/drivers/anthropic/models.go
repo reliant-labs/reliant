@@ -24,6 +24,7 @@ var SupportedModels = []models.ModelID{
 	models.Claude48Opus,
 	models.Claude5Sonnet,
 	models.Claude5Fable,
+	models.Claude5Opus,
 }
 
 // createAnthropicClient is the driver factory for standard Anthropic API

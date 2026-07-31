@@ -91,6 +91,70 @@ func TestLoadTool_EmptyParams_ReturnsError(t *testing.T) {
 	assert.Contains(t, resp.Content, "query")
 }
 
+// ----- MCP tool discovery / loading -----
+
+func TestLoadTool_SearchByQuery_SurfacesConnectedMCPTool(t *testing.T) {
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	GetLoadedToolsStore().SetAvailableMCPTools(ctx.ChatID, []MCPToolInfo{
+		{Name: "mcp__chrome-devtools__take_screenshot", Description: "Capture a screenshot"},
+	})
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Query: "screenshot"})
+	require.NoError(t, err)
+	assert.False(t, resp.IsError)
+	assert.Contains(t, resp.Content, "mcp__chrome-devtools__take_screenshot",
+		"search should surface a connected MCP tool matched by keyword")
+}
+
+func TestLoadTool_LoadMCPTool_ConnectedSucceeds(t *testing.T) {
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	const mcpName = "mcp__chrome-devtools__take_screenshot"
+	GetLoadedToolsStore().SetAvailableMCPTools(ctx.ChatID, []MCPToolInfo{
+		{Name: mcpName, Description: "Capture a screenshot"},
+	})
+
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: mcpName})
+	require.NoError(t, err)
+	assert.False(t, resp.IsError, "connected MCP tool should load: %s", resp.Content)
+	assert.Contains(t, resp.Content, mcpName)
+	assert.Contains(t, resp.Metadata, mcpName, "metadata should announce the loaded MCP tool")
+	assert.True(t, GetLoadedToolsStore().Has(ctx.ChatID, mcpName),
+		"connected MCP tool must be recorded in the store")
+}
+
+func TestLoadTool_LoadMCPTool_UnconnectedErrors(t *testing.T) {
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	// A different MCP tool is connected; request one that is not.
+	GetLoadedToolsStore().SetAvailableMCPTools(ctx.ChatID, []MCPToolInfo{
+		{Name: "mcp__chrome-devtools__navigate_page", Description: "Navigate"},
+	})
+
+	const missing = "mcp__chrome-devtools__take_screenshot"
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: missing})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError, "unconnected MCP tool must error instead of being silently added")
+	assert.Contains(t, resp.Content, "not available")
+	assert.False(t, GetLoadedToolsStore().Has(ctx.ChatID, missing),
+		"unavailable MCP tool must NOT be recorded in the store")
+}
+
+func TestLoadTool_LoadMCPTool_NoneConnectedErrors(t *testing.T) {
+	tool := &loadToolTool{}
+	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+
+	// No MCP tools recorded for this chat at all.
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "mcp__server__tool"})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError, "no MCP tools connected -> load must error")
+	assert.Contains(t, resp.Content, "not available")
+}
+
 // ----- Permission gating -----
 
 func TestLoadTool_PermissionGating_ReadOnlyCannotLoadMutatingTool(t *testing.T) {

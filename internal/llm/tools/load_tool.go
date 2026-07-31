@@ -71,7 +71,7 @@ func (t *loadToolTool) Execute(rctx *rctx.ToolContext, params LoadToolParams) (T
 
 	// Search mode
 	if params.Query != "" {
-		return t.searchTools(params.Query, permission), nil
+		return t.searchTools(chatID, params.Query, permission), nil
 	}
 
 	// Load mode
@@ -135,7 +135,15 @@ func (t *loadToolTool) loadMCPTool(rctx *rctx.ToolContext, name string) ToolResp
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
 	}
 
-	// MCP tools are always allowed (they're managed by the MCP configuration)
+	// Verify the MCP tool is actually connected in this environment before
+	// loading it. Adding an unavailable name would be silently dropped by the
+	// runtime next turn ("Tools in filter not found"), so fail loudly instead.
+	if !mcpToolAvailable(store.GetAvailableMCPTools(chatID), name) {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"MCP tool '%s' is not available in this environment. Use load_tool with a query to discover connected MCP tools.", name))
+	}
+
+	// MCP tools are gated by MCP configuration, not the agent permission ladder.
 	store.Add(chatID, name)
 
 	metadata := LoadToolMetadata{
@@ -148,8 +156,20 @@ func (t *loadToolTool) loadMCPTool(rctx *rctx.ToolContext, name string) ToolResp
 	return WithResponseMetadata(response, metadata)
 }
 
-func (t *loadToolTool) searchTools(query string, permission string) ToolResponse {
-	results := SearchTools(query, permission)
+// mcpToolAvailable reports whether name is present in the recorded set of
+// connected/available MCP tools.
+func mcpToolAvailable(available []MCPToolInfo, name string) bool {
+	for _, m := range available {
+		if m.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func (t *loadToolTool) searchTools(chatID, query string, permission string) ToolResponse {
+	mcpTools := GetLoadedToolsStore().GetAvailableMCPTools(chatID)
+	results := SearchTools(query, permission, mcpTools)
 
 	if len(results) == 0 {
 		return NewTextResponse(fmt.Sprintf("No tools found matching '%s'.", query))

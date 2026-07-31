@@ -3,7 +3,10 @@ package tools
 
 // Permission levels control which tools an agent can load via load_tool.
 const (
-	// PermissionReadOnly allows read-only tools: view, grep, glob, fetch, websearch, skill, load_tool
+	// PermissionReadOnly allows read-only tools: view, fetch, websearch, skill,
+	// load_tool — plus the shell, which is the ONLY search path now that the
+	// scoped grep/glob tools are gone. See minimumPermissionFromTags for why
+	// that makes "readonly" a weaker guarantee than its name implies.
 	PermissionReadOnly = "readonly"
 
 	// PermissionMutating allows read-only + mutating tools: write, edit, bash, find_replace, move_code, etc.
@@ -33,13 +36,20 @@ func PermissionAtLeast(have, need string) bool {
 // InitialToolsForPermission returns the tool names that are always loaded
 // (with full schemas) for a given permission level.
 func InitialToolsForPermission(permission string) []string {
-	// All levels get these
+	// All levels get these. The shell family rides along at EVERY level because
+	// searching the codebase now goes through the shell — a level without it
+	// cannot search at all, which is the regression that followed the first
+	// removal of grep/glob. `tag:shell` is kept whole (the shell's own
+	// description tells the model to reach for bash_output/bash_kill/bash_list,
+	// so handing over the shell without them documents tools that do not exist).
 	base := []string{
 		ToolSkill,
 		ToolLoadTool,
 		ToolView,
-		ToolGrep,
-		ToolGlob,
+		ShellToolName,
+		ToolBashList,
+		ToolBashOutput,
+		ToolBashKill,
 	}
 
 	switch permission {
@@ -48,15 +58,13 @@ func InitialToolsForPermission(permission string) []string {
 	case PermissionMutating:
 		return append(base,
 			ToolFetch, ToolWebSearch,
-			ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode,
-			ToolBashList, ToolBashOutput, ToolBashKill,
+			ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode,
 		)
 	case PermissionOrchestrator:
 		// Orchestrator gets everything mutating gets, plus spawn is added separately
 		return append(base,
 			ToolFetch, ToolWebSearch,
-			ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode,
-			ToolBashList, ToolBashOutput, ToolBashKill,
+			ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode,
 		)
 	default:
 		return base
@@ -84,11 +92,20 @@ func MinimumPermissionForTool(toolName string) string {
 }
 
 // minimumPermissionFromTags determines permission level from tool tags.
+//
+// The shell family is readonly-tier. That is a deliberate weakening, not an
+// oversight: with the scoped grep/glob tools removed, the shell is the only way
+// to search a codebase, so gating it at mutating would leave readonly and
+// plan-mode agents unable to search — the exact regression the earlier removal
+// produced. The tradeoff is that "readonly" no longer means the agent cannot
+// write; it means the agent is not HANDED write tools, while retaining a shell
+// that can still `>` a file. Callers needing a hard read-only boundary must
+// enforce it below the tool layer (sandbox/filesystem), not via this gate.
 func minimumPermissionFromTags(tags []ToolTag) string {
 	for _, tag := range tags {
 		switch tag {
 		case TagShell, TagExecution:
-			return PermissionMutating
+			return PermissionReadOnly
 		case TagFile:
 			// File tools that are also read-only stay readonly
 			for _, t := range tags {

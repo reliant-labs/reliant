@@ -30,6 +30,8 @@ import { CommandPalette } from "./components/Layout/CommandPalette";
 import { ChatSearch } from "./components/Layout/ChatSearch";
 import { NewChatView } from "./components/Chat/NewChatView";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
+import { approveAllPendingApprovals } from "./hooks/approval-queries";
+import { useChatList, getCachedChatList, getChatFromCache } from "./hooks/chat-queries";
 
 
 import { Header, type HeaderRef } from "./components/Layout/Header";
@@ -70,11 +72,16 @@ import { useModalStore } from "./store/modalStore";
 import { useGlobalDataStore } from "./store/globalDataStore";
 import { trackEvent } from "./lib/analytics";
 
+// Stable empty reference so the useChatList default doesn't churn the tray effect.
+const EMPTY_CHAT_LIST: Chat[] = [];
+
 function App() {
-  const chats = useChatStore((state) => state.chats); // Map<string, Chat>
   const chatError = useChatStore((state) => state.error);
   const activeChatId = useChatStore((state) => state.activeChatId);
   const currentProject = useProjectStore((state) => state.currentProject);
+  // Chat list from the React Query cache (the single source of truth), used by
+  // the tray-status effect below.
+  const { data: chats = EMPTY_CHAT_LIST } = useChatList(currentProject?.id);
   const selectProject = useProjectStore((state) => state.selectProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   // Onboarding state (`plan`, `reset-onboarding`) now lives on /onboarding —
@@ -425,7 +432,7 @@ function App() {
         const chatStore = useChatStore.getState();
         const worktreeStore = useWorktreeStore.getState();
         const activeChatId = chatStore.activeChatId;
-        const activeChat = activeChatId ? chatStore.chats.get(activeChatId) ?? null : null;
+        const activeChat = activeChatId ? getChatFromCache(activeChatId) ?? null : null;
         const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
         chatStore.clearCurrentChat(currentWorktreeId);
       },
@@ -561,22 +568,15 @@ function App() {
         }
       },
       onApproveToolRequests: () => {
-        // Find the active chat and approve all pending tool requests
+        // Find the active chat and approve all pending tool requests.
+        // Approvals are server data in the React Query cache; the helper reads
+        // pending straight from the cache and batch-approves optimistically.
         if (activeChatId) {
-          const { approveAllPending, pendingApprovals } =
-            useChatStore.getState();
-          const pending = pendingApprovals[activeChatId] || [];
-
-          // Only approve if there are pending requests
-          if (pending.length > 0) {
-            logger.info(
-              "✅ Cmd+Enter pressed - approving all tool requests for:",
-              activeChatId,
-              "Count:",
-              pending.length
-            );
-            approveAllPending(activeChatId);
-          }
+          logger.info(
+            "✅ Cmd+Enter pressed - approving all tool requests for:",
+            activeChatId,
+          );
+          void approveAllPendingApprovals(activeChatId);
         }
       },
       onToggleTerminal: () => {
@@ -1123,7 +1123,7 @@ function App() {
       return;
     }
 
-    const activeChats = Array.from(chats.values()).filter((chat) => chat.state !== ChatState.ARCHIVED);
+    const activeChats = chats.filter((chat) => chat.state !== ChatState.ARCHIVED);
     const activityMap = useActivityStore.getState().activities;
     const activeWorkflows = activeChats.filter(
       (chat) => {
@@ -1253,7 +1253,7 @@ function App() {
       const worktreeStore = useWorktreeStore.getState();
       const activeChatId = chatStore.activeChatId;
       const activeChat = activeChatId
-        ? chatStore.chats.get(activeChatId) ?? null
+        ? getChatFromCache(activeChatId) ?? null
         : null;
       const currentWorktreeId =
         activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
@@ -1280,13 +1280,13 @@ function App() {
         chatStore.selectChat(chat);
       };
 
-      const target = chatId ? chatStore.chats.get(chatId) : undefined;
+      const target = chatId ? getChatFromCache(chatId) : undefined;
       if (target && target.state !== ChatState.ARCHIVED) {
         await alignWorktreeAndSelect(target);
         return;
       }
 
-      const sorted = Array.from(chatStore.chats.values())
+      const sorted = getCachedChatList(project?.id)
         .filter((chat) => chat.state !== ChatState.ARCHIVED)
         .sort((a, b) => {
           const aTime = Date.parse(a.updatedAt || a.createdAt || "");

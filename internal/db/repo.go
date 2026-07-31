@@ -623,7 +623,13 @@ func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType r
 		// Generate ID
 		updateID := fmt.Sprintf("%s-%d", chatID, nextSeq)
 
-		createdAt := time.Now()
+		// UTC, not local. chat_updates.created_at is TIMESTAMP WITHOUT TIME
+		// ZONE, so the driver drops the offset and keeps the wall clock: a
+		// local time.Now() is stored as its local reading and then read back
+		// and serialized as RFC3339 with a "Z". The value does not become
+		// wrong at the format step — it is already wrong here, and no consumer
+		// can recover it. Every sibling writer in this file already does this.
+		createdAt := time.Now().UTC()
 
 		chatUpdate = ChatUpdate{
 			ID:             updateID,

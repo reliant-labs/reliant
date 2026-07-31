@@ -91,6 +91,26 @@ const LOG_PREFIX_STREAM = "[📡 gRPCStream]";
 const CHAT_GAP_RESYNC_MIN_INTERVAL_MS = 1_000;
 const USER_GAP_RESYNC_THROTTLE_MS = 5_000;
 
+// Reconnect pacing. This stream is the *only* push path for the whole UI, so
+// there is no state in which giving up permanently is correct — a stream that
+// stops retrying leaves the app silently stale until a full page reload. We
+// retry forever with exponential backoff capped at MAX_RECONNECT_DELAY_MS, and
+// the wake triggers (online / tab-visible) collapse the backoff to zero the
+// moment the user is plausibly back.
+const BASE_RECONNECT_DELAY_MS = 1_000;
+const MAX_RECONNECT_DELAY_MS = 30_000;
+// Cap the exponent so Math.pow stays finite over a long outage.
+const MAX_RECONNECT_EXPONENT = 6;
+
+// Liveness watchdog. The server sends a heartbeat every 30s (see
+// internal/grpc/services/streaming.go heartbeatInterval). A half-open
+// connection — backend SIGKILLed under `air`, laptop slept, proxy dropped the
+// socket without a FIN — never surfaces as a stream error, so `for await` just
+// blocks forever and no reconnect is attempted. Treat "no event of any kind
+// for 2.5 heartbeat intervals" as dead and force a reconnect.
+const STREAM_STALE_TIMEOUT_MS = 75_000;
+const WATCHDOG_TICK_MS = 15_000;
+
 // ============================================================================
 // Type Converters
 // ============================================================================
@@ -113,6 +133,7 @@ const CHAT_UPDATE_TYPE_MAP: Record<number, string> = {
   [ChatUpdateType.REFETCH]: "refetch",
   [ChatUpdateType.STREAMING_DELTA]: "streaming_delta",
   [ChatUpdateType.QUESTION]: "question",
+  [ChatUpdateType.STREAM_FINALIZED]: "stream_finalized",
 };
 
 // Valid update types that we expect from the backend
@@ -133,6 +154,7 @@ const VALID_UPDATE_TYPES = new Set([
   "workflow_execution",
   "refetch",
   "question",
+  "stream_finalized",
 ]);
 
 /**
@@ -185,6 +207,10 @@ function isValidChatUpdate(
       return typeof data.id === "string" || typeof data.chat_id === "string";
     case "streaming_delta":
       return typeof data.delta_type === "string";
+    case "stream_finalized":
+      // The delta identity protocol keys everything off the pre-allocated
+      // message id; a marker without one is unusable.
+      return typeof data.message_id === "string";
     default:
       return true;
   }
@@ -373,17 +399,87 @@ export class UserStreamingService {
   private projectId: string | undefined = undefined;
   private isIntentionallyClosed = false;
   private reconnectAttempts = 0;
-  private maxReconnectAttempts = 10;
-  private reconnectDelay = 1000;
   private lastSequence: bigint = 0n;
   private lastChatSequence: bigint = 0n;
   private isConnected_ = false;
   private subscribedChatId: string | undefined = undefined;
   private lastChatGapResyncAt = 0;
   private lastUserGapResyncAt = 0;
+  // Liveness / lifecycle bookkeeping. `connectAttemptInFlight` and
+  // `reconnectTimer` exist so start() can tell "a connection is genuinely being
+  // worked on" from "we hold a stale AbortController that will never fire".
+  private connectAttemptInFlight = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private lastEventAt = 0;
+  private wakeHandlersBound = false;
 
   constructor(callbacks: GlobalWebSocketCallbacks) {
     this.callbacks = callbacks;
+  }
+
+  // --- Wake triggers -------------------------------------------------------
+  // Backoff can be sitting at 30s when the user comes back to a slept laptop or
+  // a reconnected network. Both signals mean "conditions just changed" — drop
+  // the backoff and retry immediately instead of making the user wait out a
+  // timer (or reload the page).
+  private handleOnline = (): void => {
+    if (this.isIntentionallyClosed || this.isConnected_) return;
+    logger.info(`${LOG_PREFIX_STREAM} Network back online — reconnecting now`);
+    this.reconnectNow("online");
+  };
+
+  private handleVisibilityChange = (): void => {
+    if (document.visibilityState !== "visible") return;
+    if (this.isIntentionallyClosed || this.isConnected_) return;
+    logger.info(`${LOG_PREFIX_STREAM} Tab visible again — reconnecting now`);
+    this.reconnectNow("visible");
+  };
+
+  private bindWakeHandlers(): void {
+    if (this.wakeHandlersBound || typeof window === "undefined") return;
+    window.addEventListener("online", this.handleOnline);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    this.wakeHandlersBound = true;
+  }
+
+  private unbindWakeHandlers(): void {
+    if (!this.wakeHandlersBound || typeof window === "undefined") return;
+    window.removeEventListener("online", this.handleOnline);
+    document.removeEventListener(
+      "visibilitychange",
+      this.handleVisibilityChange,
+    );
+    this.wakeHandlersBound = false;
+  }
+
+  // --- Liveness watchdog ---------------------------------------------------
+  private armWatchdog(): void {
+    this.lastEventAt = Date.now();
+    if (this.watchdogTimer !== null) return;
+    this.watchdogTimer = setInterval(() => {
+      if (!this.isConnected_ || this.isIntentionallyClosed) return;
+      const silentFor = Date.now() - this.lastEventAt;
+      if (silentFor < STREAM_STALE_TIMEOUT_MS) return;
+
+      logger.warn(
+        `${LOG_PREFIX_STREAM} No events (not even heartbeats) — connection is half-open, forcing reconnect`,
+        { silentForMs: silentFor, staleAfterMs: STREAM_STALE_TIMEOUT_MS },
+      );
+      // The socket is dead but `for await` will never unblock on its own.
+      // reconnectNow() aborts it, which makes the orphaned loop's catch see a
+      // superseded controller and bail out quietly.
+      this.isConnected_ = false;
+      this.callbacks.onStatusChange("disconnected");
+      this.reconnectNow("stale");
+    }, WATCHDOG_TICK_MS);
+  }
+
+  private disarmWatchdog(): void {
+    if (this.watchdogTimer !== null) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
   }
 
   /**
@@ -398,8 +494,15 @@ export class UserStreamingService {
     chatFromSeq: number = 0,
     projectId?: string,
   ): void {
-    if (this.abortController && !this.abortController.signal.aborted) {
-      logger.warn(`${LOG_PREFIX_STREAM} Already connected`);
+    // Guard on work actually in flight, NOT on the AbortController. A failed
+    // attempt leaves behind a non-aborted controller, so the old check made a
+    // dead service permanently un-restartable — start() would no-op forever.
+    if (
+      this.isConnected_ ||
+      this.connectAttemptInFlight ||
+      this.reconnectTimer !== null
+    ) {
+      logger.warn(`${LOG_PREFIX_STREAM} Already connected or connecting`);
       return;
     }
 
@@ -414,6 +517,8 @@ export class UserStreamingService {
     this.lastChatSequence = BigInt(chatFromSeq);
     this.subscribedChatId = subscribeChatId;
     this.projectId = projectId;
+    this.reconnectAttempts = 0;
+    this.bindWakeHandlers();
 
     void this.establishConnection();
   }
@@ -511,6 +616,23 @@ export class UserStreamingService {
    * Reconnect the stream, preserving user-level sequence but resetting chat state.
    */
   private reconnectWithNewSubscription(): void {
+    this.reconnectNow("resubscribe");
+  }
+
+  /**
+   * Tear down the current connection (if any) and reconnect immediately,
+   * resetting the backoff. Preserves both resume cursors, so the server
+   * replays (since_seq, latest] from the DB and nothing is lost.
+   */
+  private reconnectNow(reason: string): void {
+    if (this.isIntentionallyClosed) return;
+
+    // Cancel a pending backoff timer so we don't end up with two connections.
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     // Abort the old connection. The old stream's catch block will detect
     // that this.abortController has been replaced (by establishConnection)
     // and bail out instead of calling attemptReconnect().
@@ -518,7 +640,9 @@ export class UserStreamingService {
       this.abortController.abort();
     }
     this.isConnected_ = false;
+    this.disarmWatchdog();
     this.reconnectAttempts = 0;
+    logger.info(`${LOG_PREFIX_STREAM} Immediate reconnect`, { reason });
 
     // Establish new connection (creates a new AbortController)
     void this.establishConnection();
@@ -526,6 +650,7 @@ export class UserStreamingService {
 
   private async establishConnection(): Promise<void> {
     this.callbacks.onStatusChange("connecting");
+    this.connectAttemptInFlight = true;
     this.abortController = new AbortController();
 
     // Capture this connection's abort controller so we can detect if it gets
@@ -557,10 +682,15 @@ export class UserStreamingService {
           return;
         }
 
+        // Any event — including a bare heartbeat — proves the socket is alive.
+        this.lastEventAt = Date.now();
+
         if (!this.isConnected_) {
           this.isConnected_ = true;
+          this.connectAttemptInFlight = false;
           this.callbacks.onStatusChange("connected");
           this.reconnectAttempts = 0;
+          this.armWatchdog();
         }
 
         this.handleEvent(event);
@@ -574,6 +704,8 @@ export class UserStreamingService {
 
       logger.info(`${LOG_PREFIX_STREAM} Stream ended normally`);
       this.isConnected_ = false;
+      this.connectAttemptInFlight = false;
+      this.disarmWatchdog();
       this.callbacks.onStatusChange("disconnected");
 
       if (!this.isIntentionallyClosed) {
@@ -587,6 +719,8 @@ export class UserStreamingService {
       }
 
       this.isConnected_ = false;
+      this.connectAttemptInFlight = false;
+      this.disarmWatchdog();
 
       if (this.isIntentionallyClosed || myAbortController.signal.aborted) {
         logger.info(`${LOG_PREFIX_STREAM} Stream aborted (intentional)`);
@@ -794,36 +928,36 @@ export class UserStreamingService {
   }
 
   private attemptReconnect(): void {
-    if (this.isIntentionallyClosed) {
+    if (this.isIntentionallyClosed || this.reconnectTimer !== null) {
       return;
     }
 
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error(
-        `${LOG_PREFIX_STREAM} Max reconnect attempts reached`,
-        {
-          attempts: this.reconnectAttempts,
-        },
-      );
-      this.callbacks.onError("Max reconnection attempts reached");
-      return;
-    }
-
+    // Deliberately unbounded. This stream is the app's only push path, so
+    // "stop retrying" means "the UI is silently stale until the user reloads" —
+    // never the right outcome. Backoff is capped at MAX_RECONNECT_DELAY_MS and
+    // the online/visible wake triggers short-circuit it, so a server that comes
+    // back (a rebuilt dev backend, a finished deploy) is picked up promptly
+    // without hammering one that is still down.
     this.reconnectAttempts++;
+    const exponent = Math.min(
+      this.reconnectAttempts - 1,
+      MAX_RECONNECT_EXPONENT,
+    );
     const delay = Math.min(
-      this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1) +
-        Math.random() * 1000,
-      30000,
+      BASE_RECONNECT_DELAY_MS * Math.pow(2, exponent) + Math.random() * 1000,
+      MAX_RECONNECT_DELAY_MS,
     );
 
     logger.info(`${LOG_PREFIX_STREAM} Reconnecting`, {
       attempt: this.reconnectAttempts,
       delayMs: delay,
       fromSeq: Number(this.lastSequence),
+      chatFromSeq: Number(this.lastChatSequence),
       subscribeChatId: this.subscribedChatId?.slice(0, 8),
     });
 
-    setTimeout(() => {
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
       if (!this.isIntentionallyClosed) {
         void this.establishConnection();
       }
@@ -834,6 +968,13 @@ export class UserStreamingService {
     logger.info(`${LOG_PREFIX_STREAM} Stopping`);
     this.isIntentionallyClosed = true;
     this.isConnected_ = false;
+    this.connectAttemptInFlight = false;
+    this.disarmWatchdog();
+    this.unbindWakeHandlers();
+    if (this.reconnectTimer !== null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     if (this.abortController) {
       this.abortController.abort();
       this.abortController = null;

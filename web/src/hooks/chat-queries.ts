@@ -61,6 +61,41 @@ export function patchChatCaches(
 }
 
 /**
+ * Seed (create or replace) the detail cache for a chat.
+ *
+ * Unlike patchChatCaches — which is defensive and never creates an entry —
+ * this installs the full Chat object as the detail-query data. Object-entering
+ * paths (select / create / branch / status refresh) call this so the detail
+ * cache is populated synchronously, before any component's useChat query would
+ * otherwise fetch it. That keeps reads (e.g. ChatInterface's active-chat
+ * existence check) from momentarily seeing `undefined` and flashing the
+ * new-chat view.
+ */
+export function seedChatDetail(chat: Chat): void {
+  queryClient.setQueryData(chatKeys.detail(chat.id), chat);
+}
+
+/**
+ * Read a single Chat from the detail cache (imperative, non-reactive).
+ * Returns undefined when the chat has not been loaded/seeded.
+ */
+export function getChatFromCache(chatId: string): Chat | undefined {
+  return queryClient.getQueryData<Chat>(chatKeys.detail(chatId));
+}
+
+/**
+ * Read the cached chat list for a project (imperative, non-reactive).
+ * Returns [] when the list has not been loaded/seeded.
+ */
+export function getCachedChatList(projectId: string | undefined): Chat[] {
+  if (!projectId) return [];
+  return (
+    queryClient.getQueryData<ChatListEnvelope>(chatKeys.list(projectId))
+      ?.chats ?? []
+  );
+}
+
+/**
  * Remove a chat from the list cache envelope and drop its detail cache.
  */
 export function removeChatFromListCache(
@@ -98,14 +133,6 @@ export function useChatList(projectId?: string) {
   });
 }
 
-export function useChatListWithSequence(projectId?: string) {
-  return useQuery({
-    queryKey: chatKeys.list(projectId),
-    queryFn: () => api.chatsV2.list(projectId),
-    enabled: !!projectId,
-  });
-}
-
 export function useChat(chatId?: string) {
   return useQuery({
     queryKey: chatKeys.detail(chatId),
@@ -118,14 +145,6 @@ export function useArchivedChats() {
   return useQuery({
     queryKey: chatKeys.archived(),
     queryFn: () => api.chatsV2.listArchived(),
-  });
-}
-
-export function useSearchChats(projectId: string, query: string) {
-  return useQuery({
-    queryKey: chatKeys.search(projectId, query),
-    queryFn: () => api.chatsV2.search(projectId, query),
-    enabled: !!projectId && !!query,
   });
 }
 

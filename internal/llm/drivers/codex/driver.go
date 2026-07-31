@@ -152,7 +152,7 @@ func NewClient(opts llm.DriverOptions) (*CodexClient, error) {
 		option.WithHeader("chatgpt-account-id", client.accountID),
 	)
 
-	client.client = openai.NewClient(sdkOpts...)
+	client.client = llm.NewOpenAISDKClient(sdkOpts...)
 
 	return client, nil
 }
@@ -373,13 +373,43 @@ func pruneDuplicateCodexToolNames(toolList []tools.Tool) []tools.Tool {
 	return pruned
 }
 
-func firstCodexResponseToolName(toolList []tools.Tool) (string, bool) {
+// soleCodexResponseToolName returns the response tool to PIN tool_choice to,
+// and only when pinning cannot take anything away from the model: when every
+// tool it was handed is a response tool, answering IS the only available act,
+// so forcing it costs nothing and removes a wasted turn.
+//
+// It deliberately does NOT fire when ordinary tools are present. Pinning
+// tool_choice to a named function applies to EVERY request in the turn loop,
+// not just the last one — so a model given tools alongside a response tool
+// could never call them. It has to answer on turn one, before it has done
+// anything.
+//
+// That is not hypothetical. A reviewer node was granted 22 tools — the shell
+// family, view, and 13 chrome-devtools tools — to boot the app and inspect it
+// before grading. It could call none of them, filed a `stuck` verdict in 18
+// seconds saying so in plain words, and failed a run whose gate was green: 10
+// linters, 48 frontend tests, `go test -race`, 2 builds. The grant was real
+// and the pin made it decoration.
+//
+// The original behavior was written for a ROUTER (its test still names the
+// stub `node_routing_decision`), where the response tool is the only tool and
+// forcing is exactly right. Applying it to every response tool is what broke
+// agents that must act before they answer.
+//
+// A model that ends a turn without answering is handled where it belongs —
+// builtin://structured-agent has a remind_response node for that — rather than
+// by removing its ability to act.
+func soleCodexResponseToolName(toolList []tools.Tool) (string, bool) {
+	name := ""
 	for _, tool := range toolList {
-		if tools.IsResponseTool(tool) {
-			return tool.Name(), true
+		if !tools.IsResponseTool(tool) {
+			return "", false
+		}
+		if name == "" {
+			name = tool.Name()
 		}
 	}
-	return "", false
+	return name, name != ""
 }
 
 // convertTools converts internal tools to SDK tool format
@@ -421,8 +451,8 @@ func (c *CodexClient) convertTools(toolList []tools.Tool) ([]responses.ToolUnion
 			Strict:      openai.Bool(false), // Codex API may not fully support strict mode
 			Description: openai.String(d),
 		}
-		if err := openaidriver.ValidateResponsesToolSchemaStrict(params); err != nil {
-			logging.Warn("[Codex] Invalid strict tool schema after normalization; applying safe fallback",
+		if err := openaidriver.ValidateResponsesToolSchema(params); err != nil {
+			logging.Warn("[Codex] Invalid tool schema after normalization; applying safe fallback",
 				"tool", toolName,
 				"error", err,
 			)
@@ -549,7 +579,7 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 			return responses.ResponseNewParams{}, err
 		}
 		params.Tools = convertedTools
-		if responseToolName, ok := firstCodexResponseToolName(validatedTools); ok {
+		if responseToolName, ok := soleCodexResponseToolName(validatedTools); ok {
 			params.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
 				OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: responseToolName},
 			}

@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
+	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 )
 
@@ -59,6 +60,16 @@ type daemonClient struct {
 	// server-assigned daemonID after registration. Empty in server mode.
 	serverURL string
 	bootCfg   bootstrap.DaemonBootstrapConfig
+
+	// gatewayClient and gatewayURL are built ONCE and reused by every session.
+	// The transport underneath owns an HTTP/2 connection pool, so building one
+	// per session leaks a live TCP connection (and its reader/writer
+	// goroutines) on every reconnect: a daemon that flapped 60 times held 60
+	// ESTABLISHED sockets to the gateway, none of them carrying a stream.
+	// Reusing it also means a reconnect resumes on the pooled connection
+	// instead of paying a fresh handshake.
+	gatewayClient reliantv1connect.ToolsDaemonServiceClient
+	gatewayURL    string
 
 	mcpManager    *mcp.Manager
 	localExecutor *toolexec.LocalToolExecutor
@@ -108,10 +119,55 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
 
+	// Claim the data directory before anything else, so a second daemon fails
+	// here rather than at the gateway. Two daemons on one host resolve to one
+	// daemonID; the gateway keys connections by daemonID and evicts the
+	// incumbent on every registration, so the pair evict each other until one
+	// is killed. Refusing to be the second one is the only place that costs
+	// nothing.
+	lock, err := daemonstate.Acquire(opts.BootstrapConfig.DataDir)
+	if err != nil {
+		if errors.Is(err, daemonstate.ErrLocked) {
+			return fmt.Errorf("%s: %w", describeIncumbentDaemon(opts.BootstrapConfig.DataDir), err)
+		}
+		return err
+	}
+	defer func() {
+		if releaseErr := lock.Release(); releaseErr != nil {
+			logging.Warn(logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
+		}
+	}()
+
 	client, err := newDaemonClient(opts.BootstrapConfig)
 	if err != nil {
 		return err
 	}
+
+	// Publish the runtime record before the first dial. Until the gateway acks
+	// registration the record says so, which is what makes `reliant daemon
+	// status` able to distinguish "the process exists" from "the daemon is
+	// serving tool calls".
+	gatewayURL := opts.BootstrapConfig.GRPCURL
+	if !opts.BootstrapConfig.ServerMode {
+		// Record the URL actually dialed, not the one typed, so an operator who
+		// passed grpc:// sees where the daemon really went.
+		if normalized, nErr := opts.BootstrapConfig.GatewayURL(); nErr == nil {
+			gatewayURL = normalized
+		}
+	}
+	if stateErr := daemonstate.Init(
+		opts.BootstrapConfig.DataDir,
+		gatewayURL,
+		string(opts.BootstrapConfig.TLSMode),
+		opts.BootstrapConfig.ServerMode,
+	); stateErr != nil {
+		logging.Warn(logPrefix+" Failed to write daemon runtime state", "error", stateErr)
+	}
+	defer func() {
+		if clearErr := daemonstate.Clear(opts.BootstrapConfig.DataDir); clearErr != nil {
+			logging.Warn(logPrefix+" Failed to clear daemon runtime state", "error", clearErr)
+		}
+	}()
 
 	// Watch workspace memory (cgroup v2) for pressure telemetry. Returns
 	// immediately on hosts without cgroup accounting, so this is free for
@@ -193,6 +249,21 @@ func Start(ctx context.Context, opts StartOptions) error {
 	return nil
 }
 
+// describeIncumbentDaemon names the daemon already holding dataDir, for the
+// refusal message. The runtime record is the only thing that can say WHICH
+// process it is; the claim itself only says that one exists. The record may be
+// missing or stale — that is precisely why it is not what the refusal is based
+// on — so this degrades to a generic sentence rather than lying.
+func describeIncumbentDaemon(dataDir string) string {
+	state, err := daemonstate.Read(dataDir)
+	if err != nil || state.PID == 0 {
+		return "a daemon is already running against this data directory — stop it with `reliant daemon stop` before starting another"
+	}
+	return fmt.Sprintf(
+		"daemon PID %d is already running against this data directory (started %s) — stop it with `reliant daemon stop` before starting another",
+		state.PID, state.StartedAt.Local().Format(time.RFC3339))
+}
+
 func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, error) {
 	// Resolve CWD: prefer DAEMON_WORKING_DIR env var (used in Docker), else os.Getwd().
 	cwd := strings.TrimSpace(os.Getenv("DAEMON_WORKING_DIR"))
@@ -250,6 +321,14 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// stamp ProcessInfo.DaemonID even before the RegistrationAck re-asserts it.
 	SetDaemonIdentity(bootCfg.DaemonID)
 
+	// One transport for the process. A bad URL or TLS mode is named here, at
+	// startup, rather than becoming a session error that reconnect retries
+	// forever against a config that can never come good.
+	httpClient, gatewayURL, err := transport.NewDaemonHTTPClient(bootCfg)
+	if err != nil {
+		return nil, fmt.Errorf("creating daemon HTTP client: %w", err)
+	}
+
 	return &daemonClient{
 		daemonID:   bootCfg.DaemonID,
 		daemonName: daemonName,
@@ -259,6 +338,8 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		cwd:               cwd,
 		serverURL:         bootCfg.ServerURL,
 		bootCfg:           bootCfg,
+		gatewayClient:     reliantv1connect.NewToolsDaemonServiceClient(httpClient, gatewayURL, connect.WithGRPC()),
+		gatewayURL:        gatewayURL,
 		mcpManager:        mcpManager,
 		localExecutor:     localExec,
 		capabilities:      caps,
@@ -360,6 +441,16 @@ func setupGitCredentials() {
 	logging.Info(logPrefix + " Configured git credential-store with GIT_TOKEN")
 }
 
+// recordStream publishes a gateway-stream transition to the daemon's on-disk
+// runtime record so `reliant daemon status` reports the stream, not the PID.
+// Best-effort: a daemon that is connected and serving must not die because a
+// status file could not be written.
+func (d *daemonClient) recordStream(s daemonstate.Stream, detail string) {
+	if err := daemonstate.SetStream(d.bootCfg.DataDir, s, detail); err != nil {
+		logging.Warn(logPrefix+" Failed to record daemon stream state", "error", err, "stream", string(s))
+	}
+}
+
 // isFatalError returns true for errors that should not be retried (e.g. auth failures).
 func isFatalError(err error) bool {
 	if err == nil {
@@ -371,6 +462,13 @@ func isFatalError(err error) bool {
 		return true
 	case connect.CodeUnimplemented:
 		// Server doesn't have the ConnectDaemon endpoint — wrong URL.
+		return true
+	case connect.CodeAborted:
+		// Another daemon process claimed this daemon id while we were being
+		// served. Redialing would evict it and be evicted right back, forever:
+		// two local daemons sharing one id flapped every 15-30s for 37 minutes
+		// on 2026-07-27, losing every in-flight tool request. Exactly one
+		// process may hold a daemon id, so the superseded one stops.
 		return true
 	}
 	return false
@@ -385,8 +483,10 @@ func (d *daemonClient) run(ctx context.Context) error {
 		}
 
 		sessionStart := time.Now()
+		d.recordStream(daemonstate.StreamConnecting, "")
 		err := d.runSession(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
+			d.recordStream(daemonstate.StreamDisconnected, err.Error())
 			if isFatalError(err) {
 				logging.Error(logPrefix+" Fatal error — not reconnecting",
 					"error", err,
@@ -394,6 +494,17 @@ func (d *daemonClient) run(ctx context.Context) error {
 					"grpc_url", d.bootCfg.GRPCURL,
 				)
 				d.stopAllStreams()
+				if connect.CodeOf(err) == connect.CodeAborted {
+					// Name the condition rather than calling it a connection
+					// failure: the connection worked fine, another daemon
+					// process took the identity. The remedy is to stop one of
+					// them, and the operator cannot infer that from "connection
+					// failed".
+					return fmt.Errorf(
+						"another daemon process claimed this daemon's identity on %s — "+
+							"exactly one daemon may run per identity, so this one is stopping: %w",
+						d.bootCfg.GRPCURL, err)
+				}
 				return fmt.Errorf("daemon connection failed (not retrying): %w", err)
 			}
 			logging.Error(logPrefix+" Session ended; reconnecting",
@@ -427,16 +538,11 @@ func (d *daemonClient) run(ctx context.Context) error {
 }
 
 func (d *daemonClient) runSession(ctx context.Context) error {
-	httpClient, baseURL, err := transport.NewDaemonHTTPClient(d.bootCfg)
-	if err != nil {
-		return fmt.Errorf("creating daemon HTTP client: %w", err)
-	}
+	baseURL := d.gatewayURL
 
 	logging.Info(logPrefix+" Connecting to gateway", "url", baseURL)
 
-	client := reliantv1connect.NewToolsDaemonServiceClient(httpClient, baseURL, connect.WithGRPC())
-
-	stream := client.ConnectDaemon(ctx)
+	stream := d.gatewayClient.ConnectDaemon(ctx)
 
 	// --- Registration: send directly before starting the sender goroutine ---
 	// daemon_id and user_id are no longer self-asserted; the gateway derives
@@ -458,7 +564,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			DaemonId: d.daemonID,
 		}},
 	}
-	if err = stream.Send(register); err != nil {
+	if err := stream.Send(register); err != nil {
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
 	}
 
@@ -467,10 +573,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	d.sendDone = make(chan struct{})
 	d.sessionDone = make(chan struct{})
 	go d.runSender(stream)
-	defer func() {
-		close(d.sessionDone) // signal send() and runSender to stop
-		<-d.sendDone         // wait for runSender to exit
-	}()
+	defer d.drainSender(senderDrainTimeout)
 
 	if err := d.sendProjectDiscovery(); err != nil {
 		logging.Warn(logPrefix+" Failed to send project discovery", "error", err)
@@ -515,6 +618,12 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 
 	case *reliantv1.ServerMessage_RegistrationAck:
 		if m.RegistrationAck != nil {
+			// The ack is the only unambiguous "the gateway stream is up" signal
+			// the daemon gets: the gateway sends it after it has accepted the
+			// registration and bound the connection. Record it — a successful
+			// local Send() proves nothing about the far end.
+			d.recordStream(daemonstate.StreamConnected, "")
+
 			// Gateway derives both identities from the PAT used to authenticate
 			// the stream and tells us. Daemon stores them locally for downstream
 			// use (tool execution context, logging).
@@ -876,10 +985,17 @@ func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
 	}
 }
 
+// messageSender is the write half of the gateway stream. It is an interface so
+// session teardown can be tested against a sender whose Send never returns —
+// the condition that makes an unbounded drain wedge the whole process.
+type messageSender interface {
+	Send(*reliantv1.DaemonMessage) error
+}
+
 // runSender is the single goroutine that drains sendCh and writes to the
 // bidi stream. This serialises writes (required — stream.Send is not
 // thread-safe) without blocking producers on I/O.
-func (d *daemonClient) runSender(stream *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage]) {
+func (d *daemonClient) runSender(stream messageSender) {
 	defer close(d.sendDone)
 	for {
 		select {
@@ -894,6 +1010,34 @@ func (d *daemonClient) runSender(stream *connect.BidiStreamForClient[reliantv1.D
 		case <-d.sessionDone:
 			return
 		}
+	}
+}
+
+// senderDrainTimeout bounds how long session teardown waits for runSender.
+const senderDrainTimeout = 3 * time.Second
+
+// drainSender ends the session and waits — with a deadline — for runSender to
+// stop. It reports whether the sender actually stopped.
+//
+// The deadline is the point. stream.Send writes into an io.Pipe that feeds the
+// HTTP/2 request body, so it blocks whenever the peer stops reading: a gateway
+// that has evicted this connection, or one whose flow-control window is full.
+// runSender is then inside Send and cannot reach its `case <-sessionDone`, so
+// an unbounded wait here never returns — and it sits between SIGTERM and
+// process exit, which is how a daemon takes SIGTERM, prints "Shutting down",
+// and then lives forever.
+//
+// Abandoning the goroutine is safe: the session is over, its stream is being
+// discarded, and the process is on its way out.
+func (d *daemonClient) drainSender(timeout time.Duration) bool {
+	close(d.sessionDone) // signal send() and runSender to stop
+	select {
+	case <-d.sendDone:
+		return true
+	case <-time.After(timeout):
+		logging.Warn(logPrefix+" sender did not stop within the drain deadline; abandoning it",
+			"timeout", timeout.String())
+		return false
 	}
 }
 
@@ -1283,13 +1427,38 @@ type skillsIndexEntry struct {
 	skills  []*reliantv1.IndexedSkill
 	blob    []byte
 	expires time.Time
+
+	// forgeProject records whether the project had a forge.yaml when this entry
+	// was built. It invalidates the entry independently of the TTL — see
+	// indexSkills.
+	forgeProject bool
 }
 
 const skillsIndexTTL = 60 * time.Second
 
+// projectHasForgeYAML reports whether the project root carries a forge.yaml,
+// the file that makes forge's framework skills visible at all
+// (internal/skills/catalog/forge.go drops every `emit: forge` skill without it).
+func projectHasForgeYAML(projectPath string) bool {
+	if projectPath == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(projectPath, "forge.yaml"))
+	return err == nil
+}
+
 func indexSkills(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
+	// A project BECOMING a forge project changes the catalog wholesale — every
+	// `forge/*` skill appears (or disappears) at once — and it is a transition a
+	// generation workflow makes on purpose, in its first phase, seconds before it
+	// is told to work from those very skills. Serving a cached "no forge skills"
+	// answer for up to a TTL across that moment means the agent's skill loads
+	// 404 and it proceeds from memory instead. Cheap to check: one stat against
+	// discovery that walks every skill root in the tree.
+	forgeProject := projectHasForgeYAML(projectPath)
+
 	skillsIndexMu.Lock()
-	if e, ok := skillsIndexCache[projectPath]; ok && time.Now().Before(e.expires) {
+	if e, ok := skillsIndexCache[projectPath]; ok && time.Now().Before(e.expires) && e.forgeProject == forgeProject {
 		skillsIndexMu.Unlock()
 		return e.skills, e.blob
 	}
@@ -1298,7 +1467,12 @@ func indexSkills(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	skills, blob := buildSkillsIndex(projectPath)
 
 	skillsIndexMu.Lock()
-	skillsIndexCache[projectPath] = skillsIndexEntry{skills: skills, blob: blob, expires: time.Now().Add(skillsIndexTTL)}
+	skillsIndexCache[projectPath] = skillsIndexEntry{
+		skills:       skills,
+		blob:         blob,
+		expires:      time.Now().Add(skillsIndexTTL),
+		forgeProject: forgeProject,
+	}
 	skillsIndexMu.Unlock()
 	return skills, blob
 }

@@ -3,7 +3,6 @@ package openai
 
 import (
 	"fmt"
-	"sort"
 )
 
 // OpenAI Responses strict schemas cannot express maps (additionalProperties schemas).
@@ -69,22 +68,73 @@ func rewriteMapSchemaToKVArray(schema map[string]any) bool {
 	return true
 }
 
-// stripRequired removes a required field if present. OpenAI Responses rejects schemas where
-// 'required' contains keys not present in properties.
-func stripRequired(schema map[string]any) {
+// requiredNames reads a JSON Schema 'required' value in either shape it can
+// arrive in: []any after a JSON round-trip, or []string when built in Go.
+func requiredNames(raw any) []string {
+	switch r := raw.(type) {
+	case []any:
+		names := make([]string, 0, len(r))
+		for _, v := range r {
+			if s, ok := v.(string); ok {
+				names = append(names, s)
+			}
+		}
+		return names
+	case []string:
+		return append([]string(nil), r...)
+	default:
+		return nil
+	}
+}
+
+// pruneRequired keeps the schema's declared 'required' list but drops entries
+// that do not name a real property. That is the only constraint OpenAI Responses
+// actually imposes here: it rejects a schema whose 'required' references a key
+// absent from 'properties'.
+//
+// It deliberately does NOT invent entries. Which parameters are optional is the
+// tool author's decision and the only channel through which a model can be told
+// it may omit one. A model that is told every parameter is mandatory answers
+// with a zero value — "" for a string, false for a boolean, 0 for a number —
+// and a zero value is a different request from an absent key for any server
+// that treats "not provided" as its own case.
+func pruneRequired(schema map[string]any) {
 	if schema == nil {
 		return
 	}
-	delete(schema, "required")
+	raw, ok := schema["required"]
+	if !ok {
+		return
+	}
+
+	props, _ := schema["properties"].(map[string]any)
+	if len(props) == 0 {
+		// Nothing a required entry could legitimately name.
+		delete(schema, "required")
+		return
+	}
+
+	kept := make([]any, 0, len(props))
+	for _, name := range requiredNames(raw) {
+		if _, exists := props[name]; exists {
+			kept = append(kept, name)
+		}
+	}
+	schema["required"] = kept
 }
 
-// NormalizeResponsesToolSchema mutates the given JSON-schema-ish map into the strict subset
-// required by OpenAI Responses when using function tools with strict=true.
+// NormalizeResponsesToolSchema mutates the given JSON-schema-ish map into the
+// shape OpenAI Responses accepts for function tools.
 //
 // Known constraints enforced here:
-// - Every object schema must set additionalProperties=false
-// - If an object schema has properties, it must also have required containing *every* property key
+// - Root parameters must be an object schema
+// - Every object schema sets additionalProperties=false, so the model does not invent keys
+// - Map schemas (additionalProperties with no properties) become {key,value} arrays
 // - required must not include keys that are not present in properties
+//
+// It preserves the tool's declared optionality: a parameter the tool did not
+// mark required stays optional, so the model can leave it out of the call. See
+// pruneRequired for why that distinction is load-bearing.
 //
 // This function is intentionally conservative and schema-shape-agnostic; it only
 // touches object/array/combinator nodes and recurses.
@@ -93,35 +143,18 @@ func NormalizeResponsesToolSchema(schema map[string]any) {
 		return
 	}
 
-	// If we have a map schema but it's missing additionalProperties (or has already been flattened),
-	// we still must ensure it doesn't carry an invalid 'required'. The safe move is to drop it.
-	// (If it's truly a map schema, rewriteMapSchemaToKVArray will handle it; otherwise dropping
-	// required just avoids OpenAI schema validation errors.)
-	stripRequired(schema)
+	// Keep the declared required list, minus entries naming no real property.
+	// A map schema's stray 'required' is irrelevant — rewriteMapSchemaToKVArray
+	// clears the node entirely.
+	pruneRequired(schema)
 
-	// Map schemas must be rewritten before we enforce strict object rules.
+	// Map schemas must be rewritten before we enforce object rules.
 	if rewriteMapSchemaToKVArray(schema) {
 		// We rewrote to array form; do not treat it as an object schema.
 		// Still recurse into nested nodes below.
-	} else {
-		// If this looks like an object schema, enforce strict object rules.
-		if schema["type"] == "object" || schema["properties"] != nil {
-			// Always close objects.
-			schema["additionalProperties"] = false
-
-			if props, ok := schema["properties"].(map[string]any); ok && props != nil {
-				keys := make([]string, 0, len(props))
-				for k := range props {
-					keys = append(keys, k)
-				}
-				sort.Strings(keys)
-				req := make([]any, 0, len(keys))
-				for _, k := range keys {
-					req = append(req, k)
-				}
-				schema["required"] = req
-			}
-		}
+	} else if schema["type"] == "object" || schema["properties"] != nil {
+		// Always close objects.
+		schema["additionalProperties"] = false
 	}
 
 	// If this is an object schema with additionalProperties=false but no explicit properties,
@@ -164,16 +197,21 @@ func NormalizeResponsesToolSchema(schema map[string]any) {
 	}
 }
 
-// ValidateResponsesToolSchemaStrict validates the OpenAI Responses strict subset invariants.
-// Returns nil if schema is acceptable.
-func ValidateResponsesToolSchemaStrict(schema map[string]any) error {
+// ValidateResponsesToolSchema validates the invariants OpenAI Responses imposes
+// on function tool parameters. Returns nil if schema is acceptable.
+//
+// Failing this check makes the caller drop the tool's entire parameter list, so
+// it must assert only what the API actually rejects. In particular a tool with
+// optional parameters is valid: 'required' is a subset of 'properties', not a
+// copy of it.
+func ValidateResponsesToolSchema(schema map[string]any) error {
 	if schema == nil {
 		return fmt.Errorf("schema is nil")
 	}
-	return validateResponsesToolSchemaStrictAtPath(schema, "$")
+	return validateResponsesToolSchemaAtPath(schema, "$")
 }
 
-func validateResponsesToolSchemaStrictAtPath(schema map[string]any, path string) error {
+func validateResponsesToolSchemaAtPath(schema map[string]any, path string) error {
 	if schema == nil {
 		return fmt.Errorf("%s: schema is nil", path)
 	}
@@ -188,25 +226,9 @@ func validateResponsesToolSchemaStrictAtPath(schema map[string]any, path string)
 		}
 
 		if props, ok := schema["properties"].(map[string]any); ok && props != nil {
-			requiredSet := map[string]bool{}
-			switch r := schema["required"].(type) {
-			case []any:
-				for _, v := range r {
-					if s, ok := v.(string); ok {
-						requiredSet[s] = true
-					}
-				}
-			case []string:
-				for _, s := range r {
-					requiredSet[s] = true
-				}
-			default:
-				return fmt.Errorf("%s: required must be present as array when properties exist", path)
-			}
-
-			for k := range props {
-				if !requiredSet[k] {
-					return fmt.Errorf("%s: required missing property %q", path, k)
+			for _, name := range requiredNames(schema["required"]) {
+				if _, exists := props[name]; !exists {
+					return fmt.Errorf("%s: required names %q which is not a property", path, name)
 				}
 			}
 		}
@@ -215,7 +237,7 @@ func validateResponsesToolSchemaStrictAtPath(schema map[string]any, path string)
 	if props, ok := schema["properties"].(map[string]any); ok {
 		for k, v := range props {
 			if child, ok := v.(map[string]any); ok {
-				if err := validateResponsesToolSchemaStrictAtPath(child, path+".properties."+k); err != nil {
+				if err := validateResponsesToolSchemaAtPath(child, path+".properties."+k); err != nil {
 					return err
 				}
 			}
@@ -227,7 +249,7 @@ func validateResponsesToolSchemaStrictAtPath(schema map[string]any, path string)
 		if !ok {
 			return fmt.Errorf("%s: items must be an object schema, got %T", path, rawItems)
 		}
-		if err := validateResponsesToolSchemaStrictAtPath(items, path+".items"); err != nil {
+		if err := validateResponsesToolSchemaAtPath(items, path+".items"); err != nil {
 			return err
 		}
 	}
@@ -236,7 +258,7 @@ func validateResponsesToolSchemaStrictAtPath(schema map[string]any, path string)
 		if arr, ok := schema[key].([]any); ok {
 			for i, v := range arr {
 				if child, ok := v.(map[string]any); ok {
-					if err := validateResponsesToolSchemaStrictAtPath(child, fmt.Sprintf("%s.%s[%d]", path, key, i)); err != nil {
+					if err := validateResponsesToolSchemaAtPath(child, fmt.Sprintf("%s.%s[%d]", path, key, i)); err != nil {
 						return err
 					}
 				}

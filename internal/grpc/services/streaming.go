@@ -97,6 +97,15 @@ func (s *StreamingService) StreamUserUpdates(
 		return err
 	}
 
+	// Subscribe to user updates before the catch-up read below, for the same
+	// reason as the per-chat hub: an event published between the catch-up
+	// query and the subscription would be in neither.
+	var userUpdateSub streaming.UpdateSubscription[db.UserUpdate]
+	if s.userUpdateHub != nil {
+		userUpdateSub = s.userUpdateHub.Subscribe(ctx, userID)
+		defer userUpdateSub.Unsubscribe()
+	}
+
 	// Send any user updates since sinceSeq
 	if latestSeq > sinceSeq {
 		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, projectID, stream); err != nil {
@@ -110,6 +119,7 @@ func (s *StreamingService) StreamUserUpdates(
 	// --- Per-chat subscription initialization ---
 	var lastChatSeq int64
 	var hubSub streaming.Subscription
+	var chatUpdateSub streaming.UpdateSubscription[db.ChatUpdate]
 
 	if subscribeChatID != "" {
 		// Verify user owns the chat before subscribing
@@ -126,6 +136,21 @@ func (s *StreamingService) StreamUserUpdates(
 
 		// Subscribe to the streaming hub for ephemeral events (streaming deltas)
 		hubSub = s.hub.Subscribe(ctx, subscribeChatID)
+
+		// Subscribe to persisted chat updates BEFORE the snapshot below.
+		// buildChatSnapshot reads its sequence high-water mark first and then
+		// does substantially more DB work; an update committed inside that
+		// window would be published with no subscriber attached and, since
+		// core NATS has no retention, lost from the live stream — while also
+		// being absent from the snapshot, whose sequence predates it. That
+		// loses the update permanently when it is the last one of a turn,
+		// because no later event ever arrives to trip the client's gap
+		// detection. Subscribing first makes the two overlap instead; the
+		// seq <= lastChatSeq dedup in the main loop drops the redundancy.
+		if s.chatUpdateHub != nil {
+			chatUpdateSub = s.chatUpdateHub.Subscribe(ctx, subscribeChatID)
+			defer chatUpdateSub.Unsubscribe()
+		}
 
 		// Send initial chat sync
 		if chatSinceSeq == 0 {
@@ -153,22 +178,10 @@ func (s *StreamingService) StreamUserUpdates(
 		}
 	}
 
-	// --- Subscribe to update hubs BEFORE catch-up is complete ---
-	// This ensures we don't miss events between the DB read and subscription start.
-	// Dedup by sequence number: skip any hub event with seq <= lastUserSeq.
-	var userUpdateSub streaming.UpdateSubscription[db.UserUpdate]
-	if s.userUpdateHub != nil {
-		userUpdateSub = s.userUpdateHub.Subscribe(ctx, userID)
-		defer userUpdateSub.Unsubscribe()
-	}
-
-	var chatUpdateSub streaming.UpdateSubscription[db.ChatUpdate]
-	if subscribeChatID != "" && s.chatUpdateHub != nil {
-		chatUpdateSub = s.chatUpdateHub.Subscribe(ctx, subscribeChatID)
-		defer chatUpdateSub.Unsubscribe()
-	}
-
 	// --- Event-driven main loop ---
+	// Both hubs are subscribed above, before their respective catch-up reads,
+	// so live events overlap the replay rather than falling between the two.
+	// The seq <= last*Seq checks below discard the overlap.
 	heartbeatTicker := time.NewTicker(heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
@@ -479,7 +492,9 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	var (
 		mainThreadMessages  []*db.Message
 		threadTokenCount    int64
-		compactionThreshold int64 = 185000
+		// Fallback only; the real per-model DERIVED value is fetched from
+		// GetContextUsage below. Kept single-source via threads.DefaultCompactionThreshold.
+		compactionThreshold int64 = threads.DefaultCompactionThreshold
 	)
 
 	if mainThread != "" {

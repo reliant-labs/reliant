@@ -128,8 +128,7 @@ func NewClient(opts llm.DriverOptions) *ReliantClient {
 			clientOptions = append(clientOptions, option.WithHeader(key, value))
 		}
 	}
-	clientOptions = append(clientOptions, option.WithHTTPClient(llm.StreamingHTTPClient()))
-	client := openai.NewClient(clientOptions...)
+	client := llm.NewOpenAISDKClient(clientOptions...)
 	return &ReliantClient{
 		Options: opts,
 		Client:  client,
@@ -318,7 +317,7 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 			option.WithResponseInto(&rawResp),
 		)
 		if err != nil {
-			retry, after, retryErr := c.shouldRetry(attempts, err)
+			retry, wait, retryErr := c.shouldRetry(attempts, err)
 			if retryErr != nil {
 				return nil, retryErr
 			}
@@ -326,12 +325,12 @@ func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, mess
 				logging.Warn("Retrying Reliant API request",
 					"attempt", attempts,
 					"max_retries", models.MaxRetries,
-					"after_ms", after,
+					"after_ms", wait.Delay.Milliseconds(),
 				)
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
-				case <-time.After(time.Duration(after) * time.Millisecond):
+				case <-time.After(wait.Delay):
 					continue
 				}
 			}
@@ -454,7 +453,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				return
 			}
 
-			retry, after, retryErr := c.shouldRetry(attempts, err)
+			retry, wait, retryErr := c.shouldRetry(attempts, err)
 			if retryErr != nil {
 				eventChan <- llm.DriverEvent{Type: llm.EventError, Error: retryErr}
 				close(eventChan)
@@ -464,8 +463,19 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 				logging.Warn("Retrying Reliant API request",
 					"attempt", attempts,
 					"max_retries", models.MaxRetries,
-					"after_ms", after,
+					"after_ms", wait.Delay.Milliseconds(),
 				)
+				// Announce the wait BEFORE taking it. The whole ladder runs inside
+				// one Temporal activity attempt, so without this the run emits
+				// nothing at all while it sleeps: measured on run b7aa4056, eight of
+				// ten fan-out units spent ~113s of their ~129s life here and every
+				// supervision surface read it as "the model is thinking".
+				select {
+				case eventChan <- llm.DriverEvent{Type: llm.EventRetryWait, Retry: &wait}:
+				case <-ctx.Done():
+					close(eventChan)
+					return
+				}
 				select {
 				case <-ctx.Done():
 					if ctx.Err() != nil {
@@ -473,7 +483,7 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 					}
 					close(eventChan)
 					return
-				case <-time.After(time.Duration(after) * time.Millisecond):
+				case <-time.After(wait.Delay):
 					continue
 				}
 			}
@@ -486,10 +496,15 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 	return eventChan
 }
 
-func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, int64, error) {
+// shouldRetry decides whether a failed request is retryable and, when it is,
+// describes the wait about to be taken (attempt, delay, provider status, and the
+// decision reason). The description is returned rather than only logged so the
+// caller can publish it: a backoff that exists only in a log line is invisible
+// to every surface a supervisor reads.
+func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, llm.RetryWait, error) {
 	var apierr *openai.Error
 	if !errors.As(err, &apierr) {
-		return false, 0, err
+		return false, llm.RetryWait{}, err
 	}
 
 	retry, reason := shouldRetryReliantAPIError(apierr)
@@ -499,16 +514,22 @@ func (c *ReliantClient) shouldRetry(attempts int, err error) (bool, int64, error
 		// marker-bearing error so the frontend can detect it across the
 		// Temporal serialization boundary (see ErrReliantManagedQuotaExhausted).
 		if reason == "reliant_managed_quota_exhausted" {
-			return false, 0, wrapReliantManagedQuotaError(apierr)
+			return false, llm.RetryWait{}, wrapReliantManagedQuotaError(apierr)
 		}
-		return false, 0, err
+		return false, llm.RetryWait{}, err
 	}
 
 	if attempts > models.MaxRetries {
-		return false, 0, reliantRetryExhaustedError(apierr)
+		return false, llm.RetryWait{}, reliantRetryExhaustedError(apierr)
 	}
 
-	return true, retryDelayMs(attempts, apierr), nil
+	return true, llm.RetryWait{
+		Attempt:     attempts,
+		MaxAttempts: models.MaxRetries,
+		Delay:       time.Duration(retryDelayMs(attempts, apierr)) * time.Millisecond,
+		StatusCode:  apierr.StatusCode,
+		Reason:      reason,
+	}, nil
 }
 
 func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {

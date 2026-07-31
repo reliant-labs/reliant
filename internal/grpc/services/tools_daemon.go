@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -113,6 +114,9 @@ type daemonConnection struct {
 	sendCh       chan *reliantv1.ServerMessage
 	done         chan struct{}
 	doneOnce     sync.Once
+	// closeReason records why done was closed, so the stream handler can
+	// return a distinguishable error instead of a bare EOF.
+	closeReason atomic.Pointer[error]
 
 	// pendingCommands tracks in-flight DaemonCommandRequests awaiting responses.
 	// Key is request_id, value is a channel that receives the response.
@@ -412,13 +416,63 @@ func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, d
 	})
 }
 
-func (c *daemonConnection) closeDone() {
+// errDaemonSuperseded ends the stream of a connection whose daemonID slot was
+// claimed by another daemon PROCESS.
+//
+// A daemon process never holds two sessions at once — daemonClient.run calls
+// runSession sequentially and only redials after the previous session's
+// Receive() returned. So a connection that is still being served when a fresh
+// registration takes its slot is, by construction, a DIFFERENT process
+// asserting the same identity. Left alone the two evict each other forever, on
+// a period set by the heartbeat interval (measured 2026-07-27: two local
+// daemons sharing one daemonID, sessions 30.00s ±12ms for 37 minutes, every
+// in-flight tool request lost with each flap).
+//
+// CodeAborted ("concurrency conflict") is the daemon's cue to stop rather than
+// redial — see isFatalError in internal/toolexec/daemonruntime.
+var errDaemonSuperseded = connect.NewError(connect.CodeAborted, fmt.Errorf(
+	"daemon identity claimed by another daemon process on the same gateway; "+
+		"this process is superseded and must not reconnect (only one daemon may hold a daemon id)"))
+
+func (c *daemonConnection) closeDone() { c.closeWith(nil) }
+
+// closeWith closes the connection's done channel, recording why. The reason is
+// what the stream handler returns to the daemon, so a superseded daemon can
+// tell "another process took my identity" from an ordinary EOF.
+func (c *daemonConnection) closeWith(reason error) {
 	if c == nil {
 		return
 	}
 	c.doneOnce.Do(func() {
+		c.closeReason.Store(&reason)
 		close(c.done)
 	})
+}
+
+// supersedeIncumbent ends the connection that previously held a daemon id
+// because a NEWER inbound registration claimed it. It is not an eviction of a
+// stale duplicate of the same process: a daemon process runs its sessions
+// strictly one at a time, so a connection still being served when a fresh
+// registration arrives belongs to a different process. Ending it with
+// errDaemonSuperseded is what stops the two from evicting each other forever.
+func (s *ToolsDaemonService) supersedeIncumbent(old *daemonConnection) {
+	if old == nil {
+		return
+	}
+	old.closeWith(errDaemonSuperseded)
+	logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Daemon id claimed by another daemon process; superseding the incumbent connection",
+		"userID", old.userID, "daemonID", old.daemonID)
+}
+
+// closedReason returns the error recorded by closeWith, or nil.
+func (c *daemonConnection) closedReason() error {
+	if c == nil {
+		return nil
+	}
+	if r := c.closeReason.Load(); r != nil {
+		return *r
+	}
+	return nil
 }
 
 func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister) (string, error) {
@@ -606,11 +660,8 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	}
 	s.mu.Unlock()
 
-	// Close old connection if this daemon was already connected (reconnect).
-	if oldConn != nil {
-		oldConn.closeDone()
-		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection", "userID", userID, "daemonID", daemonID)
-	}
+	// Close old connection if this daemon id was already connected.
+	s.supersedeIncumbent(oldConn)
 
 	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID)
@@ -783,20 +834,56 @@ func (o *OutboundConn) Disconnect() {
 	o.service.teardownConnection(o.conn, "outbound stream ended")
 }
 
-// handleIncoming handles incoming messages from the daemon
+// receivedMessage carries one Receive() outcome from the reader goroutine.
+type receivedMessage struct {
+	msg *reliantv1.DaemonMessage
+	err error
+}
+
+// handleIncoming handles incoming messages from the daemon.
+//
+// Receive runs in its own goroutine so the loop can also select on conn.done.
+// Checking done only between messages meant a connection closed by the
+// replace path or the stale sweeper kept its handler parked in Receive until
+// the daemon's next heartbeat — up to a full heartbeat interval during which
+// the stream was closed on the gateway's books but still open on the wire, and
+// the daemon learned nothing about WHY it ended (it saw a bare EOF).
 func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonConnection) error {
+	received := make(chan receivedMessage)
+	go func() {
+		for {
+			msg, err := conn.stream.Receive()
+			select {
+			case received <- receivedMessage{msg: msg, err: err}:
+			case <-conn.done:
+				return
+			case <-ctx.Done():
+				return
+			}
+			if err != nil {
+				return
+			}
+		}
+	}()
+
 	for {
+		var msg *reliantv1.DaemonMessage
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-conn.done:
-			return nil
-		default:
+			// closedReason is nil for an ordinary teardown and
+			// errDaemonSuperseded when another process claimed this daemon id.
+			// Returning it hands the daemon a status code it can act on.
+			return conn.closedReason()
+		case r := <-received:
+			if r.err != nil {
+				return r.err
+			}
+			msg = r.msg
 		}
-
-		msg, err := conn.stream.Receive()
-		if err != nil {
-			return err
+		if msg == nil {
+			continue
 		}
 
 		now := time.Now().UTC()
@@ -1840,13 +1927,27 @@ func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemon
 	}
 }
 
-// SendToolRequestSync sends a tool execution request to the daemon and waits for the correlated response.
+// SendToolRequestSync sends a tool execution request to the user's default
+// daemon and waits for the correlated response. Resolution happens exactly
+// once, here; everything downstream operates on that one connection.
 func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
 	s.mu.RLock()
 	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
 	if conn == nil {
 		return nil, fmt.Errorf("no daemon connected for user %s", userID)
+	}
+	return s.sendToolRequestToConn(ctx, conn, request)
+}
+
+// sendToolRequestToConn sends a tool request to ONE specific connection and
+// waits for that connection to answer. The correlation map, the send, and the
+// liveness the wait is bound to must all name the same connection — mixing
+// them is how an answer gets delivered to a connection nobody is listening on.
+// Mirrors sendCommandToConn.
+func (s *ToolsDaemonService) sendToolRequestToConn(ctx context.Context, conn *daemonConnection, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+	if conn == nil {
+		return nil, fmt.Errorf("nil daemon connection")
 	}
 
 	// Register a pending response channel.
@@ -1886,7 +1987,16 @@ func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID str
 			ToolRequest: toolReq,
 		},
 	}
-	if err := s.sendToUserDaemon(userID, msg); err != nil {
+	// Send on the SAME connection the pending channel was registered on.
+	// Re-resolving the user's default daemon here reintroduced a race that
+	// silently loses the answer: if the slot was replaced between the resolve
+	// above and this send, the request goes to connection B while the waiter
+	// listens on connection A. B's response finds no pending entry and is
+	// dropped, and A — still open — never fires done, so the caller waits out
+	// the FULL tool timeout (330s at the NATS hop) for a reply that can never
+	// come. Pinning the connection makes the wait honest: either the answer
+	// arrives, or A closes and we fail immediately.
+	if err := s.sendToConn(conn, msg); err != nil {
 		return nil, fmt.Errorf("send tool request: %w", err)
 	}
 

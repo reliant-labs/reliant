@@ -430,21 +430,55 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 }
 
 func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	// Marshal + payload preflight BEFORE daemon resolution: an oversize request
+	// is client-constructed and must fail fast with an actionable error even
+	// when no daemon is available (see TestNATSDaemonRouter_OversizeRequest_FailsFast).
+	data, reqID, err := r.buildDaemonCommand(commandType, payload, timeoutMs)
+	if err != nil {
+		return nil, err
+	}
+	// Default routing: resolve the user's daemon and pin the command to it, so
+	// resolution and delivery use the same daemon id (a caller that also records
+	// which daemon ran the command can resolve once and reuse SendDaemonCommandToDaemon).
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolving daemon for command: %w", err)
+	}
+	return r.sendDaemonCommandData(ctx, userID, daemonID, commandType, data, reqID, timeoutMs)
+}
+
+// SendDaemonCommandToDaemon sends a generic command to a SPECIFIC daemon id,
+// bypassing default resolution. Use when the target daemon is already known
+// (e.g. every worktree.create for one worktree must hit the same daemon that
+// will own it on disk) so the operation and any recorded owner id agree.
+func (r *NATSDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	data, reqID, err := r.buildDaemonCommand(commandType, payload, timeoutMs)
+	if err != nil {
+		return nil, err
+	}
+	return r.sendDaemonCommandData(ctx, userID, daemonID, commandType, data, reqID, timeoutMs)
+}
+
+// buildDaemonCommand marshals a daemon command envelope and runs the oversize
+// preflight. Split out so both the default-routing and daemon-pinned entry
+// points run the client-side size check before any daemon resolution.
+func (r *NATSDaemonRouter) buildDaemonCommand(commandType string, payload []byte, timeoutMs int32) (data []byte, requestID string, err error) {
+	requestID = fmt.Sprintf("%d", time.Now().UnixNano())
 	req := struct {
 		RequestID   string          `json:"request_id"`
 		CommandType string          `json:"command_type"`
 		Payload     json.RawMessage `json:"payload"`
 		TimeoutMs   int32           `json:"timeout_ms"`
 	}{
-		RequestID:   fmt.Sprintf("%d", time.Now().UnixNano()),
+		RequestID:   requestID,
 		CommandType: commandType,
 		Payload:     json.RawMessage(payload),
 		TimeoutMs:   timeoutMs,
 	}
 
-	data, err := json.Marshal(req)
+	data, err = json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal daemon command: %w", err)
+		return nil, "", fmt.Errorf("marshal daemon command: %w", err)
 	}
 
 	// Preflight the request against the connection's max_payload so an
@@ -453,10 +487,15 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 	// The reply direction is guarded on the bridge side (see nats_bridge.go).
 	if max := r.nc.MaxPayload(); exceedsNATSPayloadLimit(len(data), max) {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "oversize_request").Inc()
-		return nil, fmt.Errorf("daemon command %s: %s", commandType,
+		return nil, "", fmt.Errorf("daemon command %s: %s", commandType,
 			oversizeNATSPayloadError("request", len(data), max, oversizeRequestHint))
 	}
+	return data, requestID, nil
+}
 
+// sendDaemonCommandData performs the NATS round trip for a pre-marshalled,
+// pre-checked daemon command envelope addressed to a specific daemon.
+func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, daemonID, commandType string, data []byte, requestID string, timeoutMs int32) ([]byte, error) {
 	timeout := 30 * time.Second
 	if timeoutMs > 0 {
 		timeout = time.Duration(timeoutMs) * time.Millisecond
@@ -473,10 +512,6 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 	type natsResult struct {
 		msg *nats.Msg
 		err error
-	}
-	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("resolving daemon for command: %w", err)
 	}
 	subject := daemonSubject(daemonCommandSubject, userID, daemonID)
 	reqMsg := observability.NATSPublishMsg(ctx, subject, data)
@@ -509,7 +544,7 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 		}
 		msg = res.msg
 	case <-ctx.Done():
-		_ = r.SendToolExecutionCancel(context.Background(), userID, req.RequestID, "daemon command caller cancelled")
+		_ = r.SendToolExecutionCancel(context.Background(), userID, requestID, "daemon command caller cancelled")
 		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "timeout").Inc()
 		return nil, fmt.Errorf("daemon command via NATS failed: %w", ctx.Err())
 	}

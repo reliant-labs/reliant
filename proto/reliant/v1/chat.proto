@@ -227,6 +227,7 @@ message Message {
   optional string workflow_id = 16;    // Workflow that produced this message (for handoff detection)
   optional DisplayStyle display_style = 17;
   int64 sequence_number = 18;           // Streaming sync sequence number for tracking
+  optional string node_id = 19;         // Workflow node/step that produced this message (for per-node supervision)
 }
 
 // ContentBlock represents a granular message content piece
@@ -666,6 +667,13 @@ message WorkflowExecution {
   repeated ThreadStatus thread_statuses = 14; // Thread liveness information
   optional string thread_title = 15; // Human-readable title for the thread
   optional string parent_thread = 16; // Parent thread ID (set for both fork and new child threads)
+  // Outcome is the run's own verdict — "success" or "failure" — stamped by the
+  // terminal node it reached (Node.outcome). Empty when the workflow declared
+  // no outcome, which is NOT a failure: it means the workflow never said.
+  // Orthogonal to status: status is the lifecycle (Temporal-owned, reconciled
+  // against it), outcome is whether the work passed. A run that routes to a
+  // `failed` node has status=completed and outcome=failure.
+  optional string outcome = 17;
 }
 
 // ThreadStatus represents the liveness state of a thread

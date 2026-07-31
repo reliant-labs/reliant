@@ -23,6 +23,10 @@ type adoptTestDaemonRouter struct {
 	discoverCalls int
 }
 
+func (r *adoptTestDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *adoptTestDaemonRouter) SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	if commandType == "repo.discover" {
 		r.discoverCalls++

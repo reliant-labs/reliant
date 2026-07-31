@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // newTestStore returns a fresh LoadedToolsStore so tests do not interfere with
@@ -131,6 +132,72 @@ func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
 	assert.Equal(t, PermissionOrchestrator, s.GetPermission(chatID),
 		"Clear must remove stored permission, falling back to default")
 	assert.Nil(t, s.Get(chatID))
+}
+
+func TestLoadedToolsStore_AvailableMCPTools_SetGetClear(t *testing.T) {
+	s := newTestStore() // note: newTestStore does not init availableMCP; setter must lazily init
+	chatID := "chat-mcp"
+
+	// Unset -> nil.
+	assert.Nil(t, s.GetAvailableMCPTools(chatID))
+
+	infos := []MCPToolInfo{
+		{Name: "mcp__chrome-devtools__take_screenshot", Description: "Capture a screenshot"},
+		{Name: "mcp__chrome-devtools__navigate_page", Description: "Navigate to a URL"},
+	}
+	s.SetAvailableMCPTools(chatID, infos)
+	assert.Equal(t, infos, s.GetAvailableMCPTools(chatID))
+
+	// Empty slice clears the entry.
+	s.SetAvailableMCPTools(chatID, nil)
+	assert.Nil(t, s.GetAvailableMCPTools(chatID))
+
+	// Clear also removes recorded MCP tools.
+	s.SetAvailableMCPTools(chatID, infos)
+	s.Clear(chatID)
+	assert.Nil(t, s.GetAvailableMCPTools(chatID))
+}
+
+func TestSearchTools_SurfacesConnectedMCPTool(t *testing.T) {
+	mcpTools := []MCPToolInfo{
+		{Name: "mcp__chrome-devtools__take_screenshot", Description: "Capture a screenshot of the current page"},
+		{Name: "mcp__chrome-devtools__navigate_page", Description: "Navigate the browser to a URL"},
+	}
+
+	// Keyword present in the MCP tool NAME.
+	results := SearchTools("screenshot", PermissionReadOnly, mcpTools)
+	require.True(t, containsToolResult(results, "mcp__chrome-devtools__take_screenshot"),
+		"expected screenshot MCP tool surfaced by name keyword")
+	for _, r := range results {
+		if r.Name == "mcp__chrome-devtools__take_screenshot" {
+			assert.True(t, r.PermissionAllowed, "connected MCP tools should report as available")
+			assert.Contains(t, r.Tags, TagMCP)
+		}
+	}
+
+	// Keyword present only in the DESCRIPTION ("browser").
+	results = SearchTools("browser", PermissionReadOnly, mcpTools)
+	assert.True(t, containsToolResult(results, "mcp__chrome-devtools__navigate_page"),
+		"expected MCP tool surfaced via description keyword")
+
+	// Non-matching keyword surfaces no MCP tools.
+	results = SearchTools("zzz_no_match_zzz", PermissionReadOnly, mcpTools)
+	for _, r := range results {
+		assert.NotContains(t, r.Name, "mcp__", "no MCP tool should match a non-matching keyword")
+	}
+
+	// Built-in registry search still works with no MCP tools supplied.
+	results = SearchTools("workflow", PermissionOrchestrator, nil)
+	assert.NotEmpty(t, results, "registry search must still function without MCP tools")
+}
+
+func containsToolResult(results []ToolSearchResult, name string) bool {
+	for _, r := range results {
+		if r.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 func TestLoadedToolsStore_ConcurrentAccess(t *testing.T) {

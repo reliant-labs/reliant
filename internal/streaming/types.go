@@ -55,8 +55,53 @@ type StreamingDelta struct {
 
 	// Message metadata
 	MessageID string `json:"message_id,omitempty"`
+	// StreamSeq is a per-message monotonically increasing sequence number
+	// stamped by the producer. Consumers use it to detect duplicate or
+	// re-streamed deltas after an activity retry (delta identity protocol).
+	StreamSeq int64  `json:"stream_seq,omitempty"`
 	Role      string `json:"role,omitempty"`
 	Model     string `json:"model,omitempty"`
+}
+
+// coalescible reports whether this delta is a plain content-text delta that
+// can be merged with an adjacent one of the same thread+block. Only additive
+// text (content_block_delta carrying Delta text) qualifies — structural deltas
+// (block/tool start-stop, cancellations, token counts, thinking signatures)
+// must never be merged or dropped, since losing one corrupts the rendered
+// message (orphaned tool calls, stuck placeholders).
+func (d StreamingDelta) coalescible() bool {
+	return d.DeltaType == DeltaTypeContentBlockDelta &&
+		d.ToolCall == nil &&
+		d.ThinkingSignature == ""
+}
+
+// canCoalesceWith reports whether next can be appended onto d without loss:
+// both must be coalescible text deltas targeting the same thread, block, and
+// message. Merging across message boundaries would splice a retry re-stream's
+// text onto the previous attempt's tail, so MessageID must match exactly
+// (including both being empty for legacy id-less streams).
+func (d StreamingDelta) canCoalesceWith(next StreamingDelta) bool {
+	return d.coalescible() && next.coalescible() &&
+		d.Thread == next.Thread &&
+		d.BlockIndex == next.BlockIndex &&
+		d.MessageID == next.MessageID
+}
+
+// coalesce returns a delta whose text content is d's followed by next's. The
+// caller must have verified canCoalesceWith. Token counts, if present on the
+// newer delta, are carried forward so downstream accounting isn't lost.
+func (d StreamingDelta) coalesce(next StreamingDelta) StreamingDelta {
+	merged := d
+	merged.Delta += next.Delta
+	if next.TokenCount != 0 {
+		merged.TokenCount = next.TokenCount
+	}
+	// Carry the later stream sequence forward so the merged delta represents
+	// the high-water mark of what it contains.
+	if next.StreamSeq != 0 {
+		merged.StreamSeq = next.StreamSeq
+	}
+	return merged
 }
 
 // MarshalJSON ensures update_type is always "streaming_delta" for wire format

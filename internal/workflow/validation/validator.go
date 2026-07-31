@@ -41,6 +41,11 @@ type ValidationOptions struct {
 	// semantic validation (for example: "builtin://agent").
 	// When empty, validation falls back to wf.name.
 	CanonicalWorkflowRef string
+
+	// SkillResolver resolves the skill names a workflow declares against a real
+	// catalog. When provided, enables the skill-reference layer that fails a
+	// workflow naming a skill nothing resolves.
+	SkillResolver *SkillResolver
 }
 
 // =============================================================================
@@ -86,6 +91,10 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 	// Layer 4: Cross-workflow validation via core semantic contracts.
 	// Loader is optional: compile contracts are still validated even without ref loading.
 	validateCrossWorkflow(wf, opts, result)
+
+	// Layer 5: Skill references resolve against a real catalog.
+	// Resolver is optional; without one the layer is a no-op.
+	validateSkillReferences(wf, opts, result)
 
 	return result
 }

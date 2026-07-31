@@ -15,9 +15,22 @@ const (
 	// MaxContextTokens is the hard limit for context tokens (200k for Claude)
 	MaxContextTokens = 200000
 
-	// SafeContextTokens is the threshold above which we trim content to stay safe
-	// We use 195k to leave room for response overhead
+	// SafeContextTokens is the LEGACY, model-unaware fallback threshold used only
+	// when a caller cannot supply the model's real context window (contextWindow
+	// <= 0). Prefer the model-aware backstop derived from the real window via
+	// deriveSafeContextTokens — see TrimBackstopFraction. This fixed value assumes
+	// a 200k window and is far too low for large-window models (e.g. 1M), which is
+	// why trimming must always be driven by the real window when it is known.
 	SafeContextTokens = 195000
+
+	// TrimBackstopFraction is the fraction of a model's REAL context window at
+	// which the trim BACKSTOP engages. It sits ABOVE the compaction threshold
+	// (~85% of the window) so that compaction — which summarizes older context
+	// into a handoff — is the PRIMARY context-management mechanism. Trimming, which
+	// head/tail-shreds tool output and degrades the session, is only a last-resort
+	// safety net that engages if compaction did not run or did not bring the
+	// context back down below this level.
+	TrimBackstopFraction = 0.95
 
 	// CharsPerToken is the estimated character-to-token ratio
 	// Conservative estimate: 4 characters per token
@@ -26,6 +39,17 @@ const (
 	// TrimmedContentSuffix is appended to content that was trimmed
 	TrimmedContentSuffix = "\n<system>output was trimmed due to exceeding token limits</system>"
 )
+
+// deriveSafeContextTokens returns the token count above which the trim backstop
+// engages for a model with the given REAL context window (~95% of the window).
+// When the window is unknown (<= 0) it falls back to the fixed SafeContextTokens
+// so callers without a resolved model keep the legacy behavior.
+func deriveSafeContextTokens(contextWindow int64) int {
+	if contextWindow <= 0 {
+		return SafeContextTokens
+	}
+	return int(float64(contextWindow) * TrimBackstopFraction)
+}
 
 // ============================================================================
 // TOOL DEFINITION INTERFACE
@@ -142,8 +166,25 @@ func estimatePartChars(part ContentPart) int {
 	}
 }
 
-// TrimMessagesToFitContextWithFullEstimate trims message content to fit within the context window,
-// accounting for the full token count including system prompts and tool definitions.
+// TrimMessagesToFitContextWithFullEstimate is the legacy, model-UNAWARE entry
+// point. It delegates to TrimMessagesToFitContextWindow with contextWindow=0,
+// which uses the fixed SafeContextTokens threshold. Prefer
+// TrimMessagesToFitContextWindow with the model's real context window so the
+// backstop scales with the model instead of assuming a 200k window.
+func TrimMessagesToFitContextWithFullEstimate(messages []Message, systemPrompts []string, tools []ToolDefinition) bool {
+	return TrimMessagesToFitContextWindow(messages, systemPrompts, tools, 0)
+}
+
+// TrimMessagesToFitContextWindow trims message content to fit within the model's
+// context window, accounting for the full token count including system prompts
+// and tool definitions.
+//
+// This is the model-aware BACKSTOP: the trim threshold is derived from the
+// model's real context window (~95% of it via TrimBackstopFraction), which sits
+// ABOVE the compaction threshold (~85%). Compaction is the primary mechanism;
+// this trim only engages when compaction failed to bring the context down. Pass
+// contextWindow<=0 when the real window is unknown to fall back to the fixed
+// SafeContextTokens threshold.
 //
 // This function provides accurate context window protection by considering:
 // - Message content tokens
@@ -152,13 +193,15 @@ func estimatePartChars(part ContentPart) int {
 //
 // The function modifies messages in-place and returns whether any trimming occurred.
 // It trims from the end of the conversation, prioritizing tool results for trimming.
-func TrimMessagesToFitContextWithFullEstimate(messages []Message, systemPrompts []string, tools []ToolDefinition) bool {
+func TrimMessagesToFitContextWindow(messages []Message, systemPrompts []string, tools []ToolDefinition, contextWindow int64) bool {
 	if len(messages) == 0 {
 		return false
 	}
 
+	safeLimit := deriveSafeContextTokens(contextWindow)
+
 	estimate := EstimateFullContextTokens(messages, systemPrompts, tools)
-	if estimate.TotalTokens <= SafeContextTokens {
+	if estimate.TotalTokens <= safeLimit {
 		return false
 	}
 
@@ -167,12 +210,13 @@ func TrimMessagesToFitContextWithFullEstimate(messages []Message, systemPrompts 
 		"messageTokens", estimate.MessageTokens,
 		"systemPromptTokens", estimate.SystemPromptTokens,
 		"toolTokens", estimate.ToolTokens,
-		"safeLimit", SafeContextTokens,
-		"tokensOver", estimate.TotalTokens-SafeContextTokens)
+		"safeLimit", safeLimit,
+		"contextWindow", contextWindow,
+		"tokensOver", estimate.TotalTokens-safeLimit)
 
 	// Calculate how many tokens we need to trim from messages
 	// We can only trim message content, not system prompts or tool definitions
-	tokensToTrim := estimate.TotalTokens - SafeContextTokens
+	tokensToTrim := estimate.TotalTokens - safeLimit
 	charsToTrim := tokensToTrim * CharsPerToken
 
 	// Calculate how much the last message can contribute

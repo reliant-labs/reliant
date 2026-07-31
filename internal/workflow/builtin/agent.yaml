@@ -35,6 +35,14 @@ inputs:
       - code_reviewer
     description: Presets available for spawn tool (empty = spawn disabled)
 
+  skills:
+    type: array
+    default: []
+    description: |
+      Namespaced skill paths (e.g. "forge/getting-started") to preload into the
+      agent's context before the first turn, so it works from the source-of-truth
+      skills instead of loading them by hand.
+
   system_prompt:
     type: string
     default: ""
@@ -67,13 +75,13 @@ inputs:
       3. **Create Plans** - Use create_plan to document the approach
       4. **Define Tasks** - Use add_task to create specific, implementable tasks
       5. **Identify Dependencies** - Note what needs to happen in what order
-      6. **Research & Analyze** - Use read-only tools (view, grep, glob) to understand the codebase
+      6. **Research & Analyze** - Use read-only tools (view, and the shell for searching) to understand the codebase
       7. **Document Findings** - Capture important patterns, constraints, and decisions
 
       ## Tools You Have
 
       - **Planning tools**: create_plan, update_plan, add_task, update_task, list_tasks, get_plan
-      - **Read-only tools**: view, grep, glob, fetch, websearch
+      - **Read-only tools**: view, fetch, websearch, and the shell for searching (prefer `rg`, scoped to a relative path)
       - **Analysis tools**: Any MCP tools for reading/searching
 
       ## What You Should NOT Do
@@ -140,11 +148,20 @@ nodes:
             thinking_level: "{{has(inputs.model.thinking_level) ? inputs.model.thinking_level : ''}}"
             # 0 = unset → call_llm resolves the threshold from the model default
             compaction_threshold: "{{has(inputs.model.compaction_threshold) ? inputs.model.compaction_threshold : 0}}"
+            skills: "{{inputs.skills}}"
             system_prompt: >
               {{inputs.mode == 'plan' && inputs.planning_prompt != '' ? (inputs.system_prompt != '' ? inputs.system_prompt + "\n\n" : '') + inputs.planning_prompt : inputs.system_prompt}}
-            # Plan mode gets plan-tagged tools only; spawn available in all modes (child inherits preset config)
+            # Plan mode gets plan-tagged tools plus the shell family — search runs
+            # through the shell, since there are no dedicated grep/glob tools;
+            # spawn available in all modes (child inherits preset config).
+            #
+            # Plan mode gates at 'readonly', which is now sufficient: the shell is
+            # readonly-tier precisely so plan-mode agents can still search. The
+            # earlier blanket 'mutating' existed only because the shell used to
+            # gate at mutating and plan mode would otherwise have had no way to
+            # search at all; that workaround is no longer needed.
             tools_config:
-              filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools}}"
+              filter: "{{inputs.mode == 'plan' ? ['tag:plan', 'tag:shell'] : inputs.tools}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: "{{inputs.mode == 'plan' ? 'readonly' : 'mutating'}}"
 

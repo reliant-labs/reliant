@@ -3,6 +3,7 @@ package tools
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -12,16 +13,12 @@ import (
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
-type EditOperation struct {
+type EditParams struct {
 	FilePath   string `json:"file_path" jsonschema:"required,description=The absolute path to the file to modify"`
 	OldString  string `json:"old_string,omitempty" jsonschema:"description=The text to replace (leave empty when creating a new file)"`
 	NewString  string `json:"new_string,omitempty" jsonschema:"description=The edited text to replace the old_string (leave empty when deleting content)"`
 	ReplaceAll bool   `json:"replace_all,omitempty" jsonschema:"description=Replace all occurrences of old_string in the file (default: false)"`
-}
-
-type EditParams struct {
-	Edits []EditOperation `json:"edits" jsonschema:"required,description=Array of edit operations to perform. All edits must be provided in this array."`
-	Repo  string          `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
+	Repo       string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
 
 type EditPermissionsParams struct {
@@ -39,16 +36,17 @@ type editTool struct{}
 
 const (
 	EditToolName    = "edit"
-	editDescription = `Make precise text replacements in files or create new files. All edit operations must be provided in the edits array.
+	editDescription = `Make a precise text replacement in a single file, or create/delete file content. One edit per call.
 
-NOTE: You can parallelize multiple edit tool calls in one message, even if they involve the same files.
+NOTE: To make several edits at once, issue multiple edit tool calls IN THE SAME MESSAGE — they run in parallel. Do NOT try to pack multiple edits into one call.
+
+Edits to DIFFERENT files in one message run at the same time. Edits to the SAME file are applied one at a time, in an unspecified order, each one seeing the result of the ones before it. So batch same-file edits freely — but only when they are independent: each old_string must still match after the others have applied. Two edits whose old_string regions overlap, or where one creates the text the other matches, must be sent in separate messages, or the second will fail to match.
 
 WHEN TO USE:
 - Precise text replacements
-- Creating new files (empty old_string)
+- Creating a new file (empty old_string)
 - Deleting specific content (empty new_string)
-- Renaming variables/functions (with replace_all)
-- Coordinated changes across multiple files
+- Renaming a variable/function (with replace_all)
 
 WHEN NOT TO USE:
 - Complete file rewrite: Use Write tool
@@ -61,57 +59,33 @@ COMMON MISTAKES TO AVOID:
 
 USAGE PATTERNS:
 
-## One Edit
-edits: [
-  {
-    file_path: "/path/to/file.go",
-    old_string: "Include 3-5 lines before AND after",
-    new_string: "Your replacement text",
-    replace_all: false
-  }
-]
+## Replace Text
+file_path: "/path/to/file.go"
+old_string: "Include 3-5 lines before AND after"
+new_string: "Your replacement text"
+replace_all: false
 
 ## Multiple Edits
-edits: [
-  {
-    file_path: "/path/to/file1.go",
-    old_string: "old text 1",
-    new_string: "new text 1"
-  },
-  {
-    file_path: "/path/to/file2.go",
-    old_string: "old text 2",
-    new_string: "new text 2"
-  }
-]
+Issue one edit call per change, all in the same message. For example, to edit two
+files at once, send two edit tool calls in parallel:
+  edit(file_path="/path/to/file1.go", old_string="old text 1", new_string="new text 1")
+  edit(file_path="/path/to/file2.go", old_string="old text 2", new_string="new text 2")
 
 ## Create New File
-edits: [
-  {
-    file_path: "/path/to/new/file.go",
-    old_string: "",
-    new_string: "file contents"
-  }
-]
+file_path: "/path/to/new/file.go"
+old_string: ""
+new_string: "file contents"
 
 ## Delete Content
-edits: [
-  {
-    file_path: "/path/to/file.go",
-    old_string: "text to remove",
-    new_string: ""
-  }
-]
+file_path: "/path/to/file.go"
+old_string: "text to remove"
+new_string: ""
 
 ## Rename Variable
-edits: [
-  {
-    file_path: "/path/to/file.go",
-    old_string: "oldName",
-    new_string: "newName",
-    replace_all: true
-  }
-]
+file_path: "/path/to/file.go"
+old_string: "oldName"
+new_string: "newName"
+replace_all: true
 
 # 🎯 CRITICAL REQUIREMENTS
 
@@ -132,8 +106,8 @@ edits: [
 
 # 💡 BEST PRACTICES
 - Include ample context
-- All operations are atomic (all succeed or all fail)
 - Use replace_all for systematic renames
+- Parallelize independent edits as separate calls in one message
 - Verify edits don't break code
 
 # 🔄 WORKS WELL WITH
@@ -141,11 +115,10 @@ edits: [
 - ALTERNATIVE: Write (complete rewrite)
 
 # 📝 PARAMETERS
-- edits: Array of edit operations (required)
-  - file_path: Absolute path (required)
-  - old_string: Text to find (exact match)
-  - new_string: Replacement text
-  - replace_all: Replace all occurrences (optional)
+- file_path: Absolute path (required)
+- old_string: Text to find (exact match)
+- new_string: Replacement text
+- replace_all: Replace all occurrences (optional)
 
 Remember: This tool requires EXACT text matching including all whitespace and indentation.`
 )
@@ -186,15 +159,15 @@ func (e *editTool) validateFileForEdit(rctx *rctx.ToolContext, chatID, thread, f
 }
 
 func (e *editTool) Execute(rctx *rctx.ToolContext, params EditParams) (ToolResponse, error) {
-	logging.Debug("Edit tool Execute called", "edits_count", len(params.Edits), "chatID", rctx.ChatID, "thread", rctx.Thread)
+	logging.Debug("Edit tool Execute called", "file_path", params.FilePath, "chatID", rctx.ChatID, "thread", rctx.Thread)
 
 	if rctx.Daemon == nil {
 		return NewTextErrorResponse("filesystem access requires a connected daemon"), nil
 	}
 
-	if len(params.Edits) == 0 {
-		logging.Warn("Edit tool called with zero edits", "chatID", rctx.ChatID, "thread", rctx.Thread)
-		return NewTextErrorResponse("at least one edit operation is required"), nil
+	if params.FilePath == "" {
+		logging.Warn("Edit tool called with empty file_path", "chatID", rctx.ChatID, "thread", rctx.Thread)
+		return NewTextErrorResponse("file_path is required"), nil
 	}
 
 	wd, err := ResolveRepoPath(rctx, params.Repo)
@@ -211,86 +184,57 @@ func (e *editTool) Execute(rctx *rctx.ToolContext, params EditParams) (ToolRespo
 		thread = "0"
 	}
 
-	// Phase 1: Validate all operations
-	processedEdits := make([]EditOperation, len(params.Edits))
-	for i, edit := range params.Edits {
-		if edit.FilePath == "" {
-			return NewTextErrorResponse(fmt.Sprintf("file_path is required for edit operation %d", i+1)), nil
-		}
+	// Convert to absolute path
+	filePath := params.FilePath
+	if !filepath.IsAbs(filePath) {
+		filePath = filepath.Join(wd, filePath)
+	}
 
-		// Convert to absolute path
-		if !filepath.IsAbs(edit.FilePath) {
-			edit.FilePath = filepath.Join(wd, edit.FilePath)
-		}
-		processedEdits[i] = edit
-
+	// Everything from here down is a read-modify-write on filePath, and this tool
+	// is called concurrently with itself: the tool calls in one assistant message
+	// are dispatched onto a worker pool, and the description above tells the model
+	// to batch its edits that way. Hold the path lock across the whole sequence so
+	// same-file edits in a batch see each other's writes instead of racing.
+	// See file_concurrency.go.
+	var response ToolResponse
+	response, err = withPathLock(rctx, filePath, func() (ToolResponse, error) {
 		// Validate file access for existing files
-		if edit.OldString != "" {
-			if err := e.validateFileForEdit(rctx, rctx.ChatID, thread, edit.FilePath); err != nil {
-				return NewTextErrorResponse(fmt.Sprintf("edit operation %d: %s", i+1, err.Error())), nil
+		if params.OldString != "" {
+			if err := e.validateFileForEdit(rctx, rctx.ChatID, thread, filePath); err != nil {
+				return NewTextErrorResponse(err.Error()), nil
 			}
 		}
+
+		// Apply the edit
+		switch {
+		case params.OldString == "":
+			// Creating a new file (empty old_string)
+			return e.createNewFile(rctx, thread, filePath, params.NewString)
+		case params.NewString == "":
+			// Deleting content (empty new_string)
+			return e.deleteContent(rctx, thread, filePath, params.OldString)
+		default:
+			// Normal content replacement
+			return e.replaceContent(rctx, thread, filePath, params.OldString, params.NewString, params.ReplaceAll)
+		}
+	})
+
+	if err != nil {
+		return response, err
+	}
+	if response.IsError {
+		return response, nil
 	}
 
-	// Phase 2: Apply all operations atomically
-	var allResponses []ToolResponse
-	var totalAdditions, totalRemovals int
+	finalText := fmt.Sprintf("<result>\n%s\n</result>\n", response.Content)
 
-	for i, edit := range processedEdits {
-		var response ToolResponse
-		var err error
-
-		// Handle creating new file (empty old_string)
-		if edit.OldString == "" {
-			response, err = e.createNewFile(rctx, thread, edit.FilePath, edit.NewString)
-		} else if edit.NewString == "" {
-			// Handle deleting content (empty new_string)
-			response, err = e.deleteContent(rctx, thread, edit.FilePath, edit.OldString)
-		} else {
-			// Handle normal content replacement
-			response, err = e.replaceContent(rctx, thread, edit.FilePath, edit.OldString, edit.NewString, edit.ReplaceAll)
-		}
-
-		if err != nil {
-			return response, err
-		}
-		if response.IsError {
-			return NewTextErrorResponse(fmt.Sprintf("edit operation %d failed: %s", i+1, response.Content)), nil
-		}
-
-		allResponses = append(allResponses, response)
-
-		// Extract metadata from JSON string for aggregation
-		if response.Metadata != "" {
-			var metadata EditResponseMetadata
-			if err := json.Unmarshal([]byte(response.Metadata), &metadata); err == nil {
-				totalAdditions += metadata.Additions
-				totalRemovals += metadata.Removals
-			}
-		}
+	// Propagate the underlying operation's metadata (diff, additions, removals).
+	var metadata EditResponseMetadata
+	if response.Metadata != "" {
+		_ = json.Unmarshal([]byte(response.Metadata), &metadata)
 	}
 
-	// Phase 3: Build response
-	var resultText string
-	if len(allResponses) == 1 {
-		resultText = allResponses[0].Content
-	} else {
-		resultText = fmt.Sprintf("Successfully applied %d edit operations:", len(allResponses))
-		for i, response := range allResponses {
-			resultText += fmt.Sprintf("\n%d. %s", i+1, response.Content)
-		}
-	}
-
-	finalText := fmt.Sprintf("<result>\n%s\n</result>\n", resultText)
-
-	return WithResponseMetadata(
-		NewTextResponse(finalText),
-		EditResponseMetadata{
-			Diff:      "", // Combined diff could be added later if needed
-			Additions: totalAdditions,
-			Removals:  totalRemovals,
-		},
-	), nil
+	return WithResponseMetadata(NewTextResponse(finalText), metadata), nil
 }
 
 func (e *editTool) createNewFile(rctx *rctx.ToolContext, thread, filePath, content string) (ToolResponse, error) {
@@ -328,7 +272,13 @@ func (e *editTool) createNewFile(rctx *rctx.ToolContext, thread, filePath, conte
 		rootDir,
 	)
 
-	if _, err = rctx.Daemon.WriteFile(rctx.Context, filePath, content); err != nil {
+	// Expect the file to still be absent: we checked stat.Exists above, and
+	// creating over content that appeared in between would destroy it.
+	if err = writeFileGuarded(rctx, filePath, "", content); err != nil {
+		var conflict *ConcurrentModificationError
+		if errors.As(err, &conflict) {
+			return NewTextErrorResponse(conflict.Error()), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 
@@ -388,7 +338,11 @@ func (e *editTool) deleteContent(rctx *rctx.ToolContext, thread, filePath, oldSt
 		rootDir,
 	)
 
-	if _, err = rctx.Daemon.WriteFile(rctx.Context, filePath, newContent); err != nil {
+	if err = writeFileGuarded(rctx, filePath, oldContent, newContent); err != nil {
+		var conflict *ConcurrentModificationError
+		if errors.As(err, &conflict) {
+			return NewTextErrorResponse(conflict.Error()), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 
@@ -476,7 +430,11 @@ func (e *editTool) replaceContent(rctx *rctx.ToolContext, thread, filePath, oldS
 		rootDir,
 	)
 
-	if _, err = rctx.Daemon.WriteFile(rctx.Context, filePath, newContent); err != nil {
+	if err = writeFileGuarded(rctx, filePath, oldContent, newContent); err != nil {
+		var conflict *ConcurrentModificationError
+		if errors.As(err, &conflict) {
+			return NewTextErrorResponse(conflict.Error()), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 

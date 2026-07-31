@@ -134,6 +134,31 @@ vi.mock("../../../store/chatStore", async (importOriginal) => {
   };
 });
 
+// The wizard's starter-picker-modal gate reads the chat list from React Query
+// (useChatList) and the current project. Provide a populated list + a project
+// so the gate does NOT trigger (these routing tests are about tour navigation).
+vi.mock("../../../hooks/chat-queries", () => ({
+  useChatList: () => ({
+    data: [{ id: "existing-chat" }],
+    isSuccess: true,
+  }),
+}));
+
+vi.mock("../../../store/projectStore", () => {
+  const projectState = { currentProject: { id: "project-1" } };
+  return {
+    useProjectStore: Object.assign(
+      (selector: any) =>
+        selector ? selector(projectState) : projectState,
+      {
+        getState: () => projectState,
+        setState: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+      }
+    ),
+  };
+});
+
 vi.mock("../../../lib/analytics", () => ({
   trackEvent: vi.fn(),
 }));

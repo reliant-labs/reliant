@@ -39,15 +39,18 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		// bash requires mutating permission
+		// write requires mutating permission. The shell family does NOT: it
+		// is readonly-tier by decision (internal/llm/tools/permissions.go),
+		// since the shell is the only way to search once the scoped search
+		// tools were removed.
 		input := ExecuteToolsInput{
 			ChatID: chatID,
 			Thread: "0",
 			ToolCalls: []ToolCall{
 				{
-					ID:    "call_bash",
-					Name:  "bash",
-					Input: `{"command": "ls"}`,
+					ID:    "call_write",
+					Name:  tools.ToolWrite,
+					Input: `{"file_path": "/tmp/x", "content": "y"}`,
 				},
 			},
 		}
@@ -62,7 +65,7 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		assert.Contains(t, output.ToolResults[0].Content, "readonly")
 
 		// Tool should NOT have been executed
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_bash"))
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"))
 	})
 
 	t.Run("Read-only tool allowed with readonly permission", func(t *testing.T) {
@@ -374,7 +377,12 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// Set readonly — view is allowed, bash is denied
+		// Set readonly — view and bash are allowed, write is denied. bash is
+		// readonly-tier by decision (internal/llm/tools/permissions.go): with
+		// the scoped search tools gone the shell is the only way to search, so
+		// gating it at mutating would leave a readonly agent unable to look
+		// around. It can still redirect into a file, which is why a hard
+		// boundary has to live below the tool layer.
 		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionReadOnly)
 		defer tools.GetLoadedToolsStore().Clear(chatID)
 
@@ -387,18 +395,18 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 			ToolCalls: []ToolCall{
 				{
 					ID:    "call_view",
-					Name:  "view",
+					Name:  tools.ToolView,
 					Input: `{"file_path": "test.txt"}`,
+				},
+				{
+					ID:    "call_write",
+					Name:  tools.ToolWrite,
+					Input: `{"file_path": "/tmp/x", "content": "y"}`,
 				},
 				{
 					ID:    "call_bash",
 					Name:  "bash",
-					Input: `{"command": "rm -rf /"}`,
-				},
-				{
-					ID:    "call_grep",
-					Name:  "grep",
-					Input: `{"pattern": "foo"}`,
+					Input: `{"command": "ls"}`,
 				},
 			},
 		}
@@ -414,17 +422,17 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 			resultMap[r.GetToolCallId()] = r
 		}
 
-		// Read-only tools should execute
+		// Readonly-tier tools should execute
 		assert.False(t, resultMap["call_view"].IsError)
-		assert.False(t, resultMap["call_grep"].IsError)
+		assert.False(t, resultMap["call_bash"].IsError)
 
 		// Mutating tool should be denied
-		assert.True(t, resultMap["call_bash"].IsError)
-		assert.Contains(t, resultMap["call_bash"].Content, "permission")
+		assert.True(t, resultMap["call_write"].IsError)
+		assert.Contains(t, resultMap["call_write"].Content, "permission")
 
 		// Verify execution counts
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_bash"))
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_grep"))
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"))
+		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_bash"))
 	})
 }

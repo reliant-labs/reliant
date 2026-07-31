@@ -1,6 +1,6 @@
 // Package wfv2 provides helper functions and accessors for proto-based workflow types.
 // Provides constants and utility functions backed by proto messages
-// from internal/gen/reliant/v1.
+// from gen/reliant/v1.
 package model
 
 // Node type constants matching the type field discriminator in YAML.
@@ -18,6 +18,27 @@ const (
 	NodeTypeJoin           = "join"
 	NodeTypeRouter         = "router"
 )
+
+// Node outcome constants — the VERDICT a node stamps on the run when it
+// executes (Node.outcome in the YAML). This is not the lifecycle: a run that
+// routes to a failure-outcome terminal node ran to completion AND did not
+// succeed, and both facts have to survive to the supervision surfaces.
+//
+// A node with no declaration leaves the outcome alone. Absence therefore means
+// "the workflow never said", never "failure" — most workflows declare nothing.
+const (
+	OutcomeSuccess = "success"
+	OutcomeFailure = "failure"
+)
+
+// ValidOutcomes lists every value Node.outcome accepts, for validation and
+// error messages.
+var ValidOutcomes = []string{OutcomeSuccess, OutcomeFailure}
+
+// IsValidOutcome reports whether s is a declarable node outcome.
+func IsValidOutcome(s string) bool {
+	return s == OutcomeSuccess || s == OutcomeFailure
+}
 
 // Thread mode constants.
 const (

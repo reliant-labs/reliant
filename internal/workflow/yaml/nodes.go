@@ -61,6 +61,8 @@ func unmarshalNode(node *yaml.Node) (*reliantv1.Node, error) {
 				return nil, fmt.Errorf("node %s: %s: %w", v2node.Id, yamlKeyDaemon, err)
 			}
 			v2node.Daemon = d
+		case yamlKeyOutcome:
+			v2node.Outcome = val.Value
 		}
 	}
 
@@ -293,6 +295,7 @@ func validateActivityNodeTopLevelKeys(node *yaml.Node, binding generatedNodeBind
 		yamlKeyTimeout:     {},
 		yamlKeySaveMessage: {},
 		yamlKeyDaemon:      {},
+		yamlKeyOutcome:     {},
 		yamlKeyArgs:        {},
 	}
 	for key := range binding.argFieldKeys {
@@ -860,6 +863,11 @@ func marshalNode(v2node *reliantv1.Node) (*yaml.Node, error) {
 		if dn != nil {
 			m.Content = append(m.Content, scalarNode(yamlKeyDaemon, ""), dn)
 		}
+	}
+
+	// outcome (node base level) — the verdict this node stamps on the run.
+	if v2node.Outcome != "" {
+		m.Content = append(m.Content, scalarNode(yamlKeyOutcome, ""), scalarNode(v2node.Outcome, ""))
 	}
 
 	// Marshal args based on generated descriptor binding.

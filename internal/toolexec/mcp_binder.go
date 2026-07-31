@@ -103,16 +103,17 @@ func (r *daemonMCPRuntime) ListAllTools() (map[string][]mcp.Tool, error) {
 	return r.listTools("")
 }
 
-func (r *daemonMCPRuntime) ProjectCallTool(projectPath, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
-	return r.callTool(projectPath, serverName, toolName, arguments)
+func (r *daemonMCPRuntime) ProjectCallTool(session, projectPath, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+	return r.callTool(session, projectPath, serverName, toolName, arguments)
 }
 
-func (r *daemonMCPRuntime) CallTool(serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
-	return r.callTool("", serverName, toolName, arguments)
+func (r *daemonMCPRuntime) CallTool(session, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+	return r.callTool(session, "", serverName, toolName, arguments)
 }
 
-func (r *daemonMCPRuntime) callTool(projectPath, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+func (r *daemonMCPRuntime) callTool(session, projectPath, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
 	payload, err := json.Marshal(map[string]interface{}{
+		"session_key":  session,
 		"project_path": projectPath,
 		"server_name":  serverName,
 		"tool_name":    toolName,

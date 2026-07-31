@@ -350,9 +350,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
     for (const msg of sorted) {
       // TOOL-role messages carry only tool_result blocks; their content is
-      // already embedded into the assistant tool-call cards via matchedResult.
-      // Rendering them standalone would synthesize empty-input duplicate cards
-      // (see ChatContainer/ChatPresenter which filter the same way).
+      // joined into the assistant tool-call cards at read time (via the store's
+      // normalized tool-result index). Rendering them standalone would
+      // synthesize empty-input duplicate cards (see ChatContainer/ChatPresenter
+      // which filter the same way).
       if (msg.role === MessageRole.TOOL) continue;
 
       // Thread defaults to chatId (main thread) if not set

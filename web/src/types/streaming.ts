@@ -76,6 +76,9 @@ export interface WorkflowStatusUpdate {
     | "paused"
     | "expired";
   timestamp: string;
+  // Empty string for the root workflow. Lets a consumer tell a root terminal
+  // from a child's without a second lookup.
+  parent_workflow_id: string;
 }
 
 // ToolCallUpdate represents direct tool_call updates from the backend
@@ -136,6 +139,7 @@ export interface ChatMetadataUpdate {
 export interface StreamingDelta {
   update_type: "streaming_delta";
   delta_type:
+    | "message_start"
     | "content_block_start"
     | "content_block_delta"
     | "thinking_block_start"
@@ -154,6 +158,25 @@ export interface StreamingDelta {
   };
   status?: string;
   thread?: string;
+  sequence_number?: number;
+  // Delta identity protocol: the server pre-allocates the assistant message id
+  // and stamps every delta with it, plus a per-message monotonic sequence.
+  // Absent on deltas from old servers — consumers must treat these as optional
+  // and fall back to the legacy thread-keyed placeholder path.
+  message_id?: string;
+  stream_seq?: number;
+}
+
+// StreamFinalizedUpdate marks that the stream for a pre-allocated assistant
+// message id reached a terminal state (delta identity protocol). Emitted
+// exactly once per allocated id — after this, any delta carrying the same
+// message_id is a stale tail and must be dropped.
+export interface StreamFinalizedUpdate {
+  update_type: "stream_finalized";
+  message_id: string;
+  thread?: string;
+  reason: "completed" | "aborted" | "cancelled";
+  last_stream_seq?: number;
   sequence_number?: number;
 }
 
@@ -278,6 +301,7 @@ export type ChatUpdate =
   | InfoUpdate
   | ChatMetadataUpdate
   | StreamingDelta
+  | StreamFinalizedUpdate
   | RunOutputUpdate
   | NodeExecutionUpdate
   | WorkflowExecutionUpdate

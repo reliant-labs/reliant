@@ -1,9 +1,9 @@
 name: general
 description: Balanced general-purpose agent with full tool access including file modification, shell commands, and ability to spawn sub-agents
 tag: agent
-recommended_skills:
-  - general-agent
 params:
+  skills:
+    - general-agent
   model:
     tags: [flagship]
   spawn_presets:

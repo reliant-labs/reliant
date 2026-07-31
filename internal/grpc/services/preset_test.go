@@ -278,6 +278,9 @@ inputs:
   tools:
     type: tools
     default: ["tag:default"]
+  skills:
+    type: array
+    default: []
   spawn_presets:
     type: preset
     tags: [agent]

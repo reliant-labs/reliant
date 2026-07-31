@@ -164,8 +164,13 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 			}
 
 			if tc.expectExactlyOneTool != "" {
-				require.Len(t, mockDriver.capturedTools, 1)
-				assert.Equal(t, tc.expectExactlyOneTool, mockDriver.capturedTools[0])
+				// load_tool rides along with every tool-enabled agent (see
+				// call_llm.go), so the filter's one tool plus load_tool is the
+				// whole set — naming both keeps this pinned to the filter
+				// rather than to a count.
+				assert.ElementsMatch(t,
+					[]string{tc.expectExactlyOneTool, tools.ToolLoadTool},
+					mockDriver.capturedTools)
 				return
 			}
 
@@ -377,5 +382,7 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 	err := h.ExecuteActivity(activityInstance.Execute, input, &output)
 	require.NoError(t, err)
 	require.Equal(t, worktreePath, resolver.lastProjectPath)
-	assert.Empty(t, mockDriver.capturedTools)
+	// This case declares no tools, so only the universal load_tool is handed
+	// over. The subject here is the path MCP enumeration is scoped to, above.
+	assert.Equal(t, []string{tools.ToolLoadTool}, mockDriver.capturedTools)
 }

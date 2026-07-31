@@ -1,0 +1,68 @@
+# Green gate + reviewer passes → the loop TERMINATES.
+#
+# This is the exit path of the whole workflow and, in production, the one that had
+# never once executed: every measured forge-one-shot run reached a working, green
+# build and then failed to stop, because the reviewer could not reach `pass`.
+#
+# happy_path_no_retry covers the same verdict with NO checks configured, so the
+# gate lanes are skipped and eval_strategy is decided by the reviewer alone. This
+# one configures all three lanes and runs them green, which is the shape every real
+# caller uses (forge-one-shot sets lint/test/build on every phase) and the only
+# shape in which `gate_failed` means anything.
+#
+# Flow: implement → lint ∥ test ∥ build (all 0) → join → review(pass) → done
+
+name: green_gate_review_pass_terminates
+description: Configured gate passes and the reviewer passes — one iteration, no checkpoints, loop exits
+
+inputs:
+  max_retries: 5
+  lint_command: "task lint"
+  test_command: "task test"
+  build_command: "task build"
+  start_app_command: "cd /srv/app && start-the-app"
+
+events:
+  - node: attempt.implement
+    output:
+      response_text: "Implemented every RPC and wired the pages. Ran the suite locally, green."
+
+  - node: attempt.lint
+    output:
+      exit_code: 0
+
+  - node: attempt.test
+    output:
+      exit_code: 0
+
+  - node: attempt.build
+    output:
+      exit_code: 0
+
+  - node: attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Opened the live app, every page renders real data, all 23 RPCs implemented. Correct and complete."
+
+expect:
+  outcome: completed
+  reached:
+    - attempt
+    - attempt.implement
+    - attempt.lint
+    - attempt.test
+    - attempt.build
+    - attempt.review
+  # A pass must not stop for a human and must not send anything back for rework.
+  not_reached:
+    - attempt.refactor
+    - attempt.review_checkpoint
+    - attempt.stuck_checkpoint
+  node_outputs:
+    attempt:
+      eval_strategy: "pass"
+      review_grade: "pass"
+      gate_failed: false
+      has_feedback: false

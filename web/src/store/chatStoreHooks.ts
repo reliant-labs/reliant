@@ -18,11 +18,13 @@
 import { useMemo, useRef } from "react";
 import { useChatStore } from "./chatStore";
 import { useActivityStore, ChatActivity } from "./activityStore";
+import { useChat as useChatQuery } from "../hooks/chat-queries";
+import { useMessages } from "../hooks/message-queries";
 import type {
   Chat,
   Message,
 } from "../api/client";
-import type { ProcessedMessage } from "../lib/messageProcessor";
+import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import type {
   ErrorUpdate,
   InfoUpdate,
@@ -49,15 +51,15 @@ export function useActiveChatId(): string | null {
 }
 
 /**
- * Get the currently active chat object (full chat data)
+ * Get the currently active chat object (full chat data).
+ *
+ * activeChatId is UI navigation state and stays in Zustand; the Chat object
+ * itself is sourced from the React Query detail cache (the single source of
+ * truth for Chat entities).
  */
 export function useActiveChat(): Chat | null {
-  return useChatStore((state) => {
-    if (!state.activeChatId) {
-      return null;
-    }
-    return state.chats.get(state.activeChatId) || null;
-  });
+  const activeChatId = useChatStore((state) => state.activeChatId);
+  return useChatQuery(activeChatId ?? undefined).data ?? null;
 }
 
 /**
@@ -72,10 +74,14 @@ export function useIsChatActive(chatId: string): boolean {
 // ============================================================================
 
 /**
- * Get a specific chat by ID
+ * Get a specific chat by ID.
+ *
+ * Delegates to the React Query detail cache (chat-queries.useChat) — the single
+ * source of truth for Chat objects — while preserving the historical
+ * `Chat | undefined` return shape so existing consumers need no change.
  */
 export function useChat(chatId: string | undefined): Chat | undefined {
-  return useChatStore((state) => (chatId ? state.chats.get(chatId) : undefined));
+  return useChatQuery(chatId).data;
 }
 
 // ============================================================================
@@ -83,26 +89,33 @@ export function useChat(chatId: string | undefined): Chat | undefined {
 // ============================================================================
 
 /**
- * Get messages for a specific chat
+ * Get messages for a specific chat.
+ *
+ * Reads from the React Query message cache (messageKeys.list) — the single
+ * source of truth for a chat's persisted messages. The cache is kept live from
+ * the chat stream (snapshot on subscribe/reconnect, incremental thereafter,
+ * plus loadMessages / optimistic writes) via the helpers in message-queries.ts;
+ * the queryFn is only a cold-start seed. The in-flight streaming placeholder is
+ * NOT here — it lives in the streamingMessages slice and is composed at the
+ * render layer (see ChatContainer / WorkflowBuilderChat).
  */
 export function useChatMessages(chatId: string | undefined): Message[] {
-  return useChatStore((state) =>
-    chatId
-      ? state.messages[chatId] || (EMPTY_ARRAY as Message[])
-      : (EMPTY_ARRAY as Message[])
-  );
+  return useMessages(chatId).data?.messages ?? (EMPTY_ARRAY as Message[]);
 }
 
 /**
- * Get processed messages for a specific chat (pre-parsed for rendering)
+ * Get the normalized tool-result index for a chat (tool_call_id -> result).
+ * Tool results arrive as separate TOOL messages; the store keeps them here so
+ * consumers resolve a tool call's result by id instead of relying on results
+ * embedded into assistant message blocks.
  */
-export function useProcessedMessages(
+export function useToolResultsByCallId(
   chatId: string
-): Map<string, ProcessedMessage> {
+): ToolResultsByCallId {
   return useChatStore(
     (state) =>
-      state.processedMessages[chatId] ||
-      (EMPTY_MAP as Map<string, ProcessedMessage>)
+      state.toolResultsByCallId[chatId] ||
+      (EMPTY_OBJECT as ToolResultsByCallId)
   );
 }
 

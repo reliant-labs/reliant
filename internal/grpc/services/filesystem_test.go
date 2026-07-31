@@ -67,3 +67,55 @@ func TestFileSystemService_GetFileContent_RejectsNonPDFBinaryFiles(t *testing.T)
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
+
+// GetFileTree serves a live, depth-limited walk: files report real sizes,
+// depth=1 returns only immediate children with has_children set on non-empty
+// directories, and depth=0 returns the full recursive tree (back-compat).
+func TestFileSystemService_GetFileTree_DepthAndLiveWalk(t *testing.T) {
+	svc, projectPath := setupTestFileSystemService(t)
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "keep.txt"), []byte("hello world"), 0o644)) // 11 bytes
+	require.NoError(t, os.MkdirAll(filepath.Join(projectPath, "pkg", "sub"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "pkg", "inner.txt"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "pkg", "sub", "deep.txt"), []byte("c"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectPath, "empty"), 0o755))
+
+	getTree := func(depth int32) []*reliantv1.FileNode {
+		resp, err := svc.GetFileTree(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+			ProjectId:  "test-project",
+			ShowHidden: false,
+			Depth:      depth,
+		}))
+		require.NoError(t, err)
+		return resp.Msg.Files
+	}
+	find := func(nodes []*reliantv1.FileNode, name string) *reliantv1.FileNode {
+		for _, n := range nodes {
+			if n.Name == name {
+				return n
+			}
+		}
+		return nil
+	}
+
+	// depth 1: immediate children only, real sizes, has_children hints.
+	lvl1 := getTree(1)
+	keep := find(lvl1, "keep.txt")
+	require.NotNil(t, keep)
+	assert.Equal(t, int64(11), keep.GetSize(), "file must report its real on-disk size")
+	pkg := find(lvl1, "pkg")
+	require.NotNil(t, pkg)
+	assert.Empty(t, pkg.Children, "depth 1 must not include grandchildren")
+	assert.True(t, pkg.GetHasChildren(), "non-empty dir must carry has_children at the boundary")
+	empty := find(lvl1, "empty")
+	require.NotNil(t, empty)
+	assert.False(t, empty.GetHasChildren(), "empty dir must not carry has_children")
+
+	// depth 0: full recursive tree.
+	full := getTree(0)
+	fpkg := find(full, "pkg")
+	require.NotNil(t, fpkg)
+	fsub := find(fpkg.Children, "sub")
+	require.NotNil(t, fsub)
+	assert.NotNil(t, find(fsub.Children, "deep.txt"), "depth 0 must recurse fully")
+}

@@ -112,6 +112,15 @@ func NewServer(cfg *Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
 	}
+
+	// One PAT service backs every rlnt_pat_ token (kind='daemon' for gateway
+	// streams, kind='api' for user API auth). Api-kind bearers are
+	// prefix-dispatched in the same auth interceptor as JWTs (daemon-kind
+	// tokens are rejected there); the service also backs DaemonTokenService
+	// (daemon-kind) and TokenService (api-kind user-token management), both
+	// registered below.
+	patService := pat.NewService(database)
+	authInterceptor.SetAPITokenValidator(patService)
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
 	// Internal-service auth for the managed-daemon-token surface. Verifier reads
@@ -155,16 +164,23 @@ func NewServer(cfg *Config) (*Server, error) {
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService := services.NewScenarioService(database, router)
-	packageCommandsService := services.NewPackageCommandsService(database)
+	// PackageCommands is a browser-facing workspace service: on a cloud daemon
+	// (router != nil) its filesystem discovery must run on the daemon, so it uses
+	// the proxy. Without this it silently returned an empty command list because
+	// discovery ran against the api-server's filesystem. See pickPackageCommandsService.
+	packageCommandsService := pickPackageCommandsService(router, database)
 
 	streamingService := services.NewStreamingService(database, cfg.StreamingHub, cfg.UserUpdateHub, cfg.ChatUpdateHub)
 
 	attachmentService := services.NewAttachmentService(database)
 	presetService := services.NewPresetService(database)
 
-	patService := pat.NewService(database)
 	daemonRegistryService := services.NewDaemonRegistryService(database, router)
 	daemonTokenService := services.NewDaemonTokenService(patService)
+	// TokenService manages user API tokens (api-kind PATs) — the Connect
+	// replacement for the former /api/v1/tokens JSON surface. A thin wrapper
+	// over the same pat.Service.
+	tokenService := services.NewTokenService(patService)
 	daemonProxyService := services.NewDaemonProxyService(router)
 	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)
 
@@ -254,6 +270,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// no dedicated introspection RPC is needed here.
 	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
 	daemonTokenPath, daemonTokenHandler := reliantv1connect.NewDaemonTokenServiceHandler(daemonTokenService, opts...)
+	tokenPath, tokenHandler := reliantv1connect.NewTokenServiceHandler(tokenService, opts...)
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
 	mux.Handle(systemPath, systemHandler)
@@ -284,6 +301,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	mux.Handle(daemonRegistryPath, daemonRegistryHandler)
 	mux.Handle(daemonTokenPath, daemonTokenHandler)
+	mux.Handle(tokenPath, tokenHandler)
 	mux.Handle(daemonPath, daemonHandler)
 
 	if backgroundHandler != nil {
@@ -292,6 +310,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	if terminalHandler != nil {
 		mux.Handle(terminalPath, terminalHandler)
 	}
+
+	// The CLI's api-token management and workflow-trigger surfaces are Connect
+	// RPCs now (TokenService above, ChatService.CreateChat), not bespoke
+	// /api/v1 JSON handlers — the CLI speaks the same authenticated Connect
+	// path the web app does.
 
 	// JSON health endpoint on the gRPC mux so the frontend can discover auth_mode
 	// without needing to reach the dedicated health port.

@@ -58,6 +58,11 @@ type Repository interface {
 	// displayStyle is optional - if provided, sets the UI display style (info/warning/success/hidden).
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*Message, error)
 
+	// SaveMessageToThreadWithID is SaveMessageToThread with a caller-supplied
+	// message id (delta identity protocol — the persisted row must match the
+	// id stamped on streamed deltas). Empty messageID generates a uuid.
+	SaveMessageToThreadWithID(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*Message, error)
+
 	// Content Blocks
 	CreateContentBlock(ctx context.Context, block *MessageContentBlock) error
 	CreateContentBlockIfNotExists(ctx context.Context, block *MessageContentBlock) error // INSERT OR IGNORE variant
@@ -238,11 +243,21 @@ type Repository interface {
 	ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error)
 	UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error
 
-	// Daemon PATs (Personal Access Tokens)
+	// PATs (Personal Access Tokens; daemon_pats table). One table and one
+	// rlnt_pat_ token format back both kinds — DaemonPATKindDaemon (gateway
+	// stream auth) and DaemonPATKindAPI (user API auth). See internal/pat for
+	// the lifecycle/validation service.
 	CreateDaemonPAT(ctx context.Context, pat *DaemonPAT) error
 	GetDaemonPATByTokenHash(ctx context.Context, tokenHash string) (*DaemonPAT, error)
 	ListDaemonPATsByUserID(ctx context.Context, userID string) ([]*DaemonPAT, error)
+	// ListDaemonPATsByUserIDAndKind returns the user's PATs of one kind,
+	// newest first (used by the kind-scoped management surfaces).
+	ListDaemonPATsByUserIDAndKind(ctx context.Context, userID, kind string) ([]*DaemonPAT, error)
 	RevokeDaemonPAT(ctx context.Context, id string) error
+	// RevokeDaemonPATByUserID is scoped by owner AND kind (a caller can never
+	// revoke another user's token, nor cross the api/daemon management
+	// surfaces). Returns true when a live token transitioned to revoked.
+	RevokeDaemonPATByUserID(ctx context.Context, userID, id, kind string) (bool, error)
 	RevokeDaemonPATsByUserID(ctx context.Context, userID string, ephemeralOnly bool) error
 	// RevokeDaemonPATsByDaemonID marks every live (not-yet-revoked) PAT bound to
 	// daemonID as revoked. Used by the managed-daemon lifecycle to invalidate a
@@ -269,6 +284,7 @@ type Repository interface {
 	EmitToolCallUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitToolCallCancelledUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
+	EmitStreamFinalizedUpdate(ctx context.Context, chatID string, update StreamFinalizedUpdate) error
 	// Refetch Signals (tell frontend to re-fetch specific data)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType RefetchType, opts RefetchOpts) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType RefetchType) error
@@ -329,9 +345,25 @@ type Repository interface {
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) // Returns map of chatID -> root workflow status
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
+	// SetWorkflowOutcome records the run's verdict (success/failure) as declared
+	// by the terminal node it reached. Orthogonal to status.
+	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
 	EnsureWorkflowRunning(ctx context.Context, workflowID, chatID string)         // Idempotent: no-op if already running
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error // Only allowed when status is 'pending'
-	CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error    // Cascade completion to all child workflows
+	// CascadeTerminalStatusToDescendants ends every running/paused descendant of
+	// a workflow that just reached a terminal status, at THAT status. The caller
+	// passes what actually happened: a descendant of a cancelled run is
+	// cancelled, not completed, and a supervision surface that counts completed
+	// units must not be handed a terminated subtree to count.
+	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status WorkflowStatus) error
+	// ReapOrphanedWorkflowDescendants ends every running/paused workflow whose
+	// parent is already terminal — at the terminal ancestor's own status — and
+	// reports how many rows it moved. The backstop for a write path that reached
+	// a terminal status without cascading (every TerminateWorkflow path does: a
+	// hard kill skips the workflow's own completion handler). Nothing else
+	// revisits those rows — the reconciler skips workflows with a parent_id — so
+	// without this they are reported as running forever.
+	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error         // Pause all running workflows for a chat
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error               // Resume all paused workflows for a chat
 	DeleteWorkflow(ctx context.Context, id string) error
@@ -344,6 +376,11 @@ type Repository interface {
 	UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error
 	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error)
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
+	// Provider backoff markers — the durable evidence that a thread is parked in
+	// an LLM provider's retry ladder rather than working. See provider_backoff.go.
+	RecordProviderBackoff(ctx context.Context, chatID, threadID string, attempt, maxAttempts, statusCode int, reason string, delay time.Duration, now time.Time) error
+	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
+	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]ProviderBackoff, error)
 	// Threads - First-class entity for thread hierarchy and fork relationships
 	// Thread type is derived: NULL parent = root, parent in same conversation = sub_agent,
 	// parent in different conversation = branch

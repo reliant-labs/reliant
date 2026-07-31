@@ -36,6 +36,7 @@ import { useProjectStore } from "./projectStore";
 import { useWorktreeStore } from "./worktreeStore";
 import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
+import { getCachedChatList, getChatFromCache } from "../hooks/chat-queries";
 
 async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
   const projectId = useProjectStore.getState().currentProject?.id;
@@ -64,11 +65,14 @@ async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
  * - Activity state computation
  */
 async function getOrderedChatList(): Promise<Chat[]> {
-  const { useChatStore } = await import("./chatStore");
   const { useChatListPreferencesStore } = await import("./chatListPreferencesStore");
   const { useWorktreeStore } = await import("./worktreeStore");
-  const chatStore = useChatStore.getState();
-  const chats = chatStore.chats;
+  const { useProjectStore } = await import("./projectStore");
+  // Read the chat list from the React Query cache — the same source the sidebar
+  // renders from — so navigation order matches the sidebar exactly.
+  const chats = getCachedChatList(
+    useProjectStore.getState().currentProject?.id
+  );
   const { sortOrder, viewMode, filters } = useChatListPreferencesStore.getState();
   const worktrees = useWorktreeStore.getState().worktrees;
   const activities = useActivityStore.getState().activities;
@@ -93,7 +97,7 @@ async function getOrderedChatList(): Promise<Chat[]> {
   };
 
   // Filter to non-archived chats
-  let activeChats = Array.from(chats.values()).filter((c) => c.state !== ChatState.ARCHIVED);
+  let activeChats = chats.filter((c) => c.state !== ChatState.ARCHIVED);
 
   // Apply worktree filtering (matching Sidebar.tsx logic)
   // Skip chats whose worktrees don't exist or are completed/abandoned
@@ -412,7 +416,7 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
       const nextChatId = newQueue.length > 0 ? newQueue[0] : null;
       if (nextChatId) {
         // Use chatStore.selectChat() to switch to next chat
-        const chat = useChatStore.getState().chats.get(nextChatId);
+        const chat = getChatFromCache(nextChatId);
         if (chat) {
           await selectChatWithWorktreeContext(chat);
         }

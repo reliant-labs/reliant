@@ -26,21 +26,30 @@ func ValidateYAML(yamlData []byte, loader WorkflowLoader) error {
 
 // ValidateYAMLResult validates workflow YAML and returns the full result with warnings.
 func ValidateYAMLResult(yamlData []byte, loader WorkflowLoader) (*validation.Result, error) {
+	return ValidateYAMLResultWithOptions(yamlData, loader, nil)
+}
+
+// ValidateYAMLResultWithOptions is ValidateYAMLResult with additional optional
+// validation capabilities (currently the skill-reference resolver). The loader
+// argument still wins over opts.WorkflowLoader so existing callers keep their
+// behavior; pass nil opts for the default.
+func ValidateYAMLResultWithOptions(yamlData []byte, loader WorkflowLoader, opts *validation.ValidationOptions) (*validation.Result, error) {
 	protoWorkflow, err := wfyaml.ParseWorkflow(yamlData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse workflow: %w", err)
 	}
 
-	var workflowLoader validation.WorkflowLoader
+	merged := validation.ValidationOptions{}
+	if opts != nil {
+		merged = *opts
+	}
 	if loader != nil {
-		workflowLoader = func(ref string) (*reliantv1.Workflow, error) {
+		merged.WorkflowLoader = func(ref string) (*reliantv1.Workflow, error) {
 			return loader(ref)
 		}
 	}
 
-	return validation.StaticAnalysisWithOptions(protoWorkflow, &validation.ValidationOptions{
-		WorkflowLoader: workflowLoader,
-	}), nil
+	return validation.StaticAnalysisWithOptions(protoWorkflow, &merged), nil
 }
 
 // ParseWorkflowProto parses a workflow YAML file into a proto message.

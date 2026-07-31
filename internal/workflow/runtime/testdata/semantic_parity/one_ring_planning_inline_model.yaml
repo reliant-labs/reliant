@@ -36,7 +36,6 @@ simulator:
       build_command: ""
       build_log: "./data/one-ring/build.log"
       start_app_command: ""
-      app_port: 5173
     events:
       - node: planning.plan
         output:

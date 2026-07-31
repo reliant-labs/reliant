@@ -28,6 +28,10 @@ enum ChatUpdateType {
   CHAT_UPDATE_TYPE_STREAMING_DELTA = 16;
   CHAT_UPDATE_TYPE_SKILL_INVOCATION = 17;
   CHAT_UPDATE_TYPE_QUESTION = 18;
+  // Emitted exactly once per pre-allocated assistant message id when its
+  // stream reaches a terminal state (completed / aborted / cancelled), so
+  // consumers can retire streaming placeholders (delta identity protocol).
+  CHAT_UPDATE_TYPE_STREAM_FINALIZED = 19;
 }
 
 // UserUpdateType categorizes user-level update events

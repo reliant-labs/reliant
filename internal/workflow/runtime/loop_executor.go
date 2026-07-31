@@ -696,6 +696,8 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 	if len(e.subWorkflow.GetInputs()) > 0 {
 		iterInputs = ApplyDefaultsForRuntime(iterInputs, e.subWorkflow.GetInputs())
 	}
+	// An unattended run stays unattended in the loop body. See unattended.go.
+	propagateUnattended(e.workflowInputs, iterInputs)
 	iterInputs["loop"] = map[string]interface{}{"iteration": e.iteration}
 	iterInputs["iter"] = e.buildIterCtx()
 	return iterInputs, nil
@@ -834,6 +836,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, step.Node, iterNodeOutputs, iterInputs,
 				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
+				&LoopScope{Iter: e.buildIterContextModel(), Outputs: e.prevIterOutputs},
 			)
 			if condErr != nil {
 				return nil, condErr
@@ -1319,7 +1322,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running
-					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", nil)
+					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", &workflowStatusOpts{Resumed: true})
 
 					e.logger.Info("[InlineLoop] Resumed after pause, retrying step",
 						"loopID", e.loopID,

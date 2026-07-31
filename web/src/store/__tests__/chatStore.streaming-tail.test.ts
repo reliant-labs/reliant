@@ -6,6 +6,10 @@ import {
 } from "../../gen/reliant/v1/chat_pb";
 import type { ChatUpdate } from "../../types/streaming";
 import { useChatStore } from "../chatStore";
+import {
+  getMessagesFromCache,
+  clearAllMessagesCache,
+} from "../../hooks/message-queries";
 
 // End-of-chat ordering/staleness bugs:
 //
@@ -21,35 +25,18 @@ import { useChatStore } from "../chatStore";
 // ordinal), not createdAt — repair/attachment messages have shipped with
 // wrong (local-vs-UTC) timestamps.
 
-function seedChat(chatId: string) {
+function seedChat(_chatId: string) {
+  clearAllMessagesCache();
   useChatStore.setState({
     activeChatId: null,
-    chats: new Map([
-      [
-        chatId,
-        {
-          id: chatId,
-          userId: "user-1",
-          title: "Chat",
-          projectId: "p1",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          updatedAt: "2026-01-01T00:00:00.000Z",
-          lastActive: "2026-01-01T00:00:00.000Z",
-        } as never,
-      ],
-    ]),
-    messages: {},
-    processedMessages: {},
+    toolResultsByCallId: {},
     streamingMessages: {},
-    approvals: {},
-    pendingApprovals: {},
     errorEvents: {},
     infoEvents: {},
     runOutputs: {},
     nodeExecutions: {},
     toolCallStates: {},
-    pendingQuestions: {},
-  });
+  } as never);
 }
 
 function completeAssistantMessage(
@@ -85,7 +72,7 @@ function completeAssistantMessage(
 
 function streamingTempIds(chatId: string): string[] {
   const state = useChatStore.getState();
-  const inMessages = (state.messages[chatId] || [])
+  const inMessages = getMessagesFromCache(chatId)
     .filter((m) => m.id.startsWith("streaming-temp"))
     .map((m) => m.id);
   const inStreaming = Object.values(state.streamingMessages[chatId] || {})
@@ -95,7 +82,7 @@ function streamingTempIds(chatId: string): string[] {
 }
 
 describe("late delta tails after finalization", () => {
-  it("does not fabricate an empty streaming message from a content-only tail", () => {
+  it("does not fabricate an empty streaming message from a content-only tail (no message_id / old server)", () => {
     const chatId = "chat-tail-content";
     seedChat(chatId);
     const store = useChatStore.getState();
@@ -106,6 +93,8 @@ describe("late delta tails after finalization", () => {
 
     // Stale tail: a content delta for the already-finalized stream. The
     // newline makes it bypass the flush buffer and hit the store directly.
+    // Old-server deltas carry no message_id — the empty-tail guard is what
+    // protects the content case.
     store.processChatStreamUpdates(chatId, [
       {
         update_type: "streaming_delta",
@@ -118,7 +107,40 @@ describe("late delta tails after finalization", () => {
     expect(streamingTempIds(chatId)).toHaveLength(0);
   });
 
-  it("clearStreamingState removes a phantom rebuilt from a late tool_use_start tail", () => {
+  it("drops an id-carrying content tail for an already-finalized message", () => {
+    const chatId = "chat-tail-content-id";
+    seedChat(chatId);
+    const store = useChatStore.getState();
+
+    // The finalized message pre-allocated id "m1"; a tail carrying that id is
+    // stale and must be dropped by the finalized-id drop rule.
+    store.processChatStreamUpdates(chatId, [
+      completeAssistantMessage(chatId, "m1", 2, "2026-01-01T00:00:10.000Z"),
+    ]);
+
+    store.processChatStreamUpdates(chatId, [
+      {
+        update_type: "streaming_delta",
+        delta_type: "content_block_start",
+        block_index: 0,
+        message_id: "m1",
+        stream_seq: 5,
+      } as unknown as ChatUpdate,
+      {
+        update_type: "streaming_delta",
+        delta_type: "content_block_delta",
+        block_index: 0,
+        delta: "stale tail\n",
+        message_id: "m1",
+        stream_seq: 6,
+      } as unknown as ChatUpdate,
+    ]);
+
+    expect(streamingTempIds(chatId)).toHaveLength(0);
+    expect(getMessagesFromCache(chatId).map((m) => m.id)).toEqual(["m1"]);
+  });
+
+  it("clearStreamingState removes a phantom rebuilt from a late tool_use_start tail (no message_id / old server)", () => {
     const chatId = "chat-tail-tool";
     seedChat(chatId);
     const store = useChatStore.getState();
@@ -136,8 +158,9 @@ describe("late delta tails after finalization", () => {
       } as unknown as ChatUpdate,
     ]);
 
-    // The tail rebuilds a placeholder (we can't distinguish it from a new
-    // stream starting) — but the activity-IDLE signal must clean it up.
+    // Old-server tail (no message_id): we can't distinguish it from a new
+    // stream starting, so a placeholder IS rebuilt — the activity-IDLE signal
+    // is the backstop that cleans it up.
     expect(streamingTempIds(chatId).length).toBeGreaterThan(0);
 
     useChatStore.getState().clearStreamingState(chatId);
@@ -145,8 +168,95 @@ describe("late delta tails after finalization", () => {
     expect(streamingTempIds(chatId)).toHaveLength(0);
     // The finalized message must survive the cleanup.
     expect(
-      (useChatStore.getState().messages[chatId] || []).map((m) => m.id),
+      getMessagesFromCache(chatId).map((m) => m.id),
     ).toEqual(["m1"]);
+  });
+
+  it("builds NO placeholder for an id-carrying tool_use_start tail after finalization", () => {
+    const chatId = "chat-tail-tool-id";
+    seedChat(chatId);
+    const store = useChatStore.getState();
+
+    // The finalized assistant message pre-allocated id "m1".
+    store.processChatStreamUpdates(chatId, [
+      completeAssistantMessage(chatId, "m1", 2, "2026-01-01T00:00:10.000Z"),
+    ]);
+
+    // A late tool_use_start tail stamped with the same message_id. With delta
+    // identity, this is provably stale: it is dropped BEFORE any placeholder is
+    // built — the phantom-at-end-of-chat is now impossible (no reliance on the
+    // clearStreamingState janitor).
+    store.processChatStreamUpdates(chatId, [
+      {
+        update_type: "streaming_delta",
+        delta_type: "tool_use_start",
+        block_index: 0,
+        tool_call: { id: "tool-9", name: "bash" },
+        message_id: "m1",
+        stream_seq: 7,
+      } as unknown as ChatUpdate,
+    ]);
+
+    expect(streamingTempIds(chatId)).toHaveLength(0);
+    expect(getMessagesFromCache(chatId).map((m) => m.id)).toEqual(["m1"]);
+  });
+});
+
+describe("incremental streaming placeholder updates", () => {
+  it("updates the in-flight placeholder in place across delta batches (no duplicate)", () => {
+    const chatId = "chat-incremental";
+    seedChat(chatId);
+    const store = useChatStore.getState();
+
+    // The in-flight placeholder lives ONLY in the streamingMessages slice, not
+    // the persisted messages array — the render layer composes them.
+    const slicePlaceholders = () =>
+      Object.values(useChatStore.getState().streamingMessages[chatId] || {}).filter(
+        (m): m is NonNullable<typeof m> => !!m,
+      );
+    const persistedPlaceholders = () =>
+      getMessagesFromCache(chatId).filter((m) =>
+        m.id.startsWith("streaming-temp"),
+      );
+
+    // First batch: start a block and stream some text. The newline forces the
+    // batch past the flush buffer so it lands in the store synchronously.
+    store.processChatStreamUpdates(chatId, [
+      {
+        update_type: "streaming_delta",
+        delta_type: "content_block_start",
+        block_index: 0,
+      } as unknown as ChatUpdate,
+      {
+        update_type: "streaming_delta",
+        delta_type: "content_block_delta",
+        block_index: 0,
+        delta: "Hello\n",
+      } as unknown as ChatUpdate,
+    ]);
+
+    expect(slicePlaceholders()).toHaveLength(1);
+    // Never co-mingled into the persisted messages array.
+    expect(persistedPlaceholders()).toHaveLength(0);
+
+    // Second batch: more text for the same thread/block. It must update the
+    // same placeholder in place, not append a second one.
+    store.processChatStreamUpdates(chatId, [
+      {
+        update_type: "streaming_delta",
+        delta_type: "content_block_delta",
+        block_index: 0,
+        delta: " world\n",
+      } as unknown as ChatUpdate,
+    ]);
+
+    const placeholders = slicePlaceholders();
+    expect(placeholders).toHaveLength(1);
+    expect(persistedPlaceholders()).toHaveLength(0);
+    const text = (placeholders[0].contentBlocks || [])
+      .map((b) => b.content || "")
+      .join("");
+    expect(text).toBe("Hello\n world\n");
   });
 });
 
@@ -165,7 +275,7 @@ describe("canonical message order in the store", () => {
     ]);
 
     expect(
-      (useChatStore.getState().messages[chatId] || []).map((m) => m.id),
+      getMessagesFromCache(chatId).map((m) => m.id),
     ).toEqual(["m1", "m2", "m3"]);
   });
 });

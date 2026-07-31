@@ -396,7 +396,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 				Success:      false,
 				IsError:      true,
 				ErrorMessage: err.Error(),
-				ErrorCode:    "DAEMON_ERROR",
+				ErrorCode:    ErrorCodeDaemonRoundTrip,
 			})
 			_ = msg.Respond(errResp)
 			return

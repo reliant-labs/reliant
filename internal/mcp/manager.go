@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -23,7 +24,20 @@ const (
 	// daemon launches for the built-in browser MCP. Bump deliberately.
 	// Docs: https://github.com/ChromeDevTools/chrome-devtools-mcp
 	chromeDevtoolsMCPVersion = "1.6.0"
+
+	// chromeDevtoolsServerName is the logical name of the built-in browser MCP.
+	chromeDevtoolsServerName = "chrome-devtools"
 )
+
+// isLazyStartServer reports whether a server should be started on first tool
+// use rather than eagerly at session/daemon startup. Currently limited to the
+// built-in chrome-devtools MCP, whose node + headless Chrome subprocess holds a
+// large resident set that most sessions never exercise. Kept name-scoped (not a
+// config.MCPServer field) so the persisted MCP config schema is unchanged and
+// user-defined servers keep their existing eager-start behavior.
+func isLazyStartServer(name string, cfg config.MCPServer) bool {
+	return name == chromeDevtoolsServerName && cfg.Type == config.MCPStdio
+}
 
 // systemChromePaths are on-disk locations a system Chrome/Chromium may live.
 // The cloud workspace-base image installs google-chrome-stable and symlinks
@@ -57,6 +71,25 @@ type Manager struct {
 	clients        map[string]Client
 	projectServers map[string]map[string]bool // projectPath -> set of server names
 	mu             sync.RWMutex
+
+	// serverConfigs records the config each logical server was registered with
+	// so a session-scoped server can be spawned again for a new session key
+	// without re-resolving where its config came from.
+	serverConfigs map[string]config.MCPServer
+
+	// clientFactory constructs the underlying MCP client for a server. A field
+	// rather than a direct NewClient call so tests can exercise the manager's
+	// client lifecycle — session scoping, eviction — without spawning real
+	// subprocesses.
+	clientFactory func(name string, cfg config.MCPServer) (Client, error)
+
+	// sessionClients holds per-session private clients for session-scoped
+	// servers (see session.go), keyed by sessionClientKey. Deliberately a
+	// SEPARATE map from clients: these are the same server spawned again so its
+	// process-global state is not shared, and they must never appear in server
+	// listings, health reporting, or tool discovery — the model sees one
+	// chrome-devtools, not one per thread.
+	sessionClients map[string]Client
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -92,6 +125,9 @@ func NewManager() *Manager {
 	return &Manager{
 		clients:             make(map[string]Client),
 		projectServers:      make(map[string]map[string]bool),
+		serverConfigs:       make(map[string]config.MCPServer),
+		sessionClients:      make(map[string]Client),
+		clientFactory:       NewClient,
 		healthChecks:        make(map[string]*healthStatus),
 		healthCheckInterval: 30 * time.Second,
 		ctx:                 ctx,
@@ -247,7 +283,21 @@ func (m *Manager) Initialize(servers map[string]config.MCPServer) error {
 func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServer) error {
 	logging.Info("Adding MCP server", "name", name, "type", cfg.Type)
 
-	client, err := NewClient(name, cfg)
+	spawn := func() (Client, error) { return m.clientFactory(name, cfg) }
+
+	var (
+		client Client
+		err    error
+	)
+	if isLazyStartServer(name, cfg) {
+		// Defer spawning heavy subprocesses (chrome-devtools node + headless
+		// Chrome) until a browser tool is actually used. Initialize below is a
+		// no-op for lazy clients, so the server is registered/healthy without
+		// holding the ~345MB resident set idle for the pod's lifetime.
+		client = newLazyClientWithFactory(name, cfg, spawn)
+	} else {
+		client, err = spawn()
+	}
 	if err != nil {
 		return fmt.Errorf("failed to create MCP client: %w", err)
 	}
@@ -278,6 +328,7 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 
 	m.mu.Lock()
 	m.clients[name] = client
+	m.serverConfigs[name] = cfg
 	delete(m.nextRetryAt, name)
 	m.mu.Unlock()
 
@@ -301,16 +352,32 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 	return nil
 }
 
-// RemoveServer removes and closes an MCP server connection
+// RemoveServer removes and closes an MCP server connection, along with any
+// per-session clients spawned from it.
 func (m *Manager) RemoveServer(name string) error {
 	m.mu.Lock()
 	client, exists := m.clients[name]
 	if exists {
 		delete(m.clients, name)
 	}
+	delete(m.serverConfigs, name)
+	sessionPrefix := name + sessionKeySeparator
+	var sessionClients []Client
+	for key, sc := range m.sessionClients {
+		if strings.HasPrefix(key, sessionPrefix) {
+			sessionClients = append(sessionClients, sc)
+			delete(m.sessionClients, key)
+		}
+	}
 	delete(m.nextRetryAt, name)
 	m.untrackProjectServer(name)
 	m.mu.Unlock()
+
+	for _, sc := range sessionClients {
+		if err := sc.Close(); err != nil {
+			logging.Warn("Failed to close session-scoped MCP client", "server", name, "error", err)
+		}
+	}
 
 	if !exists {
 		return fmt.Errorf("server %s not found", name)
@@ -370,11 +437,82 @@ func (m *Manager) ListAllTools() (map[string][]Tool, error) {
 	return result, nil
 }
 
-// CallTool calls a tool on a specific MCP server
-func (m *Manager) CallTool(serverName, toolName string, arguments map[string]interface{}) (*ToolResult, error) {
+// sessionClientFor returns the private client for (serverName, session),
+// creating it on first use. ok is false when the call should route to the
+// shared client: an empty session key, an unregistered server, or a server that
+// is not session-scoped (see session.go — nearly all of them).
+//
+// Session clients are always lazy: the subprocess is spawned by the first tool
+// call and reaped after an idle period, at which point the client evicts itself
+// from the map so a long-lived daemon does not accumulate one entry per thread
+// it has ever served.
+func (m *Manager) sessionClientFor(serverName, session string) (Client, bool) {
+	session = normalizeSessionKey(session)
+	if session == "" {
+		return nil, false
+	}
+	key := sessionClientKey(serverName, session)
+
+	m.mu.RLock()
+	client, exists := m.sessionClients[key]
+	cfg, registered := m.serverConfigs[serverName]
+	m.mu.RUnlock()
+
+	if exists {
+		return client, true
+	}
+	if !registered || !isSessionScopedServer(serverName, cfg) {
+		return nil, false
+	}
+
+	m.mu.Lock()
+	if client, exists := m.sessionClients[key]; exists {
+		m.mu.Unlock()
+		return client, true
+	}
+	// The delegate is constructed with the LOGICAL server name so its logs,
+	// handshake and ServerInfo read as chrome-devtools, not as the composite key.
+	lc := newLazyClientWithFactory(serverName, cfg, func() (Client, error) {
+		return m.clientFactory(serverName, cfg)
+	})
+	lc.onReap = func() { m.evictSessionClient(key, lc) }
+	m.sessionClients[key] = lc
+	m.mu.Unlock()
+
+	logging.Info("Created session-scoped MCP client",
+		"server", serverName,
+		"session", session,
+		"reason", "server keeps per-caller state that concurrent threads must not share")
+	return lc, true
+}
+
+// evictSessionClient drops a session client once its subprocess has been reaped
+// for inactivity. The pointer check keeps a late callback from a superseded
+// client from removing its replacement.
+func (m *Manager) evictSessionClient(key string, client Client) {
+	m.mu.Lock()
+	if current, ok := m.sessionClients[key]; ok && current == client {
+		delete(m.sessionClients, key)
+	}
+	m.mu.Unlock()
+}
+
+// CallTool calls a tool on a specific MCP server.
+//
+// session isolates callers that must not share a server's process-global state
+// — see session.go. Empty means the shared client, which is what every server
+// except the session-scoped ones uses regardless of what is passed.
+func (m *Manager) CallTool(session, serverName, toolName string, arguments map[string]interface{}) (*ToolResult, error) {
 	// Ensure MCP servers are initialized on first call
 	if err := m.ensureInitialized(); err != nil {
 		return nil, fmt.Errorf("failed to initialize MCP servers: %w", err)
+	}
+
+	if sessionClient, ok := m.sessionClientFor(serverName, session); ok {
+		// Session clients are private and lazily (re)spawned, so the shared
+		// server's health gate does not describe them; a failure surfaces as the
+		// call's own error.
+		return sessionClient.CallTool(toolName, arguments)
 	}
 
 	m.mu.RLock()
@@ -429,10 +567,14 @@ func (m *Manager) Close() error {
 	// Cancel context to stop health monitoring first
 	m.cancel()
 
-	// Get all clients
+	// Get all clients, including every session's private client.
 	m.mu.Lock()
 	clients := m.clients
+	for key, client := range m.sessionClients {
+		clients[key] = client
+	}
 	m.clients = make(map[string]Client)
+	m.sessionClients = make(map[string]Client)
 	m.projectServers = make(map[string]map[string]bool)
 	m.mu.Unlock()
 
@@ -878,8 +1020,8 @@ func (m *Manager) RestartProjectServer(ctx context.Context, projectPath, serverN
 }
 
 // ProjectCallTool calls a tool on a project-scoped server.
-func (m *Manager) ProjectCallTool(projectPath, serverName, toolName string, arguments map[string]interface{}) (*ToolResult, error) {
-	return m.CallTool(serverName, toolName, arguments)
+func (m *Manager) ProjectCallTool(session, projectPath, serverName, toolName string, arguments map[string]interface{}) (*ToolResult, error) {
+	return m.CallTool(session, serverName, toolName, arguments)
 }
 
 // ListProjectTools returns tools from all connected project-scoped MCP servers.
@@ -930,23 +1072,66 @@ func builtinMCPServers() map[string]config.MCPServer {
 		},
 	}
 
-	// chrome-devtools browser MCP — advertised ONLY when a system browser is
-	// present on disk (cloud daemons install google-chrome-stable; the arm64
-	// local-dev image does not). Self-gating keeps browser-less images from
-	// spawning an MCP that would immediately fail. We point at the system binary
-	// via --executablePath so it never downloads its own Chrome, and run
-	// --headless (no display in the pod) --isolated (throwaway profile/session).
-	if chromePath := detectSystemChrome(); chromePath != "" {
-		servers["chrome-devtools"] = config.MCPServer{
+	// chrome-devtools browser MCP.
+	//
+	// Two ways it gets a browser, in priority order:
+	//
+	//  1. Remote CDP (RELIANT_CHROME_BROWSER_URL set) — connect to an
+	//     already-running browser over the DevTools Protocol instead of
+	//     launching one locally. This is the "drive the laptop's Chrome" escape
+	//     hatch for the arm64 local-dev daemon: set it to (e.g.)
+	//     http://host.k3d.internal:9222 and run Chrome on the host with
+	//     --remote-debugging-port=9222 --remote-debugging-address=0.0.0.0
+	//     --remote-allow-origins=*. chrome-devtools-mcp needs NO local Chrome
+	//     binary in this mode, so it deliberately BYPASSES the detectSystemChrome
+	//     gate. Unset in cloud/prod → identical behavior to before.
+	//
+	//  2. Local browser on disk (detectSystemChrome) — cloud/amd64 daemons ship
+	//     google-chrome-stable; the arm64 local-dev image ships chromium (xtradeb,
+	//     control-plane docker/Dockerfile.workspace-base). Self-gating keeps
+	//     browser-less images from spawning an MCP that would immediately fail.
+	//     We point at the system binary via --executablePath so it never
+	//     downloads its own Chrome, and run --headless (no display in the pod)
+	//     --isolated (throwaway profile/session).
+	if browserURL := strings.TrimSpace(os.Getenv("RELIANT_CHROME_BROWSER_URL")); browserURL != "" {
+		servers[chromeDevtoolsServerName] = config.MCPServer{
 			Type:    config.MCPStdio,
 			Command: "npx",
 			Args: []string{
 				"-y",
 				"chrome-devtools-mcp@" + chromeDevtoolsMCPVersion,
-				"--headless",
 				"--isolated",
-				"--executablePath=" + chromePath,
+				"--browserUrl=" + browserURL,
 			},
+			Enabled: true,
+		}
+	} else if chromePath := detectSystemChrome(); chromePath != "" {
+		args := []string{
+			"-y",
+			"chrome-devtools-mcp@" + chromeDevtoolsMCPVersion,
+			"--headless",
+			"--isolated",
+			"--executablePath=" + chromePath,
+		}
+		// Sandbox policy differs by pod shape. The amd64 cloud daemon runs on the
+		// privileged docker-tier (Kata) with a setuid chrome-sandbox, so Chrome
+		// keeps its sandbox. The arm64 local-dev daemon pod drops ALL caps and
+		// forbids privilege escalation (workspace_controller securityContext), so
+		// neither the setuid nor the user-namespace sandbox can initialize and
+		// chromium fails to launch without --no-sandbox. Gate on arch: non-amd64
+		// == the dev pod shape. --disable-dev-shm-usage avoids crashes on the
+		// pod's small /dev/shm.
+		if runtime.GOARCH != "amd64" {
+			args = append(args,
+				"--chromeArg=--no-sandbox",
+				"--chromeArg=--disable-setuid-sandbox",
+				"--chromeArg=--disable-dev-shm-usage",
+			)
+		}
+		servers[chromeDevtoolsServerName] = config.MCPServer{
+			Type:    config.MCPStdio,
+			Command: "npx",
+			Args:    args,
 			Enabled: true,
 		}
 	}

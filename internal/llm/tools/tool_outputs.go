@@ -43,6 +43,24 @@ type BashOutput struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exit_code"`
+	// Timing is set only when the wall-clock cost of the tool call and the
+	// command's own runtime disagree — see bashTransportTiming. Omitted
+	// otherwise, because a duration on every result is a number the reader
+	// learns to skip, while a duration that appears when two clocks contradict
+	// each other is a claim.
+	Timing *BashTiming `json:"timing,omitempty"`
+}
+
+// BashTiming reports the two independent clocks that measured one command:
+// WallMs is what the tool call cost end to end, CommandMs is what the machine
+// running the command measured for the command itself. Their difference is
+// transport — the RPC to the daemon and any queueing in front of it — so when
+// it is large the command was not the slow part, and the reader should stop
+// looking at the command.
+type BashTiming struct {
+	WallMs    int64  `json:"wall_ms"`
+	CommandMs int64  `json:"command_ms"`
+	Note      string `json:"note"`
 }
 
 // BashBackgroundOutput is returned when a command is started in the background.

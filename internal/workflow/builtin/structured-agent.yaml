@@ -49,6 +49,14 @@ inputs:
     default: []
     description: Presets available for spawn tool (empty = spawn disabled)
 
+  skills:
+    type: array
+    default: []
+    description: |
+      Namespaced skill paths (e.g. "forge/getting-started") to preload into the
+      agent's context before the first turn, so it works from the source-of-truth
+      skills instead of loading them by hand.
+
   response_tool_name:
     type: string
     default: "submit_response"
@@ -84,9 +92,9 @@ inputs:
     description: Maximum agent loop iterations (0 = unlimited)
   compaction_threshold:
     type: integer
-    default: 185000
-    min: 10000
-    description: Token count to trigger context compaction
+    default: 0
+    min: 0
+    description: Token count to trigger context compaction (0 = derive from the model's context window)
 
   ask:
     type: boolean
@@ -130,6 +138,7 @@ nodes:
             temperature: "{{inputs.temperature}}"
             thinking_level: "{{inputs.thinking_level}}"
             compaction_threshold: "{{inputs.compaction_threshold}}"
+            skills: "{{inputs.skills}}"
             system_prompt: "{{inputs.system_prompt}}"
             # Regular tools + spawn. The response tool must NOT go in the
             # filter: it is not a registry tool (putting it here only produces

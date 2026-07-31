@@ -2,17 +2,15 @@ name: documentation
 description: Documentation specialist creating comprehensive, narrative-driven technical
   documentation that teaches through explanation and example
 tag: agent
-recommended_skills:
-  - documentation-writing
 params:
+  skills:
+    - documentation-writing
   spawn_presets:
   - researcher
   tools:
   - view
   - write
   - edit
-  - grep
-  - glob
   - tag:shell
   - fetch
   model:

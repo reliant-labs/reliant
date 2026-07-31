@@ -254,6 +254,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	thread := execCtx.Thread
 	forkedFromThread := execCtx.ForkedFrom
 
+	// Delta identity: install the stream-id tracker in the workflow context
+	// BEFORE the completion defer, so cancellation cleanup can finalize any
+	// allocated-but-unfinalized assistant message ids. workflow.WithValue is
+	// not a Temporal command — safe for all histories.
+	ctx = WithStreamIDTracker(ctx, NewStreamIDTracker())
+
 	logger.Info("[Workflow Runtime] Using execution context",
 		"thread", thread,
 		"mode", execCtx.ThreadMode,
@@ -265,8 +271,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if execCtx.Parent != nil {
 		parentWorkflowID = execCtx.Parent.WorkflowID
 	}
+	// runOutcome is the VERDICT the graph stamped on this run: the outcome
+	// declared by the last executed node that declares one (Node.outcome).
+	// Empty means no node said, which is not the same as failure.
+	//
+	// It rides beside retErr into the completion handler because the two answer
+	// different questions. retErr is "did the machinery break"; runOutcome is
+	// "did the work pass". A run that routes to a `failed` terminal node returns
+	// no error and completes normally — that is the whole reason the verdict
+	// needs its own channel instead of being read off the lifecycle status.
+	runOutcome := ""
 	defer func() {
-		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr)
+		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome)
 	}()
 
 	// STEP 5: Load workflow definition (YAML and JSON)
@@ -626,101 +642,23 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Track running inline workflows for parallel execution of workflow/agent steps
 	var runningInlineWorkflows []*RunningInlineWorkflow
 
-	// STEP 8: Set up signal-based pause infrastructure
-	// Pause/resume coordination uses an epoch-based broadcast pattern.
-	// A single resume-coordinator goroutine consumes the resume signal and
-	// increments pauseEpoch. All goroutines (main loop + inline spawns) block
-	// on workflow.Await() waiting for the epoch to advance, which wakes them
-	// ALL — unlike resumeCh.Receive() which only unblocks one consumer.
-	var pauseRequested bool
-	var pauseEpoch int
-	pauseCh := workflow.GetSignalChannel(ctx, "signal.pause")
-	resumeCh := workflow.GetSignalChannel(ctx, "signal.resume")
-
-	// Create a shared cancellable context for all activity dispatch.
-	// One cancelAllActivities() call cancels every in-flight activity at any nesting
-	// depth — including those in inline workflow executors and loop executors.
-	activityCtx, cancelAllActivities := workflow.WithCancel(ctx)
-
-	// getActivityCtx returns the current (possibly refreshed) cancellable context.
-	// All executors call this when dispatching activities, so after resume they
-	// automatically pick up the fresh context.
-	getActivityCtx := func() workflow.Context {
-		return activityCtx
-	}
-
-	// checkPause checks for a pending pause signal and blocks until resume if paused.
-	// This is called at step boundaries to provide cooperative pause/resume.
-	// Multiple goroutines can call this concurrently — they all block via
-	// workflow.Await on the epoch counter rather than competing over a single
-	// signal channel receive.
-	checkPause := func(callerCtx workflow.Context) {
-		// Non-blocking drain of any pending pause signals
-		for pauseCh.ReceiveAsync(nil) {
-			pauseRequested = true
-		}
-		if pauseRequested {
-			// cancelAllActivities() is a Temporal SDK command (not a side effect)
-			// and MUST execute during replay to maintain determinism.
-			cancelAllActivities()
-			if !workflow.IsReplaying(ctx) {
-				logger.Info("[Workflow Runtime] Pause requested, cancelling activities and blocking until resume signal",
-					"workflowID", workflowID,
-				)
-			}
-			// Snapshot current epoch, then wait for the resume coordinator
-			// to advance it. workflow.Await wakes ALL blocked goroutines.
-			// IMPORTANT: callerCtx (not root ctx) is used here so that goroutines
-			// spawned via workflow.Go() block on their own coroutine, avoiding
-			// Temporal's "trying to block on coroutine which is already blocked" panic.
-			myEpoch := pauseEpoch
-			_ = workflow.Await(callerCtx, func() bool { return pauseEpoch > myEpoch })
-			if !workflow.IsReplaying(ctx) {
-				logger.Info("[Workflow Runtime] Resume signal received, continuing with fresh activity context",
-					"workflowID", workflowID,
-				)
-			}
-		}
-	}
-
-	// Background goroutine to listen for pause signals at any time.
-	// This ensures the flag is set even while the workflow is blocked in waitForAnyCompletion().
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		for {
-			pauseCh.Receive(gCtx, nil)
-			pauseRequested = true
-			// cancelAllActivities() is a Temporal SDK command (not a side effect)
-			// and MUST execute during replay to maintain determinism.
-			cancelAllActivities()
-		}
+	// STEP 8: Set up signal-based pause infrastructure (see pauseCoordinator).
+	// Replay-versioning gate for the resume-hold behavior: a resume signal
+	// arriving while no pause is armed is held until one arms, instead of
+	// being consumed as a no-op — the fix for reset-and-replay of a
+	// self-paused workflow swallowing the resume and re-parking forever.
+	// Histories recorded before this change must keep the old behavior on
+	// replay (GetVersion returns DefaultVersion for them, 1 for new runs).
+	resumeHoldEnabled := workflow.GetVersion(ctx, resumeHoldVersionGate, workflow.DefaultVersion, 1) >= 1
+	pauser := newPauseCoordinator(ctx, workflowID, pauseOptions{
+		HoldResume: resumeHoldEnabled,
+		// An unattended run has nobody to send signal.resume, so a self-pause
+		// would park it forever. See selfPauseBackoff.
+		Unattended: IsUnattended(input.Inputs),
 	})
-
-	// Resume coordinator goroutine: consumes the resume signal and broadcasts
-	// to all paused goroutines by advancing the epoch counter and refreshing
-	// the shared activity context.
-	workflow.Go(ctx, func(gCtx workflow.Context) {
-		for {
-			resumeCh.Receive(gCtx, nil)
-			pauseRequested = false
-			// Always refresh the activity context and advance epoch for determinism.
-			// These are Temporal SDK operations that must happen during replay too.
-			activityCtx, cancelAllActivities = workflow.WithCancel(ctx)
-			pauseEpoch++
-			if !workflow.IsReplaying(gCtx) {
-				logger.Info("[Workflow Runtime] Resume coordinator: broadcast resume to all goroutines",
-					"workflowID", workflowID,
-					"pauseEpoch", pauseEpoch,
-				)
-			}
-		}
-	})
-
-	// requestPause triggers a self-pause from within the workflow.
-	// Used by executors when a retryable error (like a rate limit) exhausts retries.
-	requestPause := func() {
-		pauseRequested = true
-		cancelAllActivities()
-	}
+	getActivityCtx := pauser.ActivityCtx
+	checkPause := pauser.CheckPause
+	requestPause := pauser.RequestPause
 
 	// STEP 8.55: Daemon-offline circuit breaker.
 	// Counts consecutive daemon-targeted step completions that failed with
@@ -761,11 +699,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// routes through the resume path instead of starting a new workflow.
 		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
 
-		// Signal-based pause: set the pause flag and block until resume.
+		// Signal-based pause: arm the pause and block until resume.
 		// Mirrors the retry-exhaustion self-pause. We deliberately do NOT
 		// cancel in-flight activities: anything still running either fails
 		// with the same daemon-offline condition or proves the daemon is back.
-		pauseRequested = true
+		pauser.Arm()
 		checkPause(callerCtx)
 		// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 		_ = workflow.Sleep(callerCtx, 0)
@@ -773,7 +711,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		// Resumed — update DB status back to running. The breaker's streak is
 		// NOT reset here: if the machine is still down, the next offline step
 		// re-pauses after a single round-trip; any daemon success resets it.
-		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, nil)
+		notifyWorkflowStatus(callerCtx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 	})
 
 	// makeThreadPauseCtrl creates a per-thread PauseController that inherits
@@ -839,6 +777,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			"", // Join nodes don't have loop context
 			0,
 			nil, // No execContext for join nodes
+			"",  // No pre-allocated assistant message id for join nodes
 		)
 		if err != nil {
 			logger.Error("[Workflow Runtime] Join save_message failed",
@@ -959,6 +898,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				ctx, step.Node, nodeOutputs, input.Inputs,
 				workflowID, input.ChatID, input.WorkflowName, logger,
+				nil,
 			)
 			if condErr != nil {
 				return nil, condErr
@@ -966,6 +906,19 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			if skipped {
 				events = append(events, skipEvt)
 				continue
+			}
+
+			// Record the verdict this node declares, if any. Done at entry —
+			// after the condition check, so a skipped node stamps nothing —
+			// because a terminal node's own activity failing must not erase the
+			// fact that the graph decided the run did not pass. Deterministic
+			// (derived from the same replayed history), so replay-safe.
+			if outcome := model.NodeOutcome(step.Node); outcome != "" {
+				runOutcome = outcome
+				logger.Info("[Workflow Runtime] Node declared run outcome",
+					"stepID", step.Node.GetId(),
+					"outcome", outcome,
+				)
 			}
 
 			// Position checkpoint: record entry into this top-level node so an
@@ -1664,14 +1617,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					// routes through the resume path instead of starting a new workflow.
 					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
 
-					// Signal-based pause: set the pause flag directly and block until resume.
-					pauseRequested = true
+					// Signal-based pause: arm the pause directly and block until resume.
+					pauser.Arm()
 					checkPause(ctx)
 					// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 					_ = workflow.Sleep(ctx, 0)
 
 					// Resumed! Update DB status back to running.
-					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, nil)
+					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, &workflowStatusOpts{Resumed: true})
 
 					logger.Info("[Workflow Runtime] Resumed after pause, retrying step",
 						"stepID", running.StepID,
@@ -2161,11 +2114,21 @@ func splitProtoToolCalls(toolCalls []*reliantv1.ToolCallMsg) protoToolCallSplit 
 
 // buildSpawnChildInputs forwards only spawn-relevant parent inputs to the child agent.
 //
-// Model values must be selector objects ({"id":"gpt-5.3-codex"}, {"tags":[...]}).
-// String model values are normalized to {"id": string} objects.
+// The child's model and thinking are intentionally NOT inherited from the parent.
+// A spawned agent runs under its own preset (config.presetName), whose declared
+// model/thinking is authoritative. Node args override preset params in
+// buildSubWorkflowInputs, so forwarding the parent's model here would clobber the
+// preset's choice — the exact bug this omission prevents. With no model arg the
+// preset supplies the model, and when a preset declares none the sub-workflow's
+// own input default applies — never the parent's model.
 //
 // parent_permission is propagated so the child's resolved permission is capped
 // to be at most as permissive as the parent's.
+//
+// unattended is propagated for the same reason parent_permission is capped: a
+// spawned fan-out unit runs in the same world as its parent, and the forge preset
+// hands it `ask_user`. Without this, one spawned unit calling ask_user parks the
+// whole unattended run on a gate nobody will ever answer.
 func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]interface{} {
 	childInputs := map[string]interface{}{}
 
@@ -2174,6 +2137,8 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 		childInputs["mode"] = mode
 	}
 
+	propagateUnattended(workflowInputs, childInputs)
+
 	// Derive parent_permission so child permission is capped to parent's level.
 	// If the parent already has a parent_permission (chained spawn), propagate the
 	// most restrictive. Otherwise derive from mode.
@@ -2181,24 +2146,6 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 		childInputs["parent_permission"] = parentPerm
 	}
 
-	if workflowInputs == nil {
-		return childInputs
-	}
-
-	model, ok := workflowInputs["model"]
-	if !ok || model == nil {
-		return childInputs
-	}
-
-	// Normalize string model values to objects at this boundary
-	if modelID, ok := model.(string); ok {
-		if modelID != "" {
-			childInputs["model"] = map[string]interface{}{"id": modelID}
-		}
-		return childInputs
-	}
-
-	childInputs["model"] = deepCopyJSONLike(model)
 	return childInputs
 }
 
@@ -2225,26 +2172,6 @@ func resolveParentPermission(workflowInputs map[string]interface{}) string {
 		return "mutating"
 	default:
 		return "" // Unknown mode, don't constrain
-	}
-}
-
-// deepCopyJSONLike performs a deep copy for JSON-like values used in workflow inputs.
-func deepCopyJSONLike(v interface{}) interface{} {
-	switch val := v.(type) {
-	case map[string]interface{}:
-		copied := make(map[string]interface{}, len(val))
-		for k, child := range val {
-			copied[k] = deepCopyJSONLike(child)
-		}
-		return copied
-	case []interface{}:
-		copied := make([]interface{}, len(val))
-		for i, child := range val {
-			copied[i] = deepCopyJSONLike(child)
-		}
-		return copied
-	default:
-		return val
 	}
 }
 
@@ -2882,6 +2809,7 @@ func executeToolsWithSpawnSupport(
 				gCtx, askTC,
 				rtx.ChatID, rtx.WorkflowID, rtx.Thread,
 				rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration,
+				IsUnattended(workflowInputs),
 				logger,
 			)
 			combinedResults = append(combinedResults, result)
@@ -2904,6 +2832,7 @@ func executeAskUserInline(
 	chatID, workflowID, threadID string,
 	stepID, loopNodeID string,
 	loopIteration int,
+	unattended bool,
 	logger log.Logger,
 ) map[string]interface{} {
 	const questionTimeout = 24 * time.Hour
@@ -2965,6 +2894,34 @@ func executeAskUserInline(
 		"metadata", metadata,
 		"hasQuestions", metaObj["questions"] != nil,
 	)
+
+	// Unattended: hand the question straight back to the model. No QuestionCreate,
+	// so no questions row and nothing to wait on.
+	//
+	// The MODEL is the right resolver here — unlike an ask_question node's fixed
+	// option list, an ask_user question is open-ended and the agent that raised it
+	// already holds the context needed to settle it. So nothing is chosen on the
+	// user's behalf; the agent is told there is no human, decides, and is required
+	// to say what it decided and why, which puts the auto-resolution in the
+	// transcript where forensics can read it.
+	//
+	// The tool is deliberately NOT withheld in unattended mode. Leaving it callable
+	// is what makes "the charter is still provoking questions" measurable — a model
+	// that cannot see the tool teaches you nothing about the prompt that made it
+	// want to ask.
+	if unattended {
+		logger.Info("[Unattended] ask_user auto-resolved with no answer",
+			"toolCallID", toolCallID,
+			"stepID", stepID,
+			"loopNodeID", loopNodeID,
+			"loopIteration", loopIteration,
+			"metadata", metadata,
+		)
+		return map[string]interface{}{
+			"tool_call_id": toolCallID,
+			"content":      unattendedAskUserResponse(metadata),
+		}
+	}
 
 	temporalWorkflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
@@ -3217,6 +3174,16 @@ type workflowStatusOpts struct {
 	SpawnedByToolCallID string
 	SpawnedByNodeID     string // Node ID that spawned this child workflow
 	LoopIteration       *int64 // Iteration index when spawned by a loop node
+	// Resumed marks a "started" notification that follows a self-pause resume
+	// (as opposed to a workflow/spawn starting). The activity un-pauses the
+	// chat's workflow rows chat-wide for it — a resume un-parks the ENTIRE
+	// Temporal execution, not just the notifying (possibly nested) workflow.
+	Resumed bool
+	// Outcome is the run's verdict ("success" / "failure") as declared by the
+	// terminal node the graph reached. Set only on the terminal notification.
+	// Empty means the workflow declared no outcome and the stored value is left
+	// alone — absence is not failure.
+	Outcome string
 }
 
 // notifyWorkflowStatus sends workflow status updates to chat_updates for UI notifications
@@ -3275,6 +3242,12 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.LoopIteration != nil {
 			input["loop_iteration"] = *opts.LoopIteration
+		}
+		if opts.Resumed {
+			input["resumed"] = true
+		}
+		if opts.Outcome != "" {
+			input["outcome"] = opts.Outcome
 		}
 	}
 
@@ -3462,7 +3435,14 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 // The workflows table tracks parent-child hierarchy for debugging and tracing.
 // The retErr parameter captures the workflow's return error (via named returns),
 // allowing us to distinguish between successful completion and error returns.
-func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error) {
+//
+// runOutcome is the ORTHOGONAL fact: the verdict the graph reached (the outcome
+// declared by the terminal node it routed to). "The graph reached an end state"
+// and "the work succeeded" are different questions, and collapsing them is how a
+// run that failed every gate lane and routed to its `failed` node reported
+// COMPLETED to every supervision surface. Status stays the lifecycle; the
+// outcome rides alongside it.
+func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string) {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
@@ -3472,6 +3452,10 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// Check if workflow was cancelled
 	if ctx.Err() != nil {
 		logger.Info("[Workflow Runtime] Cancelled", "workflowID", workflowID)
+		// Delta identity: finalize any outstanding message ids (aborted).
+		// emitStreamFinalized detects the cancelled ctx and switches to a
+		// disconnected context itself; ids only exist post-GetVersion-gate.
+		finalizeOutstandingStreams(ctx, streamReasonAborted)
 		// Run cleanup activities (cancel pending approvals, etc.)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow was cancelled and update workflow record
@@ -3482,6 +3466,8 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// Check for panic/error recovery
 	if r := recover(); r != nil {
 		logger.Error("[Workflow Runtime] Panic recovered", "panic", r, "workflowID", workflowID)
+		// Delta identity: finalize any outstanding message ids (aborted).
+		finalizeOutstandingStreams(ctx, streamReasonAborted)
 		// Run cleanup activities
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
@@ -3492,6 +3478,8 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// Check if the workflow returned an error
 	if retErr != nil {
 		logger.Error("[Workflow Runtime] Failed with error", "workflowID", workflowID, "error", retErr)
+		// Delta identity: finalize any outstanding message ids (aborted).
+		finalizeOutstandingStreams(ctx, streamReasonAborted)
 		// Run cleanup activities for failed workflows
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
@@ -3501,13 +3489,24 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 
 	// Normal completion - don't run cleanup for successful completions
 	// Cleanup should only run for cancelled/failed workflows to avoid race conditions
-	logger.Info("[Workflow Runtime] Completed successfully", "workflowID", workflowID)
+	//
+	// "Ran to the end of the graph" is NOT "the work passed": a run that routed
+	// to a failure-outcome terminal node arrives here with no error at all. Say
+	// which one happened rather than logging success over both.
+	if runOutcome == model.OutcomeFailure {
+		logger.Info("[Workflow Runtime] Ran to completion with outcome FAILURE",
+			"workflowID", workflowID)
+	} else {
+		logger.Info("[Workflow Runtime] Completed successfully", "workflowID", workflowID, "outcome", runOutcome)
+	}
 	// Only run cleanup for root workflows (not child workflows) to avoid cleaning up parent workflows' tool calls
 	if parentWorkflowID == "" {
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 	}
-	// Notify UI that workflow completed successfully and update workflow record
-	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread, nil)
+	// Notify UI that the workflow finished and update the workflow record. The
+	// lifecycle status is "completed" — the Temporal execution really did finish
+	// — and the verdict travels beside it so no surface has to guess.
+	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread, &workflowStatusOpts{Outcome: runOutcome})
 }
 
 // runCleanupActivities executes cleanup tasks such as cancelling pending approvals

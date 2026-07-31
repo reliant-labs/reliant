@@ -84,7 +84,6 @@ function seedCaches() {
   const chat = buildChat({});
   useChatStore.setState({
     activeChatId: null,
-    chats: new Map([["c1", chat]]),
   });
 
   queryClient.setQueryData(chatKeys.list("p1"), {
@@ -106,12 +105,12 @@ beforeEach(() => {
 
 afterEach(() => {
   queryClient.clear();
-  useChatStore.setState({ activeChatId: null, chats: new Map() });
+  useChatStore.setState({ activeChatId: null });
   useProjectStore.setState({ currentProject: null });
 });
 
 describe("globalUpdatesStore cache patching", () => {
-  it("CHAT_STATE_CHANGE patches list + detail caches and the Zustand map without a refetch", () => {
+  it("CHAT_STATE_CHANGE patches the list + detail caches without a refetch", () => {
     // parseChatState only recognizes "idle"/"archived" strings (or numeric
     // enum values) — send the numeric enum so a real state change is visible.
     useGlobalUpdatesStore.getState().handleUpdate([
@@ -133,12 +132,10 @@ describe("globalUpdatesStore cache patching", () => {
     expect(envelope.total).toBe(1);
     expect(envelope.lastUserUpdateSequence).toBe(7);
 
+    // The detail cache is the single source of truth read by useChat.
     const detail = queryClient.getQueryData<Chat>(chatKeys.detail("c1"))!;
     expect(detail.unread).toBe(true);
-
-    const mapChat = useChatStore.getState().chats.get("c1")!;
-    expect(mapChat.unread).toBe(true);
-    expect(mapChat.state).toBe(ChatState.IDLE);
+    expect(detail.state).toBe(ChatState.IDLE);
   });
 
   it("CHAT_STATE_CHANGE resolves projectId from the store when project_id is empty", () => {
@@ -173,25 +170,14 @@ describe("globalUpdatesStore cache patching", () => {
     ).toBe("New Title");
   });
 
-  it("CHAT_TITLE_CHANGED also updates the Zustand chats map", () => {
-    // The Zustand map is read by ChatInput/useActiveChat — leaving it stale
-    // while patching only the React Query caches splits the source of truth.
-    useGlobalUpdatesStore.getState().handleUpdate([
-      buildUpdate({
-        update_type: UserUpdateType.CHAT_TITLE_CHANGED,
-        data: { title: "New Title", previous_title: "Old" },
-      }),
-    ]);
-
-    expect(useChatStore.getState().chats.get("c1")!.title).toBe("New Title");
-  });
-
   it("CHAT_ACTIVITY_CHANGED → IDLE clears leftover streaming state for the chat", () => {
     // The activity-IDLE event is persisted and gap-protected, making it the
     // authoritative "nothing is streaming anymore" signal. Any streaming
     // placeholder still around at that point is a stale tail (deltas race
     // message finalization on a separate channel server-side) and would
     // otherwise render at the end of the chat until a page refresh.
+    // The in-flight placeholder lives solely in the streamingMessages slice —
+    // it is never co-mingled into the persisted messages array.
     const phantom = {
       id: "streaming-temp-c1",
       chatId: "c1",
@@ -205,7 +191,6 @@ describe("globalUpdatesStore cache patching", () => {
       attachments: [],
     } as never;
     useChatStore.setState({
-      messages: { c1: [phantom] },
       streamingMessages: { c1: { c1: phantom } },
     });
 
@@ -217,11 +202,10 @@ describe("globalUpdatesStore cache patching", () => {
     ]);
 
     const state = useChatStore.getState();
-    expect(state.messages["c1"] || []).toHaveLength(0);
     expect(state.streamingMessages["c1"]).toBeUndefined();
   });
 
-  it("CHAT_DELETED removes the chat from the list envelope, detail cache, and Zustand map", () => {
+  it("CHAT_DELETED removes the chat from the list envelope and detail cache", () => {
     useGlobalUpdatesStore.getState().handleUpdate([
       buildUpdate({
         update_type: UserUpdateType.CHAT_DELETED,
@@ -233,7 +217,6 @@ describe("globalUpdatesStore cache patching", () => {
     expect(envelope.chats).toHaveLength(0);
     expect(envelope.total).toBe(0);
     expect(queryClient.getQueryData(chatKeys.detail("c1"))).toBeUndefined();
-    expect(useChatStore.getState().chats.has("c1")).toBe(false);
   });
 
   it("CHAT_STATE_CHANGE is a no-op on the list when the chat is not cached", () => {

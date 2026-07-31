@@ -25,7 +25,30 @@ const (
 	EventComplete      EventType = "complete"
 	EventError         EventType = "error"
 	EventWarning       EventType = "warning"
+	// EventRetryWait is emitted by a driver immediately BEFORE it sleeps out a
+	// retryable provider error (429 / transient 5xx). It carries the wait the
+	// driver is about to take, so the caller can record a durable marker while
+	// the request is parked instead of the whole ladder happening invisibly
+	// inside one activity attempt. Emitted before the sleep, never after: a
+	// marker written after the fact cannot make a run that is waiting RIGHT NOW
+	// distinguishable from one that is working.
+	EventRetryWait EventType = "retry_wait"
 )
+
+// RetryWait describes one rung of a driver's provider-error backoff ladder.
+type RetryWait struct {
+	// Attempt is the 1-based number of the request that just failed.
+	Attempt int
+	// MaxAttempts is the ladder's ceiling, so a consumer can say "3 of 8".
+	MaxAttempts int
+	// Delay is how long the driver is about to sleep before retrying.
+	Delay time.Duration
+	// StatusCode is the provider HTTP status that triggered the retry (429, 503…).
+	StatusCode int
+	// Reason is the driver's own retry-decision reason ("http_429",
+	// "transient_gateway_error", …) — the same string it logs.
+	Reason string
+}
 
 // TokenUsage contains token information from an LLM response.
 // TokenCount represents the total tokens used (input + output + cache).
@@ -63,6 +86,8 @@ type DriverEvent struct {
 	Response *DriverResponse
 	ToolCall *message.ToolCall
 	Error    error
+	// Retry is set only on EventRetryWait.
+	Retry *RetryWait
 }
 
 // Driver represents the interface for interacting with LLM providers

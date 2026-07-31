@@ -46,8 +46,30 @@ func WriteAuthSession(accessToken, refreshToken, userID, email string) error {
 		return fmt.Errorf("marshalling auth session: %w", err)
 	}
 
-	if err := os.WriteFile(authPath, data, 0600); err != nil {
+	// Atomic write: stage into a sibling temp file (0600) then rename over the
+	// target. A concurrent reader (or a crash mid-write) never sees a truncated
+	// or half-rotated auth file — it observes either the old or the new session.
+	dir := filepath.Dir(authPath)
+	tmp, err := os.CreateTemp(dir, ".reliant-auth-*.tmp")
+	if err != nil {
+		return fmt.Errorf("creating temp auth file: %w", err)
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName) // no-op after a successful rename
+
+	if err := tmp.Chmod(0600); err != nil {
+		tmp.Close()
+		return fmt.Errorf("setting auth file permissions: %w", err)
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
 		return fmt.Errorf("writing auth file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("finalizing auth file: %w", err)
+	}
+	if err := os.Rename(tmpName, authPath); err != nil {
+		return fmt.Errorf("replacing auth file: %w", err)
 	}
 
 	return nil

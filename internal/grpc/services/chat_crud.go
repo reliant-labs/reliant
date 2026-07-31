@@ -1061,10 +1061,69 @@ func (s *ChatService) CancelChat(
 		}
 	}
 
-	// Cancel the workflow via Temporal
-	if err := s.tempClient.CancelWorkflow(ctx, workflowID, ""); err != nil {
-		logging.Error("Failed to cancel workflow", "error", err, "workflowID", workflowID)
+	// The run is live in Temporal. A user cancel is authoritative and terminal:
+	// unlike the reconciler — which leaves a question-parked run alone because a
+	// human still owns it — an explicit cancel must kill the run even when it is
+	// parked on a gate.
+
+	// 1. Void any pending question so the run is no longer awaiting input and the
+	//    chat's computed activity drops the AWAITING_INPUT state. Best-effort;
+	//    the terminate + status swap below are what actually stop the run.
+	if q, qErr := s.database.GetPendingQuestionByChatID(ctx, req.Msg.ChatId); qErr != nil {
+		logging.Warn("CancelChat: failed to look up pending question",
+			"chatID", req.Msg.ChatId, "error", qErr)
+	} else if q != nil {
+		cancelledResponse := `{"action":"cancelled","reason":"chat cancelled by user"}`
+		if err := s.database.ResolveQuestion(ctx, q.ID, &cancelledResponse); err != nil {
+			logging.Warn("CancelChat: failed to void pending question",
+				"chatID", req.Msg.ChatId, "questionID", q.ID, "error", err)
+		}
+	}
+
+	// 2. Forcefully terminate the workflow. A graceful CancelWorkflow only
+	//    requests cancellation cooperatively; a run parked on a signal Await
+	//    (e.g. an ask_question gate) never observes it and stays RUNNING forever
+	//    (status=2). Terminate is the same forceful stop the reconciler uses for
+	//    wedged runs. Best-effort — we still reconcile the DB status below.
+	if err := s.tempClient.TerminateWorkflow(ctx, workflowID, "", "Chat cancelled by user"); err != nil {
+		logging.Warn("CancelChat: failed to terminate workflow in Temporal (continuing to reconcile DB)",
+			"error", err, "workflowID", workflowID)
+	}
+
+	// 3. Move the workflow row to CANCELLED. CAS (not a blind write) so a run
+	//    that settled terminally underneath us is never clobbered — the swap that
+	//    succeeds also emits the chat_activity_changed (IDLE) event that unblocks
+	//    the frontend, the same transition the not-running branch performs. Cover
+	//    a paused run too, since a user cancel overrides a pause. If neither swap
+	//    lands the run was already terminal, and its own transition already fired.
+	swapped, err := s.database.CompareAndSwapWorkflowStatus(ctx, workflowID, db.WorkflowStatusCancelled, db.WorkflowStatusRunning)
+	if err != nil {
+		logging.Error("CancelChat: failed to mark workflow cancelled", "error", err, "workflowID", workflowID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to cancel workflow"))
+	}
+	if !swapped {
+		if _, err := s.database.CompareAndSwapWorkflowStatus(ctx, workflowID, db.WorkflowStatusCancelled, db.WorkflowStatusPaused); err != nil {
+			logging.Warn("CancelChat: failed to cancel paused workflow", "error", err, "workflowID", workflowID)
+		}
+	}
+
+	// 4. Cascade to the subtree. The terminate above is a HARD kill, so the
+	//    workflow's own completion handler never runs — and that handler is
+	//    what normally drives the status activity's cancelled arm, the only
+	//    thing that cascades on a cancel. Step 3 covers the root row the
+	//    handler would have written; this covers the spawn and thread rows it
+	//    would have drained. Without it every descendant stays at running/paused
+	//    forever (nothing revisits a row with a parent_id), so `workflow ps`
+	//    reports a cancelled run as live and the chat stays "active" in
+	//    chats_with_activity — which makes the IDLE event step 3 is meant to
+	//    emit compute to RUNNING instead.
+	//
+	//    CANCELLED, not completed: these rows were terminated mid-flight and
+	//    never finished their work. Recording them as completed made a cancelled
+	//    run indistinguishable from a successful one in every later count.
+	if err := s.database.CascadeTerminalStatusToDescendants(ctx, workflowID, db.WorkflowStatusCancelled); err != nil {
+		logging.Error("CancelChat: failed to cascade cancellation to child workflows",
+			"error", err, "workflowID", workflowID)
 	}
 
 	return connect.NewResponse(&reliantv1.CancelChatResponse{

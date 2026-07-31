@@ -57,7 +57,7 @@ func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *base
 	// 400 if temperature is sent at all, so omitting it is mandatory.
 	return &baseClient{
 		options: opts,
-		client:  anthropic.NewClient(clientOptions...),
+		client:  llm.NewAnthropicSDKClient(clientOptions...),
 	}
 }
 

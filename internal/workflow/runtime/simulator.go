@@ -409,6 +409,11 @@ func (s *WorkflowSimulator) assembleSubWorkflowInputs(nodePath string, node *rel
 	// against the parent context, mirroring the runtime's EvaluateNodeConfig
 	// on workflow/loop node args before invoking the child.
 	s.resolveTemplateInputs(assembled)
+	// Parity with the runtime's buildSubWorkflowInputs / buildIterationInputs:
+	// an unattended run stays unattended in every child, and no arg or default
+	// may turn it back off. Without this a descended scenario would evaluate the
+	// child's `unattended` default instead of the run's actual value.
+	propagateUnattended(s.workflowInputs, assembled)
 	return assembled
 }
 
@@ -582,6 +587,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 					s.nodeOutputs,
 					s.workflowInputs,
 					workflowContext,
+					nil,
 				)
 				if err != nil {
 					return fmt.Errorf("node condition evaluation failed for %s: %w", stepID, err)
@@ -1068,6 +1074,10 @@ func (s *WorkflowSimulator) executeLoopIteration(
 					innerOutputs,
 					subInputs,
 					workflowContext,
+					// A node condition inside a loop sees the same `iter` and previous-iteration
+					// `outputs` the real loop executor gives it — otherwise a scenario would take
+					// a different branch than the run it is meant to simulate.
+					&LoopScope{Iter: &model.IterContext{Iteration: iteration, Index: iteration}, Outputs: prevIterOutputs},
 				)
 				if err != nil {
 					return nil, fmt.Errorf("node condition evaluation failed for %s: %w", qualifiedID, err)
@@ -1357,6 +1367,10 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 					innerOutputs,
 					subInputs,
 					workflowContext,
+					// A node condition inside a loop sees the same `iter` and previous-iteration
+					// `outputs` the real loop executor gives it — otherwise a scenario would take
+					// a different branch than the run it is meant to simulate.
+					&LoopScope{Iter: &model.IterContext{Iteration: iteration, Index: iteration}, Outputs: prevIterOutputs},
 				)
 				if err != nil {
 					return nil, fmt.Errorf("node condition evaluation failed for %s: %w", qualifiedID, err)
@@ -1619,6 +1633,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 					innerOutputs,
 					subInputs,
 					workflowContext,
+					nil,
 				)
 				if err != nil {
 					return nil, fmt.Errorf("node condition evaluation failed for %s: %w", qualifiedID, err)

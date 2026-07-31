@@ -23,11 +23,12 @@ import type {
   ChecklistItemId,
   ChecklistPanelState,
 } from "../components/Onboarding/types";
-import { useChatStore } from "./chatStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useProjectStore } from "./projectStore";
 import { useGlobalDataStore } from "./globalDataStore";
 import { getEventBus } from "../lib/events";
+import { chatKeys, getCachedChatList } from "../hooks/chat-queries";
+import { queryClient } from "../lib/query-client";
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
@@ -231,8 +232,8 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       // 2. Start a chat
       if (!newItems.has("start-chat")) {
-        const chats = useChatStore.getState().chats;
-        if (chats.size > 0) {
+        const chats = getCachedChatList(projectId);
+        if (chats.length > 0) {
           newItems.add("start-chat");
           changed = true;
         }
@@ -240,10 +241,10 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       // 3. Use a custom workflow
       if (!newItems.has("use-custom-workflow")) {
-        const chats = useChatStore.getState().chats;
+        const chats = getCachedChatList(projectId);
         const isDefaultWorkflow = (name?: string) =>
           !name || name === "" || name === "agent" || name === "builtin://agent";
-        const usedCustomWorkflow = Array.from(chats.values()).some(
+        const usedCustomWorkflow = chats.some(
           (chat) => !isDefaultWorkflow(chat.workflowName),
         );
         if (usedCustomWorkflow) {
@@ -329,18 +330,31 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
     subscribeToStoreChanges: () => {
       const unsubscribers: (() => void)[] = [];
 
-      let prevChatCount = useChatStore.getState().chats.size;
+      // Chats live in the React Query cache (the single source of truth), so
+      // subscribe to the query cache and re-read the current project's list on
+      // each change instead of subscribing to the Zustand store.
+      const currentChatList = () =>
+        getCachedChatList(useProjectStore.getState().currentProject?.id);
+      let prevChatCount = currentChatList().length;
       unsubscribers.push(
-        useChatStore.subscribe((state) => {
-          if (state.chats.size > prevChatCount) {
+        queryClient.getQueryCache().subscribe((event) => {
+          // Only react to chat-list cache mutations.
+          if (
+            event.query.queryKey[0] !== chatKeys.all[0] ||
+            event.query.queryKey[1] !== "list"
+          ) {
+            return;
+          }
+          const chats = currentChatList();
+          if (chats.length > prevChatCount) {
             get().markComplete("start-chat");
           }
-          prevChatCount = state.chats.size;
+          prevChatCount = chats.length;
 
           if (!get().completedItems.has("use-custom-workflow")) {
             const isDefault = (name?: string) =>
               !name || name === "" || name === "agent" || name === "builtin://agent";
-            const usedCustom = Array.from(state.chats.values()).some(
+            const usedCustom = chats.some(
               (chat) => !isDefault(chat.workflowName),
             );
             if (usedCustom) {

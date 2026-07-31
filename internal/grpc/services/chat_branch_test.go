@@ -7,9 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/require"
 )
@@ -265,4 +265,95 @@ func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
 	require.NotNil(t, branchedChat.WorktreeID, "branched chat should have a worktree")
 	require.Equal(t, worktreeID, *branchedChat.WorktreeID,
 		"branching from same chat should keep the same worktree")
+}
+
+// TestBranchChat_PinsActiveDaemonFromWorktree verifies a branched chat inherits
+// ActiveDaemonID from its worktree's owning daemon, so its first message routes
+// tool execution to the machine holding the branch checkout (the fix for
+// "chatting with a branch chat didn't work").
+func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	now := time.Now().UTC()
+
+	projectID := "test-project-branch-daemon-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID:         projectID,
+		UserID:     "test-user",
+		Name:       "Branch Daemon Project",
+		Path:       t.TempDir(),
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}))
+
+	daemonID := "daemon-owning-branch"
+	worktreeID := "wt-" + uuid.NewString()
+	require.NoError(t, repo.CreateWorktree(ctx, &db.Worktree{
+		ID:         worktreeID,
+		Name:       "feature",
+		Path:       t.TempDir(),
+		Branch:     "feature",
+		ProjectID:  projectID,
+		DaemonID:   &daemonID,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}))
+
+	chatID := uuid.NewString()
+	threadID := chatID
+	cwID := chatID + ":" + threadID + ":0"
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID:         chatID,
+		UserID:     "test-user",
+		Title:      "Source Chat",
+		ProjectID:  projectID,
+		WorktreeID: &worktreeID,
+		State:      db.ChatStateIdle,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+	}))
+
+	threadsSvc := threads.NewService(repo)
+	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+		Workflow: &db.Workflow{
+			ID:           chatID,
+			ChatID:       chatID,
+			WorkflowName: "builtin://agent",
+			Thread:       threadID,
+			Status:       db.WorkflowStatusPending,
+			CreatedAt:    now,
+		},
+		ThreadID: threadID,
+		ChatID:   chatID,
+	})
+	require.NoError(t, err)
+
+	msgID := uuid.NewString()
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID:              msgID,
+		ChatID:          chatID,
+		ThreadID:        threadID,
+		ContextWindowID: cwID,
+		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
+		Ordinal:         1,
+		CreatedAt:       now,
+	}))
+
+	service := &ChatService{database: repo, threads: threadsSvc}
+
+	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+		ChatId:    chatID,
+		MessageId: msgID,
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, resp.Msg.Chat)
+
+	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	require.NoError(t, err)
+	require.NotNil(t, branchedChat.ActiveDaemonID, "branched chat must be pinned to the worktree's daemon")
+	require.Equal(t, daemonID, *branchedChat.ActiveDaemonID)
 }

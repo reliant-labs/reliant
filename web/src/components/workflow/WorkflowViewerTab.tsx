@@ -143,6 +143,7 @@ export function WorkflowViewerTab({ projectId, chatId, workflowName }: WorkflowV
       <div className="flex-1 min-h-0">
         <WorkflowViewerPanel
           projectId={projectId}
+          chatId={chatId}
           workflowName={selectedWorkflow?.workflowName || workflowName}
           execution={selectedWorkflow || undefined}
           compact={false}

@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -126,8 +127,8 @@ func TestGetToolSpecificSuggestions(t *testing.T) {
 		expectCount int // minimum expected suggestions
 	}{
 		{ShellToolName, 3},
-		{"grep", 3},
-		{"glob", 2},
+		{"view", 3},
+		{"ls", 2},
 		{"fetch", 2},
 		{"unknown", 2},
 	}
@@ -203,5 +204,84 @@ func TestViewSuggestionsExist(t *testing.T) {
 	}
 	if !found {
 		t.Error("view suggestions should mention offset parameter")
+	}
+}
+
+// A skill that fits must pass through untouched — no notice, no reformatting.
+func TestCapSkillContent_UnderBudgetIsUntouched(t *testing.T) {
+	body := strings.Repeat("a", MaxSkillBodySize)
+	got, truncated := CapSkillContent(body)
+	if truncated {
+		t.Fatalf("skill exactly at budget must not be truncated")
+	}
+	if got != body {
+		t.Fatalf("under-budget skill must be returned verbatim")
+	}
+}
+
+// Dropping content must be announced in the delivered text. The tail of a skill
+// load is where the tool appends its sub-skill / related-skill / suggested-tools
+// pointers, so a silent cut severs the links to the rest of the skill tree.
+func TestCapSkillContent_OverBudgetIsMarkedAndFits(t *testing.T) {
+	// Size the fixture FROM the budget rather than to a fixed line count: a
+	// literal count silently stops exercising truncation the moment the
+	// ceiling is raised, and the test then passes while proving nothing.
+	const filler = "filler line of skill guidance\n"
+	reps := MaxSkillBodySize/len(filler) + 10
+	body := "HEAD MARKER\n" + strings.Repeat(filler, reps) + "TAIL MARKER\n"
+	if len(body) <= MaxSkillBodySize {
+		t.Fatalf("fixture must exceed the budget, got %d for a %d-byte budget", len(body), MaxSkillBodySize)
+	}
+
+	got, truncated := CapSkillContent(body)
+	if !truncated {
+		t.Fatalf("over-budget skill must report truncation")
+	}
+	if len(got) > MaxSkillBodySize {
+		t.Fatalf("capped skill is %d bytes, over the %d budget", len(got), MaxSkillBodySize)
+	}
+	if !strings.Contains(got, "HEAD MARKER") {
+		t.Fatalf("head of the skill must survive")
+	}
+	if strings.Contains(got, "TAIL MARKER") {
+		t.Fatalf("tail should have been dropped by the cap")
+	}
+	for _, want := range []string{"SKILL TRUNCATED", "END SKILL TRUNCATION NOTICE", "SKILL.md"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("truncation notice must contain %q; got tail:\n%s", want, got[len(got)-800:])
+		}
+	}
+	// The reported byte counts must be the real ones, not an estimate.
+	if !strings.Contains(got, fmt.Sprintf("OF %d BYTES", len(body))) {
+		t.Fatalf("notice must state the true original size %d", len(body))
+	}
+}
+
+// The notice length varies with the digits of the numbers it reports, so the
+// fitting loop has to converge for any input size, never overshooting.
+func TestCapSkillContent_FitsAtEveryOversizeBoundary(t *testing.T) {
+	for _, extra := range []int{1, 9, 99, 999, 9_999, 99_999, 1_000_000} {
+		body := strings.Repeat("x", MaxSkillBodySize+extra)
+		got, truncated := CapSkillContent(body)
+		if !truncated {
+			t.Fatalf("size %d must truncate", len(body))
+		}
+		if len(got) > MaxSkillBodySize {
+			t.Fatalf("size %d capped to %d, over the %d budget", len(body), len(got), MaxSkillBodySize)
+		}
+	}
+}
+
+// TruncateOutput must route the skill tool to the skill-aware cap rather than
+// the generic tail cut, so both skill-delivery paths emit identical bytes.
+func TestTruncateOutput_SkillUsesSkillCap(t *testing.T) {
+	body := strings.Repeat("skill content line\n", 2000)
+	viaTruncate := TruncateOutput(ToolSkill, body, true)
+	viaCap, _ := CapSkillContent(body)
+	if viaTruncate != viaCap {
+		t.Fatalf("TruncateOutput(skill) must delegate to CapSkillContent")
+	}
+	if strings.Contains(viaTruncate, "OUTPUT TRUNCATED") {
+		t.Fatalf("skill output must not fall through to the generic truncation marker")
 	}
 }

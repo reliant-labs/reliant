@@ -432,6 +432,11 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{}
 		subInputs = ApplyDefaultsForRuntime(subInputs, e.subWorkflow.GetInputs())
 	}
 
+	// Last, so nothing above can undo it: an unattended run stays unattended in
+	// every child. See unattended.go for why this is enforced here instead of
+	// being left to each YAML's passthrough list.
+	propagateUnattended(e.workflowInputs, subInputs)
+
 	return subInputs
 }
 
@@ -671,6 +676,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, node, subNodeOutputs, subInputs,
 				e.workflowID, e.chatID, e.subWorkflowName, e.logger,
+				nil,
 			)
 			if condErr != nil {
 				return nil, condErr
@@ -936,7 +942,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					_ = workflow.Sleep(e.ctx, 0)
 
 					// Resumed! Update DB status back to running
-					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", nil)
+					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "started", "", "", &workflowStatusOpts{Resumed: true})
 
 					e.logger.Info("[InlineWorkflow] Resumed after pause, retrying step",
 						"nodeID", e.nodeID,
@@ -1162,6 +1168,7 @@ func (e *InlineWorkflowExecutor) executeAskQuestion(
 		LoopNodeID:    e.loopNodeID,
 		LoopIteration: e.loopIteration,
 		Metadata:      metadata,
+		Unattended:    IsUnattended(workflowInputs),
 		Logger:        e.logger,
 	})
 }
@@ -1303,6 +1310,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 				WorkflowName:     nestedWorkflowName,
 				ThreadMode:       model.NodeThreadMode(evalResult),
 				ForkFromThread:   childExecCtx.ForkedFrom,
+				ParentThread:     e.execContext.Thread, // Current execution's thread
 				SpawnedByNodeID:  nid,
 				LoopIteration:    loopIter,
 				InjectMessage:    injectMsg,

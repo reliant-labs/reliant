@@ -20,6 +20,13 @@ type Workflow struct {
 	CompletedAt     *time.Time     `json:"completed_at,omitempty"`
 	WorkerStartedAt *time.Time     `json:"worker_started_at,omitempty"`
 	WorkerStoppedAt *time.Time     `json:"worker_stopped_at,omitempty"`
+	// Outcome is the run's own verdict — "success" or "failure" — stamped by
+	// the terminal node it reached (Node.outcome in the workflow YAML).
+	// Orthogonal to Status: Status is the Temporal-owned lifecycle and is
+	// reconciled against Temporal, so it cannot hold a workflow-semantic
+	// judgement. nil means the workflow declared no outcome, which is NOT a
+	// failure — most workflows declare nothing.
+	Outcome *string `json:"outcome,omitempty"`
 }
 
 // WorkflowCheckpoint records the position a workflow run has reached: the last
@@ -61,8 +68,10 @@ type WorkflowStore interface {
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error)
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
+	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
-	CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error
+	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status WorkflowStatus) error
+	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)

@@ -7,7 +7,10 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -66,7 +69,17 @@ func ResilientTransport() *http.Transport {
 	// ResponseHeaderTimeout limits how long we wait for response headers after
 	// sending a request. This catches hung connections where the server accepts
 	// the request but never responds. Once headers arrive, the body can stream
-	// indefinitely (this timeout does NOT apply to body reads).
+	// indefinitely (this timeout does NOT apply to body reads) — that gap is
+	// covered by the idle-timeout reader below.
+	//
+	// This stays deliberately loose at 2 minutes, and must not be tightened to
+	// match the idle timeout. The same client also serves NON-streaming
+	// completions (SendMessages, ValidateKey), and a non-streaming provider
+	// withholds response headers until the whole generation is finished. For
+	// those calls "time to headers" is "time to generate", so a tight header
+	// timeout would kill legitimate long completions. For STREAMING calls the
+	// headers arrive at request-acceptance time and this timeout is never the
+	// binding constraint.
 	base.ResponseHeaderTimeout = 2 * time.Minute
 
 	systemDialer := &net.Dialer{
@@ -182,12 +195,55 @@ func ResilientHTTPClient() *http.Client {
 	}
 }
 
-// StreamIdleTimeout is the maximum time a streaming response can go without
-// receiving any data before the read is aborted. This catches "silent hang"
-// scenarios where the server keeps the TCP connection open but stops sending
-// SSE events. Set to 5 minutes — LLM providers send heartbeat/ping events
-// more frequently than this during normal operation.
-const StreamIdleTimeout = 5 * time.Minute
+// DefaultStreamIdleTimeout is the maximum time a streaming response may go
+// without receiving ANY data before the read is aborted. It catches the
+// "silent hang": the server keeps the TCP connection open (so nothing below
+// this layer notices) but stops sending SSE frames, and the request only ends
+// minutes later when a middlebox resets the connection.
+//
+// 90 seconds, derived from 4,039 real completed LLM streams in this repo's
+// worker logs:
+//
+//	p50 5.8s   p90 28.8s   p95 51.0s   p99 137.6s
+//	97.8% of streams FINISH ENTIRELY in under 90s.
+//
+// Any byte resets this clock, including SSE keepalives, ping frames and
+// reasoning-summary deltas — so a live-but-thinking stream has to be silent for
+// 90 consecutive seconds to trip it, not merely slow. The failure this guards
+// produced zero bytes for 8-17 minutes, and the automatic retry then succeeded
+// in 12-17s, so the cost of a false positive is bounded and small.
+//
+// Override with RELIANT_LLM_STREAM_IDLE_TIMEOUT (a Go duration, e.g. "3m") if a
+// provider is found to hold a stream silent for longer than this.
+const DefaultStreamIdleTimeout = 90 * time.Second
+
+// StreamIdleTimeoutEnv overrides DefaultStreamIdleTimeout at runtime.
+const StreamIdleTimeoutEnv = "RELIANT_LLM_STREAM_IDLE_TIMEOUT"
+
+// StreamIdleTimeout returns the configured stream idle timeout. It is read on
+// every client construction (once per LLM call) so the override takes effect
+// without a rebuild.
+func StreamIdleTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(StreamIdleTimeoutEnv))
+	if raw == "" {
+		return DefaultStreamIdleTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		logging.Warn("[Transport] Ignoring unusable stream idle timeout override",
+			"env", StreamIdleTimeoutEnv, "value", raw, "using", DefaultStreamIdleTimeout)
+		return DefaultStreamIdleTimeout
+	}
+	return d
+}
+
+// ErrStreamIdleTimeout is returned by IdleTimeoutReader.Read when the stream
+// went idle for longer than the configured timeout.
+//
+// The wording matters: activities.autoClassify scans the error text, and this
+// string must miss every terminal pattern and hit a transient one ("timeout")
+// so a silent stream is retried rather than failing the workflow.
+var ErrStreamIdleTimeout = errors.New("llm stream idle timeout: provider sent no data before the idle deadline")
 
 // IdleTimeoutReader wraps an io.ReadCloser and enforces an idle timeout on reads.
 // If no data is received within the timeout, Read returns ErrStreamIdleTimeout.
@@ -197,24 +253,21 @@ type IdleTimeoutReader struct {
 	r       io.ReadCloser
 	timeout time.Duration
 	timer   *time.Timer
-	done    chan struct{}
+	fired   atomic.Bool
 	once    sync.Once
 }
 
-// ErrStreamIdleTimeout is returned when an SSE stream goes idle for too long.
-var ErrStreamIdleTimeout = errors.New("stream idle timeout: no data received for " + StreamIdleTimeout.String())
-
 // NewIdleTimeoutReader wraps r with an idle timeout.
 // Each successful Read resets the timer. If the timer fires before the next
-// Read completes, the underlying reader is closed, causing the blocked Read
-// to return an error.
+// Read completes, the underlying reader is closed, unblocking the pending Read,
+// which then reports ErrStreamIdleTimeout.
 func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration) *IdleTimeoutReader {
 	itr := &IdleTimeoutReader{
 		r:       r,
 		timeout: timeout,
-		done:    make(chan struct{}),
 	}
 	itr.timer = time.AfterFunc(timeout, func() {
+		itr.fired.Store(true)
 		logging.Warn("[IdleTimeoutReader] Stream idle timeout reached, closing connection",
 			"timeout", timeout)
 		_ = itr.Close()
@@ -228,13 +281,22 @@ func (itr *IdleTimeoutReader) Read(p []byte) (int, error) {
 		// Data received — reset the idle timer
 		itr.timer.Reset(itr.timeout)
 	}
+	if err != nil {
+		// Report the real cause. Without this the caller sees whatever the
+		// transport says about a body we closed underneath it ("read on closed
+		// response body", "use of closed network connection"), which is neither
+		// diagnosable in a log nor reliably classified as transient.
+		if itr.fired.Load() {
+			return n, ErrStreamIdleTimeout
+		}
+		itr.timer.Stop()
+	}
 	return n, err
 }
 
 func (itr *IdleTimeoutReader) Close() error {
 	itr.once.Do(func() {
 		itr.timer.Stop()
-		close(itr.done)
 	})
 	return itr.r.Close()
 }
@@ -266,21 +328,29 @@ func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, err
 func WrapWithIdleTimeout(base http.RoundTripper) http.RoundTripper {
 	return &idleTimeoutTransport{
 		base:    base,
-		timeout: StreamIdleTimeout,
+		timeout: StreamIdleTimeout(),
 	}
 }
 
 // StreamingHTTPClient returns an *http.Client configured for LLM streaming:
 //   - DNS resilience (retry, fallback, caching) via ResilientTransport
 //   - ResponseHeaderTimeout (2min) to detect hung connections before streaming starts
-//   - Idle stream timeout (5min) to detect silent hangs during streaming
+//   - Idle stream timeout to detect silent hangs during streaming
 //
-// Use this for all LLM API calls that involve streaming responses.
+// Every LLM SDK client is built with this — see NewOpenAISDKClient,
+// NewAnthropicSDKClient and NewGenAISDKClient in sdkclient.go, which are the
+// only sanctioned way for a driver to construct one.
 func StreamingHTTPClient() *http.Client {
+	return newStreamingHTTPClient(StreamIdleTimeout())
+}
+
+// newStreamingHTTPClient builds the streaming client with an explicit idle
+// timeout. Tests use it to exercise the guard without waiting the real timeout.
+func newStreamingHTTPClient(idle time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &idleTimeoutTransport{
 			base:    otelhttp.NewTransport(ResilientTransport()),
-			timeout: StreamIdleTimeout,
+			timeout: idle,
 		},
 	}
 }

@@ -2,12 +2,51 @@
 package preset
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 )
+
+// TestAllBuiltinPresetsParse runs the real ParsePreset over every embedded
+// builtin preset and asserts it loads without error. This is the loader path
+// used at runtime (via loadPresetFromDB's builtin fallback), so a preset that
+// fails ParsePreset — e.g. an unknown model-object key like "thinking" instead
+// of "thinking_level" — surfaces to users as the misleading "preset not found",
+// which is exactly how the ux.yaml regression slipped past the looser
+// yaml.Unmarshal checks in builtin/presets/presets_test.go.
+func TestAllBuiltinPresetsParse(t *testing.T) {
+	entries, err := fs.ReadDir(builtin.BuiltinPresetsFS, "presets")
+	if err != nil {
+		t.Fatalf("read builtin presets dir: %v", err)
+	}
+
+	found := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		found++
+		name := strings.TrimSuffix(entry.Name(), ".yaml")
+		t.Run(name, func(t *testing.T) {
+			data, err := fs.ReadFile(builtin.BuiltinPresetsFS, "presets/"+entry.Name())
+			if err != nil {
+				t.Fatalf("read %s: %v", entry.Name(), err)
+			}
+			if _, err := ParsePreset(data, name); err != nil {
+				t.Errorf("ParsePreset(%s) failed: %v", entry.Name(), err)
+			}
+		})
+	}
+
+	if found == 0 {
+		t.Fatal("no builtin presets found to parse")
+	}
+}
 
 func TestParsePreset(t *testing.T) {
 	tests := []struct {

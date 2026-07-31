@@ -144,24 +144,8 @@ func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Def
 	}
 
 	for _, s := range skills {
-		emit := s.Emit
-		if emit == "" {
-			emit = "forge"
-		}
-
-		var skillPath string
-		switch emit {
-		case "general", "both":
-			skillPath = s.Path
-		case "forge":
-			if !hasForgeYAML {
-				continue
-			}
-			skillPath = forgeNamespace + "/" + s.Path
-		default:
-			// Unknown emit value — be conservative and drop. A future
-			// emit category should land here as a deliberate switch
-			// case rather than silently surfacing somewhere wrong.
+		skillPath, ok := forgeAddressablePath(s, hasForgeYAML)
+		if !ok {
 			continue
 		}
 
@@ -194,6 +178,65 @@ func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Def
 	return defs
 }
 
+// forgeAddressablePath is THE emit partition: the single decision about which
+// path a forge skill is addressable by once reliant surfaces it.
+//
+//   - emit "general"/"both": the BARE path. These are methodology skills that
+//     apply to any project, so they are not namespaced. Consequently they are
+//     NOT addressable as "forge/<path>" — the synthetic namespace has no entry
+//     for them, and the resolver's suffix rule only accepts shorter spellings
+//     of longer paths, never the reverse.
+//   - emit "forge": "forge/<path>", and only inside a forge project.
+//
+// ok is false when the skill is not surfaced at all.
+//
+// Both the runtime catalog and ForgeFrameworkSkillPaths (which backs workflow
+// validation) go through here. A second implementation of this rule would be
+// free to disagree with the first, and a validator that disagrees with the
+// resolver is the bug it is meant to prevent.
+func forgeAddressablePath(s forgecli.Skill, hasForgeYAML bool) (string, bool) {
+	emit := s.Emit
+	if emit == "" {
+		emit = "forge"
+	}
+	switch emit {
+	case "general", "both":
+		return s.Path, true
+	case "forge":
+		if !hasForgeYAML {
+			return "", false
+		}
+		return forgeNamespace + "/" + s.Path, true
+	default:
+		// Unknown emit value — be conservative and drop. A future emit
+		// category should land here as a deliberate switch case rather
+		// than silently surfacing somewhere wrong.
+		return "", false
+	}
+}
+
+// ForgeFrameworkSkillPaths returns every path a forge skill is addressable by
+// INSIDE a forge project, from forge's embedded catalog alone.
+//
+// Workflow validation needs this view because a builtin charter like
+// forge-one-shot targets forge projects by construction: its "forge/..."
+// references resolve there and nowhere else. Validating such a charter against
+// a non-forge working directory would report every one of them as broken.
+func ForgeFrameworkSkillPaths() []string {
+	skills, err := forgecli.ListSkills("")
+	if err != nil {
+		return nil
+	}
+	paths := make([]string, 0, len(skills))
+	for _, s := range skills {
+		if p, ok := forgeAddressablePath(s, true); ok {
+			paths = append(paths, p)
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
 // filterForgeAudience returns only the skills that should appear in the
 // forge-audience view — emit "forge", "both", or the legacy empty
 // default (treated as forge). Used to render the synthetic forge
@@ -216,18 +259,31 @@ func filterForgeAudience(skills []forgecli.Skill) []forgecli.Skill {
 // forgeParentBody renders the synthetic body for the top-level "forge" skill.
 // It exists so a model that lands on the parent (rather than a specific
 // sub-skill) gets a clear navigational map of what's available.
+//
+// Every entry is printed at the path it is ACTUALLY addressable by, via the
+// same forgeAddressablePath the catalog uses. It previously printed a blanket
+// "forge/<path>" for everything, which advertised emit:both skills — db,
+// service-layer, testing — under a namespace they are not surfaced in. This
+// map is the thing an agent reads to learn what to load, so a wrong path here
+// does not merely mislead: it is copied into charters and into skill loads
+// that then silently resolve to nothing.
 func forgeParentBody(skills []forgecli.Skill) string {
 	var b strings.Builder
 	b.WriteString("# Forge skills\n\n")
 	b.WriteString("These skills are surfaced from this project's sibling forge module. ")
-	b.WriteString("Load a specific sub-skill via the skill tool to read its body. ")
-	b.WriteString("All paths below are addressable as `forge/<path>`.\n\n")
+	b.WriteString("Load a specific sub-skill via the skill tool to read its body, ")
+	b.WriteString("using exactly the path shown below — framework skills carry the ")
+	b.WriteString("`forge/` namespace, general methodology skills do not.\n\n")
 	for _, s := range skills {
+		path, ok := forgeAddressablePath(s, true)
+		if !ok {
+			continue
+		}
 		desc := strings.TrimSpace(s.Description)
 		if desc == "" {
-			fmt.Fprintf(&b, "- **forge/%s**\n", s.Path)
+			fmt.Fprintf(&b, "- **%s**\n", path)
 		} else {
-			fmt.Fprintf(&b, "- **forge/%s** — %s\n", s.Path, desc)
+			fmt.Fprintf(&b, "- **%s** — %s\n", path, desc)
 		}
 	}
 	return b.String()

@@ -13,14 +13,22 @@ import {
   ChatState,
 } from "../gen/reliant/v1/chat_pb";
 import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
-import type { ProcessedMessage } from "../lib/messageProcessor";
-import { processMessage } from "../lib/messageProcessor";
+import type { ToolResultsByCallId } from "../lib/messageProcessor";
+import { getProcessedMessage } from "../lib/messageProcessor";
 import { sortMessagesForDisplay } from "../lib/messageOrder";
 import {
   CHAT_MARKER_KINDS,
   extractChatMarker,
   stripChatMarker,
 } from "../lib/chatMarkers";
+import {
+  applyLogSlice,
+  applyToolCallStateUpdates,
+  bySequenceNumber,
+  mergeActiveThreads,
+  mergeMessages,
+  resolveStreamingBase,
+} from "../lib/chatStreamReducers";
 
 import * as Sentry from "@sentry/react";
 
@@ -35,11 +43,12 @@ import type {
   InfoUpdate,
   WorkflowStatusUpdate,
   StreamingDelta,
+  StreamFinalizedUpdate,
   RunOutputUpdate,
   NodeExecutionUpdate,
   QuestionUpdate,
 } from "../types/streaming";
-import { questionGrpc, type QuestionInfo } from "../api/question-grpc";
+import { questionGrpc } from "../api/question-grpc";
 
 // ToolExecutionStateUpdate is a CLIENT-SIDE type synthesized from ToolCallUpdate.
 // The backend sends tool_call updates, which the frontend converts to this format
@@ -77,7 +86,25 @@ import type { Attachment } from "../api/client";
 import { logger } from "../lib/logger";
 import { singleflight } from "../lib/singleflight";
 import { queryClient } from "../lib/query-client";
-import { approvalKeys, questionKeys } from "../hooks/approval-queries";
+import {
+  approvalKeys,
+  upsertApprovalInCache,
+  patchPendingQuestionCache,
+} from "../hooks/approval-queries";
+import {
+  chatKeys,
+  seedChatDetail,
+  patchChatCaches,
+  getChatFromCache,
+} from "../hooks/chat-queries";
+import {
+  setMessagesInCache,
+  patchMessagesCache,
+  getMessagesFromCache,
+  hasMessagesCache,
+  clearMessagesCache,
+  clearAllMessagesCache,
+} from "../hooks/message-queries";
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
@@ -322,6 +349,60 @@ function clearStreamingBuffersForChat(chatId: string): void {
   }
 }
 
+// ============================================================================
+// Workflow event-log reducers
+//
+// errorEvents / infoEvents / runOutputs / nodeExecutions are stream-only
+// ephemeral logs: appended live, replaced wholesale on a snapshot (isSnapshot),
+// and deduped by a per-type key. The pure reducers live in
+// lib/chatStreamReducers.ts; behavior is pinned by
+// chatStore.streamEvents.test.ts.
+// ============================================================================
+
+/** Errors dedup by id (replace in place); snapshot replaces the whole list. */
+const applyErrorUpdates = (
+  existing: ErrorUpdate[],
+  updates: ErrorUpdate[],
+  isSnapshot: boolean,
+): ErrorUpdate[] =>
+  applyLogSlice(existing, updates, isSnapshot, { key: (e) => e.id });
+
+/**
+ * Info notifications dedup by id, but a re-delivery keeps the ORIGINAL
+ * timestamp so its place in the timeline stays stable.
+ */
+const applyInfoUpdates = (
+  existing: InfoUpdate[],
+  updates: InfoUpdate[],
+  isSnapshot: boolean,
+): InfoUpdate[] =>
+  applyLogSlice(existing, updates, isSnapshot, {
+    key: (e) => e.id,
+    merge: (prev, next) => ({ ...next, timestamp: prev.timestamp || next.timestamp }),
+  });
+
+/** Run outputs dedup by unique_activity_id, then sort by sequence_number. */
+const applyRunOutputUpdates = (
+  existing: RunOutputUpdate[],
+  updates: RunOutputUpdate[],
+  isSnapshot: boolean,
+): RunOutputUpdate[] =>
+  applyLogSlice(existing, updates, isSnapshot, {
+    key: (r) => r.unique_activity_id || "",
+    sort: bySequenceNumber,
+  });
+
+/** Node executions dedup by node_id + event_type, then sort by sequence_number. */
+const applyNodeExecutionUpdates = (
+  existing: NodeExecutionUpdate[],
+  updates: NodeExecutionUpdate[],
+  isSnapshot: boolean,
+): NodeExecutionUpdate[] =>
+  applyLogSlice(existing, updates, isSnapshot, {
+    key: (n) => `${n.node_id}:${n.event_type}`,
+    sort: bySequenceNumber,
+  });
+
 // Buffer streaming deltas and flush on newlines
 // Returns deltas that should be processed immediately
 // Thread-aware: groups deltas by thread and buffers each separately
@@ -550,7 +631,7 @@ function isProtoMessageComplete(msg: Message): boolean {
 
 // Individual chat state
 // Tool call state tracking
-interface ToolCallState {
+export interface ToolCallState {
   id: string;
   sessionId: string;
   toolName: string;
@@ -588,13 +669,15 @@ interface ToolCallState {
 // NORMALIZED STORE STRUCTURE
 // Each piece of chat state is stored separately for optimal Zustand subscriptions
 interface ChatStoreState {
-  // Single source of truth for all chat objects — O(1) lookup by ID
-  chats: Map<string, Chat>;
-  messages: Record<string, Message[]>;
-  approvals: Record<string, ToolApprovalRequest[]>;
-  pendingApprovals: Record<string, ToolApprovalRequest[]>;
+  // Chat objects are homed in the React Query caches (chatKeys.detail /
+  // chatKeys.list) — the single source of truth. Read them via
+  // chat-queries (useChat / getChatFromCache / getCachedChatList).
+  //
+  // Per-chat MESSAGES are likewise homed in the React Query cache
+  // (messageKeys.list) — the single source of truth. Read via useChatMessages /
+  // getMessagesFromCache; write via the message-queries helpers
+  // (setMessagesInCache / patchMessagesCache). There is no messages field here.
   discussMode: Record<string, boolean>;
-  pendingQuestions: Record<string, QuestionInfo | null>;
   errorEvents: Record<string, ErrorUpdate[]>; // Error events from workflow/activity failures
   infoEvents: Record<string, InfoUpdate[]>; // Info notifications (shown to user, not saved to thread)
   runOutputs: Record<string, RunOutputUpdate[]>; // Run step outputs from workflow execution
@@ -603,6 +686,16 @@ interface ChatStoreState {
   // Activity state comes from activityStore, populated by the server's ChatActivity enum
   toolCallStates: Record<string, Map<string, ToolCallState>>;
   streamingMessages: Record<string, Record<string, Message | null> | undefined>; // Currently streaming messages per chat+thread (temporary, replaced by complete message)
+
+  // Delta identity protocol: per-chat set of assistant message ids whose stream
+  // has finalized. Seeded from (a) persisted stream_finalized markers (live +
+  // snapshot replay) and (b) every complete persisted ASSISTANT message id.
+  // Once an id is here, any streaming delta stamped with it is a stale tail and
+  // is dropped BEFORE a placeholder is built — that is what makes the
+  // phantom-at-end-of-chat impossible. Snapshot replaces the set (snapshot
+  // semantics); cleared in evictChat/reset. Deltas without a message_id (old
+  // servers) bypass this entirely and take the legacy thread-keyed path.
+  finalizedStreamIds: Record<string, Set<string>>;
 
   // Context usage tracking for compaction indicator (per chat, per thread)
   contextUsage: Record<
@@ -617,9 +710,12 @@ interface ChatStoreState {
   >;
 
 
-  // Pre-processed message data for fast rendering (indexed by chatId -> messageId)
-  // This cache stores parsed message content to avoid re-parsing on every render/tab switch
-  processedMessages: Record<string, Map<string, ProcessedMessage>>;
+  // Normalized tool results, indexed by chatId -> tool_call_id. Tool results
+  // arrive as separate TOOL-role messages; this index is the single place they
+  // live, and processMessage resolves each tool call's result from it at read
+  // time (the call→result join), instead of embedding results into assistant
+  // message blocks.
+  toolResultsByCallId: Record<string, ToolResultsByCallId>;
 
   // Track which chat is currently active (for UI purposes)
   activeChatId: string | null;
@@ -627,9 +723,6 @@ interface ChatStoreState {
   // Global loading/error states
   hasLoaded: boolean;
   error: string | null;
-
-  // Track chats currently being deleted (to prevent duplicate delete operations)
-  deletingChatIds: Set<string>;
 
   // Track pending status fetches to prevent duplicate API calls
   pendingStatusFetches: Record<string, Promise<unknown>>;
@@ -687,25 +780,10 @@ interface ChatStoreState {
   checkChatStatus: (chatId: string) => Promise<void>;
   dismissChat: (chatId: string) => Promise<void>;
 
-  // Tool approval methods
-  addPendingApproval: (chatId: string, approval: ToolApprovalRequest) => void;
-  approveToolRequest: (
-    chatId: string,
-    requestId: string,
-    actionTaken?: string,
-  ) => Promise<void>;
-  denyToolRequest: (
-    chatId: string,
-    requestId: string,
-    denialReason?: string,
-    actionTaken?: string,
-  ) => Promise<void>;
-  approveAllPending: (chatId: string, actionTaken?: string) => Promise<void>;
-  denyAllPending: (
-    chatId: string,
-    denialReason?: string,
-    actionTaken?: string,
-  ) => Promise<void>;
+  // Tool approvals + pending questions are server data owned by the React
+  // Query cache (see hooks/approval-queries.ts): approve/deny via the mutation
+  // hooks, read via useApprovals / usePendingApprovals / usePendingQuestion.
+  // The chat stream patches that cache directly — no store-side copy here.
 
   // Branch chat
   _navigateToBranchedChat: (newChat: Chat, worktreeId?: string) => void;
@@ -776,6 +854,11 @@ interface ChatStoreState {
   convertToBackground: (chatId: string, toolCallId: string) => Promise<string>;
   getExecutingToolCalls: (chatId: string) => ToolCallState[];
   getIsChatBusy: (chatId: string) => boolean; // Computed busy state
+  // Release ALL retained state for one chat (messages RQ cache + per-chat
+  // Zustand slices + streaming buffers). Called when a chat is deleted or
+  // archived — the caches use gcTime: Infinity, so without this a dead
+  // chat's messages are held until logout.
+  evictChat: (chatId: string) => void;
   reset: () => void;
 }
 
@@ -807,31 +890,25 @@ interface ChatStoreState {
  */
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Initial state
-  chats: new Map<string, Chat>(),
-  messages: {},
-  approvals: {},
-  pendingApprovals: {},
   discussMode: {},
-  pendingQuestions: {},
   errorEvents: {},
   infoEvents: {},
   runOutputs: {},
   nodeExecutions: {},
   toolCallStates: {},
   streamingMessages: {}, // Currently streaming messages per chat+thread
+  finalizedStreamIds: {}, // Delta identity: finalized assistant message ids per chat
   contextUsage: {}, // Context usage tracking for compaction indicator
-  processedMessages: {}, // Pre-processed message data for fast rendering
+  toolResultsByCallId: {}, // Normalized tool results per chat, keyed by tool_call_id
   activeChatId: null,
   hasLoaded: false,
   error: null,
-  deletingChatIds: new Set(),
   pendingStatusFetches: {},
 
   // Load all chats (with singleflight deduplication to prevent parallel API calls)
   loadChats: async () => {
     const projectId = useProjectStore.getState().currentProject?.id;
     if (!projectId) {
-      set({ chats: new Map() });
       return;
     }
 
@@ -844,67 +921,44 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const chatList = response.chats;
         const lastUserUpdateSequence = response.lastUserUpdateSequence;
 
-        // Preserve existing timestamps to prevent reordering on refresh
-        // Only use backend timestamp if it's actually newer (real update)
-        const currentChats = get().chats;
-
-        // Create a map of API chats for deduplication
+        // Index the API chats by id for the activity merge below.
         const apiChatMap = new Map<string, Chat>();
         (chatList || []).forEach((chat: Chat) => {
-          const existingTimestamp = currentChats.get(chat.id)?.updatedAt;
-          // Use existing timestamp to preserve sort order
-          // Backend may update timestamp on read, but we only want to update on actual changes
-          const chatWithTimestamp = existingTimestamp
-            ? { ...chat, updatedAt: existingTimestamp }
-            : chat;
-          apiChatMap.set(chat.id, chatWithTimestamp);
+          apiChatMap.set(chat.id, chat);
         });
 
-        // Get fresh state to catch any optimistically-added chats
-        // This prevents race conditions where createChat adds a chat after we captured currentChats
-        const freshChats = get().chats;
+        set({ hasLoaded: true });
 
-        // Merge: API chats take precedence, but include any optimistically-added chats not yet in API response
-        const mergedChats = new Map<string, Chat>(apiChatMap);
-
-        // Add any optimistically-added chats that aren't in the API response yet
-        for (const [id, chat] of freshChats) {
-          if (!mergedChats.has(id)) {
-            mergedChats.set(id, chat);
-          }
-        }
-
-        set({
-          chats: mergedChats,
-          hasLoaded: true,
-        });
-
-        // Merge activity from ListChats into activityStore.
-        // Guard: protect recent optimistic non-IDLE values from being
-        // downgraded by a server response that may predate the optimistic
-        // set.  Once the anti-downgrade window expires the server value
-        // is authoritative — this prevents permanently-stuck RUNNING
-        // states when a CHAT_ACTIVITY_CHANGED event is missed.
-        const activityState = useActivityStore.getState();
-        const currentActivities = activityState.activities;
-        const merged = new Map(currentActivities);
+        // Home each loaded chat into the React Query detail cache (the single
+        // source of truth read by useChat / useActiveChat). The sidebar list
+        // (chatKeys.list) is owned by useChatList's own fetch — we deliberately
+        // do not write it here, to preserve its ordering. Imperative readers
+        // enumerate that same list cache via getCachedChatList.
         for (const chat of apiChatMap.values()) {
-          const serverActivity = (chat.activity ?? 0) as ChatActivity;
-          if (
-            serverActivity !== ChatActivity.IDLE ||
-            !activityState.isFreshNonIdle(chat.id)
-          ) {
-            merged.set(chat.id, serverActivity);
-          }
+          seedChatDetail(chat);
         }
+
+        // Merge activity from ListChats into activityStore. Per-entry
+        // precedence is decided by sequence ordering inside the store: the
+        // envelope's lastUserUpdateSequence is the snapshot's freshness
+        // watermark, so a list value only overwrites an entry set by a
+        // stream event / optimistic write with a newer-or-equal seq claim.
+        const serverActivities = new Map<string, ChatActivity>();
+        for (const chat of apiChatMap.values()) {
+          serverActivities.set(chat.id, (chat.activity ?? 0) as ChatActivity);
+        }
+        useActivityStore
+          .getState()
+          .applyListActivities(serverActivities, lastUserUpdateSequence);
         // Remove entries for chats no longer returned by the server
-        // (deleted or moved to another project)
-        for (const chatId of merged.keys()) {
-          if (!apiChatMap.has(chatId) && !freshChats.has(chatId)) {
-            merged.delete(chatId);
+        // (deleted or moved to another project). An optimistically-created
+        // chat may not be in the server list yet but is already homed in the
+        // detail cache — keep its activity in that case.
+        for (const chatId of [...useActivityStore.getState().activities.keys()]) {
+          if (!apiChatMap.has(chatId) && !getChatFromCache(chatId)) {
+            useActivityStore.getState().removeActivity(chatId);
           }
         }
-        useActivityStore.getState().setActivities(merged);
 
         // Store the user update sequence for stream sync.
         // This must happen BEFORE globalUpdatesStore.connect() so the
@@ -962,19 +1016,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     const chatId = chat.id;
 
-    // Add to chats map (if not already present)
-    // The chat might already be in the map if the chat_created event arrived
-    // and triggered loadChats() before this code resumed after await
-    set((state) => {
-      if (state.chats.has(chatId)) {
-        return state;
-      }
-      const newChats = new Map(state.chats);
-      newChats.set(chatId, chat);
-      return {
-        chats: newChats,
-      };
-    });
+    // Home the new chat into the React Query detail cache immediately so
+    // useChat / useActiveChat show it without waiting for a list refetch.
+    seedChatDetail(chat);
 
     // Initialize state for the new chat
     get().initChatState(chat);
@@ -1001,12 +1045,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           optimisticAttachments.length > 0 ? optimisticAttachments : [],
       };
 
-      set((state) => ({
-        messages: {
-          ...state.messages,
-          [chatId]: [optimisticUserMessage],
-        },
-      }));
+      // Seed the optimistic user message into the RQ message cache (the single
+      // source of truth) so the UI shows it immediately.
+      setMessagesInCache(chatId, [optimisticUserMessage]);
     }
 
     // Optimistically mark as RUNNING so the thinking indicator shows immediately
@@ -1027,27 +1068,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   initChatState: (chat: Chat) => {
     const chatId = chat.id;
 
+    // Skip if already initialized — presence of a message-list cache entry for
+    // this chat is the init marker (created here and preserved thereafter).
+    if (hasMessagesCache(chatId)) {
+      // Still ensure the Chat object is homed below.
+      seedChatDetail(chat);
+      return;
+    }
+
+    // Seed the RQ message cache as the per-chat init marker (empty list).
+    setMessagesInCache(chatId, []);
+
     // Use callback form of set() to ensure we're working with fresh state
     // This prevents race conditions when multiple state updates happen in sequence
-    set((state) => {
-      // Skip if already initialized
-      if (state.chats.has(chatId)) {
-        return state;
-      }
+    set((state) => ({
+      toolCallStates: { ...state.toolCallStates, [chatId]: new Map() },
+      toolResultsByCallId: { ...state.toolResultsByCallId, [chatId]: {} },
+    }));
 
-      // Store chat in the Map
-      const newChats = new Map(state.chats);
-      newChats.set(chatId, chat);
-
-      return {
-        chats: newChats,
-        messages: { ...state.messages, [chatId]: [] },
-        approvals: { ...state.approvals, [chatId]: [] },
-        pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
-        toolCallStates: { ...state.toolCallStates, [chatId]: new Map() },
-        processedMessages: { ...state.processedMessages, [chatId]: new Map() },
-      };
-    });
+    // Home the Chat object into the React Query detail cache (the single source
+    // of truth read by useChat / useActiveChat).
+    seedChatDetail(chat);
 
     // Activity is NOT synced here. The authoritative paths are:
     // 1. loadChats (merge into activityStore on initial load / project switch)
@@ -1070,20 +1111,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-enter", {
         chatId: chat.id,
-        messageCount: get().messages[chat.id]?.length || 0,
-        hasProcessedMessages: !!get().processedMessages[chat.id]?.size,
+        messageCount: getMessagesFromCache(chat.id).length,
+        hasMessages: getMessagesFromCache(chat.id).length > 0,
       });
     }
 
-    const { activeChatId, chats } = get();
+    const { activeChatId } = get();
 
     // If already selected, don't reload
     if (activeChatId === chat.id) {
       return;
     }
 
-    // Check if this is a new chat or existing one
-    const isNewChat = !chats.has(chat.id);
+    // Check if this is a new chat or an already-initialized one. Presence of a
+    // message-list cache entry is the per-chat init marker (see initChatState).
+    const isNewChat = !hasMessagesCache(chat.id);
 
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-check-state", { isNewChat });
@@ -1100,13 +1142,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
     } else {
       // NOTE: auto_approve and is_planning_mode are now local state only (removed from backend)
-      // Update chats Map with the chat info
-      // Mode is tracked in chatParamsStore, not on chat object
-      set((state) => {
-        const newChats = new Map(state.chats);
-        newChats.set(chat.id, chat);
-        return { chats: newChats };
-      });
+      // Mode is tracked in chatParamsStore, not on chat object.
+      // Refresh the React Query detail cache with the selected chat object.
+      seedChatDetail(chat);
     }
 
     // Set as active and clear pending new chat worktree
@@ -1138,16 +1176,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         .addToChatQueue(projectId, currentWorktreeId, chat.id);
     }
 
-    // Initialize state for new chats that don't have message data yet.
-    if (isNewChat) {
-      const state = get();
-      const chatId = chat.id;
-      set({
-        messages: { ...state.messages, [chatId]: [] },
-        approvals: { ...state.approvals, [chatId]: [] },
-        pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
-      });
-    } else {
+    // New chats already had their empty message-list cache seeded by
+    // initChatState above (the init marker); nothing more to do here.
+    if (!isNewChat) {
       // For existing chats with cached data, preserve messages and approvals
       // Activity state is managed by activityStore (populated by server events)
       // They will be refreshed by the async loads below
@@ -1155,8 +1186,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         const chatId = chat.id;
         const state = get();
         tabSwitchProfiler.mark("existing-chat-reuse-state", {
-          messagesCount: state.messages[chatId]?.length || 0,
-          processedCount: state.processedMessages[chatId]?.size || 0,
+          messagesCount: getMessagesFromCache(chatId).length,
+          toolResultsCount: Object.keys(
+            state.toolResultsByCallId[chatId] || {},
+          ).length,
         });
       }
     }
@@ -1212,49 +1245,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
     })();
 
-    // Load pending approvals from API (fire-and-forget)
-    // This ensures we have fresh approval state even if WebSocket missed updates
-    // The API (ListPendingApprovalsByChat) only returns pending approvals
-    void (async () => {
-      try {
-        const pendingApprovals = await api.approvals.listByChat(
-          chat.id,
-        );
-        const state = get();
-        set({
-          pendingApprovals: {
-            ...state.pendingApprovals,
-            [chat.id]: pendingApprovals,
-          },
-        });
-        logger.debug("[ChatStore] Loaded pending approvals", {
-          chatId: chat.id.slice(0, 8),
-          count: pendingApprovals.length,
-        });
-      } catch (error) {
-        logger.error("[ChatStore] Failed to load approvals:", error);
-        Sentry.captureMessage('Failed to load approvals', {
-          level: 'warning',
-          tags: { component: 'chat', operation: 'load_approvals' },
-        });
-      }
-    })();
-
-    // Load pending question for this chat (fire-and-forget)
-    void (async () => {
-      try {
-        const pendingQuestion = await questionGrpc.getPendingQuestion(chat.id);
-        const state = get();
-        set({
-          pendingQuestions: {
-            ...state.pendingQuestions,
-            [chat.id]: pendingQuestion,
-          },
-        });
-      } catch (error) {
-        logger.error("[ChatStore] Failed to load pending question:", error);
-      }
-    })();
+    // Pending approvals and the pending question are server data owned by the
+    // React Query cache: useApprovals / usePendingApprovals / usePendingQuestion
+    // fetch them on mount and the chat stream patches the cache live (see
+    // approval-queries.ts). No store-side prefetch needed here.
 
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-end");
@@ -1308,8 +1302,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       discuss?: boolean;
     },
   ) => {
-    const state = get();
-    if (!state.chats.has(chatId)) {
+    if (!getChatFromCache(chatId)) {
       throw new Error(`No state for chat ${chatId}`);
     }
 
@@ -1344,20 +1337,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           optimisticAttachments.length > 0 ? optimisticAttachments : [],
       };
 
-      set((state) => {
-        // Update chat timestamp when message is sent so it moves to top of list
-        const existing = state.chats.get(chatId);
-        const newChats = existing
-          ? new Map(state.chats).set(chatId, { ...existing, updatedAt: new Date().toISOString() })
-          : state.chats;
-        return {
-          chats: newChats,
-          // Add optimistic user message to ensure correct layer grouping
-          messages: {
-            ...state.messages,
-            [chatId]: [...(state.messages[chatId] || []), optimisticUserMessage],
-          },
-        };
+      // Append the optimistic user message to the RQ message cache (the single
+      // source of truth) to ensure correct layer grouping. It is replaced by
+      // the real message when it arrives via the gRPC stream (matched/removed
+      // by the "optimistic-user-" id prefix in processChatStreamUpdates).
+      patchMessagesCache(chatId, (msgs) => [...msgs, optimisticUserMessage]);
+      // Bump the chat timestamp when a message is sent, in the React Query
+      // DETAIL cache only (projectId omitted → list untouched). The sidebar
+      // renders from the RQ list, so patching the list would newly reorder
+      // chats on send. Detail is the only surface a useChat consumer observes.
+      patchChatCaches(undefined, chatId, {
+        updatedAt: new Date().toISOString(),
       });
 
       // Use V2 message endpoint (no project ID required)
@@ -1392,7 +1382,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       logger.log("Message sent successfully:", response);
 
-      const existingMessages = get().messages[chatId] || [];
+      const existingMessages = getMessagesFromCache(chatId);
       const isFirstInChat = existingMessages.filter(
         (m) => m.role === MessageRole.USER && !m.id.startsWith("optimistic-"),
       ).length === 0;
@@ -1409,34 +1399,22 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Optimistically update chat workflow_name if workflow changed
       // Note: Agent is now a workflow param, not stored on chat - no optimistic update needed
       if (options?.workflow !== undefined && options.workflow) {
-        set((state) => {
-          const currentChat = state.chats.get(chatId);
-          if (!currentChat) return state;
-
-          const newChats = new Map(state.chats);
-          newChats.set(chatId, { ...currentChat, workflowName: options.workflow ?? undefined });
-          return { chats: newChats };
-        });
+        // Patch the RQ caches (list + detail) — workflowName is surfaced in the
+        // sidebar and ChatInput, matching handleChatConfigChanged.
+        patchChatCaches(
+          useProjectStore.getState().currentProject?.id,
+          chatId,
+          { workflowName: options.workflow ?? undefined }
+        );
       }
 
-      // Update workflow metadata from response so Temporal links stay current
+      // Update workflow metadata from response so Temporal links stay current.
+      // Patch the RQ DETAIL cache only — these are detail-level links, never
+      // rendered in the sidebar list.
       if (response.workflowId || response.runId) {
-        set((state) => {
-          const currentChat = state.chats.get(chatId);
-          if (!currentChat) return state;
-
-          const newChats = new Map(state.chats);
-          newChats.set(chatId, {
-            ...currentChat,
-            ...(response.workflowId
-              ? { workflowId: response.workflowId }
-              : {}),
-            ...(response.runId
-              ? { runId: response.runId }
-              : {}),
-          } as Chat);
-
-          return { chats: newChats };
+        patchChatCaches(undefined, chatId, {
+          ...(response.workflowId ? { workflowId: response.workflowId } : {}),
+          ...(response.runId ? { runId: response.runId } : {}),
         });
       }
 
@@ -1491,33 +1469,54 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // PERFORMANCE: Pre-process all messages for fast rendering on tab switches
       // This is critical - without this, each ChatMessage parses JSON on every render
       // which causes 800ms+ delays when switching to chats with many messages
-      const approvals = state.approvals[chatId] || [];
-      const existingProcessed = state.processedMessages[chatId] || new Map();
-      const newProcessedMessages = new Map(existingProcessed);
-
-      // Process each message that isn't already processed
-      // Use processMessage directly (matching WebSocket handler)
+      const approvals =
+        queryClient.getQueryData<ToolApprovalRequest[]>(
+          approvalKeys.list(chatId),
+        ) ?? [];
+      // Build the normalized tool-result index from the loaded TOOL messages,
+      // merged over anything already known for this chat, so processMessage can
+      // resolve call→result the same way the live stream path does. (Loaded
+      // assistant messages may also carry a backend-embedded matchedResult;
+      // processMessage falls back to that when the index has no entry.)
+      const loadedToolResults: ToolResultsByCallId = {
+        ...(state.toolResultsByCallId[chatId] || {}),
+      };
       for (const message of messages) {
-        if (!newProcessedMessages.has(message.id)) {
-          const processed = processMessage(message, approvals);
-          newProcessedMessages.set(message.id, processed);
+        if (message.role !== MessageRole.TOOL) continue;
+        for (const block of message.contentBlocks || []) {
+          if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
+            loadedToolResults[block.toolCallId] = {
+              content: block.content || "",
+              is_error: block.isError,
+              tool_name: block.toolName,
+            };
+          }
         }
       }
 
+      // Warm the reference-keyed processMessage memo so the first render after
+      // a tab switch reads cached parses instead of reparsing every message —
+      // the performance reason this pre-pass exists. The memo (not a store
+      // field) is now the parsed cache.
+      for (const message of messages) {
+        getProcessedMessage(message, loadedToolResults, approvals);
+      }
+
       logger.info(
-        `[ChatStore] Pre-processed ${newProcessedMessages.size} messages for fast rendering`,
+        `[ChatStore] Pre-processed ${messages.length} messages for fast rendering`,
         {
           chatId: chatId.slice(0, 8),
           loadedCount: messages.length,
-          processedCount: newProcessedMessages.size,
         },
       );
 
+      // Seed/replace the RQ message cache (the single source of truth) with the
+      // loaded list; the tool-result index stays in Zustand.
+      setMessagesInCache(chatId, messages);
       set({
-        messages: { ...state.messages, [chatId]: messages },
-        processedMessages: {
-          ...state.processedMessages,
-          [chatId]: newProcessedMessages,
+        toolResultsByCallId: {
+          ...state.toolResultsByCallId,
+          [chatId]: loadedToolResults,
         },
       });
     } catch (error) {
@@ -1550,11 +1549,30 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
       }
 
+      // Delta identity: all deltas in a thread group carry the same
+      // pre-allocated message id. Capture it so the placeholder can adopt the
+      // real id instead of a fabricated streaming-temp-* one.
+      let deltaMessageId: string | undefined;
+      for (const delta of deltas) {
+        if (delta.message_id) {
+          deltaMessageId = delta.message_id;
+          break;
+        }
+      }
+
       if (currentMsg && currentMsg.contentBlocks) {
         contentBlocks = [...currentMsg.contentBlocks] as Array<ContentBlock & { status?: string }>;
       }
 
       for (const delta of deltas) {
+        if (delta.delta_type === "message_start") {
+          // A CallLLM retry re-streams the same message id from block 0. Reset
+          // the placeholder's blocks so stale attempt-N content doesn't linger
+          // beside the fresh attempt's blocks.
+          contentBlocks = [];
+          continue;
+        }
+
         if (
           delta.delta_type === "thinking_block_start" ||
           delta.delta_type === "thinking_block_delta"
@@ -1631,8 +1649,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
 
       const normalizedThread = normalizeThreadKey(chatId, thread);
+      // Placeholder identity: prefer the server's pre-allocated message id, then
+      // an existing placeholder's id, then the legacy thread-keyed sentinel.
+      // With a real id present the fabricated streaming-temp-* id — and the
+      // phantom it enabled — is gone.
       const streamingId =
-        currentMsg?.id || `streaming-temp-${normalizedThread}`;
+        deltaMessageId || currentMsg?.id || `streaming-temp-${normalizedThread}`;
 
       const streamingMsg: Message = {
         id: streamingId,
@@ -1729,6 +1751,47 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           (u): u is StreamingDelta => u.update_type === "streaming_delta",
         );
 
+        // Extract stream_finalized markers (delta identity protocol). Emitted
+        // exactly once per allocated assistant message id when its stream ends
+        // (success/abort/cancel), riding the persisted+sequenced channel.
+        const streamFinalizedUpdates = updates.filter(
+          (u): u is StreamFinalizedUpdate => u.update_type === "stream_finalized",
+        );
+
+        // Ids finalized by THIS batch's markers — not yet committed to state, so
+        // union them into the drop check for the same-batch marker+tail case.
+        const batchFinalizedIds = new Set<string>();
+        for (const u of streamFinalizedUpdates) {
+          if (u.message_id) batchFinalizedIds.add(u.message_id);
+        }
+
+        // Delta identity: an assistant message id is "finalized" once its stream
+        // ended. Reads live state each call (so the buffered-flush path sees a
+        // finalization that landed after buffering), plus a persisted-message
+        // backstop for old-server skew. Deltas without a message_id never match.
+        const isFinalizedId = (id: string | undefined): boolean => {
+          if (!id) return false;
+          if (get().finalizedStreamIds[chatId]?.has(id)) return true;
+          return getMessagesFromCache(chatId).some(
+            (m) =>
+              m.id === id &&
+              m.role === MessageRole.ASSISTANT &&
+              isProtoMessageComplete(m),
+          );
+        };
+
+        // THE DROP RULE: a delta stamped with a finalized id is a stale tail —
+        // drop it BEFORE buffering so it can never fabricate a placeholder. This
+        // is what makes the phantom-at-end-of-chat impossible when message_id is
+        // present. Id-less deltas (old servers) pass through to the legacy path.
+        const liveStreamingDeltas = rawStreamingDeltas.filter(
+          (d) =>
+            !(
+              isFinalizedId(d.message_id) ||
+              (d.message_id ? batchFinalizedIds.has(d.message_id) : false)
+            ),
+        );
+
         // Buffer streaming deltas and flush on newlines to reduce re-renders
         // This batches char-by-char content_block_delta events until we hit a newline
         // Thread-aware: each thread has its own buffer and streaming message
@@ -1751,27 +1814,33 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               return;
             }
 
-            // Process buffered deltas asynchronously (they were delayed by the buffer timeout)
-            const threadKey = normalizeThreadKey(chatId, thread);
-            const chatStreaming = get().streamingMessages[chatId] || {};
-            let currentStreamingMsg = chatStreaming[threadKey] || null;
-
-            // If the existing streaming message is already finished (cancelled),
-            // clear it before processing new deltas - don't build on stale content
-            if (currentStreamingMsg?.streamingState === StreamingState.COMPLETE) {
+            // Delta identity: finalization can land between buffering and flush.
+            // Re-apply the drop rule here so a marker (or persisted message) that
+            // arrived in the interim retires the buffered tail instead of
+            // flushing a placeholder for an already-finalized id.
+            const flushDeltas = bufferedDeltas.filter(
+              (d) => !isFinalizedId(d.message_id),
+            );
+            if (flushDeltas.length === 0) {
               logger.debug(
-                "[Streaming] Clearing finished streaming message before buffered flush",
+                "[Streaming] Skipping buffered flush - deltas finalized before flush",
                 {
                   chatId: chatId.slice(0, 8),
-                  thread: threadKey.slice(0, 8),
-                  oldMsgId: currentStreamingMsg.id,
+                  thread: thread?.slice(0, 8),
                 },
               );
-              currentStreamingMsg = null;
+              return;
             }
 
+            // Process buffered deltas asynchronously (they were delayed by the buffer timeout)
+            const threadKey = normalizeThreadKey(chatId, thread);
+            const currentStreamingMsg = resolveStreamingBase(
+              get().streamingMessages[chatId],
+              threadKey,
+            );
+
             const flushedMsg = processStreamingDeltas(
-              bufferedDeltas,
+              flushDeltas,
               currentStreamingMsg,
             );
             if (flushedMsg) {
@@ -1790,7 +1859,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
         const streamingDeltas = bufferStreamingDeltas(
           chatId,
-          rawStreamingDeltas,
+          liveStreamingDeltas,
           handleBufferedFlush,
         );
 
@@ -1855,7 +1924,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           runOutputUpdates.length > 0 ||
           nodeExecutionUpdates.length > 0 ||
           toolCallUpdates.length > 0 ||
-          allToolExecutionUpdates.length > 0;
+          allToolExecutionUpdates.length > 0 ||
+          // stream_finalized markers must reach the commit below so the
+          // finalized-id set is seeded and any matching placeholder retired.
+          streamFinalizedUpdates.length > 0;
 
         // If we only have raw streaming deltas and they all got buffered (no immediate deltas),
         // skip the main state update - the buffered flush will handle it later
@@ -1902,21 +1974,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           const chatStreaming = get().streamingMessages[chatId] || {};
           for (const [thread, threadDeltas] of deltasByThread) {
             const threadKey = normalizeThreadKey(chatId, thread);
-            let currentStreamingMsg = chatStreaming[threadKey] || null;
-
-            // If the existing streaming message is already finished (cancelled),
-            // clear it before processing new deltas - don't build on stale content
-            if (currentStreamingMsg?.streamingState === StreamingState.COMPLETE) {
-              logger.debug(
-                "[Streaming] Clearing finished streaming message before new stream",
-                {
-                  chatId: chatId.slice(0, 8),
-                  thread: threadKey.slice(0, 8),
-                  oldMsgId: currentStreamingMsg.id,
-                },
-              );
-              currentStreamingMsg = null;
-            }
+            const currentStreamingMsg = resolveStreamingBase(
+              chatStreaming,
+              threadKey,
+            );
 
             const processedMsg = processStreamingDeltas(
               threadDeltas,
@@ -1936,21 +1997,23 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
 
         // Cross-match tool results with tool calls across all messages
-        // First pass: collect all tool_results from tool messages in this update batch
-        // messageUpdates are now proto Message objects (camelCase fields)
-        const batchToolResultsMap = new Map<
-          string,
-          { content: string; is_error?: boolean; tool_name?: string }
-        >();
+        // First pass: collect all tool_results from tool messages in this
+        // update batch into a normalized index keyed by tool_call_id. Tool
+        // results arrive as separate TOOL-role messages; rather than embedding
+        // them into the assistant message's TOOL_CALL blocks (a second join on
+        // top of processMessage's internal one), we merge them into a per-chat
+        // index and let processMessage resolve call→result at read time.
+        // messageUpdates are proto Message objects (camelCase fields).
+        const batchToolResults: ToolResultsByCallId = {};
         messageUpdates.forEach((protoMsg) => {
           if (protoMsg.role === MessageRole.TOOL) {
             protoMsg.contentBlocks.forEach((block) => {
               if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
-                batchToolResultsMap.set(block.toolCallId, {
+                batchToolResults[block.toolCallId] = {
                   content: block.content || "",
                   is_error: block.isError,
                   tool_name: block.toolName,
-                });
+                };
               }
             });
           }
@@ -1972,766 +2035,525 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           return converted;
         };
 
-        // Helper to embed matchedResult in tool_call blocks
-        const embedMatchedResults = (
-          msg: Message,
-        ): Message => {
-          if (msg.role !== MessageRole.ASSISTANT) {
-            return msg;
-          }
-          const enhancedBlocks = (msg.contentBlocks || []).map((block) => {
-            if (block.type === ContentBlockType.TOOL_CALL && block.toolCallId) {
-              const matchedResult = batchToolResultsMap.get(block.toolCallId);
-              if (matchedResult) {
-                return {
-                  ...block,
-                  matchedResult: {
-                    toolCallId: block.toolCallId,
-                    type: "tool_result",
-                    name: matchedResult.tool_name || block.toolName || "",
-                    content: matchedResult.content,
-                    isError: matchedResult.is_error || false,
-                  },
-                };
-              }
-            }
-            return block;
-          });
-          return {
-            ...msg,
-            contentBlocks: enhancedBlocks,
-          } as Message;
-        };
+        const messages: Message[] = messageUpdates.map(convertProtoMsg);
 
-        // Convert proto messages and embed matched results
-        const messages: Message[] = messageUpdates.map((msg) =>
-          embedMatchedResults(convertProtoMsg(msg)),
-        );
-
-        // Track which threads have complete messages BEFORE the set() call
-        // This is needed for clearing streaming buffers after state update
-        const completedThreadsForBufferClear = new Set<string>();
+        // Threads whose stream finalized in this batch (a complete assistant
+        // message arrived). Computed once here and captured by the set()
+        // closure below; also used after set() to clear streaming buffers.
+        const completedThreads = new Set<string>();
         messages.forEach((m) => {
           if (m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m)) {
-            const threadKey = normalizeThreadKey(chatId, m.thread);
-            completedThreadsForBufferClear.add(threadKey);
+            completedThreads.add(normalizeThreadKey(chatId, m.thread));
           }
         });
 
-        set((state) => {
-          // Initialize chats Map if this chat doesn't exist (can happen if snapshot arrives before initChatState)
-          let chatsMap = state.chats;
-          if (!chatsMap.has(chatId)) {
-            logger.warn(
-              "[ChatStore] Received updates for uninitialized chat, initializing now",
-              {
-                chatId: chatId.slice(0, 8),
-                messageCount: messages.length,
-              },
-            );
-            // Create minimal chat data to allow messages to be stored
-            // The full chat data will be loaded separately
-            const minimalChat: Chat = {
-              id: chatId,
-              userId: "",
-              title: "",
-              projectId: useProjectStore.getState().currentProject?.id || "",
-              state: ChatState.IDLE,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-              lastActive: new Date().toISOString(),
-            } as Chat;
-            chatsMap = new Map(chatsMap);
-            chatsMap.set(chatId, minimalChat);
+        // Delta identity: assistant message ids finalized by THIS batch, from
+        // both channels — persisted stream_finalized markers and every complete
+        // persisted assistant message (redundancy + old-server skew).
+        const newlyFinalizedIds = new Set<string>(batchFinalizedIds);
+        messages.forEach((m) => {
+          if (m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m) && m.id) {
+            newlyFinalizedIds.add(m.id);
           }
+        });
 
-          // CRITICAL FIX: Read fresh state to avoid race condition
-          // Multiple rapid WebSocket updates can cause stale state reads
-          // Using get() ensures we see the latest messages, not the state captured
-          // when this set() callback was queued
-          const freshState = get();
+        // The Chat object is homed in the React Query cache, not here — a
+        // snapshot arriving before the chat is loaded no longer needs a
+        // fabricated placeholder. Messages are stored independently below;
+        // the real Chat lands via the detail/list query.
+        //
+        // Everything below is computed synchronously (no awaits between this
+        // read and the set() that commits, and batches are synchronous), then
+        // committed in ONE set(), with the external-store / RQ-cache side
+        // effects applied after the commit.
+        const state = get();
 
-          // Check if we received a complete assistant message (replaces streaming)
-          const hasCompleteAssistantMessage = messages.some(
-            (m) => m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m),
-          );
+        // Check if we received a complete assistant message (replaces streaming)
+        const hasCompleteAssistantMessage = messages.some(
+          (m) => m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m),
+        );
 
-          // SNAPSHOT vs INCREMENTAL message handling:
-          // Snapshots REPLACE all messages to prevent cross-chat contamination.
-          // Incremental updates MERGE with existing messages.
-          let updatedMessages: Message[];
+        // SNAPSHOT vs INCREMENTAL: snapshot replaces the list (cross-chat /
+        // stale contamination guard), incremental upserts by id. Current
+        // messages come from the RQ cache (single source of truth); reads are
+        // synchronous and setQueryData commits synchronously, so this sees the
+        // latest merged array — same freshness the old get()-based read had.
+        if (isSnapshot) {
+          logger.info("[ChatStore] Snapshot: replacing messages for chat", {
+            chatId: chatId.slice(0, 8),
+            snapshotCount: messages.length,
+            previousCount: getMessagesFromCache(chatId).length,
+          });
+        }
+        let updatedMessages = mergeMessages(
+          getMessagesFromCache(chatId),
+          messages,
+          isSnapshot,
+        );
 
-          if (isSnapshot) {
-            // Snapshot: replace entirely with the snapshot's messages
-            logger.info("[ChatStore] Snapshot: replacing messages for chat", {
-              chatId: chatId.slice(0, 8),
-              snapshotCount: messages.length,
-              previousCount: (freshState.messages[chatId] || []).length,
-            });
-            updatedMessages = [...messages];
-          } else {
-            // Incremental: merge with existing messages
-            const existingMessages = freshState.messages[chatId] || [];
-            updatedMessages = [...existingMessages];
+        // Merge this batch's tool results into the per-chat normalized
+        // index. Results arrive as their own TOOL messages, often in a later
+        // batch than the assistant tool call — carrying them in a chat-level
+        // index (rather than re-embedding into already-stored assistant
+        // blocks) is what makes "late results" attach on the next read
+        // without mutating the assistant message.
+        const updatedToolResults: ToolResultsByCallId = {
+          ...(isSnapshot ? {} : state.toolResultsByCallId[chatId] || {}),
+          ...batchToolResults,
+        };
 
-            // Check if we received a real user message (replaces optimistic)
-            const hasRealUserMessage = messages.some(
-              (m) => m.role === MessageRole.USER && !m.id.startsWith("optimistic-user-"),
-            );
+        // Gather all streaming messages: newly processed ones merged with existing ones
+        // Thread-aware: each thread can have its own streaming message
+        const existingChatStreaming =
+          state.streamingMessages[chatId] || {};
+        const mergedStreamingMsgs = new Map<string, Message>();
 
-            // Remove optimistic user message if a real user message arrived
-            if (hasRealUserMessage) {
-              updatedMessages = updatedMessages.filter(
-                (m) => !m.id.startsWith("optimistic-user-"),
-              );
-            }
-
-            messages.forEach((newMessage) => {
-              const existingIndex = updatedMessages.findIndex(
-                (m) => m.id === newMessage.id,
-              );
-
-              if (existingIndex >= 0) {
-                // Update existing message
-                updatedMessages[existingIndex] = newMessage;
-              } else {
-                // Add new message
-                updatedMessages.push(newMessage);
-              }
-            });
-          }
-
-          // Cross-match tool results with existing assistant messages
-          // This handles the case where tool results arrive after the assistant message
-          // Track which messages were modified so we can reprocess them for the processedMessages cache
-          const crossMatchedMessageIds = new Set<string>();
-          if (batchToolResultsMap.size > 0) {
-            updatedMessages = updatedMessages.map((msg) => {
-              if (msg.role !== MessageRole.ASSISTANT) return msg;
-
-              const blocks = msg.contentBlocks || [];
-              let modified = false;
-
-              const updatedBlocks = blocks.map((block) => {
-                if (
-                  block.type === ContentBlockType.TOOL_CALL &&
-                  block.toolCallId &&
-                  !block.matchedResult
-                ) {
-                  const matchedResult = batchToolResultsMap.get(block.toolCallId);
-                  if (matchedResult) {
-                    modified = true;
-                    return {
-                      ...block,
-                      matchedResult: {
-                        toolCallId: block.toolCallId,
-                        type: "tool_result",
-                        name: matchedResult.tool_name || block.toolName || "",
-                        content: matchedResult.content,
-                        isError: matchedResult.is_error || false,
-                      },
-                    };
-                  }
-                }
-                return block;
-              });
-
-              if (modified) {
-                crossMatchedMessageIds.add(msg.id);
-                return {
-                  ...msg,
-                  contentBlocks: updatedBlocks,
-                };
-              }
-              return msg;
-            });
-          }
-
-          // Gather all streaming messages: newly processed ones merged with existing ones
-          // Thread-aware: each thread can have its own streaming message
-          // CRITICAL: Use freshState to avoid race condition with stale state
-          const existingChatStreaming =
-            freshState.streamingMessages[chatId] || {};
-          const mergedStreamingMsgs = new Map<string, Message>();
-
-          // Start with existing streaming messages
-          for (const [threadKey, msg] of Object.entries(
-            existingChatStreaming,
-          )) {
-            if (msg) {
-              mergedStreamingMsgs.set(threadKey, msg);
-            }
-          }
-
-          // Override with newly processed streaming messages
-          for (const [threadKey, msg] of processedStreamingMsgs) {
+        // Start with existing streaming messages
+        for (const [threadKey, msg] of Object.entries(
+          existingChatStreaming,
+        )) {
+          if (msg) {
             mergedStreamingMsgs.set(threadKey, msg);
           }
+        }
 
-          // Track which threads have complete assistant messages
-          const completedThreads = new Set<string>();
-          messages.forEach((m) => {
-            if (m.role === MessageRole.ASSISTANT && isProtoMessageComplete(m)) {
-              const threadKey = normalizeThreadKey(chatId, m.thread);
-              completedThreads.add(threadKey);
-            }
-          });
+        // Override with newly processed streaming messages
+        for (const [threadKey, msg] of processedStreamingMsgs) {
+          mergedStreamingMsgs.set(threadKey, msg);
+        }
 
-          // If we received complete messages, handle streaming cleanup for those threads
-          if (completedThreads.size > 0) {
-            logger.debug(
-              "[Streaming] Complete messages received, cleaning up streaming for threads",
-              {
-                chatId: chatId.slice(0, 8),
-                completedThreads: [...completedThreads].map((t) =>
-                  t.slice(0, 8),
-                ),
-              },
-            );
+        // completedThreads (threads finalized in this batch) is computed
+        // once above and captured here.
+        // If we received complete messages, handle streaming cleanup for those threads
+        if (completedThreads.size > 0) {
+          logger.debug(
+            "[Streaming] Complete messages received, cleaning up streaming for threads",
+            {
+              chatId: chatId.slice(0, 8),
+              completedThreads: [...completedThreads].map((t) =>
+                t.slice(0, 8),
+              ),
+            },
+          );
 
-            // For each completed thread, handle cancelled tool preservation and remove streaming
-            for (const threadKey of completedThreads) {
-              // Find streaming-temp message for this thread
-              const streamingMsg = mergedStreamingMsgs.get(threadKey);
-              if (
-                streamingMsg &&
-                streamingMsg.id.startsWith("streaming-temp")
-              ) {
-                const streamingBlocks = streamingMsg.contentBlocks || [];
-                const cancelledBlocks = streamingBlocks.filter(
-                  (block: ContentBlock & { status?: string }) =>
-                    block.type === ContentBlockType.TOOL_CALL &&
-                    block.status === "cancelled",
+          // For each completed thread, handle cancelled tool preservation and remove streaming
+          for (const threadKey of completedThreads) {
+            // The slice only ever holds the ephemeral placeholder for this
+            // thread; preserve any tool calls it captured as cancelled.
+            const streamingMsg = mergedStreamingMsgs.get(threadKey);
+            if (streamingMsg) {
+              const streamingBlocks = streamingMsg.contentBlocks || [];
+              const cancelledBlocks = streamingBlocks.filter(
+                (block: ContentBlock & { status?: string }) =>
+                  block.type === ContentBlockType.TOOL_CALL &&
+                  block.status === "cancelled",
+              );
+
+              if (cancelledBlocks.length > 0) {
+                logger.debug(
+                  "[Streaming] Preserving cancelled tool calls from streaming message",
+                  {
+                    chatId: chatId.slice(0, 8),
+                    thread: threadKey.slice(0, 8),
+                    cancelledCount: cancelledBlocks.length,
+                  },
                 );
 
-                if (cancelledBlocks.length > 0) {
-                  logger.debug(
-                    "[Streaming] Preserving cancelled tool calls from streaming message",
-                    {
-                      chatId: chatId.slice(0, 8),
-                      thread: threadKey.slice(0, 8),
-                      cancelledCount: cancelledBlocks.length,
-                    },
+                // Find the complete assistant message for this thread and merge cancelled blocks
+                updatedMessages = updatedMessages.map((msg) => {
+                  const msgThreadKey = normalizeThreadKey(
+                    chatId,
+                    msg.thread,
                   );
-
-                  // Find the complete assistant message for this thread and merge cancelled blocks
-                  updatedMessages = updatedMessages.map((msg) => {
-                    const msgThreadKey = normalizeThreadKey(
-                      chatId,
-                      msg.thread,
+                  if (
+                    msg.role === MessageRole.ASSISTANT &&
+                    isProtoMessageComplete(msg) &&
+                    msgThreadKey === threadKey
+                  ) {
+                    const existingIds = new Set(
+                      (msg.contentBlocks || []).map((b) => b.id),
                     );
-                    if (
-                      msg.role === MessageRole.ASSISTANT &&
-                      isProtoMessageComplete(msg) &&
-                      !msg.id.startsWith("streaming-temp") &&
-                      msgThreadKey === threadKey
-                    ) {
-                      const existingIds = new Set(
-                        (msg.contentBlocks || []).map((b) => b.id),
-                      );
-                      const newCancelledBlocks = cancelledBlocks.filter(
-                        (cb: any) => !existingIds.has(cb.id),
-                      );
-                      if (newCancelledBlocks.length > 0) {
-                        return {
-                          ...msg,
-                          contentBlocks: [
-                            ...(msg.contentBlocks || []),
-                            ...newCancelledBlocks,
-                          ],
-                        };
-                      }
+                    const newCancelledBlocks = cancelledBlocks.filter(
+                      (cb: any) => !existingIds.has(cb.id),
+                    );
+                    if (newCancelledBlocks.length > 0) {
+                      return {
+                        ...msg,
+                        contentBlocks: [
+                          ...(msg.contentBlocks || []),
+                          ...newCancelledBlocks,
+                        ],
+                      };
                     }
-                    return msg;
-                  });
-                }
+                  }
+                  return msg;
+                });
               }
+            }
 
-              // Remove streaming message for this completed thread
+            // Remove streaming message for this completed thread
+            mergedStreamingMsgs.delete(threadKey);
+          }
+        }
+
+        // Delta identity: retire any placeholder whose id was finalized this
+        // batch. The completedThreads path above only fires when a COMPLETE
+        // assistant message arrives; a stream that finalized via an
+        // aborted/cancelled marker (no persisted message) leaves the placeholder
+        // behind unless we delete it by id here. Keyed by placeholder identity,
+        // so it also catches a thread mismatch between marker and placeholder.
+        if (newlyFinalizedIds.size > 0) {
+          for (const [threadKey, msg] of [...mergedStreamingMsgs]) {
+            if (msg && newlyFinalizedIds.has(msg.id)) {
+              logger.debug("[Streaming] Retiring placeholder for finalized id", {
+                chatId: chatId.slice(0, 8),
+                thread: threadKey.slice(0, 8),
+                messageId: msg.id,
+              });
               mergedStreamingMsgs.delete(threadKey);
             }
-
-            // Remove streaming-temp messages from updatedMessages for completed threads
-            updatedMessages = updatedMessages.filter((m) => {
-              if (!m.id.startsWith("streaming-temp")) return true;
-              const msgThreadKey = normalizeThreadKey(chatId, m.thread);
-              return !completedThreads.has(msgThreadKey);
-            });
           }
+        }
 
-          // Add/update streaming messages for threads that don't have complete messages
-          for (const [threadKey, streamingMsg] of mergedStreamingMsgs) {
-            // Skip if this thread has a complete message
-            if (completedThreads.has(threadKey)) continue;
+        // The in-flight streaming placeholder lives ONLY in the
+        // streamingMessages slice (written below), never in the persisted
+        // messages array. The render layer composes the two at display time
+        // (see ChatContainer / WorkflowBuilderChat). This keeps persisted
+        // messages as server-truth and the ephemeral placeholder as the sole
+        // owner of in-progress content — no double-storage, no
+        // streaming-temp bookkeeping in the messages array.
 
-            const streamingMsgExists = updatedMessages.some(
-              (m) =>
-                m.id === streamingMsg.id &&
-                normalizeThreadKey(chatId, m.thread) === threadKey,
-            );
-            if (!streamingMsgExists) {
-              logger.debug(
-                "[Streaming] Adding streaming message to message list",
-                {
-                  chatId: chatId.slice(0, 8),
-                  thread: threadKey.slice(0, 8),
-                  streamingMsgId: streamingMsg.id,
-                  messageCount: updatedMessages.length,
-                },
-              );
-              updatedMessages.push(streamingMsg);
-            } else {
-              logger.debug(
-                "[Streaming] Streaming message already exists in list, updating in place",
-                {
-                  chatId: chatId.slice(0, 8),
-                  thread: threadKey.slice(0, 8),
-                  streamingMsgId: streamingMsg.id,
-                },
-              );
-              // Update the existing streaming message in place
-              const existingIndex = updatedMessages.findIndex(
-                (m) =>
-                  m.id === streamingMsg.id &&
-                  normalizeThreadKey(chatId, m.thread) === threadKey,
-              );
-              if (existingIndex >= 0) {
-                updatedMessages[existingIndex] = streamingMsg;
-              }
-            }
-          }
+        // Canonical order (oldest first): per-thread ordinal, threads
+        // interleaved by clamped time — see lib/messageOrder.ts. createdAt
+        // alone is NOT trustworthy (repair/attachment messages have shipped
+        // with wrong timestamps; placeholders stamp the client clock).
+        updatedMessages = sortMessagesForDisplay(updatedMessages, chatId);
 
-          // Canonical order (oldest first): per-thread ordinal, threads
-          // interleaved by clamped time — see lib/messageOrder.ts. createdAt
-          // alone is NOT trustworthy (repair/attachment messages have shipped
-          // with wrong timestamps; placeholders stamp the client clock).
-          updatedMessages = sortMessagesForDisplay(updatedMessages, chatId);
+        // Note: activity updates come through the global stream and are
+        // handled by activityStore, so we don't need to fetch status separately
+        // when threads complete.
 
-          // Process approval updates (both traditional and workflow-based)
-          // CRITICAL: Use freshState to avoid race condition
-          const updatedApprovals = [...(freshState.approvals[chatId] || [])];
-          let updatedPendingApprovals = [
-            ...(freshState.pendingApprovals[chatId] || []),
-          ];
+        // Process error updates
+        // Each error persists in the chat - no deduplication.
+        // Errors are sorted by timestamp in the timeline so they appear
+        // in chronological order alongside messages.
+        // On snapshot: start fresh to avoid stale/duplicate events from previous subscription
+        const updatedErrorEvents = applyErrorUpdates(
+          state.errorEvents[chatId] || [],
+          errorUpdates,
+          isSnapshot,
+        );
+        // Route on any chat-error marker tail planted by the workflow /
+        // driver (RELIANT_MANAGED_QUOTA_EXHAUSTED, RELIANT_DAEMON_OFFLINE_HALT,
+        // …). Live-only side effects (modal pop) skip the snapshot path;
+        // marker-stripping is idempotent and runs in both modes so the
+        // rendered timeline is clean either way. Kept in the orchestrator
+        // because it's a side effect, not part of the pure log reduction.
+        errorUpdates.forEach((errorUpdate) =>
+          routeChatErrorMarker(errorUpdate, isSnapshot),
+        );
 
-          allApprovals.forEach((approvalUpdate) => {
-            // Convert ToolApprovalUpdate to ToolApprovalRequest format
-            const approval: ToolApprovalRequest = {
-              id: approvalUpdate.id,
-              chat_id: approvalUpdate.chat_id,
-              content_block_id:
-                approvalUpdate.content_block_id || approvalUpdate.entity_id,
-              status: toApprovalStatus(approvalUpdate.status),
-              denial_reason: approvalUpdate.denial_reason,
-              created_at: approvalUpdate.created_at,
-              responded_at: approvalUpdate.responded_at,
-              action_taken: approvalUpdate.action_taken, // Which action was clicked
-            };
+        const updatedInfoEvents = applyInfoUpdates(
+          state.infoEvents[chatId] || [],
+          infoUpdates,
+          isSnapshot,
+        );
 
-            // Update or add approval
-            const existingIndex = updatedApprovals.findIndex(
-              (a) => a.id === approval.id,
-            );
-            if (existingIndex >= 0) {
-              updatedApprovals[existingIndex] = approval;
-            } else {
-              updatedApprovals.push(approval);
-            }
+        const updatedRunOutputs = applyRunOutputUpdates(
+          state.runOutputs[chatId] || [],
+          runOutputUpdates,
+          isSnapshot,
+        );
 
-            // Update pending approvals list
-            if (approval.status === ApprovalStatus.PENDING) {
-              if (!updatedPendingApprovals.some((a) => a.id === approval.id)) {
-                updatedPendingApprovals.push(approval);
-              }
-            } else {
-              // Remove from pending if no longer pending
-              updatedPendingApprovals = updatedPendingApprovals.filter(
-                (a) => a.id !== approval.id,
-              );
-            }
-          });
+        const updatedNodeExecutions = applyNodeExecutionUpdates(
+          state.nodeExecutions[chatId] || [],
+          nodeExecutionUpdates,
+          isSnapshot,
+        );
 
-          // Process thread updates -> write to threadActivityStore (not chatStore)
-          if (threadUpdates.length > 0) {
-            const threadActivityState = useThreadActivityStore.getState();
-            const existingThreads = threadActivityState.threads[chatId] || [];
-            const updatedThreads = [...existingThreads];
-            threadUpdates.forEach((threadUpdate) => {
-              const existingIndex = updatedThreads.findIndex(
-                (t) => t.id === threadUpdate.id,
-              );
-              if (existingIndex >= 0) {
-                const existing = updatedThreads[existingIndex];
-                updatedThreads[existingIndex] = {
-                  ...existing,
-                  ...threadUpdate,
-                  // Preserve thread identity fields when completion updates omit them
-                  thread_title: threadUpdate.thread_title || existing.thread_title,
-                  spawned_by_node_id: threadUpdate.spawned_by_node_id || existing.spawned_by_node_id,
-                  spawned_by_tool_call_id: threadUpdate.spawned_by_tool_call_id || existing.spawned_by_tool_call_id,
-                  router_decision: threadUpdate.router_decision || existing.router_decision,
-                };
-              } else {
-                updatedThreads.push(threadUpdate);
-              }
-            });
-            threadActivityState.setThreads(chatId, updatedThreads);
-          }
-
-          // Note: activity updates come through the global stream and are
-          // handled by activityStore, so we don't need to fetch status separately
-          // when threads complete.
-
-          // Process error updates
-          // Each error persists in the chat - no deduplication.
-          // Errors are sorted by timestamp in the timeline so they appear
-          // in chronological order alongside messages.
-          // CRITICAL: Use freshState to avoid race condition
-          // On snapshot: start fresh to avoid stale/duplicate events from previous subscription
-          const updatedErrorEvents = isSnapshot
-            ? []
-            : [...(freshState.errorEvents[chatId] || [])];
-          errorUpdates.forEach((errorUpdate) => {
-            // Only dedupe by exact ID to prevent duplicates from re-polling
-            const existingIndex = updatedErrorEvents.findIndex(
-              (e) => e.id === errorUpdate.id,
-            );
-            if (existingIndex >= 0) {
-              // Update existing error (same ID means same error event)
-              updatedErrorEvents[existingIndex] = errorUpdate;
-            } else {
-              // New error - add it to the list
-              updatedErrorEvents.push(errorUpdate);
-            }
-
-            // Route on any chat-error marker tail planted by the workflow /
-            // driver (RELIANT_MANAGED_QUOTA_EXHAUSTED, RELIANT_DAEMON_OFFLINE_HALT,
-            // …). Live-only side effects (modal pop) skip the snapshot
-            // path; marker-stripping is idempotent and runs in both modes
-            // so the rendered timeline is clean either way.
-            routeChatErrorMarker(errorUpdate, isSnapshot);
-          });
-
-          // Process info updates (notifications shown to user, not saved to thread)
-          // CRITICAL: Use freshState to avoid race condition
-          // On snapshot: start fresh to avoid stale/duplicate events
-          const updatedInfoEvents = isSnapshot
-            ? []
-            : [...(freshState.infoEvents[chatId] || [])];
-          infoUpdates.forEach((infoUpdate) => {
-            // Only dedupe by exact ID to prevent duplicates from re-polling
-            const existingIndex = updatedInfoEvents.findIndex(
-              (e) => e.id === infoUpdate.id,
-            );
-            if (existingIndex >= 0) {
-              // Keep the original timestamp for stable timeline placement.
-              const existing = updatedInfoEvents[existingIndex];
-              updatedInfoEvents[existingIndex] = {
-                ...infoUpdate,
-                timestamp: existing.timestamp || infoUpdate.timestamp,
-              };
-            } else {
-              // New info - add it to the list
-              updatedInfoEvents.push(infoUpdate);
-            }
-          });
-
-          // Process run output updates (workflow run step outputs)
-          // CRITICAL: Use freshState to avoid race condition
-          // On snapshot: start fresh to avoid stale/duplicate events
-          const updatedRunOutputs = isSnapshot
-            ? []
-            : [...(freshState.runOutputs[chatId] || [])];
-          runOutputUpdates.forEach((runOutput) => {
-            // Add or update run output (dedup by unique_activity_id)
-            const existingIndex = updatedRunOutputs.findIndex(
-              (r) =>
-                r.unique_activity_id &&
-                r.unique_activity_id === runOutput.unique_activity_id,
-            );
-            if (existingIndex >= 0) {
-              updatedRunOutputs[existingIndex] = runOutput;
-            } else {
-              updatedRunOutputs.push(runOutput);
-            }
-          });
-          // Sort by sequence_number for consistent ordering
-          updatedRunOutputs.sort(
-            (a, b) => (a.sequence_number || 0) - (b.sequence_number || 0),
+        if (workflowStatusUpdates.length > 0) {
+          logger.debug(
+            "[WorkflowStatus] Chat stream updates received",
+            {
+              chatId: chatId.slice(0, 8),
+              count: workflowStatusUpdates.length,
+              statuses: workflowStatusUpdates.map((u) => u.status),
+            },
           );
+        }
 
-          // Process node execution updates (workflow activity lifecycle events)
-          // CRITICAL: Use freshState to avoid race condition
-          // On snapshot: start fresh to avoid stale/duplicate events
-          const updatedNodeExecutions = isSnapshot
-            ? []
-            : [...(freshState.nodeExecutions[chatId] || [])];
+        // Process tool execution state updates (dedup by tool_call_id,
+        // guard terminal statuses).
+        const updatedToolCallStates = applyToolCallStateUpdates(
+          state.toolCallStates[chatId] || new Map(),
+          allToolExecutionUpdates,
+          chatId,
+        );
 
-          nodeExecutionUpdates.forEach((nodeExec) => {
-            // Add or update node execution (dedup by node_id + event_type)
-            const existingIndex = updatedNodeExecutions.findIndex(
-              (n) =>
-                n.node_id === nodeExec.node_id &&
-                n.event_type === nodeExec.event_type,
+        // NOTE: chat activity is NOT updated here.
+        // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
+        // via the global user update stream, which populates activityStore.
+        // Activity state is read from activityStore (single source of truth).
+
+        // Log state update details
+        logger.debug("[Streaming] State update", {
+          chatId: chatId.slice(0, 8),
+          messageCount: updatedMessages.length,
+          hasCompleteMessage: hasCompleteAssistantMessage,
+          streamingMsgCount: processedStreamingMsgs.size,
+          streamingThreads: [...processedStreamingMsgs.keys()].map((t) =>
+            t.slice(0, 8),
+          ),
+        });
+
+        // Pre-parse message content so the render layer reads from the
+        // reference-keyed processMessage memo without reparsing, and drive
+        // the real-time task side effects below. Rendering invalidation is
+        // handled by the memo itself (keyed on message / tool-result index /
+        // approvals references), so there is no store-side parsed cache to
+        // keep in sync — we just warm the memo and run the side effects.
+        const messagesToProcess = [
+          ...messages, // New/updated messages from this WebSocket update
+        ];
+
+        // Also process streaming messages if present (all threads)
+        for (const streamingMsg of processedStreamingMsgs.values()) {
+          messagesToProcess.push(streamingMsg);
+        }
+
+        // CRITICAL (late results): a tool result usually arrives in a LATER
+        // batch than the assistant tool call it belongs to. That assistant
+        // message is already stored (not in this batch's `messages`). The
+        // render memo picks up the new tool-result index reference on its
+        // own, but the task side effects below only run for messages we
+        // process here — so queue the already-stored assistant messages whose
+        // calls this batch's results resolve, or a task tool's late result
+        // would be missed.
+        const batchResultCallIds = Object.keys(batchToolResults);
+        if (batchResultCallIds.length > 0) {
+          const alreadyQueued = new Set(messagesToProcess.map((m) => m.id));
+          const resolvedIds = new Set(batchResultCallIds);
+          for (const msg of updatedMessages) {
+            if (msg.role !== MessageRole.ASSISTANT) continue;
+            if (alreadyQueued.has(msg.id)) continue;
+            const owns = (msg.contentBlocks || []).some(
+              (block) =>
+                block.type === ContentBlockType.TOOL_CALL &&
+                block.toolCallId != null &&
+                resolvedIds.has(block.toolCallId),
             );
-            if (existingIndex >= 0) {
-              updatedNodeExecutions[existingIndex] = nodeExec;
-            } else {
-              updatedNodeExecutions.push(nodeExec);
+            if (owns) {
+              messagesToProcess.push(msg);
+              alreadyQueued.add(msg.id);
             }
-          });
-          // Sort by sequence_number for consistent ordering
-          updatedNodeExecutions.sort(
-            (a, b) => (a.sequence_number || 0) - (b.sequence_number || 0),
-          );
-
-          if (workflowStatusUpdates.length > 0) {
-            logger.debug(
-              "[WorkflowStatus] Chat stream updates received",
-              {
-                chatId: chatId.slice(0, 8),
-                count: workflowStatusUpdates.length,
-                statuses: workflowStatusUpdates.map((u) => u.status),
-              },
-            );
           }
+        }
 
-          // Process tool execution state updates
-          // CRITICAL: Use fresh state to avoid race condition with rapid updates
-          const existingToolCallStates =
-            freshState.toolCallStates[chatId] || new Map();
-          const updatedToolCallStates = new Map(existingToolCallStates);
-
-          // Terminal statuses that should not be overwritten
-          const terminalStatuses = new Set(["cancelled", "backgrounded"]);
-
-          allToolExecutionUpdates.forEach((update) => {
-            const existing = updatedToolCallStates.get(update.tool_call_id);
-            const mappedStatus: ToolCallState["status"] =
-              update.status === "denied" ? "failed" : update.status;
-
-            // Don't allow "completed" to overwrite terminal statuses like "cancelled" or "backgrounded"
-            // This prevents race conditions where the tool finishes right after user clicks cancel/background
-            if (
-              existing &&
-              terminalStatuses.has(existing.status) &&
-              mappedStatus === "completed"
-            ) {
-              return; // Skip this update
-            }
-
-            const toolCallState: ToolCallState = {
-              ...existing,
-              id: update.tool_call_id,
-              sessionId: chatId,
-              toolName: update.tool_name,
-              status: mappedStatus,
-              timestamp: update.timestamp,
-            };
-
-            updatedToolCallStates.set(update.tool_call_id, toolCallState);
-          });
-
+        const newState = {
+          toolResultsByCallId: {
+            ...state.toolResultsByCallId,
+            [chatId]: updatedToolResults,
+          },
+          errorEvents: { ...state.errorEvents, [chatId]: updatedErrorEvents },
+          infoEvents: { ...state.infoEvents, [chatId]: updatedInfoEvents },
+          runOutputs: { ...state.runOutputs, [chatId]: updatedRunOutputs },
+          nodeExecutions: {
+            ...state.nodeExecutions,
+            [chatId]: updatedNodeExecutions,
+          },
+          toolCallStates: {
+            ...state.toolCallStates,
+            [chatId]: updatedToolCallStates,
+          },
           // NOTE: chat activity is NOT updated here.
           // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
           // via the global user update stream, which populates activityStore.
-          // Activity state is read from activityStore (single source of truth).
-
-          // Log state update details
-          logger.debug("[Streaming] State update", {
-            chatId: chatId.slice(0, 8),
-            messageCount: updatedMessages.length,
-            hasCompleteMessage: hasCompleteAssistantMessage,
-            streamingMsgCount: processedStreamingMsgs.size,
-            streamingThreads: [...processedStreamingMsgs.keys()].map((t) =>
-              t.slice(0, 8),
-            ),
-          });
-
-          // Process messages for fast rendering
-          // This pre-parses message content so components can render without re-parsing
-          // On snapshot: start fresh to avoid stale processed messages
-          // On incremental: merge with existing processed messages
-          const existingProcessed = isSnapshot
-            ? new Map()
-            : (freshState.processedMessages[chatId] || new Map());
-          const newProcessedMessages = new Map(existingProcessed);
-
-          // Only process new/updated messages (not all messages)
-          // This is critical for performance - we only process what changed
-          const messagesToProcess = [
-            ...messages, // New/updated messages from this WebSocket update
-          ];
-
-          // Also reprocess streaming messages if present (all threads)
-          for (const streamingMsg of processedStreamingMsgs.values()) {
-            messagesToProcess.push(streamingMsg);
-          }
-
-          // CRITICAL: Also reprocess assistant messages that were cross-matched with tool results
-          // When tool results arrive, we embed them in the assistant message's tool_call blocks.
-          // Without reprocessing, the processedMessages cache has stale data and the UI
-          // won't show the tool output until a re-render (like switching chats).
-          if (crossMatchedMessageIds.size > 0) {
-            const crossMatchedMessages = updatedMessages.filter((msg) =>
-              crossMatchedMessageIds.has(msg.id),
-            );
-            logger.debug(
-              "[Streaming] Reprocessing cross-matched assistant messages",
-              {
-                chatId: chatId.slice(0, 8),
-                messageIds: Array.from(crossMatchedMessageIds).map((id) =>
-                  id.slice(0, 8),
-                ),
-                toolResultCount: batchToolResultsMap.size,
-              },
-            );
-            messagesToProcess.push(...crossMatchedMessages);
-          }
-
-          messagesToProcess.forEach((message) => {
-            const processed = processMessage(message, updatedApprovals);
-            newProcessedMessages.set(message.id, processed);
-
-            // Process task-related tool calls in real-time as messages arrive
-            // This ensures tasks appear immediately in the sidebar without needing ChatMessage to render
-            // Only process each tool result once (messages may be reprocessed on cross-matching)
-            if (
-              processed.toolExecutions &&
-              processed.toolExecutions.length > 0
-            ) {
-              const tasksStore = useTasksStore.getState();
-              processed.toolExecutions.forEach((exec) => {
-                const toolCallId = exec.call?.id;
-                if (!toolCallId) return;
-                const toolName = exec.call?.name?.toLowerCase?.();
-                const content = exec.result?.content;
-                if (!content || typeof content !== "string") return;
-
-                // Skip if we've already processed this tool result
-                if (processedTaskToolCallIds.has(toolCallId)) return;
-
-                if (toolName === "update_task") {
-                  processedTaskToolCallIds.add(toolCallId);
-                  tasksStore.processUpdateTaskContent(chatId, content);
-                } else if (toolName === "add_task") {
-                  processedTaskToolCallIds.add(toolCallId);
-                  tasksStore.processAddTaskContent(chatId, content);
-                } else if (toolName === "create_subtask") {
-                  processedTaskToolCallIds.add(toolCallId);
-                  tasksStore.processCreateSubtaskContent(chatId, content);
-                } else if (toolName === "list_tasks") {
-                  processedTaskToolCallIds.add(toolCallId);
-                  tasksStore.processListTasksContent(chatId, content);
-                } else if (toolName === "create_plan") {
-                  processedTaskToolCallIds.add(toolCallId);
-                  tasksStore.processCreatePlanContent(chatId, content);
-                }
-              });
+          // NOTE: contextUsage is NOT touched here — it arrives via
+          // handleChatContextUsage (onContextUsage callback), not via
+          // message updates.
+          // Update streaming messages state (thread-aware):
+          // - For completed threads: remove their streaming messages
+          // - For active threads: update with newly processed streaming messages
+          // Only update if there are actual changes (avoid creating new object references unnecessarily)
+          streamingMessages: (() => {
+            const hasStreamingChanges =
+              processedStreamingMsgs.size > 0 ||
+              completedThreads.size > 0 ||
+              // A finalize marker with no persisted message can still retire a
+              // placeholder by id — that mutates mergedStreamingMsgs too.
+              newlyFinalizedIds.size > 0;
+            if (!hasStreamingChanges) {
+              // No streaming changes - preserve existing state reference
+              return state.streamingMessages;
             }
-          });
-
-          // Process question updates
-          let updatedPendingQuestion = freshState.pendingQuestions[chatId] ?? null;
-          for (const qu of questionUpdates) {
-            if (qu.status === "pending") {
-              updatedPendingQuestion = {
-                question_id: qu.question_id,
-                chat_id: qu.chat_id,
-                workflow_id: qu.workflow_id,
-                step_id: qu.step_id,
-                status: qu.status,
-                created_at: "",
-                metadata: qu.metadata,
-              };
-            } else if (qu.status === "resolved") {
-              updatedPendingQuestion = null;
+            // Convert mergedStreamingMsgs Map to object for state
+            const newChatStreaming = Object.fromEntries(mergedStreamingMsgs);
+            return {
+              ...state.streamingMessages,
+              [chatId]:
+                Object.keys(newChatStreaming).length > 0
+                  ? newChatStreaming
+                  : undefined,
+            };
+          })(),
+          // Delta identity: seed the finalized-id set. Snapshot REPLACES it
+          // (snapshot semantics — the snapshot dedups markers by entity_id, so
+          // it carries one marker per finalized message); incremental UNIONS.
+          finalizedStreamIds: (() => {
+            if (newlyFinalizedIds.size === 0 && !isSnapshot) {
+              return state.finalizedStreamIds;
             }
-          }
+            const base = isSnapshot
+              ? new Set<string>()
+              : new Set(state.finalizedStreamIds[chatId] || []);
+            for (const id of newlyFinalizedIds) base.add(id);
+            return {
+              ...state.finalizedStreamIds,
+              [chatId]: base,
+            };
+          })(),
+        };
 
-          // Context usage comes from onContextUsage callback, not from message updates
-          const updatedContextUsage = { ...(state.contextUsage[chatId] || {}) };
+        // Commit the Zustand slices in one shot. All inputs were computed
+        // synchronously above from get() — nothing can have changed since.
+        set(newState);
 
-          const newState = {
-            messages: { ...state.messages, [chatId]: updatedMessages },
-            processedMessages: {
-              ...state.processedMessages,
-              [chatId]: newProcessedMessages,
-            },
-            approvals: { ...state.approvals, [chatId]: updatedApprovals },
-            pendingApprovals: {
-              ...state.pendingApprovals,
-              [chatId]: updatedPendingApprovals,
-            },
-            pendingQuestions: { ...state.pendingQuestions, [chatId]: updatedPendingQuestion },
-            errorEvents: { ...state.errorEvents, [chatId]: updatedErrorEvents },
-            infoEvents: { ...state.infoEvents, [chatId]: updatedInfoEvents },
-            runOutputs: { ...state.runOutputs, [chatId]: updatedRunOutputs },
-            nodeExecutions: {
-              ...state.nodeExecutions,
-              [chatId]: updatedNodeExecutions,
-            },
-            toolCallStates: {
-              ...state.toolCallStates,
-              [chatId]: updatedToolCallStates,
-            },
-            // Include chats Map if it was modified (uninitialized chat case)
-            ...(chatsMap !== state.chats ? { chats: chatsMap } : {}),
-            // NOTE: chat activity is NOT updated here.
-            // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
-            // via the global user update stream, which populates activityStore.
-            // Update context usage for compaction indicator (per-thread)
-            contextUsage:
-              Object.keys(updatedContextUsage).length > 0
-                ? { ...state.contextUsage, [chatId]: updatedContextUsage }
-                : state.contextUsage,
-            // Update streaming messages state (thread-aware):
-            // - For completed threads: remove their streaming messages
-            // - For active threads: update with newly processed streaming messages
-            // Only update if there are actual changes (avoid creating new object references unnecessarily)
-            streamingMessages: (() => {
-              const hasStreamingChanges =
-                processedStreamingMsgs.size > 0 || completedThreads.size > 0;
-              if (!hasStreamingChanges) {
-                // No streaming changes - preserve existing state reference
-                return state.streamingMessages;
-              }
-              // Convert mergedStreamingMsgs Map to object for state
-              const newChatStreaming = Object.fromEntries(mergedStreamingMsgs);
-              return {
-                ...state.streamingMessages,
-                [chatId]:
-                  Object.keys(newChatStreaming).length > 0
-                    ? newChatStreaming
-                    : undefined,
-              };
-            })(),
+        // ---- External writes (post-commit) ----
+        // Everything below writes to stores OTHER than this one (RQ caches,
+        // threadActivityStore, tasksStore). They run after the Zustand commit
+        // but in the same synchronous task, so React batches all of it into
+        // one render — same observable ordering as before.
+
+        // Commit the freshly-merged messages array to the RQ cache (the
+        // single source of truth). snapshot-replace / incremental-upsert /
+        // optimistic-user replacement / canonical sort were all applied to
+        // `updatedMessages` above.
+        setMessagesInCache(chatId, updatedMessages);
+
+        // Approval updates from the stream patch the React Query cache
+        // directly (setQueryData, no refetch) — approvals are server data
+        // owned by the cache, read via useApprovals/usePendingApprovals.
+        // usePendingApprovals derives "pending" from the same list via a
+        // client-side select, so one list upsert updates both. The patch IS
+        // the sync; no invalidate/refetch round-trip.
+        allApprovals.forEach((approvalUpdate) => {
+          const approval: ToolApprovalRequest = {
+            id: approvalUpdate.id,
+            chat_id: approvalUpdate.chat_id,
+            content_block_id:
+              approvalUpdate.content_block_id || approvalUpdate.entity_id,
+            status: toApprovalStatus(approvalUpdate.status),
+            denial_reason: approvalUpdate.denial_reason,
+            created_at: approvalUpdate.created_at,
+            responded_at: approvalUpdate.responded_at,
+            action_taken: approvalUpdate.action_taken, // Which action was clicked
           };
-
-          return newState;
+          upsertApprovalInCache(chatId, approval);
         });
 
-        // Invalidate React Query caches so RQ-based hooks stay in sync
-        if (allApprovals.length > 0) {
-          queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
+        // Question updates patch the React Query cache (server data), read
+        // via usePendingQuestion. A "pending" event sets it; "resolved" clears.
+        for (const qu of questionUpdates) {
+          if (qu.status === "pending") {
+            patchPendingQuestionCache(chatId, {
+              question_id: qu.question_id,
+              chat_id: qu.chat_id,
+              workflow_id: qu.workflow_id,
+              step_id: qu.step_id,
+              status: qu.status,
+              created_at: "",
+              metadata: qu.metadata,
+            });
+          } else if (qu.status === "resolved") {
+            patchPendingQuestionCache(chatId, null);
+          }
         }
-        if (questionUpdates.length > 0) {
-          queryClient.invalidateQueries({ queryKey: questionKeys.pending(chatId) });
+
+        // Thread updates live in threadActivityStore (not chatStore). Merge
+        // is pure; this is the store write.
+        if (threadUpdates.length > 0) {
+          const threadActivityState = useThreadActivityStore.getState();
+          threadActivityState.setThreads(
+            chatId,
+            mergeActiveThreads(
+              threadActivityState.threads[chatId] || [],
+              threadUpdates,
+            ),
+          );
         }
+
+        // Pre-parse message content so the render layer reads from the
+        // reference-keyed processMessage memo without reparsing, and drive
+        // the real-time task side effects (tasksStore writes). Rendering
+        // invalidation is handled by the memo itself (keyed on message /
+        // tool-result index / approvals references), so there is no
+        // store-side parsed cache to keep in sync.
+        //
+        // Approvals live in the React Query cache; read the current list
+        // (including this batch's upserts above) to embed approval status
+        // into processed tool calls.
+        const approvalsForProcessing =
+          queryClient.getQueryData<ToolApprovalRequest[]>(
+            approvalKeys.list(chatId),
+          ) ?? [];
+        messagesToProcess.forEach((message) => {
+          const processed = getProcessedMessage(
+            message,
+            updatedToolResults,
+            approvalsForProcessing,
+          );
+
+          // Process task-related tool calls in real-time as messages arrive
+          // This ensures tasks appear immediately in the sidebar without needing ChatMessage to render
+          // Only process each tool result once (messages may be reprocessed on cross-matching)
+          if (
+            processed.toolExecutions &&
+            processed.toolExecutions.length > 0
+          ) {
+            const tasksStore = useTasksStore.getState();
+            processed.toolExecutions.forEach((exec) => {
+              const toolCallId = exec.call?.id;
+              if (!toolCallId) return;
+              const toolName = exec.call?.name?.toLowerCase?.();
+              const content = exec.result?.content;
+              if (!content || typeof content !== "string") return;
+
+              // Skip if we've already processed this tool result
+              if (processedTaskToolCallIds.has(toolCallId)) return;
+
+              if (toolName === "update_task") {
+                processedTaskToolCallIds.add(toolCallId);
+                tasksStore.processUpdateTaskContent(chatId, content);
+              } else if (toolName === "add_task") {
+                processedTaskToolCallIds.add(toolCallId);
+                tasksStore.processAddTaskContent(chatId, content);
+              } else if (toolName === "create_subtask") {
+                processedTaskToolCallIds.add(toolCallId);
+                tasksStore.processCreateSubtaskContent(chatId, content);
+              } else if (toolName === "list_tasks") {
+                processedTaskToolCallIds.add(toolCallId);
+                tasksStore.processListTasksContent(chatId, content);
+              } else if (toolName === "create_plan") {
+                processedTaskToolCallIds.add(toolCallId);
+                tasksStore.processCreatePlanContent(chatId, content);
+              }
+            });
+          }
+        });
 
         // CRITICAL FIX: Clear streaming buffers when complete messages arrive
         // This prevents buffer flush timeouts from firing after complete messages
         // and recreating partial streaming messages that overwrite complete ones
         // Thread-aware: only clear buffers for threads that received complete messages
-        if (completedThreadsForBufferClear.size > 0) {
-          for (const threadKey of completedThreadsForBufferClear) {
+        if (completedThreads.size > 0) {
+          for (const threadKey of completedThreads) {
             clearStreamingBuffer(chatId, threadKey);
           }
           logger.debug(
             "[Streaming] Cleared streaming buffers for completed threads",
             {
               chatId: chatId.slice(0, 8),
-              threads: [...completedThreadsForBufferClear].map((t) =>
+              threads: [...completedThreads].map((t) =>
                 t.slice(0, 8),
               ),
             },
@@ -2740,47 +2562,29 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
 
-  // Remove streaming placeholders and buffers for a chat. The activity-IDLE
-  // event (persisted + gap-protected) is the authoritative signal that no
-  // stream is running; any placeholder still present is a stale delta tail
-  // that would otherwise render at the end of the chat until a refresh.
+  // Remove the in-flight streaming placeholder and buffers for a chat. The
+  // activity-IDLE event (persisted + gap-protected) is the authoritative
+  // signal that no stream is running; any placeholder still present is a stale
+  // delta tail that would otherwise render until a refresh. The placeholder
+  // lives solely in the streamingMessages slice, so clearing it is a single
+  // slice delete — no messages-array filtering.
   clearStreamingState: (chatId: string) => {
     // Drop buffers first so pending flush timers can't resurrect a placeholder.
     clearStreamingBuffersForChat(chatId);
 
     set((state) => {
-      const messages = state.messages[chatId] || [];
-      const filtered = messages.filter(
-        (m) => !m.id.startsWith("streaming-temp"),
-      );
-      const hasStreaming = !!state.streamingMessages[chatId];
-      if (filtered.length === messages.length && !hasStreaming) {
+      if (!state.streamingMessages[chatId]) {
         return state;
       }
 
       logger.info("[Streaming] Clearing streaming state for idle chat", {
         chatId: chatId.slice(0, 8),
-        removedPlaceholders: messages.length - filtered.length,
       });
-
-      const newProcessed = new Map(state.processedMessages[chatId] || []);
-      for (const m of messages) {
-        if (m.id.startsWith("streaming-temp")) {
-          newProcessed.delete(m.id);
-        }
-      }
 
       const newStreamingMessages = { ...state.streamingMessages };
       delete newStreamingMessages[chatId];
 
-      return {
-        messages: { ...state.messages, [chatId]: filtered },
-        processedMessages: {
-          ...state.processedMessages,
-          [chatId]: newProcessed,
-        },
-        streamingMessages: newStreamingMessages,
-      };
+      return { streamingMessages: newStreamingMessages };
     });
   },
 
@@ -2792,8 +2596,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return;
     }
 
-    const state = get();
-    if (!state.chats.has(chatId)) {
+    if (!getChatFromCache(chatId)) {
       logger.warn("No chat state found for chatId:", chatId);
       return;
     }
@@ -2801,27 +2604,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // IMMEDIATELY update UI state for instant feedback (optimistic update)
     // NOTE: We do NOT clear thread activity here. The useIsThreadActive hook already
     // returns false when the chat is not RUNNING, so threads appear inactive.
-    set((state) => {
-      const existing = state.chats.get(chatId);
-      if (!existing) return state;
-      const newChats = new Map(state.chats);
-      newChats.set(chatId, { ...existing, state: ChatState.IDLE });
-      return {
-        chats: newChats,
-        // Mark any incomplete messages as finished
-        messages: {
-          ...state.messages,
-          [chatId]: (state.messages[chatId] || []).map((msg) =>
-            !isProtoMessageComplete(msg)
-              ? {
-                  ...msg,
-                  streamingState: StreamingState.COMPLETE,
-                }
-              : msg,
-          ),
-        },
-      };
-    });
+    // Mark any incomplete messages as finished in the RQ message cache.
+    patchMessagesCache(chatId, (msgs) =>
+      msgs.map((msg) =>
+        !isProtoMessageComplete(msg)
+          ? { ...msg, streamingState: StreamingState.COMPLETE }
+          : msg,
+      ),
+    );
+    // Set the chat IDLE in the RQ caches (list + detail).
+    patchChatCaches(projectId, chatId, { state: ChatState.IDLE });
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.IDLE);
@@ -2838,8 +2630,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   // Pause chat - pauses a running workflow
   pauseChat: async (chatId: string) => {
-    const state = get();
-    if (!state.chats.has(chatId)) {
+    if (!getChatFromCache(chatId)) {
       logger.warn("No chat state found for chatId:", chatId);
       return;
     }
@@ -2849,26 +2640,20 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // hook already returns false when the chat is not RUNNING, so threads
     // appear inactive regardless. On resume, the backend re-emits thread updates
     // to repopulate thread activity (handles multi-window and page refresh cases).
-    set((state) => {
-      const existing = state.chats.get(chatId);
-      if (!existing) return state;
-      const newChats = new Map(state.chats);
-      newChats.set(chatId, { ...existing, state: ChatState.IDLE });
-      return {
-        chats: newChats,
-        messages: {
-          ...state.messages,
-          [chatId]: (state.messages[chatId] || []).map((msg) =>
-            !isProtoMessageComplete(msg)
-              ? {
-                  ...msg,
-                  streamingState: StreamingState.COMPLETE,
-                }
-              : msg,
-          ),
-        },
-      };
-    });
+    // Mark any incomplete messages as finished in the RQ message cache.
+    patchMessagesCache(chatId, (msgs) =>
+      msgs.map((msg) =>
+        !isProtoMessageComplete(msg)
+          ? { ...msg, streamingState: StreamingState.COMPLETE }
+          : msg,
+      ),
+    );
+    // Set the chat IDLE in the RQ caches (list + detail).
+    patchChatCaches(
+      useProjectStore.getState().currentProject?.id,
+      chatId,
+      { state: ChatState.IDLE }
+    );
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.IDLE);
@@ -2894,23 +2679,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // For expired: backend uses ResetWorkflowExecution to restore it
   // The backend ResumeChat handler detects the state and handles both transparently
   resumeChat: async (chatId: string) => {
-    const state = get();
-    if (!state.chats.has(chatId)) {
+    if (!getChatFromCache(chatId)) {
       logger.warn("No chat state found for chatId:", chatId);
       return;
     }
 
-    // Optimistic update — also clear discuss mode since we're resuming
-    set((state) => {
-      const existing = state.chats.get(chatId);
-      if (!existing) return state;
-      const newChats = new Map(state.chats);
-      newChats.set(chatId, { ...existing } as Chat);
-      return {
-        chats: newChats,
-        discussMode: { ...state.discussMode, [chatId]: false },
-      };
-    });
+    // Optimistic update — clear discuss mode since we're resuming. The chat
+    // object itself is unchanged (activity is tracked in activityStore).
+    set((state) => ({
+      discussMode: { ...state.discussMode, [chatId]: false },
+    }));
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
@@ -2927,11 +2705,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   resolveQuestion: async (chatId, questionId, action, responseData) => {
     await questionGrpc.resolveQuestion(questionId, action, responseData);
-    // Optimistically clear
-    set((state) => ({
-      pendingQuestions: { ...state.pendingQuestions, [chatId]: null },
-    }));
-    queryClient.invalidateQueries({ queryKey: questionKeys.pending(chatId) });
+    // Optimistically clear the pending question in the React Query cache.
+    patchPendingQuestionCache(chatId, null);
   },
 
   // Refresh chat - reconnects the unified stream to re-fetch data
@@ -2950,35 +2725,29 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       chatId: chatId.slice(0, 8),
     });
 
-    set((state) => {
-      const existing = state.chats.get(chatId);
-      const newChats = existing
-        ? new Map(state.chats).set(chatId, { ...existing, state: ChatState.IDLE } as Chat)
-        : state.chats;
-      // Clear thread activity in the dedicated store
-      useThreadActivityStore.getState().clearThreads(chatId);
+    // Clear thread activity in the dedicated store
+    useThreadActivityStore.getState().clearThreads(chatId);
+    // Approvals are server data in the RQ cache; reconcile from the server.
+    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
 
-      return {
-        chats: newChats,
-        pendingApprovals: { ...state.pendingApprovals, [chatId]: [] },
-        // Mark any incomplete messages as finished
-        messages: {
-          ...state.messages,
-          [chatId]: (state.messages[chatId] || []).map((msg) =>
-            !isProtoMessageComplete(msg)
-              ? {
-                  ...msg,
-                  streamingState: StreamingState.COMPLETE,
-                }
-              : msg,
-          ),
-        },
-      };
-    });
+    // Mark any incomplete messages as finished in the RQ message cache.
+    patchMessagesCache(chatId, (msgs) =>
+      msgs.map((msg) =>
+        !isProtoMessageComplete(msg)
+          ? { ...msg, streamingState: StreamingState.COMPLETE }
+          : msg,
+      ),
+    );
+
+    // Mirror the IDLE transition into the RQ caches (list + detail).
+    patchChatCaches(
+      useProjectStore.getState().currentProject?.id,
+      chatId,
+      { state: ChatState.IDLE }
+    );
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.IDLE);
-    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
 
     logger.info("✅ Chat reset to idle state", {
       chatId: chatId.slice(0, 8),
@@ -2991,227 +2760,31 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (!projectId) return;
 
     try {
+      // Capture the sequence baseline BEFORE the fetch: the GetChat response
+      // reflects server state at least as fresh as everything the client had
+      // processed at request time, so it may overwrite entries with seq <=
+      // baseline but must yield to stream events that arrive mid-flight.
+      const baselineSeq = useActivityStore.getState().maxSeenSeq;
+
       // Use the get endpoint to check if chat exists and get its state
       const chat = await api.chatsV2.get(chatId);
 
       // NOTE: auto_approve and is_planning_mode were removed from backend
-      // Mode is tracked in chatParamsStore, not on chat object
-      set((s) => {
-        const newChats = new Map(s.chats);
-        newChats.set(chatId, chat);
-        return { chats: newChats };
-      });
+      // Mode is tracked in chatParamsStore, not on chat object.
+      // Home the fresh chat into the React Query detail cache.
+      seedChatDetail(chat);
 
-      // Sync activity from fetched chat.  Protect recent optimistic
-      // non-IDLE values from a server response that may predate them,
-      // but allow the server to correct stale RUNNING states once the
-      // anti-downgrade window has elapsed.
+      // Sync activity from the fetched chat under sequence precedence. This
+      // is the stuck-busy recovery path: a stale RUNNING left by a missed
+      // IDLE event has seq <= baseline, so the snapshot reconciles it to
+      // IDLE. A fresh optimistic write (tagged maxSeenSeq+1 > baseline)
+      // stays protected from a snapshot that predates its workflow start.
       const serverActivity = (chat.activity ?? 0) as ChatActivity;
-      if (
-        serverActivity !== ChatActivity.IDLE ||
-        !useActivityStore.getState().isFreshNonIdle(chatId)
-      ) {
-        useActivityStore.getState().setActivity(chatId, serverActivity);
-      }
+      useActivityStore
+        .getState()
+        .applyChatSnapshot(chatId, serverActivity, baselineSeq);
     } catch (error) {
       logger.error("Failed to check chat status:", error);
-    }
-  },
-
-
-  // Add pending approval
-  addPendingApproval: (chatId: string, approval: ToolApprovalRequest) => {
-    const state = get();
-    const currentApprovals = state.approvals[chatId] || [];
-    const currentPendingApprovals = state.pendingApprovals[chatId] || [];
-
-    const alreadyExists = currentApprovals.some((a) => a.id === approval.id);
-    const newApprovals = alreadyExists
-      ? currentApprovals.map((a) => (a.id === approval.id ? approval : a))
-      : [...currentApprovals, approval];
-
-    const alreadyPending = currentPendingApprovals.some(
-      (a) => a.id === approval.id,
-    );
-    const newPending =
-      approval.status === ApprovalStatus.PENDING && !alreadyPending
-        ? [...currentPendingApprovals, approval]
-        : currentPendingApprovals.filter((a) => a.status === ApprovalStatus.PENDING);
-
-    // Log for debugging
-    logger.info("[ChatStore] Adding pending approval:", {
-      chatId,
-      approvalId: approval.id,
-      toolCallId: approval.tool_call_id,
-      status: approval.status,
-      newPendingCount: newPending.length,
-    });
-
-    set({
-      approvals: { ...state.approvals, [chatId]: newApprovals },
-      pendingApprovals: { ...state.pendingApprovals, [chatId]: newPending },
-    });
-
-    // Show notification if chat is not active
-    if (get().activeChatId !== chatId) {
-      // Notification handling removed - no longer using tabStore
-    }
-  },
-
-  // Approve tool request
-  approveToolRequest: async (
-    chatId: string,
-    requestId: string,
-    actionTaken?: string,
-  ) => {
-    const state = get();
-    const currentApprovals = state.approvals[chatId] || [];
-    const currentPendingApprovals = state.pendingApprovals[chatId] || [];
-
-    try {
-      await api.approvals.approve(requestId, actionTaken);
-
-      const updatedApprovals = currentApprovals.map((a) =>
-        a.id === requestId
-          ? {
-              ...a,
-              status: ApprovalStatus.APPROVED,
-              responded_at: new Date().toISOString(),
-              action_taken: actionTaken,
-            }
-          : a,
-      );
-
-      const s = get();
-      set({
-        approvals: { ...s.approvals, [chatId]: updatedApprovals },
-        pendingApprovals: {
-          ...s.pendingApprovals,
-          [chatId]: currentPendingApprovals.filter((a) => a.id !== requestId),
-        },
-      });
-    } catch (error) {
-      logger.error("Failed to approve tool request:", error);
-      throw error;
-    }
-  },
-
-  // Deny tool request
-  denyToolRequest: async (
-    chatId: string,
-    requestId: string,
-    denialReason?: string,
-    actionTaken?: string,
-  ) => {
-    const state = get();
-    const currentApprovals = state.approvals[chatId] || [];
-    const currentPendingApprovals = state.pendingApprovals[chatId] || [];
-
-    try {
-      await api.approvals.deny(requestId, denialReason, actionTaken);
-
-      const updatedApprovals = currentApprovals.map((a) =>
-        a.id === requestId
-          ? {
-              ...a,
-              status: ApprovalStatus.DENIED,
-              responded_at: new Date().toISOString(),
-              denial_reason: denialReason || "User denied this tool call",
-              action_taken: actionTaken,
-            }
-          : a,
-      );
-
-      const s = get();
-      set({
-        approvals: { ...s.approvals, [chatId]: updatedApprovals },
-        pendingApprovals: {
-          ...s.pendingApprovals,
-          [chatId]: currentPendingApprovals.filter((a) => a.id !== requestId),
-        },
-      });
-    } catch (error) {
-      logger.error("Failed to deny tool request:", error);
-      throw error;
-    }
-  },
-
-  // Approve all pending
-  approveAllPending: async (chatId: string, actionTaken?: string) => {
-    const state = get();
-    const currentApprovals = state.approvals[chatId] || [];
-    const currentPendingApprovals = state.pendingApprovals[chatId] || [];
-    if (currentPendingApprovals.length === 0) return;
-
-    try {
-      const requestIds = currentPendingApprovals.map((a) => a.id);
-      await api.approvals.batchApprove(
-        requestIds,
-        actionTaken,
-      );
-
-      const s = get();
-      set({
-        approvals: {
-          ...s.approvals,
-          [chatId]: currentApprovals.map((a) =>
-            requestIds.includes(a.id)
-              ? {
-                  ...a,
-                  status: ApprovalStatus.APPROVED,
-                  responded_at: new Date().toISOString(),
-                  action_taken: actionTaken,
-                }
-              : a,
-          ),
-        },
-        pendingApprovals: { ...s.pendingApprovals, [chatId]: [] },
-      });
-    } catch (error) {
-      logger.error("Failed to approve all pending:", error);
-    }
-  },
-
-  // Deny all pending
-  denyAllPending: async (
-    chatId: string,
-    denialReason?: string,
-    actionTaken?: string,
-  ) => {
-    const state = get();
-    const currentApprovals = state.approvals[chatId] || [];
-    const currentPendingApprovals = state.pendingApprovals[chatId] || [];
-    if (currentPendingApprovals.length === 0) return;
-
-    try {
-      const requestIds = currentPendingApprovals.map((a) => a.id);
-      await api.approvals.batchDeny(
-        requestIds,
-        denialReason,
-        actionTaken,
-      );
-
-      const s = get();
-      set({
-        approvals: {
-          ...s.approvals,
-          [chatId]: currentApprovals.map((a) =>
-            requestIds.includes(a.id)
-              ? {
-                  ...a,
-                  status: ApprovalStatus.DENIED,
-                  responded_at: new Date().toISOString(),
-                  denial_reason:
-                    denialReason || "User denied one or more tool calls",
-                  action_taken: actionTaken,
-                }
-              : a,
-          ),
-        },
-        pendingApprovals: { ...s.pendingApprovals, [chatId]: [] },
-      });
-    } catch (error) {
-      logger.error("Failed to deny all pending:", error);
     }
   },
 
@@ -3233,18 +2806,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         messageId,
       });
 
-      // Add to global chat map (if not already present)
-      set((state) => {
-        if (state.chats.has(newChat.id)) {
-          return state;
-        }
-        const newChats = new Map(state.chats);
-        newChats.set(newChat.id, newChat);
-        return {
-          chats: newChats,
-          
-        };
-      });
+      // Home the branched chat into the React Query detail cache immediately.
+      seedChatDetail(newChat);
 
       // Initialize state for new chat
       get().initChatState(newChat);
@@ -3298,18 +2861,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         worktreeId,
       });
 
-      // Add to global chat map (if not already present)
-      set((state) => {
-        if (state.chats.has(newChat.id)) {
-          return state;
-        }
-        const newChats = new Map(state.chats);
-        newChats.set(newChat.id, newChat);
-        return {
-          chats: newChats,
-          
-        };
-      });
+      // Home the branched chat into the React Query detail cache immediately.
+      seedChatDetail(newChat);
 
       // Initialize state for new chat
       get().initChatState(newChat);
@@ -3482,8 +3035,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Dismiss unread state when viewing a chat
   // This is fire-and-forget - the global WebSocket will update our state
   dismissChat: async (chatId: string) => {
-    // Skip if chat is not unread (no need to dismiss)
-    const chatObj = get().chats.get(chatId);
+    // Skip if chat is not unread (no need to dismiss). Read from the RQ cache —
+    // the single source of truth for Chat objects.
+    const chatObj = getChatFromCache(chatId);
     if (!chatObj?.unread) {
       return;
     }
@@ -3494,13 +3048,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // If state actually changed, update local state immediately for responsiveness
       // (global WebSocket will also deliver this update)
       if (result.changed) {
-        set((state) => {
-          const existing = state.chats.get(chatId);
-          if (!existing) return state;
-          const newChats = new Map(state.chats);
-          newChats.set(chatId, { ...existing, unread: false });
-          return { chats: newChats };
-        });
+        // Patch the RQ caches (list + detail) — unread drives the sidebar.
+        patchChatCaches(
+          useProjectStore.getState().currentProject?.id,
+          chatId,
+          { unread: false }
+        );
         logger.debug("[ChatStore] Dismissed unread for chat", {
           chatId,
         });
@@ -3515,6 +3068,35 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   getIsChatBusy: (chatId: string) => {
     const activity = useActivityStore.getState().activities.get(chatId);
     return activity !== undefined && activity >= ChatActivity.RUNNING;
+  },
+
+  // Release all retained state for one chat. The messages cache and the
+  // per-chat slices below have no TTL (gcTime: Infinity / plain records), so
+  // deleted/archived chats must be evicted explicitly or they leak until
+  // logout. Chat objects themselves (chatKeys.list/detail) are removed by
+  // removeChatFromListCache in the delete path; this handles everything else.
+  evictChat: (chatId: string) => {
+    clearStreamingBuffersForChat(chatId);
+    clearMessagesCache(chatId);
+    useThreadActivityStore.getState().clearThreads(chatId);
+
+    const omit = <T>(record: Record<string, T>): Record<string, T> => {
+      if (!(chatId in record)) return record;
+      const { [chatId]: _evicted, ...rest } = record;
+      return rest;
+    };
+    set((state) => ({
+      discussMode: omit(state.discussMode),
+      errorEvents: omit(state.errorEvents),
+      infoEvents: omit(state.infoEvents),
+      runOutputs: omit(state.runOutputs),
+      nodeExecutions: omit(state.nodeExecutions),
+      toolCallStates: omit(state.toolCallStates),
+      streamingMessages: omit(state.streamingMessages),
+      finalizedStreamIds: omit(state.finalizedStreamIds),
+      toolResultsByCallId: omit(state.toolResultsByCallId),
+      contextUsage: omit(state.contextUsage),
+    }));
   },
 
   // Reset store to initial state (for logout)
@@ -3542,26 +3124,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear module-scoped set that tracks processed task tool calls
     processedTaskToolCallIds.clear();
 
+    // Drop the homed Chat objects from the React Query caches (the single
+    // source of truth) so a logout clears chat data everywhere.
+    queryClient.removeQueries({ queryKey: chatKeys.all });
+    // Messages are homed in the RQ cache — drop all their entries too.
+    clearAllMessagesCache();
+
     // Reset to initial state
     set({
-      chats: new Map<string, Chat>(),
-      messages: {},
-      approvals: {},
-      pendingApprovals: {},
       discussMode: {},
-      pendingQuestions: {},
       errorEvents: {},
       infoEvents: {},
       runOutputs: {},
       nodeExecutions: {},
       streamingMessages: {},
+      finalizedStreamIds: {},
       contextUsage: {},
-      processedMessages: {},
+      toolResultsByCallId: {},
       toolCallStates: {},
       activeChatId: null,
       hasLoaded: false,
       error: null,
-      deletingChatIds: new Set(),
       pendingStatusFetches: {},
     });
   },

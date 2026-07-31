@@ -1,0 +1,207 @@
+#!/usr/bin/env bash
+# wf-node — everything reviewable about one node of a workflow execution.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./_lib.sh
+
+usage() {
+  cat <<'EOF'
+Usage: wf-node <execution-id> <node-id> [--tail N] [--max-chars N] [--full]
+
+Dump one node's reviewable state:
+  NODE THREADS      child workflow rows spawned by this node (agent threads),
+                    with their thread ids
+  STEP EXECUTIONS   recorded results for step_id = node (output payload shown)
+  NODE EVENTS       node_execution events for the node
+  QUESTIONS         ask/question gates raised by the node
+  CONVERSATION      messages + content blocks, from (a) threads spawned by the
+                    node and (b) messages tagged with this node id (save steps
+                    are matched too: node "implement" also matches
+                    "implement-save")
+
+Node ids come from the workflow YAML (e.g. implement, review, build) — see
+wf-status for which ids actually appear in this execution.
+
+Options:
+  --tail N       Show only the last N conversation messages (default 30; 0 = all)
+  --max-chars N  Truncate each content block / payload to N chars (default 2000)
+  --full         No truncation (equivalent to --tail 0 --max-chars 100000000)
+  -h, --help     Show this help
+
+Environment:
+  RELIANT_DB_URL  Postgres DSN (default: postgres://postgres:postgres@127.0.0.1:5434/reliant)
+
+Read-only: connects with default_transaction_read_only=on.
+EOF
+}
+
+tailn=30 maxch=2000
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tail)      tailn="${2:?}"; shift 2 ;;
+    --max-chars) maxch="${2:?}"; shift 2 ;;
+    --full)      tailn=0; maxch=100000000; shift ;;
+    -h|--help)   usage; exit 0 ;;
+    -*) echo "error: unknown option '$1'" >&2; usage >&2; exit 1 ;;
+    *)  args+=("$1"); shift ;;
+  esac
+done
+[ ${#args[@]} -eq 2 ] || { usage >&2; exit 1; }
+case "$tailn$maxch" in (*[!0-9]*) echo "error: --tail/--max-chars must be integers" >&2; exit 1 ;; esac
+
+wid=$(resolve_execution_id "${args[0]}")
+node="${args[1]}"
+
+run_sql -P pager=off -v wid="$wid" -v node="$node" -v tailn="$tailn" -v maxch="$maxch" <<SQL
+\echo == NODE THREADS ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT
+  w.id                                       AS child_workflow_id,
+  w.workflow_name                            AS record,
+  $(wf_status_expr w.status)                 AS status,
+  to_char(w.created_at, 'MM-DD HH24:MI:SS')  AS started,
+  coalesce(to_char(w.completed_at, 'MM-DD HH24:MI:SS'), '-') AS finished,
+  w.thread                                   AS thread_id,
+  coalesce(t.title, '-')                     AS thread_title
+FROM workflows w
+LEFT JOIN threads t ON t.id = w.thread
+WHERE w.parent_id IN (SELECT id FROM fam)
+  AND w.spawned_by_node_id = :'node'
+ORDER BY w.created_at;
+
+\echo == STEP EXECUTIONS ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT
+  to_char(s.created_at, 'MM-DD HH24:MI:SS')  AS at,
+  s.activity_name                            AS activity,
+  CASE s.success WHEN 1 THEN 'ok' WHEN 0 THEN 'FAIL' ELSE '?' END AS result,
+  coalesce(s.exit_code::text, '-')           AS exit,
+  s.duration_ms                              AS ms,
+  coalesce(s.loop_node_id || '#' || s.loop_iteration, '-') AS loop,
+  CASE
+    WHEN s.output_json IS NULL THEN '-'
+    WHEN length(s.output_json) > :maxch THEN
+      left(s.output_json, :maxch) || ' ...[truncated ' || length(s.output_json) || ' chars]'
+    ELSE s.output_json
+  END                                        AS output
+FROM step_executions s
+WHERE s.workflow_id IN (SELECT id FROM fam) AND s.step_id = :'node'
+ORDER BY s.created_at;
+
+\echo == NODE EVENTS ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT
+  to_char(cu.created_at, 'MM-DD HH24:MI:SS')  AS at,
+  cu.data::jsonb->>'event_type'               AS event,
+  cu.data::jsonb->>'node_type'                AS type,
+  coalesce(cu.data::jsonb->>'duration_ms','-') AS ms,
+  coalesce(cu.data::jsonb->>'error_message','') AS error
+FROM chat_updates cu
+WHERE cu.chat_id = (SELECT chat_id FROM workflows WHERE id = :'wid')
+  AND cu.update_type = 9
+  AND cu.data::jsonb->>'workflow_id' IN (SELECT id FROM fam)
+  AND cu.data::jsonb->>'node_id' = :'node'
+ORDER BY cu.sequence_number;
+
+\echo == QUESTIONS ==
+SELECT
+  to_char(q.created_at, 'MM-DD HH24:MI:SS')  AS at,
+  CASE q.status WHEN 1 THEN 'pending' WHEN 2 THEN 'resolved'
+    ELSE 'status='||q.status END             AS status,
+  left(coalesce(q.metadata, ''), :maxch)     AS metadata,
+  left(coalesce(q.response_data, ''), :maxch) AS response
+FROM questions q
+WHERE q.workflow_id = :'wid' AND q.step_id = :'node'
+ORDER BY q.created_at;
+
+\echo == CONVERSATION ==
+\pset tuples_only on
+\pset format unaligned
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+), node_threads AS (
+  SELECT w.thread AS thread_id FROM workflows w
+  WHERE w.parent_id IN (SELECT id FROM fam) AND w.spawned_by_node_id = :'node'
+), msgs AS (
+  SELECT m.* FROM messages m
+  WHERE m.thread_id IN (SELECT thread_id FROM node_threads)
+     OR (m.workflow_id IN (SELECT id FROM fam)
+         AND (m.node_id = :'node' OR m.node_id LIKE :'node' || '-%'))
+), tail AS (
+  SELECT * FROM (
+    SELECT * FROM msgs ORDER BY created_at DESC, ordinal DESC
+    LIMIT nullif(:tailn, 0)
+  ) last_n
+), total AS (SELECT count(*) AS n FROM msgs)
+SELECT CASE WHEN (SELECT n FROM total) > (SELECT count(*) FROM tail)
+  THEN '... showing last ' || (SELECT count(*) FROM tail) || ' of '
+       || (SELECT n FROM total) || ' messages (use --tail 0 for all)'
+  ELSE '(' || (SELECT n FROM total) || ' messages)' END;
+
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+), node_threads AS (
+  SELECT w.thread AS thread_id FROM workflows w
+  WHERE w.parent_id IN (SELECT id FROM fam) AND w.spawned_by_node_id = :'node'
+), msgs AS (
+  SELECT m.* FROM messages m
+  WHERE m.thread_id IN (SELECT thread_id FROM node_threads)
+     OR (m.workflow_id IN (SELECT id FROM fam)
+         AND (m.node_id = :'node' OR m.node_id LIKE :'node' || '-%'))
+), tail AS (
+  SELECT * FROM (
+    SELECT * FROM msgs ORDER BY created_at DESC, ordinal DESC
+    LIMIT nullif(:tailn, 0)
+  ) last_n
+)
+SELECT line FROM (
+  SELECT
+    CASE WHEN row_number() OVER (PARTITION BY t.id ORDER BY b.position) = 1 THEN
+      E'\n=== msg ' || t.ordinal || ' | '
+      || CASE t.role WHEN 1 THEN 'USER' WHEN 2 THEN 'ASSISTANT'
+           WHEN 3 THEN 'SYSTEM' WHEN 4 THEN 'TOOL' ELSE 'role='||t.role END
+      || coalesce(' | agent='||nullif(t.agent,''), '')
+      || coalesce(' | model='||nullif(t.model,''), '')
+      || coalesce(' | node='||nullif(t.node_id,''), '')
+      || ' | ' || to_char(t.created_at, 'MM-DD HH24:MI:SS')
+      || ' | thread=' || left(t.thread_id, 8) || E' ===\n'
+    ELSE '' END
+    ||
+    CASE WHEN b.id IS NULL THEN '(no content blocks)' ELSE
+      '[' || CASE b.block_type WHEN 1 THEN 'text' WHEN 2 THEN 'tool_call'
+               WHEN 3 THEN 'tool_result' WHEN 4 THEN 'image' WHEN 5 THEN 'thinking'
+               WHEN 6 THEN 'file_ref' WHEN 7 THEN 'document'
+               ELSE 'block='||b.block_type END
+      || coalesce(' ' || nullif(b.tool_name, ''), '')
+      || CASE WHEN b.is_error THEN ' ERROR' ELSE '' END || ']'
+      || coalesce(E'\ninput: ' ||
+           CASE WHEN length(b.tool_input) > :maxch THEN
+             left(b.tool_input, :maxch) || ' ...[truncated ' || length(b.tool_input) || ' chars]'
+           ELSE b.tool_input END, '')
+      || coalesce(E'\n' ||
+           CASE WHEN length(b.content) > :maxch THEN
+             left(b.content, :maxch) || ' ...[truncated ' || length(b.content) || ' chars]'
+           ELSE b.content END, '')
+    END AS line,
+    t.created_at AS _c, t.ordinal AS _o, b.position AS _p
+  FROM tail t
+  LEFT JOIN message_content_blocks b ON b.message_id = t.id
+) rendered
+ORDER BY _c, _o, _p;
+SQL

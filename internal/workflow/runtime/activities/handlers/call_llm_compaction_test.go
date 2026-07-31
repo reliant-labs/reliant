@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 func celIntLiteral(v int64) *reliantv1.CelInt {
@@ -43,29 +44,57 @@ func TestExplicitCompactionThreshold(t *testing.T) {
 }
 
 // TestEffectiveCompactionThresholdPrecedence documents the layering applied in
-// executeCore: an explicit positive arg wins outright; otherwise the resolved
-// model's DefaultCompactionThreshold wins; otherwise the global default.
+// executeCore: an explicit positive per-node arg wins outright; otherwise the
+// threshold is DERIVED from the resolved model's real context window (with a
+// per-model explicit override honored if one is declared); otherwise the global
+// default when the window is unknown.
 func TestEffectiveCompactionThresholdPrecedence(t *testing.T) {
 	tests := []struct {
-		name         string
-		arg          *reliantv1.CelInt
-		modelDefault *int64
-		want         int32
+		name string
+		arg  *reliantv1.CelInt
+		def  *models.ModelDefinition
+		want int32
 	}{
-		{name: "explicit arg beats model default", arg: celIntLiteral(300000), modelDefault: ptrInt64(900000), want: 300000},
-		{name: "model default when arg unset", arg: nil, modelDefault: ptrInt64(900000), want: 900000},
-		{name: "1M model returns its large default", arg: celIntLiteral(0), modelDefault: ptrInt64(950000), want: 950000},
-		{name: "global default when arg unset and no model default", arg: nil, modelDefault: nil, want: DefaultCompactionThreshold},
+		{
+			name: "explicit per-node arg beats derived value",
+			arg:  celIntLiteral(300000),
+			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}},
+			want: 300000,
+		},
+		{
+			name: "1M-window model derives 850k when arg unset",
+			arg:  nil,
+			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}},
+			want: 850_000,
+		},
+		{
+			name: "200k-window model derives 170k when arg unset",
+			arg:  celIntLiteral(0),
+			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 200_000}},
+			want: 170_000,
+		},
+		{
+			name: "per-model override wins over derivation",
+			arg:  nil,
+			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 1_000_000}, DefaultCompactionThreshold: ptrInt(950000)},
+			want: 950000,
+		},
+		{
+			name: "global default when arg unset and window unknown",
+			arg:  nil,
+			def:  &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 0}},
+			want: DefaultCompactionThreshold,
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			args := &reliantv1.CallLLMArgs{CompactionThreshold: tc.arg}
 
-			// Mirror executeCore's precedence.
+			// Mirror executeCore's precedence for a resolved definition.
 			effective := explicitCompactionThresholdArg(args)
-			if !explicitCompactionThresholdIsSet(args) && tc.modelDefault != nil {
-				effective = int32(*tc.modelDefault)
+			if !explicitCompactionThresholdIsSet(args) {
+				effective = int32(models.CompactionThresholdForDefinition(tc.def))
 			}
 
 			if effective != tc.want {
@@ -75,4 +104,4 @@ func TestEffectiveCompactionThresholdPrecedence(t *testing.T) {
 	}
 }
 
-func ptrInt64(v int64) *int64 { return &v }
+func ptrInt(v int) *int { return &v }

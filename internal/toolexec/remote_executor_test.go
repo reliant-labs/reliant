@@ -23,6 +23,9 @@ func (r *routerStub) SendKillProcess(ctx context.Context, userID, processID stri
 func (r *routerStub) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	return nil, nil
 }
+func (r *routerStub) SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return nil, nil
+}
 func (r *routerStub) EnqueueDaemonCommand(_ context.Context, _ string, _ string, _ []byte, _ int32) (int, error) {
 	return 0, nil
 }

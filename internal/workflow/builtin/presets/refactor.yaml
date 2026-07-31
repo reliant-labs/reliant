@@ -2,9 +2,9 @@ name: refactor
 description: Code refactoring specialist who reorganizes and improves code structure
   while preserving behavior
 tag: agent
-recommended_skills:
-  - refactor
 params:
+  skills:
+    - refactor
   spawn_presets:
   - researcher
   tools:
@@ -13,8 +13,6 @@ params:
   - write
   - find_replace
   - move_code
-  - grep
-  - glob
   - tag:shell
   model:
     tags: [moderate]

@@ -9,13 +9,35 @@ import (
 	orderedmap "github.com/wk8/go-ordered-map/v2"
 )
 
+// unwrapArrayParams is a stand-in tool-params shape carrying a required array
+// field. It exists so the generic unwrapStringifiedValues / schema-validation
+// tests exercise a real reflector-generated array-bearing schema without
+// coupling to any specific tool (the edit tool no longer has an array field).
+type unwrapArrayParams struct {
+	Items []unwrapArrayItem `json:"items" jsonschema:"required,description=array of items"`
+}
+
+type unwrapArrayItem struct {
+	FilePath  string `json:"file_path" jsonschema:"required,description=path"`
+	OldString string `json:"old_string,omitempty" jsonschema:"description=old"`
+	NewString string `json:"new_string,omitempty" jsonschema:"description=new"`
+}
+
+// unwrapArraySchema builds a schema the same way ToolWrapper.ParamSchema does.
+func unwrapArraySchema() *jsonschema.Schema {
+	reflector := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	return ResolveSchemaRefs(reflector.Reflect(&unwrapArrayParams{}))
+}
+
 func TestUnwrapStringifiedValues(t *testing.T) {
-	editTool := NewEditTool()
-	editSchema := editTool.ParamSchema()
+	arraySchema := unwrapArraySchema()
 
 	// Create a test schema with various types
 	props := orderedmap.New[string, *jsonschema.Schema]()
-	props.Set("edits", &jsonschema.Schema{Type: "array"})
+	props.Set("items", &jsonschema.Schema{Type: "array"})
 	props.Set("limit", &jsonschema.Schema{Type: "integer"})
 	props.Set("ratio", &jsonschema.Schema{Type: "number"})
 	props.Set("enabled", &jsonschema.Schema{Type: "boolean"})
@@ -31,15 +53,15 @@ func TestUnwrapStringifiedValues(t *testing.T) {
 	}{
 		{
 			name:     "stringified array gets unwrapped",
-			schema:   editSchema,
-			input:    `{"edits": "[{\"file_path\": \"/test.go\"}]"}`,
-			expected: `{"edits":[{"file_path":"/test.go"}]}`,
+			schema:   arraySchema,
+			input:    `{"items": "[{\"file_path\": \"/test.go\"}]"}`,
+			expected: `{"items":[{"file_path":"/test.go"}]}`,
 		},
 		{
 			name:     "normal array unchanged",
-			schema:   editSchema,
-			input:    `{"edits": [{"file_path": "/test.go"}]}`,
-			expected: `{"edits":[{"file_path":"/test.go"}]}`,
+			schema:   arraySchema,
+			input:    `{"items": [{"file_path": "/test.go"}]}`,
+			expected: `{"items":[{"file_path":"/test.go"}]}`,
 		},
 		{
 			name:     "stringified integer gets unwrapped",
@@ -103,35 +125,33 @@ func TestUnwrapStringifiedValues(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_DoubleStringified(t *testing.T) {
-	editTool := NewEditTool()
-	schema := editTool.ParamSchema()
+	schema := unwrapArraySchema()
 
-	// edits arrives as a JSON string whose contents are *themselves* a JSON
+	// items arrives as a JSON string whose contents are *themselves* a JSON
 	// string (double-encoded). A single unwrap yields a string, not an array,
 	// so the value must be peeled twice to reach the array.
-	input := `{"edits": "\"[{\\\"file_path\\\": \\\"/x.go\\\", \\\"old_string\\\": \\\"a\\\", \\\"new_string\\\": \\\"b\\\"}]\""}`
+	input := `{"items": "\"[{\\\"file_path\\\": \\\"/x.go\\\", \\\"old_string\\\": \\\"a\\\", \\\"new_string\\\": \\\"b\\\"}]\""}`
 
 	result := unwrapStringifiedValues(input, schema)
 	if err := validateJSONSchema(result, schema); err != nil {
-		t.Fatalf("double-stringified edits should validate after unwrap, got: %v\nresult: %s", err, result)
+		t.Fatalf("double-stringified items should validate after unwrap, got: %v\nresult: %s", err, result)
 	}
 
 	var data map[string]interface{}
 	if err := json.Unmarshal([]byte(result), &data); err != nil {
 		t.Fatalf("result not valid JSON: %v", err)
 	}
-	if _, ok := data["edits"].([]interface{}); !ok {
-		t.Errorf("expected edits to be an array after unwrap, got %T", data["edits"])
+	if _, ok := data["items"].([]interface{}); !ok {
+		t.Errorf("expected items to be an array after unwrap, got %T", data["items"])
 	}
 }
 
 func TestUnwrapStringifiedValues_WholeObjectStringified(t *testing.T) {
-	editTool := NewEditTool()
-	schema := editTool.ParamSchema()
+	schema := unwrapArraySchema()
 
 	// The entire argument payload arrived as a JSON-encoded string rather than
 	// a JSON object.
-	input := `"{\"edits\": [{\"file_path\": \"/x.go\", \"old_string\": \"a\", \"new_string\": \"b\"}]}"`
+	input := `"{\"items\": [{\"file_path\": \"/x.go\", \"old_string\": \"a\", \"new_string\": \"b\"}]}"`
 
 	result := unwrapStringifiedValues(input, schema)
 	if err := validateJSONSchema(result, schema); err != nil {
@@ -188,7 +208,7 @@ func TestUnwrapToType(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_NilSchema(t *testing.T) {
-	input := `{"edits": "[{\"file_path\": \"/test.go\"}]"}`
+	input := `{"items": "[{\"file_path\": \"/test.go\"}]"}`
 	result := unwrapStringifiedValues(input, nil)
 
 	if result != input {
@@ -197,8 +217,7 @@ func TestUnwrapStringifiedValues_NilSchema(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_InvalidJSON(t *testing.T) {
-	editTool := NewEditTool()
-	schema := editTool.ParamSchema()
+	schema := unwrapArraySchema()
 
 	input := `{invalid json}`
 	result := unwrapStringifiedValues(input, schema)

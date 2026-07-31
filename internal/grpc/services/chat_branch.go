@@ -162,6 +162,18 @@ func (s *ChatService) BranchChat(
 		targetWorktree = worktree
 	}
 
+	// Pin the branch to the daemon that owns its worktree's checkout on disk.
+	// A branch chat's worktree exists on only one daemon; without this the
+	// chat's tool calls resolve to a default daemon that lacks the path (the
+	// "branch chat didn't work" bug). Derived from the resolved worktree so the
+	// session daemon is set from the first message, not lazily on interaction.
+	var activeDaemonID *string
+	if worktreeID != nil && *worktreeID != "" {
+		if wt, err := s.database.GetWorktree(ctx, *worktreeID); err == nil && wt != nil && wt.DaemonID != nil && *wt.DaemonID != "" {
+			activeDaemonID = wt.DaemonID
+		}
+	}
+
 	// Create new branched chat with pointer to parent (NO message copying)
 	// IMPORTANT: Set workflow_id = chat_id for root workflow identification
 	// This is consistent with CreateChat behavior and ensures UI can detect root workflows
@@ -171,18 +183,19 @@ func (s *ChatService) BranchChat(
 	// NOTE: Context inheritance is now handled via workflow fork (see below)
 	// The Chat struct no longer has BranchedFromChatID, BranchedAtOrdinal, ParentContextSequence
 	branchChat := &db.Chat{
-		ID:            branchChatID,
-		UserID:        sourceChat.UserID,
-		Title:         title,
-		ProjectID:     sourceChat.ProjectID,
-		WorktreeID:    worktreeID,
-		WorkflowName:  sourceChat.WorkflowName,
-		State:         db.ChatStateIdle,
-		WorkflowID:    &branchWorkflowID, // Root workflow ID = chat ID for UI identification
-		CreatedAt:     time.Now().UTC(),
-		UpdatedAt:     time.Now().UTC(),
-		LastActive:    time.Now().UTC(),
-		LastMessageAt: sourceChat.LastMessageAt, // Inherit from source chat
+		ID:             branchChatID,
+		UserID:         sourceChat.UserID,
+		Title:          title,
+		ProjectID:      sourceChat.ProjectID,
+		WorktreeID:     worktreeID,
+		WorkflowName:   sourceChat.WorkflowName,
+		State:          db.ChatStateIdle,
+		WorkflowID:     &branchWorkflowID, // Root workflow ID = chat ID for UI identification
+		ActiveDaemonID: activeDaemonID,    // Pin to the worktree's owning daemon
+		CreatedAt:      time.Now().UTC(),
+		UpdatedAt:      time.Now().UTC(),
+		LastActive:     time.Now().UTC(),
+		LastMessageAt:  sourceChat.LastMessageAt, // Inherit from source chat
 	}
 
 	// Create the branched chat

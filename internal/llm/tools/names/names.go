@@ -11,11 +11,6 @@ const (
 	ToolEdit        = "edit"
 	ToolFindReplace = "find_replace"
 
-	// Search tools
-	ToolGrep = "grep"
-	ToolGlob = "glob"
-	ToolLs   = "ls"
-
 	// Execution tools
 	// Platform-specific shell tools - use tag:shell to get the appropriate one
 	ToolBash       = "bash"       // Unix/macOS/Linux
@@ -117,7 +112,6 @@ const (
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
-	ToolGrep, ToolGlob,
 	ToolBash, ToolPowerShell, ToolBashList, ToolBashOutput, ToolBashKill,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

@@ -2,14 +2,93 @@
 package runtime
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// TestEveryChildWorkflowInitPassesParentThread pins the one field of
+// ChildWorkflowInitOpts that a caller cannot omit without silently corrupting
+// the thread forest.
+//
+// initChildWorkflow only forwards `parent_thread` when opts.ParentThread is
+// non-empty, so an omitted field is not a compile error and not a runtime
+// error — it is a thread row born with a NULL parent_thread_id. That thread
+// then reads as a forest ROOT, which `workflow ps` now depends on for its
+// state rollup (56f66602): a nested child that should roll up into its parent
+// instead reports as a top-level execution of its own.
+//
+// inline_workflow_executor.go's nested-workflow branch was exactly that: the
+// only one of seven call sites that omitted it, so every thread born from a
+// nested inline workflow was a forest root.
+//
+// The guard is structural rather than behavioural on purpose. The bug is a
+// MISSING struct field, and the class of bug is "the eighth call site forgets
+// too" — so the set is derived from the call sites themselves (every
+// `initChildWorkflow(ChildWorkflowInitOpts{...})` in this package), never from
+// a hand-maintained list of files, and an empty set fails loudly.
+func TestEveryChildWorkflowInitPassesParentThread(t *testing.T) {
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, parser.SkipObjectResolution)
+	require.NoError(t, err)
+
+	callSites := 0
+	for _, pkg := range pkgs {
+		for path, file := range pkg.Files {
+			ast.Inspect(file, func(n ast.Node) bool {
+				call, ok := n.(*ast.CallExpr)
+				if !ok {
+					return true
+				}
+				if id, ok := call.Fun.(*ast.Ident); !ok || id.Name != "initChildWorkflow" {
+					return true
+				}
+				require.Len(t, call.Args, 1, "initChildWorkflow takes one opts struct")
+				lit, ok := call.Args[0].(*ast.CompositeLit)
+				if !ok {
+					// A pre-built opts variable can't be checked here. If that
+					// shape ever appears, this guard has to grow to follow it
+					// rather than silently skip it.
+					t.Errorf("%s: initChildWorkflow called with a non-literal argument; "+
+						"this guard can only see inline ChildWorkflowInitOpts literals",
+						fset.Position(call.Pos()))
+					return true
+				}
+				callSites++
+
+				for _, elt := range lit.Elts {
+					kv, ok := elt.(*ast.KeyValueExpr)
+					if !ok {
+						continue
+					}
+					if key, ok := kv.Key.(*ast.Ident); ok && key.Name == "ParentThread" {
+						return true
+					}
+				}
+				t.Errorf("%s (%s): ChildWorkflowInitOpts omits ParentThread — the child thread "+
+					"is created with a NULL parent_thread_id and becomes a forest root, so "+
+					"`workflow ps` rolls its state up nowhere. Pass the thread whose "+
+					"ExecutionContext produced this child (the receiver of ForChild).",
+					fset.Position(lit.Pos()), filepath.Base(path))
+				return true
+			})
+		}
+	}
+
+	require.NotZero(t, callSites,
+		"found no initChildWorkflow(ChildWorkflowInitOpts{...}) call sites to check — the guard "+
+			"has stopped guarding anything (renamed function, or the callers moved package)")
+}
 
 // nopLogger is a no-op implementation of log.Logger for testing.
 type nopLogger struct{}

@@ -1,9 +1,9 @@
 name: migrate
 description: Guided migration assistant for moving from Claude Code, Cursor, Codex, or Windsurf to Reliant
 tag: agent
-recommended_skills:
-  - refactor/migration-guidance
 params:
+  skills:
+    - refactor/migration-guidance
   model:
     tags: [flagship]
     temperature: 0.4

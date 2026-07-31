@@ -53,11 +53,12 @@ type Preset struct {
 
 	// Params is a map of parameter name to value.
 	// These are applied to the workflow inputs when the preset is selected.
+	//
+	// Recommended skills live here under the "skills" key (a []string), the same
+	// unified skill param the call_llm node reads. Keeping them in Params means
+	// they flow through ApplyToInputs + mergePresetParams like every other input,
+	// so a child spawned from a chat no longer inherits the parent chat's skills.
 	Params map[string]interface{} `yaml:"params" json:"params"`
-
-	// RecommendedSkills lists skill names whose bodies are auto-loaded and injected
-	// as system messages at the start of conversation history in call_llm.
-	RecommendedSkills []string `yaml:"recommended_skills,omitempty" json:"recommended_skills,omitempty"`
 
 	// Source indicates where the preset came from (builtin or project)
 	Source string `yaml:"-" json:"source,omitempty"`
@@ -355,12 +356,43 @@ func ParsePreset(data []byte, name string) (*Preset, error) {
 		return nil, fmt.Errorf("preset name is required")
 	}
 
+	// Legacy fold: recommended skills used to live in a top-level
+	// `recommended_skills:` list. They now live in params["skills"] (the unified
+	// skill param). Fold any legacy field into params["skills"] so presets
+	// authored/stored before the unification keep working during the deprecation
+	// window. An explicit params["skills"] wins if both are present.
+	foldLegacyRecommendedSkills(data, &preset)
+
 	// Validate model param if present
 	if err := validateModelParam(&preset); err != nil {
 		return nil, err
 	}
 
 	return &preset, nil
+}
+
+// foldLegacyRecommendedSkills migrates a deprecated top-level `recommended_skills`
+// list into params["skills"] (as a []interface{} of strings, matching how YAML
+// parses a native params.skills list and what structpb.NewValue accepts). No-op
+// when the legacy field is absent or params["skills"] is already set.
+func foldLegacyRecommendedSkills(data []byte, p *Preset) {
+	var legacy struct {
+		RecommendedSkills []string `yaml:"recommended_skills"`
+	}
+	if err := yaml.Unmarshal(data, &legacy); err != nil || len(legacy.RecommendedSkills) == 0 {
+		return
+	}
+	if p.Params == nil {
+		p.Params = make(map[string]interface{})
+	}
+	if _, ok := p.Params["skills"]; ok {
+		return // explicit params.skills takes precedence over the legacy field
+	}
+	skills := make([]interface{}, len(legacy.RecommendedSkills))
+	for i, s := range legacy.RecommendedSkills {
+		skills[i] = s
+	}
+	p.Params["skills"] = skills
 }
 
 // validateModelParam validates a model param in a preset.

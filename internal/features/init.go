@@ -18,6 +18,22 @@ var (
 	userContextMu     sync.RWMutex
 )
 
+// staticFlagDefaults is the lowest-priority flag source: the values every
+// evaluation falls back to when no higher-priority provider answers.
+//
+// A key here whose name is a GATE — `<subsystem>_enabled` / `_disabled` —
+// asserts that the subsystem is switched by it. That assertion is only true
+// while something evaluates the key, and it is worse than useless when it is
+// not: a `_enabled: false` nobody reads describes a product that is off while
+// the feature ships on, and the next reader trusts the declaration over the
+// code. TestStaticGateFlagsHaveAReader derives the gate keys from this map and
+// fails when one has no evaluator.
+var staticFlagDefaults = map[string]interface{}{
+	"debug_enhanced":            false,
+	"new_chat_ui":               false,
+	"project_analyzer_disabled": true, // TEMPORARY: Disable project analyzer and scanning
+}
+
 // InitializeFeatureFlags sets up the feature flag system with configured providers
 func InitializeFeatureFlags(ctx context.Context) error {
 	return InitializeFeatureFlagsWithSettings(ctx, nil)
@@ -30,13 +46,7 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 	// Initialize static provider (lowest priority)
 	staticProvider := providers.NewStaticProvider(100)
 	staticConfig := map[string]interface{}{
-		"flags": map[string]interface{}{
-			// Default static flags
-			"debug_enhanced":            false,
-			"new_chat_ui":               false,
-			"project_analyzer_disabled": true,  // TEMPORARY: Disable project analyzer and scanning
-			"skills_enabled":            false, // Release-safe default: disable skills until explicitly enabled
-		},
+		"flags": staticFlagDefaults,
 	}
 	if err := staticProvider.Initialize(ctx, staticConfig); err != nil {
 		logging.Warn("Failed to initialize static provider", "error", err)

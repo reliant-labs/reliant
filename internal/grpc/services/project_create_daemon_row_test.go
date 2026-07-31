@@ -36,6 +36,10 @@ func (r *createProjectRowRouter) ResolveDaemonID(_ context.Context, _ string) (s
 	return r.resolveID, nil
 }
 
+func (r *createProjectRowRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (r *createProjectRowRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
 	switch commandType {
 	case "fs.mkdir":

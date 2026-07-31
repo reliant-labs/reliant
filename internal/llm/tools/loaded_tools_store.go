@@ -13,16 +13,27 @@ import (
 // This is an in-memory store that persists across loop iterations within
 // the same server process. Thread-safe for concurrent access.
 type LoadedToolsStore struct {
-	mu          sync.RWMutex
-	tools       map[string]map[string]bool      // chatID -> set of tool names
-	permissions map[string]string               // chatID -> permission level
-	skills      map[string][]config.StoredSkill // chatID -> skills
+	mu           sync.RWMutex
+	tools        map[string]map[string]bool      // chatID -> set of tool names
+	permissions  map[string]string               // chatID -> permission level
+	skills       map[string][]config.StoredSkill // chatID -> skills
+	availableMCP map[string][]MCPToolInfo        // chatID -> connected/available MCP tools
+}
+
+// MCPToolInfo carries the minimal metadata needed for progressive discovery of
+// available (connected) MCP tools via load_tool: the prefixed tool name
+// (mcp__server__tool) and its description, used for keyword search and to
+// verify a tool is actually connected before loading it.
+type MCPToolInfo struct {
+	Name        string
+	Description string
 }
 
 var globalLoadedToolsStore = &LoadedToolsStore{
-	tools:       make(map[string]map[string]bool),
-	permissions: make(map[string]string),
-	skills:      make(map[string][]config.StoredSkill),
+	tools:        make(map[string]map[string]bool),
+	permissions:  make(map[string]string),
+	skills:       make(map[string][]config.StoredSkill),
+	availableMCP: make(map[string][]MCPToolInfo),
 }
 
 // GetLoadedToolsStore returns the global loaded tools store.
@@ -80,6 +91,33 @@ func (s *LoadedToolsStore) Clear(chatID string) {
 	delete(s.tools, chatID)
 	delete(s.permissions, chatID)
 	delete(s.skills, chatID)
+	delete(s.availableMCP, chatID)
+}
+
+// SetAvailableMCPTools records the connected/available MCP tools for a chat so
+// load_tool can search them by keyword and verify they exist before loading.
+// Passing an empty slice clears any previously recorded set for the chat.
+func (s *LoadedToolsStore) SetAvailableMCPTools(chatID string, mcpTools []MCPToolInfo) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.availableMCP == nil {
+		s.availableMCP = make(map[string][]MCPToolInfo)
+	}
+	if len(mcpTools) == 0 {
+		delete(s.availableMCP, chatID)
+		return
+	}
+	s.availableMCP[chatID] = mcpTools
+}
+
+// GetAvailableMCPTools returns the connected/available MCP tools recorded for a
+// chat, or nil if none.
+func (s *LoadedToolsStore) GetAvailableMCPTools(chatID string) []MCPToolInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.availableMCP[chatID]
 }
 
 // SetSkills stores the project skills for a chat so the executor can access them.
@@ -157,15 +195,19 @@ func DeferredToolNames(chatID string, permission string, initialToolNames []stri
 	return deferred
 }
 
-// SearchTools searches for tools by keyword in the registry.
-func SearchTools(query string, permission string) []ToolSearchResult {
+// SearchTools searches for tools by keyword in the built-in registry AND in the
+// set of available/connected MCP tools. The mcpTools argument carries the
+// connected MCP tools (name + description) so that, e.g., load_tool(query=
+// "screenshot") can surface mcp__chrome-devtools__take_screenshot even though
+// MCP tools are not part of the static registry.
+func SearchTools(query string, permission string, mcpTools []MCPToolInfo) []ToolSearchResult {
 	registry := GetToolRegistry()
-	query = strings.ToLower(query)
+	q := strings.ToLower(query)
 
 	var results []ToolSearchResult
 	for _, def := range registry {
 		name := strings.ToLower(def.Name)
-		if !strings.Contains(name, query) {
+		if !strings.Contains(name, q) {
 			continue
 		}
 		minPerm := MinimumPermissionForTool(def.Name)
@@ -176,6 +218,23 @@ func SearchTools(query string, permission string) []ToolSearchResult {
 			PermissionAllowed: PermissionAtLeast(permission, minPerm),
 		})
 	}
+
+	// Also match connected MCP tools by name or description keyword. MCP tools
+	// are gated by MCP configuration rather than the agent permission ladder, so
+	// they always report as available once connected.
+	for _, m := range mcpTools {
+		if !strings.Contains(strings.ToLower(m.Name), q) &&
+			!strings.Contains(strings.ToLower(m.Description), q) {
+			continue
+		}
+		results = append(results, ToolSearchResult{
+			Name:              m.Name,
+			Tags:              []ToolTag{TagMCP},
+			MinPermission:     PermissionReadOnly,
+			PermissionAllowed: true,
+		})
+	}
+
 	return results
 }
 

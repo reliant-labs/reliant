@@ -39,6 +39,10 @@ func (f *fakeDaemonRouter) SendToolExecutionCancel(_ context.Context, userID, re
 func (f *fakeDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
 	return nil
 }
+func (f *fakeDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return f.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+}
+
 func (f *fakeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	return nil, nil
 }

@@ -25,7 +25,7 @@ params:
         6. Test with scenarios (aim for 3+ covering positive, negative, edge cases)
     tools:
         - tag:workflow
-        - tag:search
+        - tag:shell   # search the codebase via the shell tool (rg/grep/find)
         - tag:web
         - skill
         - view

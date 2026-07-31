@@ -56,10 +56,7 @@ func NewClient(opts llm.DriverOptions) *OpenaiClient {
 		}
 	}
 
-	// Use streaming HTTP client with DNS resilience, ResponseHeaderTimeout (2min),
-	// and idle stream timeout (5min) to detect silent hangs during streaming.
-	openaiClientOptions = append(openaiClientOptions, option.WithHTTPClient(llm.StreamingHTTPClient()))
-	client := openai.NewClient(openaiClientOptions...)
+	client := llm.NewOpenAISDKClient(openaiClientOptions...)
 	return &OpenaiClient{
 		Options: opts,
 		Client:  client,
@@ -726,10 +723,11 @@ func (o *OpenaiClient) convertToolsToResponsesTools(toolList []tools.Tool) []res
 			Description: openai.String(d),
 		}
 
-		// Final safety check: if schema is still not OpenAI-strict after normalization,
-		// fall back to a safe empty object schema rather than hard-failing the entire request.
-		if err := ValidateResponsesToolSchemaStrict(params); err != nil {
-			logging.Warn("[OpenAI Responses] Invalid strict tool schema after normalization; applying safe fallback",
+		// Final safety check: if the schema is still not acceptable to OpenAI after
+		// normalization, fall back to a safe empty object schema rather than
+		// hard-failing the entire request.
+		if err := ValidateResponsesToolSchema(params); err != nil {
+			logging.Warn("[OpenAI Responses] Invalid tool schema after normalization; applying safe fallback",
 				"tool", tool.Name(),
 				"error", err,
 			)

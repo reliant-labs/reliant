@@ -2,7 +2,6 @@
 package daemonruntime
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -13,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -59,50 +57,9 @@ func handleFSReadFile(_ context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	f, err := os.Open(req.Path)
+	resp, err := daemon.ReadFileContent(req.Path, req.Opts)
 	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", req.Path, err)
-	}
-	defer f.Close()
-
-	info, err := f.Stat()
-	if err != nil {
-		return nil, fmt.Errorf("stat %s: %w", req.Path, err)
-	}
-
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, 0, 256*1024), 10*1024*1024) // up to 10MB lines
-
-	var (
-		lines      []string
-		totalLines int
-		offset     int
-		limit      int
-	)
-	if req.Opts != nil {
-		offset = req.Opts.Offset
-		limit = req.Opts.Limit
-	}
-
-	lineNum := 0
-	for scanner.Scan() {
-		totalLines++
-		if lineNum >= offset && (limit == 0 || len(lines) < limit) {
-			lines = append(lines, scanner.Text())
-		}
-		lineNum++
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("read %s: %w", req.Path, err)
-	}
-
-	truncated := limit > 0 && totalLines > offset+limit
-
-	resp := daemon.FileContent{
-		Content:    strings.Join(lines, "\n"),
-		TotalLines: totalLines,
-		Truncated:  truncated,
-		Size:       info.Size(),
+		return nil, err
 	}
 	return json.Marshal(resp)
 }
@@ -808,6 +765,10 @@ func handleFSDelete(_ context.Context, payload []byte) ([]byte, error) {
 type fsGetTreeRequest struct {
 	Path       string `json:"path"`
 	ShowHidden bool   `json:"show_hidden"`
+	// Depth bounds how many levels of children to include below Path:
+	//   0 = unlimited (full recursive tree — back-compat default)
+	//   N = N levels of descendants (1 = immediate children only)
+	Depth int `json:"depth"`
 }
 
 type fsFileNode struct {
@@ -817,6 +778,10 @@ type fsFileNode struct {
 	Children []*fsFileNode `json:"children,omitempty"`
 	Size     int64         `json:"size"`
 	Modified string        `json:"modified,omitempty"`
+	// HasChildren is a hint for directory nodes at the depth boundary: true when
+	// the directory holds at least one visible entry. Lets the UI show an expand
+	// chevron without eagerly loading the subtree.
+	HasChildren bool `json:"has_children"`
 }
 
 // skipDirs contains directory names that are always skipped during tree walks.
@@ -827,7 +792,47 @@ var skipDirs = map[string]bool{
 	".git":         true,
 }
 
-func buildFileTree(fsPath string, relativePath string, showHidden bool) ([]*fsFileNode, error) {
+// treeUnlimited is the remaining-depth sentinel meaning "recurse without bound".
+const treeUnlimited = -1
+
+// includeTreeEntry reports whether a directory entry should appear in the tree,
+// applying the always-skipped noise dirs and the show_hidden dotfile rule. It is
+// the single predicate shared by the walk and the has_children probe so the
+// chevron hint always matches what an expand would actually reveal.
+func includeTreeEntry(name string, isDir, showHidden bool) bool {
+	if isDir && skipDirs[name] {
+		return false
+	}
+	if !showHidden && strings.HasPrefix(name, ".") {
+		return false
+	}
+	return true
+}
+
+// dirHasVisibleChildren reports whether dir contains at least one entry that
+// would be shown in the tree (respecting show_hidden), short-circuiting on the
+// first match. Used to set the has_children hint at the depth boundary without
+// walking the subtree.
+func dirHasVisibleChildren(dir string, showHidden bool) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if includeTreeEntry(e.Name(), e.IsDir(), showHidden) {
+			return true
+		}
+	}
+	return false
+}
+
+// buildFileTree performs a live, depth-limited walk of fsPath. remainingDepth
+// caps how many more levels of children to descend: treeUnlimited (-1) recurses
+// fully; N>0 descends N levels. Sizes and mtimes come from a live Lstat of each
+// entry (os.ReadDir's DirEntry.Info), so the tree reflects filesystem truth.
+// Directory nodes at the boundary carry HasChildren instead of eagerly-loaded
+// Children, powering VS Code-style lazy expansion.
+func buildFileTree(fsPath string, relativePath string, showHidden bool, remainingDepth int) ([]*fsFileNode, error) {
 	entries, err := os.ReadDir(fsPath)
 	if err != nil {
 		return nil, err
@@ -836,14 +841,7 @@ func buildFileTree(fsPath string, relativePath string, showHidden bool) ([]*fsFi
 	var nodes []*fsFileNode
 	for _, entry := range entries {
 		name := entry.Name()
-
-		// Skip well-known noisy directories
-		if entry.IsDir() && skipDirs[name] {
-			continue
-		}
-
-		// Skip hidden files/dirs unless show_hidden is true
-		if !showHidden && strings.HasPrefix(name, ".") {
+		if !includeTreeEntry(name, entry.IsDir(), showHidden) {
 			continue
 		}
 
@@ -856,20 +854,31 @@ func buildFileTree(fsPath string, relativePath string, showHidden bool) ([]*fsFi
 		}
 
 		node := &fsFileNode{
-			Name: name,
-			Path: relPath,
+			Name:     name,
+			Path:     relPath,
+			Modified: info.ModTime().Format(time.RFC3339),
 		}
 
 		if entry.IsDir() {
 			node.Type = "directory"
-			children, err := buildFileTree(entryPath, relPath, showHidden)
-			if err == nil {
-				node.Children = children
+			// Descend when unlimited or more than one level remains; otherwise
+			// this is the boundary — record whether a chevron is warranted.
+			if remainingDepth == treeUnlimited || remainingDepth > 1 {
+				childDepth := remainingDepth
+				if remainingDepth > 0 {
+					childDepth = remainingDepth - 1
+				}
+				children, err := buildFileTree(entryPath, relPath, showHidden, childDepth)
+				if err == nil {
+					node.Children = children
+				}
+				node.HasChildren = len(node.Children) > 0
+			} else {
+				node.HasChildren = dirHasVisibleChildren(entryPath, showHidden)
 			}
 		} else {
 			node.Type = "file"
 			node.Size = info.Size()
-			node.Modified = info.ModTime().Format(time.RFC3339)
 		}
 
 		nodes = append(nodes, node)
@@ -893,18 +902,20 @@ func handleFSGetTree(_ context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	// Try git ls-files first for git repos (much faster)
-	var nodes []*fsFileNode
-	var err error
-	if isGitRepo(basePath) {
-		nodes, err = buildFileTreeFromGit(basePath, req.ShowHidden)
+	// Serve from a live, depth-limited filesystem walk (VS Code style) rather
+	// than the git index: this reads filesystem truth, so manually-removed files
+	// (rm, not `git rm`) disappear and every node reports its real size. A nested
+	// checkout is just another directory here — the walk recurses into it and
+	// lists its contents (preserving the old embedded-repo behavior) while
+	// skipping only the .git dir itself. Depth 0 keeps the full-tree contract.
+	depth := treeUnlimited
+	if req.Depth > 0 {
+		depth = req.Depth
 	}
-	// Fall back to filesystem walk if not a git repo or git ls-files failed
-	if err != nil || nodes == nil {
-		nodes, err = buildFileTree(basePath, "", req.ShowHidden)
-		if err != nil {
-			return nil, fmt.Errorf("read dir %s: %w", basePath, err)
-		}
+
+	nodes, err := buildFileTree(basePath, "", req.ShowHidden, depth)
+	if err != nil {
+		return nil, fmt.Errorf("read dir %s: %w", basePath, err)
 	}
 
 	resp := struct {
@@ -923,158 +934,6 @@ func isGitRepo(path string) bool {
 		return false
 	}
 	return info.IsDir() || info.Mode().IsRegular()
-}
-
-// buildFileTreeFromGit uses git ls-files to build the file tree efficiently.
-// This reads the git index + finds untracked files, respecting .gitignore.
-// Much faster than recursive os.ReadDir for git repos (~100ms vs ~2s).
-func buildFileTreeFromGit(basePath string, showHidden bool) ([]*fsFileNode, error) {
-	// Get tracked + untracked files (respecting .gitignore) in one command
-	cmd := exec.Command("git", "ls-files", "--cached", "--others", "--exclude-standard")
-	cmd.Dir = basePath
-	output, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-
-	// Build tree from flat path list
-	root := &fsFileNode{Type: "directory", Children: []*fsFileNode{}}
-	dirMap := map[string]*fsFileNode{"": root}
-
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, line := range lines {
-		if line == "" {
-			continue
-		}
-
-		// Skip hidden files/dirs if not showing hidden
-		if !showHidden {
-			parts := strings.Split(line, string(filepath.Separator))
-			hidden := false
-			for _, part := range parts {
-				if strings.HasPrefix(part, ".") {
-					hidden = true
-					break
-				}
-			}
-			if hidden {
-				continue
-			}
-		}
-
-		// git ls-files emits an embedded git repository (a checkout nested
-		// inside this one) as a single "dir/" line with a trailing slash
-		// instead of recursing into it. Type it as a directory and list its
-		// contents ourselves — via its own ls-files when it is a git repo
-		// (so its .gitignore is respected), a plain walk otherwise. Without
-		// this branch the entry lands in the tree as a zero-byte FILE named
-		// after the directory and the viewer chokes trying to preview it.
-		if strings.HasSuffix(line, "/") {
-			rel := strings.TrimSuffix(line, "/")
-			ensureDirPath(dirMap, rel, showHidden)
-			node, ok := dirMap[rel]
-			if !ok {
-				continue
-			}
-			sub := filepath.Join(basePath, rel)
-			var children []*fsFileNode
-			if isGitRepo(sub) {
-				if gitChildren, subErr := buildFileTreeFromGit(sub, showHidden); subErr == nil {
-					prefixTreePaths(gitChildren, rel)
-					children = gitChildren
-				}
-			}
-			if children == nil {
-				if walked, walkErr := buildFileTree(sub, rel, showHidden); walkErr == nil {
-					children = walked
-				}
-			}
-			node.Children = append(node.Children, children...)
-			continue
-		}
-
-		// Ensure all parent directories exist in the tree
-		dir := filepath.Dir(line)
-		ensureDirPath(dirMap, dir, showHidden)
-
-		// Add the file node
-		name := filepath.Base(line)
-		node := &fsFileNode{
-			Name: name,
-			Path: line,
-			Type: "file",
-		}
-
-		parentDir := ""
-		if dir != "." {
-			parentDir = dir
-		}
-		if parent, ok := dirMap[parentDir]; ok {
-			parent.Children = append(parent.Children, node)
-		}
-	}
-
-	if root.Children == nil {
-		return []*fsFileNode{}, nil
-	}
-	sortTree(root.Children)
-	return root.Children, nil
-}
-
-// prefixTreePaths rebases node paths produced relative to a subtree root
-// onto the parent tree's coordinate space.
-func prefixTreePaths(nodes []*fsFileNode, prefix string) {
-	for _, n := range nodes {
-		n.Path = filepath.Join(prefix, n.Path)
-		if len(n.Children) > 0 {
-			prefixTreePaths(n.Children, prefix)
-		}
-	}
-}
-
-// ensureDirPath ensures all directories in the path exist in the tree.
-func ensureDirPath(dirMap map[string]*fsFileNode, dirPath string, showHidden bool) {
-	if dirPath == "." || dirPath == "" {
-		return
-	}
-	if _, exists := dirMap[dirPath]; exists {
-		return
-	}
-
-	// Ensure parent exists first
-	parent := filepath.Dir(dirPath)
-	if parent == "." {
-		parent = ""
-	}
-	ensureDirPath(dirMap, parent, showHidden)
-
-	name := filepath.Base(dirPath)
-	node := &fsFileNode{
-		Name:     name,
-		Path:     dirPath,
-		Type:     "directory",
-		Children: []*fsFileNode{},
-	}
-	dirMap[dirPath] = node
-
-	if parentNode, ok := dirMap[parent]; ok {
-		parentNode.Children = append(parentNode.Children, node)
-	}
-}
-
-// sortTree sorts children: directories first, then files, alphabetically within each group.
-func sortTree(nodes []*fsFileNode) {
-	sort.Slice(nodes, func(i, j int) bool {
-		if nodes[i].Type != nodes[j].Type {
-			return nodes[i].Type == "directory" // dirs first
-		}
-		return strings.ToLower(nodes[i].Name) < strings.ToLower(nodes[j].Name)
-	})
-	for _, node := range nodes {
-		if node.Children != nil {
-			sortTree(node.Children)
-		}
-	}
 }
 
 // =============================================================================

@@ -6,6 +6,7 @@ import { projectGrpc, type Project as GrpcProject } from "../api/project-grpc";
 import { toast } from "../lib/toast-manager";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatStore } from "./chatStore";
+import { getChatFromCache } from "../hooks/chat-queries";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useViewerStore } from "./viewerStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
@@ -171,8 +172,9 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       worktreeStore.worktrees = [];
       worktreeStore.currentWorktree = null;
 
-      const chatStore = useChatStore.getState();
-      chatStore.chats = new Map();
+      // Chats now live in the React Query cache, keyed by projectId — the
+      // list query for the new project scopes naturally and loadChats seeds
+      // its detail entries, so no manual clear is needed here.
     }
 
     set({ currentProject: project });
@@ -244,7 +246,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const worktreeState = useWorkspaceStateStore.getState().getWorktreeState(project.id, currentWorktreeId);
       if (worktreeState.activeChatId) {
         const chat = worktreeState.activeChatId
-          ? useChatStore.getState().chats.get(worktreeState.activeChatId)
+          ? getChatFromCache(worktreeState.activeChatId)
           : undefined;
         if (chat) {
           logger.info("[ProjectStore] Restoring active chat on project switch", {

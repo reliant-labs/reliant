@@ -15,6 +15,9 @@ import { useChatStore } from "./chatStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useTourStore } from "./tourStore";
+import { useProjectStore } from "./projectStore";
+import { getCachedChatList } from "../hooks/chat-queries";
+import { getMessagesFromCache } from "../hooks/message-queries";
 
 /**
  * Whether the guided tour is currently active. Source of truth: the URL
@@ -161,7 +164,7 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
     }
 
     const activeChatId = chatState.activeChatId;
-    const activeMessages = activeChatId ? chatState.messages[activeChatId] || [] : [];
+    const activeMessages = activeChatId ? getMessagesFromCache(activeChatId) : [];
     const activeThreads = activeChatId
       ? useThreadActivityStore.getState().threads[activeChatId] || []
       : [];
@@ -171,7 +174,9 @@ export const useContextualTipsStore = create<ContextualTipsStoreState>((set, get
         onboardingComplete: onboardingState.hasCompletedOnboarding,
         isWizardActive: isTourActiveFromUrl(),
         activeChatId,
-        chats: Array.from(chatState.chats.values()),
+        chats: getCachedChatList(
+          useProjectStore.getState().currentProject?.id
+        ),
         activeMessages,
         activeThreads,
         hasNonMainWorktree: worktreeState

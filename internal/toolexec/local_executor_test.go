@@ -14,6 +14,7 @@ import (
 type recordingMCPRuntime struct {
 	ensureCalls      []string
 	listProjectCalls []string
+	callSessions     []string
 	toolsByProject   map[string]map[string][]mcp.Tool
 }
 
@@ -37,11 +38,13 @@ func (r *recordingMCPRuntime) ListAllTools() (map[string][]mcp.Tool, error) {
 	return map[string][]mcp.Tool{}, nil
 }
 
-func (r *recordingMCPRuntime) ProjectCallTool(projectPath, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+func (r *recordingMCPRuntime) ProjectCallTool(session, projectPath, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+	r.callSessions = append(r.callSessions, session)
 	return &mcp.ToolResult{Content: []mcp.ToolContent{{Type: "text", Text: projectPath + ":" + serverName + ":" + toolName}}}, nil
 }
 
-func (r *recordingMCPRuntime) CallTool(serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+func (r *recordingMCPRuntime) CallTool(session, serverName, toolName string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
+	r.callSessions = append(r.callSessions, session)
 	return &mcp.ToolResult{Content: []mcp.ToolContent{{Type: "text", Text: serverName + ":" + toolName}}}, nil
 }
 
@@ -110,6 +113,11 @@ func TestLocalToolExecutor_EnsuresProjectMCPServersLoadedBeforeLookup(t *testing
 	require.Equal(t, []string{worktreePath}, runtime.ensureCalls)
 	require.Equal(t, []string{worktreePath}, runtime.listProjectCalls)
 	require.Equal(t, worktreePath+":fetch:fetch", result.Content)
+	// The agent thread must survive the whole executor path to the MCP runtime:
+	// it is the key that keeps concurrent fan-out threads off each other's
+	// browser page (internal/mcp/session.go).
+	require.Equal(t, []string{"thread-1"}, runtime.callSessions,
+		"the executing thread must reach the MCP runtime as the session key")
 }
 
 func TestLocalToolExecutor_DoesNotAutoloadForNonMCPTools(t *testing.T) {

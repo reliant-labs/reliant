@@ -13,6 +13,19 @@
  * daemon then reads the existing entry for `endpointKey(--server)` and skips
  * its own registration flow entirely.
  *
+ * Token freshness
+ * ---------------
+ * The stored session's access token is a short-lived JWT (~1h). This
+ * preflight runs on COLD LAUNCH, typically hours-to-days after the session
+ * was last persisted — so the disk token is usually EXPIRED and minting with
+ * it verbatim 401s deterministically, dumping the daemon into the broken
+ * interactive flow ("No machine connected"). We therefore refresh the
+ * session against the GoTrue token endpoint (using the stored refresh_token)
+ * before minting: proactively when `expires_at` says the token is stale, and
+ * reactively — once — when the mint comes back 401 anyway. The refreshed
+ * session is persisted back through authStorage so the renderer inherits the
+ * ROTATED refresh token instead of burning the old one twice.
+ *
  * Contract with the Go side
  * -------------------------
  * The on-disk format (`~/.reliant/daemon.json`) and the keying scheme
@@ -51,6 +64,16 @@ const MINT_RETRY_BACKOFFS_MS = [200, 800];
 // 502/503/504 are the classic transient-upstream codes. 4xx (including 401)
 // are *not* retried — bad credentials/bad request won't fix themselves.
 const MINT_RETRYABLE_STATUSES = new Set([502, 503, 504]);
+// GoTrue session-refresh endpoint (relative to the Supabase project base
+// URL). Same endpoint supabase-js uses under the hood.
+const REFRESH_TOKEN_PATH = '/auth/v1/token?grant_type=refresh_token';
+// Per-call timeout for the session refresh. One roundtrip to GoTrue; kept as
+// short as the mint's because we're blocking daemon spawn.
+const REFRESH_TIMEOUT_MS = 5_000;
+// Proactive-refresh margin: treat the stored access token as stale when it
+// expires within this window. Wide enough to absorb modest clock skew;
+// narrow enough that a mid-session relaunch reuses the live token.
+const TOKEN_EXPIRY_MARGIN_S = 60;
 // Node error codes that mean "couldn't even reach the server" — almost
 // always transient when `air` is mid-restart of the api-server.
 const MINT_RETRYABLE_ERROR_CODES = new Set([
@@ -190,8 +213,12 @@ function writeDaemonStore(store, opts = {}) {
  * never blocks daemon spawn. Throwing here keeps the helper honest for
  * tests; the orchestrator decides whether a failure aborts startup.
  *
- * `sub` is the Supabase subject the PAT was minted for. The Go side ignores
- * this field (extra JSON keys round-trip), but BackendManager reads it via
+ * `sub` is the Supabase subject the PAT was minted for. The Go side never
+ * sets it but declares it on DaemonCredentials (internal/auth/daemon_file.go)
+ * purely so the daemon's own entry rewrites (persisting daemon_id after
+ * registration) round-trip it — Go struct unmarshal DROPS unknown JSON keys,
+ * so without that field every registration erased `sub` and forced a
+ * re-mint on the next cold launch. BackendManager reads it via
  * `entryOwnerSub` to decide whether the cached PAT belongs to the currently
  * signed-in user — without it, sign-out-sign-in-as-different-user reuses the
  * old user's PAT, the daemon registers under the wrong owner, and the new
@@ -511,6 +538,105 @@ async function safeReadText(res) {
   }
 }
 
+/**
+ * Whether the stored session's access token is expired or about to expire
+ * (within TOKEN_EXPIRY_MARGIN_S). `expires_at` is unix SECONDS in Supabase
+ * session objects. A session with no usable `expires_at` returns false —
+ * we can't tell, so we let the mint's 401-triggered refresh path decide
+ * instead of burning a refresh-token rotation on a guess.
+ *
+ * @param {{ expires_at?: number } | null | undefined} session
+ * @param {number} [nowMs] injectable clock for tests
+ * @returns {boolean}
+ */
+function sessionNeedsRefresh(session, nowMs = Date.now()) {
+  const expiresAt = Number(session?.expires_at);
+  if (!Number.isFinite(expiresAt) || expiresAt <= 0) return false;
+  return expiresAt * 1000 <= nowMs + TOKEN_EXPIRY_MARGIN_S * 1000;
+}
+
+/**
+ * Exchange the session's refresh_token for a fresh session at the GoTrue
+ * token endpoint. Throws on any failure — the caller decides whether a
+ * failed refresh is fatal (it isn't: we fall back to minting with the
+ * stored token, which preserves the pre-refresh behavior exactly).
+ *
+ * Returns a NEW session object in the stored-session shape (auth-storage
+ * requires access_token + refresh_token to persist): unspecified fields are
+ * carried forward from the old session, `expires_at` is normalized from
+ * `expires_in` when GoTrue omits it, and a missing rotated refresh_token
+ * (shouldn't happen, but never brick the store on it) keeps the old one.
+ *
+ * `fetch` is taken off `globalThis` so tests can stub it, same as the mint.
+ * No localhost-HTTPS fallback here: GoTrue is either a real-cert hosted
+ * project or a plain-HTTP self-hosted dev stack, never self-signed HTTPS.
+ *
+ * @param {{ authUrl: string, anonKey: string, session: object,
+ *           logger?: { debug?: Function } }} args
+ * @returns {Promise<object>} the refreshed session
+ */
+async function refreshSupabaseSession({ authUrl, anonKey, session, logger }) {
+  if (!authUrl || !anonKey) {
+    throw new Error('refreshSupabaseSession: auth provider not configured');
+  }
+  const refreshToken = session?.refresh_token;
+  if (!refreshToken) {
+    throw new Error('refreshSupabaseSession: session has no refresh_token');
+  }
+  const fetchImpl = globalThis.fetch;
+  if (typeof fetchImpl !== 'function') {
+    throw new Error('refreshSupabaseSession: globalThis.fetch is not available');
+  }
+
+  const url = `${authUrl.replace(/\/+$/, '')}${REFRESH_TOKEN_PATH}`;
+  if (logger?.debug) logger.debug('[daemon-creds] refreshing Supabase session via', url);
+  const res = await fetchImpl(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      apikey: anonKey,
+    },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+    signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
+  });
+
+  if (!res.ok) {
+    const text = await safeReadText(res);
+    throw new Error(
+      `session refresh failed: HTTP ${res.status}${text ? ` — ${text}` : ''}`
+    );
+  }
+
+  const data = await res.json();
+  if (!data || typeof data.access_token !== 'string' || !data.access_token) {
+    throw new Error('session refresh response missing access_token');
+  }
+
+  const expiresIn = Number(data.expires_in);
+  const rawExpiresAt = Number(data.expires_at);
+  const expiresAt =
+    Number.isFinite(rawExpiresAt) && rawExpiresAt > 0
+      ? rawExpiresAt
+      : Number.isFinite(expiresIn) && expiresIn > 0
+        ? Math.floor(Date.now() / 1000) + expiresIn
+        : undefined;
+
+  return {
+    ...session,
+    access_token: data.access_token,
+    refresh_token:
+      typeof data.refresh_token === 'string' && data.refresh_token
+        ? data.refresh_token
+        : session.refresh_token,
+    ...(typeof data.token_type === 'string' && data.token_type
+      ? { token_type: data.token_type }
+      : {}),
+    ...(Number.isFinite(expiresIn) && expiresIn > 0 ? { expires_in: expiresIn } : {}),
+    ...(expiresAt ? { expires_at: expiresAt } : {}),
+    user: data.user || session.user,
+  };
+}
+
 // No-op logger used when the caller doesn't supply one. Keeps the orchestrator
 // pure-function from the test's perspective (no console noise leaks out).
 const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
@@ -524,19 +650,37 @@ const NOOP_LOGGER = { debug() {}, info() {}, warn() {}, error() {} };
  *     fall into its own headless-broken flow, which is the pre-existing
  *     behavior).
  *   - If an existing entry matches the current session's `sub` → no-op (reuse).
- *   - Otherwise → mint a fresh PAT via CreateDaemonToken and write it.
+ *   - Otherwise → mint a fresh PAT via CreateDaemonToken and write it,
+ *     refreshing the stored session first when its access token is stale
+ *     (see "Token freshness" in the module doc). A 401 from the mint with a
+ *     token that LOOKED fresh triggers one refresh + one retry — server-side
+ *     clock skew or out-of-band revocation, both fixed by a new token.
+ *
+ * `authUrl` + `authAnonKey` identify the GoTrue provider for the refresh.
+ * When either is missing the refresh is disabled and behavior degrades to
+ * the historical mint-with-stored-token (OSS builds with no hosted config).
  *
  * Failure-mode contract: this function NEVER throws. Every failure path is
  * logged and swallowed so the caller can spawn the daemon unconditionally.
  *
  * @param {{
- *   authStorage: { loadStoredAuth: () => object|null } | null,
+ *   authStorage: { loadStoredAuth: () => object|null,
+ *                  saveAuth?: (session: object) => boolean } | null,
  *   apiUrl: string,
  *   gatewayUrl?: string,
+ *   authUrl?: string,
+ *   authAnonKey?: string,
  *   logger?: { debug?: Function, info?: Function, warn?: Function, error?: Function },
  * }} args
  */
-async function ensureDaemonPATForOrigin({ authStorage, apiUrl, gatewayUrl, logger }) {
+async function ensureDaemonPATForOrigin({
+  authStorage,
+  apiUrl,
+  gatewayUrl,
+  authUrl,
+  authAnonKey,
+  logger,
+}) {
   const log = logger || NOOP_LOGGER;
   try {
     if (!authStorage) {
@@ -552,9 +696,10 @@ async function ensureDaemonPATForOrigin({ authStorage, apiUrl, gatewayUrl, logge
 
     // Read the current session BEFORE the idempotency check — we need its
     // sub to decide whether the cached PAT still belongs to the right user.
-    const session = authStorage.loadStoredAuth();
-    const accessToken = session?.access_token;
-    const currentSub = session?.user?.id;
+    // All three are mutable: a session refresh below swaps them wholesale.
+    let session = authStorage.loadStoredAuth();
+    let accessToken = session?.access_token;
+    let currentSub = session?.user?.id;
 
     const store = readDaemonStore({ logger: log });
     const existing = store[key];
@@ -587,6 +732,43 @@ async function ensureDaemonPATForOrigin({ authStorage, apiUrl, gatewayUrl, logge
       log.info?.('[daemon-creds] ensureDaemonPATForOrigin: cached PAT has no owner sub recorded — re-minting');
     }
 
+    // ── Session freshness ────────────────────────────────────────────────
+    // The disk session is from the PREVIOUS app run; on a cold launch its
+    // access token has usually outlived its ~1h TTL and the mint would 401
+    // deterministically. Refresh first when we can tell it's stale, and
+    // persist the rotated session so the renderer (which reads the same
+    // store at startup) doesn't replay the consumed refresh token later.
+    const canRefresh = Boolean(authUrl && authAnonKey && session?.refresh_token);
+    let refreshed = false;
+    const applyRefreshedSession = (next) => {
+      session = next;
+      accessToken = next.access_token;
+      currentSub = next.user?.id || currentSub;
+      refreshed = true;
+      try {
+        if (typeof authStorage.saveAuth === 'function' && !authStorage.saveAuth(next)) {
+          log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: could not persist refreshed session (continuing with in-memory session)');
+        }
+      } catch (persistErr) {
+        log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: persisting refreshed session threw (continuing):', persistErr?.message || persistErr);
+      }
+    };
+
+    if (canRefresh && sessionNeedsRefresh(session)) {
+      log.info?.('[daemon-creds] ensureDaemonPATForOrigin: stored access token expired/expiring — refreshing session before mint');
+      try {
+        applyRefreshedSession(
+          await refreshSupabaseSession({ authUrl, anonKey: authAnonKey, session, logger: log })
+        );
+      } catch (refreshErr) {
+        // Not fatal: fall through and mint with the stored token — identical
+        // to the pre-refresh behavior. The 401 path below can't retry
+        // (refresh already failed once; a second attempt won't do better).
+        log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: pre-mint session refresh failed, minting with stored token:', refreshErr.message);
+        refreshed = true; // consume the one refresh attempt
+      }
+    }
+
     log.info?.('[daemon-creds] ensureDaemonPATForOrigin: minting daemon PAT for origin', key);
     let minted;
     try {
@@ -597,9 +779,35 @@ async function ensureDaemonPATForOrigin({ authStorage, apiUrl, gatewayUrl, logge
         logger: log,
       });
     } catch (mintErr) {
-      // 401/403/5xx/network all funnel through here. Log + skip.
-      log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: mint failed, falling back to daemon flow:', mintErr.message);
-      return;
+      // A 401 with a token we HAVEN'T refreshed yet means the token is stale
+      // in a way expires_at didn't reveal (clock skew, revocation). One
+      // refresh + one retry; anything else — 403/5xx/network — won't be
+      // fixed by a new token, so log + skip (the pre-existing contract).
+      const retriableAuthFailure = mintErr?.mintStatus === 401 && canRefresh && !refreshed;
+      if (!retriableAuthFailure) {
+        log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: mint failed, falling back to daemon flow:', mintErr.message);
+        return;
+      }
+      log.info?.('[daemon-creds] ensureDaemonPATForOrigin: mint got 401 — refreshing session and retrying once');
+      try {
+        applyRefreshedSession(
+          await refreshSupabaseSession({ authUrl, anonKey: authAnonKey, session, logger: log })
+        );
+      } catch (refreshErr) {
+        log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: session refresh after 401 failed, falling back to daemon flow:', refreshErr.message);
+        return;
+      }
+      try {
+        minted = await mintDaemonPAT({
+          apiUrl,
+          accessToken,
+          name: os.hostname(),
+          logger: log,
+        });
+      } catch (retryErr) {
+        log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: mint retry after refresh failed, falling back to daemon flow:', retryErr.message);
+        return;
+      }
     }
 
     try {
@@ -637,9 +845,13 @@ module.exports = {
   deleteEntry,
   entryOwnerSub,
   mintDaemonPAT,
+  sessionNeedsRefresh,
+  refreshSupabaseSession,
   ensureDaemonPATForOrigin,
   MINT_RPC_PATH,
   MINT_TIMEOUT_MS,
   MINT_MAX_ATTEMPTS,
   MINT_RETRY_BACKOFFS_MS,
+  REFRESH_TOKEN_PATH,
+  TOKEN_EXPIRY_MARGIN_S,
 };

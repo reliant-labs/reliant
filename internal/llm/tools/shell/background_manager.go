@@ -334,6 +334,14 @@ func (m *BackgroundManager) StartProcessWithEnv(ctx context.Context, command str
 
 // StartProcess starts a new background process with the given options
 func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessOptions) (*BackgroundProcess, error) {
+	// Name a bad working directory before spawning. Go does the chdir in the
+	// forked child, so the kernel's ENOENT comes back as
+	// "fork/exec /bin/bash: no such file or directory" — blaming the shell for
+	// a directory that is gone.
+	if err := osutil.ValidateWorkingDir(opts.WorkingDir); err != nil {
+		return nil, err
+	}
+
 	processID := uuid.New().String()
 
 	// Create command with context for cancellation
@@ -544,7 +552,20 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 				logging.Warn("Background process OOM-killed", "id", process.ID, "command", process.Command)
 			}
 		} else {
+			// No exit status means the process never ran to completion, so
+			// nothing was ever written to its stderr pipe. Anyone polling the
+			// output (LLM via bg_output, user via RPC) would see a process that
+			// is "failed" with no exit code and no output at all — the daemon
+			// log is not a channel they can read. Append the reason as a
+			// synthetic stderr line, the same way an OOM kill is reported above.
 			process.Status = "failed"
+			process.outputSeq++
+			process.combinedOutput = append(process.combinedOutput, OutputLineWithSeq{
+				Type:     "stderr",
+				Text:     err.Error(),
+				Sequence: process.outputSeq,
+			})
+			process.stderr.WriteString(err.Error() + "\n")
 		}
 		logging.Error("Background process failed", "id", process.ID, "error", err)
 		eventType = "failed"
@@ -767,6 +788,10 @@ func (m *BackgroundManager) GetCombinedOutputWithSeq(processID string, afterSeq 
 	return result, latestSeq, nil
 }
 
+// KillGraceTimeout is how long a kill waits for a process group to go down on
+// SIGTERM before escalating to SIGKILL.
+const KillGraceTimeout = 3 * time.Second
+
 // KillProcess terminates a background process and all its child processes
 func (m *BackgroundManager) KillProcess(processID string) error {
 	process, err := m.GetProcess(processID)
@@ -813,7 +838,7 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 	case <-process.done:
 		// Process finished
 		logging.Debug("Process group terminated gracefully", "id", processID)
-	case <-time.After(3 * time.Second):
+	case <-time.After(KillGraceTimeout):
 		// Force kill the entire process group if it doesn't stop gracefully
 		logging.Warn("Process group did not terminate gracefully, force killing",
 			"id", processID,
@@ -1155,6 +1180,13 @@ func (m *BackgroundManager) CleanupOldProcesses(maxAge time.Duration) {
 
 // KillAllRunning kills all running background processes.
 // This should be called during server shutdown to prevent orphaned processes.
+//
+// The processes are killed concurrently. KillProcess spends up to three seconds
+// waiting for each one to die, and this runs on the shutdown path between
+// SIGTERM and process exit — serially that is three seconds PER background
+// process, so a daemon holding a handful of dev servers stayed alive for tens of
+// seconds after it was told to stop, looking indistinguishable from wedged. The
+// processes are independent, so nothing is ordered here.
 func (m *BackgroundManager) KillAllRunning() {
 	m.mu.RLock()
 	var runningIDs []string
@@ -1172,13 +1204,19 @@ func (m *BackgroundManager) KillAllRunning() {
 
 	logging.Info("Killing all running background processes during shutdown", "count", len(runningIDs))
 
+	var wg sync.WaitGroup
 	for _, id := range runningIDs {
-		if err := m.KillProcess(id); err != nil {
-			logging.Warn("Failed to kill background process during shutdown",
-				"id", id,
-				"error", err)
-		}
+		wg.Add(1)
+		go func(id string) {
+			defer wg.Done()
+			if err := m.KillProcess(id); err != nil {
+				logging.Warn("Failed to kill background process during shutdown",
+					"id", id,
+					"error", err)
+			}
+		}(id)
 	}
+	wg.Wait()
 }
 
 // getProcessPorts gets the ports used by a process and its children

@@ -9,7 +9,7 @@ snapshot that `sqlc` reads to generate type-safe Go code.
 ## Files
 
 - **`migrations/postgres/`** - Goose migration files (source of truth for the schema)
-- **`postgres/schema.sql`** - Schema snapshot consumed by `sqlc`
+- **`postgres/schema.sql`** - Schema consumed by `sqlc`, generated from the migrations by `scripts/generate-schema-sql.sh`
 - **`postgres/queries/`** - Hand-written SQL queries compiled by `sqlc`
 - **`sqlc.yaml`** - Points `sqlc` at `postgres/schema.sql` and `postgres/queries/`
 
@@ -24,7 +24,15 @@ snapshot that `sqlc` reads to generate type-safe Go code.
    # Edit the migration file with your schema changes
    ```
 
-2. **Update `postgres/schema.sql`** to reflect the new schema so `sqlc` can see it.
+2. **Regenerate `postgres/schema.sql`** from the migrations:
+
+   ```bash
+   scripts/generate-schema-sql.sh
+   ```
+
+   This applies every migration to a disposable Postgres and dumps the result,
+   so the file cannot describe a schema the migrations do not build. Do not edit
+   it by hand — `TestSchemaSQLMatchesMigrations` fails when the two disagree.
 
 3. **Regenerate Go code**:
 
@@ -46,6 +54,7 @@ snapshot that `sqlc` reads to generate type-safe Go code.
 
 | Command              | Description                            |
 | -------------------- | -------------------------------------- |
+| `scripts/generate-schema-sql.sh` | Regenerate `postgres/schema.sql` from the migrations |
 | `make sqlc`          | Generate Go code from `postgres/schema.sql` |
 | `make db-regenerate` | Alias for `make sqlc`                  |
 

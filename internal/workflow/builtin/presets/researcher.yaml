@@ -1,11 +1,11 @@
 name: researcher
-description: Research and analysis specialist conducting comprehensive investigations with read-only codebase access. Has full access to search the web and explore the codebase, but cannot modify files
+description: Research and analysis specialist conducting comprehensive investigations of the codebase. Has full access to search the web and explore the codebase. Intended for investigation rather than code changes.
 tag: agent
-recommended_skills:
-  - research-methodology
 params:
+  skills:
+    - research-methodology
   tools:
-  - tag:search   # grep, glob for code exploration
+  - tag:shell    # search the codebase via the shell tool (rg/grep/find)
   - tag:web      # fetch for documentation research
   - view         # Read files
   model:

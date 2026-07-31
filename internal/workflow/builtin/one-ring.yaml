@@ -126,11 +126,6 @@ inputs:
     default: npm run dev
     description: Command to start the application for UX review.
 
-  app_port:
-    type: integer
-    default: 5173
-    description: Port the application runs on (for UX reviewer to connect to).
-
   context_bridge:
     type: enum
     default: feedback_only
@@ -408,7 +403,6 @@ nodes:
       build_command: "{{'build' in inputs.steps ? inputs.build_command : ''}}"
       build_log: "{{inputs.build_log}}"
       start_app_command: "{{'start_app' in inputs.steps ? inputs.start_app_command : ''}}"
-      app_port: "{{inputs.app_port}}"
     thread:
       mode: fork
       memo: false
@@ -430,6 +424,7 @@ nodes:
 
   - id: success
     type: save_message
+    outcome: success
     args:
       role: assistant
       content: |
@@ -439,6 +434,9 @@ nodes:
 
   - id: max_retries_reached
     type: save_message
+    # Out of retries with the gate still red — the run ended, the work did not
+    # pass, and the graph reaching this node is the only place that is known.
+    outcome: failure
     args:
       role: assistant
       content: |

@@ -2,21 +2,23 @@
 package commands
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/preset"
+	skillscatalog "github.com/reliant-labs/reliant/internal/skills/catalog"
+	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
@@ -35,7 +37,21 @@ func newWorkflowCmd() *cobra.Command {
 	cmd.AddCommand(newWorkflowValidateTreeCmd())
 	cmd.AddCommand(newWorkflowListCmd())
 	cmd.AddCommand(newWorkflowRunCmd())
+	cmd.AddCommand(newWorkflowFollowCmd())
 	cmd.AddCommand(newWorkflowScenarioCmd())
+
+	// Live supervision surface (Connect RPCs + context credential; no DB).
+	cmd.AddCommand(newWorkflowWatchCmd())
+	cmd.AddCommand(newWorkflowWaitForGateCmd())
+	cmd.AddCommand(newWorkflowStatusCmd())
+	cmd.AddCommand(newWorkflowQuestionsCmd())
+	cmd.AddCommand(newWorkflowAnswerCmd())
+	cmd.AddCommand(newWorkflowCancelCmd())
+	cmd.AddCommand(newWorkflowPauseCmd())
+	cmd.AddCommand(newWorkflowResumeCmd())
+
+	// ps, node, analyze and forensics read the database directly, so they are
+	// not part of this CLI — they live in tools/reliant-dev.
 
 	return cmd
 }
@@ -231,32 +247,67 @@ func parseWorkflowInfo(path, source string) workflowListInfo {
 
 func newWorkflowRunCmd() *cobra.Command {
 	var (
-		inputs    []string
-		inputFile string
-		follow    bool
-		projectID string
+		inputs      []string
+		inputFile   string
+		message     string
+		follow      bool
+		projectID   string
+		projectPath string
+		followFlags followFlags
 	)
 
 	cmd := &cobra.Command{
 		Use:   "run <workflow-name>",
 		Short: "Run a workflow",
-		Long: `Triggers a workflow execution via the Reliant cloud API.
+		Long: `Triggers a workflow execution by creating a chat bound to the workflow,
+via the Reliant ChatService.CreateChat Connect RPC — the exact path the web
+app takes. A run IS a chat: sending the first user message kicks the root
+workflow.
 
-Requires authentication (run 'reliant auth login' first).`,
+Authentication and target server resolve through the CLI context
+(--context flag > RELIANT_CONTEXT env > current_context), falling back to
+the legacy auth file from 'reliant auth login'. The resolved bearer (an
+rlnt_pat_ API token or a session JWT) authenticates the RPC.
+
+A run executes against a project. Supply it by ID (--project-id) or by path
+(--project-path); with --project-path the project is resolved by its path —
+reused if one already exists there, or created on the fly — so no manual
+project setup is needed. --project-id takes precedence when both are given.
+
+Bare workflow names that match a builtin are normalized to builtin://<name>
+(like the web app); other names resolve as drafts / project workflows
+server-side. The first user message is taken from --message, then
+inputs.message, then inputs.prompt, then a generic kick message. All --input
+values land on the workflow_params plane (message/prompt excluded).
+
+With --follow, streams NDJSON lifecycle events until the workflow reaches
+a terminal state (see 'reliant workflow follow --help' for the event
+format, exit codes, and --hook).`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			workflowName := args[0]
 
-			// Ensure authenticated
-			accessToken, err := auth.ReadAccessTokenFromAuthFile()
-			if err != nil || accessToken == "" {
-				return fmt.Errorf("not authenticated — run 'reliant auth login' first")
+			// Resolve server + credentials (context-aware; legacy JWT fallback)
+			conn, err := resolveConnection(cmd)
+			if err != nil {
+				return err
+			}
+			// Resolve the project. --project-id wins; otherwise --project-path
+			// finds-or-creates a project by path so no manual CreateProject is
+			// needed.
+			resolvedProjectID := projectID
+			if resolvedProjectID == "" && projectPath != "" {
+				resolvedProjectID, err = resolveProjectPathToID(cmd.Context(), conn, projectPath)
+				if err != nil {
+					return err
+				}
+			}
+			if resolvedProjectID == "" {
+				return fmt.Errorf("a project is required — pass --project-id or --project-path")
 			}
 
-			// Build input map
+			// Build input map: --input flags then --input-file overlay.
 			inputMap := make(map[string]interface{})
-
-			// From --input flags
 			for _, kv := range inputs {
 				parts := strings.SplitN(kv, "=", 2)
 				if len(parts) != 2 {
@@ -264,8 +315,6 @@ Requires authentication (run 'reliant auth login' first).`,
 				}
 				inputMap[parts[0]] = parts[1]
 			}
-
-			// From --input-file
 			if inputFile != "" {
 				data, err := os.ReadFile(inputFile)
 				if err != nil {
@@ -280,70 +329,122 @@ Requires authentication (run 'reliant auth login' first).`,
 				}
 			}
 
-			// Build request payload
-			payload := map[string]interface{}{
-				"workflow_name": workflowName,
-				"inputs":        inputMap,
-			}
-			if projectID != "" {
-				payload["project_id"] = projectID
-			}
-
-			reqBody, err := json.Marshal(payload)
+			params, err := workflowParamsFromInputs(inputMap)
 			if err != nil {
-				return fmt.Errorf("encoding request: %w", err)
+				return err
 			}
 
-			// POST to cloud API
-			url := serverURL + "/api/v1/workflows/run"
-			req, err := http.NewRequestWithContext(cmd.Context(), "POST", url, bytes.NewReader(reqBody))
+			createReq := &reliantv1.CreateChatRequest{
+				ProjectId: resolvedProjectID,
+				Workflow:  normalizeRunWorkflowRef(workflowName),
+				Messages: []*reliantv1.InputMessage{{
+					Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
+					Content: resolveRunMessage(workflowName, message, inputMap),
+				}},
+				WorkflowParams: params,
+			}
+
+			// Connect client authenticated by the context bearer, mirroring how
+			// `reliant workflow follow` builds its ChatService client.
+			chatClient := reliantv1connect.NewChatServiceClient(conn.httpClient(), conn.ServerURL)
+
+			resp, err := chatClient.CreateChat(cmd.Context(), connect.NewRequest(createReq))
 			if err != nil {
-				return fmt.Errorf("creating request: %w", err)
-			}
-			req.Header.Set("Authorization", "Bearer "+accessToken)
-			req.Header.Set("Content-Type", "application/json")
-
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				return fmt.Errorf("API request failed: %w", err)
-			}
-			defer resp.Body.Close()
-
-			respBody, _ := io.ReadAll(resp.Body)
-
-			if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-				return fmt.Errorf("API returned %d: %s", resp.StatusCode, string(respBody))
+				return conn.annotate(fmt.Errorf("starting workflow: %w", err))
 			}
 
-			var result struct {
-				WorkflowID  string `json:"workflow_id"`
-				ExecutionID string `json:"execution_id"`
+			// chat_id == execution_id: the follow surface is chat-scoped.
+			chatID := resp.Msg.GetChat().GetId()
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "Workflow %q triggered\n", workflowName)
+			if chatID != "" {
+				fmt.Fprintf(out, "  Chat/Execution ID: %s\n", chatID)
 			}
-			if err := json.Unmarshal(respBody, &result); err != nil {
-				// Still show raw response if we can't parse
-				fmt.Fprintf(cmd.OutOrStdout(), "Workflow triggered. Response: %s\n", string(respBody))
-				return nil
+			if wid := resp.Msg.GetWorkflowId(); wid != "" {
+				fmt.Fprintf(out, "  Workflow ID:       %s\n", wid)
 			}
-
-			fmt.Fprintf(cmd.OutOrStdout(), "Workflow %q triggered\n", workflowName)
-			if result.ExecutionID != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  Execution ID: %s\n", result.ExecutionID)
+			if rid := resp.Msg.GetRunId(); rid != "" {
+				fmt.Fprintf(out, "  Run ID:            %s\n", rid)
 			}
 
 			if follow {
-				fmt.Fprintln(cmd.OutOrStdout(), "  --follow is not yet implemented")
+				if chatID == "" {
+					return fmt.Errorf("cannot follow: CreateChat did not return a chat ID")
+				}
+				return runWorkflowFollow(cmd, chatID, &followFlags)
 			}
-
 			return nil
 		},
 	}
 
 	cmd.Flags().StringArrayVarP(&inputs, "input", "i", nil, "Workflow input as key=value (repeatable)")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "JSON file containing workflow inputs")
-	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Stream workflow execution output")
-	cmd.Flags().StringVar(&projectID, "project-id", "", "Project ID (default: from .reliant/config)")
+	cmd.Flags().StringVarP(&message, "message", "m", "", "First chat message that kicks the workflow (falls back to inputs.message/prompt, then a default)")
+	cmd.Flags().BoolVarP(&follow, "follow", "f", false, "Follow the execution and stream NDJSON lifecycle events")
+	cmd.Flags().StringVar(&projectID, "project-id", "", "Project ID (takes precedence over --project-path)")
+	cmd.Flags().StringVar(&projectPath, "project-path", "", "Project directory path; resolves (find-or-create) to a project ID when --project-id is absent")
+	followFlags.register(cmd)
 
 	return cmd
+}
+
+// reservedMessageKeys are inputs that belong to the chat-message plane
+// (consumed by resolveRunMessage), not the workflow_params plane. Passing them
+// through as params would fail a workflow's strict unknown-input validation
+// (e.g. `-i message=…` on a workflow that declares no `message` input), so
+// they are stripped when building workflow_params.
+var reservedMessageKeys = map[string]bool{"message": true, "prompt": true}
+
+// normalizeRunWorkflowRef maps bare builtin names ("forge-one-shot") to the
+// builtin://<name> refs the web app sends. Refs that already carry a scheme,
+// and names that do not match a builtin (user drafts / project workflows,
+// which CreateChat resolves by slug), pass through unchanged.
+func normalizeRunWorkflowRef(name string) string {
+	if strings.Contains(name, "://") {
+		return name
+	}
+	if _, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml"); err == nil {
+		return "builtin://" + name
+	}
+	return name
+}
+
+// resolveRunMessage picks the chat's first user message: explicit --message,
+// then inputs.message, then inputs.prompt, then a generic kick message
+// (CreateChat requires at least one user message; input-driven workflows read
+// their params, not the message).
+func resolveRunMessage(workflowName, explicit string, inputs map[string]interface{}) string {
+	if explicit != "" {
+		return explicit
+	}
+	for _, key := range []string{"message", "prompt"} {
+		if s, ok := inputs[key].(string); ok && s != "" {
+			return s
+		}
+	}
+	return fmt.Sprintf("Run the %s workflow with the provided inputs.", workflowName)
+}
+
+// workflowParamsFromInputs converts the CLI input map to the proto
+// workflow_params plane, excluding the reserved message-plane keys. Values
+// from --input are strings; --input-file may carry arbitrary JSON. structpb
+// conversion only fails on values JSON can't represent.
+func workflowParamsFromInputs(inputs map[string]interface{}) (map[string]*structpb.Value, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+	params := make(map[string]*structpb.Value, len(inputs))
+	for k, v := range inputs {
+		if reservedMessageKeys[k] {
+			continue
+		}
+		pv, err := structpb.NewValue(v)
+		if err != nil {
+			return nil, fmt.Errorf("input %q is not representable: %v", k, err)
+		}
+		params[k] = pv
+	}
+	return params, nil
 }
 
 // --- workflow validate implementation ---
@@ -519,6 +620,28 @@ func buildCLIWorkflowLoader(dir string) runtime.WorkflowLoader {
 	}
 }
 
+// cliSkillResolver is built once per process: enumerating the catalog walks
+// disk and forge's embedded templates, and `workflow validate` runs it against
+// every file in a directory.
+var cliSkillResolver = sync.OnceValue(func() *validation.SkillResolver {
+	cwd, err := os.Getwd()
+	if err != nil {
+		cwd = ""
+	}
+	paths := skillscatalog.WorkflowSkillPaths(cwd)
+	if len(paths) == 0 {
+		// Nothing to check against. Returning a resolver here would fail every
+		// skill name in every workflow; the layer is skipped instead.
+		return nil
+	}
+	return &validation.SkillResolver{
+		Names:   paths,
+		Resolve: func(p string) bool { return skillscore.ResolveSkillPathIndex(paths, p) >= 0 },
+	}
+})
+
+func buildCLISkillResolver() *validation.SkillResolver { return cliSkillResolver() }
+
 func validateWorkflowFile(path string, workflowDir string) validateResult {
 	result := validateResult{
 		File: filepath.Base(path),
@@ -541,9 +664,11 @@ func validateWorkflowFile(path string, workflowDir string) validateResult {
 	result.Nodes = len(wf.GetNodes())
 	result.Edges = len(wf.GetEdges())
 
-	// Run full validation with cross-workflow loader
+	// Run full validation with cross-workflow loader and a real skill catalog.
 	loader := buildCLIWorkflowLoader(workflowDir)
-	valResult, valErr := runtime.ValidateYAMLResult(data, loader)
+	valResult, valErr := runtime.ValidateYAMLResultWithOptions(data, loader, &validation.ValidationOptions{
+		SkillResolver: buildCLISkillResolver(),
+	})
 	if valErr != nil {
 		result.Errors = append(result.Errors, valErr.Error())
 	} else if valResult != nil {

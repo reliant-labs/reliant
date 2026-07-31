@@ -1,15 +1,14 @@
 name: debug
 description: Debugging orchestrator that coordinates research and testing to isolate bugs without fixing them
 tag: agent
-recommended_skills:
-  - debug
 params:
+  skills:
+    - debug
   spawn_presets:
   - researcher
   - tester
   tools:
   - view          # Read code and logs
-  - tag:search    # grep, glob for finding code
-  - tag:shell     # Run tests, check logs
+  - tag:shell     # Run tests, check logs, search the codebase (rg/grep/find)
   model:
     tags: [flagship]

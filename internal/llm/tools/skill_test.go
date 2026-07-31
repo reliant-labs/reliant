@@ -3,6 +3,7 @@ package tools
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -403,4 +404,282 @@ func TestSkillsAnnouncement_OnlyTopLevel(t *testing.T) {
 func TestSkillsAnnouncement_EmptyReturnsEmpty(t *testing.T) {
 	got := SkillsAnnouncement(nil)
 	assert.Empty(t, got)
+}
+
+// -----------------------------------------------------------------------------
+// forge namespace resolution
+// -----------------------------------------------------------------------------
+
+// newForgeNamespaceEnv mirrors how reliant actually surfaces a forge project's
+// skills: every forge skill is re-keyed under a synthetic "forge/" namespace
+// (internal/skills/catalog/forge.go), and in a multi-repo project under a
+// further "<repo>/" prefix. forge's own CLI and forge's own skill bodies use
+// the bare path, so these are the spellings an agent will type.
+func newForgeNamespaceEnv() *skillTestEnv {
+	return &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
+		{
+			SkillPath:   "forge",
+			Name:        "forge",
+			Description: "Forge skills surfaced from this project's sibling forge module",
+			Body:        "# Forge skills",
+		},
+		{
+			SkillPath:   "forge/frontend",
+			Name:        "frontend",
+			Description: "Write Next.js frontends",
+			Body:        "# Frontend",
+		},
+		{
+			SkillPath:   "forge/frontend/design",
+			Name:        "frontend-design",
+			Description: "Visual-design discipline for forge frontends",
+			Body:        "# Frontend design\n\nSee the frontend/state skill.",
+		},
+		{
+			SkillPath:   "forge/frontend/state",
+			Name:        "frontend-state",
+			Description: "Frontend state management",
+			Body:        "# Frontend state",
+		},
+		{
+			SkillPath:   "forge/db",
+			Name:        "db",
+			Description: "Database work",
+			Body:        "# DB",
+		},
+	}}}
+}
+
+// The headline friction from real-workflow run 1: six of seven fan-out units
+// independently called `skill load frontend/design` — the path `forge skill
+// list` prints and `forge skill load` accepts — and each got a 404.
+func TestSkillTool_Load_AcceptsPathForgePrints(t *testing.T) {
+	env := newForgeNamespaceEnv()
+
+	for _, path := range []string{"frontend/design", "forge/frontend/design", "FRONTEND/DESIGN", "  frontend/design  "} {
+		resp := env.execute(t, SkillParams{Action: "load", Path: path})
+		require.False(t, resp.IsError, "path %q should resolve: %s", path, resp.Content)
+		assert.Contains(t, resp.Content, "# Frontend design", "path %q loaded the wrong skill", path)
+	}
+}
+
+// forge's skill bodies cross-reference each other unprefixed, so following a
+// skill's own advice has to work.
+func TestSkillTool_Load_AcceptsUnprefixedCrossReference(t *testing.T) {
+	env := newForgeNamespaceEnv()
+
+	resp := env.execute(t, SkillParams{Action: "load", Path: "frontend/state"})
+	require.False(t, resp.IsError, "unprefixed cross-reference should resolve: %s", resp.Content)
+	assert.Contains(t, resp.Content, "# Frontend state")
+
+	resp = env.execute(t, SkillParams{Action: "load", Path: "db"})
+	require.False(t, resp.IsError, "unprefixed top-level forge skill should resolve: %s", resp.Content)
+	assert.Contains(t, resp.Content, "# DB")
+}
+
+// Listing a group by the name forge prints must list that group's children,
+// and must echo the prefixed path those children carry.
+func TestSkillTool_List_AcceptsPathForgePrints(t *testing.T) {
+	env := newForgeNamespaceEnv()
+
+	resp := env.execute(t, SkillParams{Action: "list", Path: "frontend"})
+	require.False(t, resp.IsError, "unprefixed group listing should succeed: %s", resp.Content)
+	assert.Contains(t, resp.Content, "Sub-skills of forge/frontend",
+		"header should teach the canonical prefixed path")
+	assert.Contains(t, resp.Content, "forge/frontend/design")
+	assert.Contains(t, resp.Content, "forge/frontend/state")
+}
+
+// A multi-repo project stacks "<repo>/" on top of "forge/". The bare path is
+// still what forge prints, so it still has to resolve.
+func TestSkillTool_Load_AcceptsPathForgePrints_NestedRepo(t *testing.T) {
+	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
+		{SkillPath: "api/forge/frontend/design", Name: "frontend-design", Body: "# Nested design", Source: "api"},
+	}}}
+
+	resp := env.execute(t, SkillParams{Action: "load", Path: "frontend/design"})
+	require.False(t, resp.IsError, "nested-repo forge skill should resolve unprefixed: %s", resp.Content)
+	assert.Contains(t, resp.Content, "# Nested design")
+}
+
+// An exact match must never be shadowed by a suffix match, or a project skill
+// could be silently replaced by a forge skill of the same name.
+func TestSkillTool_Load_ExactMatchBeatsSuffixMatch(t *testing.T) {
+	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
+		{SkillPath: "deploy", Name: "deploy", Body: "# Project deploy"},
+		{SkillPath: "forge/deploy", Name: "deploy", Body: "# Forge deploy"},
+	}}}
+
+	resp := env.execute(t, SkillParams{Action: "load", Path: "deploy"})
+	require.False(t, resp.IsError, "exact match should resolve: %s", resp.Content)
+	assert.Contains(t, resp.Content, "# Project deploy")
+	assert.NotContains(t, resp.Content, "# Forge deploy")
+}
+
+// Two equally-good suffix candidates must not be guessed between — the caller
+// gets the "did you mean" list instead.
+func TestSkillTool_Load_AmbiguousSuffix_ReturnsCandidates(t *testing.T) {
+	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
+		{SkillPath: "api/forge/db", Name: "db", Body: "# API db"},
+		{SkillPath: "web/forge/db", Name: "db", Body: "# Web db"},
+	}}}
+
+	resp := env.execute(t, SkillParams{Action: "load", Path: "db"})
+	require.True(t, resp.IsError, "ambiguous path must not silently pick one: %s", resp.Content)
+	assert.Contains(t, resp.Content, "api/forge/db")
+	assert.Contains(t, resp.Content, "web/forge/db")
+}
+
+// The suffix match is component-aligned — a bare word must not match the tail
+// of a longer path component.
+func TestSkillTool_Load_SuffixMatchIsComponentAligned(t *testing.T) {
+	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
+		{SkillPath: "forge/frontend-design", Name: "frontend-design", Body: "# Hyphenated"},
+	}}}
+
+	resp := env.execute(t, SkillParams{Action: "load", Path: "design"})
+	assert.True(t, resp.IsError, "'design' must not match the tail of 'frontend-design': %s", resp.Content)
+}
+
+// -----------------------------------------------------------------------------
+// list/load namespace agreement
+// -----------------------------------------------------------------------------
+
+// newForgeProjectSkillsEnv mirrors the skill set a real forge project hands the
+// tool. Two independent producers contribute:
+//
+//   - internal/skills/catalog/forge.go re-keys forge's nested skill tree under
+//     the synthetic "forge/" namespace ("frontend/design" -> "forge/frontend/design").
+//   - `forge generate` writes a FLAT, hyphenated copy of the same skills into
+//     .claude/skills ("frontend/", "frontend-design/"), which the runtime
+//     discovers as top-level skills of their own.
+//
+// So "frontend" exists as a childless top-level skill while its actual children
+// live under "forge/frontend/". That collision is what an agent hits.
+func newForgeProjectSkillsEnv() *skillTestEnv {
+	return &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
+		// Flat .claude/skills copies.
+		{SkillPath: "frontend", Name: "frontend", Description: "Write Next.js frontends", Scope: "claude", Body: "# Frontend"},
+		{SkillPath: "frontend-design", Name: "frontend-design", Description: "Visual-design discipline", Scope: "claude", Body: "# Frontend design (flat)"},
+		{SkillPath: "frontend-state", Name: "frontend-state", Description: "Frontend state management", Scope: "claude", Body: "# Frontend state (flat)"},
+		{SkillPath: "testing", Name: "testing", Description: "Testing methodology", Scope: "claude", Body: "# Testing"},
+		{SkillPath: "testing-unit", Name: "testing-unit", Description: "Unit tests", Scope: "claude", Body: "# Testing unit (flat)"},
+		{SkillPath: "db", Name: "db", Description: "Database work", Scope: "claude", Body: "# DB (flat)"},
+
+		// Nested forge tree.
+		{SkillPath: "forge", Name: "forge", Description: "Forge skills", Scope: "forge", Body: "# Forge skills"},
+		{SkillPath: "forge/frontend", Name: "frontend", Description: "Write Next.js frontends", Scope: "forge", Body: "# Frontend"},
+		{SkillPath: "forge/frontend/design", Name: "frontend-design", Description: "Visual-design discipline", Scope: "forge", Body: "# Frontend design"},
+		{SkillPath: "forge/frontend/state", Name: "frontend-state", Description: "Frontend state management", Scope: "forge", Body: "# Frontend state"},
+		{SkillPath: "forge/testing", Name: "testing", Description: "Testing methodology", Scope: "forge", Body: "# Testing"},
+		{SkillPath: "forge/testing/unit", Name: "testing-unit", Description: "Unit tests", Scope: "forge", Body: "# Testing unit"},
+		{SkillPath: "forge/db", Name: "db", Description: "Database work", Scope: "forge", Body: "# DB"},
+	}}}
+}
+
+// addressableNamespaces derives, from the skill slice alone, every namespace an
+// agent can legitimately type, mapped to the skills that live directly under it.
+//
+// The rule is the one findSkillByPath already implements for load: a path
+// resolves by exact match OR by unique component-aligned suffix. So for a skill
+// "forge/frontend/design", `load` accepts "forge/frontend/design" and
+// "frontend/design" and "design" — which makes both "forge/frontend" and
+// "frontend" namespaces that must list it.
+//
+// Deriving instead of hard-coding means a renamed or re-homed skill changes the
+// expectation with the fixture rather than silently dropping an assertion; the
+// caller must still assert the derived set is non-empty.
+func addressableNamespaces(skills []config.StoredSkill) map[string][]string {
+	out := map[string][]string{}
+	for _, s := range skills {
+		idx := strings.LastIndex(s.SkillPath, "/")
+		if idx < 0 {
+			continue // top-level: no parent namespace
+		}
+		for ns := s.SkillPath[:idx]; ns != ""; {
+			out[ns] = append(out[ns], s.SkillPath)
+			cut := strings.Index(ns, "/")
+			if cut < 0 {
+				break
+			}
+			ns = ns[cut+1:]
+		}
+	}
+	return out
+}
+
+// listedSkillPaths pulls the skill paths back out of a list response body.
+func listedSkillPaths(content string) []string {
+	var out []string
+	for _, line := range strings.Split(content, "\n") {
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		path, _, ok := strings.Cut(strings.TrimPrefix(line, "- "), ":")
+		if !ok {
+			continue
+		}
+		out = append(out, strings.TrimSpace(path))
+	}
+	return out
+}
+
+// list and load must agree on what a namespace contains. The measured defect:
+// `list frontend` answered "no sub-skills found under: frontend" while
+// `load frontend/design` happily loaded one of its members.
+func TestSkillTool_List_NamespaceAgreesWithLoad(t *testing.T) {
+	env := newForgeProjectSkillsEnv()
+
+	want := addressableNamespaces(env.tool.skills)
+	require.NotEmpty(t, want, "fixture yields no namespaces — this test would assert nothing")
+
+	namespaces := make([]string, 0, len(want))
+	for ns := range want {
+		namespaces = append(namespaces, ns)
+	}
+	sort.Strings(namespaces)
+
+	for _, ns := range namespaces {
+		children := want[ns]
+		require.NotEmpty(t, children, "namespace %q derived with no members", ns)
+
+		listResp := env.execute(t, SkillParams{Action: "list", Path: ns})
+		require.False(t, listResp.IsError,
+			"list %q errored but load can address %v under it: %s", ns, children, listResp.Content)
+
+		assert.ElementsMatch(t, children, listedSkillPaths(listResp.Content),
+			"list %q must return exactly the skills load can address under it", ns)
+
+		for _, child := range children {
+			byFullPath := env.execute(t, SkillParams{Action: "load", Path: child})
+			require.False(t, byFullPath.IsError, "list %q offered %q but load rejected it: %s", ns, child, byFullPath.Content)
+
+			short := ns + "/" + child[strings.LastIndex(child, "/")+1:]
+			byNamespace := env.execute(t, SkillParams{Action: "load", Path: short})
+			require.False(t, byNamespace.IsError, "load %q must resolve because list %q offers it: %s", short, ns, byNamespace.Content)
+		}
+	}
+}
+
+// A path with genuinely nothing under it must say so actionably — naming the
+// namespaces that do exist, so the agent can retry instead of giving up.
+func TestSkillTool_List_EmptyNamespace_NamesExistingNamespaces(t *testing.T) {
+	env := newForgeProjectSkillsEnv()
+
+	resp := env.execute(t, SkillParams{Action: "list", Path: "nonexistent"})
+	require.True(t, resp.IsError, "unknown namespace should error: %s", resp.Content)
+	assert.Contains(t, resp.Content, "nonexistent", "error should echo the queried path")
+
+	// Every canonical namespace — the full-path parent of some skill — must be
+	// named, so the reply is a menu rather than a dead end.
+	canonical := map[string]struct{}{}
+	for _, s := range env.tool.skills {
+		if idx := strings.LastIndex(s.SkillPath, "/"); idx > 0 {
+			canonical[s.SkillPath[:idx]] = struct{}{}
+		}
+	}
+	require.NotEmpty(t, canonical, "fixture yields no namespaces — this test would assert nothing")
+	for ns := range canonical {
+		assert.Contains(t, resp.Content, ns, "error should name existing namespace %q", ns)
+	}
 }

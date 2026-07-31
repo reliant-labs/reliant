@@ -33,6 +33,10 @@ var ccOutputLean string // block[3] lean
 var leanPromptModels = map[string]bool{
 	"claude-opus-4-8": true,
 	"claude-fable-5":  true,
+	// opus-5 is opus-class and uses the lean blocks. A 2.1.219 capture confirms
+	// the lean variant; we serve the embedded 2.1.204 lean blocks to keep the
+	// whole spoof (User-Agent, billing version, prompts) on one CLI fingerprint.
+	"claude-opus-5": true,
 }
 
 // claudeCodeAgentOutputBlocks returns the (agent, output) prompt pair for the

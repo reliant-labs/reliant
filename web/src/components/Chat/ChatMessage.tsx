@@ -6,6 +6,7 @@ import {
   useState,
   useRef,
   useLayoutEffect,
+  Fragment,
   type JSX,
 } from "react";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
@@ -27,7 +28,7 @@ import type { Message, ToolApprovalRequest } from "../../api/client";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
   useActiveChatId,
-  useProcessedMessages,
+  useToolResultsByCallId,
   useToolCallStates,
   useChat,
 } from "../../store/chatStoreHooks";
@@ -37,9 +38,10 @@ import { logger } from "../../lib/logger";
 import { api } from "../../api/client";
 import { toast } from "../../lib/toast-manager";
 import {
-  processMessage,
+  getProcessedMessage,
   type ToolCallData,
   type ToolResultData as ProcessedToolResultData,
+  type MessageSegment,
 } from "../../lib/messageProcessor";
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
@@ -65,6 +67,9 @@ interface ParsedContent {
     result?: LocalToolResultData;
     approval?: ToolApprovalRequest;
   }>;
+  // Ordered text/tool timeline — the canonical render order. Empty for older
+  // pre-processed store entries that predate segments (handled at render).
+  segments: MessageSegment[];
 }
 
 const CONTEXT_MARKER_PATTERN = /\[\[([^\]]+):(\d+)-(\d+)\]\]/g;
@@ -151,11 +156,9 @@ function ChatMessageComponent({
     renderStartRef.current = performance.now();
   }
 
-  // Get pre-processed message data from store (FAST - no parsing needed)
-  const processedMessages = useProcessedMessages(chatId || "");
-  const processedFromStore = chatId
-    ? processedMessages.get(message.id) || null
-    : null;
+  // Normalized tool-result index for this chat; joined into the message's
+  // tool calls at read time via the reference-keyed processMessage memo below.
+  const toolResultsByCallId = useToolResultsByCallId(chatId || "");
 
   const currentProject = useProjectStore((state) => state.currentProject);
 
@@ -414,25 +417,13 @@ function ChatMessageComponent({
     }
   };
 
-  // OPTIMIZED: Get parsed content - uses pre-processed data from store for FAST rendering
-  // Fallback uses processMessage() from messageProcessor.ts to avoid code duplication
+  // Parsed content via the reference-keyed processMessage memo. The memo
+  // recomputes only when the message object, the chat's tool-result index, or
+  // the approvals list changes reference (all fresh on immutable content
+  // change, stable otherwise) — so this stays fast on tab switches / re-renders
+  // without a hand-maintained store cache, and never renders stale results.
   const parsed = useMemo((): ParsedContent => {
-    // FAST PATH: Use pre-processed data from store if available
-    // This is the common case after our performance optimization
-    if (processedFromStore) {
-      return {
-        text: processedFromStore.text,
-        toolExecutions: processedFromStore.toolExecutions?.map((exec) => ({
-          call: exec.call,
-          result: exec.result,
-          approval: exec.approval,
-        })),
-      };
-    }
-
-    // FALLBACK: Process on-the-fly for streaming or edge cases
-    // This uses the same logic as the store pre-processing
-    const processed = processMessage(message, approvals);
+    const processed = getProcessedMessage(message, toolResultsByCallId, approvals);
     return {
       text: processed.text,
       toolExecutions: processed.toolExecutions?.map((exec) => ({
@@ -440,8 +431,9 @@ function ChatMessageComponent({
         result: exec.result,
         approval: exec.approval,
       })),
+      segments: processed.segments,
     };
-  }, [message, approvals, processedFromStore]);
+  }, [message, approvals, toolResultsByCallId]);
 
   // Check for overflow after rendering - runs on text changes, font changes, and initial render
   // PERFORMANCE: Use requestAnimationFrame to batch DOM reads and avoid forced synchronous layout
@@ -531,6 +523,17 @@ function ChatMessageComponent({
     return result.filter((exec) => exec.call.name !== "ask_user");
   }, [parsed.toolExecutions, chatId, toolCallStates, getApprovalStatus]);
 
+  // Index the enhanced executions by their tool-call id so each ordered
+  // segment can look up the enriched version (with live status / approval /
+  // cancel handlers) while preserving the message's text↔tool interleaving.
+  const enhancedById = useMemo(() => {
+    const map = new Map<string, EnhancedToolExecution>();
+    for (const exec of enhancedToolExecutions ?? []) {
+      map.set(exec.call.id, exec);
+    }
+    return map;
+  }, [enhancedToolExecutions]);
+
   // Task processing moved to chatStore.ts for better performance
   // - Real-time updates: handled in WebSocket handler
   // - Loaded messages: handled in loadMessages
@@ -561,6 +564,97 @@ function ChatMessageComponent({
 
   // Decide grouping: if more than 1 execution, show single grouped component
   const shouldGroup = (enhancedToolExecutions?.length || 0) > 1;
+
+  const toolDensity =
+    timelineVariant === "card"
+      ? "card"
+      : timelineVariant === "minimal"
+        ? "minimal"
+        : "compact";
+
+  // Render one contiguous run of tool executions (a single "tools" segment).
+  // Read-only tools collapse together; write/planning tools use the existing
+  // group-or-list logic. keyPrefix keeps React keys unique across segments.
+  const renderToolRun = (
+    executions: EnhancedToolExecution[],
+    keyPrefix: string,
+  ): JSX.Element | null => {
+    if (executions.length === 0) return null;
+    const readOnlyTools = executions.filter((exec) =>
+      isReadOnlyTool(exec.call.name),
+    );
+    const otherTools = executions.filter(
+      (exec) => !isReadOnlyTool(exec.call.name),
+    );
+
+    return (
+      <div
+        className={cn(
+          "tool-executions-container mb-1",
+          timelineVariant === "card" ? "space-y-2" : "space-y-1",
+        )}
+      >
+        {/* Render read-only tools - only group if 2+ tools */}
+        {readOnlyTools.length > 1 ? (
+          <ToolExecutionCollapsibleGroup
+            executions={readOnlyTools}
+            messageId={message.id}
+            chatId={chatId || undefined}
+            showRichContent={true}
+            onSelectThread={onSelectThread}
+            density={toolDensity}
+          />
+        ) : (
+          readOnlyTools.map((exec, idx) => (
+            <ToolExecution
+              key={`${keyPrefix}-readonly-${idx}`}
+              toolCall={exec.call}
+              toolResult={exec.result}
+              status={exec.status}
+              onCancel={exec.onCancel}
+              onConvertToBackground={exec.onConvertToBackground}
+              approval={exec.approval}
+              chatId={chatId || undefined}
+              showRichContent={true}
+              onSelectThread={onSelectThread}
+              density={toolDensity}
+            />
+          ))
+        )}
+
+        {/* Render other tools with existing logic */}
+        {otherTools.length > 0 &&
+          (shouldGroup && otherTools.length > 1 ? (
+            <ToolExecutionGroup
+              executions={otherTools}
+              messageId={message.id}
+              defaultCollapsed={true}
+              approvals={approvals}
+              chatId={chatId || undefined}
+              showRichContent={true}
+              onSelectThread={onSelectThread}
+              density={toolDensity}
+            />
+          ) : (
+            otherTools.map((exec, idx) => (
+              <ToolExecution
+                key={`${keyPrefix}-exec-${idx}`}
+                toolCall={exec.call}
+                toolResult={exec.result}
+                status={exec.status}
+                onCancel={exec.onCancel}
+                onConvertToBackground={exec.onConvertToBackground}
+                approval={exec.approval}
+                chatId={chatId || undefined}
+                showRichContent={true}
+                onSelectThread={onSelectThread}
+                density={toolDensity}
+              />
+            ))
+          ))}
+      </div>
+    );
+  };
 
   const isOptimistic = message.id.startsWith("optimistic-");
   const timestampText = message.createdAt ? formatTimestamp(message.createdAt) : "";
@@ -705,24 +799,45 @@ function ChatMessageComponent({
                 timelineVariant === "minimal" && "px-0"
               )}
             >
-              {/* Text Content */}
-              {parsed.text && (
-                <div className="message-bubble w-full">
-                  {parsed.text.trim().startsWith("Error:") ? (
-                    <ErrorMessage content={parsed.text} />
-                  ) : (
-                    <div className="relative">
-                      <MarkdownRenderer
-                        content={parsed.text}
-                        isUser={false}
-                        isStreaming={isStreaming}
-                        worktreeId={chatWorktreeId}
-                        className="text-sm w-full"
-                      />
+              {/* Ordered content: text and tool runs interleaved exactly as
+                  they occurred in the message, so a mid-message tool call
+                  renders between paragraphs, not after all the prose. */}
+              {parsed.segments.map((segment, segIdx) => {
+                if (segment.kind === "text") {
+                  if (!segment.text) return null;
+                  return (
+                    <div
+                      key={`${message.id}-seg-${segIdx}`}
+                      className="message-bubble w-full"
+                    >
+                      {segment.text.trim().startsWith("Error:") ? (
+                        <ErrorMessage content={segment.text} />
+                      ) : (
+                        <div className="relative">
+                          <MarkdownRenderer
+                            content={segment.text}
+                            isUser={false}
+                            isStreaming={isStreaming}
+                            worktreeId={chatWorktreeId}
+                            className="text-sm w-full"
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
+                  );
+                }
+
+                // Tool run — show during streaming too (preparing state).
+                if (hideToolExecutions) return null;
+                const runExecutions = segment.executions
+                  .map((exec) => enhancedById.get(exec.call.id))
+                  .filter((e): e is EnhancedToolExecution => e !== undefined);
+                return (
+                  <Fragment key={`${message.id}-seg-${segIdx}`}>
+                    {renderToolRun(runExecutions, `${message.id}-seg-${segIdx}`)}
+                  </Fragment>
+                );
+              })}
 
               {/* Attachments */}
               {hasAttachments && (
@@ -733,84 +848,6 @@ function ChatMessageComponent({
                 />
               )}
 
-              {/* Tool Executions - grouped to reduce clutter */}
-              {/* Show tools even during streaming - they'll display in "preparing" state */}
-              {!hideToolExecutions &&
-                enhancedToolExecutions &&
-                enhancedToolExecutions.length > 0 &&
-                (() => {
-                  // Separate read-only tools from write/planning tools
-                  const readOnlyTools = enhancedToolExecutions.filter((exec) =>
-                    isReadOnlyTool(exec.call.name),
-                  );
-                  const otherTools = enhancedToolExecutions.filter(
-                    (exec) => !isReadOnlyTool(exec.call.name),
-                  );
-                  const toolDensity = timelineVariant === "card" ? "card" : timelineVariant === "minimal" ? "minimal" : "compact";
-
-                  return (
-                    <div className={cn("tool-executions-container mb-1", timelineVariant === "card" ? "space-y-2" : "space-y-1")}>
-                      {/* Render read-only tools - only group if 2+ tools */}
-                      {readOnlyTools.length > 1 ? (
-                        <ToolExecutionCollapsibleGroup
-                          executions={readOnlyTools}
-                          messageId={message.id}
-                          chatId={chatId || undefined}
-                          showRichContent={true}
-                          onSelectThread={onSelectThread}
-                          density={toolDensity}
-                        />
-                      ) : (
-                        readOnlyTools.map((exec, idx) => (
-                          <ToolExecution
-                            key={`${message.id}-readonly-${idx}`}
-                            toolCall={exec.call}
-                            toolResult={exec.result}
-                            status={exec.status}
-                            onCancel={exec.onCancel}
-                            onConvertToBackground={exec.onConvertToBackground}
-                            approval={exec.approval}
-                            chatId={chatId || undefined}
-                            showRichContent={true}
-                            onSelectThread={onSelectThread}
-                            density={toolDensity}
-                          />
-                        ))
-                      )}
-
-                      {/* Render other tools with existing logic */}
-                      {otherTools.length > 0 &&
-                        (shouldGroup && otherTools.length > 1 ? (
-                          <ToolExecutionGroup
-                            executions={otherTools}
-                            messageId={message.id}
-                            defaultCollapsed={true}
-                            approvals={approvals}
-                            chatId={chatId || undefined}
-                            showRichContent={true}
-                            onSelectThread={onSelectThread}
-                            density={toolDensity}
-                          />
-                        ) : (
-                          otherTools.map((exec, idx) => (
-                            <ToolExecution
-                              key={`${message.id}-exec-${idx}`}
-                              toolCall={exec.call}
-                              toolResult={exec.result}
-                              status={exec.status}
-                              onCancel={exec.onCancel}
-                              onConvertToBackground={exec.onConvertToBackground}
-                              approval={exec.approval}
-                              chatId={chatId || undefined}
-                              showRichContent={true}
-                              onSelectThread={onSelectThread}
-                              density={toolDensity}
-                            />
-                          ))
-                        ))}
-                    </div>
-                  );
-                })()}
               {messageActions}
             </div>
           )}

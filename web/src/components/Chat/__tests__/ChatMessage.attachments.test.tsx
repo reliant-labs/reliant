@@ -14,7 +14,7 @@ vi.mock("../MessageAttachments", () => ({
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useActiveChatId: () => "chat-1",
-  useProcessedMessages: () => new Map(),
+  useToolResultsByCallId: () => ({}),
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),
 }));

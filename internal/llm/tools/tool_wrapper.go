@@ -21,7 +21,7 @@ var ErrInvalidParameters = errors.New("invalid tool parameters")
 // unwrapStringifiedValues fixes a Claude API bug where values are sometimes
 // sent as JSON strings instead of their actual types when using MCP-prefixed tool names.
 // Examples:
-//   - {"edits": "[{\"file_path\": \"...\"}]"} -> {"edits": [{"file_path": "..."}]}
+//   - {"slides": "[{\"title\": \"...\"}]"} -> {"slides": [{"title": "..."}]}
 //   - {"limit": "5"} -> {"limit": 5}
 //   - {"enabled": "true"} -> {"enabled": true}
 //
@@ -359,15 +359,35 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	if response, ok := outputInterface.(ToolResponse); ok {
 		// Check and potentially truncate the content
 		if response.Content != "" {
+			originalSize := len(response.Content)
 			truncatedContent, wasTruncated, err := CheckOutputSize(toolName, response.Content)
 			if err != nil {
-				// Output is too large - truncate it
+				// Output is too large - truncate it. The size reported in
+				// metadata is the ORIGINAL size, captured before the content
+				// is replaced.
 				response.Content = TruncateOutput(toolName, response.Content, true)
-				// Add truncation info to metadata
+				note := fmt.Sprintf("Output truncated from %d bytes to %d bytes", originalSize, len(response.Content))
 				if response.Metadata == "" {
-					response.Metadata = fmt.Sprintf("Output truncated from %d bytes", len(response.Content))
+					response.Metadata = note
 				} else {
-					response.Metadata += fmt.Sprintf("; Output truncated from %d bytes", len(response.Content))
+					response.Metadata += "; " + note
+				}
+				// Loud server-side: an oversize skill is a publishing defect
+				// that must get noticed and fixed at the source, not quietly
+				// degrade every run that loads it.
+				if toolName == ToolSkill {
+					logging.Warn("Skill exceeds delivery budget and was truncated",
+						"tool", toolName,
+						"original_bytes", originalSize,
+						"delivered_bytes", len(response.Content),
+						"dropped_bytes", originalSize-len(response.Content),
+						"budget_bytes", MaxSkillBodySize,
+						"input", truncateString(call.Input, 200))
+				} else {
+					logging.Warn("Tool output truncated",
+						"tool", toolName,
+						"original_bytes", originalSize,
+						"delivered_bytes", len(response.Content))
 				}
 			} else if wasTruncated {
 				response.Content = truncatedContent

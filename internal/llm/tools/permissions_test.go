@@ -81,13 +81,19 @@ func TestInitialToolsForPermission_ReadOnly(t *testing.T) {
 
 	// Read-only agents must get the core discovery/read tools.
 	assert.True(t, containsAll(got,
-		ToolSkill, ToolLoadTool, ToolView, ToolGrep, ToolGlob, ToolFetch, ToolWebSearch,
+		ToolSkill, ToolLoadTool, ToolView, ToolFetch, ToolWebSearch,
 	), "readonly initial set missing expected read-only tools: %v", got)
 
-	// But must NOT get mutating tools.
+	// The shell family rides along even at readonly, because it is the only way
+	// to search a codebase now that the scoped grep/glob tools are gone. A
+	// readonly agent without it cannot search at all.
+	assert.True(t, containsAll(got,
+		ShellToolName, ToolBashList, ToolBashOutput, ToolBashKill,
+	), "readonly initial set missing the shell search path: %v", got)
+
+	// But must NOT get the file-mutating tools.
 	assert.True(t, containsNone(got,
-		ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode,
-		ToolBashList, ToolBashOutput, ToolBashKill,
+		ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode,
 	), "readonly initial set unexpectedly contains mutating tools: %v", got)
 }
 
@@ -96,7 +102,7 @@ func TestInitialToolsForPermission_Mutating(t *testing.T) {
 
 	// Mutating agents get everything readonly gets...
 	assert.True(t, containsAll(got,
-		ToolSkill, ToolLoadTool, ToolView, ToolGrep, ToolGlob, ToolFetch, ToolWebSearch,
+		ToolSkill, ToolLoadTool, ToolView, ToolFetch, ToolWebSearch,
 	), "mutating initial set missing read-only tools: %v", got)
 
 	// ...plus all the mutating tools.
@@ -111,7 +117,7 @@ func TestInitialToolsForPermission_Orchestrator(t *testing.T) {
 
 	// Orchestrator at minimum contains everything the mutating level has.
 	assert.True(t, containsAll(got,
-		ToolSkill, ToolLoadTool, ToolView, ToolGrep, ToolGlob, ToolFetch, ToolWebSearch,
+		ToolSkill, ToolLoadTool, ToolView, ToolFetch, ToolWebSearch,
 		ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode,
 		ToolBashList, ToolBashOutput, ToolBashKill,
 	), "orchestrator initial set missing expected tools: %v", got)
@@ -124,7 +130,7 @@ func TestInitialToolsForPermission_Orchestrator(t *testing.T) {
 // ----- MinimumPermissionForTool -----
 
 func TestMinimumPermissionForTool_ReadOnlyTools(t *testing.T) {
-	readOnlyTools := []string{ToolView, ToolGrep, ToolGlob, ToolFetch, ToolWebSearch}
+	readOnlyTools := []string{ToolView, ToolFetch, ToolWebSearch}
 	for _, name := range readOnlyTools {
 		assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool(name),
 			"tool %q should require readonly permission", name)
@@ -132,10 +138,24 @@ func TestMinimumPermissionForTool_ReadOnlyTools(t *testing.T) {
 }
 
 func TestMinimumPermissionForTool_MutatingTools(t *testing.T) {
-	mutatingTools := []string{ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode}
+	mutatingTools := []string{ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode}
 	for _, name := range mutatingTools {
 		assert.Equal(t, PermissionMutating, MinimumPermissionForTool(name),
 			"tool %q should require mutating permission", name)
+	}
+}
+
+// The shell gates at READONLY, not mutating. This is the deliberate tradeoff
+// taken when the scoped grep/glob tools were removed: the shell became the only
+// search path, so gating it at mutating would leave readonly and plan-mode
+// agents unable to search — the regression that followed the first removal.
+// "readonly" therefore means "not handed write tools", not "cannot write": the
+// shell can still redirect into a file. A hard read-only boundary has to be
+// enforced below the tool layer.
+func TestMinimumPermissionForTool_ShellIsReadOnlyTier(t *testing.T) {
+	for _, name := range []string{ShellToolName, ToolBashList, ToolBashOutput, ToolBashKill} {
+		assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool(name),
+			"tool %q must be loadable by a readonly agent so search still works", name)
 	}
 }
 

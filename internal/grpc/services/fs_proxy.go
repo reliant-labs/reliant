@@ -103,6 +103,7 @@ func (s *FileSystemProxyService) GetFileTree(
 	cmdReq := map[string]any{
 		"path":        resolvedPath,
 		"show_hidden": req.Msg.ShowHidden,
+		"depth":       req.Msg.Depth,
 	}
 
 	var cmdResp struct {
@@ -117,19 +118,42 @@ func (s *FileSystemProxyService) GetFileTree(
 		files[i] = convertFsProxyNode(&n)
 	}
 
+	// The daemon walks the resolved absolute directory and returns node paths
+	// relative to THAT directory (e.g. "inner.txt" for a request scoped to
+	// "pkg"). Rebase them onto the project-relative request path so every node
+	// carries a full project-relative path — matching the local
+	// FileSystemService's contract and what the UI needs to lazily expand a
+	// subdirectory (child path = parent path + "/" + name). Root requests
+	// ("" / "/") need no prefix.
+	if prefix := strings.Trim(req.Msg.Path, "/"); prefix != "" {
+		for _, f := range files {
+			prefixFileNodePaths(f, prefix)
+		}
+	}
+
 	return connect.NewResponse(&reliantv1.GetFileTreeResponse{
 		Files: files,
 	}), nil
 }
 
+// prefixFileNodePaths rebases a node subtree's paths onto prefix, so daemon
+// results scoped to a subdirectory carry full project-relative paths.
+func prefixFileNodePaths(node *reliantv1.FileNode, prefix string) {
+	node.Path = prefix + "/" + node.Path
+	for _, c := range node.Children {
+		prefixFileNodePaths(c, prefix)
+	}
+}
+
 // fsProxyFileNode mirrors the daemon's fsFileNode JSON shape.
 type fsProxyFileNode struct {
-	Name     string            `json:"name"`
-	Path     string            `json:"path"`
-	Type     string            `json:"type"`
-	Children []fsProxyFileNode `json:"children,omitempty"`
-	Size     int64             `json:"size"`
-	Modified string            `json:"modified,omitempty"`
+	Name        string            `json:"name"`
+	Path        string            `json:"path"`
+	Type        string            `json:"type"`
+	Children    []fsProxyFileNode `json:"children,omitempty"`
+	Size        int64             `json:"size"`
+	Modified    string            `json:"modified,omitempty"`
+	HasChildren bool              `json:"has_children"`
 }
 
 func convertFsProxyNode(n *fsProxyFileNode) *reliantv1.FileNode {
@@ -137,9 +161,17 @@ func convertFsProxyNode(n *fsProxyFileNode) *reliantv1.FileNode {
 		Name: n.Name,
 		Path: n.Path,
 	}
+	if n.Modified != "" {
+		node.Modified = proto.String(n.Modified)
+	}
 
 	if n.Type == "directory" {
 		node.Type = reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
+		// has_children lets the UI render an expand chevron for a lazily-loaded
+		// directory whose children were not eagerly included by a depth-limited
+		// walk. When children are present, derive it too so the hint is never
+		// stale relative to the payload.
+		node.HasChildren = n.HasChildren || len(n.Children) > 0
 		if len(n.Children) > 0 {
 			node.Children = make([]*reliantv1.FileNode, len(n.Children))
 			for i := range n.Children {
@@ -149,9 +181,6 @@ func convertFsProxyNode(n *fsProxyFileNode) *reliantv1.FileNode {
 	} else {
 		node.Type = reliantv1.FileNodeType_FILE_NODE_TYPE_FILE
 		node.Size = proto.Int64(n.Size)
-		if n.Modified != "" {
-			node.Modified = proto.String(n.Modified)
-		}
 	}
 	return node
 }

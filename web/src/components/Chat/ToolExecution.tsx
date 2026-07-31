@@ -26,8 +26,11 @@ import {
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
-import { useChatStore } from "../../store/chatStore";
 import { useChat, useToolCallStates } from "../../store/chatStoreHooks";
+import {
+  useApproveToolRequest,
+  useDenyToolRequest,
+} from "../../hooks/approval-queries";
 import type { ToolApprovalRequest } from "../../api/client";
 import { FileLink } from "./FileLink";
 import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults } from "../../lib/toolFormatters";
@@ -143,6 +146,9 @@ function ToolExecutionComponent({
   const toolCallStates = useToolCallStates(chatId || "");
   const lookupKey = toolCall.content_block_id || toolCall.id;
   const liveToolCallState = toolCallStates.get(lookupKey) || null;
+
+  const approveMutation = useApproveToolRequest();
+  const denyMutation = useDenyToolRequest();
 
   // Determine current status
   const liveStatus = liveToolCallState?.status || status;
@@ -260,19 +266,19 @@ function ToolExecutionComponent({
   // Handlers
   const handleApprove = useCallback(() => {
     if (approval && chatId) {
-      useChatStore.getState().approveToolRequest(chatId, approval.id);
+      approveMutation.mutate({ chatId, requestId: approval.id });
     } else if (onApprove) {
       onApprove(toolCall.id);
     }
-  }, [approval, chatId, onApprove, toolCall.id]);
+  }, [approval, chatId, onApprove, toolCall.id, approveMutation]);
 
   const handleDeny = useCallback(() => {
     if (approval && chatId) {
-      useChatStore.getState().denyToolRequest(chatId, approval.id);
+      denyMutation.mutate({ chatId, requestId: approval.id });
     } else if (onDeny) {
       onDeny(toolCall.id);
     }
-  }, [approval, chatId, onDeny, toolCall.id]);
+  }, [approval, chatId, onDeny, toolCall.id, denyMutation]);
 
   // Extract file paths for view tools
   const extractFilePaths = (input: Record<string, unknown> | string): string[] => {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -121,7 +121,11 @@ func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Ch
 		return &rctx.WorktreeInfo{ID: "", Path: project.Path}
 	}
 
-	return &rctx.WorktreeInfo{ID: worktree.ID, Path: worktree.Path}
+	daemonID := ""
+	if worktree.DaemonID != nil {
+		daemonID = *worktree.DaemonID
+	}
+	return &rctx.WorktreeInfo{ID: worktree.ID, Path: worktree.Path, DaemonID: daemonID}
 }
 
 // buildToolRequest creates a ToolRequest from the loaded context
@@ -505,7 +509,13 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil)
 	}
 
-	// Set daemon selector for targeted routing
+	// Daemon routing priority: explicit node/workflow selector > the worktree's
+	// owning daemon > default resolution. A worktree-bound (e.g. branch) chat
+	// must run on the daemon that has its checkout on disk; a nil worktree
+	// DaemonID (main checkout / legacy rows) leaves routing at the default.
+	if tec.worktree != nil && tec.worktree.DaemonID != "" {
+		tec.daemonSelector = &toolexec.DaemonSelector{ID: tec.worktree.DaemonID}
+	}
 	if daemonSel != nil {
 		tec.daemonSelector = &toolexec.DaemonSelector{
 			ID:     daemonSel.ID,

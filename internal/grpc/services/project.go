@@ -223,6 +223,44 @@ func (s *ProjectService) sendProjectDaemonCommand(ctx context.Context, userID, c
 	return nil
 }
 
+// verifyProjectDirectoryExists refuses to hand back a project whose directory
+// the daemon says is gone.
+//
+// CreateProject's create branch mkdirs the project directory; nothing did that
+// for the find branch, so a projects row could outlive its directory and still
+// resolve. A run bound to that phantom path starts, executes nothing, and
+// reports success — the worst failure shape there is. Recreating the directory
+// silently would be worse than refusing: it produces an EMPTY directory that
+// looks like the project, so a workflow asked to change existing code finds
+// nothing to change and still reports success. Creating a missing directory is
+// the right answer for a project that does not exist yet (that is what
+// find-or-create means, and the create branch below still does it); for a row
+// that already exists it is a stale registry, and the user's intent was "run
+// against my project", not "make me a fresh empty one".
+//
+// Only a daemon that ANSWERED "does not exist" is evidence. An unreachable
+// daemon is a different failure — onboarding races daemon provisioning by
+// ~10s — so a failed probe falls through rather than inventing a refusal.
+func (s *ProjectService) verifyProjectDirectoryExists(ctx context.Context, userID, projectID, path string) error {
+	// Local struct rather than daemon.FileStat: the API tier does not import
+	// the daemon package, and only one field is needed.
+	var stat struct {
+		Exists bool `json:"exists"`
+	}
+	if err := s.sendProjectDaemonCommand(ctx, userID, "fs.stat", map[string]string{"path": path}, &stat); err != nil {
+		logging.Warn("Could not verify project directory via daemon; proceeding",
+			"error", err, "path", path, "projectID", projectID)
+		return nil
+	}
+	if stat.Exists {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"project %s is registered at %s but that directory does not exist; "+
+			"restore the directory or delete the project, then retry",
+		projectID, path))
+}
+
 // resolveProjectRepoPath resolves a per-RPC repo_id selector against the
 // project's repo set and returns the absolute git checkout path. Rules
 // match WorktreeService.resolveRepoPath:
@@ -314,7 +352,15 @@ func (s *ProjectService) CreateProject(
 	// Check if project already exists for this user and path. Path-only
 	// lookups are nondeterministic in multi-user setups (the projects table
 	// allows the same path under different user_ids), so scope the check.
+	//
+	// AlreadyExists is the "find" half of find-or-create: every --project-path
+	// resolution lands here on the second and later runs. A row is not a
+	// directory, so before handing the caller an id to bind a run to, confirm
+	// the directory the row names is still there.
 	if existing, err := s.database.GetProjectByPathAndUser(ctx, req.Msg.Path, userID); err == nil && existing != nil {
+		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, existing.Path); verr != nil {
+			return nil, verr
+		}
 		return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("a project already exists at this path"))
 	}
 

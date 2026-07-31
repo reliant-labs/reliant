@@ -10,6 +10,15 @@ testdata_dir = "testdata"
 tmp_dir = "tmp/air-worker"
 
 [build]
+  # full_bin routes startup through the wrapper, which reaps any worker still
+  # alive from a prior cycle before exec'ing the new binary in place. air's
+  # stopBin() caps its wait on the old process at a hardcoded 5s regardless of
+  # kill_delay, and a freshly-started worker is only wired into air's kill
+  # tracking after startCmd — so under a burst of rebuilds air can lose track
+  # of a live worker and never signal it. An orphaned old-code worker keeps
+  # polling the shared task queue and serving stale tasks. The wrapper execs
+  # in place, so air's own signals still reach the worker directly.
+  full_bin = "scripts/air-run-worker.sh"
   bin = "./tmp/air-worker/reliant"
   args_bin = ["server", "worker"]
   cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/air-worker/reliant.tmp ./cmd/reliant && mv ./tmp/air-worker/reliant.tmp ./tmp/air-worker/reliant"

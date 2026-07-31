@@ -78,6 +78,17 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
     }
   }
 
+  // Model-authored prose describing what `command` does, from the shell tool's
+  // optional `description` param. Not rendered yet — it is read here so the
+  // value is known to reach the renderer, and so wiring up a display later is a
+  // presentation change only. Absent on older tool calls and whenever the model
+  // omits it, so any future UI must treat it as optional.
+  const commandDescription =
+    typeof input === 'object' && input !== null && typeof input.description === 'string'
+      ? input.description
+      : undefined;
+  void commandDescription;
+
   // Parse structured output (must be before any early returns to satisfy Rules of Hooks)
   const parsed = useMemo(
     () => (result ? parseShellOutput(result.content) : null),

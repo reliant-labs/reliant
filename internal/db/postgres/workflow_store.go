@@ -126,6 +126,14 @@ func (s *workflowStore) UpdateWorkflowStatus(ctx context.Context, id string, sta
 	return err
 }
 
+func (s *workflowStore) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
+	_, err := s.q.SetWorkflowOutcome(ctx, pgdb.SetWorkflowOutcomeParams{
+		Outcome: sql.NullString{String: outcome, Valid: outcome != ""},
+		ID:      id,
+	})
+	return err
+}
+
 func (s *workflowStore) UpdateWorkflowName(ctx context.Context, id string, workflowName string) error {
 	_, err := s.q.UpdateWorkflowName(ctx, pgdb.UpdateWorkflowNameParams{WorkflowName: workflowName, ID: id})
 	if err != nil {
@@ -137,8 +145,15 @@ func (s *workflowStore) UpdateWorkflowName(ctx context.Context, id string, workf
 	return nil
 }
 
-func (s *workflowStore) CompleteChildWorkflows(ctx context.Context, parentWorkflowID string) error {
-	return s.q.CompleteChildWorkflows(ctx, sql.NullString{String: parentWorkflowID, Valid: true})
+func (s *workflowStore) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status core.WorkflowStatus) error {
+	return s.q.CascadeTerminalStatusToDescendants(ctx, pgdb.CascadeTerminalStatusToDescendantsParams{
+		ParentID: sql.NullString{String: parentWorkflowID, Valid: true},
+		Status:   int32(status),
+	})
+}
+
+func (s *workflowStore) ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error) {
+	return s.q.ReapOrphanedWorkflowDescendants(ctx)
 }
 
 func (s *workflowStore) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
@@ -304,6 +319,7 @@ func workflowFromPG(row pgdb.Workflow) *core.Workflow {
 		CompletedAt:     workflowNullTimeToPtr(row.CompletedAt),
 		WorkerStartedAt: workflowNullTimeToPtr(row.WorkerStartedAt),
 		WorkerStoppedAt: workflowNullTimeToPtr(row.WorkerStoppedAt),
+		Outcome:         nullStringToPtr(row.Outcome),
 	}
 }
 

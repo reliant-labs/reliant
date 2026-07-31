@@ -2,9 +2,9 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/reliant-labs/reliant/internal/diff"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -169,6 +169,20 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 		thread = "0"
 	}
 
+	// The rest reads both files and writes both back, and tool calls in one
+	// assistant message run concurrently. Hold both path locks across the whole
+	// operation; withPathLocks orders them so two moves over the same pair of
+	// files cannot deadlock. The mod-time check below stays, but it cannot see a
+	// racing call in this same batch — every caller stats the files before any of
+	// them writes. See file_concurrency.go.
+	return withPathLocks(rctx, []string{sourceFile, targetFile}, func() (ToolResponse, error) {
+		return m.moveLocked(rctx, params, wd, sourceFile, targetFile, chatID, thread, isSameFile)
+	})
+}
+
+// moveLocked performs the read-modify-write over both files. Callers must hold
+// the path locks for sourceFile and targetFile.
+func (m *moveCodeTool) moveLocked(rctx *rctx.ToolContext, params MoveCodeParams, wd, sourceFile, targetFile, chatID, thread string, isSameFile bool) (ToolResponse, error) {
 	// Validate source file
 	sourceStat, err := rctx.Daemon.StatFile(rctx.Context, sourceFile)
 	if err != nil {
@@ -193,7 +207,7 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 		return ToolResponse{}, fmt.Errorf("failed to read source file: %w", err)
 	}
 	sourceContent := sourceFc.Content
-	sourceLines := strings.Split(sourceContent, "\n")
+	sourceLines, sourceTerminated := splitLines(sourceContent)
 
 	// Validate source line numbers
 	if params.SourceStart > len(sourceLines) {
@@ -211,6 +225,7 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 
 	var targetLines []string
 	var targetContent string
+	var targetTerminated bool
 
 	if isSameFile {
 		targetLines = sourceLines
@@ -239,7 +254,7 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 			return ToolResponse{}, fmt.Errorf("failed to read target file: %w", err)
 		}
 		targetContent = targetFc.Content
-		targetLines = strings.Split(targetContent, "\n")
+		targetLines, targetTerminated = splitLines(targetContent)
 	}
 
 	// Validate target line
@@ -324,7 +339,7 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 			newLines = finalLines
 		}
 
-		newSourceContent = strings.Join(newLines, "\n")
+		newSourceContent = joinLines(newLines, sourceTerminated)
 
 		if sourceContent == newSourceContent {
 			return NewTextErrorResponse("no changes would be made"), nil
@@ -333,7 +348,11 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 		sourceDiff, totalAdditions, totalRemovals = diff.GenerateDiff(sourceContent, newSourceContent, sourceFile, wd)
 
 		// Write the file
-		if _, err = rctx.Daemon.WriteFile(rctx.Context, sourceFile, newSourceContent); err != nil {
+		if err = writeFileGuarded(rctx, sourceFile, sourceContent, newSourceContent); err != nil {
+			var conflict *ConcurrentModificationError
+			if errors.As(err, &conflict) {
+				return NewTextErrorResponse(conflict.Error()), nil
+			}
 			return ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 		}
 
@@ -352,7 +371,7 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 		if targetIdx < len(targetLines) {
 			newTargetLines = append(newTargetLines, targetLines[targetIdx:]...)
 		}
-		newTargetContent = strings.Join(newTargetLines, "\n")
+		newTargetContent = joinLines(newTargetLines, targetTerminated)
 
 		var additionsTarget, removalsTarget int
 		targetDiff, additionsTarget, removalsTarget = diff.GenerateDiff(targetContent, newTargetContent, targetFile, wd)
@@ -360,7 +379,11 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 		totalRemovals += removalsTarget
 
 		// Write target file first
-		if _, err = rctx.Daemon.WriteFile(rctx.Context, targetFile, newTargetContent); err != nil {
+		if err = writeFileGuarded(rctx, targetFile, targetContent, newTargetContent); err != nil {
+			var conflict *ConcurrentModificationError
+			if errors.As(err, &conflict) {
+				return NewTextErrorResponse(conflict.Error()), nil
+			}
 			return ToolResponse{}, fmt.Errorf("failed to write target file: %w", err)
 		}
 		recordFileAwareness(chatID, thread, targetFile)
@@ -374,14 +397,22 @@ func (m *moveCodeTool) Execute(rctx *rctx.ToolContext, params MoveCodeParams) (T
 				}
 				newSourceLines = append(newSourceLines, sourceLines[i])
 			}
-			newSourceContent = strings.Join(newSourceLines, "\n")
+			newSourceContent = joinLines(newSourceLines, sourceTerminated)
 
 			var additionsSource, removalsSource int
 			sourceDiff, additionsSource, removalsSource = diff.GenerateDiff(sourceContent, newSourceContent, sourceFile, wd)
 			totalAdditions += additionsSource
 			totalRemovals += removalsSource
 
-			if _, err = rctx.Daemon.WriteFile(rctx.Context, sourceFile, newSourceContent); err != nil {
+			if err = writeFileGuarded(rctx, sourceFile, sourceContent, newSourceContent); err != nil {
+				var conflict *ConcurrentModificationError
+				if errors.As(err, &conflict) {
+					// The target already has the code; only the source trim was
+					// refused, so say that rather than implying nothing happened.
+					return NewTextErrorResponse(fmt.Sprintf(
+						"the code was copied into %s, but the source could not be trimmed: %s",
+						targetFile, conflict.Error())), nil
+				}
 				return ToolResponse{}, fmt.Errorf("failed to write source file: %w", err)
 			}
 			recordFileAwareness(chatID, thread, sourceFile)

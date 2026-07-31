@@ -7,9 +7,18 @@ description: |
   Loop: implement → checks → review → [refactor?] → loop back
     1. implement — Build the requested changes (the only node that writes code).
     2. checks — Parallel lint/test/build. If any fail, skip review and loop back immediately.
-    3. review — Evaluate the implementation. Decide: pass, continue, or refactor.
+    3. review — Evaluate the implementation. Decide: pass, continue, refactor, or stuck.
     4. refactor — (conditional) Undo the problematic work. Does NOT reimplement —
        the next implement iteration handles that.
+
+  Two doors back into the loop, and which one you get depends on WHO is blocked:
+    - the implementation is wrong (continue/refactor, or a red gate) → next iteration
+      entering at `implement`, which is the entry. This is the normal path.
+    - the REVIEW is blocked (`stuck`: a missing tool, an app that will not start) and
+      the human answers → next iteration SKIPS `implement` (see its condition) and
+      becomes gate → review, so the answer reaches the agent it was addressed to.
+      Answering a reviewer's blocker by re-running the implementer is how a finished,
+      working build fails to terminate.
 
   Context management (controlled by context_bridge input):
     - feedback_only (default): Review feedback AND implementation summaries are saved to the
@@ -65,6 +74,26 @@ inputs:
     default: true
     description: Pause for user review after each iteration.
 
+  # Distinct from `ask`, which only decides whether a PRESENT human is paused for.
+  # `unattended` says there is no human at all. Its effect is enforced by the
+  # runtime, not by this file: an ask_question node resolves immediately with NO
+  # answer and writes no questions row, and the `ask_user` tool returns unanswered
+  # (internal/workflow/runtime/unattended.go). That matters here because
+  # `stuck_checkpoint` below is reached UNCONDITIONALLY — `ask: false` never
+  # suppressed it, so before this input a "stuck" verdict parked any run for 24h
+  # with nobody watching.
+  #
+  # The parent does not need a passthrough entry: the runtime propagates it into
+  # every sub-workflow, loop body and spawned agent, and a child can never turn it
+  # back off. The default below is what a standalone run gets.
+  unattended:
+    type: boolean
+    ui: toolbar
+    default: false
+    description: >
+      No human is available. Checkpoints resolve immediately with no answer
+      instead of waiting, and `ask_user` returns unanswered.
+
   lint_command:
     type: string
     default: ""
@@ -106,12 +135,21 @@ inputs:
   start_app_command:
     type: string
     default: ""
-    description: Command to start the application for UX review (skipped if empty).
+    description: |
+      The command that brings the application up for the REVIEWER to inspect, handed
+      to it verbatim in its prompt. Nothing in this workflow executes it: starting an
+      app is a process-lifecycle operation and the engine's `run` node is synchronous,
+      so a run node either hangs on a dev server that holds the foreground or orphans
+      one that detaches — and neither has a stop. The reviewer runs it with the shell
+      tool, which owns exactly that lifecycle (`run_in_background`, `bash_output`,
+      `bash_list`, `bash_kill`). Leave empty when there is no app to look at; the
+      reviewer is then told nothing about starting one.
 
-  app_port:
-    type: integer
-    default: 5173
-    description: Port the application runs on (for UX reviewer).
+      There is deliberately NO companion port input. Dev servers are assigned their
+      port at launch — forge hands every frontend a kernel-allocated ephemeral one —
+      so any port written down here is a guess that reads as fact, and a guessed port
+      that answers is more likely to be an unrelated server than the app under review.
+      The reviewer reads the port off what the server printed.
 
   implementer_preset:
     type: preset
@@ -121,6 +159,92 @@ inputs:
       Preset applied to the implementer agent. Swap for role-specific behavior
       (e.g. "ux" for frontend work, "backend" for server work). Sets the
       implementer's system_prompt, tools, and spawn_presets as one unit.
+
+  review_enabled:
+    type: boolean
+    default: true
+    description: |
+      When false, the LLM review node is skipped and the phase gates on the
+      deterministic checks alone (eval_strategy falls back to checks-only
+      pass/continue). Use for purely-mechanical phases where an LLM review does not
+      earn its cost. The lint/test/build gate always runs regardless of this flag.
+
+  review_tools:
+    type: tools
+    default: ["view", "tag:shell", "tag:web"]
+    description: |
+      Tools the REVIEWER gets. The default is the code-review set (view + the shell
+      family + web): the reviewer reads and searches code, and can run commands —
+      including `start_app_command` — but is never given write/edit, because a
+      reviewer diagnoses and get-it-right's refactor/implement nodes own the code.
+      `tag:shell` resolves to the whole shell family (the shell tool plus
+      bash_output / bash_list / bash_kill), so a reviewer that backgrounds a dev
+      server can read its startup output and stop it again.
+
+      Override this to give the review EYES: pass browser tools
+      (mcp__chrome-devtools__take_snapshot / take_screenshot / navigate_page /
+      new_page / list_console_messages) so the reviewer opens the LIVE app itself
+      instead of trusting the implementer's self-report.
+
+      Whatever you pass must cover every tool the review instructions NAME. A
+      prompt that orders a tool the grant does not carry leaves the reviewer with
+      no legal way to satisfy its own response schema, and the only in-schema move
+      left is an evidence-free `stuck`.
+
+  review_response_schema:
+    type: object
+    description: |
+      JSON Schema for the reviewer's submit_evaluation response. Defaults to the
+      grade/strategy/feedback verdict. Override to ADD required fields — e.g. an
+      `inspection_evidence` object — so a verdict cannot be submitted without the
+      reviewer citing its own snapshots/build output (the "no evidence = invalid"
+      rule). Any override MUST keep grade/strategy/feedback, which the loop reads.
+    default:
+      type: object
+      required:
+        - grade
+        - strategy
+        - feedback
+      properties:
+        grade:
+          type: string
+          enum: [pass, pass_with_suggestions, fail]
+          description: |
+            pass — implementation is correct, no blocking issues.
+            pass_with_suggestions — implementation is correct but has minor improvements.
+            fail — implementation has blocking issues that must be fixed.
+        strategy:
+          type: string
+          enum: ["pass", "continue", "refactor", "stuck"]
+          description: |
+            "pass" — implementation is correct and complete. Break the loop.
+            "continue" — implementation is incomplete or has minor issues. Loop back to implement.
+            "refactor" — approach is fundamentally wrong. The refactor agent will undo the problematic work, then the next implement iteration starts fresh with your insights.
+            "stuck" — LAST RESORT. Use ONLY when:
+              (a) The refactor agent already tried and the same fundamental problem persists, OR
+              (b) The issue is NOT a coding problem — it's a tooling failure, environment issue,
+                  missing dependency, broken CLI command, or something else outside the user's code.
+            Do NOT use "stuck" for normal implementation difficulties — use "continue" or "refactor" first.
+            "stuck" pauses the workflow and escalates to the user for help.
+        feedback:
+          type: string
+          description: |
+            Detailed feedback for the next attempt. This is the ONLY context the next
+            attempt gets (besides the original request). Be thorough:
+            - What was wrong or incomplete
+            - What approach would work better
+            - What parts were correct and should be preserved
+            - Any codebase patterns or constraints discovered
+            - What specific improvements should the next attempt make
+
+  skills:
+    type: array
+    default: []
+    description: |
+      Namespaced skill paths (e.g. "forge/getting-started") to preload into the
+      IMPLEMENT agent's context at the start of the phase, so it works from the
+      source-of-truth skills instead of loading them by hand. Forwarded to the
+      implementer agent.
 
 nodes:
   - id: attempt
@@ -138,6 +262,12 @@ nodes:
         lint_exit: "{{nodes.lint.exit_code}}"
         test_exit: "{{nodes.test.exit_code}}"
         build_exit: "{{nodes.build.exit_code}}"
+        # Did the deterministic gate actually fail this iteration? An unconfigured or
+        # skipped lane reports exit 0, so this is true only when a lane that RAN came
+        # back non-zero. The retry prompt branches on it: a retry driven by the
+        # reviewer on a green gate must not open with "the gate failed" over three
+        # lanes it then lists as PASSED.
+        gate_failed: "{{nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0}}"
         eval_strategy: >
           {{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null
             ? nodes.review.response.strategy
@@ -146,16 +276,40 @@ nodes:
         review_grade: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null && has(nodes.review.response.grade) ? nodes.review.response.grade : 'pass'}}"
         review_feedback: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null ? nodes.review.response.feedback : ''}}"
         has_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.has_feedback) ? nodes.stuck_checkpoint.has_feedback : (has(nodes.review_checkpoint) && has(nodes.review_checkpoint.has_feedback) ? nodes.review_checkpoint.has_feedback : false)}}"
+        # What the human actually typed when they unblocked a `stuck`. The next
+        # iteration's reviewer is the one being answered, so it gets the words
+        # verbatim rather than "see the conversation above" — which is a pointer the
+        # reviewer cannot follow when context_bridge is 'none'.
+        stuck_feedback: "{{has(nodes.stuck_checkpoint) && has(nodes.stuck_checkpoint.response) ? string(nodes.stuck_checkpoint.response) : ''}}"
 
       nodes:
         - id: implement
           type: workflow
+          # THE RE-REVIEW ENTRY. `implement` is the iteration entry for every normal
+          # path and stays that way; this condition takes it OUT of exactly one path.
+          #
+          # `stuck` does not mean the code is wrong — it means the REVIEW could not be
+          # performed: a tool the reviewer was not granted, a URL it could not obtain,
+          # an environment that would not come up. So the human's answer at
+          # stuck_checkpoint is an answer to the REVIEWER, and re-entering at
+          # `implement` hands it to an agent that holds write tools and cannot file a
+          # verdict. Measured: the human replied "nothing is broken, do not redo the
+          # implementation, just run the review properly" and the next attempt spent
+          # 9m04s and 31 LLM calls making zero edits, because that was the only door.
+          #
+          # Skipping `implement` still emits its completion event, so the edges below
+          # route on unchanged and the iteration becomes gate → review. The gate is
+          # deliberately NOT skipped with it: the human's other option here is "I fixed
+          # it, continue", so the environment may differ from the last measurement and
+          # the reviewer must be handed current exit codes, not stale ones.
+          condition: "!(has(outputs.eval_strategy) && outputs.eval_strategy == 'stuck' && has(outputs.has_feedback) && outputs.has_feedback)"
           ref: builtin://agent
           presets:
             default: "{{inputs.implementer_preset}}"
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
+            skills: "{{inputs.skills}}"
           thread:
             mode: fork
             memo: "{{inputs.context_bridge == 'full'}}"
@@ -166,12 +320,21 @@ nodes:
 
                 Implement the requested changes. Start by investigating the relevant code, then make your changes and run tests to verify them.
 
+                **When the work splits into independent units, fan out.** If you HAVE a `spawn` tool and the task decomposes into pieces that don't depend on each other — distinct sections, components, files, or slides — spawn ONE sub-agent per unit and run them in PARALLEL (e.g. a sub-agent per landing-page section, or per slide) instead of building them serially. Brief each on the shared design/voice so results stay consistent, then integrate. This keeps each context small and is faster. If the work is a single small artifact or one tightly-coupled change, just do it directly — don't force a split.
+
                 {{(inputs.lint_command == '' && inputs.test_command == '' && inputs.build_command == '') ?
                   'No lint/test/build commands are configured for this run, so nothing verifies your work automatically. Discover the checks this project already defines — package.json scripts, Makefile/justfile targets, go test / go build, pyproject/tox, cargo, etc. — and run the relevant ones (typecheck/lint, tests, build) yourself. Report each command you ran and whether it passed; if you genuinely cannot find any checks, say so explicitly.' :
                   'Configured lint/test/build commands run automatically after this step, but still run focused tests yourself to verify your changes before finishing.'}}
 
                 {{inputs.context_bridge != 'none' ? 'The review feedback and implementation summaries from previous attempts (if any) are in the conversation above. Use them to guide your implementation.' : 'You have no context from prior attempts — implement from scratch.'}}
-                {{inputs.context_bridge != 'none' ? 'If previous checks failed, the error details and log file paths are in the messages above.\nRead the log files FIRST before making changes — they contain the actual error output as JSON with working_dir, stdout, and stderr.' : ''}}
+                {{iter.iteration > 0 && has(outputs.gate_failed) && outputs.gate_failed ? '**The gate failed. Below is WHICH LANE failed, taken from the run itself.** Do not go looking for this in the conversation above — the gate runs outside this thread and nothing above reports its result, so a summary above saying you finished green is not in conflict with this, it is simply older.' : ''}}
+                {{iter.iteration > 0 && has(outputs.gate_failed) && !outputs.gate_failed ? '**The gate is GREEN — every configured lane passed.** This attempt exists because the REVIEWER asked for changes, not because anything failed to build. Do not go hunting for a broken lane; there is not one. What you owe this iteration is the reviewer verdict below, and the lane results are listed underneath only so you do not re-run them to find out.' : ''}}
+                {{iter.iteration > 0 && has(outputs.gate_failed) && !outputs.gate_failed && has(outputs.review_feedback) && outputs.review_feedback != '' ? '**Reviewer feedback (this is the work):**\n' + string(outputs.review_feedback) : ''}}
+                {{iter.iteration > 0 && inputs.lint_command != '' && has(outputs.lint_exit) ? '- lint — ' + (string(outputs.lint_exit) == '0' ? 'PASSED' : (string(outputs.lint_exit) == '' ? 'did not run' : 'FAILED (exit ' + string(outputs.lint_exit) + '); full output in `' + inputs.lint_log + '`')) : ''}}
+                {{iter.iteration > 0 && inputs.test_command != '' && has(outputs.test_exit) ? '- test — ' + (string(outputs.test_exit) == '0' ? 'PASSED' : (string(outputs.test_exit) == '' ? 'did not run' : 'FAILED (exit ' + string(outputs.test_exit) + '); full output in `' + inputs.test_log + '`')) : ''}}
+                {{iter.iteration > 0 && inputs.build_command != '' && has(outputs.build_exit) ? '- build — ' + (string(outputs.build_exit) == '0' ? 'PASSED' : (string(outputs.build_exit) == '' ? 'did not run' : 'FAILED (exit ' + string(outputs.build_exit) + '); full output in `' + inputs.build_log + '`')) : ''}}
+                {{iter.iteration > 0 && has(outputs.gate_failed) && outputs.gate_failed ? 'READ THE FAILING LANE LOG FIRST, before you change anything — it is JSON with `exit_code`, `working_dir`, `command`, `stdout` and `stderr`, and it contains the actual error. Then fix the cause and re-run THAT LANE to confirm. A lane marked PASSED above passed: do not re-run it to find out, and do not go hunting for the failure inside it.' : ''}}
+                {{iter.iteration > 0 && has(outputs.gate_failed) && outputs.gate_failed && inputs.implementer_preset == 'forge' ? 'Only if the failing lane log does not explain itself, widen the search: load the `debug` skill for a triage methodology, and run `reliant forge project audit`, which surfaces structural problems (unwired handlers, schema drift, missing CRUD halves) that a raw build or lint error does not. Reach for it SECOND — it is a diagnostic, not a gate lane, so an audit finding is not what failed here and clearing one is not what turns this phase green.' : ''}}
 
                 After finishing, summarize:
                 1. What you changed and why
@@ -191,7 +354,7 @@ nodes:
           command: "{{inputs.lint_command}}"
           log_file: "{{inputs.lint_log}}"
           save_message:
-            condition: "output.exit_code != 0"
+            condition: "{{output.exit_code != 0}}"
             role: assistant
             display_style: warning
             content: |
@@ -206,7 +369,7 @@ nodes:
           command: "{{inputs.test_command}}"
           log_file: "{{inputs.test_log}}"
           save_message:
-            condition: "output.exit_code != 0"
+            condition: "{{output.exit_code != 0}}"
             role: assistant
             display_style: warning
             content: |
@@ -221,7 +384,7 @@ nodes:
           command: "{{inputs.build_command}}"
           log_file: "{{inputs.build_log}}"
           save_message:
-            condition: "output.exit_code != 0"
+            condition: "{{output.exit_code != 0}}"
             role: assistant
             display_style: warning
             content: |
@@ -235,51 +398,30 @@ nodes:
 
         - id: review
           type: workflow
+          # Skipped on purely-mechanical phases (review_enabled=false); the loop then
+          # gates on the deterministic checks alone (eval_strategy falls back to
+          # checks-only pass/continue below).
+          condition: "inputs.review_enabled == true"
           ref: builtin://structured-agent
           presets:
             default: code_reviewer
           args:
             model: "{{inputs.model}}"
             mode: "{{inputs.mode}}"
+            # The reviewer is the correctness gate — always run it at high thinking,
+            # independent of whatever thinking level the implement model carries.
+            thinking_level: high
+            # Reviewer toolset. Default (from review_tools) is read-only; a caller can
+            # pass browser + shell tools to give the review teeth — inspect the LIVE
+            # app and run builds itself rather than trusting the implementer's report.
+            # Overrides the code_reviewer preset's tools (explicit args win over presets).
+            tools: "{{inputs.review_tools}}"
             response_tool_name: submit_evaluation
             response_tool_description: "Submit your evaluation of the implementation attempt and recommended strategy"
-            response_schema:
-              type: object
-              required:
-                - grade
-                - strategy
-                - feedback
-              properties:
-                grade:
-                  type: string
-                  enum: [pass, pass_with_suggestions, fail]
-                  description: |
-                    pass — implementation is correct, no blocking issues.
-                    pass_with_suggestions — implementation is correct but has minor improvements.
-                    fail — implementation has blocking issues that must be fixed.
-                strategy:
-                  type: string
-                  enum: ["pass", "continue", "refactor", "stuck"]
-                  description: |
-                    "pass" — implementation is correct and complete. Break the loop.
-                    "continue" — implementation is incomplete or has minor issues. Loop back to implement.
-                    "refactor" — approach is fundamentally wrong. The refactor agent will undo the problematic work, then the next implement iteration starts fresh with your insights.
-                    "stuck" — LAST RESORT. Use ONLY when:
-                      (a) The refactor agent already tried and the same fundamental problem persists, OR
-                      (b) The issue is NOT a coding problem — it's a tooling failure, environment issue,
-                          missing dependency, broken CLI command, or something else outside the user's code.
-                    Do NOT use "stuck" for normal implementation difficulties — use "continue" or "refactor" first.
-                    "stuck" pauses the workflow and escalates to the user for help.
-                feedback:
-                  type: string
-                  description: |
-                    Detailed feedback for the next attempt. This is the ONLY context the next
-                    attempt gets (besides the original request). Be thorough:
-                    - What was wrong or incomplete
-                    - What approach would work better
-                    - What parts were correct and should be preserved
-                    - Any codebase patterns or constraints discovered
-                    - What specific improvements should the next attempt make
+            # Verdict schema. Default is grade/strategy/feedback; a caller can pass an
+            # extended schema (review_response_schema) that additionally REQUIRES
+            # inspection evidence, so a verdict can't be filed without it.
+            response_schema: "{{inputs.review_response_schema}}"
           thread:
             mode: fork
             memo: "{{inputs.context_bridge != 'none'}}"
@@ -293,7 +435,9 @@ nodes:
                 - Test: {{inputs.test_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.test.exit_code == 0 ? 'passed' : 'FAILED')}}
                 - Build: {{inputs.build_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.build.exit_code == 0 ? 'passed' : 'FAILED')}}
 
-                {{inputs.start_app_command != '' ? 'The application is running at: http://localhost:' + string(inputs.app_port) + ' — load the ux-review-methodology skill to audit it via Chrome DevTools.' : ''}}
+                {{has(outputs.eval_strategy) && outputs.eval_strategy == 'stuck' && has(outputs.has_feedback) && outputs.has_feedback ? '### Re-review — you filed `stuck` and a human answered\n\n**Nothing was re-implemented.** The implement step was SKIPPED for this iteration: the code is byte-identical to what you looked at last time, so there is no new diff to read. The check results above were re-measured just now against that same code. What changed is that a human replied:\n\n> ' + string(has(outputs.stuck_feedback) ? outputs.stuck_feedback : '') + '\n\nFinish the review you could not finish. If your blocker was a tool or a URL you could not obtain, act on the answer above and try again BEFORE you reach for `stuck` a second time — a `stuck` that repeats the same blocker without attempting the remedy is not a verdict, it is a loop, and it is the human who pays for it.\n' : ''}}
+
+                {{inputs.start_app_command == '' ? '' : '### Bring the app up YOURSELF — nothing has started it\n\nNo node in this workflow starts the application, and no port has been reserved for you. There is no server running unless you start one. Run this with the shell tool, exactly as written:\n\n```\n' + string(inputs.start_app_command) + '\n```\n\nWhich lifecycle you get is decided by that command, so read what comes back. If it RETURNS (a runner that starts its servers, detaches them onto their own log files, prints their ports and exits — `reliant forge run` is one), the ports are in the output you were just handed: take them from there, and do NOT background it, or the port line ends up in a buffer you have to poll for. If it HOLDS the foreground (`npm run dev`, `python3 -m http.server`, most dev servers), re-run it with `run_in_background: true` and read the same startup lines out of `bash_output`. `bash_list` shows what is already running, so check it before you start a second copy, and `bash_kill` stops one you started.\n\n**Take the port from what the server printed — never from this prompt, and never from habit (3000, 5173, 8080).** Dev servers are assigned their port at launch and it changes every run. Then confirm the page you loaded is the app THIS run built — its title, its nav, its routes — not merely that something answered: a 200 from a guessed port is more likely to be an unrelated server holding it, and a false green is worse than a failure.\n\nIf you truly cannot get the app up, that is a real `stuck` — but say what you ran and what it printed. `stuck` with no evidence and no attempt is not reviewable by the human who receives it.' }}
 
                 {{has(inputs.review_instructions) && inputs.review_instructions != '' ? inputs.review_instructions : 'Analyze the implementation attempt. Your prior reviews (if any) are in this thread — use them to track progress across attempts.\n\nYour job:\n1. Is the implementation correct and complete? Grade it.\n2. Decide the strategy: pass, continue, or refactor.\n3. Write detailed feedback for the next attempt.\n\n**Your feedback is the primary bridge to the next attempt.**\nThe next implement agent starts with a fresh fork but sees your accumulated review feedback and implementation summaries on the parent thread.\nBe thorough: describe what worked, what didn\'t, what patterns in the codebase matter, and what approach should be taken.\n\n**Strategy guidance:**\n- **pass**: implementation is correct and complete. Break the loop.\n- **continue**: incomplete but approach is sound. Loop back, skip refactor.\n- **refactor**: fundamentally wrong. Refactor agent will UNDO the work, next attempt starts fresh with your feedback.\n\n**Bias toward refactoring** for complex changes that fight the codebase\'s patterns.\nFor trivial changes (CSS, spacing, config): bias toward `pass`.'}}
           save_message:

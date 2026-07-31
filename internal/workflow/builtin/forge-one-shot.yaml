@@ -1,22 +1,42 @@
 name: forge-one-shot
 apiVersion: "0.0.5"
 description: |
-  Build a production Forge app from a conversation in five phases.
+  Build a production Forge app from a conversation. The build is structured as
+  SCAFFOLD → FAN-OUT → SYNTHESIS → REVIEW so genuinely-independent seams run in
+  parallel instead of serially.
 
-  Phase 1a: SCOPE — Agent has a conversation with the user to understand what they want.
-            Asks focused questions, infers defaults, writes FORGE_PLAN.md.
-            Uses builtin://agent (not get-it-right) so the conversation isn't interrupted by checks.
-  Phase 1b: SCAFFOLD — Takes the scoped plan and scaffolds the project, writes protos,
-            runs forge generate + build. Uses get-it-right for lint/build verification.
-  Phase 2:  FRONTEND POLISH — Make the generated UI look like a real product.
-  Phase 3:  MVP BACKEND — Single generative agent pass to make the app functional. It
-            self-verifies (generate+build); a mvp_verify gate fails loud if the tree
-            isn't green rather than feeding a broken project into production polish.
-  Phase 4:  PRODUCTION POLISH — Remaining features, edge cases, error handling, tests.
-            Uses get-it-right — this is the real correctness gate.
+  Phase 1: SCOPE + SCAFFOLD — one phase, one thread. The agent talks to the user via
+           `ask_user`, writes FORGE_PLAN.md, then lays the WHOLE substrate the fan-out
+           units consume, almost all of it by running forge commands and editing the
+           files they birth: protos + migrations + `forge scaffold`, the
+           interactor/custom-RPC packages, the app's error/reason vocabulary, and the
+           branding pass over the scaffolded frontend (theme VALUES). Review OFF —
+           the deterministic generate/lint/test/build gate IS the gate (forge lint carries
+           the frontend typecheck; forge build carries `next build`). `context_bridge: full`
+           keeps the conversation across retries so it never re-asks. This MUST end green
+           before fan-out.
+  Phase 2: BUILD MVP — FAN-OUT (one parallel wave) → SYNTHESIS → REVIEW, all in ONE
+           get-it-right loop. The orchestrator fans out one small, focused sub-agent per
+           seam — one backend concern or one frontend page-group each — in a SINGLE wave,
+           then SYNTHESIZES serially (wire units + ONE forge generate/build gate). The
+           get-it-right review runs with REAL TEETH (top tier): it opens the LIVE app and
+           runs builds itself, and its RUBRIC covers hardening too — error handling,
+           validation, edge cases, security, integrations — so nothing goes unchecked.
+           The loop's EXIT bar stays "correct and complete". That split is deliberate: a
+           hardening finding rides into the next attempt of a loop that already has the
+           app open and its context loaded, instead of raising the bar the loop has to
+           clear before it can ever end.
+
+  The app is LAUNCHED and its preview URL posted as the final step, so the run ends on a
+  link that serves the build which actually shipped.
+
+  Model/effort tiers: scope+scaffold runs MEDIUM — its deterministic gate is the real
+  check; build_mvp runs the flagship model at ITS OWN default thinking and its spawned
+  fan-out units run at their own preset's tier; every get-it-right review runs at the top
+  tier.
 
   Context flows via two mechanisms:
-  - FORGE_PLAN.md (project spec) — written by phase 1a, read by all phases. Defines WHAT to build.
+  - FORGE_PLAN.md (project spec) — written by scaffold_and_verify, read by all phases. Defines WHAT to build.
   - Per-phase plans (via plan tool) — each forked phase creates its own plan for task tracking.
     Plans are thread-scoped, so each phase has its own compaction-resistant execution tracker.
 
@@ -25,7 +45,7 @@ description: |
 # (the pipeline itself is one-shot — see the transition_to mechanism).
 transition_to: builtin://agent
 
-entry: [scope_conversation]
+entry: [scaffold_and_verify]
 
 inputs:
   model:
@@ -45,7 +65,26 @@ inputs:
     type: boolean
     ui: toolbar
     default: true
-    description: Pause for user review between phases
+    description: Pause for user review after each get-it-right iteration
+
+  # `ask` and `unattended` are NOT the same switch and must not be merged.
+  # `ask` decides whether an iteration PAUSES for review when a human is there.
+  # `unattended` states that there is no human at all — so `ask_user` cannot be
+  # answered and every checkpoint resolves with no answer instead of waiting.
+  # A run with ask=false is still interactive; a run with unattended=true is not.
+  #
+  # No passthrough entry is needed: the runtime propagates `unattended` into every
+  # sub-workflow, loop body and spawned agent, monotonically (see
+  # internal/workflow/runtime/unattended.go). That is deliberate — this flag must
+  # not be droppable by forgetting a YAML line, which is exactly how `ask` came to
+  # be inert on the node that asks the opening question.
+  unattended:
+    type: boolean
+    ui: toolbar
+    default: false
+    description: >
+      No human is available. The agent never blocks: `ask_user` returns
+      immediately unanswered and the agent must decide and record why.
 
   working_directory:
     type: string
@@ -56,121 +95,90 @@ outputs:
   project_root: "{{inputs.working_directory}}"
 
 nodes:
-  # ─── Phase 1a: Scope Conversation ──────────────────────────────────
+  # ─── Phase 1: Scaffold & Verify ────────────────────────────────────
   #
-  # The agent has a natural conversation with the user to understand what
-  # they want to build. No lint/build checks — this is pure conversation.
-  # Writes FORGE_PLAN.md when scoping is done.
-
-  - id: scope_conversation
-    type: workflow
-    ref: builtin://scope-conversation
-    passthrough: [model, mode, ask]
-    args:
-      working_directory: "{{inputs.working_directory}}"
-      question_areas: |
-        **Functionality & Data:**
-        - What entities/data models? (what fields, what relationships?)
-        - What operations beyond basic CRUD?
-        - What pages/UI flows matter most?
-        - Any integrations? (Stripe, email, auth providers, etc.)
-
-        **Branding & Visual Style:**
-        - Do you have an existing website or brand guidelines we should match?
-        - Are there any websites or apps whose visual style you like? (share URLs if possible)
-        - What kind of look and feel are you going for? (e.g. minimal/clean, bold/colorful, corporate/professional, playful/friendly)
-        - Do you have brand colors, fonts, or a logo?
-
-        If the user's initial message already covers branding/style preferences (e.g. they shared
-        reference sites, color palettes, or described a visual direction), do NOT re-ask those questions.
-        Use your own judgement to fill in gaps — these are suggestions, not a checklist.
-      plan_filename: "FORGE_PLAN.md"
-      plan_template: |
-        - All features organized by priority (HIGH / MEDIUM / LOW)
-        - Which features are MVP (HIGH) vs later
-        - Key architectural decisions
-        - Entity list with fields and relationships
-        - Branding & style direction (if discussed — colors, fonts, reference sites, visual tone)
-
-        Example:
-        ```markdown
-        # Forge Plan
-
-        ## Branding & Style
-        - **Visual tone:** Clean and modern, inspired by Linear/Vercel
-        - **Colors:** Primary #2563EB (blue), neutral grays, white backgrounds
-        - **Typography:** Inter or system font stack
-        - **Reference sites:** linear.app, vercel.com
-
-        ## Entities
-        - **Patient** — id, org_id, name, species, breed, owner_name, owner_email, repeated string allergies
-        - **Appointment** — id, org_id, patient_id, veterinarian_id, scheduled_at, status, reason
-
-        ## Features
-        | # | Feature | Priority | Notes |
-        |---|---------|----------|-------|
-        | 1 | Patient CRUD | HIGH | Core entity |
-        | 2 | Appointment scheduling | HIGH | Custom RPC |
-        | 3 | Email notifications | MEDIUM | SendGrid integration |
-
-        ## Decisions
-        - Using org_id as tenant key for all entities
-        - Appointments link to patients via patient_id
-        ```
-
-        After writing FORGE_PLAN.md, tell the user the plan is ready and you'll scaffold next.
-      max_questions: 10
-      max_turns: 3
-      context_prompt: |
-        **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
-
-        ## Scope a Forge App
-
-        You are a senior architect helping the user plan a production app built with Forge.
-        Forge scaffolds Go + Next.js monorepos with batteries included — Connect RPC, middleware,
-        ORM, migrations, frontend hooks, CRUD pages — all generated from proto files.
-
-        ## What Forge Gives You for Free (DO NOT ask about these)
-        HTTP server with Connect RPC, JWT auth, RBAC, CORS, logging, tracing,
-        PostgreSQL + ORM, OpenTelemetry, Docker, CI/CD, Next.js frontend with
-        TypeScript client + Tailwind, workers, webhooks, K8s manifests, code generation,
-        dependency injection, test harness, mocks.
-    thread:
-      mode: inherit
-
-  # ─── Phase 1b: Scaffold & Verify ──────────────────────────────────
-  #
-  # Takes the scoped plan from FORGE_PLAN.md and scaffolds the project.
-  # This phase uses get-it-right because it needs lint/build verification.
+  # Takes the scoped plan from FORGE_PLAN.md and lays the ENTIRE substrate the
+  # fan-out phase consumes: protos + migrations + `forge scaffold`, the
+  # interactor/custom-RPC packages forge births on command, the app's error/reason
+  # vocabulary, and the branding pass over the scaffolded frontend. Runs SERIALLY,
+  # with the LLM review OFF — the deterministic generate/lint/test/build gate IS
+  # the gate. This is the structural barrier: it MUST end green before
+  # build_mvp fans out, because units built against an unstable substrate drift into
+  # inconsistent error handling, styling, and duplicate components.
 
   - id: scaffold_and_verify
     type: workflow
     ref: builtin://get-it-right
-    passthrough: [model, mode, ask]
+    passthrough: [mode, ask]
     args:
+      # Pin thinking MEDIUM, threaded onto the user's model. The work is mostly
+      # running forge commands and editing the files they birth, so the deterministic
+      # gate is the real check and `forge generate` is the fast oracle — but the
+      # proto/migration surface still carries the design decisions every later phase
+      # inherits. Letting thinking float to the model default (xhigh on GPT-5.x) just
+      # makes the agent deliberate the annotation surface instead of drafting it.
+      model: "{{ {'id': getOrDefault(inputs.model, 'id', ''), 'tags': getOrDefault(inputs.model, 'tags', []), 'providers': getOrDefault(inputs.model, 'providers', []), 'thinking_level': 'medium'} }}"
       implementer_preset: forge
-      max_retries: 3
-      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint"
+      # Carry the whole conversation across retries instead of forking fresh and
+      # re-reading the tree. Scaffolding is cumulative — the entities already born, the
+      # commands already run, why a field was shaped the way it was. A fresh fork with
+      # only the failure log re-derives all of that every iteration, and re-learns the
+      # same generator constraints the hard way. Continuing the thread also lets a
+      # realization here flow back into the plan rather than being worked around.
+      context_bridge: full
+      # Mechanical phase: run the forge commands → edit what they birth → build. The
+      # deterministic generate/lint/test/build gate is the real check, so skip the LLM review.
+      review_enabled: false
+      # db/service-layer/testing carry NO forge/ prefix: forge ships them as
+      # emit:both, so reliant surfaces them at their bare path and the synthetic
+      # forge/ namespace covers only emit:forge skills. TestBuiltinWorkflowSkillsResolve
+      # is what keeps this list honest — an unresolvable name is silently skipped
+      # at preload, so the guidance would just never arrive.
+      skills: [forge/getting-started, db, forge/proto, forge/architecture, service-layer, forge/frontend/design]
+      max_retries: 5
+      # FORGE_PLAN.md is checked first: this phase owns the scoping conversation, and the
+      # plan is the only artifact carrying its decisions into build_mvp. Skipping it fails
+      # silently — the next phase just reads nothing and invents its own. A non-empty file
+      # is a floor, not a quality bar; the charter carries what it has to say.
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && { [ -s FORGE_PLAN.md ] || { echo 'FORGE_PLAN.md is missing or empty — write the plan before the gate can pass'; exit 1; }; } && reliant forge generate && reliant forge lint"
       build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge build"
+      # The born CRUD tests are forge's own output, and the only check that a
+      # generated Create actually works against the schema forge derived from
+      # the same proto. Without this a phase goes green with its entire test
+      # suite failing — which is exactly what a measured run did.
+      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && task test"
       review_instructions: |
-        You are reviewing the initial scaffold of a Forge app.
+        You are reviewing the scaffold pass of a Forge app — the substrate the parallel
+        fan-out phase will build on.
 
         **Pass if:**
         - The project exists with forge.yaml, proto files, migrations, and generated code
-        - `forge generate` and `forge build` succeed
+        - `forge generate`, `forge lint` (which runs the frontend TypeScript typecheck as
+          its own lane), `task test` (the born CRUD tests plus the frontend test lane),
+          and `forge build` (which runs `next build` for every frontend) all succeed
         - Entities follow the two-halves rule from the forge db skill: CRUD RPCs in a
           service proto AND a matching table in the migrations
         - At least one service and one frontend exist
+        - The frontend carries FORGE_PLAN.md's branding (theme VALUES edited in place).
+          The scaffolded page tree mirrors exactly the entities the protos declare, so an
+          UNCHANGED route set is the normal outcome — deletions are expected only where
+          the product never offers that operation (e.g. `new`/`edit` on an append-only
+          entity). Never fail a run for having deleted nothing.
         - FORGE_PLAN.md exists in the project root
 
         **Do NOT fail because:**
-        - Handlers are stubs (expected at this stage)
-        - Frontend is unstyled (that's a later phase)
+        - Handlers and custom-RPC bodies are stubs (expected at this stage)
+        - Page features aren't built (that's the fan-out phase)
 
         **Only fail if:**
         - Proto files break generation or build
         - Required entities/services from FORGE_PLAN.md are missing
         - The project structure is fundamentally broken
+
+        A FAIL must be root-caused and classified before the phase re-runs — forge gap
+        (the generated starting point made it hard), unclear direction (the prompt/skill
+        never said it), or LLM slip (guidance existed, the agent missed it). Put the
+        classification in your feedback — it is the signal that drives fixes.
     thread:
       mode: inherit
       inject:
@@ -178,52 +186,568 @@ nodes:
         content: |
           **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
 
-          ## Scaffold the Forge App
+          ## Scope, then Scaffold the Forge App
 
-          Read `FORGE_PLAN.md` in `{{inputs.working_directory}}` — it has the scoping decisions
-          from the conversation you just had with the user. Now scaffold the project.
+          You own BOTH halves: work out what to build with the user, then build it. Scaffold
+          the project AND lay the substrate the next phase's parallel per-seam units will all
+          build on: the schema and API surface, the packages forge births on command, the
+          app's error/reason vocabulary, and the frontend branding. Get this right and the
+          units stay consistent; leave it half-done and they drift into ad-hoc error handling,
+          mismatched styling, and duplicate components. **This phase ENDS GREEN — no feature
+          bodies, no page features.**
 
-          **Step 0: Load the source of truth — do not work from memory.**
-          ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
-          reliant forge skill load getting-started
-          reliant forge skill load db
-          reliant forge skill load proto
-          ```
-          These skills ship inside the forge binary this project is generated with, so
-          they always match its current conventions. Follow them exactly; if anything
-          in this prompt disagrees with a loaded skill, the skill wins.
+          {{inputs.unattended ? '**There is NO human in this run — do not call `ask_user`.** It is wired to return immediately with no answer, so calling it buys nothing and costs a turn. Settle every open question yourself from the opening message and from what the domain obviously requires. **Record every decision you had to make without the user in `FORGE_PLAN.md`, under a `## Decisions made without the user` heading — the decision AND the reason.** That section is the only thing that distinguishes a choice you invented from a choice the user made, so a plan that hides an invented decision inside a confident-sounding spec is a defect, not a tidy plan.' : '**Start by talking to the user — you have `ask_user`.** Do not guess your way into a schema. Ask what you genuinely need and cannot infer, in as few rounds as possible. **An explicit instruction in their opening message is the answer — do not ask about that topic at all.** This is not "ask anyway, but shorter": if they named the visual style, do not ask about branding; if they named the entities, do not ask what to model; if they said not to block on them, do not raise a gate. Re-asking what they already told you reads as not having listened. If the opening message settles everything, ask nothing and go straight to FORGE_PLAN.md.'}}
+
+          Either way, these two surfaces have to be SETTLED before you write FORGE_PLAN.md —
+          from what the user already said, or by asking, or by your own judgement:
+
+          - **Functionality & data** — what entities, what fields, what relationships? What
+            operations beyond CRUD? Which pages matter most? Any integrations?
+          - **Branding & visual style** — an existing site or brand guidelines to match? Apps
+            whose look they like (URLs help)? Overall feel — minimal, bold, corporate, playful?
+            Brand colors, fonts, a logo?
+
+          These are prompts for your judgement, not a checklist to march through.
+          Never ask about — or invent constraints around — what forge already gives you (see below).
+
+          **Write your understanding to `FORGE_PLAN.md`** in `{{inputs.working_directory}}`
+          before you start building, and shape it however serves this build — you had the
+          conversation and you are about to drive the generator, so you know what it needs to
+          say. The next phase reads it to build features on top of what you lay down.
+
+          **The plan is yours to revise.** You are in ONE continuing thread: the conversation,
+          the scaffolding, and every retry. When running forge teaches you something the
+          conversation could not — two entities can't both name a status the same way, a field
+          needs a different type to represent real values, a list needs a filter nobody
+          mentioned — go back and change the plan, then say what changed and why. A plan that
+          quietly disagrees with the code is worse than no plan. Do not work around a
+          realization; fold it in.
+
+          **What forge gives you for free — never ask about these.** HTTP server with Connect
+          RPC, JWT authN middleware, CORS, logging, tracing, PostgreSQL + ORM, OpenTelemetry,
+          Docker, CI/CD, Next.js frontend with TypeScript client + Tailwind, workers, webhooks,
+          K8s manifests, code generation, dependency injection, test harness, mocks.
+
+          **Web research — to sharpen decisions, not to browse.** You have `websearch` and
+          `fetch`. Reach for them when the domain is unfamiliar: to see how real systems in it
+          shape their data before you commit to entities and field vocabularies, and to confirm
+          domain terminology or a regulatory / controlled-vocabulary constraint the app has to
+          respect. A few targeted lookups that change a decision — never an open-ended browsing
+          session, and never a substitute for asking the user what they actually want.
+
+          **Step 0: Work from the source of truth, not from memory.** The forge skills for
+          this phase are `getting-started`, `db`, `proto`, `architecture`, `service-layer`
+          and `frontend/design`. They ship inside the forge binary this project is generated
+          with, so they always match its current conventions. Follow them exactly; if
+          anything in this prompt disagrees with a loaded skill, the skill wins.
+
+          **They are NOT in your context on this first turn, and that is not a mistake.**
+          forge's skills are surfaced through the PROJECT — the directory has no `forge.yaml`
+          until you create it, so on turn one there is no forge skill catalog to preload
+          from. So: run `reliant forge project new` FIRST. The catalog picks the project up
+          immediately after that, so load all six in ONE turn (issue the six `skill` calls
+          together — they do not depend on each other) and work from them for everything
+          after. Do not skip this on the assumption they arrived by themselves; check that
+          you can actually see them.
+
+          **Do NOT over-deliberate the annotation surface.** The proto markers, protovalidate
+          constraints, and List-filter tags below are a large surface, and reasoning about
+          which combination forge accepts is the slowest possible way to find out. DRAFT the
+          proto, run `reliant forge generate`, and read what it says. `forge generate` is the
+          empirical oracle for this phase — one run beats ten paragraphs of deliberation.
+
+          **`forge/pkg` already ships the infrastructure — read the index BEFORE you author
+          any.** Load the `forge-libraries` skill: it indexes every `forge/pkg/*`
+          subpackage in one page, including errors (`svcerr`), CRUD (`crud`), validation
+          (`validate`), the test harness (`testkit` / `tdd` / `pgtest`), middleware, config,
+          and observability (`observe`). Import what exists; hand-author ONLY what genuinely
+          does not. Re-implementing a `forge/pkg` helper is a defect, not a shortcut.
+
+          **Await idiom — role-aware. The commands are FAST; the discipline is about TURNS,
+          not seconds.** Measured on a real 4-entity project: `reliant forge generate` ~10s,
+          `reliant forge lint` ~17-20s, `reliant forge build` ~28-35s, `npx tsc --noEmit` ~2s,
+          `go build ./...` ~6-8s. Do NOT budget or restructure this phase around command
+          latency. What DOES cost is turn churn: if you background a command as the phase
+          ORCHESTRATOR, launch it ONCE with a generous timeout and block on its completion
+          signal — no SEPARATE wait-loop, and no re-polling after the signal arrives.
+          SUB-AGENTS must NOT do this at all: a leaf agent that backgrounds a command and
+          yields silently ENDS its turn and strands the phase — any sub-agent you spawn runs
+          commands FOREGROUND with a generous timeout, and you brief it so. Both mistakes are
+          measured: re-polling burned ~1/3 of one run's tool calls; a backgrounding leaf lost
+          ~1/3 of another. Since the commands are seconds, FOREGROUND is the default for you
+          too — and there is nothing in this workflow to background, `reliant forge run`
+          included. **`forge run` does NOT stay alive.** Your shell has no TTY, so it
+          resolves to its detach lifecycle: it starts every host service and frontend, hands
+          each one its own log file, prints the ephemeral ports, and EXITS 0 while the
+          servers keep running. Background it and you get a pid that has already exited and
+          a port line buried in a buffer you then have to poll for. Run it FOREGROUND, read
+          the ports off its output, and stop the servers with `reliant forge env down dev`.
+
+          **Issue the calls you have ALREADY decided in ONE turn.** When you know three
+          edits to the SAME file (an import, a `Deps` field, its `validateDeps` branch),
+          make them one turn of three `edit` calls, not three turns of one — and author
+          two independent new files in one turn too. This applies ONLY to calls whose
+          inputs you already hold: NEVER batch a call whose input depends on what the
+          previous call returns, and never batch a gate with the edit it is meant to be
+          checking. Guessing at a dependent call costs far more than the round trip.
+
+          **Command names — scaffolding is ONE verb, and arity picks the mode.**
+          `reliant forge scaffold` with no noun sweeps every `// forge:entity`
+          marker and births what is missing; `reliant forge scaffold <noun> ...`
+          scaffolds exactly one thing (entity, service, worker, frontend, rpc,
+          package, ...). Project-wide operations stay under `reliant forge
+          project ...` (new, delete, graph, audit, annotations). There is no
+          `forge project add` and no `forge project scaffold` — both were
+          removed, and an unknown subcommand now exits non-zero rather than
+          printing help and returning success.
+
+          **If a command errors as unknown, STOP and report it — do NOT hunt for
+          an older spelling that works.** `reliant` embeds forge (its go.mod
+          replaces the module with the local checkout), so `reliant forge` is a
+          COPY of forge compiled into this binary, not a call out to whatever
+          `forge` is on PATH. Built at different times they are DIFFERENT
+          FORGES, and a command present in one can be missing from the other. A
+          run that quietly falls back to whatever an older build accepts will
+          scaffold against that older forge, pass its own gate, and measure
+          nothing. A missing subcommand is a stale-binary fault in the
+          environment running this workflow — report it, never work around it.
 
           **Step 1: Create the project IN PLACE at the working directory.**
           ```bash
-          cd {{inputs.working_directory}} && reliant forge new --in-place --force --mod github.com/user/<project-name> --service <service-name> --frontend dashboard
+          cd {{inputs.working_directory}} && reliant forge project new --in-place --force --mod github.com/user/<project-name> --service <service-name> --frontend dashboard
           ```
           Pick the project and service names based on what the user described.
           `--in-place` scaffolds directly into `{{inputs.working_directory}}` (no nested
           subdirectory), so `forge.yaml` lives at the working directory and all subsequent
           commands run there. `--force` makes re-runs idempotent if this phase retries.
 
-          **Step 2: Define the schema and API per the skills.**
-          - SQL migrations in `db/migrations/` are the single source of truth for the
-            schema; proto files define the API services and RPCs. An entity becomes
-            real only when BOTH halves exist — CRUD RPCs in a service proto AND a
-            matching table in the applied migrations (the db skill explains the rule).
-          - For each entity in FORGE_PLAN.md, use the scaffolder — it creates the
-            migration and the proto CRUD surface together:
+          **Step 2: Author the protos, then scaffold the whole app in ONE command.**
+          - Proto is the surface you author. The two truths are proto (wire) and
+            migrations (schema); forge projects everything else from them (the db skill
+            explains the rule).
+          - In the service proto, write each entity from FORGE_PLAN.md as a message with
+            its fields, and put a leading `// forge:entity` comment on it — that marks it
+            as a CRUD entity. Add any custom (non-CRUD) RPCs to the protos too. Field
+            types and the marker are covered in the db and proto skills.
+          - **Model with markers + protovalidate — don't hand-fix after scaffold.** Use
+            the field/entity markers so born artifacts are correct from the start (the db
+            skill documents each): protovalidate `(buf.validate.field)` constraints (money
+            `>= 0`, email, string lengths → DB CHECK + zod + wire); `// forge:secret` on
+            credential/secret fields (kept out of read responses AND preserved on update);
+            `// forge:server-set` on server-authoritative fields (status, computed prices,
+            lifecycle timestamps) so they're excluded from Create/Update input — do NOT
+            hand-strip fields from a Create request AFTER scaffold, it breaks the born
+            new-page/test; `// forge:append-only` on audit/ledger entities; opt-in
+            `// forge:soft-delete` on clinical/financial entities. Also check domain
+            defaults match the plan (a gate flag like `rx_required` must default to the
+            SAFE direction, not proto3's zero-value).
+          - **Never hardcode proto field tag numbers when adding List filters.** forge
+            auto-derives filters from scalar entity fields (a `bool consent_given` field
+            becomes a filter), which shifts tags. READ the generated `List<Entity>Request`
+            and append your filters at the next FREE tag — never assume the standard
+            `descending=5` layout.
+          - **Author the List filters your UI will need AT BIRTH — forge won't derive them.**
+            forge auto-derives List filters only from scalar/bool fields, NOT from enums or
+            foreign keys. If the plan's UI will facet a list by an enum (status/type/…) or
+            show a per-owner "my items" view keyed on `<owner>_id`, those filter fields will
+            NOT appear on the generated `List<Entity>Request` on their own — add them
+            explicitly to the request message now, at scaffold time. Later frontend work
+            reads protos — it can't edit them — so a filter missing here becomes a
+            client-side truncation bug or an unscoped list downstream.
+          - An informational `Schema drift` notice where `generate did not fail` is NOT a
+            gate failure — record it as a finding and move on; do not rewrite owned
+            migrations just to silence it. Birth's foreign keys are live SQL, not
+            suggestions — vet in Step 4 that each one points where the domain means.
+          - **Read before you overwrite — EVERY existing file this phase touches, not just
+            protos.** Almost nothing you edit here is a new file: `project new`,
+            `db migration new` and `forge scaffold` pre-create the service protos, the
+            migration stubs, `db/seeds/vocab.yaml`, `forge.yaml`, the born handler and
+            `contract.go` files, `globals.css`, `nav.tsx` and `layout.tsx`. Write does NOT
+            reject an unread overwrite — it replaces the file and hands the diff of what it
+            destroyed back into your context. That is worse than a rejection, not better:
+            you pay those tokens on every hand-authored artifact you clobbered without
+            seeing (measured on a large proto, and again on `db/seeds/vocab.yaml` — the same
+            trap with a different filename), and nothing stops you. Only the Read TOOL
+            records awareness of a file; `cat`, `head`, `grep` and `sed` do not. So batch
+            the Reads UP FRONT for every existing file you intend to replace wholesale, and
+            when a Write does report an unread overwrite, READ the diff it returns instead
+            of moving on. For a file you are changing IN PART, use the `edit` tool — it has
+            no read gate at all and it is the right tool for the theme / nav / `Deps` edits
+            below regardless.
+          - Then scaffold everything the protos imply, in one command:
             ```bash
-            reliant forge add entity <name> <field:type ...>
+            cd {{inputs.working_directory}} && export PATH="$HOME/go/bin:$PATH"
+            reliant forge scaffold
             ```
-            Field syntax, types, and nullability rules are in the db skill.
-          - Add custom (non-CRUD) RPCs to the service protos per the proto skill.
+            This births every `// forge:entity` message (create-table migration + CRUD
+            quintet — BOTH halves, owned at birth) and runs `forge generate`. Custom
+            (non-CRUD) RPCs surface as correctly-signed pb-through stub methods on the
+            handler service — later phases implement the bodies in place. Re-running
+            is a safe no-op. This is the only entity-birth path — there is no
+            `field:type` shorthand and no schema-import direction; a `field:type` pair
+            cannot spell an enum, a nullable, a validation rule or an FK reference, so
+            marker + proto is where you say what the column actually means.
           - Add relationships, indexes, and constraints with hand-written migrations
             per the db skill.
+          - **Authentication is owned code in `internal/app/auth.go`** (`SetupAuth`, default
+            JWT), scaffolded once — it authenticates the caller and puts the user + claims in
+            context. Leave it as scaffolded here; later phases adjust it if the plan needs
+            something other than the default.
           - Prefer 1-2 services, 1 frontend. Be ambitious — Forge handles the heavy lifting.
 
-          **Step 3: Generate and verify.**
+          **Step 3: Fill `db/seeds/vocab.yaml` while the domain is fresh.** One
+          seed-adjacent artifact IS yours, right after the migrations: `db/seeds/vocab.yaml`
+          (scaffolded fully-commented). Fill in domain-noun pools for the columns whose
+          values the seeder cannot invent — product/compound names, brand names, and the
+          like — so seeded rows speak the project's domain instead of generic placeholders.
+          A few pools with 5-10 real terms each is enough; forge validates every value
+          against the column's constraints and handles everything else (emails, people,
+          addresses, FK integrity) itself. This is vocabulary, not seed data — you are
+          naming things, not authoring rows. Seed ROWS are not your job: `reliant forge
+          run` migrates AND, on first boot against an empty dev database, auto-seeds
+          deterministic FK-coherent rows from this very file — so the vocabulary you write
+          here is what the next phase browses.
+
+          **Step 4: READ the schema forge drafted, and correct it HERE — this is the only
+          cheap place.** `forge scaffold` derived those migrations from your proto. That
+          derivation is a CONVENIENCE, not a source of truth: **the SQL is the schema.**
+          forge projects the ORM, the CRUD conversions and the born pages from the APPLIED
+          schema — not from what birth happened to emit — so a column birth guessed wrong
+          is wrong for the whole app, and no proto edit corrects it. Birth hands you a
+          plausible FIRST DRAFT of a schema. Nothing so far has read it.
+
+          Read it now, because the price of the same defect only goes up. Today a wrong
+          column is ONE edit to a `.up.sql` that nothing has been built on yet. After the
+          fan-out it is a second migration plus a cascade through handlers, pages, hooks
+          and tests. (The db skill's "migrations are append-only" rule governs a MERGED
+          migration, whose immutability other clones depend on. This project has no other
+          clone and no applied environment; that window is open exactly now and closes
+          when this phase ends.)
+
           ```bash
-          cd {{inputs.working_directory}} && export PATH="$HOME/go/bin:$PATH"
-          reliant forge generate && reliant forge build
+          cd {{inputs.working_directory}} && ls db/migrations/*.up.sql
           ```
+          READ every file that lists — with the Read tool, so you can edit it afterwards.
+          Then answer these, per table, per column:
+
+          - **Does the TYPE mean what the domain means?** `JSONB` is what birth emits for
+            a repeated or nested message, because a proto field is all it has to go on;
+            whether those rows deserve their own table with foreign keys, their own
+            constraints and their own queries is a decision only you can make. Know what
+            the JSONB column does NOT cost before you decide: the generated conversions
+            round-trip a repeated message through `orm.MarshalJSONBList` /
+            `orm.UnmarshalJSONBList`, so the field moves over the CRUD path intact either
+            way. What a document cannot have is a FOREIGN KEY on the ids inside it, a
+            CHECK or an index on one of its fields, or a query that filters or joins on
+            one — that, and nothing else, is the trade. A `TEXT` the domain means as a
+            timestamp, a closed vocabulary, a number or a boolean is a different and
+            simpler class of miss. Money gets the same treatment birth cannot give it:
+            proto has no fixed-point decimal, so the correct idiom is an integer
+            minor-unit field (`int64 amount_cents`), which birth turns into an exact
+            `BIGINT` with nothing left to fix. A `double` money field is not a looser
+            version of that — it is the defect, a `DOUBLE PRECISION` that is inexact on
+            every value it stores. If the domain genuinely needs decimal precision
+            `int64` cents cannot give it, `NUMERIC(12,2)` has no proto spelling either
+            and has to be written into the migration by hand.
+          - **Is it NULLABLE where the domain requires a value** — or NOT NULL where the
+            domain genuinely has none to give?
+          - **Is a UNIQUE the domain implies missing — and can proto even say so?** A
+            natural key nothing enforces — an email, a slug, a code, one row per pair —
+            becomes duplicate rows no later phase can clean up. Proto has no spelling for
+            UNIQUE at all: a single-column constraint, a composite one
+            (`UNIQUE (tenant_id, slug)`), a partial one
+            (`UNIQUE (email) WHERE deleted_at IS NULL`), and the plain multi-column or
+            partial index a compound lookup needs all exist only if you write the SQL
+            here.
+          - **Is a CHECK the domain implies missing — including one proto cannot express
+            at all?** A quantity that cannot go negative, a range whose end must follow
+            its start, a vocabulary with a legal set — protovalidate can carry all three,
+            field by field. What it cannot carry is a rule that compares two columns to
+            each other (`due_at > issued_at`, `shipped_at IS NULL OR shipped_at >=
+            ordered_at`): there is no cross-field spelling in proto, so that CHECK exists
+            only if you add it to the migration yourself.
+          - **Do the relationships POINT WHERE THE DOMAIN MEANS?** Birth already WROTE
+            the `FOREIGN KEY` and its index — live SQL in the `.up.sql`, applied on the
+            first migration — for every `*_id` whose stem resolved to a table it knows.
+            Where the referenced table is born by a LATER migration, the index is here
+            and the constraint is in that table's own birth migration. And where the stem
+            resolved to nothing — a polymorphic id, an identity-provider id, an
+            `owner_id` that is no `owners` row — birth wrote NOTHING on purpose, because
+            a REFERENCES to a table that does not exist is a worse defect than an absent
+            constraint. So this bullet is two jobs, neither of them accepting a
+            suggestion: confirm every constraint that IS there points at the table the
+            domain means, and write the `ALTER TABLE … ADD CONSTRAINT … FOREIGN KEY` plus
+            its index for every real relation birth left unconstrained. What birth's
+            `FOREIGN KEY` never carries is a referential action — `ON DELETE CASCADE`,
+            `ON DELETE SET NULL` — proto has no field for "and delete these too," so a
+            parent the domain means to cascade stays `NO ACTION` until you say otherwise.
+          - **Would a row built from this schema ALONE be a row your own RPCs accept?**
+            Anything generating data reads only the column's type, constraints and
+            DEFAULT — it cannot know your rules. A DEFAULT the domain rejects, a status
+            whose zero value is not a legal starting state, or a combination the schema
+            permits and the domain forbids each yields rows that exist and then fail the
+            first real operation over them.
+
+          **Correct what is WRONG for this domain. Do NOT redesign.** Every edit here has
+          to trace to something the plan says; if you cannot name the domain rule an edit
+          serves, do not make it. Do not rename for taste, do not add columns for features
+          nobody asked for, do not restructure a table that already fits, and do not
+          delete anything in order to have deleted something. Owning a file means you may
+          CORRECT it — it does not make it a blank page. If a correction changes which
+          columns the seeder needs a noun pool for, update `db/seeds/vocab.yaml` in the
+          same pass.
+
+          **A `forge generate` that REFUSES a field is this review talking — not a broken
+          toolchain.** A proto field paired with a column nothing can carry a value
+          between is DEAD over the API: both sides exist and no value ever moves between
+          them. forge fails the generate rather than ship that, and the failure names the
+          message, the field, the table, the column, the declared SQL type and the reason
+          — every such pair at once, so one run tells you about all of them. The fix is a
+          line in the `.up.sql`, or the proto field beside it. Never a flag, never a
+          hand-written conversion, never a retry. If you genuinely cannot tell which side
+          is wrong, write that down and stop — do not make the error go away.
+
+          **Correcting the schema invalidates the born CRUD test — delete it and let
+          `forge generate` write it again.** `internal/handlers/<svc>/handlers_crud_test.go`
+          is scaffolded ONCE and is yours from line one, and its fixtures were derived
+          from the schema AS BORN: literals chosen to satisfy the CHECKs that existed
+          then, and a seeded parent row for each foreign key that existed then. That
+          derivation runs on the first scaffold ONLY — `forge generate` never rewrites a
+          scaffold-once file that is already on disk — so a corrected schema leaves
+          fixtures nothing will refresh, and the very next `task test` fails in
+          `TestCRUD_<Entity>_Lifecycle` on the constraints you just added, with nothing
+          in the failure saying why. The fix is one line:
+
+          ```bash
+          cd {{inputs.working_directory}} && rm internal/handlers/<svc>/handlers_crud_test.go && reliant forge generate
+          ```
+          Do that for every service whose schema you touched. Do NOT hand-edit the
+          fixture literals instead: that re-does by hand what the generator derives from
+          the schema, and it is wrong again the next time the schema moves.
+
+          **Done when the corrected schema is green:**
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint && task test && reliant forge build
+          ```
+          That is the phase gate, run HERE for the first time instead of only at the end,
+          because a schema defect that survives into the steps below has already spread.
+          `task test` is the lane that runs the born CRUD tests: a real Create/Get/List
+          round-tripped against the applied schema. The steps below change what these
+          lanes check, so you will run the affected ones again — that is not re-running a
+          green gate.
+
+          **Then answer the last question with a row, not by reading.** A green gate says
+          the schema is coherent and the code compiles against it. It does NOT say a row
+          built from that schema alone is a row your own RPCs accept — the born CRUD test
+          builds its fixtures FROM the schema, so it agrees with the schema by
+          construction and cannot disagree with your domain. Seeding is what disagrees.
+          It synthesizes rows from nothing but the column types, constraints and DEFAULTs
+          — exactly what any generator has — and inserts them in foreign-key order, so a
+          combination the schema permits and the domain forbids becomes a row you can
+          look at.
+
+          The seeder needs a live, MIGRATED database, and nothing above leaves one behind:
+          the born tests boot their own throwaway postgres inside the test process, and
+          `forge generate` introspects a scratch shadow database it then drops. `forge
+          run` is what creates the dev database, applies the migrations as the app boots,
+          and seeds it on that first boot — and it detaches its servers and returns
+          rather than staying alive, so it needs stopping.
+
+          ```bash
+          cd {{inputs.working_directory}} && reliant forge run && reliant forge db seed apply; reliant forge env down dev
+          ```
+          Read what comes back. Two outcomes belong to THIS step, and both are schema
+          edits in the window that is still open:
+          - **A refusal naming a reference diamond.** A table that reaches one parent by
+            TWO routes — a direct `<parent>_id`, and a second reference whose own row
+            carries a `<parent>_id` as well — carries a rule the schema implies and never
+            states: whether the two must agree, and if so which one is the truth. Nothing
+            in the DDL says, so seeding the routes independently produces rows that
+            contradict each other. `db seed apply` refuses rather than write them, and
+            prints the declaration to paste: `COMMENT ON CONSTRAINT … IS 'forge:ref
+            derived-from=<column>'` (or `authoritative`, or `independent`). Put it in the
+            `.up.sql` — it is a fact about the schema, not a preference about seeding.
+            Reading the migrations one at a time cannot surface this; only walking the
+            reference graph does, which is why a command finds it and you would not.
+          - **Rows that are legal and wrong.** A total with no line items. A status whose
+            value your own flow cannot legally start in. A quantity of zero on a row that
+            means something shipped. Each one is the schema permitting a combination the
+            domain forbids, each is one CHECK or one DEFAULT away from impossible, and
+            each would otherwise be found by whichever fan-out unit first called the RPC
+            that rejects it.
+          Fix what it finds in the migration, re-run the affected lanes, and seed again.
+          **Then stop reviewing the schema.**
+
+          **Step 5: Birth the remaining packages with forge COMMANDS — do not hand-author
+          them.** Each command below writes correctly-shaped, marker-wired files; your job
+          is to run it and then edit what it births.
+          - Custom (non-CRUD) RPC a HIGH-priority feature needs that isn't already in the
+            protos: `reliant forge scaffold rpc <service> <Name>` writes the
+            correctly-signed handler stub to its own `rpc_<snake_name>.go` and PRINTS a proto
+            snippet — never hand-write Connect signatures. Leave the body a stub; the fan-out
+            unit implements it.
+            **It does NOT edit the .proto, and the snippet it prints is a skeleton — budget
+            for the messages.** That is deliberate in forge (proto files have hand-curated
+            section markers and ordering an injector would regress), so the snippet arrives
+            as `rpc Foo(FooRequest) returns (FooResponse);` plus two message blocks whose
+            bodies are `// TODO: request fields`. YOU paste the rpc line into the `service {
+            … }` block, YOU author every request/response field, and only then does `forge
+            generate` produce the pb types the stub already imports. A measured run
+            hand-authored 8 such messages; plan that work in this step rather than
+            discovering it mid-fan-out.
+            **Order matters for the file layout.** Scaffold the RPC BEFORE it is in the
+            proto and you get the disjoint `rpc_<name>.go` above. Declare it in the proto
+            first and the next `forge generate` APPENDS its stub to the one shared
+            `internal/handlers/<svc>/handlers.go` instead — which is the file the fan-out
+            then has to pre-split. Prefer the scaffold-first order; it costs nothing.
+            **Both paths stamp `// forge:gen unwired-stub symbol=…`,** so whichever order you
+            use, every stub you leave unimplemented is visible to the fan-out phase's query
+            and to `forge project audit`. Leave the marker on the stub you hand off — a stub
+            you strip it from, or hand-write a placeholder body over, silently drops that RPC
+            off the next phase's work list.
+          - Orchestration/composition (multi-adapter flows, state machines, use cases):
+            author NOTHING by hand in a new `internal/` package. Run `reliant forge
+            scaffold package <name>` FIRST — the DEFAULT shape is the one you want (an
+            orchestrator is just a service whose deps are other services' interfaces, so
+            there is no separate flag for it) and it scaffolds contract.go + service.go +
+            test with the `// forge:constructor` marker and svcerr wiring
+            already correct — then EDIT the born files. Package names are a single lowercase
+            word, NO underscores (a bad name forces a rename + regenerate saga). The owning
+            backend unit fills the body later. (The one package you DO hand-author is the
+            constants-only reason vocabulary in Step 6 — forge has no command for it because
+            it declares nothing to wire.)
+          - Then run ONE `reliant forge generate` so the next phase's units all fan out
+            against a single stable generated surface (hooks + pb stubs).
+
+          **Step 6: Edit the born backend files — shapes and values, not new substrate.**
+          - **A service IS its handler package `internal/handlers/<svc>/` — and it has NO
+            `contract.go`.** forge already wrote `service.go` (the `Deps` struct, the concrete
+            `Service` STRUCT, `New(Deps) (*Service, error)` + `validateDeps`), delegated every
+            CRUD RPC through the owned `handlers_crud.go`, and appended a correctly-signed,
+            `Unimplemented`-returning stub to `handlers.go` for each custom RPC in the proto.
+            The `*Service` methods ARE the handlers — there is no interface/impl split here.
+            Do NOT create a `contract.go` in a handler package: forge's pre-codegen contract
+            check HARD-FAILS `forge generate` with
+            `forgeconv-internal-package-contract-names` (the package's `Service` is a struct,
+            not the interface that rule demands).
+          - **Leave every stub body EXACTLY as forge wrote it — the stub IS the handoff.**
+            forge stamps each one with `// FORGE_SCAFFOLD: …` and
+            `// forge:gen unwired-stub symbol=<pkg>.<Method>`, and that marker is what the
+            next phase QUERIES to learn what is unimplemented — it does not read prose. So
+            do not replace the body with your own `return nil, fmt.Errorf("… not
+            implemented")`, do not leave a `// TODO(next phase): …` comment naming who
+            should implement it, and do not delete the marker. Those are pure waste twice
+            over: the next phase deletes body and comment anyway, and they must be plausible
+            enough to compile and pass `forge lint`, so they cost MORE than the stub forge
+            already wrote. Worse, a hand-written body is not neutral — `forge generate`
+            treats ANY existing `*Service` method as implemented, so your placeholder
+            permanently SUPPRESSES both the marked stub and the born
+            `handlers_scaffold_<rpc>_test.go` for that RPC. A measured hand-run did exactly
+            this and handed the next phase a handler package containing zero markers.
+          - **What you actually shape here is `Deps`.** For each Step-5 package a service will
+            call, add its interface-typed field to that handler's `Deps` plus the matching
+            nil-check in `validateDeps()`. `forge generate` then resolves the field BY TYPE in
+            the regenerated `internal/app/compose.go` — no wiring to hand-write. **Fixing the
+            dep surface NOW is the rule that governs**: it is what lets per-service units fill
+            bodies in parallel without colliding on the struct, so add every field the plan
+            calls for in this serial step rather than leaving units to grow the struct
+            concurrently.
+            The constraint that goes WITH it is not "only add a field whose implementation
+            exists" — it is **every field you add must RESOLVE, in this same pass.** forge
+            recognises exactly two providers, and you pick one per field:
+             1. **Another registered component, matched by its `Service` interface type.**
+                This is the free path and the one to prefer: the packages Step 5 births with
+                `forge scaffold package` are components, so a field typed
+                as `<pkg>.Service` resolves with nothing further to do. An orchestrator whose
+                contract.go you have only edited — not implemented — still resolves; the
+                interface existing is the whole requirement, and the TODO bodies are the
+                fan-out unit's job.
+             2. **A field on the owned `*Infra` struct in `internal/app/providers.go`**, for
+                any dep type with no component behind it — a `Store`/`Repository` interface
+                declared in the handler's own package, a third-party client. Any Infra field
+                ASSIGNABLE to the dep type resolves it (the NAME need not match). This one is
+                hand-wiring, and it is due NOW, in the same pass as the field.
+            A field that is neither is the one thing forge refuses to paper over: it will not
+            emit a nil for a custom-interface dep (that passes `validateDeps` and then
+            nil-derefs at runtime), so `forge generate` HARD-FAILS with
+            `<Component>.Deps.<Field> (<Type>) has no provider`. **That error is the runbook**
+            — it names the exact Infra field to add, the `OpenInfra` line that constructs it,
+            and the compose.go assignment you then get for free. Follow it. Never resolve it
+            by deleting the Deps field: that trades a loud generate-time failure for a seam
+            the fan-out then has to re-add under contention.
+          - **`contract.go` belongs to the standalone packages Step 5 births.** The canonical
+            `Service` interface / `Deps` struct / `New(Deps) Service` shape lives in
+            `internal/<name>/contract.go` — the file `forge scaffold package` wrote. EDIT
+            it in place: replace the placeholder `Run` / `RunInput` / `RunResult` with the
+            real domain method signatures the plan needs, and leave the bodies in
+            `service.go` as `TODO` stubs for the owning unit.
+          - **Error / reason vocabulary — constants in `internal/reasons/reasons.go`.**
+            `forge/pkg/svcerr` ALREADY exports `WithReason` and every code constructor
+            (`Invalid`, `FailedPrecondition`, `PermissionDenied`, …). Use them — do NOT
+            re-wrap them in your own helpers. What you author is ONLY the app's shared
+            `Reason` code vocabulary: plain string constants like `order_not_approvable` /
+            `prescription_expired` that handlers pass to `svcerr.WithReason`, so errors read
+            consistently everywhere. Hand-author this ONE package — it declares no interface
+            and no `contract.go`, so forge's component discovery never treats it as something
+            to wire and the contract-name lint never walks it. One package, imported by every
+            handler and interactor, so two seams cannot drift into two spellings of the same
+            reason.
+
+          **Step 7: Brand the scaffolded frontend IN PLACE — change values, don't re-author.**
+          - **Load the `frontend/design` skill and follow it** — declared type/color system,
+            scale floors, restrained color, no hand-drawn SVGs.
+          - **forge ALREADY scaffolded the design system** — `globals.css` (a full ~27-token
+            `@theme` light+dark palette), `nav.tsx`, and `layout.tsx` exist. EDIT them IN
+            PLACE: change the palette VALUES to FORGE_PLAN.md's branding (colors/fonts/tone)
+            and relabel — do NOT Write-overwrite or re-author the token structure, and KEEP
+            `nav.tsx` driven by the generated `ALL_ROUTES` (hardcoding routes breaks auto-nav
+            when new entities land). Add only NEW **shared components** the page-groups reuse.
+            Make these edits with the `edit` tool. Rewriting a scaffolded file through a
+            shell heredoc (`python3 - <<EOF`, `perl -0pi`, `sed -i`) is how a palette comes
+            back with its indentation mangled — measured, and it cost two further turns to
+            repair a file `edit` would have changed correctly the first time.
+          - **The page tree already mirrors YOUR entities — delete only what the product
+            genuinely never offers.** forge emits exactly `list` / `[id]` / `[id]/edit` /
+            `new` per `// forge:entity` message, plus the dashboard home and Next's own
+            framework files (`layout`, `providers`, `error`, `global-error`, `loading`,
+            `not-found`). There is no scaffolded auth route — sign-in is owned app logic
+            forge does not route for you, so do not go looking for one to keep or delete.
+            You declared those entities, so there is usually NOTHING extraneous — do not go
+            hunting for pages to delete just to have deleted something. The real case is an
+            entity the product exposes for only SOME operations: an append-only ledger or a
+            server-managed lifecycle entity has no honest `new`/`edit` page. `rm` those, and
+            nothing else — every other page you remove is one the fan-out phase has to
+            re-author. You OWN every non-`_gen` file — the only untouchables are
+            forge-regenerated `_gen` files and `src/gen/`.
+
+          ### Gate — the substrate must compile AND pass its tests before you finish (REQUIRED)
+          ```bash
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint && task test && reliant forge build
+          ```
+          **That is the whole gate — all four lanes, and `task test` is one of them.** The
+          engine re-runs exactly these after you return, and a red `task test` fails the
+          phase and costs you a whole retry. `task test` runs the born CRUD tests, which
+          are forge's own output and the only check that a generated Create actually works
+          against the schema forge derived from the same proto. Run it here, before you
+          hand back.
+
+          The test lane is `task test`, not `forge test`: the project's Taskfile.yml is
+          where the suite is DEFINED, so the gate, the local loop, and the project's CI
+          workflow all run the same commands. (`task test:all` adds the
+          `integration`-tagged lane; the gate deliberately runs the fast lane.)
+
+          **Do NOT add a FIFTH command to cover the frontend — these four already do.**
+          `forge lint` runs the frontend TypeScript typecheck as its own named lane,
+          `task test` runs the frontend test lane, and `forge build` runs `next build` for
+          every frontend. A separate `npx tsc --noEmit` or `npm test` pass re-checks what
+          the gate just checked, and `npx` resolves the compiler off the network instead of
+          the frontend's own `node_modules` — a slower, non-deterministic answer to a
+          question already asked.
+          Fix the root cause and re-run until green. `scaffold-not-customized` warnings on
+          the still-stub feature handlers are the EXPECTED end state — never fill in business
+          logic to silence them. To re-inspect a single failing lane, use its targeted flag
+          (e.g. `forge lint --contract`, `forge lint --scaffolds`) instead of re-running the
+          full lint.
 
           ## Generated vs Owned
           Rule of thumb (from the architecture skill): anything with `_gen` in the name
@@ -233,62 +757,321 @@ nodes:
 
           ## SCOPE BOUNDARY — READ THIS
           Your job in this phase is ONLY:
-          1. Run `forge new` to create the project
-          2. Define entities (migrations + proto CRUD, via `forge add entity`) and custom RPCs
-          3. Run `forge generate && forge build` to verify
+          1. Run `forge project new` to create the project
+          2. Author the entity messages (marked `// forge:entity`) and any custom RPCs in
+             the protos, then run `forge scaffold`
+          3. Fill in `db/seeds/vocab.yaml` with the project's domain-noun pools (vocabulary,
+             not seed rows)
+          4. Read every born `db/migrations/*.up.sql` and correct what is wrong for this
+             domain — types, nullability, uniques, checks, foreign keys — then bring the
+             gate green on the corrected schema and seed it once to prove a row
+          5. Run the `forge scaffold rpc` / `scaffold package` commands the
+             plan needs, then ONE `forge generate`
+          6. Shape the handler `Deps` structs, edit the born `internal/<name>/contract.go`
+             interfaces, and author the shared reason-code constants in `internal/reasons/`
+          7. Edit the scaffolded frontend theme / nav in place, deleting a route only where
+             the product never offers that operation
+          8. Run the gate above until it is green
 
-          **STOP after `forge build` passes.** Do NOT:
-          - Write handler implementations (they are auto-generated stubs — later phases fill them in)
-          - Write frontend code (it is auto-generated — a later phase polishes it)
-          - Write tests, seeds, business logic, or anything beyond proto files
+          **STOP once the gate is green.** Do NOT:
+          - Fill in business logic or custom-RPC bodies, or annotate them with prose TODOs
+            — they are marker-stamped compiling stubs, the marker IS the handoff, and the
+            next phase queries it and implements them in parallel across seams
+          - Build page features on top of the theme (also the next phase)
+          - Write tests, or hand-write seed rows (`reliant forge db seed apply`
+            materializes them from the schema — Step 4 runs it once to check the schema,
+            and later phases re-run it; there is never a row to author by hand)
           - Edit any generated files
+          - **Re-run a gate that is already green.** The gate is generate → lint → build →
+            test. Once it has passed, editing FORGE_PLAN.md, removing a scratch file or
+            tidying up CANNOT change its answer, so running it again only re-answers a
+            question you were handed a minute ago. Re-run a lane when you changed something
+            that lane checks — and then re-run that lane, not all four.
 
-          The entire point of this phase is: migrations + protos → generate → build passes.
-          That's it. Later phases handle everything else. If you write code beyond the schema
-          and API surface, you are wasting tokens on work that will be overwritten.
+          If you write feature code here you are spending tokens on work the fan-out phase
+          will overwrite.
 
-          If a forge command fails because the binary itself is missing or crashes (not your protos/code), report it rather than rebuilding forge.
+          **NEVER modify or rebuild your own toolchain — report it instead.** forge is the
+          thing being exercised here, not something to repair in flight. If a forge command
+          is missing, crashes, emits something wrong, or reports a finding you believe is
+          FALSE, that is a finding to WRITE DOWN and hand back in your summary. Do not open
+          the forge source tree, do not patch it, and do not run any script that rebuilds
+          the `forge` or `reliant` binaries: every later phase would then run on a different
+          toolchain than the one this run set out to measure, which invalidates the run
+          silently. If forge is broken so badly the gate can never pass, say so and stop —
+          that escalates to a human, which is the designed path.
+
+          **`reliant forge project audit` is a diagnostic, not a gate lane.** It earns its
+          keep root-causing a lane that has ALREADY failed. It is not one of the four gate
+          commands, an audit finding is not a gate failure, and clearing one is never what
+          makes this phase green. If the gate is green and audit still reports something,
+          record it and stop.
 
           Work in `{{inputs.working_directory}}`.
 
-  # ─── Phase 2: Frontend Polish ───────────────────────────────────────
+  # ─── Phase 2: Build MVP — FAN-OUT (∥) → SYNTHESIS → REVIEW ───────────
   #
-  # Make the generated UI look real. Integrate with backend via the
-  # generated Connect RPC hooks — they already work with the auto-generated
-  # CRUD handlers.
+  # The substrate is in place and green. This phase FANS OUT one small, focused
+  # sub-agent per seam — backend per proto-service, frontend per page-group —
+  # running backend ∥ frontend and the page-groups ∥ each other. The orchestrator
+  # then SYNTHESIZES serially: wire the units together and run ONE forge
+  # generate/lint/test/build gate (backend generate/lint/test/build AND every
+  # frontend build). Uses get-it-right; its REVIEW runs with REAL TEETH — the reviewer opens
+  # the LIVE app and runs builds itself rather than trusting the implementer.
 
-  - id: frontend_polish
+  - id: build_mvp
     type: workflow
     ref: builtin://get-it-right
-    passthrough: [model, mode, ask]
+    # The orchestrator runs the user's model — flagship by default — at THAT model's
+    # own default thinking, deliberately unpinned. Spawned sub-units resolve their
+    # model and thinking from THEIR OWN preset, so the orchestrator no longer has to
+    # hold a tier on their behalf; pinning one here would only under- or over-reason
+    # its own mechanical integration work. The reviewer still runs at high thinking
+    # (set in get-it-right).
+    passthrough: [mode, ask, model]
     args:
+      # `testing` carries no forge/ prefix for the same reason service-layer does not
+      # (see scaffold_and_verify's note): forge ships them as emit:both. It is here
+      # because this loop's briefs tell every unit to write a TEST for any behavior it
+      # cannot see from types alone — units have no browser — and the reviewer's rubric
+      # asks whether the critical paths have tests. Both instructions need the skill
+      # present to mean anything.
+      skills: [forge/architecture, service-layer, forge/frontend, testing]
       implementer_preset: forge
+      # 7 iterations to reach "correct and complete". The reviewer's rubric is wider than
+      # the exit bar and a hardening finding is explicitly barred from holding the loop
+      # open, so the wider rubric buys no extra iterations and needs none: raising this
+      # number would only pay for a bar this loop is not asked to clear, on a phase whose
+      # measured problem is that it does not finish. Lowering it would cut convergence on
+      # the bar it does have.
       max_retries: 7
-      start_app_command: "cd {{inputs.working_directory}} && reliant forge run"
-      app_port: 3000
-      lint_command: "cd {{inputs.working_directory}} && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
-      build_command: "cd {{inputs.working_directory}} && for d in frontends/*/; do (cd \"$d\" && npm run build); done"
+      # The command the REVIEWER runs to bring the app up — get-it-right hands it over
+      # verbatim. `env down` first because this loop can iterate: forge allocates a NEW
+      # ephemeral port every `run`, so a second start without a stop leaves two stacks
+      # up and the browser can land on the older one. `env down` reads forge's own
+      # per-env pid ledger, so it stops exactly the servers a previous iteration
+      # detached and nothing else; `;` rather than `&&` because "nothing was running"
+      # is the expected answer on iteration 1. There is deliberately no port argument —
+      # forge assigns every frontend a kernel-allocated ephemeral port at launch, and
+      # the reviewer reads it off what `forge run` prints.
+      start_app_command: "cd {{inputs.working_directory}} && reliant forge env down dev; reliant forge run"
+      # ── Review TEETH ──────────────────────────────────────────────────
+      # Give the reviewer the tools to verify with its OWN eyes: browser tools to
+      # snapshot the LIVE app + a shell to run builds/tests. Without these it can
+      # only trust the implementer's self-report (the code_reviewer default is
+      # read-only). Deliberately no write/edit — the reviewer diagnoses, it does
+      # not fix.
+      review_tools:
+        - view
+        - tag:shell
+        - component_library
+        - mcp__chrome-devtools__take_snapshot
+        - mcp__chrome-devtools__take_screenshot
+        - mcp__chrome-devtools__new_page
+        - mcp__chrome-devtools__navigate_page
+        - mcp__chrome-devtools__select_page
+        - mcp__chrome-devtools__list_pages
+        - mcp__chrome-devtools__list_console_messages
+        - mcp__chrome-devtools__click
+        - mcp__chrome-devtools__fill
+        - mcp__chrome-devtools__evaluate_script
+      # A verdict cannot be submitted without inspection_evidence — this is the
+      # "no snapshot/build in the thread = INVALID" rule, enforced by the schema.
+      review_response_schema:
+        type: object
+        required: [grade, strategy, feedback, inspection_evidence]
+        properties:
+          grade:
+            type: string
+            enum: [pass, pass_with_suggestions, fail]
+            description: "pass — correct, no blocking issues. pass_with_suggestions — correct, minor improvements. fail — blocking issues."
+          strategy:
+            type: string
+            enum: ["pass", "continue", "refactor", "stuck"]
+            description: |
+              "pass" — correct and complete; break the loop.
+              "continue" — incomplete/minor issues; loop back to implement.
+              "refactor" — fundamentally wrong; the refactor agent undoes the work, next attempt starts fresh.
+              "stuck" — LAST RESORT: refactor already failed on the same problem, OR the blocker is tooling/environment (e.g. the app genuinely will not start), not the code. Record what you observed in inspection_evidence even when stuck.
+          feedback:
+            type: string
+            description: |
+              Detailed feedback for the next attempt. For EVERY miss, classify it as
+              forge-gap (the generated starting point made it hard) / unclear-direction
+              (the prompt/skill never said it) / LLM-slip (guidance existed, the agent
+              missed it) — that classification is the signal that drives fixes. On FAIL,
+              diagnose WHY before recommending a redo; never ask for a blind re-run.
+          inspection_evidence:
+            type: object
+            description: "Proof you verified with your OWN eyes. A verdict with empty/fabricated evidence is INVALID."
+            required: [live_url, pages_inspected]
+            properties:
+              live_url:
+                type: string
+                description: "The LIVE ephemeral app URL you actually navigated to — obtained from `reliant preview-url <the port the dev server actually bound>` or `reliant forge env status` — NOT a hardcoded localhost guess, and not a guessed port."
+              pages_inspected:
+                type: array
+                minItems: 1
+                description: "Every key page you ran take_snapshot AND take_screenshot on. Empty means you did not inspect — INVALID. A page that failed to load is still a valid entry (record the failure)."
+                items:
+                  type: object
+                  required: [path, observed]
+                  properties:
+                    path:
+                      type: string
+                      description: "Route you loaded on the live URL (include the edge/deviation-state record pages, not just index pages)."
+                    observed:
+                      type: string
+                      description: "What the snapshot + screenshot actually showed: did real data render? console errors? broken layout?"
+              checks_run:
+                type: array
+                minItems: 1
+                description: "Build/test commands YOU ran yourself (not the implementer's report), with results."
+                items:
+                  type: object
+                  required: [command, exit_code]
+                  properties:
+                    command:
+                      type: string
+                    exit_code:
+                      type: integer
+                    observed:
+                      type: string
+                      description: "Key output or failures."
+      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint"
+      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge build"
+      # The born CRUD tests are forge's own output, and the only check that a
+      # generated Create actually works against the schema forge derived from
+      # the same proto. Without this a phase goes green with its entire test
+      # suite failing — which is exactly what a measured run did.
+      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && task test"
       review_instructions: |
-        You are reviewing a frontend polish pass. The goal is visual quality and real data integration.
+        You are reviewing the MVP build pass: parallel per-seam frontend + backend work
+        was synthesized together. Verify BOTH surfaces WITH YOUR OWN EYES — never accept
+        the implementer's self-report. You have browser tools and a shell; use them.
 
-        **Pass if:**
-        - The app looks like a real product, not raw scaffold
-        - Navigation works, pages are accessible
+        **A verdict with no inspection evidence is INVALID.** You MUST populate
+        `inspection_evidence` from your OWN tool calls before you submit — the schema will
+        not accept a verdict without it. Do at least one full inspection cycle first:
+
+        1. **Start the app YOURSELF, then get its LIVE URL — the port is EPHEMERAL, so
+           never assume 3000.** The start command is in the section above; run it with the
+           shell tool, in the FOREGROUND. **`forge run` does NOT stay alive**: with no TTY
+           (which is every agent shell) it starts every host service and frontend, detaches
+           them onto their own log files, prints their ports, and RETURNS 0. Backgrounding
+           it hands you a pid that has already exited and buries the port line in a buffer.
+           So the ports are in the output you just got back: forge assigns every frontend a
+           kernel-allocated free port and prints
+           `[up] frontend <name>: ephemeral dev port <N>` (and `[up] host <name>: ephemeral
+           dev port <N>` for the API), then force-injects it as `PORT`. READ that line —
+           each server's own log file, named in the same output, carries its
+           `- Local: http://localhost:<N>` — and use THAT port everywhere. Then discover the
+           proxied URL for it:
+           ```bash
+           reliant preview-url <the port the dev server actually bound>
+           # or, if that returns nothing:  reliant forge env status <env> --json
+           ```
+           Use that URL as `live_url` and navigate the browser to IT. Call `preview-url` ONCE:
+           the start command binds localhost-only, so "no proxied URL" is the EXPECTED
+           answer here — take `http://localhost:<N>/` and move on rather than retrying.
+           **A 200 is NOT proof.** Confirm the page you loaded is the app YOU just built —
+           check its title/nav/routes against this project — not merely that something
+           answered. In a measured run `curl localhost:3000` returned 200 from an entirely
+           different app that held the port, and a FALSE GREEN is worse than a failure.
+           If pages render but every request fails ("Couldn't load", network errors in the
+           console), it is CORS, and it is a FORGE DEFECT — report it, do not route around
+           it. A local dev stack must be browsable from whatever origin the browser is on.
+           **Never export an env var to fix it.** Every configuration value is declared in
+           KCL; a shell variable that changes behaviour is the mechanism this project is
+           removing, and reaching for one here hides the generator gap instead of surfacing
+           it. Do not edit pages to work around it either.
+        2. **Snapshot every key page yourself.** Call BOTH `take_snapshot` (a11y tree) AND
+           `take_screenshot` (pixels) on each key page, INCLUDING edge/deviation-state
+           records (a terminal-state entity, an empty relation) — not just index pages.
+           Record each in `pages_inspected`. An implementer once fabricated snapshots, so a
+           claim is not evidence — only your own tool call is. Check `list_console_messages`.
+        3. **Do NOT re-run the gate.** lint / build / test already ran as ENGINE steps and
+           their exit codes are the check summary above — the loop trusts those same codes
+           for its own control flow, and an agent cannot fabricate them. Re-running costs a
+           minute of the serial path to reproduce a result you were handed. Run a command
+           yourself ONLY when the summary says a check is `not configured`, or when you need
+           output the exit code does not carry (the actual failure text). Record anything you
+           do run in `checks_run`.
+
+           Your snapshots are the evidence the gate CANNOT produce — that is what this
+           review is for. An implementer once fabricated snapshots, which is why
+           `pages_inspected` stays required and only your own tool call counts.
+
+        **Frontend — pass if:**
+        - The app looks like a real product, not raw scaffold; navigation works; pages load
         - CRUD pages display real data via the generated Connect RPC hooks
-        - Forms submit data through the generated hooks and it works end-to-end
-        - Layout is clean and consistent
-        - The frontend builds
+        - Forms submit through the generated hooks and work end-to-end; layout is consistent
+        - Every frontend builds
+
+        **Backend — pass if:**
+        - HIGH-priority features from FORGE_PLAN.md are implemented with real business logic
+          (not stubs) and wired into the UI
+        - Protected endpoints enforce the authorization the plan calls for, and owner-scoped
+          queries filter by the authenticated user
+        - `forge generate`, `forge lint`, `task test`, and `forge build` are green (you ran them)
+
+        **A dev browser carries NO identity.** The scaffolded frontend auth provider holds no
+        credential, and says so in the BROWSER CONSOLE on the first call that needs one
+        ("Stub auth provider is driving a real backend … every request that needs identity
+        will fail") — it is a runtime `console.warn`, so it never appears in build output and
+        `list_console_messages` is the only place you will see it. Any endpoint whose
+        handler requires a caller returns 401 in a dev browser, and any rule that binds a
+        specific role is unobservable there. Verify authorization with tests that build an
+        explicit context per role — never by dev pixels, in either direction. A page that
+        401s is evidence about the missing credential, NOT about the rule.
+
+        **Hardening rubric — this is a CHECKLIST, not an exit bar. Walk all of it every
+        iteration and write what you find into `feedback`.** This review is the only one
+        the build gets, so these have to be LOOKED at; what they must not do is decide
+        when the loop ends. Name the file and the fix for each finding:
+        - **Error handling** — do handlers return typed `svcerr` errors carrying the app's
+          reason codes, and does the UI actually render them? Or does a failure surface as
+          a blank page, a swallowed promise, or a raw internal message?
+        - **Input validation** — is every user input constrained where it belongs
+          (protovalidate on the proto, zod on the form, the check in the handler), or does
+          the handler trust whatever it is handed?
+        - **Edge cases** — empty states, a terminal-state record, an empty relation,
+          boundary values. You are already loading those pages for the evidence above;
+          say what they actually did.
+        - **Security** — no unsanitized input reaching a query, no secret in a read
+          response, owner-scoped queries filtering by the authenticated user. (An endpoint
+          left wide open where the plan requires authorization is NOT a rubric item — it
+          is in the fail list below.)
+        - **Tests** — do the critical business paths have tests? Does anything a unit
+          could not have seen from types alone have one?
+        - **Integrations** — anything the plan calls for (email, webhooks, a third-party
+          client) that is stubbed or faked rather than wired.
+
+        **A rubric finding NEVER sets `strategy` on its own.** The exit bar is the "Only
+        fail if" list and nothing else. Widening the exit bar to production-hardening
+        would make every one of these findings cost another full implement→review
+        iteration, and a loop that ends less often ships less, not more. What happens
+        instead: when the loop is iterating ANYWAY — because something in "Only fail if"
+        is still open — your rubric findings ride along as named, targeted fixes for that
+        attempt, inside a loop that already has the app running and its context loaded.
+        When the loop ends, they stand on the record in your feedback for the user and
+        the agent that takes the chat over. Grade them `pass_with_suggestions`.
 
         **Do NOT fail because:**
-        - Custom backend logic isn't implemented (CRUD works via generated handlers)
-        - Tests don't exist
-        - Edge cases aren't handled
+        - A rubric finding above is open — record it, do not gate on it
+        - LOW/MEDIUM-priority features from the plan aren't handled; HIGH priority is
+          the MVP bar
 
         **Only fail if:**
-        - UI looks like raw boilerplate
-        - Navigation broken or pages crash
-        - Frontend doesn't build
+        - UI looks like raw boilerplate, navigation is broken, or pages crash
+        - A frontend doesn't build, or backend generate/lint/test/build fails
         - Generated hooks aren't being used (manual fetch calls instead)
+        - HIGH-priority features are missing or faked (client-simulated effects)
+        - Protected endpoints are wide open where the plan requires authorization
+
+        For EVERY miss, classify it in your feedback — forge-gap / unclear-direction /
+        LLM-slip. That classification is the signal that drives the source fix. On FAIL,
+        diagnose WHY it happened before recommending a redo — never ask for a blind re-run.
     thread:
       mode: fork
       inject:
@@ -296,334 +1079,624 @@ nodes:
         content: |
           **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
 
-          ## Frontend Polish
+          ## Build the MVP — Fan Out Across Seams, Then Synthesize
 
-          The Forge app at `{{inputs.working_directory}}` has been scaffolded with generated CRUD pages,
-          Connect RPC hooks, and a component library. Your job is to make it look like a real product.
+          The Forge app at `{{inputs.working_directory}}` is scaffolded AND its whole SUBSTRATE
+          landed green in the previous phase: the frontend theme/design system + shared
+          components + navigation exist and unused scaffolds are deleted; the backend has the
+          shared error/reason vocabulary + domain-service contracts; and the
+          proto/generated-hooks contract is STABLE (custom RPCs and List filters are
+          authored, one `forge generate` has run). **Do NOT rebuild the
+          substrate.** Your job now is to FAN OUT the feature work across independent seams in
+          PARALLEL, then SYNTHESIZE — wire the units together and run one build gate.
 
-          **Read the project spec** — read `FORGE_PLAN.md` in the project root to understand what
-          features the user wants. Then **create your own plan** (via the plan tool) with tasks
-          for your frontend work. Focus on supporting the features in the spec.
+          **`forge/pkg` already ships the infrastructure — read the index BEFORE you author
+          any, and brief every unit to do the same.** Load the `forge-libraries` skill:
+          it indexes every `forge/pkg/*` subpackage — errors (`svcerr`), CRUD (`crud`),
+          validation (`validate`), the test harness (`testkit` / `tdd` / `pgtest`),
+          middleware, config, observability (`observe`). Import what exists; hand-author ONLY
+          what genuinely does not. A unit that re-implements a `forge/pkg` helper has written
+          a defect, not a shortcut.
 
-          **Load the design discipline first — do not design from memory:**
-          ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
-          reliant forge skill load frontend/design
-          ```
-          Follow it for every visual decision — brief, declared system, restrained color/type,
-          no hand-drawn SVGs, visual verification. If this prompt disagrees with the skill, the skill wins.
+          **Read the project spec** — read `FORGE_PLAN.md` in the project root for the feature
+          list and priorities. Then **create your own plan** (via the plan tool) with a task per
+          backend concern and per frontend page-group. FORGE_PLAN.md is your source of
+          truth for MVP scope — if something isn't in the plan, it wasn't discussed; don't
+          guess. Mark tasks completed as you go.
 
-          **IMPORTANT: The scaffolded UI is disposable.** The generated pages, layout, and components
-          in `frontends/*/src/` are just initial code generation — they are NOT a starting point to
-          build on top of. They have never been shipped or seen by a user. Feel free to:
-          - Completely rewrite any page, layout, or component
-          - Throw away the generated page structure and start fresh
-          - Change the navigation pattern entirely
-          - Ignore the installed components and write your own
-          - Restructure the app directory however you want
-          The only things you should keep are the generated hooks (they connect to the real backend)
-          and the generated proto stubs in `src/gen/`.
+          **You are the ORCHESTRATOR — fan out one SMALL, FOCUSED sub-agent per seam, and
+          spawn them ALL IN ONE WAVE.** Emit every spawn call in a single turn. You HAVE a
+          `spawn` tool. Measured: 6 units in one wave turned 82.7 minutes of serial work into
+          18 minutes of wall clock — 4.6x, with zero file collisions.
+
+          **One turn IS the wave. That is an ENGINE property, not a style preference, and it
+          is the reason the rule is absolute.** Reliant runs every spawn in a turn
+          CONCURRENTLY — no cap, no queue — and the turn does not return until the LAST of
+          them has FINISHED. `spawn` is blocking: there is no detached or background mode, and
+          no handle to poll. So a spawn you emit in a LATER turn cannot begin until every
+          spawn from the earlier turn has completed. Turns are waves; one-spawn-per-turn is
+          fully SERIAL execution, the exact thing this phase exists to avoid.
+
+          The corollary is the one that gets talked out of: writing ten briefs before the
+          first unit starts LOOKS like dead time and is NOT recoverable by spreading the
+          spawns over several turns. That does not start unit one sooner — it stops units
+          two-through-ten from starting at all until unit one is done. Author every brief,
+          then emit every spawn, in one turn.
+
+          **A wave costs what its SLOWEST unit costs, so the only thing that matters is that
+          no unit is BIG.** Do NOT try to estimate seam cost and balance the wave — that is
+          guessing about work you have not done yet, and the measured run guessed wrong: the
+          shell/dashboard unit (18m27s) and the single backend unit (18m01s) set the floor
+          while four page-group units finished in 9-13.6 min and then sat idle for a third of
+          the wave. Split MECHANICALLY instead, by a rule you can check without estimating
+          anything:
+
+          > **A unit owns ONE entity's page-group, ONE backend concern, or ONE page — and
+          > nothing owns "everything else".** Eight to twelve units is normal for a 4-entity
+          > app. If a unit brief you are about to write joins two entities with "and", or
+          > contains "plus anything remaining", split it again.
+
+          Disjoint FILES are the only hard limit — and the file layout is YOURS to choose. A
+          shared file is a reason to pre-split or pre-author THAT FILE during serial setup,
+          never a reason to fold two seams into one slow unit.
+
+          The seam partitions:
+          - **Backend: one unit per CONCERN, not per proto-service.** The plan calls for 1-2
+            services, so "one unit per service" means ONE ~18-minute unit — precisely the pole
+            that blew the last run's budget. The collision it was avoiding is a file-layout
+            choice, not a law: a custom RPC that was already declared in the proto when
+            `forge generate` ran gets its stub APPENDED to the one shared
+            `internal/handlers/<svc>/handlers.go` — that file is the real collision, and it
+            is the file to split. (An RPC scaffolded BEFORE it is in the proto is already
+            disjoint: `forge scaffold rpc` writes it to its own `rpc_<snake_name>.go`.) Go
+            does not care how a package splits across files. During serial setup, MOVE each
+            concern's stubs out of `handlers.go` into its own
+            `handlers_<concern>.go`; the heavy logic belongs in the `internal/<name>/`
+            interactor packages the scaffold already birthed, which are disjoint already.
+            Then one unit per concern, disjoint files, no collision. Each unit owns its
+            concern's vertical: handler bodies + interactor bodies + owner scoping + tests.
+            **Each unit also owns its own RPCs' born scaffold tests** —
+            `handlers_scaffold_<rpc>_test.go`, one file per RPC. Each holds a self-destructing
+            `Test<Rpc>_Generated` row asserting `CodeUnimplemented`, which goes RED by design
+            the moment that RPC is implemented. Rewriting it into a real test of the
+            implemented behaviour (or deleting it) is part of finishing the RPC, not a
+            blocker to report — the file is that unit's alone, so there is nothing to
+            coordinate and nothing to split. A unit that leaves the row asserting
+            `CodeUnimplemented` hands the phase a red gate.
+          - **Frontend: one unit per entity page-group — per-page when a group runs past ~4
+            pages or one page IS the product.** Every one of them spawns in the SAME wave: 16
+            per-page units is one wave, not three. The shared frontend substrate (theme,
+            components, nav) ALREADY EXISTS; each unit builds ON TOP of it and never
+            re-establishes it or invents its own. If a group's pages share a mutable file
+            (e.g. a group `_components.tsx`), author that file YOURSELF in serial setup —
+            do not merge the group back into one unit to avoid it.
+          - **The dashboard/home page is its OWN unit, and `nav.tsx` is NOBODY'S.** The
+            dashboard was the single slowest unit in the measured run; give it exactly one
+            page plus the `total_count` recipe below, and nothing else. `nav.tsx` is already
+            driven by the generated `ALL_ROUTES`, so a new page appears in the nav with NO
+            edit — and it is the one file every frontend unit would otherwise touch. No unit
+            edits `nav.tsx`; a unit that thinks nav needs changing reports that to you.
+          - **Backend ∥ frontend.** The frontend consumes the GENERATED proto/hooks contract
+            (stable from the scaffold phase), not hand-written handler bodies — so frontend page-groups
+            and backend services are independent and run concurrently.
+          - **Only parallelize genuinely DISJOINT files.** Two agents editing the same file
+            collide — that is the ONLY hard limit. Split as FINE as disjointness allows (per
+            page / per service); author any shared file yourself BEFORE fanning out so the
+            units stay disjoint.
+          - **Proto, migration, and `forge generate` work is SERIAL and belongs to YOU.** The
+            contract was stabilized in the scaffold phase, so units should NOT need proto changes. If a
+            unit discovers a genuine gap mid-flight (a missing List filter, a missing domain
+            RPC), it REPORTS the need to you — you batch the edits and run ONE generate pass
+            BETWEEN waves, never during one (`forge generate` rewrites `gen/` and the hooks
+            globally; a generate under running units collides).
+          When spawning implementation units (page-groups, per-service handlers — the
+          mechanical, parallel work), use the **`forge_implementer`** agent (a cheaper/faster
+          tier that keeps fan-out cost down, and the one that already carries the
+          `component_library` tool every unit's brief REQUIRES it to use — the plain
+          `implementer` does not, and `load_tool` costs a whole turn per tool because a
+          loaded tool only exists on the NEXT turn); orchestration and the get-it-right
+          review stay on the workflow's default agent. Brief each unit on the files it owns, its
+          verification-target record IDs, the rules below, and the FOREGROUND-command rule from
+          the await idiom.
+
+          **Copy the UNIT RULES block below into every brief, verbatim.** Not a summary,
+          not the parts you judge relevant — the literal text. A rule you paraphrase is a
+          rule the unit does not get, and "the rules below" is a pointer at hundreds of
+          lines addressed to YOU. Measured: units received the file-ownership rule and the
+          no-build boundary and none of the discovery discipline, so five of them
+          independently read the same generated protobuf client — 161,590 characters each.
+
+          === UNIT RULES — PASTE VERBATIM INTO EVERY BRIEF ===
+          - **Never read `gen/` or any `*_gen.*` file to learn signatures or patterns.**
+            It is regenerated and it is enormous. Never edit one either.
+          - **Anything your brief already gives you, do not re-derive.** Opening the source
+            to confirm something you were handed is waste.
+          - **Issue every read you already know you need in ONE turn.** A turn costs a full
+            model generation whether it carries one read or eight, so the turn count is the
+            cost — not the file count.
+          - **Recon ends when you can name the files you will change.** Not when you feel
+            informed.
+          - **To learn what code DOES at runtime, run something against it.** Never read its
+            source and simulate: it is the slowest path available, and it is simply wrong
+            when two copies of a package are loaded.
+          - **Declare no package-level identifier you were not assigned.** Your brief
+            assigns FILES; Go scopes PACKAGES. Constants, types and helpers you invent in a
+            shared package collide with siblings you cannot see, and the fix collides too —
+            one wave lost eleven minutes to three units declaring the same order-status
+            constants and then breaking each other by removing them. If you need a shared
+            name that does not exist, report it; do not create it.
+          - Run commands in the FOREGROUND with a generous timeout. Backgrounding ends your
+            turn and strands the phase.
+          === END UNIT RULES ===
+
+          **Units have NO browser, by design. Do not brief one to open a page, and do
+          not tell it to load browser tools.** A unit runs concurrently with up to eight
+          siblings against one working tree, one dev server and one API, so what a browser
+          shows a unit is NOT ATTRIBUTABLE to that unit — the bundle carries its siblings'
+          half-finished edits to shared components, and the API predates their handlers. A
+          green screenshot does not mean the page works; a red one does not mean this unit
+          broke it. **A unit that needs to know how something BEHAVES writes a test** —
+          attributable to the unit that wrote it, runs in milliseconds, survives into the
+          repo, re-runs for free. The failure mode this prevents is a unit turning the
+          browser into a debugger: with nothing else able to observe runtime behavior it
+          re-submits the same form dozens of times, which is both the slowest tool available
+          and the one whose results it cannot trust. Visual verification belongs to the
+          get-it-right review, which runs after the wave has quiesced, is the only role that
+          can attribute what it sees, and holds the full browser grant.
+
+          **Brief each unit to verify IN-THREAD with the LIGHT checks only —
+          the SCOPED `tsc --noEmit -p tsconfig.<unit>.json` recipe below for a frontend seam,
+          targeted `go build ./...` / `go test ./internal/<pkg>/...` for a backend seam, and a
+          TEST for any behavior it cannot see from types alone. A
+          unit must NOT run `npm run build` / `next build`
+          or a full `reliant forge build` / `reliant forge generate`, must NOT start or stop
+          servers, and must NOT delete shared build output (`.next/`, `gen/`). This is a HARD
+          boundary, not a preference, and the reason is SHARED STATE, not minutes: those
+          commands write whole-tree artifacts that every concurrent unit is reading. In a
+          measured run one unit ignored this, ran its own dev servers and `rm -rf .next`,
+          broke a server the other units were using — and was itself the SLOWEST unit in the
+          wave, so it set the floor for everyone. The ONE full production build +
+          generate/lint gate runs at synthesis (below). If a unit believes it needs a full
+          build or a running server, that is a REPORT back to you, not an action it takes.**
+          Build directly yourself only when a seam is genuinely tiny. Integrate at synthesis,
+          then run the visual verification and final gate below.
+
+          **Serial orchestrator setup — do this BEFORE you fan out (the proto/substrate is
+          already stable, so this is just data + the work list):**
+
+          1. **Work from the source of truth — no one works from memory.** Your orchestrator
+             skills (`architecture`, `service-layer`, `forge/frontend`) are preloaded. Each spawned
+             unit starts fresh, so still brief each BACKEND unit to load the `service-layer`,
+             `api`, `auth`, and `testing` skills; brief each FRONTEND unit to load
+             `frontend-api-brief` (the proto-to-client mapping rules — enum member names,
+             what a List request actually filters, FK ids vs display names) and
+             `frontend/design`, and to follow the latter for every visual decision. If
+             anything in this prompt disagrees with a loaded skill, the skill wins.
+
+          2. **Confirm the dev database has rows — do not blind-seed it.** `reliant forge
+             run` migrates AND auto-seeds on FIRST boot against an empty dev database; it
+             prints `[up] auto-seeded <N> rows across <M> tables`. Read that line. Only when
+             it is absent (the DB already had rows, or `--no-seed` was passed) do you run
+             `reliant forge db seed apply` yourself (it needs `DATABASE_URL` or `--dsn`).
+             Either way VERIFY before picking verification records or judging any page —
+             `reliant forge db seed status` for row counts, or call a real List RPC and
+             confirm it returns rows. An empty database makes every page look broken.
+             **Never proceed with an empty database.** If the generated dataset fails a
+             constraint, the whole apply rolls back in one transaction. The escape hatch is
+             `db/seeds/custom/*.sql`, which `db seed apply` runs in lexicographic order AFTER
+             the generated pass — write your rows there, and while the generated pass is still
+             failing, apply that SQL directly against the dev DSN to unblock. Report the
+             failure verbatim in your final summary; it is a forge gap worth fixing.
+
+          3. **The unwired-RPC work list — ASK forge what is unimplemented; do not read
+             prose.** The scaffold phase left every custom RPC as a forge-stamped stub, and
+             the stamp is machine-readable, so the backend work list is a QUERY:
+             ```bash
+             cd {{inputs.working_directory}} && grep -rn 'forge:gen unwired-stub symbol=' internal/handlers/
+             ```
+             Each hit gives you the owning method as `symbol=<pkg>.<Method>` AND the file
+             it currently sits in — which is exactly the input the pre-split in step 5
+             needs, and exactly what each backend unit's brief must name. Do not ask a
+             unit to go find its own RPCs, and do not look for a TODO comment: there
+             isn't one, by design. **Every emitter stamps the marker**, wherever the stub
+             landed — the one appended to a service's shared `handlers.go` and the one
+             `forge scaffold rpc` wrote to its own `rpc_<snake>.go` alike — so this ONE
+             query is the whole custom-RPC work list. Trust it; do not go hunting for
+             unmarked stubs to supplement it.
+             **Symbols map to units MANY-to-many, and that is correct.** You are
+             partitioning by CONCERN, not by symbol: one unit can own two or three
+             symbols, and a unit whose concern is pure interactor/domain work can own
+             none. What must hold is COVERAGE — every symbol the query returned is named
+             in exactly one unit's brief — not a symbol-per-unit count. Do not split or
+             merge units to make the numbers line up.
+             **The one thing this query does not see:** CRUD RPCs, which are implemented
+             by `handlers_crud.go` and are not stubs at all.
+             **An EMPTY result is a FINDING, not a green light.** With custom RPCs in the
+             proto it means the scaffold phase hand-wrote placeholder bodies over forge's
+             stubs — which also suppressed the born per-RPC scaffold tests. Do not invent
+             a work list from FORGE_PLAN.md prose to paper over it: derive the list from
+             the protos instead, and say plainly in your summary that the marker handoff
+             was broken upstream.
+
+          4. **Verification-target record IDs.** From the seeded dev data, pick a few
+             representative records that exercise EDGE / deviation states — e.g. an entity
+             in a failed or terminal state, one with an empty relation — not just
+             happy-path rows. Pass those specific IDs to each frontend unit (so its own
+             self-check renders the interesting state) AND reuse the same IDs in the final
+             visual sweep below, so unit self-verification and your sweep look at the same
+             records.
+
+          5. **Pre-split every file two units would both need — this is what makes the fine
+             partition legal.** Do it BEFORE you spawn, and it is mechanical, not creative:
+             move each backend concern's stubs out of `internal/handlers/<svc>/handlers.go`
+             into `handlers_<concern>.go` (same package, no behaviour change, `forge lint`
+             still green), and author any group-level `_components.tsx` a page-group's pages
+             would share. **The unwired-RPC query above already told you which methods to
+             move and out of which file — you are not reading the package to rediscover
+             them.** Move each stub WITH its `FORGE_SCAFFOLD` / `forge:gen unwired-stub`
+             comment lines intact: drop the marker and the method stops being attributable
+             to the unit that owns it. Every file you split here is one more unit you can
+             run in the wave; every one you skip forces two seams back into one slow unit.
+             **The born scaffold TESTS need no split — forge already births one file per
+             RPC.** `internal/handlers/<svc>/handlers_scaffold_<rpc>_test.go` holds that one
+             RPC's self-destructing `Test<Rpc>_Generated` row and declares NOTHING at package
+             scope, so two units implementing two RPCs have nothing to merge. Do not invent a
+             split for them, and do not delete them wholesale — see the backend seam bullet
+             for what each unit does with its own.
+
+          ### Frontend page-group units — brief each on everything below
+
+          **Build ON TOP of the substrate — don't re-lay it.** The theme/design system, the
+          shared components, and the navigation already exist and the unused scaffold routes
+          are already deleted. Each page-group unit builds its own pages using
+          the EXISTING theme + shared components + nav; it does NOT restyle the whole app,
+          rewrite nav, or invent parallel components. If a page-group genuinely needs a new
+          SHARED component, it reports that to you so it lands in one place — units do not each
+          fork their own.
+
+          **The remaining scaffolded pages are yours to rewrite.** Within your page-group, the
+          generated CRUD pages (list/detail/new/edit) are initial code generation, never
+          shipped — rewrite them freely into the real product surface, or `rm` and replace. You
+          OWN every non-`_gen` file; the only untouchables are forge-regenerated `_gen` files
+          and `src/gen/`.
 
           **What exists (use, modify, or replace — your call):**
           - CRUD pages in `frontends/*/src/app/<entity>/` — list, detail, create, edit
-          - UI components in `frontends/*/src/components/ui/` — page_header, badge, modal,
-            skeleton_loader, pagination, search_input, alert_banner, toast_notification,
-            key_value_list, sidebar_layout
+          - UI primitives and page-level shapes in `frontends/*/src/components/ui/`. Do NOT
+            recite a list here — it is scaffolded once and then owned, so it differs per
+            project, and the only correct list is the one read from the project itself. Look
+            before hand-rolling a component that already exists.
+          - **The FK/enum quartet in `frontends/*/src/components/`: `StatusBadge`,
+            `EnumSelect`, `EntityPicker`, `EntityName`.** These are the ones units reinvent —
+            a searchable FK picker gets hand-rolled twice in a wave that is not briefed on
+            them. `StatusBadge` takes the enum OBJECT, not a type-name string.
+          - **A component's real API is its prop type, not its name.** Where a name is not
+            enough to use the component correctly, read that ONE file rather than
+            replicating its markup around a guess. Sharp edges
+            are normal (a `title` that takes a string and not JSX, a prop spread that stops at
+            the wrapper) — report the ones you hit so sibling units avoid them.
+          - **Known form sharp edge — a bare `.refine()` on an enum field silently narrows the
+            zod schema's OUTPUT type.** TS 5.5+ reads `.refine((v) => v !== Enum.UNSPECIFIED)`
+            as a type PREDICATE, so the inferred field type drops `UNSPECIFIED` and no longer
+            matches the form type — `useForm`'s `values:` then fails to type-check, with an
+            error that looks like the form data is wrong rather than the schema. Annotate the
+            return type to stop the inference: `.refine((v): boolean => v !== Enum.UNSPECIFIED,
+            { message: "..." })`. This is the standard forge create/edit-form pattern, so EVERY
+            unit building a form hits it — three units hit it independently in one measured
+            run. Brief them all up front.
           - React Query hooks in `frontends/*/src/hooks/` — these connect to the real backend
             via Connect RPC. The auto-generated CRUD handlers are functional, so data flows
             end-to-end already.
-          - Sidebar navigation in `frontends/*/src/components/nav.tsx`
+          - Sidebar navigation in `frontends/*/src/components/nav.tsx` — already driven by the
+            generated `ALL_ROUTES`, so your pages appear with NO edit. Do NOT touch this file;
+            it is the one file every unit would collide on. Report nav needs to the orchestrator.
 
           **You have the `component_library` tool** — search it for production-ready React/Tailwind
           components (61 available: tables, charts, layouts, forms, dashboards, etc.) before building
           from scratch. Use `component_library(action="search", query="admin dashboard")` to find
           relevant components, then `component_library(action="get", name="...")` to get the source.
 
-          **Your focus:**
+          **Frontend focus:**
           1. Build a UI that matches what the user described in FORGE_PLAN.md
           2. Make it feel like a real product — not a scaffold demo
           3. Use the generated hooks for data — they already work end-to-end
           4. Be opinionated about design — pick a direction and commit to it
 
-          **Integration:** The generated hooks already work. Use them as-is:
+          **Integration:** The generated CRUD hooks already work — use them as-is. They are
+          React Query hooks over Connect RPC; create/read/update/delete flow end-to-end right now.
           ```typescript
-          import { useListPatients, useCreatePatient } from "@/hooks/patients-hooks";
+          // Illustrative — the hook filename is generated (keyed off the service), so confirm
+          // the real names + import path against `frontends/*/src/hooks/`.
+          import { useListOrders, useGetOrder } from "@/hooks/orders-service-hooks";
           ```
-          These are React Query hooks connected to the backend via Connect RPC. CRUD is
-          already functional — you can create, read, update, delete entities right now.
+          Data-integration rules to brief frontend units on:
+          - **Filter/scope a list SERVER-SIDE — but verify the filter EXISTS first.** Before you
+            facet or scope a list client-side, READ the generated `List<Entity>Request` and use
+            the filter fields it actually offers (e.g. a parent `*_id` for a relational/detail
+            list). Passing one page and filtering in the browser silently truncates everything
+            past the page cap — a correctness bug, not a style choice. BUT the filter you need may
+            NOT exist: enum-category facets (status/type) and owner / "mine" `<owner>_id` scoping
+            are frequently ABSENT from the generated request. A frontend unit cannot add proto
+            fields, so REPORT the gap verbatim to the orchestrator ("List<Entity>Request needs a
+            <field> filter") for the next serial generate pass, and fall back to client-side
+            filtering ONLY when you can fetch the whole set in one page. Never present an
+            unscoped list as if it were owner-scoped.
+          - **Counts and totals ALREADY EXIST — `List<Entity>Response.total_count`.** Every
+            generated List response carries a `total_count` (`totalCount` on the TS client)
+            that RESPECTS the request's filters. So a dashboard tile or a badge count is a
+            List call with the filters set and a `page_size` of 1, reading `totalCount` off
+            the response — never a count of the rows on one page (that silently caps at the
+            page size), and never a hedge. There is NO separate aggregate/Count RPC and none
+            is needed. Brief this to every unit that renders a metric BEFORE it starts: told
+            "there is no count RPC, be honest about it", a dashboard unit will ship
+            deliberately vague tiles, and that mis-brief cost a mid-flight correction in a
+            measured run.
+          - **Domain RPC not landed yet? Wire the UI, stub the effect, never fake it.** Two
+            cases both mean "no real backend for this action yet": (a) a custom RPC still
+            returning `Unimplemented`; AND (b) a generated CRUD `Create` that EXISTS but is
+            NOT the domain operation — it enforces raw FK integrity / can return
+            `failed_precondition`, but it does not run the state machine or side effects the
+            action implies. In BOTH: wire the handler into the UI, show a DESIGNED
+            optimistic-success / inline-error affordance, leave a
+            `// TODO(synthesis): wire real <Operation>` at the call site, and report the
+            missing domain RPC to the orchestrator — the owning backend unit implements it
+            THIS phase and the real call is wired at synthesis. Never call a raw CRUD
+            `Create` and present it as the domain flow, and never simulate backend effects in
+            client code. Frontend units do NOT debug or implement custom RPCs — that is the
+            backend units' job.
+          - **Errors from the hooks are TYPED and carry a machine-readable reason — never
+            branch on message text.** The scaffolded transport normalizes every failure to
+            the runtime's `ConnectClientError`, which carries `code`, `status`, `retryable`
+            and `reason` — a stable snake_case code the backend sets, and one that generated
+            CRUD stamps on every error it returns. Narrow the caught error to
+            `ConnectClientError` (imported from `@reliant-labs/web-runtime`) and branch on
+            `.reason` / `.code`; render it with `userMessage(err)`, which strips the backend
+            framing a user must never see. Message TEXT is display-only and changes without
+            notice, so an `err.message.includes(...)` match is a defect that survives review
+            precisely because it works on the one message it was written against — and it is
+            what a unit falls back to when nobody told it a typed shape exists. Brief this
+            BEFORE units start: the symbol list is in the runtime index above, and
+            `forge skill load frontend-runtime` has the composition rules.
+
+          ### Backend service units — brief each on everything below
+
+          **What already exists:** generated CRUD handlers with real DB operations, the ORM
+          projected from the migrations, the test harness (the architecture skill maps
+          generated vs owned), AND the scaffolded substrate — the domain-service contract
+          (contract.go with your service's method stubs) and the shared error/reason
+          vocabulary. Fill the bodies; reuse the substrate.
+
+          **Backend focus:**
+          1. Implement custom (non-CRUD) RPC bodies in the owned handler/service files (fill
+             the scaffolded skeleton stubs) per the service-layer and api skills
+          2. Protected endpoints must enforce authorization appropriate to the app — the app
+             owns what the rules are and how they are shaped. `middleware.GetUser(ctx)` gives
+             you the authenticated user + claims to decide with.
+          3. Add validation and business rules to existing CRUD flows (in owned files, never
+             in `*_gen.go`)
+          4. Write tests for critical business logic per the testing skill
+          5. Wire up any integrations needed for MVP (email, etc.)
+          6. Return failures through `svcerr` with a stable reason code —
+             `svcerr.WithReason(err, "no_active_subscription")`. It reaches the browser as
+             `x-forge-error-reason` and is the ONLY thing the UI can safely route on;
+             generated CRUD already stamps one on every error it returns, so a custom RPC
+             that sets none is the one case that leaves the frontend matching message text.
+
+          **A dev browser carries NO identity, so authorization is unobservable there.** The
+          scaffolded frontend auth provider holds no credential, so an endpoint whose handler
+          requires a caller 401s in a dev browser regardless of whether its rule is right.
+          Prove authorization with tests that build an explicit context per role — not with
+          pixels. And do NOT reach for a mock scenario to get past a 401: a mock verifies the
+          fixture, not the app, and a run that browses its own mocks and reports green has
+          verified nothing.
+
+          ### Synthesis — after units land
+
+          Integrate the results yourself: apply owned composition-seam / serve wiring changes
+          (these files are SHARED — units must not race on them; collect their wiring needs
+          and apply once), connect frontend actions to the custom RPCs the backend units
+          implemented, resolve anything units reported back (missing filters, missing domain
+          RPCs) with a serial proto edit + generate pass if needed, then run the visual
+          verification and the final gate below.
 
           **Visual Verification (REQUIRED before completing):**
           You have Chrome DevTools tools available. Before declaring your work complete:
-          1. Start the app if not already running
-          2. Use `take_snapshot` AND `take_screenshot` on every key page
+          1. Start the app if not already running — then **read the port off its output**:
+             `forge run` prints `[up] frontend <name>: ephemeral dev port <N>` and the dev
+             server prints `- Local: http://localhost:<port>`. The port is EPHEMERAL, never
+             assume 3000 — every 3000-based check inspects the WRONG APP. Before you trust a
+             single page, confirm the URL serves the app YOU just built (its title/nav/routes)
+             — a 200 from a stranger's server is a FALSE GREEN, worse than a failure. If pages
+             render but all data fails ("Couldn't load"), it is CORS — a forge defect to
+             REPORT, not to route around. Never export an env var to fix it and never edit
+             pages to hide it; a local dev stack must be browsable from whatever origin the
+             browser is on, and every config value is declared in KCL
+          2. Call BOTH `take_snapshot` (accessibility tree) AND `take_screenshot` (pixels) on
+             every key page. `take_snapshot` is MANDATORY and cannot be substituted with
+             `evaluate_script` or ad-hoc DOM probes — the a11y tree catches missing labels/roles
+             and broken structure that pixels don't. Navigate to the verification-target record
+             IDs you selected above (the edge / deviation-state records), not just the
+             list/index pages, so you actually see those states render the way the frontend
+             units claimed they did
           3. Check `list_console_messages` for errors on each page
           4. Verify: layout looks correct, data renders, navigation works, no visual broken-ness
           5. Both snapshot (accessibility tree) AND screenshot (visual rendering) must be checked —
-             snapshot alone cannot detect visual/CSS issues
-          Do NOT pass final verification without both snapshot and screenshot evidence.
+             screenshot alone can't catch missing labels/roles/structure, and snapshot alone can't
+             catch visual/CSS issues; they are complementary, not interchangeable
+          Do NOT pass final verification without both snapshot and screenshot evidence — and do NOT
+          claim a page was snapshotted unless you actually called `take_snapshot` on it.
 
           **Rules:**
-          - Do NOT modify `*_gen.go`, proto files, or generated hooks
+          - **Command costs are SECONDS — measured, AT THIS PHASE TOO. Do not plan around
+            them.** The numbers below were taken on a FINISHED 4-entity app (60 hand-written
+            Go files, 71 tsx files, every custom RPC implemented), not on an empty scaffold:
+            `reliant forge generate` ~18s, `reliant forge lint` ~17s, `reliant forge build`
+            (including `next build`) ~14s, `task test` ≤17s — **one full
+            generate+lint+build+test cycle is ~66 seconds.** (The 17s was measured when the
+            test lane was `reliant forge test`, which compiled and ran the whole Go suite
+            TWICE — once untagged, once under `-tags=integration`, and build tags add files
+            rather than filter them. `task test` runs it once, so the real figure is at or
+            under 17s; treat 66s as a ceiling, not a target.) The same cycle on the same
+            machine at the scaffold phase is ~55s, so the gate costs 1.2x more at the END of
+            the build than at the start. It does NOT get expensive as the app fills in.
+            Cold caches are the only real variable and they are small: a fresh GOCACHE +
+            golangci-lint cache takes lint 17s -> 39s, and a cold `.next` costs under a
+            second. Across an entire 31-minute phase every forge/npm/go command COMBINED came
+            to ~4.5 minutes. The wall clock of this phase is set by how you PARTITION and
+            BALANCE the wave, not by toolchain latency — never trade a better partition for
+            fewer command invocations, and never drop a lane from the gate to save time.
+            (One measured run recorded ~19 minutes for a single gate cycle here.
+            It does not reproduce: same project, same commands, 18x faster. It was
+            taken while the fan-out wave was still loading the machine. If YOUR gate
+            cycle takes minutes, something else is running — not the app being large.)
+          - **Await idiom — role-aware. The reason is TURN discipline, not command duration.**
+            As the ORCHESTRATOR, if you do background a command, launch it ONCE with a
+            generous timeout and block on its completion signal — no SEPARATE wait-loop, and
+            no re-polling after the signal arrives; re-polling burned ~1/3 of one run's tool
+            calls on pure churn. SUB-AGENTS must NOT background at all: a leaf agent that
+            backgrounds a command and yields silently ENDS its turn and strands the phase
+            (~1/3 of another run lost that way) — brief every unit to run commands FOREGROUND
+            with a generous timeout. Since the commands are seconds, FOREGROUND is the default
+            for you too — and there is nothing here to background, `reliant forge run`
+            included. **`forge run` does NOT stay alive:** with no TTY it starts the servers,
+            detaches them onto their own log files, prints the ephemeral ports, and EXITS 0
+            while they keep running. Backgrounding it yields an already-exited pid and buries
+            the port line. Run it FOREGROUND; stop the servers with `reliant forge env down dev`.
+          - **Build gating — units gate on a SCOPED `tsc --noEmit` + `eslint`; the ONE full
+            production build runs at synthesis and belongs to YOU.** Not because the
+            production build is slow (~30s) but because it is a WHOLE-TREE, shared-artifact
+            command: concurrent units running `next build` / `forge build` trample each
+            other's `.next/` and `gen/`. You run the production build a SINGLE time at the
+            end to confirm the tree ships.
+
+            **Bare `npx tsc --noEmit` is WHOLE-PROJECT — its exit code is not a leaf's
+            answer.** Under fan-out it goes red for a sibling's half-written page, so a unit
+            gating on it either blocks on work that is not its own or learns to ignore its
+            own gate. Give every frontend unit this scoped invocation instead, named after
+            the unit so two units never collide on the file:
+            ```bash
+            cd frontends/<app>
+            cat > tsconfig.<unit>.json <<'JSON'
+            { "extends": "./tsconfig.json",
+              "include": ["next-env.d.ts",
+                          "src/app/<slice>/**/*.ts", "src/app/<slice>/**/*.tsx",
+                          "src/components/<slice>/**/*.ts", "src/components/<slice>/**/*.tsx"] }
+            JSON
+            npx tsc --noEmit -p tsconfig.<unit>.json    # this exit code is YOURS
+            rm tsconfig.<unit>.json                     # delete it before you return
+            ```
+            `extends` keeps every compilerOption — `paths`, `jsx`, `strict`,
+            `noUncheckedIndexedAccess` — so this is the same typecheck, not a weaker one, and
+            everything the slice IMPORTS (`src/gen/`, `components/ui/`, the generated hooks)
+            is still checked. It simply does not fail on files nothing in the slice imports.
+            Measured on a real 4-entity forge frontend: ~2s; a deliberate type error planted
+            in a SIBLING page-group left the scoped run green while bare `tsc --noEmit` went
+            red, and the same error inside the slice turned the scoped run red.
+          - Generated vs owned: anything with `_gen` in the name or under `gen/` is
+            regenerated — never edit it, and don't read it to learn signatures or patterns.
+            UNITS also never edit proto files or run `forge generate` — proto/schema changes
+            route through the orchestrator's serial passes.
+          - **Discovery discipline — read the source of truth FIRST, before writing any
+            code.** The `.proto` service files give you the entities, enums, RPCs, and
+            declared List filters in ONE place; `forge.yaml` and the env config give you the
+            app shape. Do NOT re-derive the API surface by grepping generated client code or
+            probing the running backend RPC-by-RPC — measured runs lost a third to half of
+            their tool calls to piecemeal re-discovery. The forge `frontend-api-brief` skill
+            covers the proto-to-client mapping rules.
+          - **Issue every read you already know you need in ONE turn — many tool calls per
+            message, not one file per message.** A turn costs a full model generation whether
+            it carries one read or eight, so the TURN COUNT is the recon cost, not the file
+            count. Read a whole directory in one turn rather than walking it, and batch greps
+            and globs the same way. Recon at one-file-per-turn is the largest single cost in a
+            measured fan-out wave, and every unit pays it over the same shared files.
+          - **Recon ends when you can name the files you will change** — not when you feel
+            informed. If you have read a file and cannot say what you need from it, you did
+            not need it.
+          - **To learn what code DOES at runtime, run something against it — never read its
+            source and simulate.** Reconstructing a library's behavior by reading it is the
+            slowest path available, and it is outright wrong when two copies of a package are
+            loaded, because the copy you read may not be the copy executing. Print from the
+            running artifact instead: one command against the served bundle or a failing
+            four-line test settles in seconds what an hour of reading will not.
+          - Custom wiring goes in the owned composition seam the architecture skill
+            describes — never in generated composition files
+          - To understand contracts: read FORGE_PLAN.md for requirements, proto files for
+            the API, migrations for the schema, and the owned contract/handler files for the
+            signatures to implement
           - Use the generated hooks for all data fetching — don't write manual fetch calls
           - protobuf-es v2: `create(Schema, {...})` not `new Message()`
-
-          Work in `{{inputs.working_directory}}`.
-
-  - id: frontend_done
-    type: save_message
-    display_style: success
-    args:
-      role: assistant
-      content: |
-        ## Frontend Preview Ready
-
-        I've focused on the frontend first to make sure we're building the right thing.
-        The UI is connected to the backend via generated Connect RPC hooks — CRUD operations
-        work end-to-end with real data.
-
-        ### Try it out
-        ```bash
-        cd {{inputs.working_directory}} && reliant forge run
-        ```
-        - **Frontend:** http://localhost:3000
-        - **API:** http://localhost:8080
-
-        **Next:** I'll implement the core MVP features — real business logic, custom handlers,
-        and the key workflows that make this app useful beyond basic CRUD.
-
-        If the UI direction looks off, let me know before I continue.
-
-  # ─── Phase 3: MVP Backend ──────────────────────────────────────────
-  #
-  # Implement the minimal feature set for a functional app. The agent
-  # reads the plan to find high-priority features.
-
-  # Single generative pass (no review loop) — this is the first functional cut.
-  # It self-verifies via generate+build; the mvp_verify gate below fails loud if
-  # the tree isn't green, and production_polish is the real correctness gate.
-  - id: mvp_backend
-    type: workflow
-    ref: builtin://agent
-    presets:
-      default: forge
-    passthrough: [model, mode, ask]
-    thread:
-      mode: fork
-      inject:
-        role: user
-        content: |
-          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
-
-          ## MVP Backend
-
-          The Forge app at `{{inputs.working_directory}}` has a polished frontend with working CRUD.
-          Now implement the core features that make this app actually useful.
-
-          **Read the project spec** — read `FORGE_PLAN.md` in the project root to see the feature
-          list and priorities. Then **create your own plan** (via the plan tool) with tasks for
-          HIGH priority features. Focus on those only. Mark tasks completed as you finish them.
-
-          The FORGE_PLAN.md file is your source of truth for MVP scope. If something
-          isn't in the plan, it wasn't discussed — don't guess, focus on what's listed.
-
-          **Load the source of truth first — do not work from memory:**
-          ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
-          reliant forge skill load architecture
-          reliant forge skill load service-layer
-          reliant forge skill load api
-          reliant forge skill load testing
-          ```
-          These skills ship inside the forge binary and always match its current
-          conventions — where to put business logic, how handlers delegate to the
-          service layer, how the composition/wiring seam works, and how the test
-          harness is used. If anything in this prompt disagrees with a loaded skill,
-          the skill wins.
-
-          **What already works:**
-          - Generated CRUD handlers with real DB operations, ORM projected from the
-            migrations, and the test harness (the architecture skill maps what is
-            generated vs owned)
-          - Frontend is already polished and connected
-
-          **Your focus:**
-          1. Implement custom (non-CRUD) RPCs in the owned handler/service files per the
-             service-layer and api skills
-          2. Add validation and business rules to existing CRUD flows (in owned files,
-             never in `*_gen.go`)
-          3. Write tests for critical business logic per the testing skill
-          4. Wire up any integrations needed for MVP (auth, email, etc.)
-
-          **Parallelize:** Spawn agents for independent handlers/services. Each agent should
-          work on a cohesive vertical (handler + test + any frontend updates).
-
-          **Protos and migrations are yours to modify.** Need a new RPC? A new field? A new
-          entity entirely? Edit the protos / add a migration (or `reliant forge add entity ...`),
-          then run `reliant forge generate && reliant forge build`.
-          There are no backwards compatibility concerns — this project has never shipped.
-
-          **Rules:**
-          - Generated vs owned: anything with `_gen` in the name or under `gen/` is
-            regenerated — never edit it, and don't read it to learn signatures or
-            patterns. Everything else is yours (the architecture skill has the full map).
-          - Custom wiring goes in the owned composition seam the architecture skill
-            describes — never in generated composition files.
-          - To understand contracts: read FORGE_PLAN.md for requirements, proto files for
-            the API, migrations for the schema, and the owned contract/handler files for
-            the signatures to implement.
+          - **Read before you overwrite — only the Read TOOL records awareness of a file;
+            `cat`, `grep` and `sed` do NOT.** Write does not reject an unread overwrite: it
+            replaces the file and returns the diff of what it destroyed, so an unseen clobber
+            costs you those tokens and no error. Batch the Reads UP FRONT for every existing
+            file you intend to replace, and brief every unit on it. **The hard failure in
+            THIS phase is the concurrent-modification guard, and fan-out is exactly when it
+            fires:** once you have read a file, a Write is REJECTED outright if the file
+            changed on disk since — which is what a unit editing a file you also hold looks
+            like. That rejection is telling you two writers own one file; re-read, and fix
+            the partition rather than re-issuing the Write.
+          - **Replacing a scaffolded page WHOLESALE? Prefer delete-then-write.** When you're
+            throwing a scaffolded page away and writing a fresh one, `rm` the old file and Write
+            to a fresh path — a path with no existing file has nothing to clobber and nothing
+            to diff, so you neither spend a Read nor take the destroyed-content diff back into
+            context. Reserve the Read-first path above for IN-PLACE edits and partial
+            overwrites where the file must survive; do NOT Read a file only to clobber it
+            wholesale.
+          - **A real signed-in state is OWNED app logic.** The scaffolded frontend auth provider
+            is a STUB that holds no credential — it cannot sign anyone in, so every request that
+            needs identity fails. If the product needs real sessions, implement `AuthProvider`
+            and pass it to `<AuthContextProvider>`; the Connect transport is already fed from
+            `useAuth().getToken`. Do not stand up a second credential cache beside it, and do
+            not reach for a mock scenario to make protected pages look like they work.
+          - **Seed media/URL fields may hold unreachable placeholder URLs.** For image/asset
+            fields, render a deterministic LOCAL placeholder rather than shipping a broken `<img>`
+            when the seeded URL doesn't resolve, and note it as a seed-data gap.
           - Track progress in your plan (mark tasks completed as you go)
 
           ## Verify Before Finishing (REQUIRED)
-          There is no separate reviewer for this phase — you are the last line before the
-          project moves on. Before you finish, run the full generate + build and do NOT
-          return until it is green:
+          Run the gate and do NOT return until it is green:
           ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint && reliant forge build
+          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint && task test && reliant forge build
           ```
-          If it fails, fix the root cause and re-run until it passes. If a forge command fails
-          because the binary itself is missing or crashes (not your protos/code), report it rather than rebuilding forge.
+          **That is the whole gate — all four lanes, and `forge test` is one of them.** The
+          engine re-runs exactly these after you return, and a red `forge test` fails the
+          phase and costs you a whole retry, so run it here rather than discovering it in
+          the retry prompt.
+
+          **Do NOT add a FIFTH command to cover the frontend — these four already do.**
+          `forge lint` runs each frontend's TypeScript typecheck as its own lane,
+          `forge test` runs the frontend test lane, and `forge build` runs `next build` for
+          every frontend, so a trailing `npx tsc --noEmit` / `npm test` / `npm run build`
+          loop re-answers a question already asked.
+          If it fails, fix the root cause and re-run until it passes. If a forge command
+          is missing, crashes, emits something wrong, or reports a finding you believe is
+          FALSE (none of which is your protos/code), REPORT it in your summary. Never open
+          the forge source tree, patch it, or run anything that rebuilds the `forge` or
+          `reliant` binaries — later phases would then run a different toolchain than the
+          one this run set out to measure.
 
           Work in `{{inputs.working_directory}}`.
 
-  # Fail-loud gate: confirm the single-agent MVP left a building project before
-  # handing off to production polish. A broken build routes to `failed`, not forward.
-  - id: mvp_verify
-    type: run
-    command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge build"
-    save_message:
-      condition: "output.exit_code != 0"
-      role: assistant
-      display_style: warning
-      content: |
-        **MVP build FAILED** (exit {{output.exit_code}}). The MVP pass left the project in a
-        non-building state, so I'm stopping before production polish. Review the output above.
-
-  - id: mvp_done
+  - id: build_done
     type: save_message
     display_style: success
     args:
       role: assistant
       content: |
-        ## MVP Complete
+        ## Build Complete
 
-        The core features are implemented with real backend logic, tests, and working
-        end-to-end flows.
+        Frontends and backend were built concurrently: the UI looks like a real product,
+        connected to the backend via generated Connect RPC hooks, and the core features
+        are implemented with real business logic, tests, and working end-to-end flows.
 
-        ### Try it out
-        ```bash
-        cd {{inputs.working_directory}} && reliant forge run
-        ```
-        - **Frontend:** http://localhost:3000
-        - **API:** http://localhost:8080
+        **Next:** I'll start it up and send you a link so you can open it.
 
-        **Next:** I'll do a production polish pass — remaining features, edge cases,
-        error handling, thorough testing, and hardening.
-
-  # ─── Phase 4: Production Polish ─────────────────────────────────────
+  # ─── Launch Preview — the run's last step ────────────────────────────
   #
-  # Remaining features, edge cases, error handling, thorough testing,
-  # integrations. Higher retry count for thorough hardening.
-
-  - id: production_polish
-    type: workflow
-    ref: builtin://get-it-right
-    passthrough: [model, mode, ask]
-    args:
-      implementer_preset: forge
-      max_retries: 5
-      lint_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge generate && reliant forge lint"
-      test_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge test"
-      build_command: "export PATH=\"$HOME/go/bin:$PATH\" && cd {{inputs.working_directory}} && reliant forge build"
-      review_instructions: |
-        You are reviewing a production-ready Forge app. Be thorough.
-
-        **Pass if:**
-        - All features from the plan are implemented (check remaining tasks)
-        - Error handling is proper — user-facing errors are clear, internal errors are logged
-        - Validation exists on all user inputs
-        - Tests cover critical paths and edge cases
-        - Build, lint, and all tests pass
-        - No obvious security issues (SQL injection, missing auth checks, etc.)
-
-        **Only fail if:**
-        - Features from the plan are still incomplete
-        - Tests fail or are missing for critical paths
-        - Build or lint fails
-        - There are security issues or broken error handling
-        - The app would embarrass someone in a demo
-
-        Proto changes are fine — new RPCs, new fields, new entities are encouraged
-        as long as `forge generate && forge build` pass.
-
-        This is the final gate. Be strict but practical.
-    thread:
-      mode: fork
-      inject:
-        role: user
-        content: |
-          **IMPORTANT: This is a brand new project — no users, no legacy code. Do NOT add fallbacks or backwards compatibility. Fix root causes, delete unused code, use clean implementations.**
-
-          ## Production Polish
-
-          The Forge app at `{{inputs.working_directory}}` has a polished frontend and working MVP
-          backend. Now harden it for production.
-
-          **Read the project spec** — read `FORGE_PLAN.md` in the project root to see all features.
-          Then **create your own plan** (via the plan tool) with tasks for remaining features
-          not yet implemented. Complete them. Mark tasks done as you go.
-
-          **Your focus (in priority order):**
-          1. Remaining features from the plan — implement anything still incomplete
-          2. Error handling — proper error responses, logging, graceful failures
-          3. Input validation — validate all user inputs at the handler level
-          4. Tests — unit tests for business logic, integration tests for handlers
-          5. Edge cases — empty states, concurrent access, boundary conditions
-          6. Security — auth checks on all protected endpoints, input sanitization
-          7. Frontend updates — if backend API shape changed, update affected pages
-
-          **Forge gives you production infrastructure for free:**
-          - Auth middleware (JWT/API key) is already wired
-          - RBAC authorizers are generated (the auth skill covers the model)
-          - OpenTelemetry tracing/metrics are configured
-          - Health checks, graceful shutdown are built in
-          - Your job is the application logic, not infrastructure
-
-          **Parallelize aggressively:** Spawn agents for independent work streams —
-          tests, remaining features, error handling can all happen in parallel.
-
-          **Load the source of truth first — do not work from memory:**
-          ```bash
-          export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}}
-          reliant forge skill load architecture
-          reliant forge skill load service-layer
-          reliant forge skill load testing
-          ```
-          If anything in this prompt disagrees with a loaded skill, the skill wins.
-
-          **Protos and migrations are yours to modify.** Need a new RPC? A new field? A new
-          entity entirely? Edit the protos / add a migration (or `reliant forge add entity ...`),
-          then run `reliant forge generate && reliant forge build`.
-          There are no backwards compatibility concerns — this project has never shipped.
-
-          **Rules:**
-          - Generated vs owned: anything with `_gen` in the name or under `gen/` is
-            regenerated — never edit it, and don't read it to learn signatures or
-            patterns. Everything else is yours (the architecture skill has the full map).
-          - Custom wiring goes in the owned composition seam the architecture skill
-            describes — never in generated composition files.
-          - To understand contracts: read FORGE_PLAN.md for requirements, proto files for
-            the API, migrations for the schema, and the owned contract/handler files for
-            the signatures to implement.
-          - Run the full verification: `reliant forge generate && reliant forge lint && reliant forge test && reliant forge build`
-          - Track progress in your plan (mark tasks completed as you go)
-
-          Work in `{{inputs.working_directory}}`.
-
-  # ─── Launch Preview ─────────────────────────────────────────────────
-  #
-  # Start the finished app as a BACKGROUND process (survives the turn) and post
-  # its running preview URL as a markdown link, so the user can open it the
-  # moment the chat transitions to the interactive agent (see `transition_to`).
+  # Start the finished app and post its running preview URL as a markdown link. This is
+  # the last thing the pipeline does, so the link serves the build that actually
+  # shipped. `forge run` detaches its servers and returns, so they outlive the turn on
+  # their own — the node runs it FOREGROUND and reads the ephemeral port off its output.
   # Forced to auto mode so the handoff stays seamless regardless of pipeline mode.
 
   - id: launch_preview
@@ -641,9 +1714,9 @@ nodes:
         content: |
           ## Launch the App Preview
 
-          The build is complete. Start the finished app as a BACKGROUND process
-          and give the user a link to open it. Keep this focused — do NOT change
-          code, run builds, add features, or do anything else.
+          The build is complete and this is the last step of the run. Start the app and
+          give the user a link to open it. Keep this focused — do NOT change code, run
+          builds, add features, or do anything else.
 
           **Step 1: Go to the project directory** (the project lives at the working
           directory — `forge.yaml` is right there):
@@ -651,51 +1724,74 @@ nodes:
           export PATH="$HOME/go/bin:$PATH" && cd {{inputs.working_directory}} && pwd
           ```
 
-          **Step 2: Free the ports FIRST.** Phase 2's frontend polish started its own
-          `reliant forge run` (frontend on 3000, API on 8080) for its visual review and
-          nothing stopped it, so a stale, localhost-only server may still be holding those
-          ports. If you skip this, your new `--host 0.0.0.0` server cannot bind 3000 and the
-          user gets no reachable preview (the old bind is localhost-only, invisible to the
-          proxy). Kill any lingering dev server on those ports BEFORE starting yours:
+          **Step 2: Stop the build phase's servers FIRST.** The build phase started its own
+          `reliant forge run` for the visual review and nothing stopped it. Those servers are
+          bound localhost-only — invisible to the proxy — and they serve the pre-final tree,
+          so leaving them up means the user gets either no preview URL or a stale one.
+          `forge run` already exited; what is still running are the servers it DETACHED, and
+          forge tracks their pids in a per-env ledger. Use the command that reads that ledger
+          — it is idempotent, and it stops exactly those processes and nothing else, which is
+          a promise no command-line pattern match can make on a shared machine:
           ```bash
-          pkill -f 'reliant forge run' 2>/dev/null || true
-          fuser -k 3000/tcp 8080/tcp 2>/dev/null || true
+          cd {{inputs.working_directory}} && reliant forge env down dev
           ```
 
-          **Step 3: Start the app's dev server in the BACKGROUND, bound to 0.0.0.0.**
-          Use the shell tool with `run_in_background: true` so the process survives
-          after this turn ends — do NOT block on it. The server MUST bind to `0.0.0.0`,
-          not `127.0.0.1` — a localhost-only bind is NOT reachable through the proxy and
-          gets NO preview URL. For a Vite frontend, pass `--host 0.0.0.0`, e.g.:
+          **Step 3: Start the dev server in the FOREGROUND, bound to 0.0.0.0.** Do NOT use
+          `run_in_background`. `forge run` starts every host service and frontend, detaches
+          them onto their own log files, prints their ports, and RETURNS — the servers outlive
+          the command, so backgrounding it hands you an already-exited pid and puts the port
+          line in a buffer you have to poll for. The bind MUST be `0.0.0.0`, not `127.0.0.1`:
+          a localhost-only bind gets NO preview URL. **The host flag belongs to the dev
+          server, so read which one it is** — `frontends/*/package.json`'s `dev` script says
+          `next dev` or `vite`:
           ```bash
-          cd {{inputs.working_directory}} && reliant forge run -- --host 0.0.0.0
+          # next dev  → -H 0.0.0.0      |      vite → --host 0.0.0.0
+          cd {{inputs.working_directory}} && reliant forge run -- -H 0.0.0.0
           ```
-          (Whatever start command the project uses, make sure the dev server ends up
-          listening on `0.0.0.0`.)
+          Everything after `--` is forwarded verbatim to that dev server, so passing Vite's
+          `--host` to `next dev` (or the reverse) fails the flag parse and you get no server.
 
-          **Step 4: Confirm the server is actually up on port 3000.** After giving it a
-          moment to boot, call `bash_list` (or `bash_output` on the background pid) and
-          confirm it is listening and bound to `0.0.0.0`, with no "address already in use" in
-          its output. If you see "address already in use", the old server is still holding the
-          port — repeat Step 2 to free it, then restart. If it isn't up yet, the server is
-          still booting or bound to localhost — check again and confirm the `--host 0.0.0.0`
-          bind.
+          **Step 4: Read the PORT off the output — it is ephemeral, not 3000.** forge assigns
+          every frontend a kernel-allocated free port and prints
+          `[up] frontend <name>: ephemeral dev port <N>` in the output you just got back;
+          each server's own log file (forge names it in the same output) carries its
+          `- Local: http://localhost:<N>` line. Capture that `<N>` and confirm the server is
+          listening on `0.0.0.0` with no "address already in use". Use `<N>` for the rest of
+          this phase — a hardcoded 3000 will point the user at whatever unrelated server
+          holds 3000.
 
-          **Step 5: Get the preview URL and post it** as a markdown link so the user can
-          click it (the embedded browser / a new web tab will open it). Run
-          `reliant preview-url 3000` — it prints the authoritative proxied URL for port 3000
-          (the same URL also appears as a `Preview URL (port 3000): ...` line in the
-          `bash_list` / `bash_output` result from Step 4). Use that URL verbatim; do NOT invent
-          one or post a raw `http://localhost:<port>` link when a proxied URL is available:
+          **Step 5: Make sure the preview has data.** `reliant forge run` auto-seeds on
+          first boot against an EMPTY dev database (watch for its `[up] auto-seeded …`
+          line). If the database was already non-empty, or came up empty anyway, seed it
+          and confirm rows landed:
+          ```bash
+          cd {{inputs.working_directory}} && reliant forge db seed apply
+          ```
+          (`forge db seed apply` needs `DATABASE_URL` or `--dsn`.) Verify with a quick row
+          count or a real List RPC returning rows, so the preview comes up populated.
 
-          **[Open your app](<the URL from `reliant preview-url 3000`>)**
+          **Step 6: Get the preview URL for the port from Step 4.** Run
+          `reliant preview-url <N>` — it prints the authoritative proxied URL for that port
+          (the same URL also appears as a `Preview URL (port <N>): ...` line in the
+          `bash_list` / `bash_output` result from Step 4). Use it verbatim; do NOT invent one
+          or post a raw `http://localhost:<port>` link when a proxied URL is available. If
+          `reliant preview-url` reports no proxied URL (a local run), fall back to
+          `http://localhost:<N>/`.
 
-          If `reliant preview-url` reports no proxied URL (a local run), fall back to
-          `http://localhost:3000/`.
+          **Step 7: Your FINAL message is the handoff — keep it to a few lines.** It is
+          the last thing the user reads from this run, so it must be short and
+          self-contained: one or two sentences on what shipped (the real features and
+          pages, read off FORGE_PLAN.md and what you see running), then the link on its
+          own line:
 
-          If the app cannot be started because a forge command's binary itself is missing
-          or crashes (not your protos/code), say so briefly and give the manual run command
-          (`reliant forge run -- --host 0.0.0.0`) as a fallback rather than rebuilding forge.
+          **[Open your app](<the URL from `reliant preview-url <N>`>)**
+
+          No command transcript, no step-by-step narration, no next-steps pitch — the chat
+          stays open after this and the user can just ask. If the app cannot be started
+          because a forge command is missing,
+          crashes, or misbehaves (not your protos/code), say so in one line and give the
+          manual run command (`reliant forge run -- -H 0.0.0.0`) instead of a link. Never
+          patch the forge source or rebuild the `forge` / `reliant` binaries to get past it.
 
           Work in `{{inputs.working_directory}}`.
 
@@ -704,6 +1800,10 @@ nodes:
   - id: stuck
     type: save_message
     display_style: warning
+    # Reaching this node IS the run's verdict: a phase escalated and the pipeline
+    # stopped. Declared so the record says so — a graph that runs to its end is
+    # a COMPLETED execution either way, and nothing else can tell them apart.
+    outcome: failure
     args:
       role: assistant
       content: |
@@ -716,6 +1816,10 @@ nodes:
   - id: success
     type: save_message
     display_style: success
+    # The app was built, verified and launched. Declared rather than assumed, so
+    # "this run passed" is something the workflow SAID, not something inferred
+    # from the absence of a crash.
+    outcome: success
     args:
       role: assistant
       content: |
@@ -723,16 +1827,21 @@ nodes:
 
         **Project:** `{{inputs.working_directory}}`
 
-        ### Run the project
+        The finished build is running behind the preview link above. To run it yourself
+        later:
         ```bash
         cd {{inputs.working_directory}} && reliant forge run
         ```
-        - **Frontend:** http://localhost:3000
-        - **API:** http://localhost:8080
+        It prints the frontend and API URLs on startup — the dev ports are assigned free at
+        launch, so read them off that output rather than assuming 3000/8080.
 
   - id: failed
     type: save_message
     display_style: warning
+    # A phase never went green. Without this declaration the run ends here and
+    # still reports COMPLETED to status/analyze/watch — the false green this
+    # field exists to close.
+    outcome: failure
     args:
       role: assistant
       content: |
@@ -742,8 +1851,6 @@ nodes:
         Review the issues above. The project is at `{{inputs.working_directory}}`.
 
 edges:
-  - from: scope_conversation
-    default: scaffold_and_verify
   - from: scaffold_and_verify
     cases:
       - to: stuck
@@ -752,29 +1859,17 @@ edges:
       - to: failed
         condition: "nodes.scaffold_and_verify.strategy != 'pass'"
         label: scaffold_failed
-    default: frontend_polish
-  - from: frontend_polish
-    default: frontend_done
-  - from: frontend_done
-    default: mvp_backend
-  - from: mvp_backend
-    default: mvp_verify
-  - from: mvp_verify
-    cases:
-      - to: failed
-        condition: "nodes.mvp_verify.exit_code != 0"
-        label: mvp_failed
-    default: mvp_done
-  - from: mvp_done
-    default: production_polish
-  - from: production_polish
+    default: build_mvp
+  - from: build_mvp
     cases:
       - to: stuck
-        condition: "has(nodes.production_polish.stuck) && nodes.production_polish.stuck == true"
-        label: production_stuck
+        condition: "has(nodes.build_mvp.stuck) && nodes.build_mvp.stuck == true"
+        label: build_stuck
       - to: failed
-        condition: "nodes.production_polish.strategy != 'pass'"
-        label: production_failed
+        condition: "nodes.build_mvp.strategy != 'pass'"
+        label: build_failed
+    default: build_done
+  - from: build_done
     default: launch_preview
   - from: launch_preview
     default: success

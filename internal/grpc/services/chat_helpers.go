@@ -164,6 +164,14 @@ func (s *ChatService) getEffectiveWorkingPath(ctx context.Context, chat *db.Chat
 	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
 		if worktree, err := s.database.GetWorktree(ctx, *chat.WorktreeID); err == nil && worktree != nil {
 			return worktree.Path
+		} else {
+			// A worktree-bound chat whose worktree can't be resolved must NOT
+			// silently degrade to the project (main) checkout — that runs the
+			// branch chat against the wrong tree and looks like it worked. Make
+			// the failure visible; the caller still gets project path as a
+			// last resort, but the log names the broken invariant.
+			logging.Error("[getEffectiveWorkingPath] chat has worktree_id but worktree could not be resolved; falling back to project path",
+				"chatID", chat.ID, "worktreeID", *chat.WorktreeID, "error", err)
 		}
 	}
 
@@ -273,6 +281,25 @@ func (s *ChatService) reconcileWorkflowStatus(ctx context.Context, workflowID st
 			"error", err,
 			"workflowID", workflowID,
 		)
+		return
+	}
+
+	// A terminal repair must drain the subtree with it. We are here precisely
+	// because the run ended without its own completion handler writing this
+	// status — so the cascade that handler performs did not happen either, and
+	// every spawn/thread row is still at running or paused. Nothing else
+	// revisits a row with a parent_id, so skipping this leaves the chat
+	// permanently "active" and the dead rows permanently listed by
+	// `workflow ps`. The subtree inherits the status the run actually reached,
+	// so a repaired cancel does not read as a repaired success.
+	switch temporalStatus {
+	case db.WorkflowStatusCompleted, db.WorkflowStatusFailed, db.WorkflowStatusCancelled:
+		if err := s.database.CascadeTerminalStatusToDescendants(ctx, workflowID, temporalStatus); err != nil {
+			logging.Warn("Failed to cascade reconciled terminal status to child workflows",
+				"error", err,
+				"workflowID", workflowID,
+			)
+		}
 	}
 }
 

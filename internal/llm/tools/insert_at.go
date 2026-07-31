@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -159,6 +160,18 @@ func (i *insertAtTool) Execute(rctx *rctx.ToolContext, params InsertAtParams) (T
 		thread = "0"
 	}
 
+	// The rest is a read-modify-write on filePath, and tool calls in one
+	// assistant message run concurrently — hold the path lock across it so two
+	// inserts into the same file cannot both splice the same starting content.
+	// See file_concurrency.go.
+	return withPathLock(rctx, filePath, func() (ToolResponse, error) {
+		return i.insertLocked(rctx, params, wd, filePath, chatID, thread)
+	})
+}
+
+// insertLocked performs the read-modify-write. Callers must hold the path lock
+// for filePath.
+func (i *insertAtTool) insertLocked(rctx *rctx.ToolContext, params InsertAtParams, wd, filePath, chatID, thread string) (ToolResponse, error) {
 	// Validate file exists
 	stat, err := rctx.Daemon.StatFile(rctx.Context, filePath)
 	if err != nil {
@@ -180,7 +193,7 @@ func (i *insertAtTool) Execute(rctx *rctx.ToolContext, params InsertAtParams) (T
 	}
 
 	oldContent := fc.Content
-	lines := strings.Split(oldContent, "\n")
+	lines, terminated := splitLines(oldContent)
 
 	// Find anchor line
 	anchorIdx := -1
@@ -239,7 +252,7 @@ func (i *insertAtTool) Execute(rctx *rctx.ToolContext, params InsertAtParams) (T
 		}
 	}
 
-	newContent := strings.Join(newLines, "\n")
+	newContent := joinLines(newLines, terminated)
 
 	if oldContent == newContent {
 		return NewTextErrorResponse("no changes would be made"), nil
@@ -249,7 +262,11 @@ func (i *insertAtTool) Execute(rctx *rctx.ToolContext, params InsertAtParams) (T
 	diffText, additions, removals := diff.GenerateDiff(oldContent, newContent, filePath, wd)
 
 	// Write file
-	if _, err = rctx.Daemon.WriteFile(rctx.Context, filePath, newContent); err != nil {
+	if err = writeFileGuarded(rctx, filePath, oldContent, newContent); err != nil {
+		var conflict *ConcurrentModificationError
+		if errors.As(err, &conflict) {
+			return NewTextErrorResponse(conflict.Error()), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to write file: %w", err)
 	}
 

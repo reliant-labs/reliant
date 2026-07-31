@@ -455,6 +455,7 @@ export const ChatPresenter = memo(function ChatPresenter({
             )}
             <WorkflowViewerPanel
               projectId={projectId}
+              chatId={chatId}
               workflowName={workflowExecution.workflowName}
               execution={workflowExecution}
               onClose={() => updateWorkflowViewerOpen(false)}
@@ -604,6 +605,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           )}
           <WorkflowViewerPanel
             projectId={projectId}
+            chatId={chatId}
             workflowName={workflowExecution.workflowName}
             execution={workflowExecution}
             onClose={() => updateWorkflowViewerOpen(false)}

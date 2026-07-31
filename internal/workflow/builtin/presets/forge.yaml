@@ -1,9 +1,9 @@
 name: forge
 description: Balanced general-purpose agent for Forge app generation workflows with full tool access including file modification, shell commands, and ability to spawn sub-agents
 tag: agent
-recommended_skills:
-  - general-agent
 params:
+  skills:
+    - general-agent
   model:
     tags: [flagship]
   spawn_presets:
@@ -12,6 +12,7 @@ params:
   - researcher
   - planner
   - implementer
+  - forge_implementer
   - code_reviewer
   - documentation
   - refactor
@@ -21,6 +22,8 @@ params:
   - ux
   tools:
   - tag:default   # Focused default toolset (~18 tools)
+  - ask_user      # Ask the human directly — scoping questions, product judgement calls
+  - tag:web       # websearch + fetch — check how a real domain models its data
   - mcp__chrome-devtools__take_screenshot
   - mcp__chrome-devtools__take_snapshot
   - mcp__chrome-devtools__new_page

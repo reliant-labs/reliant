@@ -1,0 +1,139 @@
+#!/usr/bin/env bash
+# wf-status — per-node state of one workflow execution, at a glance.
+set -euo pipefail
+cd "$(dirname "$0")" && source ./_lib.sh
+
+usage() {
+  cat <<'EOF'
+Usage: wf-status <execution-id>
+
+Show everything the DB knows about one workflow execution (root workflow id;
+a unique id prefix is accepted). Sections:
+
+  EXECUTION        root row, current checkpoint position, open questions/approvals
+  NODE THREADS     child workflow rows (agent threads / spawns per node) with
+                   status, start/finish, duration. A node that ran twice (redo)
+                   appears as multiple rows.
+  STEP EXECUTIONS  recorded activity results per step (build/lint/test, tool
+                   steps...). "runs" > 1 means the step re-executed (retry/loop).
+  NODE EVENTS      latest node_execution event per node (fine-grained runtime
+                   events; sparse — not every node type emits these).
+  MESSAGE ACTIVITY message counts per node id — liveness signal for agent nodes.
+
+Timezone caveat: workflows/messages timestamps are UTC, but step_executions and
+chat_updates created_at are LOCAL wall time — expect a constant offset between
+the STEP EXECUTIONS / NODE EVENTS "at" columns and the other sections.
+
+Environment:
+  RELIANT_DB_URL  Postgres DSN (default: postgres://postgres:postgres@127.0.0.1:5434/reliant)
+
+Read-only: connects with default_transaction_read_only=on.
+EOF
+}
+
+[ $# -eq 1 ] || { usage >&2; exit 1; }
+case "$1" in -h|--help) usage; exit 0 ;; esac
+
+wid=$(resolve_execution_id "$1")
+
+run_sql -P pager=off -v wid="$wid" <<SQL
+\echo == EXECUTION ==
+SELECT
+  w.id,
+  w.workflow_name                             AS workflow,
+  $(wf_status_expr w.status)                  AS status,
+  to_char(w.created_at,   'YYYY-MM-DD HH24:MI:SS') AS started,
+  coalesce(to_char(w.completed_at, 'YYYY-MM-DD HH24:MI:SS'), '-') AS completed,
+  coalesce(cp.node_id || ' (iter ' || cp.loop_iteration || ', at ' ||
+           to_char(cp.updated_at, 'MM-DD HH24:MI:SS') || ')', '-') AS checkpoint_position,
+  (SELECT count(*) FROM questions q
+    WHERE q.workflow_id = w.id AND q.status = 1)  AS open_questions,
+  (SELECT count(*) FROM approvals a
+    WHERE a.chat_id = w.chat_id AND a.status = 1) AS open_approvals
+FROM workflows w
+LEFT JOIN workflow_checkpoints cp ON cp.workflow_id = w.id
+WHERE w.id = :'wid';
+
+\echo == NODE THREADS (child workflows) ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT
+  coalesce(w.spawned_by_node_id, w.workflow_name) AS node,
+  w.workflow_name                             AS record,
+  $(wf_status_expr w.status)                  AS status,
+  to_char(w.created_at, 'MM-DD HH24:MI:SS')   AS started,
+  coalesce(to_char(w.completed_at, 'MM-DD HH24:MI:SS'), '-') AS finished,
+  coalesce(to_char(w.completed_at - w.created_at, 'HH24:MI:SS'), '-') AS duration,
+  coalesce(w.loop_iteration::text, '-')       AS loop_iter,
+  w.thread                                    AS thread_id
+FROM workflows w
+WHERE w.parent_id IN (SELECT id FROM fam)
+ORDER BY w.created_at;
+
+\echo == STEP EXECUTIONS ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT
+  s.step_id                                   AS node,
+  count(*)                                    AS runs,
+  (array_agg(s.activity_name ORDER BY s.created_at DESC))[1] AS last_activity,
+  CASE (array_agg(s.success ORDER BY s.created_at DESC))[1]
+    WHEN 1 THEN 'ok' WHEN 0 THEN 'FAIL' ELSE '?' END          AS last_result,
+  coalesce((array_agg(s.exit_code ORDER BY s.created_at DESC))[1]::text, '-') AS exit,
+  (array_agg(s.duration_ms ORDER BY s.created_at DESC))[1]    AS last_ms,
+  coalesce((array_agg(s.loop_node_id ORDER BY s.created_at DESC))[1]
+    || '#' || (array_agg(s.loop_iteration ORDER BY s.created_at DESC))[1], '-') AS last_loop,
+  to_char(min(s.created_at), 'MM-DD HH24:MI:SS') AS first_run,
+  to_char(max(s.created_at), 'MM-DD HH24:MI:SS') AS last_run
+FROM step_executions s
+WHERE s.workflow_id IN (SELECT id FROM fam)
+GROUP BY s.step_id
+ORDER BY max(s.created_at);
+
+\echo == NODE EVENTS (latest per node; sparse) ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+), ev AS (
+  SELECT cu.data::jsonb AS d, cu.sequence_number
+  FROM chat_updates cu
+  WHERE cu.chat_id = (SELECT chat_id FROM workflows WHERE id = :'wid')
+    AND cu.update_type = 9
+    AND cu.data::jsonb->>'workflow_id' IN (SELECT id FROM fam)
+)
+SELECT DISTINCT ON (d->>'node_id')
+  d->>'node_id'    AS node,
+  d->>'node_type'  AS type,
+  d->>'event_type' AS last_event,
+  coalesce(to_char(to_timestamp((d->>'started_at')::bigint / 1000.0)
+           AT TIME ZONE 'UTC', 'MM-DD HH24:MI:SS'), '-') AS started,
+  coalesce(to_char(to_timestamp((d->>'completed_at')::bigint / 1000.0)
+           AT TIME ZONE 'UTC', 'MM-DD HH24:MI:SS'), '-') AS completed,
+  coalesce(d->>'duration_ms', '-')  AS ms,
+  coalesce(d->>'error_message', '') AS error
+FROM ev
+ORDER BY d->>'node_id', sequence_number DESC;
+
+\echo == MESSAGE ACTIVITY (per node id) ==
+WITH RECURSIVE fam AS (
+  SELECT id FROM workflows WHERE id = :'wid'
+  UNION ALL
+  SELECT c.id FROM workflows c JOIN fam ON c.parent_id = fam.id
+)
+SELECT
+  coalesce(nullif(m.node_id, ''), '(none)')  AS node,
+  count(*)                                    AS messages,
+  to_char(min(m.created_at), 'MM-DD HH24:MI:SS') AS first,
+  to_char(max(m.created_at), 'MM-DD HH24:MI:SS') AS last
+FROM messages m
+WHERE m.workflow_id IN (SELECT id FROM fam)
+GROUP BY 1
+ORDER BY max(m.created_at);
+SQL

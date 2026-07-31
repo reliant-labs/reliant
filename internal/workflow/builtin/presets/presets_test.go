@@ -20,11 +20,10 @@ import (
 
 // Preset represents the structure of a preset YAML file
 type Preset struct {
-	Name              string         `yaml:"name"`
-	Description       string         `yaml:"description"`
-	Tag               string         `yaml:"tag"`
-	Params            map[string]any `yaml:"params"`
-	RecommendedSkills []string       `yaml:"recommended_skills,omitempty"`
+	Name        string         `yaml:"name"`
+	Description string         `yaml:"description"`
+	Tag         string         `yaml:"tag"`
+	Params      map[string]any `yaml:"params"`
 }
 
 // ValidAgentParams are the valid input parameter names for the agent workflow.
@@ -37,6 +36,7 @@ var ValidAgentParams = map[string]bool{
 	"system_prompt":   true,
 	"max_turns":       true,
 	"planning_prompt": true,
+	"skills":          true, // unified skill-preload param (was top-level recommended_skills)
 }
 
 func TestPresetsLoad(t *testing.T) {
@@ -136,7 +136,7 @@ func TestPresetsHaveValidParams(t *testing.T) {
 
 func TestAgentPresetsNoSystemPrompt(t *testing.T) {
 	// Builtin presets should NOT set system_prompt — methodology comes from
-	// recommended_skills and the base prompt is injected by call_llm.
+	// params.skills and the base prompt is injected by call_llm.
 	// Exception: workflow_builder uses system_prompt for draft ID reference.
 	allowedExceptions := map[string]bool{
 		"workflow_builder.yaml": true,
@@ -156,7 +156,7 @@ func TestAgentPresetsNoSystemPrompt(t *testing.T) {
 				return
 			}
 			assert.False(t, hasSystemPrompt,
-				"preset %q should not set system_prompt — use recommended_skills instead", preset.Name)
+				"preset %q should not set system_prompt — use params.skills instead", preset.Name)
 		})
 	}
 }
@@ -386,7 +386,7 @@ func TestPresetRecommendedSkillsExist(t *testing.T) {
 	//     bodies are rendered with @forge-only stripped when no
 	//     forge.yaml is present.
 	//
-	// A preset's recommended_skills entry is valid if it appears in
+	// A preset's params.skills entry is valid if it appears in
 	// either set.
 	knownSkills := make(map[string]bool)
 
@@ -416,10 +416,24 @@ func TestPresetRecommendedSkillsExist(t *testing.T) {
 
 	presets := loadAllPresets(t)
 	for name, preset := range presets {
-		for _, skill := range preset.RecommendedSkills {
+		skillsRaw, ok := preset.Params["skills"]
+		if !ok {
+			continue
+		}
+		skillsList, ok := skillsRaw.([]any)
+		if !ok {
+			t.Errorf("preset %q: params.skills should be a list, got %T", name, skillsRaw)
+			continue
+		}
+		for _, sRaw := range skillsList {
+			skill, ok := sRaw.(string)
+			if !ok {
+				t.Errorf("preset %q: params.skills entries should be strings, got %T", name, sRaw)
+				continue
+			}
 			t.Run(name+"/"+skill, func(t *testing.T) {
 				assert.True(t, knownSkills[skill],
-					"preset %q references recommended_skill %q which is neither a reliant builtin nor a forge general/both skill",
+					"preset %q references skill %q (params.skills) which is neither a reliant builtin nor a forge general/both skill",
 					preset.Name, skill)
 			})
 		}

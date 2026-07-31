@@ -266,14 +266,18 @@ func (x *GetPendingQuestionResponse) GetQuestion() *QuestionInfo {
 }
 
 type QuestionInfo struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	QuestionId    string                 `protobuf:"bytes,1,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`
-	ChatId        string                 `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	WorkflowId    string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	StepId        string                 `protobuf:"bytes,4,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
-	Status        string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
-	CreatedAt     string                 `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Metadata      *string                `protobuf:"bytes,7,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	QuestionId string                 `protobuf:"bytes,1,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`
+	ChatId     string                 `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	WorkflowId string                 `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	StepId     string                 `protobuf:"bytes,4,opt,name=step_id,json=stepId,proto3" json:"step_id,omitempty"`
+	Status     string                 `protobuf:"bytes,5,opt,name=status,proto3" json:"status,omitempty"`
+	CreatedAt  string                 `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Metadata   *string                `protobuf:"bytes,7,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	// Thread that raised the question. The questions row has always carried it;
+	// omitting it here made every RPC consumer chat-scoped, so a supervision view
+	// over several spawned threads could not say WHICH one is waiting.
+	ThreadId      string `protobuf:"bytes,8,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -357,6 +361,13 @@ func (x *QuestionInfo) GetMetadata() string {
 	return ""
 }
 
+func (x *QuestionInfo) GetThreadId() string {
+	if x != nil {
+		return x.ThreadId
+	}
+	return ""
+}
+
 var File_reliant_v1_question_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_question_proto_rawDesc = "" +
@@ -375,7 +386,7 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"d\n" +
 	"\x1aGetPendingQuestionResponse\x129\n" +
 	"\bquestion\x18\x01 \x01(\v2\x18.reliant.v1.QuestionInfoH\x00R\bquestion\x88\x01\x01B\v\n" +
-	"\t_question\"\xe7\x01\n" +
+	"\t_question\"\x84\x02\n" +
 	"\fQuestionInfo\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x17\n" +
@@ -386,7 +397,8 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\x06status\x18\x05 \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\tR\tcreatedAt\x12\x1f\n" +
-	"\bmetadata\x18\a \x01(\tH\x00R\bmetadata\x88\x01\x01B\v\n" +
+	"\bmetadata\x18\a \x01(\tH\x00R\bmetadata\x88\x01\x01\x12\x1b\n" +
+	"\tthread_id\x18\b \x01(\tR\bthreadIdB\v\n" +
 	"\t_metadata*l\n" +
 	"\x0eQuestionStatus\x12\x1f\n" +
 	"\x1bQUESTION_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +

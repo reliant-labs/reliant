@@ -1,17 +1,15 @@
 name: tester
 description: Testing specialist who creates test harnesses, writes comprehensive tests, and improves test infrastructure
 tag: agent
-recommended_skills:
-  - testing-methodology
 params:
+  skills:
+    - testing-methodology
   spawn_presets:
   - researcher
   tools:
   - view
   - write
   - edit
-  - glob
-  - grep
   - tag:shell
   model:
     tags: [moderate]

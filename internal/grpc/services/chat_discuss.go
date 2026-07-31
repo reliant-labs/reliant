@@ -6,9 +6,10 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -89,6 +90,28 @@ func (s *ChatService) handleDiscussMode(
 
 	eventCh := driver.StreamResponse(ctx, prompts, history, []tools.Tool{})
 
+	// Delta identity: discuss mode is a producer with no Temporal workflow —
+	// mint the assistant message id up front, stamp every delta with it plus
+	// a monotonically increasing stream_seq, save the message under the same
+	// id, and always emit a stream_finalized marker at the end.
+	assistantMessageID := uuid.New().String()
+	var streamSeq int64
+	publish := func(delta streaming.StreamingDelta) {
+		if s.streamingHub == nil {
+			return
+		}
+		streamSeq++
+		delta.MessageID = assistantMessageID
+		delta.StreamSeq = streamSeq
+		s.streamingHub.Publish(ctx, req.Msg.ChatId, delta)
+	}
+
+	publish(streaming.StreamingDelta{
+		DeltaType: streaming.DeltaTypeMessageStart,
+		Thread:    targetThread,
+		Role:      "assistant",
+	})
+
 	var fullContent string
 	blockIndex := 0
 	blockStarted := false
@@ -98,36 +121,30 @@ func (s *ChatService) handleDiscussMode(
 		switch event.Type {
 		case llm.EventContentStart:
 			blockStarted = true
-			if s.streamingHub != nil {
-				s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
+			publish(streaming.StreamingDelta{
+				DeltaType:  streaming.DeltaTypeContentBlockStart,
+				BlockIndex: blockIndex,
+				BlockType:  "text",
+				Thread:     targetThread,
+			})
+
+		case llm.EventContentDelta:
+			if !blockStarted {
+				blockStarted = true
+				publish(streaming.StreamingDelta{
 					DeltaType:  streaming.DeltaTypeContentBlockStart,
 					BlockIndex: blockIndex,
 					BlockType:  "text",
 					Thread:     targetThread,
 				})
 			}
-
-		case llm.EventContentDelta:
-			if !blockStarted {
-				blockStarted = true
-				if s.streamingHub != nil {
-					s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
-						DeltaType:  streaming.DeltaTypeContentBlockStart,
-						BlockIndex: blockIndex,
-						BlockType:  "text",
-						Thread:     targetThread,
-					})
-				}
-			}
 			fullContent += event.Content
-			if s.streamingHub != nil {
-				s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
-					DeltaType:  streaming.DeltaTypeContentBlockDelta,
-					BlockIndex: blockIndex,
-					Delta:      event.Content,
-					Thread:     targetThread,
-				})
-			}
+			publish(streaming.StreamingDelta{
+				DeltaType:  streaming.DeltaTypeContentBlockDelta,
+				BlockIndex: blockIndex,
+				Delta:      event.Content,
+				Thread:     targetThread,
+			})
 
 		case llm.EventContentStop:
 			blockIndex++
@@ -149,20 +166,35 @@ func (s *ChatService) handleDiscussMode(
 	}
 
 	// Emit stream_cancelled delta on error so the frontend knows streaming ended
-	if streamErr != nil && s.streamingHub != nil {
-		s.streamingHub.Publish(ctx, req.Msg.ChatId, streaming.StreamingDelta{
+	if streamErr != nil {
+		publish(streaming.StreamingDelta{
 			DeltaType: streaming.DeltaTypeStreamCancelled,
 			Thread:    targetThread,
 		})
 	}
 
-	// 5. Save assistant response message
+	// 5. Save assistant response message under the pre-allocated id
 	if fullContent != "" {
-		_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT), fullContent, &workflowID, nil, nil)
+		_, err := s.database.SaveMessageToThreadWithID(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT), fullContent, &workflowID, nil, nil, assistantMessageID)
 		if err != nil {
 			logging.Error("Failed to save discuss mode assistant response", "error", err, "chatID", req.Msg.ChatId)
 			// Non-fatal: the user already saw the streamed response
 		}
+	}
+
+	// 6. Always finalize the allocated id — after the save attempt, not
+	// gated on it succeeding.
+	finalizeReason := db.StreamFinalizedCompleted
+	if streamErr != nil {
+		finalizeReason = db.StreamFinalizedAborted
+	}
+	if err := s.database.EmitStreamFinalizedUpdate(ctx, req.Msg.ChatId, db.StreamFinalizedUpdate{
+		MessageID:     assistantMessageID,
+		Thread:        targetThread,
+		Reason:        finalizeReason,
+		LastStreamSeq: streamSeq,
+	}); err != nil {
+		logging.Error("Failed to emit stream_finalized for discuss mode", "error", err, "chatID", req.Msg.ChatId)
 	}
 
 	// 6. Return with workflow_status still Paused

@@ -117,7 +117,7 @@ func TestEnrichMessageUpdate_UsesCanonicalToolCallInputField(t *testing.T) {
 	threadID := uuid.New().String()
 	cwID := uuid.New().String()
 	messageID := uuid.New().String()
-	inputJSON := `{"edits":[{"file_path":"foo.txt","old_string":"a","new_string":"b"}]}`
+	inputJSON := `{"file_path":"foo.txt","old_string":"a","new_string":"b"}`
 
 	require.NoError(t, repo.CreateChat(ctx, &Chat{
 		ID:         chatID,

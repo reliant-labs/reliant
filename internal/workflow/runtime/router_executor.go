@@ -249,11 +249,17 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 		}
 	}
 
+	// Delta identity: routers call CallLLM directly (a second phantom
+	// source), so allocate an id under the same GetVersion gate and finalize
+	// after the call — completed on success, aborted on failure.
+	preallocatedID := preallocateAssistantMessageID(r.ctx, r.chatID, routerThread)
+
 	rtx := types.RuntimeContext{
-		ChatID:     r.chatID,
-		Thread:     routerThread,
-		WorkflowID: r.workflowID,
-		StepID:     callLLMNode.GetId(),
+		ChatID:             r.chatID,
+		Thread:             routerThread,
+		WorkflowID:         r.workflowID,
+		StepID:             callLLMNode.GetId(),
+		AssistantMessageID: preallocatedID,
 	}
 
 	input := types.ActivityInput{
@@ -265,7 +271,7 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
 	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute,
-		HeartbeatTimeout:    30 * time.Second,
+		HeartbeatTimeout:    activityHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,
@@ -276,8 +282,10 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 
 	var output reliantv1.CallLLMOutput
 	if err := workflow.ExecuteActivity(activityCtx, "CallLLM", input).Get(r.ctx, &output); err != nil {
+		emitStreamFinalized(r.ctx, r.chatID, preallocatedID, routerThread, streamReasonAborted, 0)
 		return nil, fmt.Errorf("node routing CallLLM failed: %w", err)
 	}
+	emitStreamFinalized(r.ctx, r.chatID, preallocatedID, routerThread, streamReasonCompleted, output.GetLastStreamSeq())
 
 	// Parse the decision
 	decision, err := r.parseNodeRoutingDecision(&output)
@@ -513,11 +521,15 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	}
 
 	// Build runtime context for the CallLLM activity
+	// Delta identity: same phantom-source treatment as node routing above.
+	preallocatedID := preallocateAssistantMessageID(r.ctx, r.chatID, routerThread)
+
 	rtx := types.RuntimeContext{
-		ChatID:     r.chatID,
-		Thread:     routerThread,
-		WorkflowID: r.workflowID,
-		StepID:     callLLMNode.GetId(),
+		ChatID:             r.chatID,
+		Thread:             routerThread,
+		WorkflowID:         r.workflowID,
+		StepID:             callLLMNode.GetId(),
+		AssistantMessageID: preallocatedID,
 	}
 
 	input := types.ActivityInput{
@@ -529,7 +541,7 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
 	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
 		StartToCloseTimeout: 5 * time.Minute, // Routing should be fast but give it some room
-		HeartbeatTimeout:    30 * time.Second,
+		HeartbeatTimeout:    activityHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,
@@ -540,8 +552,10 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 
 	var output reliantv1.CallLLMOutput
 	if err := workflow.ExecuteActivity(activityCtx, "CallLLM", input).Get(r.ctx, &output); err != nil {
+		emitStreamFinalized(r.ctx, r.chatID, preallocatedID, routerThread, streamReasonAborted, 0)
 		return fmt.Errorf("routing CallLLM failed: %w", err)
 	}
+	emitStreamFinalized(r.ctx, r.chatID, preallocatedID, routerThread, streamReasonCompleted, output.GetLastStreamSeq())
 
 	// Parse the routing decision from the response
 	return r.parseRoutingDecision(&output)

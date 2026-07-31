@@ -169,11 +169,12 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 		return
 	}
 
-	// Cascade completion to child workflows. When a root workflow's Temporal
-	// execution has expired, children's status notifications were likely lost
-	// too — leaving them stuck at running/paused and the chat permanently "active".
-	if err := ps.database.CompleteChildWorkflows(ctx, workflowID); err != nil {
-		logging.Error("[PauseService] Failed to cascade completion to child workflows",
+	// Cascade to child workflows, at the status the run actually reached. When a
+	// root workflow's Temporal execution has expired, children's status
+	// notifications were likely lost too — leaving them stuck at running/paused
+	// and the chat permanently "active".
+	if err := ps.database.CascadeTerminalStatusToDescendants(ctx, workflowID, status); err != nil {
+		logging.Error("[PauseService] Failed to cascade terminal status to child workflows",
 			"workflowID", workflowID,
 			"error", err,
 		)
@@ -350,8 +351,13 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 	}
 
 	// Send resume to the new run so a parked workflow unblocks from its Await.
-	// Harmless for a non-parked run: the resume coordinator just advances the
-	// epoch (no goroutine is waiting on it).
+	// The reset re-executes any self-pause during replay, and the replayed
+	// pause can re-arm AFTER this signal is applied — the resume coordinator
+	// HOLDS a resume that arrives while no pause is armed (see
+	// pauseCoordinator's resume-hold) so it still releases that pause instead
+	// of being consumed as a no-op epoch bump and leaving the run parked
+	// forever. Harmless for a run that never pauses: the held resume is
+	// discarded by the next explicit signal.pause.
 	if err := ps.temporalClient.SignalWorkflow(ctx, workflowID, newRunID, SignalResume, nil); err != nil {
 		return "", fmt.Errorf("failed to send resume signal after reset: %w", err)
 	}

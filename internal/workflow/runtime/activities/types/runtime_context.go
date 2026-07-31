@@ -13,6 +13,12 @@ type RuntimeContext struct {
 	StepID     string `json:"step_id,omitempty"`
 	SessionID  string `json:"session_id,omitempty"`
 
+	// AssistantMessageID is the pre-allocated id for the assistant message a
+	// call_llm activity will stream (delta identity protocol). Minted by the
+	// workflow via SideEffect so retries re-stream under the same id. Empty
+	// for legacy histories and non-LLM activities.
+	AssistantMessageID string `json:"assistant_message_id,omitempty"`
+
 	// Loop context
 	LoopNodeID    string `json:"loop_node_id,omitempty"`
 	LoopIteration int    `json:"loop_iteration,omitempty"`

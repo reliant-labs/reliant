@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -130,8 +131,13 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		return ExecuteRunStepOutput{}, fmt.Errorf("failed to resolve working directory: %w", err)
 	}
 
-	// Propagate daemon selector from workflow input
-	execCtx.DaemonSelector = input.DaemonSelector
+	// Propagate daemon selector from workflow input. Priority: explicit
+	// node/workflow-level selector > the worktree's owning daemon (set by
+	// resolveRunExecutorContext) > default resolution. Only override the
+	// worktree pin when the input actually carries a selector.
+	if input.DaemonSelector != nil {
+		execCtx.DaemonSelector = input.DaemonSelector
+	}
 
 	// Determine working directory
 	workingDir := execCtx.ProjectPath
@@ -158,6 +164,17 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		nil, // no custom env vars for now
 	)
 	if err != nil {
+		// A transport failure means the command never ran. Fail the activity so
+		// the activity retry policy owns it, instead of returning a synthetic
+		// exit code that the workflow would read as a real command verdict.
+		var transportErr *toolexec.TransportError
+		if errors.As(err, &transportErr) {
+			activity.GetLogger(ctx).Error("[RunStep] command never reached a daemon",
+				"command", input.Command,
+				"code", transportErr.Code,
+				"detail", transportErr.Detail,
+			)
+		}
 		return ExecuteRunStepOutput{}, fmt.Errorf("failed to execute command: %w", err)
 	}
 

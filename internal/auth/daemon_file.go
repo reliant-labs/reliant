@@ -31,6 +31,22 @@ type DaemonCredentials struct {
 	// until the first successful registration. Cleared on logout by deleting
 	// the whole origin entry.
 	DaemonID string `json:"daemon_id,omitempty"`
+	// Sub is the Supabase subject the PAT was minted for. WRITTEN BY THE
+	// ELECTRON PREFLIGHT (electron/src/daemon-creds.js), never by Go — it
+	// exists here only so the daemon's own rewrites of the entry (persisting
+	// DaemonID after registration) round-trip it instead of silently dropping
+	// it. Without this field, every post-registration rewrite erased `sub`,
+	// and the Electron preflight — unable to prove the cached PAT belongs to
+	// the signed-in user — re-minted a fresh PAT on every cold launch.
+	Sub string `json:"sub,omitempty"`
+	// ExpiresAt is when the PAT stops being accepted, when that is known.
+	// Daemon-kind PATs minted by CreateDaemonToken / MintManagedDaemonToken are
+	// intentionally non-expiring, so this is nil for them. It is populated only
+	// when the credential originates from a bounded token (e.g. the Electron
+	// preflight persisting a web-UI token's expiry), so `daemon start` can
+	// proactively re-mint before it lapses instead of booting on — and then
+	// fatally failing with — a dead PAT. nil means "never expires".
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 // daemonCredentialsStore is the on-disk format: endpoint key → credentials.

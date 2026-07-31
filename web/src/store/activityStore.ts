@@ -4,9 +4,31 @@
  * Each chat has exactly one ChatActivity value (from proto).
  * The sidebar, thinking indicator, and all other consumers read from here.
  *
- * Populated from:
- *   1. ListChats response (chat.activity field)
- *   2. chat_activity_changed streaming events (globalUpdatesStore)
+ * Populated from three channels, ordered by user-update sequence number
+ * (per-user monotonic counter assigned transactionally on the server):
+ *   1. CHAT_ACTIVITY_CHANGED streaming events — carry their exact sequence
+ *      number (applyStreamActivity).
+ *   2. ListChats responses — carry lastUserUpdateSequence, a freshness
+ *      watermark for the whole snapshot (applyListActivities).
+ *   3. GetChat responses — carry no sequence; the caller passes the client's
+ *      maxSeenSeq captured before the request as a freshness lower bound
+ *      (applyChatSnapshot).
+ * Plus local optimistic writes (setActivity) for instant UI feedback on
+ * user actions (send/cancel/pause/resume).
+ *
+ * Precedence is decided purely by sequence ordering — there is no
+ * wall-clock freshness window. Each entry records the sequence that set it;
+ * a write only lands if its sequence claim is at least as new:
+ *   - stream event seq E:   applies if E >= entry.seq (an event at exactly
+ *     maxSeenSeq+1 must be able to confirm an optimistic write)
+ *   - list watermark L:     applies if L > entry.seq (equality means no
+ *     server events since the entry was set — nothing to correct — and
+ *     strict > shields the snapshot-read race inside the server handler)
+ *   - GetChat baseline B:   applies if B >= entry.seq (the response is at
+ *     least as fresh as everything the client has processed; this is the
+ *     stuck-busy recovery path used by checkChatStatus)
+ *   - optimistic:           always applies, tagged maxSeenSeq + 1 so it
+ *     beats all current server knowledge but yields to anything newer
  */
 
 import { create } from "zustand";
@@ -31,33 +53,43 @@ export function activityToDotState(activity: ChatActivity): DotState {
   }
 }
 
-/**
- * How long (ms) an optimistic non-IDLE value is protected from being
- * downgraded to IDLE by a server response.  After this window the server
- * value is considered authoritative — this prevents permanently-stuck
- * RUNNING states when a CHAT_ACTIVITY_CHANGED WebSocket event is missed.
- */
-const ANTI_DOWNGRADE_WINDOW_MS = 10_000;
-
 interface ActivityEntry {
   activity: ChatActivity;
-  /** Epoch-ms when this value was written. */
-  setAt: number;
+  /** User-update sequence that set this value (see module doc for rules). */
+  seq: number;
 }
 
 interface ActivityState {
   entries: Map<string, ActivityEntry>;
   /** Convenience projection — just the activity values (for consumers). */
   activities: Map<string, ChatActivity>;
-  setActivity: (chatId: string, activity: ChatActivity) => void;
-  setActivities: (activities: Map<string, ChatActivity>) => void;
-  removeActivity: (chatId: string) => void;
   /**
-   * Returns true if `chatId` currently has a non-IDLE value that was set
-   * within the anti-downgrade window (i.e. it's "fresh" and should be
-   * protected from a server-side IDLE overwrite).
+   * Highest server-derived sequence observed (stream event seqs and list
+   * watermarks). Optimistic writes are tagged maxSeenSeq + 1 but do NOT
+   * advance it — only real server knowledge does, so repeated optimistic
+   * writes can never inflate entry seqs past what the server will assign.
    */
-  isFreshNonIdle: (chatId: string) => boolean;
+  maxSeenSeq: number;
+  /** Local optimistic write for instant feedback on a user action. */
+  setActivity: (chatId: string, activity: ChatActivity) => void;
+  /** Write from a CHAT_ACTIVITY_CHANGED stream event carrying its seq. */
+  applyStreamActivity: (
+    chatId: string,
+    activity: ChatActivity,
+    seq: number,
+  ) => void;
+  /** Bulk write from a ListChats snapshot with its watermark. */
+  applyListActivities: (
+    serverActivities: Map<string, ChatActivity>,
+    watermark: number,
+  ) => void;
+  /** Write from a GetChat snapshot; baselineSeq = maxSeenSeq before fetch. */
+  applyChatSnapshot: (
+    chatId: string,
+    activity: ChatActivity,
+    baselineSeq: number,
+  ) => void;
+  removeActivity: (chatId: string) => void;
 }
 
 function buildActivitiesProjection(
@@ -68,38 +100,89 @@ function buildActivitiesProjection(
   return m;
 }
 
-export const useActivityStore = create<ActivityState>((set, get) => ({
+export const useActivityStore = create<ActivityState>((set) => ({
   entries: new Map(),
   activities: new Map(),
+  maxSeenSeq: 0,
 
   setActivity: (chatId, activity) =>
     set((state) => {
-      // Skip if value hasn't changed — prevents unnecessary re-renders
-      if (state.entries.get(chatId)?.activity === activity) return state;
+      const existing = state.entries.get(chatId);
+      const seq = state.maxSeenSeq + 1;
+      // Skip if nothing changes — prevents unnecessary re-renders
+      if (existing?.activity === activity && existing.seq === seq) return state;
       const next = new Map(state.entries);
-      next.set(chatId, { activity, setAt: Date.now() });
+      next.set(chatId, { activity, seq });
       return { entries: next, activities: buildActivitiesProjection(next) };
     }),
 
-  setActivities: (activities) => {
-    const now = Date.now();
-    const entries = new Map<string, ActivityEntry>();
-    for (const [id, a] of activities) entries.set(id, { activity: a, setAt: now });
-    set({ entries, activities });
-  },
+  applyStreamActivity: (chatId, activity, seq) =>
+    set((state) => {
+      const existing = state.entries.get(chatId);
+      if (seq > 0 && existing && seq < existing.seq) {
+        // Stale event (e.g. replay of an update older than a list snapshot
+        // we already applied) — sequence precedence rejects it.
+        return state;
+      }
+      const maxSeenSeq = Math.max(state.maxSeenSeq, seq);
+      // seq <= 0 means a malformed/ephemeral event — apply defensively
+      // (matches pre-sequence behavior) but preserve the entry's seq.
+      const entrySeq = seq > 0 ? seq : (existing?.seq ?? 0);
+      if (existing?.activity === activity && existing.seq === entrySeq) {
+        return maxSeenSeq === state.maxSeenSeq ? state : { maxSeenSeq };
+      }
+      const next = new Map(state.entries);
+      next.set(chatId, { activity, seq: entrySeq });
+      return {
+        entries: next,
+        activities: buildActivitiesProjection(next),
+        maxSeenSeq,
+      };
+    }),
+
+  applyListActivities: (serverActivities, watermark) =>
+    set((state) => {
+      let changed = false;
+      const next = new Map(state.entries);
+      for (const [chatId, activity] of serverActivities) {
+        const existing = next.get(chatId);
+        if (existing && watermark <= existing.seq) continue;
+        if (existing?.activity === activity && existing.seq === watermark) {
+          continue;
+        }
+        next.set(chatId, { activity, seq: watermark });
+        changed = true;
+      }
+      const maxSeenSeq = Math.max(state.maxSeenSeq, watermark);
+      if (!changed) {
+        return maxSeenSeq === state.maxSeenSeq ? state : { maxSeenSeq };
+      }
+      return {
+        entries: next,
+        activities: buildActivitiesProjection(next),
+        maxSeenSeq,
+      };
+    }),
+
+  applyChatSnapshot: (chatId, activity, baselineSeq) =>
+    set((state) => {
+      const existing = state.entries.get(chatId);
+      if (existing && baselineSeq < existing.seq) return state;
+      if (existing?.activity === activity && existing.seq === baselineSeq) {
+        return state;
+      }
+      const next = new Map(state.entries);
+      next.set(chatId, { activity, seq: baselineSeq });
+      return { entries: next, activities: buildActivitiesProjection(next) };
+    }),
 
   removeActivity: (chatId) =>
     set((state) => {
+      if (!state.entries.has(chatId)) return state;
       const next = new Map(state.entries);
       next.delete(chatId);
       return { entries: next, activities: buildActivitiesProjection(next) };
     }),
-
-  isFreshNonIdle: (chatId) => {
-    const entry = get().entries.get(chatId);
-    if (!entry || entry.activity === ChatActivity.IDLE) return false;
-    return Date.now() - entry.setAt < ANTI_DOWNGRADE_WINDOW_MS;
-  },
 }));
 
 // ============================================================================

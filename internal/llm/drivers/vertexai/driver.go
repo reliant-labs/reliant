@@ -88,7 +88,7 @@ func (c *VertexAIClient) initGeminiClient() error {
 		logging.Info("VERTEXAI_LOCATION not set, using default", "location", location)
 	}
 
-	client, err := genai.NewClient(context.Background(), &genai.ClientConfig{
+	client, err := llm.NewGenAISDKClient(context.Background(), &genai.ClientConfig{
 		Project:  project,
 		Location: location,
 		Backend:  genai.BackendVertexAI,

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,9 +13,11 @@ import (
 const authFileName = "reliant-auth.json"
 
 type persistedAuthSession struct {
-	AccessToken string `json:"access_token"`
-	User        struct {
-		ID string `json:"id"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	User         struct {
+		ID    string `json:"id"`
+		Email string `json:"email"`
 	} `json:"user"`
 }
 
@@ -78,9 +81,31 @@ func readPersistedAuthSession() (*persistedAuthSession, string, error) {
 	return nil, "", nil
 }
 
-// ReadAccessTokenFromAuthFile reads access_token from the persisted auth session.
-// Returns empty string when no auth file exists in known locations.
+// ReadAccessTokenFromAuthFile returns a VALID Supabase access token, refreshing
+// it transparently when the stored token is expired or within the staleness
+// skew (see EnsureFreshAccessToken). This is the seam every JWT-authenticated
+// CLI path composes over: resolveConnection and the other legacy-JWT call sites
+// call this and get a fresh token without knowing a refresh happened.
+//
+// Returns empty string (no error) when no auth file exists — an unauthenticated
+// machine, not a failure, so callers can keep their existing "" checks. Returns
+// ErrSessionExpired when the token is stale and cannot be refreshed (no
+// refresh_token, or the refresh endpoint rejected it); callers surface that as
+// "session expired — run `reliant auth login`". It never returns a stale token.
+//
+// For a pure, non-mutating read that must not touch the network (diagnostics
+// such as `reliant auth status`), use PeekAccessTokenFromAuthFile instead.
 func ReadAccessTokenFromAuthFile() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), refreshRequestTimeout)
+	defer cancel()
+	return EnsureFreshAccessToken(ctx)
+}
+
+// PeekAccessTokenFromAuthFile reads access_token from the persisted auth session
+// WITHOUT attempting a refresh. Use it for diagnostics that must report the
+// on-disk token exactly as stored and never mutate the file or touch the
+// network. Returns empty string when no auth file exists in known locations.
+func PeekAccessTokenFromAuthFile() (string, error) {
 	authSession, _, err := readPersistedAuthSession()
 	if err != nil {
 		return "", err

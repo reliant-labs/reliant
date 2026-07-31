@@ -15,7 +15,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 )
@@ -68,11 +67,18 @@ This is the "reliant ." command.`,
 				}
 			}
 
-			// 3. Best-effort project registration with cloud API
-			// (uses JWT access token if available — separate from daemon PAT)
-			accessToken, _ := auth.ReadAccessTokenFromAuthFile()
-			if accessToken != "" {
-				registerProject(ctx, serverURL, accessToken, projectPath)
+			// 3. Resolve the target server/gateway (context-aware). resolveServer,
+			// not resolveConnection: 'open' can legitimately run before any
+			// credential exists — it registers the daemon as part of the flow.
+			target, err := resolveServer(cmd)
+			if err != nil {
+				return err
+			}
+
+			// 4. Best-effort project registration with the cloud API, using the
+			// resolved credential when one is available.
+			if conn, connErr := resolveConnection(cmd); connErr == nil {
+				registerProject(ctx, conn, projectPath)
 			}
 
 			// 5. Start daemon (unless --no-daemon)
@@ -81,15 +87,23 @@ This is the "reliant ." command.`,
 
 			if !noDaemon {
 				// Ensure we have a PAT for daemon auth (reuse existing or create new)
-				creds, credErr := ensureDaemonCredentials(ctx, cmd, serverURL, resolveGatewayURL())
+				creds, credErr := ensureDaemonCredentials(ctx, cmd, target)
 				if credErr != nil {
 					return fmt.Errorf("daemon credential setup failed: %w", credErr)
 				}
 
 				daemonGRPCURL := creds.GatewayURL
 				if daemonGRPCURL == "" {
-					daemonGRPCURL = resolveGatewayURL()
+					daemonGRPCURL = target.GatewayURL
 				}
+				// Normalize before the scheme-keyed TLS inference below, so a
+				// grpc:// gateway (what `forge cluster urls` prints) dials as
+				// plaintext h2c instead of silently failing to connect.
+				normalizedURL, urlErr := bootstrap.NormalizeGatewayURL(daemonGRPCURL)
+				if urlErr != nil {
+					return urlErr
+				}
+				daemonGRPCURL = normalizedURL
 
 				dataDir := filepath.Join(projectPath, ".reliant", "data")
 				if err := os.MkdirAll(dataDir, 0755); err != nil {
@@ -140,22 +154,22 @@ This is the "reliant ." command.`,
 	return cmd
 }
 
-// registerProject does a best-effort POST to register the project with the cloud API.
-func registerProject(ctx context.Context, srvURL, accessToken, projectPath string) {
+// registerProject does a best-effort POST to register the project with the
+// cloud API on the resolved connection's server.
+func registerProject(ctx context.Context, conn *connection, projectPath string) {
 	projectName := filepath.Base(projectPath)
 	reqBody, err := json.Marshal(map[string]string{"name": projectName, "path": projectPath})
 	if err != nil {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", srvURL+"/api/v1/projects", bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", conn.ServerURL+"/api/v1/projects", bytes.NewReader(reqBody))
 	if err != nil {
 		return
 	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := conn.httpClient().Do(req)
 	if err != nil {
 		return
 	}

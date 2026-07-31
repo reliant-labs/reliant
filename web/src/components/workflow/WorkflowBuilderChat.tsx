@@ -13,6 +13,7 @@ import { cn } from "../../lib/utils";
 import type { Workflow } from "../../types/workflow";
 import { BaseChatInput } from "../Chat/BaseChatInput";
 import { InterleavedTimeline } from "../Chat/thread-views";
+import { sortMessagesForDisplay } from "../../lib/messageOrder";
 import { ChatMessagesContainer } from "../Chat/ChatMessagesContainer";
 import { ChatThinkingIndicator } from "../Chat/ChatThinkingIndicator";
 import { useChatStore } from "../../store/chatStore";
@@ -396,7 +397,7 @@ export function WorkflowBuilderChat({
       // Note: Auto-approve is now handled via workflow params (mode: "auto")
       // passed when creating/sending messages, not as separate toggle
       return () => {
-        unsubscribeFromChatDetails();
+        unsubscribeFromChatDetails(chatId);
       };
     }
   }, [chatId, isValidatingChat, subscribeToChatDetails, unsubscribeFromChatDetails, loadMessages]);
@@ -669,7 +670,7 @@ export function WorkflowBuilderChat({
   const handleReset = useCallback(async () => {
     // Stop websocket if running
     if (chatId) {
-      unsubscribeFromChatDetails();
+      unsubscribeFromChatDetails(chatId);
     }
     // Clear persisted chat ID from localStorage
     clearPersistedChatId(projectId, persistenceKeyRef.current);
@@ -702,8 +703,10 @@ export function WorkflowBuilderChat({
         msgs.push(streamingMsg);
       }
     }
-    return msgs;
-  }, [storeMessages, streamingMessages]);
+    // The streaming placeholder now lives only in the slice (not the store's
+    // messages array), so sort after composing to place it canonically.
+    return sortMessagesForDisplay(msgs, chatId ?? "");
+  }, [storeMessages, streamingMessages, chatId]);
 
   // Filter out tool-role messages (InterleavedTimeline renders tool results inline)
   const filteredMessages = useMemo(
