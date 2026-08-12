@@ -274,8 +274,13 @@ func TestSpawnStatus_Wait_ClampsTimeoutAboveCeiling(t *testing.T) {
 	tool := NewSpawnStatusTool(repo)
 	rc := rctx.NewToolContext(ctx, chatID, callerID, nil, nil)
 
-	require.LessOrEqual(t, spawnStatusMaxTimeout, 240*time.Second,
-		"max wait must stay under the 5m tool-execution ceiling, or the call is cancelled instead of answering")
+	// Stated against the shared constant, not a literal. toolexec's ceiling is
+	// derived from MaxBlockingToolWait with headroom, so pinning a number here
+	// only re-encodes a value that moves — this assertion said 240s and went
+	// stale (silently, because it skips without DATABASE_URL) when the budget
+	// was raised for long-running agents.
+	require.Equal(t, MaxBlockingToolWait, spawnStatusMaxTimeout,
+		"spawn_status must use the shared blocking-tool budget, or the executor ceiling derived from it no longer leaves headroom")
 
 	// Ask for an hour; the call must still return promptly because the agent
 	// is already terminal.

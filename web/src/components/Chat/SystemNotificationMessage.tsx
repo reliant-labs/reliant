@@ -33,12 +33,12 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
   const getIcon = () => {
     switch (displayStyle) {
       case DisplayStyle.WARNING:
-        return <AlertTriangle className="w-4 h-4 text-warning flex-shrink-0" />;
+        return <AlertTriangle className="w-3.5 h-3.5 text-warning flex-shrink-0" />;
       case DisplayStyle.SUCCESS:
-        return <CheckCircle className="w-4 h-4 text-success flex-shrink-0" />;
+        return <CheckCircle className="w-3.5 h-3.5 text-success flex-shrink-0" />;
       case DisplayStyle.INFO:
       default:
-        return <Info className="w-4 h-4 text-primary flex-shrink-0" />;
+        return <Info className="w-3.5 h-3.5 text-primary flex-shrink-0" />;
     }
   };
 
@@ -64,17 +64,17 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
 
   return (
     <div className={cn(
-      "rounded-md border overflow-hidden my-2 px-3 py-2",
+      "rounded-md border overflow-hidden my-0.5 px-2 py-1",
       getColorClasses()
     )}>
-      <div className="flex items-start gap-2">
+      <div className="flex items-center gap-1.5">
         {getIcon()}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-sm text-foreground">
+            <div className="text-xs leading-tight text-foreground">
               {content}
             </div>
-            <div className="text-xs text-muted-foreground flex-shrink-0">
+            <div className="text-[10px] leading-tight text-muted-foreground flex-shrink-0">
               {formatTimestamp(message.createdAt || '')}
             </div>
           </div>
