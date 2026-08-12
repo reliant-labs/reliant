@@ -35,7 +35,7 @@ type SpawnStatusParams struct {
 	Wait bool `json:"wait,omitempty" jsonschema:"description=Block until the agent reaches a terminal state (completed/failed/cancelled/expired). Requires agent_id. Ignored when listing all agents."`
 	// TimeoutSeconds bounds THIS call, not the agent's total runtime.
 	// Timing out is not an error — see bash_wait's TimeoutSeconds doc.
-	TimeoutSeconds int `json:"timeout_seconds,omitempty" jsonschema:"description=Maximum seconds to block when wait is true (default: 240, maximum: 240). Timing out does NOT stop the agent — call again to keep waiting."`
+	TimeoutSeconds int `json:"timeout_seconds,omitempty" jsonschema:"description=Maximum seconds to block when wait is true (default: 1200, maximum: 1200). Timing out does NOT stop the agent — call again to keep waiting."`
 }
 
 type SpawnStatusResponseMetadata struct {
@@ -63,12 +63,18 @@ type spawnStatusTool struct {
 const (
 	SpawnStatusToolName = "spawn_status"
 
-	// spawnStatusDefaultTimeout/MaxTimeout mirror bash_wait's: the
-	// tool-execution context cancels every tool call at 5 minutes
-	// (execute_tools.go), so 240s leaves room to return "still running,
-	// call again" instead of being cancelled mid-flight.
-	spawnStatusDefaultTimeout = 240 * time.Second
-	spawnStatusMaxTimeout     = 240 * time.Second
+	// spawnStatusDefaultTimeout/MaxTimeout are bash_wait's budget, shared via
+	// MaxBlockingToolWait so the two blocking waiters cannot drift apart:
+	// toolexec.DefaultToolTimeout is derived from that constant with headroom,
+	// so both tools return "still running, call again" before the executor
+	// cancels them mid-flight.
+	//
+	// Waiting on an AGENT is the case that made 4 minutes wrong. A background
+	// agent routinely works for tens of minutes, so a short budget turned a
+	// single "wait for my child" into a string of polls that reported nothing
+	// new each time.
+	spawnStatusDefaultTimeout = MaxBlockingToolWait
+	spawnStatusMaxTimeout     = MaxBlockingToolWait
 
 	// spawnStatusPollInterval trades responsiveness against DB chatter. The
 	// wait is server-side, so this costs no model round-trips: it is a loop
