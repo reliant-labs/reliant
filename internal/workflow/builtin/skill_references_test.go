@@ -224,7 +224,7 @@ func TestBuiltinSkillResolverRejectsNamespacedBareSkill(t *testing.T) {
 
 	// emit:forge — addressable under the namespace, and (via the
 	// component-aligned suffix rule) by the bare path forge's own CLI prints.
-	for _, namespaced := range []string{"forge/architecture", "forge/frontend/design", "forge/getting-started", "forge/proto"} {
+	for _, namespaced := range []string{"forge/architecture", "forge/frontend/design", "forge/proto"} {
 		assert.True(t, resolver.Resolve(namespaced), "%q should resolve", namespaced)
 	}
 }

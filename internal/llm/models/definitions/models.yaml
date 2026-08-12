@@ -231,6 +231,101 @@ models:
       use_max_completion_tokens: true
     default_thinking_level: xhigh
 
+  # GPT-5.6 family. These are Codex-subscription-only and use a different request
+  # envelope than GPT-5.5 and earlier (system prompt and tools ride inside `input`
+  # rather than as top-level `instructions`/`tools`). See the codex driver's
+  # buildParams and .dev/codex/SOL_PROTOCOL_NOTES.md for the wire details.
+  #
+  # They add two reasoning efforts above xhigh: `max` and `ultra`. They also
+  # return no reasoning summaries — only encrypted reasoning content — so there
+  # is no visible thinking to stream for these models.
+  - id: gpt-5.6-sol
+    name: GPT-5.6 Sol
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 272000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max, ultra]
+      supported_file_types: [image, text]
+    cost:
+      input_per_1m: 2.5
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.25
+    providers:
+      - driver: codex
+        api_model: gpt-5.6-sol
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+    default_thinking_level: low
+
+  - id: gpt-5.6-terra
+    name: GPT-5.6 Terra
+    tags: [flagship, moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 272000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max, ultra]
+      supported_file_types: [image, text]
+    cost:
+      input_per_1m: 2.5
+      output_per_1m: 15.0
+      cached_input_per_1m: 0.25
+    providers:
+      - driver: codex
+        api_model: gpt-5.6-terra
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+    default_thinking_level: medium
+
+  # Luna is the small/fast member of the family (the backend also names it as the
+  # safety-buffering "faster model"). It is deliberately NOT tagged `fast`:
+  # that tag routes @fast for the whole codex driver, and repointing it off
+  # gpt-5.3-codex-spark is a separate product decision from adding these models.
+  - id: gpt-5.6-luna
+    name: GPT-5.6 Luna
+    tags: [reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 272000
+      max_output_tokens: 128000
+      # `max` is observed working on luna in the capture. `ultra` is omitted:
+      # it is only documented for sol and terra, and was never exercised here.
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    cost:
+      input_per_1m: 1.75
+      output_per_1m: 14.0
+      cached_input_per_1m: 0.175
+    providers:
+      - driver: codex
+        api_model: gpt-5.6-luna
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+    default_thinking_level: medium
+
   - id: gpt-5.4
     name: GPT-5.4
     tags: [flagship, moderate, reasoning]

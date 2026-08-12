@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // ============================================================================
@@ -67,6 +68,23 @@ func (a *ThreadStatusActivity) Name() string {
 	return "ThreadStatus"
 }
 
+// wireStatusFromVerb maps a lifecycle verb to the status string the UI's
+// thread records use. The UI treats a thread as active on "running"/"active"
+// only (useIsThreadActive in web/src/store/threadActivityStore.ts), so
+// emitting the raw verb "started" read as NOT-active: a spawned sub-thread
+// showed no thinking indicator for its whole run, because "started" arrives
+// last and overwrites the "running" record the spawn path had already
+// written. Non-terminal verbs are normalised to "running"; terminal ones pass
+// through unchanged, since the UI compares those by name.
+func wireStatusFromVerb(verb string) string {
+	switch verb {
+	case "completed", "failed", "cancelled", "expired":
+		return verb
+	default:
+		return "running"
+	}
+}
+
 // threadStatusFromVerb maps a lifecycle verb to a stored status. Terminal
 // statuses mirror CHAT_WORKFLOW_STATUS so a thread's state is directly
 // comparable to its workflow's.
@@ -105,11 +123,59 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 		return ThreadStatusOutput{}, fmt.Errorf("failed to update thread status: %w", err)
 	}
 
+	if terminal {
+		a.resolveMailbox(ctx, input.ThreadID)
+	}
+
 	if err := a.emitThreadUpdate(ctx, input, completedAt); err != nil {
 		return ThreadStatusOutput{}, err
 	}
 
 	return ThreadStatusOutput{Success: true}, nil
+}
+
+// resolveMailbox marks a terminated thread's still-queued mailbox rows
+// undelivered, so a message that arrived too late to be drained says so
+// instead of sitting at "queued" forever.
+//
+// This is the exit point for EVERY terminal path — normal completion,
+// failure, cancellation, expiry — because every one of them reaches a
+// terminal threads.status through this single activity, and
+// threadStatusFromVerb has already decided which verbs those are. Handling
+// them here rather than at the loop's break statements is what makes the
+// coverage total instead of per-path.
+//
+// It lives in the ACTIVITY, not in workflow code, deliberately. The drain at
+// the loop-step boundary needs workflow.GetVersion (changeID
+// "agent-mailbox-drain") because it emits a command that replayed histories
+// have no record of; a second workflow-side call site would need its own
+// distinct changeID or in-flight runs would wedge with TMPRL1100. An activity
+// adds no workflow command at all, so this resolution is invisible to replay
+// and needs no gate — and since ThreadStatus is already invoked on every
+// terminal transition, it costs no additional activity dispatch either.
+//
+// Best-effort by the same rule as the drain itself: the thread's lifecycle
+// write has already landed and is the more important fact. Failing the
+// activity here would retry the whole lifecycle write to fix mailbox
+// bookkeeping, and the reconciler's own sweep is the durable backstop that
+// picks up anything missed.
+func (a *ThreadStatusActivity) resolveMailbox(ctx context.Context, threadID string) {
+	resolved, err := a.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
+	if err != nil {
+		logging.Warn("[ThreadStatus] Failed to resolve mailbox for terminated thread",
+			"threadID", threadID,
+			"error", err)
+		return
+	}
+	if resolved > 0 {
+		// ERROR, not Info: every row here is a message a human or a peer
+		// agent sent that will never be read. It is rare, it is a real loss
+		// of intent, and it is the signal that says how often this race
+		// actually fires.
+		logging.Error("[ThreadStatus] Thread exited with undelivered mailbox messages — queued after its last loop boundary",
+			"threadID", threadID,
+			"rows", resolved)
+	}
 }
 
 // emitThreadUpdate mirrors the lifecycle change onto chat_updates. The shape
@@ -128,7 +194,7 @@ func (a *ThreadStatusActivity) emitThreadUpdate(ctx context.Context, input Threa
 		"chat_id":     input.ChatID,
 		"thread":      input.ThreadID,
 		"workflow_id": input.WorkflowID,
-		"status":      input.Status,
+		"status":      wireStatusFromVerb(input.Status),
 	}
 	if input.ThreadTitle != "" {
 		updateData["thread_title"] = input.ThreadTitle

@@ -1,8 +1,13 @@
-import { createRootRoute, createRoute, createRouter, Outlet, Navigate } from '@tanstack/react-router'
+import { useEffect } from 'react'
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet, Navigate, useRouterState, useNavigate } from '@tanstack/react-router'
+import { SurfaceProvider } from './lib/surfaceContext'
+import { surfaceForPath } from './lib/surface'
+import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
+  mobileNewChatSearchSchema,
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
   proxyAuthSearchSchema,
@@ -11,24 +16,80 @@ import {
   workflowSearchSchema,
 } from './routeSchemas'
 import { ErrorFallbackUI } from './components/ErrorBoundary'
-import { AuthScreen } from './components/AuthScreen'
-import { OAuthCallback } from './components/OAuthCallback'
-import { GitHubOAuthCallback } from './components/GitHubOAuthCallback'
-import { ProxyAuth } from './components/ProxyAuth'
-import { ResetPasswordScreen } from './components/ResetPasswordScreen'
-import { EmailVerification } from './components/EmailVerification'
-import { UpgradeAccount } from './components/UpgradeAccount'
 import { AuthGuard } from './components/AuthGuard'
-import { DesignSandboxPage } from './components/DesignSandbox/DesignSandboxPage'
-import { SettingsPage } from './components/Settings/SettingsPage'
-import { WorkflowPage } from './components/workflow/WorkflowPage'
-import { OnboardingRoute } from './components/OnboardingFlow/OnboardingRoute'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
-import App from './App'
+
+// ─── Code-split route components ────────────────────────────────────────────
+//
+// Every screen below is loaded on demand. Statically importing them here is
+// what made the entry chunk the whole application: this module is imported by
+// `main.tsx`, so any component named at the top level lands in `index.js`
+// whether or not the visited route renders it. That is why /oauth/consent —
+// a lazy route with a 9.7 kB chunk of its own — still pulled ~5 MB of
+// JavaScript: the cost was in the route tree, not the route.
+//
+// The unauthenticated entry screens (AuthScreen, the OAuth callbacks,
+// ProxyAuth, ResetPassword, EmailVerification, UpgradeAccount) are split for a
+// second reason: they are frequently someone's first page load, so they should
+// not pay for the authenticated app at all.
+//
+// `AuthGuard`, the overlay components and `lib/toast` stay static — they mount
+// on every route, so deferring them would only add a waterfall.
+const AuthScreen = lazyRouteComponent(
+  () => import('./components/AuthScreen'), 'AuthScreen')
+const OAuthCallback = lazyRouteComponent(
+  () => import('./components/OAuthCallback'), 'OAuthCallback')
+const GitHubOAuthCallback = lazyRouteComponent(
+  () => import('./components/GitHubOAuthCallback'), 'GitHubOAuthCallback')
+const ProxyAuth = lazyRouteComponent(
+  () => import('./components/ProxyAuth'), 'ProxyAuth')
+const ResetPasswordScreen = lazyRouteComponent(
+  () => import('./components/ResetPasswordScreen'), 'ResetPasswordScreen')
+const EmailVerification = lazyRouteComponent(
+  () => import('./components/EmailVerification'), 'EmailVerification')
+const UpgradeAccount = lazyRouteComponent(
+  () => import('./components/UpgradeAccount'), 'UpgradeAccount')
+const DesignSandboxPage = lazyRouteComponent(
+  () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
+const SettingsPage = lazyRouteComponent(
+  () => import('./components/Settings/SettingsPage'), 'SettingsPage')
+const ConnectorConsentPage = lazyRouteComponent(
+  () => import('./components/Settings/ConnectorConsentPage'), 'ConnectorConsentPage')
+const WorkflowPage = lazyRouteComponent(
+  () => import('./components/workflow/WorkflowPage'), 'WorkflowPage')
+const OnboardingRoute = lazyRouteComponent(
+  () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
+const MobileShell = lazyRouteComponent(
+  () => import('./components/Mobile/MobileShell'), 'MobileShell')
+const MobileChatList = lazyRouteComponent(
+  () => import('./components/Mobile/MobileChatList'), 'MobileChatList')
+const MobileChatScreen = lazyRouteComponent(
+  () => import('./components/Mobile/MobileChatScreen'), 'MobileChatScreen')
+const MobileNewChat = lazyRouteComponent(
+  () => import('./components/Mobile/MobileNewChat'), 'MobileNewChat')
+const MobileDaemonList = lazyRouteComponent(
+  () => import('./components/Mobile/MobileDaemonList'), 'MobileDaemonList')
+const MobileDaemonScreen = lazyRouteComponent(
+  () => import('./components/Mobile/MobileDaemonScreen'), 'MobileDaemonScreen')
+const MobileAccountScreen = lazyRouteComponent(
+  () => import('./components/Mobile/MobileAccountScreen'), 'MobileAccountScreen')
+const MobileProjectList = lazyRouteComponent(
+  () => import('./components/Mobile/MobileProjectList'), 'MobileProjectList')
+const MobileSearchScreen = lazyRouteComponent(
+  () => import('./components/Mobile/MobileSearchScreen'), 'MobileSearchScreen')
+const MobileWorkflowCatalog = lazyRouteComponent(
+  () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
+const MobileSettingsScreen = lazyRouteComponent(
+  () => import('./components/Mobile/MobileSettingsScreen'), 'MobileSettingsScreen')
+const MobileWorkflowDetailRoute = lazyRouteComponent(
+  () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileWorkflowDetailRoute')
+const MobileChatWorkflowRoute = lazyRouteComponent(
+  () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
+const App = lazyRouteComponent(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
 // import them without dragging in the route-tree's component graph).
@@ -52,9 +113,44 @@ import App from './App'
 // page) or a small modal asking the user to navigate (wrong page). The wizard
 // gates its own visibility internally via `isWizardActive`, so mounting it
 // globally is safe on every route.
-const rootRoute = createRootRoute({
-  component: () => (
-    <>
+// The surface is resolved HERE, at the root, rather than only inside
+// MobileLayout. These overlays are siblings of <Outlet/>, so a provider
+// rendered inside the outlet sits *below* them in the tree and they read the
+// context default ("desktop") — which silently disabled the mobile guards in
+// OnboardingWizard / ContextualTipsLayer / AnonSignInNudge and left the
+// onboarding-checklist FAB floating over the phone UI, intercepting taps.
+// Deriving from the pathname keeps the overlays and the routed screen in
+// agreement. MobileLayout still provides the surface for its subtree, which is
+// harmless (same value) and keeps it self-contained for tests and embeds.
+function RootShell() {
+  const { pathname, search } = useRouterState({ select: (s) => s.location });
+  const navigate = useNavigate();
+
+  // Phones get the mobile surface. Without this the `/m/*` routes are
+  // unreachable except by typing the URL, and every phone loads the full
+  // desktop ADE — resizable sidebars, file tree, terminal tabs — at 390px.
+  //
+  // Runs on pathname change rather than once on mount so an in-app navigation
+  // out of `/m/*` (a stray link into a desktop-only route) lands back here
+  // instead of stranding the user in the desktop shell.
+  // The router's location is passed in deliberately: it commits ~17ms ahead of
+  // `window.location`, so reading the live URL here evaluated the /auth → /
+  // sign-in hop against the stale `/auth` (a preserved path) and left phones
+  // stranded on the desktop shell.
+  useEffect(() => {
+    const searchString =
+      typeof search === "string"
+        ? search
+        : new URLSearchParams(
+            search as Record<string, string>,
+          ).toString();
+    if (shouldRedirectToMobileNow({ pathname, search: searchString })) {
+      navigate({ to: "/m/chats", replace: true });
+    }
+  }, [pathname, search, navigate]);
+
+  return (
+    <SurfaceProvider surface={surfaceForPath(pathname)}>
       <Outlet />
       <ModalLayer />
       <AnonSignInNudge />
@@ -62,8 +158,12 @@ const rootRoute = createRootRoute({
       <ContextualTipsLayer />
       <GitHubSyncStatus />
       <OnboardingWizard />
-    </>
-  ),
+    </SurfaceProvider>
+  );
+}
+
+const rootRoute = createRootRoute({
+  component: RootShell,
   notFoundComponent: () => <Navigate to="/" search={{}} />,
   errorComponent: ({ error }) => (
     <ErrorFallbackUI
@@ -101,6 +201,31 @@ const githubOAuthCallbackRoute = createRoute({
   path: '/auth/github/callback',
   validateSearch: githubOAuthCallbackSearchSchema,
   component: GitHubOAuthCallback,
+})
+
+// Supabase OAuth 2.1 consent screen. Supabase's OAuth server validates the
+// authorization request and then redirects the user HERE with an
+// authorization_id, waiting for this page to approve or deny — it hosts no
+// consent UI of its own. The path must match the Authorization Path configured
+// in the Supabase dashboard (Authentication → OAuth Server), combined with the
+// project's Site URL.
+//
+// Root-level and NOT under the authenticated layout: the component checks the
+// session itself and bounces to /auth carrying the authorization_id, because a
+// layout-level redirect would drop that id and return the user to a page that
+// no longer knows what it was approving.
+const oauthConsentRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/oauth/consent',
+  // This page is reached mid-OAuth from a third-party client, often on a
+  // phone, by someone who has not otherwise opened the app — so its
+  // time-to-interactive is a step in someone else's flow rather than
+  // navigation within ours. It is also why the Monaco preload is gated off
+  // this path (see lib/monacoPreload).
+  component: lazyRouteComponent(
+    () => import('./components/Auth/OAuthConsent'),
+    'OAuthConsent',
+  ),
 })
 
 const proxyAuthRoute = createRoute({
@@ -221,6 +346,16 @@ const settingsRoute = createRoute({
   component: SettingsPage,
 })
 
+// OAuth consent: where a third-party application's user chooses which
+// connector it may act through. Under the authenticated layout, so the page
+// already knows who the user is from the existing Supabase session — no new
+// browser-auth path is needed.
+const connectorConsentRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/settings/connectors/authorize',
+  component: ConnectorConsentPage,
+})
+
 const settingsSectionRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/settings/$section',
@@ -276,19 +411,149 @@ const onboardingRoute = createRoute({
   component: OnboardingRoute,
 })
 
+// ─── Mobile surface (`/m/*`) ────────────────────────────────────────────────
+//
+// A phone-shaped surface over the same data layer, NOT a separate app: the
+// chat screen renders the very same ChatContainer the desktop uses, so every
+// subscription, stream-resume and message-merge rule is shared. What differs
+// is set by MobileLayout's <SurfaceProvider surface="mobile">, which drives
+// the capability map in lib/surface.ts.
+//
+// Gated by `authenticatedLayoutRoute` for the same reason the desktop app is.
+// Note there is no mobile *setup* onboarding: a user who has not completed
+// onboarding is redirected to `/onboarding` (see MobileShell), which is the
+// existing responsive flow — the guided *tour* is what mobile skips, because
+// it spotlights desktop chrome by DOM selector.
+const mobileLayoutRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  id: '_mobile',
+  component: MobileShell,
+})
+
+const mobileChatsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/chats',
+  component: MobileChatList,
+})
+
+const mobileChatRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/chats/$chatId',
+  component: MobileChatScreen,
+})
+
+// `/m/new` is registered BEFORE `/m/chats/$chatId` has a chance to matter —
+// they don't overlap, but keeping creation off the `/m/chats/*` prefix means a
+// future `/m/chats/new` chat can never be shadowed by this screen.
+const mobileNewChatRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/new',
+  validateSearch: mobileNewChatSearchSchema,
+  component: MobileNewChat,
+})
+
+// Daemons are view + Resume only on this surface (daemonManage: false); the
+// screens enforce that, the routes just have to exist under the shell so they
+// inherit the surface provider.
+const mobileDaemonsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/daemons',
+  component: MobileDaemonList,
+})
+
+const mobileDaemonRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/daemons/$daemonId',
+  component: MobileDaemonScreen,
+})
+
+// Identity only — sign out, and the theme. `settings` is false on this surface
+// and stays false; `mobileAccount` is the separate, narrower capability that
+// keeps a phone user from being stranded in an account they can't leave.
+const mobileAccountRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/account',
+  component: MobileAccountScreen,
+})
+
+const mobileProjectsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/projects',
+  component: MobileProjectList,
+})
+
+const mobileSearchRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/search',
+  component: MobileSearchScreen,
+})
+
+// The catalog is the route-level workflow surface; MobileWorkflowScreen is the
+// per-workflow detail view, reached from here and from a running chat, and it
+// takes a resolved Workflow rather than an id.
+const mobileWorkflowsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/workflows',
+  component: MobileWorkflowCatalog,
+})
+
+const mobileSettingsRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/settings',
+  component: MobileSettingsScreen,
+})
+
+// Both of these existed as links before they existed as routes — every
+// workflow card and the chat header's execution pill rendered "Not Found".
+const mobileWorkflowDetailRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/workflows/$workflowName',
+  component: MobileWorkflowDetailRoute,
+})
+
+const mobileChatWorkflowRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/chats/$chatId/workflow',
+  component: MobileChatWorkflowRoute,
+})
+
+// `/m` is an alias for the chat list — the list is the mobile home screen.
+const mobileIndexRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/m',
+  component: () => <Navigate to="/m/chats" />,
+})
+
 const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
   githubOAuthCallbackRoute,
+  oauthConsentRoute,
   proxyAuthRoute,
   resetPasswordRoute,
   verifyEmailRoute,
   upgradeRoute,
   designSandboxRoute,
   projectPickerRedirectRoute,
+  mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
+    mobileLayoutRoute.addChildren([
+      mobileChatsRoute,
+      mobileChatRoute,
+      mobileNewChatRoute,
+      mobileDaemonsRoute,
+      mobileDaemonRoute,
+      mobileAccountRoute,
+      mobileProjectsRoute,
+      mobileSearchRoute,
+      mobileWorkflowsRoute,
+      mobileWorkflowDetailRoute,
+      mobileChatWorkflowRoute,
+      mobileSettingsRoute,
+    ]),
     onboardingRoute,
     settingsRoute,
+    connectorConsentRoute,
     settingsSectionRoute,
     workflowHubRoute,
     workflowNewRoute,

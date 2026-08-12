@@ -50,6 +50,7 @@ import {
 } from "@opentelemetry/api";
 import * as Sentry from "@sentry/react";
 import { logger } from "../lib/logger";
+import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
@@ -90,50 +91,26 @@ const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   return await next(req);
 };
 
-// Auth interceptor to add JWT token to requests.
+// Auth interceptor to add a bearer token to requests.
 //
-// Supabase is imported lazily so this module can be safely pulled in by
-// `grpc-unauth.ts` (used during the pre-auth DevAuth bootstrap). A static
-// import would create a cycle: supabase → devAuth (grpc-unauth) → transport
-// → supabase.
+// The token source is pluggable — see `api/authProvider.ts`. The default
+// provider reproduces the historical inline behavior (API key from
+// localStorage first, then the Supabase session, with Supabase imported
+// lazily to break the `supabase → devAuth (grpc-unauth) → transport` cycle).
+// Native shells and embedders swap in their own provider at bootstrap.
 const authInterceptor: Interceptor = (next) => async (req) => {
-  // Check for API key auth first (stored by ApiKeyLogin)
-  const apiKey =
-    typeof localStorage !== "undefined"
-      ? localStorage.getItem("reliant-api-key")
-      : null;
-  if (apiKey) {
-    req.header.set("Authorization", `Bearer ${apiKey}`);
-    logger.info("[gRPC Client] API key auth set for request:", {
+  const token = await getAuthTokenProvider().getToken();
+
+  if (token) {
+    req.header.set("Authorization", `Bearer ${token}`);
+    logger.info("[gRPC Client] Auth token set for request:", {
       method: req.method.name,
+      tokenLength: token.length,
     });
-    return await next(req);
-  }
-
-  try {
-    const { supabase } = await import("../lib/supabase");
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (session?.access_token) {
-      req.header.set("Authorization", `Bearer ${session.access_token}`);
-      logger.info("[gRPC Client] Auth token set for request:", {
-        method: req.method.name,
-        tokenLength: session.access_token.length,
-      });
-    } else {
-      logger.warn("[gRPC Client] No auth token available for request:", {
-        method: req.method.name,
-        hasSession: !!session,
-        isElectron:
-          typeof window !== "undefined" ? !!window.electronAPI : false,
-      });
-    }
-  } catch (error) {
-    logger.error("[gRPC Client] Error getting session in interceptor:", {
+  } else {
+    logger.warn("[gRPC Client] No auth token available for request:", {
       method: req.method.name,
-      error: error instanceof Error ? error.message : String(error),
+      isElectron: typeof window !== "undefined" ? !!window.electronAPI : false,
     });
   }
 
@@ -185,6 +162,11 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   // Provider API key validation - external network call
   ValidateProviderAPIKey: PROVIDER_VALIDATION_TIMEOUT_MS,
   UpdateProviderAPIKey: PROVIDER_VALIDATION_TIMEOUT_MS,
+  // Control-plane CloneRepo: NATS request/reply to the daemon with a 60s
+  // server-side timeout (gitcredential.svc.Clone), then a real `git clone`
+  // subprocess on large repos. WORKTREE_OPERATION_TIMEOUT_MS gives headroom
+  // above that 60s floor rather than introducing a third "git op" constant.
+  CloneRepo: WORKTREE_OPERATION_TIMEOUT_MS,
 
   // Streaming methods should not have client-side timeout
   // These are server-streaming RPCs that manage their own lifecycle via AbortController
@@ -453,7 +435,26 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
 // - Only fires when a session/API key is currently set (no sign-in→sign-out loops).
 // - Single-flight: a burst of parallel 401s triggers exactly one sign-out.
 // - Skipped on /auth so a 401 there doesn't trigger a redirect to itself.
+//
+// The guard is released on a timer rather than left latched for the redirect to
+// tear down. Assuming the navigation always happens is what turned a single bad
+// token into an unbounded loop once Electron's will-navigate handler cancelled
+// the redirect: the page survived, so nothing ever reset the flag or stopped the
+// dead session from firing. Re-arming after a delay means that if the redirect
+// does land the timer dies with the page, and if it is blocked we retry at a
+// bounded rate instead of hammering or wedging permanently.
+const SIGN_OUT_RETRY_MS = 10_000;
 let _signOutInFlight = false;
+
+function releaseSignOutGuard(delayMs = SIGN_OUT_RETRY_MS) {
+  if (typeof window === "undefined") {
+    _signOutInFlight = false;
+    return;
+  }
+  window.setTimeout(() => {
+    _signOutInFlight = false;
+  }, delayMs);
+}
 const unauthInterceptor: Interceptor = (next) => async (req) => {
   try {
     return await next(req);
@@ -466,21 +467,10 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
       throw error;
     }
 
-    let hasSession =
-      typeof localStorage !== "undefined"
-        ? !!localStorage.getItem("reliant-api-key")
-        : false;
-    if (!hasSession) {
-      try {
-        const { supabase } = await import("../lib/supabase");
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        hasSession = !!session?.access_token;
-      } catch {
-        // Fall through with hasSession=false; nothing to clear.
-      }
-    }
+    // Deliberately `hasSession()` rather than `getToken()`: this only needs to
+    // know whether a session is believed active, and a burst of 401s must not
+    // stampede the provider's refresh path.
+    const hasSession = await getAuthTokenProvider().hasSession();
     if (!hasSession) throw error;
 
     _signOutInFlight = true;
@@ -514,6 +504,9 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
       !window.location.pathname.startsWith("/auth")
     ) {
       window.location.href = "/auth";
+      // If the navigation lands, this page (and timer) are gone. If something
+      // cancels it, the guard re-arms so we neither spin nor wedge.
+      releaseSignOutGuard();
     } else {
       _signOutInFlight = false;
     }

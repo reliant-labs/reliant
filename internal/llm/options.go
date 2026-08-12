@@ -33,6 +33,14 @@ func WithMaxTokens(maxTokens int64) DriverOption {
 	}
 }
 
+// WithForceToolChoice pins the request to a single named tool. See
+// DriverOptions.ForceToolChoice for the one-shot-only constraint.
+func WithForceToolChoice(name string) DriverOption {
+	return func(o *DriverOptions) {
+		o.ForceToolChoice = name
+	}
+}
+
 // WithDisableCache disables caching for Anthropic
 func WithDisableCache() DriverOption {
 	return func(c *DriverOptions) {
@@ -42,17 +50,21 @@ func WithDisableCache() DriverOption {
 
 // WithReasoningEffort sets the reasoning/thinking effort level.
 //
-// Accepted levels: "low", "medium", "high", "xhigh". Empty (the UI's "Auto"
-// choice — preferences that don't pin a level store "") and "auto" mean "no
-// explicit preference" and auto-select the default (medium) silently.
-// "off"/"none"/"disabled" normalize to "disabled", which drivers recognize as
-// thinking-off. Only genuinely invalid values warn (with the offending value)
-// before falling back to medium.
+// Accepted levels are models.KnownThinkingLevels ("low" through "ultra");
+// per-model support is enforced upstream by the model's declared
+// thinking_levels, not here. Empty (the UI's "Auto" choice — preferences that
+// don't pin a level store "") and "auto" mean "no explicit preference" and
+// auto-select the default (medium) silently. "off"/"none"/"disabled" normalize
+// to "disabled", which drivers recognize as thinking-off. Only genuinely
+// invalid values warn (with the offending value) before falling back to medium.
 func WithReasoningEffort(effort string) DriverOption {
 	return func(options *DriverOptions) {
-		switch normalized := strings.ToLower(strings.TrimSpace(effort)); normalized {
-		case "low", "medium", "high", "xhigh":
+		normalized := strings.ToLower(strings.TrimSpace(effort))
+		if models.IsKnownThinkingLevel(normalized) {
 			options.ReasoningEffort = normalized
+			return
+		}
+		switch normalized {
 		case "", "auto":
 			// Auto/unset: default without warning.
 			options.ReasoningEffort = "medium"

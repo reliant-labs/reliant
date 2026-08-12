@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -199,6 +200,19 @@ func (c *VertexAIClient) convertMessagesToGemini(messages []message.Message) []*
 				Role:  string(genai.RoleUser),
 				Parts: parts,
 			})
+
+		case message.System:
+			// Gemini takes system instructions via SystemInstruction, so a
+			// System message in HISTORY (compaction summary, branch note,
+			// mailbox envelope) is delivered as a user turn instead — the same
+			// treatment the direct Gemini driver gives it. Without this case it
+			// falls through the switch and is dropped.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				contents = append(contents, &genai.Content{
+					Role:  string(genai.RoleUser),
+					Parts: []*genai.Part{{Text: fmt.Sprintf("<system>\n%s\n</system>", systemText)}},
+				})
+			}
 
 		case message.Assistant:
 			var parts []*genai.Part

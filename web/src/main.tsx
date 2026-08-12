@@ -12,6 +12,7 @@ import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 // Initialize OpenTelemetry tracing (no-op if VITE_OTEL_EXPORTER_OTLP_ENDPOINT is not set)
 initOTelTracing();
 import { monacoManager } from "./lib/monacoManager";
+import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
 // globalDataStore prefetch is now called from AuthGuard after authentication
 
@@ -64,10 +65,19 @@ if (!isConfigReady()) {
 
 // Pre-initialize Monaco in the background (non-blocking)
 // Monaco will be ready by the time the user opens a code editor/diff view
-logger.info('[Main] 🚀 Pre-initializing Monaco Editor (background)...');
-monacoManager.getMonaco().catch((error) => {
-  logger.error('[Main] ❌ Monaco pre-initialization FAILED:', error);
-});
+//
+// Skipped on the mobile surface and on unauthenticated entry routes such as
+// /oauth/consent — see lib/monacoPreload for why each is excluded. Reading the
+// pathname rather than the router is deliberate: this runs before React
+// mounts, and the predicate is pure.
+if (shouldPreloadMonaco(window.location.pathname)) {
+  logger.info('[Main] 🚀 Pre-initializing Monaco Editor (background)...');
+  monacoManager.getMonaco().catch((error) => {
+    logger.error('[Main] ❌ Monaco pre-initialization FAILED:', error);
+  });
+} else {
+  logger.info('[Main] ⏭️  Skipping Monaco pre-initialization (non-desktop surface)');
+}
 
 // NOTE: Static data prefetch moved to AuthGuard.tsx to run AFTER authentication is ready
 // This prevents 401 errors when prefetch runs before auth token is available

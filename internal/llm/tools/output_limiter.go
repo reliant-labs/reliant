@@ -85,6 +85,14 @@ func CapSkillContent(content string) (string, bool) {
 }
 
 // skillTruncationNotice renders the marker appended to a truncated skill.
+//
+// The recovery instruction names the skill tool's own parameters. It used to
+// say "read the skill's SKILL.md directly from disk", which is not an action
+// the reader can take: skills reach the agent through the config pipeline —
+// embedded in a binary, or synced from a daemon that may not share the
+// filesystem — so the named path frequently does not exist on the machine
+// running the tool. An unactionable instruction is what pushed agents to shell
+// out to `sed -n` and page by hand.
 func skillTruncationNotice(total, dropped int) string {
 	return fmt.Sprintf(`
 
@@ -93,13 +101,15 @@ The text above is only the first %d bytes of this skill. It does NOT end where
 it appears to end. Everything after that point was not delivered — including,
 if this skill has them, its sub-skill list, related-skill pointers and
 suggested-tools list.
-To recover the missing content, read the skill's SKILL.md directly from disk
-(look under .claude/skills/ or .reliant/skills/) instead of relying on this
-result, and treat any instruction that seems to be cut off as incomplete.
-This skill exceeds the %d-byte delivery budget and should be split at its
-source into smaller skills.
+To read the rest, call the skill tool again with a window:
+  action="load", offset=%d          continue from where this text stops
+  action="load", section="<heading>"  fetch one section by name
+  action="load", regex="<pattern>"    find the relevant lines first
+Treat any instruction that seems to be cut off as incomplete until you have
+fetched the remainder. This skill exceeds the %d-byte delivery budget and
+should also be split at its source into smaller skills.
 === END SKILL TRUNCATION NOTICE ===
-`, dropped, total, total-dropped, MaxSkillBodySize)
+`, dropped, total, total-dropped, total-dropped, MaxSkillBodySize)
 }
 
 // OutputLimitError is returned when output exceeds the maximum allowed size

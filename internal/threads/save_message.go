@@ -113,7 +113,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 			ThreadID:              opts.Thread,
 			Sequence:              newSeq,
 			ParentContextWindowID: &parentCWID, // Link to previous CW for chain traversal
-			ForkAtOrdinal:         nil,         // Compaction is not a branch
+			ForkAtMessageID:       nil,         // Compaction is not a branch
 			CreatedAt:             now(),
 		}
 		// Try to create - if it exists (idempotent retry), just use it
@@ -168,6 +168,12 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 			return fmt.Errorf("failed to get next ordinal: %w", err)
 		}
 
+		// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
+		seq, err := s.repo.GetNextSeq(txCtx, opts.ChatID, opts.Thread)
+		if err != nil {
+			return fmt.Errorf("failed to get next seq: %w", err)
+		}
+
 		timestamp := now()
 		messageID := uuid.New().String()
 		if opts.MessageID != "" {
@@ -179,6 +185,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 			ID:              messageID,
 			ChatID:          opts.ChatID,
 			Ordinal:         ordinal,
+			Seq:             seq,
 			ThreadID:        opts.Thread,
 			ContextWindowID: cw.ID,
 			Role:            reliantv1.MessageRole(opts.Role),
@@ -204,7 +211,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		}
 
 		// Emit chat_update for frontend
-		if err := s.emitChatUpdate(txCtx, opts, messageID, ordinal, cw.Sequence, threadTokenCount, timestamp); err != nil {
+		if err := s.emitChatUpdate(txCtx, opts, messageID, ordinal, seq, cw.Sequence, threadTokenCount, timestamp); err != nil {
 			return err
 		}
 
@@ -545,44 +552,29 @@ func (s *Service) createSystemContentBlocks(ctx context.Context, messageID strin
 }
 
 // emitChatUpdate emits a chat_update for the frontend.
-func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, messageID string, ordinal int64, contextSequence int, threadTokenCount int, timestamp time.Time) error {
+func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, messageID string, ordinal int64, seq int64, contextSequence int, threadTokenCount int, timestamp time.Time) error {
 	// Fetch content blocks
 	blocks, err := s.repo.ListContentBlocks(ctx, messageID)
 	if err != nil {
 		return fmt.Errorf("failed to list content blocks for chat_update: %w", err)
 	}
 
-	// Build content blocks array and collect attachment IDs
-	contentBlocks := []map[string]interface{}{}
-	attachmentIDs := []string{}
-	for _, block := range blocks {
-		blockData := map[string]interface{}{
-			"id":    block.ID,
-			"type":  block.BlockType,
-			"index": block.Position,
+	// One serializer for a block's wire shape, shared with every other path
+	// that emits a live message update (db.ContentBlockPayloads). This is the
+	// PRIMARY live path: when it open-coded its own copy of the loop, a spawn's
+	// tool-call block shipped without the child_workflow_id that names the
+	// thread it owns, and the spawn's preview had nothing to render for the
+	// whole run.
+	toolCallsByID := make(map[string]*db.ToolCall)
+	if calls, err := s.repo.ListToolCallsByMessageIDs(ctx, []string{messageID}); err != nil {
+		slog.Warn("failed to load tool calls for chat_update", "error", err, "message_id", messageID)
+	} else {
+		for _, call := range calls {
+			toolCallsByID[call.ID] = call
 		}
-
-		if block.Content != nil {
-			blockData["content"] = *block.Content
-			if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE {
-				attachmentIDs = append(attachmentIDs, *block.Content)
-			}
-		}
-		if block.ToolName != nil {
-			blockData["tool_name"] = *block.ToolName
-		}
-		if block.ToolInput != nil {
-			blockData["input"] = *block.ToolInput
-		}
-		if block.ToolCallID != nil {
-			blockData["tool_call_id"] = *block.ToolCallID
-		}
-		if block.IsError != nil {
-			blockData["is_error"] = *block.IsError
-		}
-
-		contentBlocks = append(contentBlocks, blockData)
 	}
+	contentBlocks := db.ContentBlockPayloadsWithToolCalls(blocks, toolCallsByID)
+	attachmentIDs := db.AttachmentIDsFromBlocks(blocks)
 
 	// Fetch attachment metadata
 	attachments := []map[string]interface{}{}
@@ -615,27 +607,33 @@ func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, mess
 	}
 
 	// Build update data
-	updateData := map[string]interface{}{
-		"update_type":          "message",
-		"id":                   messageID,
-		"role":                 opts.Role,
-		"ordinal":              ordinal,
-		"thread":               opts.Thread,
-		"context_sequence":     contextSequence,
-		"created_at":           timestamp.Format("2006-01-02T15:04:05.999999999Z07:00"),
-		"updated_at":           timestamp.Format("2006-01-02T15:04:05.999999999Z07:00"),
-		"content_blocks":       contentBlocks,
-		"attachments":          attachments,
-		"thread_token_count":   threadTokenCount,
-		"compaction_threshold": DefaultCompactionThreshold,
+	compactionThreshold := DefaultCompactionThreshold
+	// seq is the chat-global order the client sorts by. This is the primary
+	// live-message path, so omitting it means every message a user sends or
+	// receives arrives with seq 0 and sorts to the TOP of the transcript
+	// instead of the bottom — delivered, but rendered where nobody looks.
+	updateData := db.MessageUpdateData{
+		UpdateType:          "message",
+		ID:                  messageID,
+		Role:                opts.Role,
+		Seq:                 seq,
+		Ordinal:             ordinal,
+		Thread:              opts.Thread,
+		ContextSequence:     &contextSequence,
+		CreatedAt:           timestamp.Format("2006-01-02T15:04:05.999999999Z07:00"),
+		UpdatedAt:           timestamp.Format("2006-01-02T15:04:05.999999999Z07:00"),
+		ContentBlocks:       contentBlocks,
+		Attachments:         &attachments,
+		ThreadTokenCount:    &threadTokenCount,
+		CompactionThreshold: &compactionThreshold,
 	}
 
 	// Add optional fields
 	if opts.DisplayStyle != 0 {
-		updateData["display_style"] = opts.DisplayStyle
+		updateData.DisplayStyle = &opts.DisplayStyle
 	}
 	if opts.TokenCount > 0 {
-		updateData["token_count"] = opts.TokenCount
+		updateData.TokenCount = &opts.TokenCount
 	}
 
 	// Marshal and emit

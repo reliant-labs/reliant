@@ -1,5 +1,8 @@
 import { createRef } from "react";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+// FileTree shows the shared machine-wait state, which reads daemon status
+// through React Query — so it needs a provider the way the real app has one.
+import { renderWithQuery as render } from "../../test/renderWithQuery";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import type { FileNode } from "./index";
 

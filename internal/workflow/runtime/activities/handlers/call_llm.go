@@ -78,24 +78,24 @@ type streamProcessingState struct {
 // CallLLMActivity implements the call_llm activity.
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
-	repo               db.Repository
-	hub                streaming.StreamingHub
-	toolsFactory       *tools.ToolsFactory
-	configProvider     cfgpkg.ConfigProvider
-	driverResolver     drivers.DriverResolver
-	mcpBinder          toolexec.MCPContextBinder
+	repo           db.Repository
+	hub            streaming.StreamingHub
+	toolsFactory   *tools.ToolsFactory
+	configProvider cfgpkg.ConfigProvider
+	driverResolver drivers.DriverResolver
+	mcpBinder      toolexec.MCPContextBinder
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
 // The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
 func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
 	return &CallLLMActivity{
-		repo:               repo,
-		hub:                hub,
-		toolsFactory:       toolsFactory,
-		configProvider:     cfgProvider,
-		driverResolver:     resolver,
-		mcpBinder:          mcpBinder,
+		repo:           repo,
+		hub:            hub,
+		toolsFactory:   toolsFactory,
+		configProvider: cfgProvider,
+		driverResolver: resolver,
+		mcpBinder:      mcpBinder,
 	}
 }
 
@@ -164,7 +164,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		if v := model.CelStringValue(args.GetThinkingLevel()); v != "" {
 			tl := ThinkingLevel(v)
 			if !tl.IsValid() {
-				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
+				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: %s)", tl, strings.Join(models.KnownThinkingLevels, ", "))
 			}
 		}
 	}
@@ -462,7 +462,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		availableTools = []tools.Tool{}
 	} else {
 		toolFilter := model.CelStringListValue(tc.GetFilter())
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, toolFilter, thread)
+		// spawn_send is only meaningful to an agent that has a counterpart to
+		// message: a sub-agent replying to the parent that spawned it, or an
+		// orchestrator actually configured to spawn children. A plain root
+		// agent has neither, so offering it there is pure tool-surface noise on
+		// every request.
+		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
+		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, toolFilter, thread, mailboxReachable)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -637,12 +644,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		seededMsgs, injectedSkills, oversizedSkills, missingSkills := buildSeededSkillMessages(projectCfg, requestedSkills)
 		preloadedSkillNames = injectedSkills
 		catalogSize := 0
+		snapshotSynced := false
 		if projectCfg != nil {
 			catalogSize = len(projectCfg.Skills)
+			snapshotSynced = projectCfg.SnapshotSynced
 		}
-		// A miss has two causes and only one is worth failing over — see
+		// Retryable only while no daemon has pushed a snapshot — see
 		// preloadSkillMissError, which is where that split lives and is tested.
-		if err := preloadSkillMissError(catalogSize, requestedSkills, missingSkills); err != nil {
+		if err := preloadSkillMissError(snapshotSynced, catalogSize, requestedSkills, missingSkills); err != nil {
 			return nil, err
 		}
 		if len(missingSkills) > 0 {
@@ -863,6 +872,21 @@ streamLoop:
 	// Combine all thinking parts
 	thinkingText := strings.Join(streamState.thinkingParts, "")
 
+	// Thinking is the ONLY output field whose loss is silent: an empty
+	// CallLLMOutput.Thinking is indistinguishable (proto3 omits zero values,
+	// and step_executor backfills the key with an empty map) from "this turn
+	// did not think". Downstream that means no thinking block is persisted and
+	// none is replayed next turn, which breaks the provider's cached prefix.
+	// Log what actually reached the output boundary so a future regression is
+	// one grep rather than another packet capture.
+	activity.GetLogger(ctx).Info("[CallLLM] Thinking captured",
+		"chatID", chat.ID,
+		"thread", thread,
+		"thinkingLen", len(thinkingText),
+		"signatureLen", len(streamState.thinkingSignature),
+		"thinkingParts", len(streamState.thinkingParts),
+	)
+
 	toolCalls := streamState.toolCalls
 
 	// Attach spawn presets to spawn tool calls for preset validation in ExecuteTools.
@@ -972,7 +996,7 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 // getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
 // Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
 // Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, projectCfg *cfgpkg.Config, toolFilter []string, _ string) toolsWithSpawnResult {
+func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, projectCfg *cfgpkg.Config, toolFilter []string, _ string, mailboxReachable bool) toolsWithSpawnResult {
 	if a.toolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
@@ -1137,6 +1161,31 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		}
 	}
 
+	// spawn_send must reach a depth-1 sub-agent talking back to its parent
+	// (spec §4.4), but the "spawn" virtual tool it travels alongside is gated
+	// off entirely at max spawn depth and a sub-agent's own preset filter was
+	// never written with a mailbox tool in mind. So grant it the way load_tool
+	// is granted above — except only where there is actually a counterpart to
+	// message (mailboxReachable), since a root agent that cannot spawn has
+	// nobody to send to. It remains subject to the same permission gate every
+	// other tool goes through in execute_tools (MinimumPermissionForTool is
+	// PermissionMutating for spawn_send, so a readonly/plan-mode agent still
+	// cannot use it even though the schema is offered).
+	if mailboxReachable {
+		spawnSendPresent := false
+		for _, t := range toolsList {
+			if t.Name() == tools.ToolSpawnSend {
+				spawnSendPresent = true
+				break
+			}
+		}
+		if !spawnSendPresent {
+			if st := projectScopedToolsFactory.SpawnSend(); st != nil {
+				toolsList = append(toolsList, st)
+			}
+		}
+	}
+
 	sort.Slice(toolsList, func(i, j int) bool {
 		return toolsList[i].Name() < toolsList[j].Name()
 	})
@@ -1217,9 +1266,9 @@ func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, co
 
 	presetList := strings.Join(presetDescriptions, "\n")
 
-	description := fmt.Sprintf(`Spawn a sub-workflow to delegate tasks. The spawned workflow runs in a separate thread and its result will be returned to you.
+	description := fmt.Sprintf(`Spawn a sub-agent to delegate a task. The call returns a handle IMMEDIATELY — it does not block. The spawned agent's result is NOT in this tool call's result; you are notified in a later turn when it finishes. You stay free to read files, edit, plan, and spawn more agents while it runs, and because work discovered mid-run can join an in-flight fan-out, you do not have to plan all your parallelism up front.
 
-PARALLELISM — spawns are SYNCHRONOUS, not async: a single spawn call BLOCKS until that sub-workflow finishes and returns. To run sub-agents IN PARALLEL you MUST emit MULTIPLE spawn calls in a SINGLE assistant turn (one tool-use block containing several spawn tool_calls) — they then execute concurrently and all results come back together. If you spawn one, wait for its result, then spawn the next, they run SERIALLY (slow). So batch every independent unit of work into ONE turn and spawn them all at once.
+While a spawned agent runs you can steer and observe it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight.
 
 Available presets:
 %s
@@ -1701,6 +1750,38 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 // trackLLMCallCompleted fires an analytics event after each LLM API call.
 func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error) {
 	model := driver.Model()
+
+	// Per-call usage, logged next to the latency that produced it. This is the
+	// only place both are in hand, and without it a stalled turn is
+	// unattributable: "[CallLLM] Completed" carries a single summed
+	// tokenCount, which cannot distinguish a 200k prompt served from cache
+	// (fast) from the same 200k prompt re-read in full (slow). cacheReadPct is
+	// the at-a-glance answer — a long thread sitting near 0% is re-reading its
+	// whole prefix every turn.
+	//
+	// Providers whose drivers don't populate the cache split report 0; see
+	// llm.TokenUsage. Logged for failures too — a stall that ends in an error
+	// still tells you how much prompt was processed first.
+	cachedIn := usage.CacheReadInputTokens + usage.CacheCreationInputTokens
+	promptTotal := usage.InputTokens + cachedIn
+	cacheReadPct := 0
+	if promptTotal > 0 {
+		cacheReadPct = int(usage.CacheReadInputTokens * 100 / promptTotal)
+	}
+	logging.Info("[CallLLM] Usage",
+		"chatID", chat.ID,
+		"provider", driver.Name(),
+		"model", string(model.ID),
+		"latencyMs", latencyMs,
+		"success", streamErr == nil,
+		"promptTokens", promptTotal,
+		"inputTokens", usage.InputTokens,
+		"outputTokens", usage.OutputTokens,
+		"cacheReadTokens", usage.CacheReadInputTokens,
+		"cacheCreationTokens", usage.CacheCreationInputTokens,
+		"cacheReadPct", cacheReadPct,
+		"totalTokens", usage.TokenCount,
+	)
 	metrics := analytics.LLMCallMetrics{
 		Provider:    driver.Name(),
 		Model:       string(model.ID),
@@ -1988,29 +2069,36 @@ calls as a mistake you need to correct.
 // preloadSkillMissError decides whether preloaded skills that did not resolve
 // fail the call, and returns nil when the call must proceed instead.
 //
-// A miss has two causes, and only one of them is worth failing over.
+// Only one cause is worth failing over, and the deciding fact is whether a
+// daemon has PUSHED a config snapshot — not whether the catalog is empty.
 //
-// An EMPTY catalog is TRANSIENT: the project-config snapshot has not filled
-// yet. One run went 37 -> 86 -> 114 entries across three consecutive turns,
-// silently dropping `db` and `forge/proto` from the very turns that chose the
-// proto surface and authored the migrations. Erroring here lets Temporal retry,
-// and the next attempt is warm — the failure repairs itself and the node gets
-// what it asked for.
+// UNSYNCED is TRANSIENT: the daemon has not answered yet, so the catalog is
+// empty for a reason the next attempt can fix. One run went 37 -> 86 -> 114
+// entries across three consecutive turns, silently dropping `db` and
+// `forge/proto` from the very turns that chose the proto surface and authored
+// the migrations. Erroring here lets Temporal retry against a warm snapshot.
 //
-// A NON-EMPTY catalog that does not hold the path is PERMANENT. No number of
-// retries conjures the skill, so failing would spend the whole retry budget to
-// kill a run over what is usually a charter typo. The caller warns instead, and
-// the seed tells the model exactly what it did not get (see
-// buildSeededSkillMessages) so it proceeds knowingly rather than either
-// assuming guidance it lacks or hunting a skill that does not exist.
-func preloadSkillMissError(catalogSize int, requested, missing []string) error {
-	if len(missing) == 0 || catalogSize > 0 {
+// Anything SYNCED is PERMANENT, whether the catalog is empty or merely lacks
+// the path. No number of retries conjures the skill, so failing would spend the
+// whole retry budget to kill a run over what is usually a charter typo. The
+// caller warns instead, and the seed tells the model exactly what it did not
+// get (see buildSeededSkillMessages) so it proceeds knowingly rather than
+// either assuming guidance it lacks or hunting a skill that does not exist.
+//
+// Keying on emptiness alone is what made a config snapshot that could never
+// arrive look like one that had not arrived YET: an unsynced-forever project
+// failed every attempt with a message promising a retry that could not help.
+// The daemon only re-sends a snapshot whose content hash CHANGED
+// (runProjectWatcher), so a snapshot the server drops is never re-offered —
+// there is no "wait longer" that resolves it.
+func preloadSkillMissError(snapshotSynced bool, catalogSize int, requested, missing []string) error {
+	if len(missing) == 0 || snapshotSynced {
 		return nil
 	}
 	return fmt.Errorf(
-		"preload skills: skill catalog is empty, so none of the %d requested skills resolved (%v) — "+
-			"the project config snapshot has not filled yet; retrying",
-		len(requested), missing)
+		"preload skills: no daemon has pushed a config snapshot for this project yet, so none of "+
+			"the %d requested skills resolved (%v) against the %d-entry catalog; retrying",
+		len(requested), missing, catalogSize)
 }
 
 // buildSeededSkillMessages resolves each requested skill path against the project
@@ -2026,19 +2114,27 @@ func preloadSkillMissError(catalogSize int, requested, missing []string) error {
 // Skills are deduped by resolved skill name (two paths that resolve to the same
 // skill inject once); empty-body / unresolvable paths are skipped.
 //
-// Each body is passed through tools.CapSkillContent — the SAME ceiling the
-// ToolWrapper applies when the agent loads a skill by hand. Without it the two
+// Each body is passed through tools.DeliverSkillContent — the SAME renderer the
+// skill tool uses when the agent loads a skill by hand. Without it the two
 // delivery paths disagree: a hand-load of an oversize skill arrives capped
 // while the seed injects the whole file, so the preloaded copy is both larger
 // than the model would ever get on its own and permanently resident in the
-// cached prefix of every turn. Capping here keeps the seeded body byte-identical
-// to the hand-loaded one, and CapSkillContent's notice makes any drop explicit
-// to the model instead of letting a skill quietly end mid-sentence.
+// cached prefix of every turn. Sharing the renderer keeps the seeded body
+// byte-identical to the hand-loaded one, and its report makes any drop explicit
+// instead of letting a skill quietly end mid-sentence.
 //
-// The turn is a USER turn, not a System one: the OpenAI-compatible driver family
-// (reliant, openai, openrouter) has no message.System case in ConvertMessages
-// and drops System history messages on the floor, so a System-role seed would be
-// a silent no-op on the very provider this preload exists to serve.
+// A preloaded skill that was truncated is just as unreachable as a hand-loaded
+// one, so the report names the skill-tool call that fetches the remainder. The
+// text is deterministic per skill, so the seeded prefix stays byte-stable and
+// prompt-cacheable across turns.
+//
+// The turn is a USER turn, not a System one. The original reason was a bug —
+// the OpenAI-compatible family had no message.System case and dropped System
+// history on the floor — and that bug is now fixed in every converter. The
+// choice stands on its own merits: a preloaded skill body is context the agent
+// is meant to treat as its own working knowledge, and attributing it to a user
+// turn (with preloadedSkillsPreamble naming who loaded it) reads correctly to
+// the model, where a system note would read as an instruction it must obey.
 //
 // Returns the seeded messages, the list of injected skill names, the names of
 // any skills that had to be truncated, and the requested paths that did NOT
@@ -2095,7 +2191,7 @@ func buildSeededSkillMessages(projectCfg *cfgpkg.Config, skillPaths []string) (m
 		seen[name] = true
 		injectedNames = append(injectedNames, name)
 
-		capped, wasTruncated := tools.CapSkillContent(body)
+		capped, wasTruncated := tools.DeliverSkillContent(path, body)
 		if wasTruncated {
 			oversizedNames = append(oversizedNames, name)
 		}
@@ -2245,30 +2341,30 @@ func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string
 }
 
 // ============================================================================
-// MESSAGE HISTORY REPAIR (Layer 3 - In-Memory Fallback)
+// MESSAGE HISTORY REPAIR (in-memory, at the prompt-assembly boundary)
 // ============================================================================
-//
-// This function provides in-memory fallback repair for orphaned tool calls.
-// It is Layer 3 of the repair strategy - used when DB-level repairs aren't possible.
-//
-// See db_helpers.go LoadMessagesForLLM for the full layered repair strategy.
 
-// repairMessageHistory validates message history and ensures tool_results appear
-// IMMEDIATELY after their corresponding tool_calls. The Anthropic API requires this
-// strict ordering - ALL tool_results for an assistant message's tool_calls must be
-// in the message immediately following that assistant message.
+// repairMessageHistory rewrites a history so that every assistant tool_use has a
+// matching tool_result in the message IMMEDIATELY after it — the adjacency the
+// Anthropic API requires, not merely presence somewhere later.
 //
-// This is Layer 3 of the repair strategy (last resort fallback). It operates in-memory
-// only and doesn't persist repairs. It handles edge cases that Layer 1 (CleanupActivity)
-// and Layer 2 (repairOrphanedToolCalls) can't handle:
-// - Inherited messages from parent chats (where we can't modify the parent)
-// - Mid-conversation orphans (where ordinal insertion is complex)
-// - Race conditions or other transient issues
+// This is the ONLY repair that runs on the read path, and it is deliberately
+// in-memory: it never writes to the database. It exists for orphans we cannot
+// legitimately fix at rest — chiefly a fork/branch whose cut point falls between
+// an assistant message and its tool message, where the inherited rows belong to
+// the parent conversation and must not be rewritten. See the failure-policy note
+// on convertAndRepairMessages in db_helpers.go for the full rationale.
+//
+// Every repair is logged. These are not routine: each one means a conversation
+// reached this point in a state the schema and CleanupActivity were supposed to
+// prevent, and silence here is what let that go unnoticed before.
 //
 // This handles:
-// 1. Missing tool_results (creates synthetic ones)
-// 2. Misplaced tool_results (moves them to correct position)
-// 3. Partial tool_results (adds missing ones)
+//  1. Missing tool_results (creates synthetic ones)
+//  2. Misplaced tool_results (moves them to the required adjacent position)
+//  3. Partial tool_results (adds only the missing ones)
+//  4. Orphaned tool_results whose tool_use is gone (drops them — a result the
+//     model never asked for is itself a provider error)
 func repairMessageHistory(msgs []message.Message) []message.Message {
 	if len(msgs) == 0 {
 		return msgs
@@ -2350,7 +2446,14 @@ func repairMessageHistory(msgs []message.Message) []message.Message {
 					// Use existing result
 					toolResults = append(toolResults, existing)
 				} else {
-					// Create synthetic result
+					// Synthesize the missing result. Loud on purpose: reaching
+					// here means a tool call never got a recorded outcome, and
+					// the model is about to be told the outcome is unknown.
+					logging.Warn("[repairMessageHistory] Synthesizing missing tool_result for orphaned tool_call",
+						"tool_call_id", tc.ID,
+						"tool_name", tc.Name,
+						"assistant_message_id", msg.ID,
+					)
 					toolResults = append(toolResults, message.ToolResult{
 						ToolCallID: tc.ID,
 						Name:       tc.Name,

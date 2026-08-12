@@ -178,7 +178,7 @@ describe('transport call sites', () => {
     // http(s), so getControlPlaneTransport returns null and DaemonRegistry/
     // DaemonToken fall through to the same-origin getTransport() — their
     // `reliant.v1.*` paths are proxied to reliant-api, CORS-free. jsdom's
-    // window.location.protocol is "http:", so useSameOriginTransport() is true
+    // window.location.protocol is "http:", so isSameOriginTransport() is true
     // here. The absolute VITE_CONTROL_PLANE_API_URL is never used as a transport
     // baseUrl in this mode (it stays the proxy target + hasControlPlane gate).
     vi.stubEnv('VITE_CONTROL_PLANE_API_URL', 'https://cp.example.test')

@@ -46,3 +46,11 @@ sql:
             nullable: true
             go_type:
               type: "sql.NullFloat64"
+          # tool_calls.input is the schema's only jsonb column. sqlc's default
+          # for a nullable jsonb is pqtype.NullRawMessage, which would pull in
+          # github.com/sqlc-dev/pqtype as a new dependency for this one column;
+          # []byte carries the same value (nil == SQL NULL) without it.
+          - column: "tool_calls.input"
+            go_type:
+              type: "byte"
+              slice: true

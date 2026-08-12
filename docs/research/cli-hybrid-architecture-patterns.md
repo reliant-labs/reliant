@@ -346,7 +346,7 @@ Three proven patterns:
 
 **Recommendation for Reliant** (given we already have a local server):
 - **WebSocket or HTTP on localhost** with dynamic port (already our pattern)
-- **Port discovery via `.env.ports`** (already our pattern)
+- **Port discovery via `.dev-ports.sh`** (already our pattern)
 - Docker's context pattern is worth adopting: `reliant context` to switch between local/remote instances
 
 ### Pattern 4: Project Context Discovery
@@ -374,7 +374,7 @@ Three proven patterns:
 | VS Code Remote | SSH connection | Auto-install on first connect | Process check | Reconnect logic |
 
 **Recommendation for Reliant**:
-- **Discovery**: Check `.env.ports` → attempt HTTP health check
+- **Discovery**: Check `.dev-ports.sh` → attempt HTTP health check
 - **Auto-start**: If daemon not running, start it (like Docker Desktop)
 - **Health**: HTTP `/health` endpoint (simple, debuggable with curl)
 - **Process supervision**: launchd plist on macOS, systemd unit on Linux

@@ -358,6 +358,106 @@ func (s *WorktreeService) CreateWorktree(
 	// becomes <HOME>/.reliant/worktrees/<workspaceID>[/<sub_path>].
 	workspaceID := worktreepath.WorkspaceDirName(project.Name, req.Msg.Name)
 
+	// An idempotency key makes a retry safe. Creation returns before the work
+	// finishes, so a client that loses the response cannot tell "failed" from
+	// "succeeded, reply dropped" — without this the natural retry produces a
+	// second workspace with a second on-disk checkout.
+	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
+		existing, err := s.database.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
+		if err != nil {
+			logging.Error("Failed to check worktree idempotency key", "error", err)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+		}
+		if existing != nil {
+			return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
+				Worktree: worktreeToProto(existing),
+			}), nil
+		}
+	}
+
+	// Persist the row BEFORE any daemon work, then return. Creation spans
+	// 30-120s across repos, and holding the response open for that long meant
+	// a client disconnect (a phone backgrounding, a dropped network) cancelled
+	// the request context and aborted the work mid-flight — including the
+	// rollback that was supposed to clean up the half-created state, which is
+	// how orphaned directories were left on the daemon.
+	//
+	// Path is empty until the daemon reports where it landed; the row carries
+	// CREATING so callers render a pending workspace rather than a broken one.
+	worktreeID := uuid.New().String()
+	now := time.Now().UTC()
+	var chatID *string
+	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
+		chatID = req.Msg.ChatId
+	}
+	var idempotencyKey *string
+	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
+		idempotencyKey = req.Msg.IdempotencyKey
+	}
+	worktree := &db.Worktree{
+		ID:             worktreeID,
+		Name:           req.Msg.Name,
+		Branch:         req.Msg.Branch,
+		BaseBranch:     globalBase,
+		ProjectID:      project.ID,
+		ChatID:         chatID,
+		DaemonID:       &ownerDaemonID,
+		IdempotencyKey: idempotencyKey,
+		Status:         int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING),
+		CreatedAt:      now,
+		UpdatedAt:      now,
+		LastActive:     now,
+	}
+	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
+		logging.Error("Failed to create worktree row", "error", err)
+		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
+			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; enable force to override", req.Msg.Name))
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+	}
+
+	// Detached from the request context so the work survives the client going
+	// away — that is the entire point of the change. Auth values and tracing
+	// carry over; only cancellation is severed. The explicit timeout is what
+	// keeps this from outliving a stuck daemon forever.
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeCreateBudget)
+	// The goroutine mutates its worktree as the create settles, while this
+	// function is still reading the same struct to build the response. Hand it
+	// a copy so the two never touch the same memory.
+	pending := *worktree
+	go func() {
+		defer cancel()
+		s.finishWorktreeCreate(bgCtx, userID, project, repos, &pending, req.Msg, ownerDaemonID, workspaceID, globalBase, sourceWorkspace)
+	}()
+
+	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
+		Worktree: worktreeToProto(worktree),
+	}), nil
+}
+
+// worktreeCreateBudget bounds the detached creation goroutine. Generous
+// because it covers every repo in a multi-repo project sequentially, but
+// finite: without it a wedged daemon would leak a goroutine and leave the row
+// in CREATING forever.
+const worktreeCreateBudget = 10 * time.Minute
+
+// finishWorktreeCreate performs the daemon-side worktree creation and settles
+// the row to ACTIVE or FAILED. It runs on a context detached from the client
+// request; nothing here may assume a caller is still listening.
+func (s *WorktreeService) finishWorktreeCreate(
+	ctx context.Context,
+	userID string,
+	project *db.Project,
+	repos []*core.Repo,
+	worktree *db.Worktree,
+	msg *reliantv1.CreateWorktreeRequest,
+	ownerDaemonID string,
+	workspaceID string,
+	globalBase string,
+	sourceWorkspace string,
+) {
+	req := struct{ Msg *reliantv1.CreateWorktreeRequest }{Msg: msg}
+
 	type repoCreateResult struct {
 		repo         *core.Repo
 		worktreePath string
@@ -365,7 +465,10 @@ func (s *WorktreeService) CreateWorktree(
 	}
 	successes := make([]repoCreateResult, 0, len(repos))
 
-	rollback := func(reason error) error {
+	// The row is kept as FAILED rather than deleted: a workspace that silently
+	// never appears is indistinguishable from a bug, whereas a visible failed
+	// row can be retried or dismissed.
+	fail := func(reason error) {
 		for _, s2 := range successes {
 			repoPath := filepath.Join(project.Path, s2.repo.RelativePath)
 			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
@@ -373,7 +476,13 @@ func (s *WorktreeService) CreateWorktree(
 				"worktree_path": s2.worktreePath,
 			}, nil)
 		}
-		return reason
+		logging.Error("Worktree creation failed", "error", reason, "worktreeID", worktree.ID)
+		worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+		worktree.UpdatedAt = time.Now().UTC()
+		if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
+			logging.Error("Failed to mark worktree failed", "error", err, "worktreeID", worktree.ID)
+		}
+		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 	}
 
 	var workspaceRoot string
@@ -433,11 +542,13 @@ func (s *WorktreeService) CreateWorktree(
 		}, &createResp)
 		if err != nil {
 			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			return nil, rollback(connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)))
+			fail(fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err))
+			return
 		}
 		if !createResp.Success {
 			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
-			return nil, rollback(s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, repoBase))
+			fail(s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, repoBase))
+			return
 		}
 
 		// First successful create gives us the absolute workspace root.
@@ -484,39 +595,38 @@ func (s *WorktreeService) CreateWorktree(
 		baseBranches = nil
 	}
 
-	worktreeID := uuid.New().String()
-	now := time.Now().UTC()
-	var chatID *string
-	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
-		chatID = req.Msg.ChatId
-	}
-	worktree := &db.Worktree{
-		ID:           worktreeID,
-		Name:         req.Msg.Name,
-		Path:         workspaceRoot,
-		Branch:       req.Msg.Branch,
-		BaseBranch:   displayBase,
-		BaseBranches: baseBranches,
-		ProjectID:    project.ID,
-		ChatID:       chatID,
-		DaemonID:     &ownerDaemonID,
-		Status:       int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		LastActive:   now,
-	}
-	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
-		logging.Error("Failed to create worktree row", "error", err)
-		_ = rollback(nil)
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; enable force to override", req.Msg.Name))
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
-	}
+	// Settle the row the handler already inserted. The daemon is the only
+	// source of the resolved path and base branches, so those are unknown
+	// until now — which is why the CREATING row carries an empty path.
+	worktree.Path = workspaceRoot
+	worktree.BaseBranch = displayBase
+	worktree.BaseBranches = baseBranches
+	worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+	worktree.UpdatedAt = time.Now().UTC()
+	worktree.LastActive = worktree.UpdatedAt
 
-	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
-		Worktree: worktreeToProto(worktree),
-	}), nil
+	if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
+		// The checkouts exist on disk but the row cannot record them, so the
+		// directories would be unreachable. Tear them down and mark failed.
+		fail(fmt.Errorf("failed to record worktree: %w", err))
+		return
+	}
+	s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
+}
+
+// emitWorktreeChanged tells connected clients a worktree's state settled.
+//
+// This rides `user_updates`, which is a sequenced Postgres table replayed on
+// reconnect via `sinceSeq` — not a fire-and-forget signal. That is what makes
+// asynchronous creation safe on a phone: an app backgrounded through the whole
+// 30-120s create reconnects and receives the completion it slept through.
+func (s *WorktreeService) emitWorktreeChanged(ctx context.Context, userID, projectID, worktreeID string) {
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
+		ProjectID:  &projectID,
+		WorktreeID: &worktreeID,
+	}); err != nil {
+		logging.Error("Failed to emit worktree refetch", "error", err, "worktreeID", worktreeID)
+	}
 }
 
 func firstNonEmpty(values ...string) string {
@@ -1024,8 +1134,8 @@ func (s *WorktreeService) archiveWorktreeChats(ctx context.Context, userID strin
 	for _, chat := range chats {
 		if chat.WorktreeID != nil && *chat.WorktreeID == worktree.ID {
 			// Cancel workflow if running (best-effort)
-			if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-				_ = s.tempClient.CancelWorkflow(ctx, *chat.WorkflowID, "")
+			if workflowID := chat.MainThreadID(); workflowID != "" {
+				_ = s.tempClient.CancelWorkflow(ctx, workflowID, "")
 			}
 			if err := s.database.UpdateChatState(ctx, chat.ID, db.ChatStateArchived, "worktree_archived"); err != nil {
 				logging.Warn("Failed to archive chat", "error", err, "chatID", chat.ID)

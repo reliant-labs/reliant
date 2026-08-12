@@ -14,6 +14,16 @@ enum WorktreeStatus {
   WORKTREE_STATUS_COMPLETED = 2;
   WORKTREE_STATUS_ABANDONED = 3;
   WORKTREE_STATUS_MERGING = 4;
+  // CREATING is written before any daemon work starts, so CreateWorktree can
+  // return immediately and the caller has a row to render. Creation spans
+  // 30-120s across repos; holding the response open for that long meant a
+  // client that disconnected (a phone backgrounding, a flaky network) killed
+  // the request context and aborted the work mid-flight.
+  WORKTREE_STATUS_CREATING = 5;
+  // FAILED records a creation that did not complete. The row is deliberately
+  // kept rather than deleted: a visible failure the user can retry or dismiss
+  // is more honest than a workspace that silently never appears.
+  WORKTREE_STATUS_FAILED = 6;
 }
 
 // WorktreeService handles worktree-related operations
@@ -145,6 +155,12 @@ message CreateWorktreeRequest {
   // base_branches overrides base_branch on a per-repo basis. Key is repo_id.
   // Missing/empty entry -> fall back to base_branch -> fall back to repo default.
   map<string, string> base_branches = 9;
+  // idempotency_key makes a retried create safe. Creation is asynchronous, so
+  // a client that loses the response has no way to tell "it failed" from "it
+  // succeeded and the reply was dropped" — without this, the natural retry
+  // produces a second workspace. Repeat the same key to get the existing row
+  // back instead.
+  optional string idempotency_key = 10;
 }
 
 // CreateWorktreeResponse returns the created workspace-level worktree.

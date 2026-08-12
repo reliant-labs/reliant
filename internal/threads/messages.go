@@ -20,7 +20,7 @@ import (
 //  1. Get messages from the current context window
 //  2. If CW has CompactionSummaryMessageID, return just its messages (compaction boundary)
 //  3. If CW has ParentContextWindowID, recursively resolve parent CW
-//  4. If CW has ForkAtOrdinal (it's a branch), filter parent messages by that ordinal
+//  4. If CW has ForkAtMessageID (it's a branch), filter parent messages at that message
 //  5. Return parent messages + current messages
 func (s *Service) ResolveMessages(ctx context.Context, opts ResolveMessagesOpts) ([]*db.Message, error) {
 	if opts.ThreadID == "" {
@@ -50,7 +50,32 @@ func (s *Service) ResolveMessages(ctx context.Context, opts ResolveMessagesOpts)
 
 // resolveMessagesFromCW recursively resolves messages by following the context window chain.
 // This is the core resolution algorithm that uses ParentContextWindowID to traverse.
+// resolveOpts controls how far back the CW chain walk goes.
+type resolveOpts struct {
+	// crossCompaction continues past a compaction boundary instead of stopping
+	// at it.
+	//
+	// The two consumers of this walk want different things from a compaction.
+	// The LLM wants to STOP: the summary message replaces everything before it,
+	// and replaying the summarized turns as well would both duplicate the
+	// content and blow the context budget the compaction existed to reclaim.
+	// The transcript wants to CONTINUE: those turns are the user's history, they
+	// are still on disk, and hiding them makes a compacted chat look like it
+	// begins mid-sentence.
+	//
+	// Conflating the two truncated the UI. A branched chat that was later
+	// compacted showed 19 messages instead of ~1,755, because the compaction
+	// boundary sat between the branch's own context window and the one carrying
+	// the fork link to its parent -- so the walk stopped before it ever reached
+	// the inherited history.
+	crossCompaction bool
+}
+
 func (s *Service) resolveMessagesFromCW(ctx context.Context, cw *db.ContextWindow, maxOrdinal *int64, visited map[string]bool) ([]*db.Message, error) {
+	return s.resolveMessagesFromCWOpts(ctx, cw, maxOrdinal, visited, resolveOpts{})
+}
+
+func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextWindow, maxOrdinal *int64, visited map[string]bool, opts resolveOpts) ([]*db.Message, error) {
 	if cw == nil {
 		return []*db.Message{}, nil
 	}
@@ -63,18 +88,18 @@ func (s *Service) resolveMessagesFromCW(ctx context.Context, cw *db.ContextWindo
 
 	// FORK-DEBUG: Log CW chain traversal
 	var parentCWID string
-	var forkOrdinal int64
+	var forkMessageID string
 	if cw.ParentContextWindowID != nil {
 		parentCWID = *cw.ParentContextWindowID
 	}
-	if cw.ForkAtOrdinal != nil {
-		forkOrdinal = *cw.ForkAtOrdinal
+	if cw.ForkAtMessageID != nil {
+		forkMessageID = *cw.ForkAtMessageID
 	}
 	logging.Info("[FORK-DEBUG] resolveMessagesFromCW visiting CW",
 		"cwID", cw.ID,
 		"threadID", cw.ThreadID,
 		"parentContextWindowID", parentCWID,
-		"forkAtOrdinal", forkOrdinal,
+		"forkAtMessageID", forkMessageID,
 		"sequence", cw.Sequence)
 
 	// Get messages in this context window
@@ -83,8 +108,10 @@ func (s *Service) resolveMessagesFromCW(ctx context.Context, cw *db.ContextWindo
 		return nil, fmt.Errorf("failed to get messages for CW %s: %w", cw.ID, err)
 	}
 
-	// If this CW has a compaction summary, it contains all prior context - stop here
-	if cw.CompactionSummaryMessageID != nil {
+	// A compaction summary stands in for everything before it. For LLM context
+	// that is the whole point, so stop. For the transcript the summarized turns
+	// are still real history the user expects to scroll to, so continue.
+	if cw.CompactionSummaryMessageID != nil && !opts.crossCompaction {
 		return messages, nil
 	}
 
@@ -96,38 +123,60 @@ func (s *Service) resolveMessagesFromCW(ctx context.Context, cw *db.ContextWindo
 		}
 
 		// Recursively resolve parent (no maxOrdinal filter for parent - we'll filter below if branching)
-		parentMsgs, err := s.resolveMessagesFromCW(ctx, parentCW, nil, visited)
+		parentMsgs, err := s.resolveMessagesFromCWOpts(ctx, parentCW, nil, visited, opts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve parent CW: %w", err)
 		}
 
-		// If we branched (not compacted), filter parent messages by fork ordinal
-		// The ForkAtOrdinal only applies to messages from the DIRECT parent CW.
-		// Messages inherited by the parent from its ancestors are already filtered.
-		if cw.ForkAtOrdinal != nil {
-			forkOrdinal := *cw.ForkAtOrdinal
-			parentCWID := *cw.ParentContextWindowID
-			var filtered []*db.Message
-			for _, msg := range parentMsgs {
-				if msg.ContextWindowID == parentCWID {
-					// Message is from direct parent's context window - apply fork ordinal filter
-					if msg.Ordinal <= forkOrdinal {
-						filtered = append(filtered, msg)
-					}
-				} else {
-					// Message is inherited from grandparent+ - already filtered, include as-is
+		// A chained CW that isn't a compaction boundary (handled above) is
+		// always a fork -- Compact always sets CompactionSummaryMessageID, so
+		// reaching here with ParentContextWindowID set means ForkThread built
+		// this CW. Cut the parent's history at the fork message. The cut only
+		// applies to messages from the DIRECT parent CW; messages the parent
+		// inherited from its own ancestors were already filtered when the
+		// parent resolved them, so they pass through.
+		//
+		// ForkAtMessageID is nil when the fork's parent had no messages at
+		// fork time (forking an empty thread) -- there is no message to
+		// reference, and the correct result is the same as if there were one
+		// at negative ordinal: nothing from the direct parent CW is included.
+		//
+		// The comparison is on Seq (the chat-global order every read path
+		// uses) rather than the fork message's position within its thread.
+		// Inside a single context window the two orders are identical, and
+		// the ContextWindowID gate below is what confines the comparison to
+		// that window -- without the gate a chat-global seq would also sweep
+		// in messages from sibling threads of the same chat.
+		var forkSeq int64 = -1
+		if cw.ForkAtMessageID != nil {
+			forkMsg, err := s.repo.GetMessage(ctx, *cw.ForkAtMessageID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get fork message %s for CW %s: %w", *cw.ForkAtMessageID, cw.ID, err)
+			}
+			forkSeq = forkMsg.Seq
+		}
+		parentCWID := *cw.ParentContextWindowID
+		var filtered []*db.Message
+		for _, msg := range parentMsgs {
+			if msg.ContextWindowID == parentCWID {
+				// Message is from direct parent's context window - apply fork filter
+				if msg.Seq <= forkSeq {
 					filtered = append(filtered, msg)
 				}
+			} else {
+				// Message is inherited from grandparent+ - already filtered, include as-is
+				filtered = append(filtered, msg)
 			}
-			// FORK-DEBUG: Log filtered parent messages
-			logging.Info("[FORK-DEBUG] resolveMessagesFromCW filtered parent messages",
-				"cwID", cw.ID,
-				"forkOrdinal", forkOrdinal,
-				"parentMsgsBefore", len(parentMsgs),
-				"parentMsgsAfter", len(filtered),
-				"localMessages", len(messages))
-			parentMsgs = filtered
 		}
+		// FORK-DEBUG: Log filtered parent messages
+		logging.Info("[FORK-DEBUG] resolveMessagesFromCW filtered parent messages",
+			"cwID", cw.ID,
+			"forkAtMessageID", cw.ForkAtMessageID,
+			"forkSeq", forkSeq,
+			"parentMsgsBefore", len(parentMsgs),
+			"parentMsgsAfter", len(filtered),
+			"localMessages", len(messages))
+		parentMsgs = filtered
 
 		return append(parentMsgs, messages...), nil
 	}
@@ -189,6 +238,25 @@ func (s *Service) ResolveMessagesFromCW(ctx context.Context, contextWindowID str
 // context windows appear as part of the current thread for display purposes.
 // The underlying CW chain (logical thread) handles resolution, but callers
 // see a unified visual thread without false "agent handoff" indicators.
+// LoadRecentMessages returns the most recent `limit` messages of the thread's
+// visual thread, for display paths that only need a window (the initial chat
+// snapshot). It is the tail of LoadCurrentMessages' result, so fork, compaction
+// and visual-thread normalization semantics are identical by construction — a
+// suffix of the correct resolution is still correctly resolved.
+//
+// Do NOT use this for LLM context assembly: a truncated context window is not
+// the same conversation. That path must keep calling LoadCurrentMessages.
+func (s *Service) LoadRecentMessages(ctx context.Context, threadID string, limit int) ([]*db.Message, error) {
+	messages, err := s.LoadCurrentMessages(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if limit > 0 && len(messages) > limit {
+		messages = messages[len(messages)-limit:]
+	}
+	return messages, nil
+}
+
 func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*db.Message, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
@@ -203,18 +271,18 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 
 	// FORK-DEBUG: Log LoadCurrentMessages start
 	var parentCWID string
-	var forkAtOrdinal int64
+	var forkAtMessageID string
 	if latestCW.ParentContextWindowID != nil {
 		parentCWID = *latestCW.ParentContextWindowID
 	}
-	if latestCW.ForkAtOrdinal != nil {
-		forkAtOrdinal = *latestCW.ForkAtOrdinal
+	if latestCW.ForkAtMessageID != nil {
+		forkAtMessageID = *latestCW.ForkAtMessageID
 	}
 	logging.Info("[FORK-DEBUG] LoadCurrentMessages called",
 		"threadID", threadID,
 		"latestCWID", latestCW.ID,
 		"parentContextWindowID", parentCWID,
-		"forkAtOrdinal", forkAtOrdinal,
+		"forkAtMessageID", forkAtMessageID,
 		"sequence", latestCW.Sequence)
 
 	// Use the recursive CW chain resolution with cycle detection
@@ -229,26 +297,87 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 		"threadID", threadID,
 		"totalMessages", len(messages),
 		"cwsVisited", len(visited))
-	// Get the thread to retrieve its workflow ID for normalization
+
+	return s.normalizeVisualThread(ctx, threadID, messages), nil
+}
+
+// LoadDisplayMessages resolves a thread's full visible history for the
+// TRANSCRIPT, continuing past compaction boundaries.
+//
+// This is deliberately not LoadCurrentMessages. That function stops at a
+// compaction summary because the summary replaces the turns before it, which is
+// correct for LLM context and wrong for the UI: those turns are still on disk
+// and the user expects to scroll to them.
+//
+// The distinction is load-bearing for branched chats. A branch's fork link to
+// its parent lives on its FIRST context window, so once the branch compacts,
+// the compaction boundary sits between the newest window and the one carrying
+// that link. Stopping at the boundary therefore hides not just the summarized
+// turns but the entire inherited parent history: one real chat showed 19
+// messages instead of ~1,755.
+//
+// Do NOT use this to build LLM context — replaying summarized turns alongside
+// their summary duplicates content and defeats the compaction.
+func (s *Service) LoadDisplayMessages(ctx context.Context, threadID string) ([]*db.Message, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
+
+	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
+	if err != nil {
+		// No context window yet - thread has no messages.
+		return []*db.Message{}, nil
+	}
+
+	visited := make(map[string]bool)
+	messages, err := s.resolveMessagesFromCWOpts(ctx, latestCW, nil, visited, resolveOpts{
+		crossCompaction: true,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return s.normalizeVisualThread(ctx, threadID, messages), nil
+}
+
+// LoadRecentDisplayMessages is the bounded form of LoadDisplayMessages: the
+// newest `limit` messages of the thread's visible history. A suffix of a
+// correct resolution is still correctly resolved, so fork, compaction and
+// visual-thread semantics are identical by construction.
+//
+// Use this for the initial snapshot; use LoadDisplayMessages when the whole
+// transcript is needed. Neither is safe for LLM context.
+func (s *Service) LoadRecentDisplayMessages(ctx context.Context, threadID string, limit int) ([]*db.Message, error) {
+	messages, err := s.LoadDisplayMessages(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if limit > 0 && len(messages) > limit {
+		messages = messages[len(messages)-limit:]
+	}
+	return messages, nil
+}
+
+// normalizeVisualThread stamps every message's ChatID/ThreadID/WorkflowID to
+// the requesting thread's own values -- the "visual thread" concept.
+// Inherited messages from parent context windows appear as part of the
+// current thread/chat for display purposes, so the UI doesn't show a false
+// "agent handoff" when viewing a branched chat. Shared by every resolution
+// path (full and bounded) so the display contract stays identical.
+func (s *Service) normalizeVisualThread(ctx context.Context, threadID string, messages []*db.Message) []*db.Message {
 	thread, err := s.repo.GetThread(ctx, threadID)
 	if err != nil {
 		// Thread might not exist yet - just normalize ThreadID without WorkflowID
 		for _, msg := range messages {
 			msg.ThreadID = threadID
 		}
-		return messages, nil
+		return messages
 	}
 
-	// Normalize to visual thread: all messages appear as part of the requesting thread/workflow
-	// This is a display concern - inherited messages should show as part of this thread/workflow
-	// to avoid false "agent handoff" indicators in the UI when viewing branched chats.
-	// ChatID must also be normalized so inherited messages from parent chats don't appear
-	// with the wrong chat ID in the frontend.
 	for _, msg := range messages {
-		msg.ChatID = thread.ConversationID
+		msg.ChatID = thread.ChatID
 		msg.ThreadID = threadID
 		msg.WorkflowID = thread.WorkflowID
 	}
-
-	return messages, nil
+	return messages
 }

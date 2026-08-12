@@ -418,6 +418,18 @@ message CompactArgs {
 
   // Field 1 removed (triggering_message — never read at runtime).
   reserved 1;
+
+  // Model used to summarize the conversation. Wire the agent loop's own model
+  // here: summarizing a thread with a SMALLER-window model than the one that
+  // filled it cannot work, because the history that tripped the compaction
+  // threshold by definition does not fit the smaller window. Unset falls back
+  // to the built-in summarization tier list.
+  CelModelSelector model = 2 [(reliant) = {
+    description: "Model used to summarize the conversation (defaults to the built-in summarization tier)"
+    label: "Model"
+    placeholder: "e.g. flagship, fast, cheap, or explicit model ID"
+    category: "Model"
+  }];
 }
 
 // ApprovalArgs configures an approval node — pauses for user approval.

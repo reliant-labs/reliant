@@ -49,6 +49,7 @@ func InitialToolsForPermission(permission string) []string {
 		ShellToolName,
 		ToolBashList,
 		ToolBashOutput,
+		ToolBashWait,
 		ToolBashKill,
 	}
 
@@ -74,7 +75,13 @@ func InitialToolsForPermission(permission string) []string {
 // MinimumPermissionForTool returns the minimum permission level required to load a tool.
 // Uses tool tags from the registry to determine the level.
 func MinimumPermissionForTool(toolName string) string {
-	// Explicit orchestrator-only tools
+	// Explicit orchestrator-only tools.
+	//
+	// spawn_status is deliberately NOT here. An agent that already holds a
+	// handle to a sub-agent it spawned needs no extra privilege to look at
+	// that sub-agent or talk to it, and gating it above the tier a sub-agent
+	// actually runs at only produced a warning on a tool the model was
+	// correctly reaching for.
 	if toolName == "spawn" || toolName == ToolAgent {
 		return PermissionOrchestrator
 	}

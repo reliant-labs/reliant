@@ -101,11 +101,16 @@ describe('grpc-client auth interceptor', () => {
 
     expect(req.header.get('Authorization')).toBeNull()
     expect(next).toHaveBeenCalledTimes(1)
+    // The interceptor now resolves a token through the pluggable
+    // AuthTokenProvider (see api/authProvider.ts) rather than reading the
+    // Supabase session inline, so it can no longer distinguish "no session"
+    // from "session without a token" — it only knows there is no token. The
+    // contract this test protects is unchanged: no Authorization header, the
+    // request still proceeds, and the miss is logged.
     expect(mocks.logger.warn).toHaveBeenCalledWith(
       '[gRPC Client] No auth token available for request:',
       expect.objectContaining({
         method: 'GetProviderStatuses',
-        hasSession: false,
       })
     )
   })

@@ -126,11 +126,37 @@ func TestLastThreadActivityByChat(t *testing.T) {
 	ctx := context.Background()
 
 	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+
+	// Messages reference a chat, a thread and a context window by foreign key,
+	// so the fixture has to build the rows it implies rather than inserting a
+	// message into empty space.
+	for _, chatID := range []string{"chat-a", "chat-b"} {
+		createActivityTestChat(t, repo, chatID)
+	}
+	for _, spec := range []struct{ threadID, chatID string }{
+		{"thread-busy", "chat-a"},
+		{"thread-quiet", "chat-a"},
+		{"thread-other", "chat-b"},
+	} {
+		if _, err := repo.CreateThread(ctx, &Thread{
+			ID:        spec.threadID,
+			ChatID:    spec.chatID,
+			CreatedAt: base,
+		}); err != nil {
+			t.Fatalf("create thread %s: %v", spec.threadID, err)
+		}
+	}
+	if _, err := rawDB.ExecContext(ctx,
+		`INSERT INTO context_windows (id, thread_id, sequence, created_at) VALUES ('cw-1', 'thread-busy', 0, $1)`,
+		base); err != nil {
+		t.Fatalf("insert context window: %v", err)
+	}
+
 	insert := func(id, chatID, threadID string, ordinal int, at time.Time) {
 		t.Helper()
 		_, err := rawDB.ExecContext(ctx,
-			`INSERT INTO messages (id, chat_id, ordinal, thread_id, context_window_id, role, created_at, updated_at)
-			 VALUES ($1, $2, $3, $4, 'cw-1', 2, $5, $5)`, id, chatID, ordinal, threadID, at)
+			`INSERT INTO messages (id, chat_id, ordinal, seq, thread_id, context_window_id, role, created_at, updated_at)
+			 VALUES ($1, $2, $3, $3, $4, 'cw-1', 2, $5, $5)`, id, chatID, ordinal, threadID, at)
 		if err != nil {
 			t.Fatalf("insert message %s: %v", id, err)
 		}

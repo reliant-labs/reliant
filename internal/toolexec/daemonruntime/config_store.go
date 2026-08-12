@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/config"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/config"
 )
 
 // filesystemConfigStore implements config.StoredConfigStore by reading config

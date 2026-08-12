@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -91,7 +92,7 @@ func (s *ChatService) BranchChat(
 			foundToolMsg := false
 			for _, msg := range messages {
 				// Tool message should be in the same context window as the assistant message
-				if msg.Ordinal > branchPointMsg.Ordinal &&
+				if msg.Seq > branchPointMsg.Seq &&
 					msg.Role == reliantv1.MessageRole_MESSAGE_ROLE_TOOL &&
 					msg.ContextWindowID == branchPointMsg.ContextWindowID {
 					branchPointMsg = msg
@@ -198,12 +199,6 @@ func (s *ChatService) BranchChat(
 		LastMessageAt:  sourceChat.LastMessageAt, // Inherit from source chat
 	}
 
-	// Create the branched chat
-	if err := s.database.CreateChat(ctx, branchChat); err != nil {
-		logging.Error("Failed to create branched chat", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create branch"))
-	}
-
 	// Determine workflow name - inherit from source chat or use user's default
 	var workflowName string
 	if sourceChat.WorkflowName != nil && *sourceChat.WorkflowName != "" {
@@ -223,39 +218,88 @@ func (s *ChatService) BranchChat(
 		CreatedAt:    time.Now().UTC(),
 	}
 
-	// Create workflow and thread atomically using CreateWorkflowWithThread
-	// This is a cross-conversation fork (parent thread in different conversation)
-	// The service extracts thread, CW, and ordinal from the branch point message
-	_, _, _, err = s.threads.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
-		Workflow:        rootWorkflow,
-		ThreadID:        branchWorkflowID,
-		ChatID:          branchChatID,
-		ForkFromMessage: &branchPointMsg.ID,
-	})
-	if err != nil {
-		logging.Error("Failed to create workflow with thread for branched chat", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create workflow fork"))
+	// Announce the new chat on the user stream, exactly as CreateChat does.
+	//
+	// Without this the branch exists but no client knows about it: the chat list
+	// is patched from user updates, so the new branch only appears after a full
+	// page refetch. A branch is a chat creation from the list's point of view,
+	// and the fact that it was produced by forking rather than by CreateChat is
+	// not something the list cares about.
+	chatCreatedData := map[string]interface{}{
+		"chat_id":     branchChat.ID,
+		"title":       branchChat.Title,
+		"project_id":  branchChat.ProjectID,
+		"worktree_id": branchChat.WorktreeID,
+		"workflow":    branchChat.WorkflowName,
+		"state":       string(branchChat.State),
+		"created_at":  branchChat.CreatedAt.Format(time.RFC3339),
+	}
+	chatCreatedJSON, marshalErr := json.Marshal(chatCreatedData)
+	if marshalErr != nil {
+		logging.Error("Failed to marshal chat_created data for branch", "error", marshalErr, "chatID", branchChat.ID)
 	}
 
-	// Copy plan and tasks from source chat to branched thread
-	if err := s.copyPlanAndTasks(ctx, sourceChatID, branchWorkflowID); err != nil {
-		// Non-fatal - log but don't fail the branch operation
-		logging.Error("Failed to copy plan to branched chat", "error", err, "sourceChatID", sourceChatID, "targetThreadID", branchWorkflowID)
-	}
-
-	// NOTE: branch_snapshot is no longer created here.
-	// Inherited messages are now resolved on-demand via the context window chain
-	// when ListMessages is called. This eliminates stale snapshot data and
-	// ensures consistent message resolution between LLM context and UI display.
-	// See ListMessages() for the CW chain resolution implementation.
-
-	// Create a system message when branching to a different worktree
-	// This helps the user understand the context of the new workspace
-	if targetWorktree != nil {
-		if err := s.createWorkspaceBranchSystemMessage(ctx, branchChat, targetWorktree, branchWorkflowID, req.Msg.WorkspaceContext); err != nil {
-			logging.Error("Failed to create workspace branch system message", "error", err)
-			// Non-fatal - the chat is created, just won't have the system message
+	// The branch chat row, its forked workflow+thread, the inherited plan,
+	// the optional workspace-switch system message, and the chat_created
+	// announcement must not be observed apart. All of it is plain DB writes
+	// (no Temporal/network calls), so it can all join one transaction: any
+	// failure leaves no orphan chat, no thread-less chat, no half-copied
+	// plan, and no announcement for a chat that doesn't exist.
+	if err := s.database.RunTx(ctx, func(txCtx context.Context) error {
+		if err := s.database.CreateChat(txCtx, branchChat); err != nil {
+			return fmt.Errorf("failed to create branch: %w", err)
 		}
+
+		// Create workflow and thread atomically using CreateWorkflowWithThread.
+		// This is a cross-conversation fork (parent thread in different conversation)
+		// The service extracts thread, CW, and ordinal from the branch point message
+		if _, _, _, err := s.threads.CreateWorkflowWithThread(txCtx, threads.CreateWorkflowWithThreadOpts{
+			Workflow:        rootWorkflow,
+			ThreadID:        branchWorkflowID,
+			ChatID:          branchChatID,
+			ForkFromMessage: &branchPointMsg.ID,
+		}); err != nil {
+			return fmt.Errorf("failed to create workflow fork: %w", err)
+		}
+
+		// Copy plan and tasks from source chat to branched thread
+		if err := s.copyPlanAndTasks(txCtx, sourceChatID, branchWorkflowID); err != nil {
+			return fmt.Errorf("failed to copy plan to branched chat: %w", err)
+		}
+
+		// NOTE: branch_snapshot is no longer created here.
+		// Inherited messages are now resolved on-demand via the context window chain
+		// when ListMessages is called. This eliminates stale snapshot data and
+		// ensures consistent message resolution between LLM context and UI display.
+		// See ListMessages() for the CW chain resolution implementation.
+
+		// Create a system message when branching to a different worktree
+		// This helps the user understand the context of the new workspace
+		if targetWorktree != nil {
+			if err := s.createWorkspaceBranchSystemMessage(txCtx, branchChat, targetWorktree, branchWorkflowID, req.Msg.WorkspaceContext); err != nil {
+				return fmt.Errorf("failed to create workspace branch system message: %w", err)
+			}
+		}
+
+		if chatCreatedJSON != nil {
+			if err := s.database.CreateUserUpdate(txCtx, &db.UserUpdate{
+				UserID:     userID,
+				ProjectID:  &branchChat.ProjectID,
+				WorktreeID: branchChat.WorktreeID,
+				ChatID:     &branchChat.ID,
+				UpdateType: db.UserUpdateChatCreated,
+				EntityType: db.EntityTypeChat,
+				EntityID:   branchChat.ID,
+				Data:       chatCreatedJSON,
+			}); err != nil {
+				return fmt.Errorf("failed to emit chat_created user update for branch: %w", err)
+			}
+		}
+
+		return nil
+	}); err != nil {
+		logging.Error("Failed to create branched chat", "error", err, "chatID", branchChatID)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create branch"))
 	}
 
 	branchChatProto := chatToProto(branchChat)
@@ -409,6 +453,13 @@ type orphanedToolCallInfo struct {
 }
 
 // findOrphanedToolCalls checks which tool calls don't have matching tool results
+//
+// A missing result does not by itself mean the call is dead. A spawn that is
+// still running has no result yet and will write a real one to this thread when
+// its sub-agent finishes, so the durable tool_calls row is consulted to tell the
+// two apart: a non-terminal status is a call still in flight, and synthesizing a
+// result for it would both lie about a live call and collide with the real
+// result when it lands.
 func (s *ChatService) findOrphanedToolCalls(ctx context.Context, toolCallIDs []string, toolCallBlocks []*db.MessageContentBlock) []orphanedToolCallInfo {
 	var orphaned []orphanedToolCallInfo
 
@@ -421,6 +472,18 @@ func (s *ChatService) findOrphanedToolCalls(ctx context.Context, toolCallIDs []s
 		}
 
 		if resultBlock == nil {
+			// A call whose durable row is still non-terminal is running, not
+			// orphaned. Only a row that exists says this; a call with no row at
+			// all predates the tool_calls table or died before recording
+			// anything, and is treated as orphaned exactly as before.
+			if call, callErr := s.database.GetToolCall(ctx, toolCallID); callErr == nil && call != nil && !call.Status.IsTerminal() {
+				logging.Info("[BranchChat] Skipping in-flight tool call at branch point",
+					"toolCallID", toolCallID,
+					"status", call.Status,
+					"childWorkflowID", call.ChildWorkflowID)
+				continue
+			}
+
 			toolName := "unknown"
 			if i < len(toolCallBlocks) && toolCallBlocks[i].ToolName != nil {
 				toolName = *toolCallBlocks[i].ToolName
@@ -453,11 +516,18 @@ func (s *ChatService) createBranchRepairToolMessage(
 		return nil, fmt.Errorf("failed to get next ordinal: %w", err)
 	}
 
+	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
+	nextSeq, err := s.database.GetNextSeq(ctx, chatID, assistantMsg.ThreadID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get next seq: %w", err)
+	}
+
 	// Create the tool message using the same context_window_id as the assistant message
 	repairMsg := &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
 		Ordinal:         nextOrdinal,
+		Seq:             nextSeq,
 		ThreadID:        assistantMsg.ThreadID,
 		ContextWindowID: assistantMsg.ContextWindowID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -543,22 +613,28 @@ func (s *ChatService) ListBranches(
 		}
 
 		// Get the root thread to check fork metadata
-		threadRecord, parentConversationID, err := s.database.GetThreadWithParent(ctx, *chat.WorkflowID)
+		threadRecord, parentChatID, err := s.database.GetThreadWithParent(ctx, *chat.WorkflowID)
 		if err != nil {
 			// Skip chats without valid threads
 			continue
 		}
 
-		// Check if this thread was forked from the requested chat
-		if parentConversationID != nil && *parentConversationID == req.Msg.ChatId {
+		// A branch is a FORK that crossed into another chat. Origin == fork
+		// rules out spawn/node children and roots but doesn't say which chat
+		// it came from; the parent chat_id comparison does that part, and
+		// also establishes the crossing (this chat differs from the parent's,
+		// or it would not be listed as a branch OF that chat).
+		if threadRecord.Origin == db.ThreadOriginFork && parentChatID != nil && *parentChatID == req.Msg.ChatId {
 			branch := &reliantv1.BranchInfo{
 				Id:         chat.ID,
 				Title:      chat.Title,
 				CreatedAt:  chat.CreatedAt.Format(time.RFC3339),
 				LastActive: chat.LastActive.Format(time.RFC3339),
 			}
-			if threadRecord.ForkAtOrdinal != nil {
-				branch.BranchedAtOrdinal = threadRecord.ForkAtOrdinal
+			if threadRecord.ForkAtMessageID != nil {
+				if forkMsg, err := s.database.GetMessage(ctx, *threadRecord.ForkAtMessageID); err == nil && forkMsg != nil {
+					branch.BranchedAtOrdinal = &forkMsg.Ordinal
+				}
 			}
 			branches = append(branches, branch)
 		}

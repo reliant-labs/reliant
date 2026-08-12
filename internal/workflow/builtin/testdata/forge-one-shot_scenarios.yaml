@@ -1,46 +1,35 @@
 # Test scenarios for forge-one-shot.yaml workflow
 #
 # Pipeline (current node graph):
-#   scaffold_and_verify → build_mvp → build_done → launch_preview → success
+#   build_app → build_done → launch_preview → success
 #
-# The build is structured SCAFFOLD → FAN-OUT → SYNTHESIS → REVIEW:
-#   scaffold_and_verify lays the whole substrate SERIALLY (review off — the
-#   generate/lint/test/build gate IS the gate). build_mvp then fans out parallel
-#   per-seam units, synthesizes, and runs the get-it-right review WITH TEETH — so
-#   scaffold_and_verify and build_mvp are both get-it-right loops (emit
-#   strategy/eval_strategy/stuck). build_done is the success marker after the build;
-#   launch_preview then starts the finished app and posts its URL as the run's last
-#   step, so the pipeline ends on a link the user can open.
+# build_app is ONE get-it-right loop carrying the whole arc: scope → scaffold →
+# green gate → parallel per-seam fan-out → synthesis → review. It emits
+# strategy/eval_strategy/stuck like any get-it-right loop. Its review runs WITH
+# TEETH — it opens the LIVE app — and its rubric also covers hardening.
+# build_done is the success marker after the build; launch_preview then starts
+# the finished app and posts its URL as the run's last step, so the pipeline
+# ends on a link the user can open.
 #
 # Failure / escalation paths (collapsed terminals):
 #   get-it-right stuck (tooling/env)   → stuck
-#   scaffold/build != pass             → failed
+#   build strategy != pass             → failed
 
 ---
 name: happy_path
-description: All phases pass. Full pipeline through the preview handoff to success.
+description: The build passes. Full pipeline through the preview handoff to success.
 
 events:
-  - node: scaffold_and_verify
+  # One loop: scoped with the user, scaffolded the substrate green, fanned out
+  # per-seam units, synthesized them, and passed the teethed review that opened
+  # the live app.
+  - node: build_app
     output:
       strategy: "pass"
       eval_strategy: "pass"
       review_grade: "pass"
-      review_feedback: "Project scaffolded, proto files generated, build passes, FORGE_PLAN.md exists."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
-  # Fan-out → synthesis → teethed review: parallel per-seam units landed together and
-  # were verified by the get-it-right gate (backend generate/lint/test/build AND every
-  # frontend build), against a rubric that also covers hardening.
-  - node: build_mvp
-    output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Per-seam frontend + backend fanned out, synthesized, and verified live; build green."
-      iterations: 3
+      review_feedback: "Substrate green, per-seam frontend + backend fanned out and synthesized, verified live; build green."
+      iterations: 4
       lint_exit: 0
       test_exit: 0
       build_exit: 0
@@ -53,8 +42,7 @@ events:
 expect:
   outcome: completed
   reached:
-    - scaffold_and_verify
-    - build_mvp
+    - build_app
     - build_done
     - launch_preview
     - success
@@ -63,67 +51,58 @@ expect:
     - failed
 
 ---
-name: scaffold_fails
-description: Scoping passes but scaffold phase fails verification. No other phases run.
+name: build_fails
+description: The build never reaches a green, complete state. Fails loud, no preview.
 
 events:
-  - node: scaffold_and_verify
+  # strategy != pass after the retries routes straight to the failed terminal;
+  # build_done and the preview never run.
+  - node: build_app
     output:
       strategy: "continue"
       eval_strategy: "continue"
       review_grade: "fail"
-      review_feedback: "Proto files have errors, build fails."
-      iterations: 5
-      lint_exit: 1
-      build_exit: 1
-
-expect:
-  outcome: completed
-  reached:
-    - scaffold_and_verify
-    - failed
-  not_reached:
-    - build_mvp
-    - build_done
-    - launch_preview
-    - success
-    - stuck
-
----
-name: mvp_build_fails
-description: Scaffold passes, but the fan-out/synthesis build fails verification. Fails loud, no preview.
-
-events:
-  - node: scaffold_and_verify
-    output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Scaffold complete."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
-  # The build phase leaves a broken build after its retries — strategy != pass routes
-  # straight to the failed terminal; build_done and the preview never run.
-  - node: build_mvp
-    output:
-      strategy: "continue"
-      eval_strategy: "continue"
-      review_grade: "fail"
-      review_feedback: "Implemented features but hit a build error I could not resolve."
+      review_feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
       iterations: 7
       lint_exit: 0
+      test_exit: 0
       build_exit: 1
 
 expect:
   outcome: completed
   reached:
-    - scaffold_and_verify
-    - build_mvp
+    - build_app
     - failed
   not_reached:
     - build_done
     - launch_preview
     - success
     - stuck
+
+---
+name: build_stuck
+description: The loop escalates on a tooling/environment blocker, not a code defect.
+
+events:
+  - node: build_app
+    output:
+      strategy: "stuck"
+      eval_strategy: "stuck"
+      stuck: true
+      review_grade: "fail"
+      review_feedback: "The app genuinely will not start — a forge command crashes. Not the protos or the code."
+      iterations: 3
+      lint_exit: 1
+      test_exit: 0
+      build_exit: 1
+
+expect:
+  outcome: completed
+  reached:
+    - build_app
+    - stuck
+  not_reached:
+    - build_done
+    - launch_preview
+    - success
+    - failed

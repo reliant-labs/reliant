@@ -10,16 +10,32 @@
  * Processing works directly with typed contentBlocks — no JSON parsing needed.
  */
 
-import { ContentBlockType } from "../gen/reliant/v1/chat_pb";
+import { ContentBlockType, ToolCallStatus } from "../gen/reliant/v1/chat_pb";
 import type { Message } from "../types/chat";
 import type { ToolApprovalRequest } from "../api/client";
 
 export interface ToolCallData {
   id: string;
   name: string;
-  input: Record<string, unknown> | string;
+  /** Undefined while the call is still streaming and its input has not arrived. */
+  input?: Record<string, unknown> | string;
   finished?: boolean;
   content_block_id?: string;
+  /**
+   * Durable status from the tool_calls table, as of the last time this
+   * message was loaded. Present once the backend has written a row for the
+   * call; a live status from the streaming store always takes precedence
+   * over this when both are available (see ToolExecution.tsx).
+   */
+  durableStatus?: ToolCallStatus;
+  durableStartedAt?: string;
+  durableCompletedAt?: string;
+  /**
+   * For a spawn call, the workflow it started (tool_calls.child_workflow_id).
+   * A spawned sub-agent's thread id equals its workflow id, so this IS the
+   * thread the call owns — no search required.
+   */
+  childWorkflowId?: string;
 }
 
 export interface ToolResultData {
@@ -122,8 +138,12 @@ export function processMessage(
 
       if (toolCallsById.has(callId)) continue;
 
-      // Parse input from JSON string if present
-      let input: Record<string, unknown> | string = "{}";
+      // Input stays undefined until the block carries one. A tool call that is
+      // still streaming has no input yet, and the renderers key their pending
+      // state off `input === undefined` — substituting a placeholder here makes
+      // a half-arrived call indistinguishable from one that was invoked with no
+      // arguments.
+      let input: Record<string, unknown> | string | undefined;
       if (block.input) {
         try {
           input = JSON.parse(block.input);
@@ -138,6 +158,10 @@ export function processMessage(
         input,
         finished: block.input !== undefined,
         content_block_id: block.id,
+        durableStatus: block.toolCallStatus,
+        durableStartedAt: block.startedAt,
+        durableCompletedAt: block.completedAt,
+        childWorkflowId: block.childWorkflowId,
       };
 
       // Check for streaming state

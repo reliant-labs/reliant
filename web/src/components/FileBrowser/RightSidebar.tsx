@@ -61,7 +61,8 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   const [focusedPath, setFocusedPath] = useState<string | null>(null);
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
   const fileTreeRef = useRef<FileTreeHandle>(null);
-  
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
   // Track if we should auto-focus the tree (when Files tab becomes active)
   const [shouldAutoFocus, setShouldAutoFocus] = useState(false);
   const prevSidebarTabRef = useRef(activeSidebarTab);
@@ -162,6 +163,26 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
       return () => clearTimeout(timer);
     }
   }, [shouldAutoFocus]);
+
+  // Cmd+Shift+B focuses the sidebar. Each tab owns its own arrow/Enter keys —
+  // FileTree and RecentChanges both have richer navigation than anything a
+  // sidebar-level handler could provide — so this only hands over focus and
+  // lets the active tab take it from there.
+  useEffect(() => {
+    const handleFocusSidebar = () => {
+      if (activeSidebarTab === "files") {
+        fileTreeRef.current?.focus();
+        return;
+      }
+      // Other tabs have no imperative focus handle; focusing the container puts
+      // the user in the right place for tab-order and scrolling.
+      sidebarRef.current?.focus();
+    };
+
+    window.addEventListener("focus-right-sidebar", handleFocusSidebar);
+    return () =>
+      window.removeEventListener("focus-right-sidebar", handleFocusSidebar);
+  }, [activeSidebarTab]);
 
   // Reset state when project or worktree changes. Project context is owned by
   // projectStore now — viewerStore reads it via getCurrentProjectId() — so we
@@ -466,7 +487,15 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
   };
 
   return (
-    <div className="flex flex-col h-full" data-onboarding="right-sidebar">
+    <div
+      ref={sidebarRef}
+      className="flex flex-col h-full"
+      data-onboarding="right-sidebar"
+      // Marks the focus context for the keyboard dispatcher, so shortcuts can
+      // be scoped to "the right sidebar has focus".
+      data-context="right-sidebar"
+      tabIndex={-1}
+    >
       {/* Tabs */}
       <div className="flex justify-center bg-accent border-b border-border h-10 overflow-visible pt-1">
         <Tooltip content="Files" placement="bottom">

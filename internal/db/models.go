@@ -116,6 +116,22 @@ type TaskStats struct {
 	Skipped    int
 }
 
+// ToolCall is an alias to the shared core tool call model.
+type ToolCall = core.ToolCall
+
+// ToolCallResult is an alias to the shared core tool call result model.
+type ToolCallResult = core.ToolCallResult
+
+// StrandedBackgroundSpawn is an alias to the shared core model.
+type StrandedBackgroundSpawn = core.StrandedBackgroundSpawn
+
+// The durable tool call status enum is deliberately NOT re-exported here as
+// `db.ToolCallStatus`: that name is already taken by the string-valued status
+// on ToolCallUpdate (chat_update_types.go), which describes the transient
+// streaming event rather than the persisted row. Two same-named types with
+// different underlying kinds in one package is a trap, so the durable one
+// stays qualified at its use sites — core.ToolCallStatusCompleted, etc.
+
 // Setting is an alias to the shared core setting model.
 type Setting = core.Setting
 
@@ -136,6 +152,9 @@ type ItemDefault = core.ItemDefault
 
 // Approval is an alias to the shared core approval model.
 type Approval = core.Approval
+
+// AgentMessage is an alias to the shared core agent mailbox model.
+type AgentMessage = core.AgentMessage
 
 // Daemon represents a persisted tools daemon identity registration.
 // Lifecycle state (connection, heartbeat) lives in daemon_attachment.
@@ -207,7 +226,7 @@ type DaemonPAT struct {
 	Kind        string // DaemonPATKindDaemon (default) or DaemonPATKindAPI
 	TokenHash   string // SHA-256 hex digest of the raw token
 	TokenPrefix string // First 8 chars of raw token for display in UI
-	Name        string // Human-readable label ("Sean's MacBook", "CI runner")
+	Name        string // Human-readable label ("Work Laptop", "CI runner")
 	Ephemeral   bool   // Auto-created tokens (desktop session) — revoked on shutdown
 	ExpiresAt   *time.Time
 	LastUsedAt  *time.Time
@@ -494,6 +513,12 @@ const (
 )
 
 // Thread lifecycle statuses, mirroring CHAT_WORKFLOW_STATUS.
+//
+// Deliberately NOT re-exported as db.ThreadStatus (a named type): these are
+// plain int32 constants for the same reason the durable tool-call status enum
+// is not re-exported as db.ToolCallStatus — that name is already taken in this
+// package by a string-valued streaming status type, and two same-named types
+// with different underlying kinds cannot coexist here.
 const (
 	ThreadStatusRunning   = core.ThreadStatusRunning
 	ThreadStatusCompleted = core.ThreadStatusCompleted

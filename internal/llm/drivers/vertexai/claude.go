@@ -260,6 +260,21 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 				Content: content,
 			})
 
+		case message.System:
+			// History System messages are content (compaction summary, branch
+			// note, mailbox envelope), delivered as a user turn wrapped in
+			// <system> tags — the same shape the direct Anthropic driver uses.
+			// Without this case they fall through the switch and are dropped.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				claudeMessages = append(claudeMessages, claudeMessage{
+					Role: "user",
+					Content: []claudeContentBlock{{
+						Type: "text",
+						Text: fmt.Sprintf("<system>\n%s\n</system>", systemText),
+					}},
+				})
+			}
+
 		case message.Assistant:
 			var content []claudeContentBlock
 
@@ -578,7 +593,11 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 				total := int64(event.Usage.InputTokens) + int64(event.Usage.OutputTokens) +
 					int64(event.Usage.CacheCreationInputTokens) + int64(event.Usage.CacheReadInputTokens)
 				accumulated.Usage = llm.TokenUsage{
-					TokenCount: total,
+					TokenCount:               total,
+					InputTokens:              int64(event.Usage.InputTokens),
+					OutputTokens:             int64(event.Usage.OutputTokens),
+					CacheReadInputTokens:     int64(event.Usage.CacheReadInputTokens),
+					CacheCreationInputTokens: int64(event.Usage.CacheCreationInputTokens),
 				}
 			}
 

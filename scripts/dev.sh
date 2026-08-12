@@ -387,24 +387,24 @@ export USE_DEV_SERVER=true
 export RELIANT_EXTERNAL_BACKEND=true  # Tell Electron to use external backend (Air)
 
 # Ensure ports are available to npm scripts
-# Write .env.ports for processes that source it
-echo "export FRONTEND_PORT=$FRONTEND_PORT" > .env.ports
-echo "export BACKEND_PORT=$BACKEND_PORT" >> .env.ports
-echo "export GRPC_PORT=$GRPC_PORT" >> .env.ports
-echo "export TOOLS_DAEMON_PORT=$TOOLS_DAEMON_PORT" >> .env.ports
-echo "export DAEMON_FRONTEND_PORT=$DAEMON_FRONTEND_PORT" >> .env.ports
-echo "export TEMPORAL_FRONTEND_PORT=$TEMPORAL_FRONTEND_PORT" >> .env.ports
-echo "export TEMPORAL_UI_PORT=$TEMPORAL_UI_PORT" >> .env.ports
-echo "export PPROF_PORT=$PPROF_PORT" >> .env.ports
+# Write .dev-ports.sh for processes that source it
+echo "export FRONTEND_PORT=$FRONTEND_PORT" > .dev-ports.sh
+echo "export BACKEND_PORT=$BACKEND_PORT" >> .dev-ports.sh
+echo "export GRPC_PORT=$GRPC_PORT" >> .dev-ports.sh
+echo "export TOOLS_DAEMON_PORT=$TOOLS_DAEMON_PORT" >> .dev-ports.sh
+echo "export DAEMON_FRONTEND_PORT=$DAEMON_FRONTEND_PORT" >> .dev-ports.sh
+echo "export TEMPORAL_FRONTEND_PORT=$TEMPORAL_FRONTEND_PORT" >> .dev-ports.sh
+echo "export TEMPORAL_UI_PORT=$TEMPORAL_UI_PORT" >> .dev-ports.sh
+echo "export PPROF_PORT=$PPROF_PORT" >> .dev-ports.sh
 if [ "${DATABASE_DRIVER:-sqlite}" = "postgres" ]; then
-    echo "export DATABASE_DRIVER=postgres" >> .env.ports
-    echo "export DATABASE_URL=$DATABASE_URL" >> .env.ports
-    echo "export PGDATABASE=$PGDATABASE" >> .env.ports
-    echo "export PGHOST=$PGHOST" >> .env.ports
-    echo "export PGPORT=$PGPORT" >> .env.ports
-    echo "export PGUSER=$PGUSER" >> .env.ports
-    echo "export PGSSLMODE=$PGSSLMODE" >> .env.ports
-    echo "export RELIANT_POSTGRES_PORT=$RELIANT_POSTGRES_PORT" >> .env.ports
+    echo "export DATABASE_DRIVER=postgres" >> .dev-ports.sh
+    echo "export DATABASE_URL=$DATABASE_URL" >> .dev-ports.sh
+    echo "export PGDATABASE=$PGDATABASE" >> .dev-ports.sh
+    echo "export PGHOST=$PGHOST" >> .dev-ports.sh
+    echo "export PGPORT=$PGPORT" >> .dev-ports.sh
+    echo "export PGUSER=$PGUSER" >> .dev-ports.sh
+    echo "export PGSSLMODE=$PGSSLMODE" >> .dev-ports.sh
+    echo "export RELIANT_POSTGRES_PORT=$RELIANT_POSTGRES_PORT" >> .dev-ports.sh
 fi
 
 # Start Temporal UI

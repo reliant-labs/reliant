@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +56,7 @@ func (tc *testContext) createThread(chatID string, parentThreadID *string) *db.T
 	tc.t.Helper()
 	thread := &db.Thread{
 		ID:             uuid.New().String(),
-		ConversationID: chatID,
+		ChatID:         chatID,
 		ParentThreadID: parentThreadID,
 		CreatedAt:      time.Now(),
 	}
@@ -65,15 +65,31 @@ func (tc *testContext) createThread(chatID string, parentThreadID *string) *db.T
 	return created
 }
 
-// createContextWindow creates a context window and returns it
+// createContextWindow creates a context window and returns it. forkAtOrdinal
+// is a position in parentCWID's messages, resolved here to the message it
+// names -- callers pass ordinals because fixtures already track ordinals for
+// message identity, and the resolution mirrors
+// 20260803010000_fork_points_reference_messages.sql's backfill.
 func (tc *testContext) createContextWindow(threadID string, sequence int, parentCWID *string, forkAtOrdinal *int64) *db.ContextWindow {
 	tc.t.Helper()
+	var forkAtMessageID *string
+	if forkAtOrdinal != nil {
+		msgs, err := tc.repo.GetMessagesByContextWindow(tc.ctx, *parentCWID, nil)
+		require.NoError(tc.t, err)
+		for _, m := range msgs {
+			if m.Ordinal == *forkAtOrdinal {
+				id := m.ID
+				forkAtMessageID = &id
+				break
+			}
+		}
+	}
 	cw := &db.ContextWindow{
 		ID:                    uuid.New().String(),
 		ThreadID:              threadID,
 		Sequence:              sequence,
 		ParentContextWindowID: parentCWID,
-		ForkAtOrdinal:         forkAtOrdinal,
+		ForkAtMessageID:       forkAtMessageID,
 		CreatedAt:             time.Now(),
 	}
 	created, err := tc.repo.CreateContextWindow(tc.ctx, cw)
@@ -84,17 +100,20 @@ func (tc *testContext) createContextWindow(threadID string, sequence int, parent
 // createMessage creates a message in a context window
 func (tc *testContext) createMessage(chatID, threadID, cwID string, ordinal int64, role reliantv1.MessageRole) *db.Message {
 	tc.t.Helper()
+	seq, err := tc.repo.GetNextSeq(tc.ctx, chatID, threadID)
+	require.NoError(tc.t, err)
 	msg := &db.Message{
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		ThreadID:        threadID,
 		ContextWindowID: cwID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		Role:            role,
 		CreatedAt:       time.Now(),
 		UpdatedAt:       time.Now(),
 	}
-	err := tc.repo.CreateMessage(tc.ctx, msg)
+	err = tc.repo.CreateMessage(tc.ctx, msg)
 	require.NoError(tc.t, err)
 	return msg
 }

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
@@ -26,10 +26,14 @@ const mutation = () => ({
   isPending: false,
 })
 
+// Mutable so individual tests can vary the compute-usage payload. `vi.hoisted`
+// is required because `vi.mock`'s factory is hoisted above normal `const`s.
+const usageState = vi.hoisted(() => ({ current: undefined as unknown }))
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useComputeSubscription: () => query(undefined),
   useWalletOverview: () => query(undefined),
-  useComputeUsage: () => query(undefined),
+  useComputeUsage: () => query(usageState.current),
   usePlans: () => query(undefined),
   useCurrentUserInvoices: () => query(undefined),
   useBillingEmail: () => query(undefined),
@@ -52,6 +56,10 @@ function renderSection() {
 }
 
 describe('BillingSection', () => {
+  beforeEach(() => {
+    usageState.current = undefined
+  })
+
   it('renders the section header and the four sub-tabs', () => {
     renderSection()
 
@@ -92,5 +100,53 @@ describe('BillingSection', () => {
     expect(
       screen.getByRole('heading', { level: 3, name: /no usage data/i }),
     ).toBeInTheDocument()
+  })
+
+  // Redeemed compute-coupon minutes. These are reported ALONGSIDE the plan's
+  // included minutes, never summed into them: included minutes refill every
+  // billing period, a grant depletes once and does not renew.
+  describe('coupon (granted) minutes', () => {
+    const usage = (grantedMinutesRemaining: number) => ({
+      includedMinutes: 600,
+      usedMinutes: 60,
+      overageMinutes: 0,
+      estimatedOverageCostCents: 0,
+      byWorkspace: [],
+      byDay: [],
+      grantedMinutesRemaining,
+    })
+
+    it('shows remaining coupon minutes, with hours, on the overview tab', () => {
+      usageState.current = usage(120)
+      renderSection()
+
+      expect(screen.getByText(/coupon minutes/i)).toBeInTheDocument()
+      expect(screen.getByText('120 min (2 h)')).toBeInTheDocument()
+      // The distinction from included minutes has to be legible, not implied.
+      expect(screen.getByText(/does not renew/i)).toBeInTheDocument()
+    })
+
+    it('shows remaining coupon minutes as its own stat on the usage tab', () => {
+      usageState.current = usage(90)
+      renderSection()
+
+      fireEvent.click(screen.getByRole('button', { name: /^usage$/i }))
+
+      expect(screen.getByText(/coupon minutes remaining/i)).toBeInTheDocument()
+      expect(screen.getByText('90 min (1.5 h)')).toBeInTheDocument()
+      // Included stays the plan's own 600 min / 10 h — the grant is not folded in.
+      expect(screen.getByText('10 h')).toBeInTheDocument()
+    })
+
+    it('omits the row entirely when no coupon has been redeemed', () => {
+      usageState.current = usage(0)
+      renderSection()
+
+      expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: /^usage$/i }))
+
+      expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
+    })
   })
 })

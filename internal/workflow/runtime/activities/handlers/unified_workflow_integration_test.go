@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -229,7 +229,7 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 
 	// STEP 0: Create user message (ordinal 0)
 	userMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              userMsgID,
 		ChatID:          chatID,
 		Ordinal:         0,
@@ -246,7 +246,7 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 	toolCallID1 := uuid.New().String()
 	toolCallID2 := uuid.New().String()
 
-	err = h.Repo().CreateMessage(ctx, &db.Message{
+	err = createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              assistantMsgID,
 		ChatID:          chatID,
 		Ordinal:         1,
@@ -487,7 +487,7 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 		toolCallID := uuid.New().String()
 		toolCallIDs = append(toolCallIDs, toolCallID)
 
-		err = h.Repo().CreateMessage(ctx, &db.Message{
+		err = createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 			ID:              assistantMsgID,
 			ChatID:          chatID,
 			Ordinal:         1,
@@ -662,7 +662,7 @@ func TestUnifiedWorkflow_DataFlowThroughOutputs(t *testing.T) {
 		toolCallID1 := uuid.New().String()
 		toolCallID2 := uuid.New().String()
 
-		err := h.Repo().CreateMessage(ctx, &db.Message{
+		err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 			ID:              assistantMsgID,
 			ChatID:          chatID,
 			Ordinal:         0,

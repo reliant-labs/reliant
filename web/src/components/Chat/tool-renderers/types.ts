@@ -5,6 +5,13 @@
 export interface ToolRenderContext {
   toolName: string;
   toolCallId: string;
+  /**
+   * For a spawn call, the workflow it started — and therefore the thread it
+   * owns, since a spawned sub-agent's thread id equals its workflow id.
+   * Sourced from tool_calls.child_workflow_id, which the spawn path writes
+   * when it creates the child.
+   */
+  childWorkflowId?: string;
   input: Record<string, unknown> | string;
   result?: ToolResultData;
   worktreeId?: string;

@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -138,6 +138,8 @@ func createTestMessage(
 	ordinal int64,
 ) *db.Message {
 	messageID := uuid.New().String()
+	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	require.NoError(t, err)
 	msg := &db.Message{
 		ID:              messageID,
 		ChatID:          chatID,
@@ -145,8 +147,9 @@ func createTestMessage(
 		ContextWindowID: contextWindowID,
 		Role:            role,
 		Ordinal:         ordinal,
+		Seq:             seq,
 	}
-	err := repo.CreateMessage(ctx, msg)
+	err = repo.CreateMessage(ctx, msg)
 	require.NoError(t, err)
 	return msg
 }

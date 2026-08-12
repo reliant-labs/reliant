@@ -25,8 +25,9 @@ import { PresetService } from "../gen/reliant/v1/preset_pb";
 import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
 import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
+import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { logger } from "../lib/logger";
-import { buildLocalhostUrl, useSameOriginTransport } from "../lib/protocol";
+import { buildLocalhostUrl, isSameOriginTransport } from "../lib/protocol";
 import {
   buildInterceptors,
   setCurrentBaseURL,
@@ -40,14 +41,14 @@ export const setDaemonLastSeen = _setDaemonLastSeenInTransport;
 // Detect if running in Electron and get gRPC URL
 // Returns null if config not yet available (Electron loading)
 const getGRPCBaseURL = (): string | null => {
-  // Same-origin (Vite-proxy) path — see useSameOriginTransport. Whenever the
+  // Same-origin (Vite-proxy) path — see isSameOriginTransport. Whenever the
   // renderer is served over http(s) (web-dev AND electron-dev), reliant.v1.*
   // RPCs go to the document origin and Vite's `/reliant.v1.*` proxy forwards
   // them to reliant-api. This is first-party ⇒ ZERO CORS, and it short-circuits
   // BEFORE RELIANT_CONFIG.grpcUrl / the absolute VITE_* fallbacks below so
   // electron-dev never dials a cross-origin backend port. Packaged Electron
   // (file://) falls through to the daemon URL.
-  if (useSameOriginTransport()) {
+  if (isSameOriginTransport()) {
     return window.location.origin;
   }
 
@@ -113,6 +114,7 @@ const clearClientCache = () => {
   _scenarioClient = null;
   _daemonRegistryClient = null;
   _questionClient = null;
+  _connectorClient = null;
 };
 
 export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
@@ -125,7 +127,7 @@ export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
 // self-hosted daemons).
 let _controlPlaneTransport: ReturnType<typeof createConnectTransport> | null = null;
 export const getControlPlaneTransport = () => {
-  // Same-origin (Vite-proxy) path — see useSameOriginTransport. When the
+  // Same-origin (Vite-proxy) path — see isSameOriginTransport. When the
   // renderer is served over http(s) (web-dev AND electron-dev), return null so
   // DaemonRegistry/DaemonToken fall through to the same-origin getTransport().
   // Their RPCs are `reliant.v1.*` paths, so the Vite `/reliant.v1.*` proxy
@@ -133,7 +135,7 @@ export const getControlPlaneTransport = () => {
   // shared dev DB) — first-party, ZERO CORS, no absolute admin-server port.
   // Only packaged Electron (file://) needs the absolute control-plane URL to
   // reach the hosted admin-server for cloud-managed daemons.
-  if (useSameOriginTransport()) return null;
+  if (isSameOriginTransport()) return null;
 
   const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
   if (!cpURL) return null;
@@ -302,6 +304,14 @@ export const createQuestionClient = (): Client<typeof QuestionService> => {
   return createClient(QuestionService, getTransport());
 };
 
+// ConnectorService manages grants for third-party MCP clients. Unlike the
+// daemon registry/token RPCs it is served by the reliant API (that is where
+// the daemon router and the /mcp endpoint live), so it uses the normal
+// transport rather than the control-plane one.
+export const createConnectorClient = (): Client<typeof ConnectorService> => {
+  return createClient(ConnectorService, getTransport());
+};
+
 // Singleton instances (lazy-initialized)
 let _systemClient: Client<typeof SystemService> | null = null;
 let _planClient: Client<typeof PlanService> | null = null;
@@ -328,6 +338,7 @@ let _scenarioClient: Client<typeof ScenarioService> | null = null;
 let _daemonRegistryClient: Client<typeof DaemonRegistryService> | null = null;
 let _daemonTokenClient: Client<typeof DaemonTokenService> | null = null;
 let _questionClient: Client<typeof QuestionService> | null = null;
+let _connectorClient: Client<typeof ConnectorService> | null = null;
 
 export const getSystemClient = (): Client<typeof SystemService> => {
   if (!_systemClient) {
@@ -506,6 +517,13 @@ export const getDaemonTokenClient = (): Client<typeof DaemonTokenService> => {
   return _daemonTokenClient;
 };
 
+export const getConnectorClient = (): Client<typeof ConnectorService> => {
+  if (!_connectorClient) {
+    _connectorClient = createConnectorClient();
+  }
+  return _connectorClient;
+};
+
 export const getQuestionClient = (): Client<typeof QuestionService> => {
   if (!_questionClient) {
     _questionClient = createQuestionClient();
@@ -541,4 +559,5 @@ export const grpcClient = {
   daemonRegistry: () => getDaemonRegistryClient(),
   daemonToken: () => getDaemonTokenClient(),
   question: () => getQuestionClient(),
+  connector: () => getConnectorClient(),
 };

@@ -84,6 +84,18 @@ export function ParamsSettingsPage({
     return values[name] ?? getInputDefault(schema);
   };
 
+  // Model-aware params (thinking_level) resolve their options from the sibling
+  // `model` param, which is excluded from this page and often untouched — so it
+  // has no entry in `values`. Fall back to each schema's default so those params
+  // see the model that will actually run.
+  const formValues = useMemo(() => {
+    const resolved: Record<string, unknown> = {};
+    for (const [name, schema] of Object.entries(inputs)) {
+      resolved[name] = getParamValue(name, schema);
+    }
+    return resolved;
+  }, [inputs, values]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (groups.length === 0) {
     return (
       <div>
@@ -177,7 +189,7 @@ export function ParamsSettingsPage({
                       value={getParamValue(name, schema)}
                       onChange={(val) => handleParamChange(name, val)}
                       hideCELToggle
-                      formValues={values}
+                      formValues={formValues}
                       isChatInputContext
                     />
                   ))}

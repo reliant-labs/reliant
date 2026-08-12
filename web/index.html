@@ -7,6 +7,10 @@
     <link rel="alternate icon" href="/favicon.ico" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Bundled UI + code typefaces. Preloaded so the first paint uses them
+         instead of flashing the platform fallback (@font-face lives in index.css). -->
+    <link rel="preload" href="/fonts/Inter-roman.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/JetBrainsMono-variable.woff2" as="font" type="font/woff2" crossorigin />
     <title>Reliant</title>
     <script>
       (function(){
@@ -42,7 +46,7 @@
           document.documentElement.setAttribute('data-color-scheme', schemeMap[savedScheme] || 'pure-black');
           
           // Load and apply font settings
-          var font = localStorage.getItem('appearance.font') || 'system';
+          var font = localStorage.getItem('appearance.font') || 'default';
           var chatFont = localStorage.getItem('appearance.chatFont') || 'default';
           var editorFont = localStorage.getItem('appearance.editorFont') || 'default';
           var fontSize = localStorage.getItem('appearance.fontSize') || 'md';
@@ -51,8 +55,23 @@
           document.documentElement.dataset.chatFont = chatFont;
           document.documentElement.dataset.editorFont = editorFont;
           
+          // The mobile surface reads two steps larger at every preference
+          // level. Tailwind's scale is rem-based, so it resolves against this
+          // value: at the 14px desktop default, `text-sm` lands at 13.1px and
+          // `text-xs` at 11.4px, against ~17px for iOS body text. That is the
+          // single biggest reason the phone UI reads as a cramped web page
+          // rather than an app.
+          //
+          // Applied here rather than in React so there is no flash of
+          // small text before hydration. MobileLayout re-applies it on
+          // client-side navigation into and out of /m/*.
           var fontSizeMap = { xs: '12px', sm: '13px', md: '14px', lg: '15px', xl: '16px' };
-          document.documentElement.style.fontSize = fontSizeMap[fontSize] || '14px';
+          var mobileFontSizeMap = { xs: '14px', sm: '15px', md: '16px', lg: '17px', xl: '18px' };
+          var onMobileSurface =
+            window.location.pathname === '/m' ||
+            window.location.pathname.indexOf('/m/') === 0;
+          var sizeMap = onMobileSurface ? mobileFontSizeMap : fontSizeMap;
+          document.documentElement.style.fontSize = sizeMap[fontSize] || (onMobileSurface ? '16px' : '14px');
           
           // Mark that initial theme has been applied
           window.__THEME_APPLIED__ = true;

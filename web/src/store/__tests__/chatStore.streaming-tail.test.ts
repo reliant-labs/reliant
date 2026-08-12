@@ -16,14 +16,14 @@ import {
 // The server streams ephemeral deltas and persisted chat updates over two
 // independent channels (internal/grpc/services/streaming.go select loop), so
 // a stale delta tail can arrive AFTER the finalized assistant message. The
-// old code rebuilt a `streaming-temp-*` placeholder from that tail (ordinal
+// old code rebuilt a `streaming-temp-*` placeholder from that tail (seq
 // 999999 → renders at the very end of the chat) and nothing ever removed it
 // because no further complete message arrives at the end of a run — the
 // phantom stuck around until a page refresh.
 //
-// The store must also keep messages in the canonical server order (per-thread
-// ordinal), not createdAt — repair/attachment messages have shipped with
-// wrong (local-vs-UTC) timestamps.
+// The store must also keep messages in the canonical server order (chat-global
+// seq), not createdAt — repair/attachment messages have shipped with wrong
+// (local-vs-UTC) timestamps.
 
 function seedChat(_chatId: string) {
   clearAllMessagesCache();
@@ -42,8 +42,9 @@ function seedChat(_chatId: string) {
 function completeAssistantMessage(
   chatId: string,
   id: string,
-  ordinal: number,
+  seq: number,
   createdAt: string,
+  thread = "",
 ): ChatUpdate {
   return {
     update_type: "message",
@@ -62,8 +63,8 @@ function completeAssistantMessage(
       createdAt,
       updatedAt: createdAt,
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
-      thread: "",
+      seq: BigInt(seq),
+      thread,
       sequenceNumber: 0n,
       attachments: [],
     },
@@ -261,13 +262,13 @@ describe("incremental streaming placeholder updates", () => {
 });
 
 describe("canonical message order in the store", () => {
-  it("orders same-thread messages by ordinal even when createdAt disagrees", () => {
+  it("orders same-thread messages by seq even when createdAt disagrees", () => {
     const chatId = "chat-order";
     seedChat(chatId);
     const store = useChatStore.getState();
 
     // m3 is a repair-style message persisted with a bogus (earlier) local
-    // timestamp. Canonical order is per-thread ordinal: m1, m2, m3.
+    // timestamp. Canonical order is seq: m1, m2, m3.
     store.processChatStreamUpdates(chatId, [
       completeAssistantMessage(chatId, "m1", 1, "2026-01-01T10:00:00.000Z"),
       completeAssistantMessage(chatId, "m2", 2, "2026-01-01T10:00:20.000Z"),
@@ -277,5 +278,33 @@ describe("canonical message order in the store", () => {
     expect(
       getMessagesFromCache(chatId).map((m) => m.id),
     ).toEqual(["m1", "m2", "m3"]);
+  });
+
+  // The end-to-end version of the phase-3 proof: two threads interleaving,
+  // rendered through the real store path. Under per-thread ordinals both
+  // threads counted 1,2,3 and the client had to infer the interleaving from
+  // (clamped) timestamps; here the timestamps are deliberately WRONG — every
+  // spawn message claims an hour earlier than it happened — and the order is
+  // still exact, because seq is a chat-global total order.
+  it("renders the true cross-thread interleaving from chat-global seq", () => {
+    const chatId = "chat-interleave";
+    seedChat(chatId);
+    const store = useChatStore.getState();
+
+    store.processChatStreamUpdates(chatId, [
+      completeAssistantMessage(chatId, "main-1", 1, "2026-01-01T10:00:00.000Z"),
+      completeAssistantMessage(chatId, "spawn-1", 2, "2026-01-01T09:00:01.000Z", "spawn"),
+      completeAssistantMessage(chatId, "main-2", 3, "2026-01-01T10:00:02.000Z"),
+      completeAssistantMessage(chatId, "spawn-2", 4, "2026-01-01T09:00:03.000Z", "spawn"),
+      completeAssistantMessage(chatId, "main-3", 5, "2026-01-01T10:00:04.000Z"),
+    ]);
+
+    expect(getMessagesFromCache(chatId).map((m) => m.id)).toEqual([
+      "main-1",
+      "spawn-1",
+      "main-2",
+      "spawn-2",
+      "main-3",
+    ]);
   });
 });

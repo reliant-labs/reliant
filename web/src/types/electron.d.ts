@@ -107,6 +107,11 @@ export interface ElectronAPI {
 
   // Privacy settings
   updatePrivacySettings: (settings: { crashReportingEnabled: boolean; analyticsEnabled: boolean }) => Promise<{ success: boolean; requiresRestart?: boolean; error?: string }>;
+  /**
+   * Push effective keyboard bindings (shortcut id -> authored binding string)
+   * so the native menu's accelerators match the user's remaps.
+   */
+  updateShortcutBindings?: (bindings: Record<string, string>) => Promise<{ success: boolean }>;
   getPrivacySettings: () => Promise<{ crashReportingEnabled: boolean; analyticsEnabled: boolean }>;
 
   // Analytics
@@ -141,6 +146,11 @@ export interface ElectronAPI {
 export interface ReliantConfig {
   grpcPort: number;
   grpcUrl: string;
+  // Daemon-gateway URL, injected by the Electron preload's buildConfig() from
+  // BackendManager.gatewayUrl. Empty string when the gateway is left to be
+  // derived from the API URL. Consumers: cli-commands.ts, to render a daemon
+  // start command that dials the gateway rather than the api-server.
+  gatewayUrl?: string;
   isElectron: boolean;
   platform: string;
   isDev: boolean;

@@ -24,8 +24,13 @@ import {
   getMonacoLanguage,
   configureMonacoTheme,
   getCurrentMonacoTheme,
+  MONACO_FONT_FAMILY,
 } from "../../lib/monacoTheme";
 import { getRelativePath } from "../../lib/fileUtils";
+import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { sendWithDaemonWait } from "../../lib/daemon-retry";
+import { DaemonWaitState } from "../DaemonWaitState";
+import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../ui/ImagePreviewModal";
 import { FileIcon } from "../ui/FileIcon";
@@ -76,6 +81,8 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   const [loading, setLoading] = useState(true);
   const [showLoadingSpinner, setShowLoadingSpinner] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Blocked on the machine rather than broken — rendered as a wait, not an error.
+  const [waitingOnDaemon, setWaitingOnDaemon] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -165,6 +172,8 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         return;
       }
 
+      // Got a response, so the machine is serving again.
+      setWaitingOnDaemon(false);
       setPreviewInfo(info);
 
       if (info.viewerKind === "text" || info.viewerKind === "pdf") {
@@ -193,6 +202,14 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       if (loadRequestIdRef.current !== requestId) {
         return;
       }
+      // A machine that isn't up yet is not a broken file. Route it to the
+      // shared waiting state instead of `mapLoadError`, which would fall
+      // through to the raw `[internal] unavailable: no daemon connected`.
+      if (isDaemonConnectingError(err)) {
+        setWaitingOnDaemon(true);
+        return;
+      }
+      setWaitingOnDaemon(false);
       console.error("Failed to load file preview:", err);
       setError(mapLoadError(err));
     } finally {
@@ -219,6 +236,15 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       revokePreviewUrl();
     };
   }, [clearLoadingTimer, loadPreview, revokePreviewUrl]);
+
+  // Re-open the file on the shared cadence while the machine comes up, so the
+  // editor fills itself in rather than making the user close and reopen the tab.
+  const daemonWait = useDaemonWait({
+    waiting: waitingOnDaemon,
+    onRetry: useCallback(() => {
+      void loadPreview();
+    }, [loadPreview]),
+  });
 
   useEffect(() => {
     if (!isTextPreview) {
@@ -389,12 +415,26 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
     setError(null);
 
     try {
-      await saveFileContent(file.path, content, effectiveWorktreeId);
+      // Retry across a machine that's still coming up rather than failing the
+      // save. The buffer is not cleared until this resolves, so the user's
+      // edits survive; failing fast here would show "Failed to save file" for
+      // a machine that was about to accept it.
+      await sendWithDaemonWait({
+        action: () => saveFileContent(file.path, content, effectiveWorktreeId),
+        onWaiting: () =>
+          toast.info("Your machine is starting — this file will save automatically."),
+      });
       setOriginalContent(content);
       setSaveSuccess(true);
       window.setTimeout(() => setSaveSuccess(false), 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save file");
+      setError(
+        isDaemonConnectingError(err)
+          ? "Your machine didn't come online, so this file wasn't saved. Your changes are still here — try again."
+          : err instanceof Error
+            ? err.message
+            : "Failed to save file",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -815,6 +855,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       editorRef.current.updateOptions({
         minimap: { enabled: settings.minimap },
         fontSize: settings.fontSize,
+        fontFamily: MONACO_FONT_FAMILY,
         lineNumbers: settings.lineNumbers ? "on" : "off",
         wordWrap: settings.wordWrap ? "on" : "off",
         renderWhitespace: settings.renderWhitespace ? "all" : "none",
@@ -844,12 +885,25 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   }, [settings]);
 
   const renderMainContent = () => {
+    // Ahead of the loading branches: a machine that isn't up yet keeps the
+    // request "in flight" indefinitely, and a bare spinner would never explain
+    // why the file won't open.
+    if (waitingOnDaemon && daemonWait.state) {
+      return (
+        <DaemonWaitState
+          state={daemonWait.state}
+          variant="panel"
+          onRetry={daemonWait.retryNow}
+        />
+      );
+    }
+
     if (loading && showLoadingSpinner) {
       return (
         <div className="flex items-center justify-center h-full">
           <div className="text-center space-y-2">
             <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
-            <p className="text-sm text-muted-foreground font-mono">Loading preview...</p>
+            <p className="text-sm text-muted-foreground">Loading preview...</p>
           </div>
         </div>
       );
@@ -864,10 +918,10 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         <div className="flex items-center justify-center h-full p-4">
           <div className="text-center space-y-3 max-w-md">
             <AlertCircle className="w-12 h-12 text-destructive mx-auto" />
-            <p className="text-sm text-muted-foreground font-mono whitespace-pre-line">{error}</p>
+            <p className="text-sm text-muted-foreground whitespace-pre-line">{error}</p>
             <button
               onClick={() => void loadPreview()}
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-mono"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
               <RefreshCw className="w-3 h-3" />
               Try again
@@ -898,6 +952,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
             readOnly: previewInfo.isEditable === false,
             minimap: { enabled: settings.minimap },
             fontSize: settings.fontSize,
+            fontFamily: MONACO_FONT_FAMILY,
             lineNumbers: settings.lineNumbers ? "on" : "off",
             rulers: [],
             wordWrap: settings.wordWrap ? "on" : "off",

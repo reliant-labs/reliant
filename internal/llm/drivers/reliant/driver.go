@@ -179,6 +179,17 @@ func (c *ReliantClient) ConvertMessages(prompts []string, messages []message.Mes
 				openaiMessages = append(openaiMessages, openai.UserMessage(content))
 			}
 
+		case message.System:
+			// History System messages are content (compaction summary, branch
+			// note, mailbox envelope), delivered as a user turn wrapped in
+			// <system> tags. Without this case they fall through the switch
+			// and are dropped before the request is built.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				openaiMessages = append(openaiMessages,
+					openai.UserMessage(fmt.Sprintf("<system>\n%s\n</system>", systemText)),
+				)
+			}
+
 		case message.Assistant:
 			assistantMsg := openai.ChatCompletionAssistantMessageParam{
 				Role: "assistant",

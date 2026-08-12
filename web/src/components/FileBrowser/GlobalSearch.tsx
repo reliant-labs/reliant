@@ -4,6 +4,7 @@ import { createPortal } from "react-dom";
 import { Search, X, Loader2, FileText, ChevronDown, ChevronRight, Settings2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { searchFiles, type SearchResult, type SearchMatch } from "../../api/fileSystem";
+import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { useProjectStore } from "../../store/projectStore";
 import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -86,6 +87,13 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       // Reset highlighted index to first item
       setHighlightedIndex(0);
     } catch (err) {
+      // Search runs on the machine, so with none connected the raw error is
+      // `[internal] unavailable: no daemon connected` — meaningless in a
+      // search box. Say what's actually true instead.
+      if (isDaemonConnectingError(err)) {
+        setError("Your machine is starting — search will work once it's online.");
+        return;
+      }
       console.error("Search failed:", err);
       setError(err instanceof Error ? err.message : "Search failed");
     } finally {

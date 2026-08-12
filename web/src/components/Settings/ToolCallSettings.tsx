@@ -18,6 +18,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
+import type { Surface } from "../../lib/surface";
 
 /**
  * Interface for tool collapse defaults settings
@@ -30,7 +31,7 @@ export interface ToolCollapseDefaults {
   execution: boolean;   // shell, run_command
   planning: boolean;    // create_plan, update_plan, update_task, add_task, list_tasks, get_plan
   mcp: boolean;         // any tool with '/' in the name (MCP tools)
-  agent: boolean;       // agent, sub-agent spawning tools
+  agent: boolean;       // spawn, agent, sub-agent spawning tools
 }
 
 /**
@@ -38,13 +39,19 @@ export interface ToolCollapseDefaults {
  */
 export const DEFAULT_TOOL_COLLAPSE_SETTINGS: ToolCollapseDefaults = {
   fileView: true,       // collapsed by default (view-only tools)
-  fileWrite: false,     // expanded by default (show diffs)
+  fileWrite: false,     // expanded by default — the diff is the point of the call
   searchRead: true,     // collapsed by default (can expand to see results)
-  execution: false,     // expanded by default (show command output)
+  execution: true,      // collapsed by default
   planning: true,       // collapsed by default
   mcp: true,            // collapsed by default
   agent: true,          // collapsed by default
 };
+
+/**
+ * Broadcast when the tool collapse defaults change, so tool calls already on
+ * screen can pick up the new preference instead of waiting for a reload.
+ */
+export const TOOL_COLLAPSE_SETTINGS_EVENT = "toolcall-collapse-updated";
 
 /**
  * Get the current tool collapse defaults from settings
@@ -68,7 +75,12 @@ export function getToolCategory(toolName: string): keyof ToolCollapseDefaults | 
   }
   
   // Agent tools
-  if (nameLower === 'agent' || nameLower.includes('subagent') || nameLower.includes('sub_agent')) {
+  if (
+    nameLower === 'agent' ||
+    nameLower.includes('spawn') ||
+    nameLower.includes('subagent') ||
+    nameLower.includes('sub_agent')
+  ) {
     return 'agent';
   }
   
@@ -102,17 +114,47 @@ export function getToolCategory(toolName: string): keyof ToolCollapseDefaults | 
 }
 
 /**
- * Get whether a tool should be collapsed by default based on settings
- * Returns true if collapsed, false if expanded
+ * Surfaces that collapse every tool category regardless of the user's setting.
+ *
+ * On a phone, an expanded `edit`/`write` renders a full diff into a viewport
+ * that fits a few lines — one file edit pushes the rest of the conversation
+ * off-screen, and the timeline stops being scannable. The desktop rationale
+ * for `fileWrite: false` ("the diff is the point of the call") assumes a pane
+ * wide enough to read a diff in, which mobile does not have.
+ *
+ * This is a *default*, not a lock: tapping a row still expands it, and that
+ * choice is remembered via `userHasToggled` in ToolExecution. The user's
+ * desktop preference is also left untouched — the override applies at read
+ * time per surface, so it doesn't write back into shared settings.
  */
-export function shouldToolBeCollapsed(toolName: string): boolean {
+const ALWAYS_COLLAPSED_SURFACES: ReadonlySet<Surface> = new Set<Surface>([
+  "mobile",
+  "embed",
+]);
+
+/**
+ * Get whether a tool should be collapsed by default based on settings.
+ * Returns true if collapsed, false if expanded.
+ *
+ * `surface` defaults to "desktop" so every existing call site keeps its
+ * current behavior; the mobile/embed surfaces pass their own value.
+ */
+export function shouldToolBeCollapsed(
+  toolName: string,
+  surface: Surface = "desktop",
+): boolean {
+  // Narrow surfaces collapse everything by default — see the comment above.
+  if (ALWAYS_COLLAPSED_SURFACES.has(surface)) {
+    return true;
+  }
+
   const defaults = getToolCollapseDefaults();
   const category = getToolCategory(toolName);
-  
+
   if (category) {
     return defaults[category];
   }
-  
+
   // Fallback: unknown tools are collapsed by default
   return true;
 }
@@ -181,15 +223,20 @@ export function ToolCallSettingsCompact() {
     loadSettings();
   }, []);
 
+  const persist = (next: ToolCollapseDefaults) => {
+    setSettings(next);
+    settingsSync.setJSONSetting(SETTINGS_KEYS.TOOL_COLLAPSE_DEFAULTS, next).catch(console.error);
+    // Already-rendered tool calls read this setting once when they mount, so
+    // without a broadcast a change here only takes effect on the next reload.
+    window.dispatchEvent(new CustomEvent(TOOL_COLLAPSE_SETTINGS_EVENT));
+  };
+
   const updateSetting = (key: keyof ToolCollapseDefaults, value: boolean) => {
-    const updated = { ...settings, [key]: value };
-    setSettings(updated);
-    settingsSync.setJSONSetting(SETTINGS_KEYS.TOOL_COLLAPSE_DEFAULTS, updated).catch(console.error);
+    persist({ ...settings, [key]: value });
   };
 
   const resetToDefaults = () => {
-    setSettings(DEFAULT_TOOL_COLLAPSE_SETTINGS);
-    settingsSync.setJSONSetting(SETTINGS_KEYS.TOOL_COLLAPSE_DEFAULTS, DEFAULT_TOOL_COLLAPSE_SETTINGS).catch(console.error);
+    persist(DEFAULT_TOOL_COLLAPSE_SETTINGS);
   };
 
   if (!isLoaded) {
@@ -261,7 +308,7 @@ export function ToolCallSettingsCompact() {
         <ToolCategoryToggle
           icon={<Bot className="w-4 h-4" />}
           label="Agent Tools"
-          description="agent, sub_agent"
+          description="spawn, agent, sub_agent"
           examples=""
           collapsed={settings.agent}
           onChange={(v) => updateSetting("agent", v)}

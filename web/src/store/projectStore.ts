@@ -54,7 +54,14 @@ function syncProjectUrl(projectId: string | null) {
         currentPath.startsWith("/auth") ||
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||
-        currentPath.startsWith("/design-sandbox")
+        currentPath.startsWith("/design-sandbox") ||
+        // The mobile surface has its own project handling (MobileShell picks a
+        // fallback project itself). Without this, MobileShell's own
+        // selectProject call navigated the user out of /m/* and into the
+        // desktop shell — which also made every /m/* URL unbookmarkable and
+        // unopenable from a notification.
+        currentPath === "/m" ||
+        currentPath.startsWith("/m/")
       ) {
         return;
       }

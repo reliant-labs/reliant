@@ -11,10 +11,10 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
@@ -486,10 +486,9 @@ func (s *ChatService) UpdateWorkflowParams(
 	// Always signal the root workflow. Child workflows are inline goroutines
 	// with synthetic DB IDs that Temporal doesn't know about.
 	// Thread-scoped updates use the __thread key in the signal payload.
-	workflowID := ""
+	workflowID := chat.MainThreadID()
 	runID := ""
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		workflowID = *chat.WorkflowID
+	if workflowID != "" {
 		if chat.RunID != nil {
 			runID = *chat.RunID
 		}
@@ -683,10 +682,9 @@ func (s *ChatService) GetThreadWorkflowInputs(
 	// Resolve to root workflow ID for Temporal queries.
 	// Child workflows are inline goroutines with synthetic DB IDs that Temporal doesn't know.
 	// All queries must target the root workflow (the only real Temporal workflow).
-	rootWorkflowID := ""
+	rootWorkflowID := chat.MainThreadID()
 	rootRunID := ""
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		rootWorkflowID = *chat.WorkflowID
+	if rootWorkflowID != "" {
 		if chat.RunID != nil {
 			rootRunID = *chat.RunID
 		}
@@ -752,10 +750,28 @@ func (s *ChatService) buildWorkflowExecutionTree(
 	}
 	// Populate Origin, ForkedFromThread, ParentThread, and ThreadTitle from the
 	// Thread table (single source of truth for thread identity).
-	if thread, err := s.database.GetThread(context.Background(), wf.Thread); err == nil && thread != nil {
+	//
+	// A failure here is NOT cosmetic: Origin is what tells the UI a thread is a
+	// spawned sub-agent, and a spawn whose origin is missing renders its entire
+	// transcript inline in the parent chat. Swallowing the error left that
+	// looking like a frontend bug for a long time, so it is logged loudly.
+	thread, threadErr := s.database.GetThread(context.Background(), wf.Thread)
+	if threadErr != nil || thread == nil {
+		logging.Error("[WorkflowTree] Failed to load thread for workflow; Origin will be empty and spawned threads will render inline",
+			"error", threadErr,
+			"workflowID", wf.ID,
+			"thread", wf.Thread,
+			"chatID", wf.ChatID)
+	}
+	if thread != nil {
 		if thread.ParentThreadID != nil {
-			// ForkedFromThread: only for actual forks (have fork metadata)
-			if thread.ForkAtOrdinal != nil {
+			// ForkedFromThread: only for actual forks, not plain child threads
+			// (e.g. spawn). ForkThread always links the thread's initial (sequence
+			// 0) context window to the parent's via ParentContextWindowID, even
+			// when ForkAtMessageID is nil (forking an empty parent thread) --
+			// createThreadInternal never sets that link. That link, not
+			// ForkAtMessageID, is what "is this a fork" needs to test.
+			if cw, err := s.database.GetContextWindowBySequence(context.Background(), wf.Thread, 0); err == nil && cw != nil && cw.ParentContextWindowID != nil {
 				proto.ForkedFromThread = thread.ParentThreadID
 			}
 			// ParentThread: always set when parent exists (both fork and new)

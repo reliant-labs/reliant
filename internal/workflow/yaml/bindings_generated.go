@@ -81,7 +81,9 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 	"compact": {
 		oneofFieldName: "compact",
 		isStructural:   false,
-		argFieldKeys:   map[string]struct{}{},
+		argFieldKeys: map[string]struct{}{
+			"model": {},
+		},
 	},
 	"create_worktree": {
 		oneofFieldName: "create_worktree",

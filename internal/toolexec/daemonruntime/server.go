@@ -48,8 +48,11 @@ func (s *daemonServer) ConnectGateway(
 			WorkingDir:   d.cwd,
 			Capabilities: d.capabilities,
 			Name:         d.daemonName,
-			DaemonType:   "cloud",
-			Labels:       d.registerLabels(),
+			// Server mode means the gateway dials in, which today only
+			// happens for a managed pod — but let the platform say so
+			// explicitly when it can. See resolveDaemonType.
+			DaemonType: resolveDaemonType("cloud"),
+			Labels:     d.registerLabels(),
 		}},
 	}
 	if err := stream.Send(register); err != nil {

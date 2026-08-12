@@ -9,7 +9,8 @@ export type ChatActivityState =
   | "streaming"
   | "awaiting_approval"
   | "background_running"
-  | "error";
+  | "error"
+  | "paused";
 
 interface ActivityDotProps {
   state: ChatActivityState;
@@ -55,6 +56,12 @@ export const ActivityDot: React.FC<ActivityDotProps> = ({
           color: "bg-destructive",
           animation: "animate-pulse",
           defaultLabel: "Error occurred",
+        };
+      case "paused":
+        return {
+          color: "bg-muted-foreground",
+          animation: "",
+          defaultLabel: "Paused",
         };
       default:
         return {

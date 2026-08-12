@@ -86,7 +86,7 @@ export function MessageAttachments({
 
   return (
     <>
-      <div className={`flex flex-wrap gap-2 px-2 py-2 ${className}`}>
+      <div className={`flex flex-wrap gap-1 pt-1 ${className}`}>
         {attachments.map((attachment) => {
           const mimeType = attachment.mimeType || '';
           const isImage = isImageMimeType(mimeType);

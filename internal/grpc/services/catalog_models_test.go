@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
 	reliantdriver "github.com/reliant-labs/reliant/internal/llm/drivers/reliant"
 	"github.com/stretchr/testify/assert"

@@ -246,7 +246,10 @@ func TestCapSkillContent_OverBudgetIsMarkedAndFits(t *testing.T) {
 	if strings.Contains(got, "TAIL MARKER") {
 		t.Fatalf("tail should have been dropped by the cap")
 	}
-	for _, want := range []string{"SKILL TRUNCATED", "END SKILL TRUNCATION NOTICE", "SKILL.md"} {
+	// The notice must name the tool parameters that fetch the remainder. It
+	// used to point at SKILL.md on disk, which the reader often cannot open —
+	// skills arrive through the config pipeline, not the filesystem.
+	for _, want := range []string{"SKILL TRUNCATED", "END SKILL TRUNCATION NOTICE", "offset=", "section="} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("truncation notice must contain %q; got tail:\n%s", want, got[len(got)-800:])
 		}

@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -38,6 +38,19 @@ type Repository interface {
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
 	GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error)
 	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*db.Message, error)
+	// GetLatestMessageInThread returns (nil, nil) for a thread with no
+	// messages -- used by resolveForkPoint to fork a thread's latest state.
+	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
+
+	// Bounded message operations for LoadRecentMessagesBefore /
+	// LoadMessagesInSeqRange / CountCurrentMessages -- these bound the read
+	// or count in SQL for the common (unforked, uncompacted) case instead of
+	// resolving a thread's whole history.
+	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
+	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
+	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*db.Message, error)
+	HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error)
+	ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*db.Message, error)
 
 	// Message operations (for SaveMessage)
 	CreateMessage(ctx context.Context, msg *db.Message) error
@@ -46,11 +59,19 @@ type Repository interface {
 	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*db.Message, error)
 	GetEffectiveMessageCount(ctx context.Context, chatID, threadID string) (int, error)
 	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
+	// GetNextSeq returns the next chat-global seq. See
+	// 20260802000000_add_message_seq.sql.
+	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
 	GetContextUsage(ctx context.Context, chatID, threadID string) (*db.ContextUsage, error)
 
 	// Content block operations
 	CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error
 	ListContentBlocks(ctx context.Context, messageID string) ([]*db.MessageContentBlock, error)
+
+	// Tool call operations. A live message update carries each tool-call
+	// block's durable status and, for a spawn, the thread it started — see
+	// db.ContentBlockPayloads.
+	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
 
 	// Attachment operations
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
@@ -76,9 +97,9 @@ func NewService(repo Repository) *Service {
 
 // CreateThreadOpts contains options for creating a new root thread.
 type CreateThreadOpts struct {
-	ID             string  // Optional - generated if empty
-	ConversationID string  // Required
-	Title          *string // Optional
+	ID     string  // Optional - generated if empty
+	ChatID string  // Required
+	Title  *string // Optional
 
 	// Origin records how the thread was created. Defaults to ThreadOriginMain,
 	// since a thread created through this entry point has no parent.
@@ -90,12 +111,20 @@ type CreateThreadOpts struct {
 
 // ForkThreadOpts contains options for forking a thread.
 type ForkThreadOpts struct {
-	ID                    string  // Optional - generated if empty
-	ConversationID        string  // Required - can differ from parent (cross-chat fork)
-	ParentThreadID        string  // Required
-	ForkAtOrdinal         int64   // Required
-	ForkAtContextWindowID string  // Required
-	Title                 *string // Optional
+	ID             string // Optional - generated if empty
+	ChatID         string // Required - can differ from parent (cross-chat fork)
+	ParentThreadID string // Required
+	// ForkAtContextWindowID is the parent thread's context window this fork
+	// branches from -- required independent of ForkAtMessageID because the
+	// new thread's own context window inherits its Sequence from it, and
+	// that holds even when the parent CW has no messages yet.
+	ForkAtContextWindowID string
+	// ForkAtMessageID is the last parent-thread message this fork inherits.
+	// Nil means the parent's context window had no messages at fork time
+	// (fork of an empty thread) -- the new thread inherits nothing from it,
+	// not everything.
+	ForkAtMessageID *string
+	Title           *string // Optional
 }
 
 // CreateWorkflowWithThreadOpts contains options for creating a workflow and thread atomically.
@@ -126,8 +155,10 @@ type CreateWorkflowWithThreadOpts struct {
 // forkOpts contains resolved fork-specific options (internal use only).
 type forkOpts struct {
 	parentThreadID        string
-	forkAtOrdinal         int64
 	forkAtContextWindowID string
+	// forkAtMessageID is nil when the fork inherits nothing from its parent
+	// (the parent's context window had no messages at fork time).
+	forkAtMessageID *string
 }
 
 // ResolveMessagesOpts contains options for resolving messages.
@@ -181,7 +212,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 	if fork != nil {
 		logging.Info("[FORK-DEBUG] CreateWorkflowWithThread resolved fork point",
 			"parentThreadID", fork.parentThreadID,
-			"forkAtOrdinal", fork.forkAtOrdinal,
+			"forkAtMessageID", fork.forkAtMessageID,
 			"forkAtContextWindowID", fork.forkAtContextWindowID,
 			"workflowID", opts.Workflow.ID,
 			"threadID", opts.ThreadID)
@@ -241,10 +272,10 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 				// Create forked thread
 				thread, cw, err = s.forkThreadInternal(txCtx, ForkThreadOpts{
 					ID:                    threadID,
-					ConversationID:        opts.ChatID,
+					ChatID:                opts.ChatID,
 					ParentThreadID:        fork.parentThreadID,
-					ForkAtOrdinal:         fork.forkAtOrdinal,
 					ForkAtContextWindowID: fork.forkAtContextWindowID,
+					ForkAtMessageID:       fork.forkAtMessageID,
 					Title:                 opts.ThreadTitle,
 				}, &workflowID)
 				if err != nil {
@@ -280,38 +311,42 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 // This is internal - callers use ForkFromMessage or ForkFromThread in opts.
 func (s *Service) resolveForkPoint(ctx context.Context, messageID, threadID *string) (*forkOpts, error) {
 	if messageID != nil {
-		// Fork from specific message - extract thread, CW, and ordinal from message
+		// Fork from specific message - extract thread and CW from message
 		msg, err := s.repo.GetMessage(ctx, *messageID)
 		if err != nil {
 			return nil, fmt.Errorf("fork message not found: %w", err)
 		}
 		return &forkOpts{
 			parentThreadID:        msg.ThreadID,
-			forkAtOrdinal:         msg.Ordinal,
 			forkAtContextWindowID: msg.ContextWindowID,
+			forkAtMessageID:       &msg.ID,
 		}, nil
 	}
 
 	if threadID != nil {
-		// Fork from thread's latest state - get latest CW and max ordinal to include all
+		// Fork from thread's latest state - inherit everything the thread
+		// currently has. The fork message is the thread's latest message
+		// (highest seq); if the thread has none yet, forkAtMessageID stays
+		// nil and the new thread correctly inherits nothing.
 		cw, err := s.repo.GetLatestContextWindow(ctx, *threadID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get latest context window for thread: %w", err)
 		}
 
-		// Get next ordinal for the thread, then subtract 1 to get max existing ordinal
-		nextOrdinal, err := s.repo.GetNextOrdinal(ctx, *threadID)
+		latestMsg, err := s.repo.GetLatestMessageInThread(ctx, *threadID)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get next ordinal: %w", err)
+			return nil, fmt.Errorf("failed to get latest message for thread: %w", err)
 		}
-		maxOrdinal := nextOrdinal - 1
 
-		// Use max ordinal to include all parent messages
-		// If thread is empty (nextOrdinal=0), maxOrdinal=-1 will include nothing (correct)
+		var forkAtMessageID *string
+		if latestMsg != nil {
+			forkAtMessageID = &latestMsg.ID
+		}
+
 		return &forkOpts{
 			parentThreadID:        *threadID,
-			forkAtOrdinal:         maxOrdinal,
 			forkAtContextWindowID: cw.ID,
+			forkAtMessageID:       forkAtMessageID,
 		}, nil
 	}
 

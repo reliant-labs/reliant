@@ -109,6 +109,12 @@ type DaemonRouter interface {
 	// SendToolExecutionCancel cancels a running tool execution.
 	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
 
+	// SendToolExecutionBackground detaches a running tool execution into a
+	// background process. The execution lives in the daemon, so the request has
+	// to cross the wire exactly as cancellation does — an in-memory signal in
+	// the API server is invisible to the process actually running the command.
+	SendToolExecutionBackground(ctx context.Context, userID, requestID, toolCallID string) error
+
 	// SendKillProcess sends a kill signal to a background process on the user's daemon.
 	SendKillProcess(ctx context.Context, userID, processID string) error
 
@@ -188,6 +194,7 @@ type DaemonConnectionManager interface {
 	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error
 	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
 	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
+	SendToolExecutionBackground(ctx context.Context, userID, requestID, toolCallID string) error
 	SendKillProcess(userID, processID string) error
 	SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error)
 	SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error

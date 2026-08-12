@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // =============================================================================
@@ -20,14 +20,14 @@ func TestCreateThread(t *testing.T) {
 
 	t.Run("creates root thread with context window", func(t *testing.T) {
 		thread, cw, err := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ConversationID: h.chatID,
+			ChatID: h.chatID,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 
-		if thread.ConversationID != h.chatID {
-			t.Errorf("expected conversation ID %s, got %s", h.chatID, thread.ConversationID)
+		if thread.ChatID != h.chatID {
+			t.Errorf("expected conversation ID %s, got %s", h.chatID, thread.ChatID)
 		}
 		if thread.ParentThreadID != nil {
 			t.Error("expected root thread to have nil parent")
@@ -42,7 +42,7 @@ func TestCreateThread(t *testing.T) {
 
 	t.Run("generates ID if not provided", func(t *testing.T) {
 		thread, _, err := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ConversationID: h.chatID,
+			ChatID: h.chatID,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -54,8 +54,8 @@ func TestCreateThread(t *testing.T) {
 
 	t.Run("uses provided ID", func(t *testing.T) {
 		thread, _, err := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ID:             "custom-id",
-			ConversationID: h.chatID,
+			ID:     "custom-id",
+			ChatID: h.chatID,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -80,13 +80,14 @@ func TestForkThread(t *testing.T) {
 
 	// Create a parent thread
 	parentThread, parentCW := h.createThread("parent-thread", h.chatID)
+	forkMsg := h.addMessageWithID("parent-fork-msg", h.chatID, parentThread.ID, parentCW.ID, 5, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
 
 	t.Run("creates forked thread inheriting sequence", func(t *testing.T) {
 		forkedThread, forkedCW, err := h.svc.ForkThread(ctx, ForkThreadOpts{
-			ConversationID:        h.chatID,
+			ChatID:                h.chatID,
 			ParentThreadID:        parentThread.ID,
-			ForkAtOrdinal:         5,
 			ForkAtContextWindowID: parentCW.ID,
+			ForkAtMessageID:       &forkMsg.ID,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -96,11 +97,8 @@ func TestForkThread(t *testing.T) {
 		if forkedThread.ParentThreadID == nil || *forkedThread.ParentThreadID != parentThread.ID {
 			t.Error("expected parent thread ID to be set")
 		}
-		if forkedThread.ForkAtOrdinal == nil || *forkedThread.ForkAtOrdinal != 5 {
-			t.Errorf("expected fork ordinal 5")
-		}
-		if forkedThread.ForkAtContextWindowID == nil || *forkedThread.ForkAtContextWindowID != parentCW.ID {
-			t.Error("expected fork context window ID")
+		if forkedThread.ForkAtMessageID == nil || *forkedThread.ForkAtMessageID != forkMsg.ID {
+			t.Errorf("expected fork message %s", forkMsg.ID)
 		}
 
 		// Verify sequence inheritance
@@ -112,12 +110,13 @@ func TestForkThread(t *testing.T) {
 	t.Run("inherits post-compaction sequence", func(t *testing.T) {
 		// Create a compacted context window on parent
 		compactedCW := h.compact(parentThread.ID, "summary-msg")
+		compactMsg := h.addMessageWithID("compact-fork-msg", h.chatID, parentThread.ID, compactedCW.ID, 10, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
 
 		forkedThread, forkedCW, err := h.svc.ForkThread(ctx, ForkThreadOpts{
-			ConversationID:        h.chatID,
+			ChatID:                h.chatID,
 			ParentThreadID:        parentThread.ID,
-			ForkAtOrdinal:         10,
 			ForkAtContextWindowID: compactedCW.ID,
+			ForkAtMessageID:       &compactMsg.ID,
 		})
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -132,9 +131,9 @@ func TestForkThread(t *testing.T) {
 
 	t.Run("requires parent thread ID", func(t *testing.T) {
 		_, _, err := h.svc.ForkThread(ctx, ForkThreadOpts{
-			ConversationID:        h.chatID,
-			ForkAtOrdinal:         1,
+			ChatID:                h.chatID,
 			ForkAtContextWindowID: parentCW.ID,
+			ForkAtMessageID:       &forkMsg.ID,
 		})
 		if err == nil {
 			t.Error("expected error for missing parent thread ID")
@@ -143,10 +142,10 @@ func TestForkThread(t *testing.T) {
 
 	t.Run("validates parent exists", func(t *testing.T) {
 		_, _, err := h.svc.ForkThread(ctx, ForkThreadOpts{
-			ConversationID:        h.chatID,
+			ChatID:                h.chatID,
 			ParentThreadID:        "non-existent",
-			ForkAtOrdinal:         1,
 			ForkAtContextWindowID: parentCW.ID,
+			ForkAtMessageID:       &forkMsg.ID,
 		})
 		if err == nil {
 			t.Error("expected error for non-existent parent")
@@ -470,8 +469,8 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 		if thread.WorkflowID == nil || *thread.WorkflowID != "wf-1" {
 			t.Errorf("expected thread workflow_id wf-1, got %v", thread.WorkflowID)
 		}
-		if thread.ConversationID != h.chatID {
-			t.Errorf("expected conversation ID %s, got %s", h.chatID, thread.ConversationID)
+		if thread.ChatID != h.chatID {
+			t.Errorf("expected conversation ID %s, got %s", h.chatID, thread.ChatID)
 		}
 
 		// Verify context window was created
@@ -570,10 +569,10 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 		if thread.ParentThreadID == nil || *thread.ParentThreadID != "parent-thread" {
 			t.Errorf("expected parent thread ID parent-thread, got %v", thread.ParentThreadID)
 		}
-		// ForkFromThread calculates maxOrdinal = nextOrdinal - 1
-		// Parent has no messages, so nextOrdinal=0, maxOrdinal=-1
-		if thread.ForkAtOrdinal == nil || *thread.ForkAtOrdinal != -1 {
-			t.Errorf("expected fork at ordinal -1 (empty parent), got %v", thread.ForkAtOrdinal)
+		// ForkFromThread with an empty parent thread has no message to
+		// reference: ForkAtMessageID stays nil, meaning "inherit nothing".
+		if thread.ForkAtMessageID != nil {
+			t.Errorf("expected nil fork message (empty parent), got %v", *thread.ForkAtMessageID)
 		}
 
 		// Verify context window inherits sequence from parent
@@ -708,23 +707,24 @@ func TestContextWindowLineage_ForkThread(t *testing.T) {
 	defer h.Close()
 	ctx := context.Background()
 
-	t.Run("fork sets ParentContextWindowID and ForkAtOrdinal", func(t *testing.T) {
+	t.Run("fork sets ParentContextWindowID and ForkAtMessageID", func(t *testing.T) {
 		// Create parent thread
 		parentThread, parentCW, err := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ID:             "cw-lineage-parent-thread",
-			ConversationID: h.chatID,
+			ID:     "cw-lineage-parent-thread",
+			ChatID: h.chatID,
 		})
 		if err != nil {
 			t.Fatalf("failed to create parent thread: %v", err)
 		}
+		forkMsg := h.addMessageWithID("cw-lineage-fork-msg", h.chatID, parentThread.ID, parentCW.ID, 5, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
 
-		// Fork at ordinal 5
+		// Fork at forkMsg
 		_, childCW, err := h.svc.ForkThread(ctx, ForkThreadOpts{
 			ID:                    "cw-lineage-child-thread",
-			ConversationID:        h.chatID,
+			ChatID:                h.chatID,
 			ParentThreadID:        parentThread.ID,
-			ForkAtOrdinal:         5,
 			ForkAtContextWindowID: parentCW.ID,
+			ForkAtMessageID:       &forkMsg.ID,
 		})
 		if err != nil {
 			t.Fatalf("failed to fork thread: %v", err)
@@ -738,12 +738,12 @@ func TestContextWindowLineage_ForkThread(t *testing.T) {
 			t.Errorf("expected ParentContextWindowID=%s, got %s", parentCW.ID, *childCW.ParentContextWindowID)
 		}
 
-		// Verify ForkAtOrdinal is set to 5
-		if childCW.ForkAtOrdinal == nil {
-			t.Fatal("expected ForkAtOrdinal to be set")
+		// Verify ForkAtMessageID is set to forkMsg
+		if childCW.ForkAtMessageID == nil {
+			t.Fatal("expected ForkAtMessageID to be set")
 		}
-		if *childCW.ForkAtOrdinal != 5 {
-			t.Errorf("expected ForkAtOrdinal=5, got %d", *childCW.ForkAtOrdinal)
+		if *childCW.ForkAtMessageID != forkMsg.ID {
+			t.Errorf("expected ForkAtMessageID=%s, got %s", forkMsg.ID, *childCW.ForkAtMessageID)
 		}
 
 		// Verify CompactionSummaryMessageID is nil (forking doesn't create compaction)
@@ -755,24 +755,26 @@ func TestContextWindowLineage_ForkThread(t *testing.T) {
 	t.Run("nested fork creates correct lineage chain", func(t *testing.T) {
 		// Create A -> B -> C fork chain
 		threadA, cwA, _ := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ID:             "lineage-A",
-			ConversationID: h.chatID,
+			ID:     "lineage-A",
+			ChatID: h.chatID,
 		})
+		msgA := h.addMessageWithID("lineage-A-msg", h.chatID, threadA.ID, cwA.ID, 1, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
 
 		_, cwB, _ := h.svc.ForkThread(ctx, ForkThreadOpts{
 			ID:                    "lineage-B",
-			ConversationID:        h.chatID,
+			ChatID:                h.chatID,
 			ParentThreadID:        threadA.ID,
-			ForkAtOrdinal:         1,
 			ForkAtContextWindowID: cwA.ID,
+			ForkAtMessageID:       &msgA.ID,
 		})
+		msgB := h.addMessageWithID("lineage-B-msg", h.chatID, "lineage-B", cwB.ID, 2, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
 
 		threadC, cwC, _ := h.svc.ForkThread(ctx, ForkThreadOpts{
 			ID:                    "lineage-C",
-			ConversationID:        h.chatID,
+			ChatID:                h.chatID,
 			ParentThreadID:        "lineage-B",
-			ForkAtOrdinal:         2,
 			ForkAtContextWindowID: cwB.ID,
+			ForkAtMessageID:       &msgB.ID,
 		})
 		_ = threadC
 
@@ -794,11 +796,11 @@ func TestContextWindowLineage_Compact(t *testing.T) {
 	defer h.Close()
 	ctx := context.Background()
 
-	t.Run("compact sets ParentContextWindowID and nil ForkAtOrdinal", func(t *testing.T) {
+	t.Run("compact sets ParentContextWindowID and nil ForkAtMessageID", func(t *testing.T) {
 		// Create thread with initial context window
 		thread, initialCW, err := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ID:             "lineage-compact-thread",
-			ConversationID: h.chatID,
+			ID:     "lineage-compact-thread",
+			ChatID: h.chatID,
 		})
 		if err != nil {
 			t.Fatalf("failed to create thread: %v", err)
@@ -822,9 +824,9 @@ func TestContextWindowLineage_Compact(t *testing.T) {
 			t.Errorf("expected ParentContextWindowID=%s, got %s", initialCW.ID, *compactedCW.ParentContextWindowID)
 		}
 
-		// Verify ForkAtOrdinal is nil (compaction is not a fork)
-		if compactedCW.ForkAtOrdinal != nil {
-			t.Errorf("expected ForkAtOrdinal to be nil for compaction, got %v", *compactedCW.ForkAtOrdinal)
+		// Verify ForkAtMessageID is nil (compaction is not a fork)
+		if compactedCW.ForkAtMessageID != nil {
+			t.Errorf("expected ForkAtMessageID to be nil for compaction, got %v", *compactedCW.ForkAtMessageID)
 		}
 
 		// Verify CompactionSummaryMessageID is set
@@ -843,8 +845,8 @@ func TestContextWindowLineage_Compact(t *testing.T) {
 
 	t.Run("multiple compactions create chain", func(t *testing.T) {
 		thread, cw0, _ := h.svc.CreateThread(ctx, CreateThreadOpts{
-			ID:             "multi-compact-lineage-thread",
-			ConversationID: h.chatID,
+			ID:     "multi-compact-lineage-thread",
+			ChatID: h.chatID,
 		})
 
 		// First compaction
@@ -861,12 +863,12 @@ func TestContextWindowLineage_Compact(t *testing.T) {
 			t.Errorf("expected cw1->cw0 link, got %v", cw1.ParentContextWindowID)
 		}
 
-		// Verify neither compaction has ForkAtOrdinal
-		if cw1.ForkAtOrdinal != nil {
-			t.Error("expected cw1.ForkAtOrdinal to be nil")
+		// Verify neither compaction has ForkAtMessageID
+		if cw1.ForkAtMessageID != nil {
+			t.Error("expected cw1.ForkAtMessageID to be nil")
 		}
-		if cw2.ForkAtOrdinal != nil {
-			t.Error("expected cw2.ForkAtOrdinal to be nil")
+		if cw2.ForkAtMessageID != nil {
+			t.Error("expected cw2.ForkAtMessageID to be nil")
 		}
 
 		// Verify sequences increment

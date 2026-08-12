@@ -57,7 +57,7 @@ export const buildLocalhostUrl = (port: string | number): string => {
  * the async RELIANT_CONFIG injection — so the whole renderer stays consistent:
  * http-served ⇒ browser-like (same-origin proxy); file:// ⇒ packaged daemon.
  */
-export const useSameOriginTransport = (): boolean => {
+export const isSameOriginTransport = (): boolean => {
   if (typeof window === "undefined") return false;
   // Same-origin (relative) baseUrl ONLY works where a dev-server PROXY is present
   // to fan RPCs out to their backends — i.e. the Vite dev server (web-dev +

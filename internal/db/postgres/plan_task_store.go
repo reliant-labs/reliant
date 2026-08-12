@@ -52,7 +52,7 @@ func (s *planTaskStore) GetPlanByThreadID(ctx context.Context, threadID string) 
 		return nil, fmt.Errorf("failed to list plans: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("no plans found for thread %s", threadID)
+		return nil, core.ErrPlanNotFound
 	}
 	return planFromPG(rows[0]), nil
 }

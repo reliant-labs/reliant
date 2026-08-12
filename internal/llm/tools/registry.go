@@ -22,6 +22,7 @@ const (
 	// Note: ToolShell is not a constant - use ShellToolName from shell_name_*.go
 	ToolBashList   = "bash_list"
 	ToolBashOutput = "bash_output"
+	ToolBashWait   = "bash_wait"
 	ToolBashKill   = "bash_kill"
 
 	// Network tools
@@ -54,6 +55,10 @@ const (
 
 	// Agent tools (v2)
 	ToolAgent = "agent"
+
+	// Spawn observability/messaging tools
+	ToolSpawnStatus = "spawn_status"
+	ToolSpawnSend   = "spawn_send"
 
 	// Worktree tools
 	ToolWorktree = "worktree"
@@ -452,6 +457,7 @@ func GetToolRegistry() []ToolDefinition {
 		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagDefault}, ToolRunsOnDaemon},
 		{ToolBashList, (*ToolsFactory).BashList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
 		{ToolBashOutput, (*ToolsFactory).BashOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolBashWait, (*ToolsFactory).BashWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
 		{ToolBashKill, (*ToolsFactory).BashKill, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
 
 		// Network tools — routed to daemon so HTTP requests originate from the user's machine
@@ -471,6 +477,13 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
 		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
 		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagPlan}, ToolRunsOnServer},
+
+		// Spawn observability/messaging tools. An agent that already holds a
+		// handle to a sub-agent it spawned needs no extra privilege to look
+		// at it or talk to it, so this is NOT gated at orchestrator tier —
+		// see MinimumPermissionForTool.
+		{ToolSpawnStatus, (*ToolsFactory).SpawnStatus, []ToolTag{TagReadOnly}, ToolRunsOnServer},
+		{ToolSpawnSend, (*ToolsFactory).SpawnSend, []ToolTag{}, ToolRunsOnServer},
 
 		// Analysis tools - conditionally add project analyzer
 		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagPlan}, ToolRunsAnywhere},

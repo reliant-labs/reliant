@@ -47,6 +47,8 @@ const ALL_THINKING_LEVELS = [
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "X-High" },
+  { value: "max", label: "Max" },
+  { value: "ultra", label: "Ultra" },
 ];
 
 // ---------------------------------------------------------------------------

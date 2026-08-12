@@ -186,7 +186,7 @@ describe("globalUpdatesStore cache patching", () => {
       createdAt: now,
       updatedAt: now,
       thread: "",
-      ordinal: BigInt(999999),
+      seq: BigInt(999999),
       sequenceNumber: BigInt(0),
       attachments: [],
     } as never;
@@ -217,6 +217,43 @@ describe("globalUpdatesStore cache patching", () => {
     expect(envelope.chats).toHaveLength(0);
     expect(envelope.total).toBe(0);
     expect(queryClient.getQueryData(chatKeys.detail("c1"))).toBeUndefined();
+  });
+
+  it("archiving the chat being viewed drops the selection so the new-chat view renders", () => {
+    useChatStore.setState({ activeChatId: "c1" });
+
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        worktree_id: "wt-1",
+        data: {
+          state: ChatState.ARCHIVED,
+          previous_state: ChatState.IDLE,
+          reason: "user_archived",
+        },
+      }),
+    ]);
+
+    // ModernApp renders NewChatView precisely when activeChatId is null.
+    expect(useChatStore.getState().activeChatId).toBeNull();
+  });
+
+  it("archiving a chat the user is not viewing leaves the selection alone", () => {
+    const otherChat = buildChat({ id: "c2", title: "Other" });
+    queryClient.setQueryData(chatKeys.detail("c2"), otherChat);
+    useChatStore.setState({ activeChatId: "c2" });
+
+    useGlobalUpdatesStore.getState().handleUpdate([
+      buildUpdate({
+        worktree_id: "wt-1",
+        data: {
+          state: ChatState.ARCHIVED,
+          previous_state: ChatState.IDLE,
+          reason: "user_archived",
+        },
+      }),
+    ]);
+
+    expect(useChatStore.getState().activeChatId).toBe("c2");
   });
 
   it("CHAT_STATE_CHANGE is a no-op on the list when the chat is not cached", () => {

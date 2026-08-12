@@ -2,6 +2,7 @@ import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { Modal } from "./ui/Modal";
 import { useAnonSignInNudge } from "@/hooks/useAnonSignInNudge";
+import { useSurface } from "@/lib/surfaceContext";
 
 /**
  * Anonymous-session sign-in nudge.
@@ -22,7 +23,13 @@ import { useAnonSignInNudge } from "@/hooks/useAnonSignInNudge";
 export function AnonSignInNudge() {
   const navigate = useNavigate();
   const { open, dismiss, close } = useAnonSignInNudge();
+  // Mounted at the root, so it renders on `/m/*` too. The nudge is a
+  // desktop-chrome-sized modal interrupting a phone screen, and the /upgrade
+  // flow it routes into is not part of the mobile surface — suppress it there
+  // rather than showing a dead end.
+  const surface = useSurface();
 
+  if (surface === "mobile" || surface === "embed") return null;
   if (!open) return null;
 
   const handleSignIn = () => {

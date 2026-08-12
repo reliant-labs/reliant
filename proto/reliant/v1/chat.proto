@@ -73,6 +73,7 @@ enum ChatActivity {
   CHAT_ACTIVITY_RUNNING = 1;
   CHAT_ACTIVITY_AWAITING_INPUT = 2;
   CHAT_ACTIVITY_ERROR = 3;
+  CHAT_ACTIVITY_PAUSED = 4;
 }
 
 // ChatService handles chat-related operations
@@ -104,6 +105,36 @@ service ChatService {
   
   // SendMessage sends a user message to a chat and continues workflow
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {}
+
+  // SendAgentMessage lets a human queue a message into a SPECIFIC running
+  // thread's mailbox (the agent_messages table) without pausing or otherwise
+  // touching the chat's workflow/pause state. This is the human-facing
+  // counterpart to the spawn_send LLM tool: it is the only way a user can
+  // steer a running sub-agent without first pausing the whole chat.
+  //
+  // The message is delivered at the target thread's next agent-loop step
+  // boundary, same as spawn_send. It is queued, not delivered synchronously.
+  rpc SendAgentMessage(SendAgentMessageRequest) returns (SendAgentMessageResponse) {}
+
+  // ListQueuedAgentMessages returns the messages currently sitting in a
+  // thread's mailbox (agent_messages) with status = queued -- i.e. sent via
+  // SendAgentMessage or spawn_send but not yet drained into that thread's
+  // history. This is what lets a human see what they queued instead of it
+  // being invisible until the agent happens to drain it.
+  rpc ListQueuedAgentMessages(ListQueuedAgentMessagesRequest) returns (ListQueuedAgentMessagesResponse) {}
+
+  // CancelQueuedAgentMessage revokes a single queued mailbox entry before
+  // the target agent drains it. This is a race against the agent's own loop
+  // boundary -- see CancelQueuedAgentMessageResponse for the honesty
+  // contract when the message was already delivered.
+  rpc CancelQueuedAgentMessage(CancelQueuedAgentMessageRequest) returns (CancelQueuedAgentMessageResponse) {}
+
+  // ClaimQueuedAgentMessages takes queued messages back off a thread's
+  // mailbox and returns them, so the caller can resend them as ordinary
+  // turns. One atomic statement, so the caller either owns a message or the
+  // agent does -- never both. This is what "Send now" / "Send all" use
+  // instead of cancel-then-send.
+  rpc ClaimQueuedAgentMessages(ClaimQueuedAgentMessagesRequest) returns (ClaimQueuedAgentMessagesResponse) {}
   
   // ListMessages lists messages for a chat with content blocks
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
@@ -211,7 +242,7 @@ message ArchivedChat {
 message Message {
   string id = 1;
   string chat_id = 2;
-  int64 ordinal = 3;
+  int64 seq = 3;
   string thread = 4;
   reserved 5;                          // removed: context_sequence (internal only)
   MessageRole role = 6;
@@ -230,6 +261,19 @@ message Message {
   optional string node_id = 19;         // Workflow node/step that produced this message (for per-node supervision)
 }
 
+// ToolCallStatus is the durable lifecycle state of a tool call, mirroring
+// internal/db/core.ToolCallStatus. Values are fixed: changing one silently
+// reinterprets every row already in the database.
+enum ToolCallStatus {
+  TOOL_CALL_STATUS_UNSPECIFIED = 0;
+  TOOL_CALL_STATUS_PENDING = 1;
+  TOOL_CALL_STATUS_EXECUTING = 2;
+  TOOL_CALL_STATUS_COMPLETED = 3;
+  TOOL_CALL_STATUS_FAILED = 4;
+  TOOL_CALL_STATUS_CANCELLED = 5;
+  TOOL_CALL_STATUS_BACKGROUNDED = 6;
+}
+
 // ContentBlock represents a granular message content piece
 message ContentBlock {
   string id = 1;
@@ -241,6 +285,20 @@ message ContentBlock {
   optional string input = 7;           // Tool input (JSON string)
   optional bool is_error = 8;          // For tool_result blocks
   optional MatchedToolResult matched_result = 9; // For tool_call blocks with results
+  optional ToolCallStatus tool_call_status = 10; // Durable status, for tool_call blocks
+  optional string started_at = 11;     // Durable status timing, for tool_call blocks
+  optional string completed_at = 12;   // Durable status timing, for tool_call blocks
+  // The workflow a spawn tool call started, from tool_calls.child_workflow_id.
+  // A spawned sub-agent's thread id EQUALS its workflow id, so this is the
+  // direct answer to "which thread does this spawn own".
+  //
+  // Without it the UI had to search for the thread by matching
+  // spawnedByNodeId across the workflow tree, or scan live streaming state --
+  // both indirect, and both miss (spawnedByNodeId is empty on some spawn
+  // workflows, and streaming state is empty for anything not currently
+  // running). The renderer then showed "Starting..." over a child thread that
+  // already had hundreds of messages.
+  optional string child_workflow_id = 13; // For spawn tool_call blocks
 }
 
 // MatchedToolResult pairs a tool call with its result
@@ -406,11 +464,105 @@ message SendMessageResponse {
   string message_id = 6;               // ID of the saved user message
 }
 
+// SendAgentMessageRequest queues a human message into a specific running
+// thread's mailbox (agent_messages), delivered at that thread's next loop
+// step boundary. Unlike SendMessage, this never touches workflow/pause
+// state -- it exists specifically so a user can steer a running sub-agent
+// without pausing the chat.
+message SendAgentMessageRequest {
+  string chat_id = 1;
+  string thread_id = 2;   // The target thread to message. Must belong to chat_id.
+  string message = 3;
+  repeated string attachments = 4;  // Attachment IDs
+}
+
+// SendAgentMessageResponse confirms the message was queued.
+// The receipt is deliberately honest: queued does not mean read or acted
+// on, mirroring spawn_send's contract.
+message SendAgentMessageResponse {
+  bool success = 1;
+  string message = 2;   // Human-readable receipt, or the reason for failure.
+}
+
+// ListQueuedAgentMessagesRequest asks for the still-undelivered mailbox
+// entries addressed to a specific thread.
+message ListQueuedAgentMessagesRequest {
+  string chat_id = 1;
+  string thread_id = 2;   // Must belong to chat_id.
+}
+
+// QueuedAgentMessage is one undelivered agent_messages row.
+message QueuedAgentMessage {
+  string id = 1;
+  string body = 2;
+  string created_at = 3;
+  // sender_kind mirrors AgentMessageKind (core.AgentMessageKind): 1 =
+  // agent-to-agent (spawn_send), 5 = human (SendAgentMessage). It lets the
+  // UI distinguish a message the user queued from one a peer agent sent.
+  int32 sender_kind = 4;
+  repeated string attachments = 5;  // Attachment IDs
+}
+
+// ListQueuedAgentMessagesResponse lists queued entries in send order.
+message ListQueuedAgentMessagesResponse {
+  repeated QueuedAgentMessage messages = 1;
+}
+
+// CancelQueuedAgentMessageRequest revokes one queued mailbox entry.
+message CancelQueuedAgentMessageRequest {
+  string chat_id = 1;
+  string message_id = 2;
+}
+
+// CancelQueuedAgentMessageResponse reports whether the cancel actually took
+// -- this is a race against the target agent's own drain, so success can
+// legitimately be false even for a request the caller was allowed to make.
+message CancelQueuedAgentMessageResponse {
+  bool success = 1;
+  string message = 2;   // Human-readable receipt, or the reason it couldn't be cancelled.
+}
+
+// ClaimQueuedAgentMessagesRequest takes queued messages back off a thread's
+// mailbox so the caller can resend them as ordinary turns.
+message ClaimQueuedAgentMessagesRequest {
+  string chat_id = 1;
+  string thread_id = 2;            // Must belong to chat_id.
+  // Leave message_id unset to claim the whole queue ("send all"); set it to
+  // claim exactly one entry ("send now").
+  optional string message_id = 3;
+}
+
+// ClaimQueuedAgentMessagesResponse returns exactly the entries this call
+// removed, oldest first.
+//
+// There is no success flag, deliberately. The claim is a single atomic
+// statement, so "what did I get" IS the answer: an entry the agent's drain
+// won first is simply absent. Callers must resend what came back and nothing
+// else -- treating a locally-cached queue view as authoritative is what would
+// reintroduce the double-send this endpoint exists to make impossible.
+message ClaimQueuedAgentMessagesResponse {
+  repeated QueuedAgentMessage messages = 1;
+}
+
 // ListMessagesRequest lists messages for a chat
 message ListMessagesRequest {
   string chat_id = 1;
   optional int32 recent = 2;           // Number of most recent messages
-  optional int64 before_ordinal = 3;   // Load messages before this ordinal
+  optional int64 before_seq = 3;       // Load messages before this seq
+
+  // Read exactly one thread instead of the whole chat.
+  //
+  // Returns that thread's visual thread (inherited messages from the context
+  // window chain included, fork/compaction resolved) and nothing else. This is
+  // the read for anything that displays a single thread: a spawn's collapsed
+  // preview, or the timeline with a thread selected.
+  //
+  // Without it those callers took the chat-wide list and filtered it by
+  // thread, which only worked when the child's messages happened to survive a
+  // window sized for the MAIN transcript. When they didn't, the spawn preview
+  // rendered "Starting..." over a child thread that already had hundreds of
+  // messages -- indistinguishable from a spawn that truly hadn't started.
+  optional string thread_id = 4;
 }
 
 // ListMessagesResponse returns messages with content blocks
@@ -419,7 +571,7 @@ message ListMessagesResponse {
   int32 total = 2;
   int32 count = 3;
   bool has_more = 4;
-  int64 oldest_ordinal = 5;
+  int64 oldest_seq = 5;
 }
 
 // UpdateChatStateRequest changes chat state

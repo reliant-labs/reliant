@@ -132,7 +132,16 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 			// The thinking block must come before text and tool_use blocks.
 			// Only include thinking blocks if thinking is enabled for this request;
 			// sending them to a non-reasoning model will cause an API error.
-			if b.isThinkingEnabled() {
+			//
+			// This predicate must match the one that decides whether the REQUEST
+			// asks for thinking (getThinkingConfig / applyClaudeCodeExtras), which
+			// is adaptive OR budget. Testing only isThinkingEnabled left adaptive
+			// models (opus-5 / sonnet-5 / fable-5 — thinking:{type:"adaptive"},
+			// which deliberately carries no ReasoningEffort budget) asking for
+			// thinking on every turn while never replaying a single thinking block,
+			// so each assistant turn was rebuilt as text+tool_calls only and the
+			// cached prefix stopped matching from the message history onward.
+			if b.isAdaptiveThinking() || b.isThinkingEnabled() {
 				reasoning := msg.ReasoningContent()
 				if reasoning.Thinking != "" && reasoning.Signature != "" {
 					blocks = append(blocks, anthropic.NewThinkingBlock(reasoning.Signature, reasoning.Thinking))
@@ -361,6 +370,25 @@ func (b *baseClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolUnionPa
 	return anthropicTools
 }
 
+// toolChoice returns the tool_choice param for a pinned tool, or the zero
+// value (provider default "auto") when no pin is configured.
+//
+// toolName is the name as it appears in the request's tools array, which is
+// not always options.ForceToolChoice: the Claude Code driver rewrites tool
+// names with an mcp__ prefix, and tool_choice must match that rewritten name.
+// DisableParallelToolUse forces exactly one tool_use block.
+func (b *baseClient) toolChoice(toolName string) anthropic.ToolChoiceUnionParam {
+	var choice anthropic.ToolChoiceUnionParam
+	if toolName == "" {
+		return choice
+	}
+	choice.OfTool = &anthropic.ToolChoiceToolParam{
+		Name:                   toolName,
+		DisableParallelToolUse: anthropic.Bool(true),
+	}
+	return choice
+}
+
 func (b *baseClient) finishReason(reason string) message.FinishReason {
 	var result message.FinishReason
 	switch reason {
@@ -492,6 +520,12 @@ func (b *baseClient) usage(msg anthropic.Message) llm.TokenUsage {
 		TokenCount:   total,
 		InputTokens:  msg.Usage.InputTokens,
 		OutputTokens: msg.Usage.OutputTokens,
+		// Carry the cache split through instead of only folding it into the
+		// total. Both numbers were already being read here to compute `total`
+		// and then dropped, which is why a stalled turn could not be
+		// attributed to a cache miss from the logs alone.
+		CacheReadInputTokens:     msg.Usage.CacheReadInputTokens,
+		CacheCreationInputTokens: msg.Usage.CacheCreationInputTokens,
 	}
 }
 

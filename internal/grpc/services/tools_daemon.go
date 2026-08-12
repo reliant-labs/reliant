@@ -1153,7 +1153,10 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 		return nil
 	}
 
-	project, err := s.database.GetProjectByPath(ctx, projectPath)
+	// Scoped by user: `projects` is UNIQUE on (user_id, path), so a path-only
+	// lookup can return another user's row for the same directory and this
+	// would emit a refetch naming a project the connected user cannot see.
+	project, err := s.database.GetProjectByPathAndUser(ctx, projectPath, conn.userID)
 	if err != nil {
 		return nil // project might not exist yet, that's fine
 	}
@@ -1228,7 +1231,17 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		return err
 	}
 	if project == nil {
-		logging.Warn("[ToolsDaemon] persistProjectConfigSnapshot: project not found for path", "projectPath", projectPath, "daemonID", conn.daemonID)
+		// Dropping a snapshot is NOT recoverable by waiting: runProjectWatcher
+		// suppresses any delta whose content hash matches the last one it SENT,
+		// so the daemon will not re-offer this snapshot until the files on disk
+		// change or it reconnects. Everything downstream (skills, MCP, memory)
+		// therefore stays empty indefinitely. Log it as the data loss it is —
+		// the previous "project not found for path" wording sent debugging
+		// after a missing row when the row existed and was merely unresolvable.
+		logging.Error("[ToolsDaemon] Dropped project config snapshot — no project resolvable for this daemon's user",
+			"projectPath", projectPath,
+			"daemonID", conn.daemonID,
+			"userID", conn.userID)
 		return nil
 	}
 
@@ -1267,13 +1280,35 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 	return nil
 }
 
+// ensureOwnedProjectForPath resolves the connected daemon's project row for a
+// path, creating it when the daemon has discovered a directory this user has no
+// project for yet.
+//
+// The lookup MUST be scoped by user. `projects` is UNIQUE on (user_id, path),
+// NOT on path — the same directory legitimately carries one row per user, and a
+// path-only `SELECT ... WHERE path = $1` then returns an arbitrary one of them.
+// Signing in under a second identity (e.g. dev session -> GitHub OAuth) is
+// enough to produce the collision on a single developer's machine.
+//
+// The failure that motivated this was silent and total: the path-only lookup
+// returned the OTHER user's row, the ownership check below rejected it, and the
+// caller logged "project not found for path" and DROPPED the snapshot — for a
+// project that existed and was created 200ms earlier. The seed row that
+// CreateProject writes (all columns NULL) therefore stayed empty forever, so
+// every CallLLM against that project saw a 0-entry skill catalog and failed
+// preload with "the project config snapshot has not filled yet; retrying" — a
+// message that promises a transient condition the pipeline could never clear.
 func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, error) {
 	if !filepath.IsAbs(path) {
 		logging.Warn("[ToolsDaemon] Rejecting non-absolute project path", "path", path)
 		return nil, nil
 	}
+	if conn == nil || strings.TrimSpace(conn.userID) == "" {
+		logging.Warn("[ToolsDaemon] Rejecting project path from unidentified daemon connection", "path", path)
+		return nil, nil
+	}
 
-	project, err := s.database.GetProjectByPath(ctx, path)
+	project, err := s.database.GetProjectByPathAndUser(ctx, path, conn.userID)
 	if err != nil {
 		if !isNotFoundErr(err) {
 			return nil, err
@@ -1299,21 +1334,18 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 			UpdatedAt:  now,
 			LastActive: now,
 		})
-		if createErr != nil {
-			project, err = s.database.GetProjectByPath(ctx, path)
-			if err != nil {
+		// Read back scoped for the same reason the first lookup is: an
+		// unscoped read-back after a successful create can hand us a DIFFERENT
+		// user's row for this path. The createErr branch is the lost race with
+		// a concurrent create (UNIQUE (user_id, path)) — re-reading our own row
+		// is what makes it idempotent rather than fatal.
+		project, err = s.database.GetProjectByPathAndUser(ctx, path, conn.userID)
+		if err != nil {
+			if createErr != nil {
 				return nil, fmt.Errorf("failed to create discovered project %s: %w", path, createErr)
 			}
-		} else {
-			project, err = s.database.GetProjectByPath(ctx, path)
-			if err != nil {
-				return nil, err
-			}
+			return nil, err
 		}
-	}
-
-	if project.UserID != conn.userID {
-		return nil, nil
 	}
 
 	// Reconcile the cached git flag against what daemon discovery actually
@@ -2022,6 +2054,45 @@ func (s *ToolsDaemonService) sendToolRequestToConn(ctx context.Context, conn *da
 func (s *ToolsDaemonService) cancelDaemonCommand(userID, requestID, reason string) {
 	if err := s.SendToolExecutionCancel(context.Background(), userID, requestID, reason); err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to send daemon command cancel", "userID", userID, "requestID", requestID, "error", err)
+	}
+}
+
+// SendToolExecutionBackground asks the connected daemon to detach an in-flight
+// execution into a background process.
+//
+// Same delivery contract as SendToolExecutionCancel below: the request is a
+// best-effort nudge to a RUNNING execution. If the daemon is offline, the
+// connection closed, or its buffer is full, the command simply keeps running in
+// the foreground — the caller surfaces that rather than claiming success.
+func (s *ToolsDaemonService) SendToolExecutionBackground(_ context.Context, userID, requestID, toolCallID string) error {
+	if strings.TrimSpace(requestID) == "" {
+		return fmt.Errorf("cannot background without a request id for tool call %s", toolCallID)
+	}
+
+	s.mu.RLock()
+	conn := s.defaultDaemonForUser(userID)
+	s.mu.RUnlock()
+	if conn == nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot background - daemon offline", "userID", userID, "requestID", requestID)
+		return fmt.Errorf("daemon offline for user %s, cannot deliver background for %s", userID, requestID)
+	}
+
+	msg := &reliantv1.ServerMessage{
+		Message: &reliantv1.ServerMessage_ToolBackground{
+			ToolBackground: &reliantv1.ToolExecutionBackground{
+				RequestId:  requestID,
+				ToolCallId: toolCallID,
+			},
+		},
+	}
+
+	select {
+	case conn.sendCh <- msg:
+		return nil
+	case <-conn.done:
+		return fmt.Errorf("daemon connection closed for user %s, background for %s dropped", userID, requestID)
+	default:
+		return fmt.Errorf("daemon buffer full for user %s, background for %s dropped", userID, requestID)
 	}
 }
 

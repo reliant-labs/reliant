@@ -28,14 +28,43 @@ type ShortcutsConfig struct {
 	Shortcuts  []Shortcut `yaml:"shortcuts"`
 }
 
-// Shortcut represents a single keyboard shortcut
+// Shortcut represents a single keyboard shortcut.
+//
+// Binding is the desktop (Electron) default. WebBinding overrides it in a
+// browser tab, where many chords are reserved — see config/shortcuts.yaml for
+// the conflict rules. When WebBinding is empty the same chord is used on both.
 type Shortcut struct {
 	ID          string `yaml:"id"`
 	Name        string `yaml:"name"`
 	Description string `yaml:"description"`
 	Category    string `yaml:"category"`
 	Binding     string `yaml:"binding"`
+	WebBinding  string `yaml:"web_binding"`
 	Handler     string `yaml:"handler"`
+	// Context names the focus surface this shortcut belongs to. Defaults to
+	// "global" when omitted.
+	Context string `yaml:"context"`
+	// AllowInInput lets an unmodified binding fire while the user is typing.
+	AllowInInput bool `yaml:"allow_in_input"`
+	// Passthrough handles the chord without consuming it.
+	Passthrough bool `yaml:"passthrough"`
+}
+
+// Context returns the declared context, defaulting to "global".
+func (s Shortcut) EffectiveContext() string {
+	if s.Context == "" {
+		return "global"
+	}
+	return s.Context
+}
+
+// EffectiveWebBinding returns the browser binding, falling back to the desktop
+// one when no override is declared.
+func (s Shortcut) EffectiveWebBinding() string {
+	if s.WebBinding == "" {
+		return s.Binding
+	}
+	return s.WebBinding
 }
 
 // ParsedBinding represents a parsed key binding
@@ -151,41 +180,16 @@ func generateTypeScript(config ShortcutsConfig) string {
 // This file contains the default keyboard shortcut definitions.
 // =============================================================================
 
-import type { KeyBinding, ShortcutDefinition } from './shortcutsStore';
-
-// Helper function to create cross-platform key bindings (Cmd on Mac, Ctrl on Windows)
-function createCrossPlatformBinding(key: string, options: { shift?: boolean; alt?: boolean } = {}): KeyBinding {
-  const isMac = typeof window !== 'undefined' && 
-    (window.navigator.platform.toUpperCase().includes('MAC') || 
-     window.navigator.userAgent.toUpperCase().includes('MAC'));
-  
-  return {
-    key,
-    meta: isMac,
-    ctrl: !isMac,
-    shift: options.shift,
-    alt: options.alt
-  };
-}
-
-// Helper function to create Cmd+Ctrl bindings (Cmd+Ctrl on Mac, Ctrl+Alt on Windows)
-function createCmdCtrlBinding(key: string, options: { shift?: boolean } = {}): KeyBinding {
-  const isMac = typeof window !== 'undefined' && 
-    (window.navigator.platform.toUpperCase().includes('MAC') || 
-     window.navigator.userAgent.toUpperCase().includes('MAC'));
-  
-  return {
-    key,
-    meta: isMac,
-    ctrl: true,
-    alt: !isMac,
-    shift: options.shift
-  };
-}
+import type { ShortcutDefinition } from './shortcutsStore';
 
 /**
  * Default keyboard shortcuts.
- * 
+ *
+ * Bindings are authored strings ("Cmd+Shift+P", "Cmd+K C") rather than
+ * pre-resolved modifier objects. Platform folding (Cmd to Meta on macOS, to
+ * Control elsewhere) happens at load time in parseBinding(), so one definition
+ * serves every platform and sequences stay readable.
+ *
  * Categories:
 `)
 
@@ -198,57 +202,27 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
 `)
 
 	for i, s := range config.Shortcuts {
-		p := parseBinding(s.Binding)
-
-		// Determine binding type and generate code
-		var bindingCode string
-		if !p.Cmd && !p.Ctrl && !p.Shift && !p.Alt {
-			// Simple key
-			bindingCode = fmt.Sprintf("{ key: '%s' }", p.Key)
-		} else if p.Cmd && p.Ctrl {
-			// Cmd+Ctrl style
-			opts := ""
-			if p.Shift {
-				opts = ", { shift: true }"
-			}
-			bindingCode = fmt.Sprintf("createCmdCtrlBinding('%s'%s)", p.Key, opts)
-		} else if p.Cmd {
-			// Cross-platform style
-			opts := []string{}
-			if p.Shift {
-				opts = append(opts, "shift: true")
-			}
-			if p.Alt {
-				opts = append(opts, "alt: true")
-			}
-			if len(opts) > 0 {
-				bindingCode = fmt.Sprintf("createCrossPlatformBinding('%s', { %s })", p.Key, strings.Join(opts, ", "))
-			} else {
-				bindingCode = fmt.Sprintf("createCrossPlatformBinding('%s')", p.Key)
-			}
-		} else {
-			// Direct binding
-			parts := []string{fmt.Sprintf("key: '%s'", p.Key)}
-			if p.Ctrl {
-				parts = append(parts, "ctrl: true")
-			}
-			if p.Shift {
-				parts = append(parts, "shift: true")
-			}
-			if p.Alt {
-				parts = append(parts, "alt: true")
-			}
-			bindingCode = fmt.Sprintf("{ %s }", strings.Join(parts, ", "))
-		}
-
 		fmt.Fprintf(&sb, `  %s: {
     id: '%s',
     name: '%s',
     description: '%s',
     category: '%s',
-    defaultBinding: %s,
-    handler: '%s'
-  }`, s.ID, s.ID, escapeJS(s.Name), escapeJS(s.Description), s.Category, bindingCode, s.Handler)
+    defaultBinding: '%s',
+    defaultWebBinding: '%s',
+    context: '%s',
+    handler: '%s'`,
+			s.ID, s.ID, escapeJS(s.Name), escapeJS(s.Description), s.Category,
+			escapeJS(s.Binding), escapeJS(s.EffectiveWebBinding()),
+			s.EffectiveContext(), s.Handler)
+
+		if s.AllowInInput {
+			sb.WriteString(",\n    allowInInput: true")
+		}
+		if s.Passthrough {
+			sb.WriteString(",\n    passthrough: true")
+		}
+
+		sb.WriteString("\n  }")
 
 		if i < len(config.Shortcuts)-1 {
 			sb.WriteString(",")
@@ -287,6 +261,11 @@ weight: 60
 
 Reliant includes keyboard shortcuts for common actions. All shortcuts can be customized in Settings → Keyboard Shortcuts.
 
+Some shortcuts differ between the desktop app and the browser. Browsers reserve
+chords like ` + "`Cmd+T`" + ` and ` + "`Cmd+W`" + ` for their own tabs and windows and will not
+release them to a web page, so those actions use a ` + "`Cmd+K`" + ` prefix on the web.
+Where the **Browser** column is blank the shortcut is the same on both.
+
 `)
 
 	// Group by category
@@ -303,8 +282,8 @@ Reliant includes keyboard shortcuts for common actions. All shortcuts can be cus
 		}
 
 		fmt.Fprintf(&sb, "## %s\n\n", cat)
-		sb.WriteString("| Shortcut | Action |\n")
-		sb.WriteString("|----------|--------|\n")
+		sb.WriteString("| Desktop | Browser | Action |\n")
+		sb.WriteString("|---------|---------|--------|\n")
 
 		// Sort by name within category
 		sort.Slice(shortcuts, func(i, j int) bool {
@@ -312,8 +291,12 @@ Reliant includes keyboard shortcuts for common actions. All shortcuts can be cus
 		})
 
 		for _, s := range shortcuts {
-			displayBinding := formatBindingForDocs(s.Binding)
-			fmt.Fprintf(&sb, "| `%s` | %s |\n", displayBinding, s.Name)
+			desktop := fmt.Sprintf("`%s`", formatBindingForDocs(s.Binding))
+			web := ""
+			if s.WebBinding != "" && s.WebBinding != s.Binding {
+				web = fmt.Sprintf("`%s`", formatBindingForDocs(s.WebBinding))
+			}
+			fmt.Fprintf(&sb, "| %s | %s | %s |\n", desktop, web, s.Name)
 		}
 		sb.WriteString("\n")
 	}

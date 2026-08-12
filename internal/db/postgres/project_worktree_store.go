@@ -190,22 +190,40 @@ func NewWorktreeStore(q pgdb.Querier) core.WorktreeStore { return &worktreeStore
 func (s *worktreeStore) CreateWorktree(ctx context.Context, worktree *core.Worktree) error {
 	baseBranchesJSON, _ := encodeBaseBranches(worktree.BaseBranches)
 	return s.q.CreateWorktree(ctx, pgdb.CreateWorktreeParams{
-		ID:           worktree.ID,
-		Name:         worktree.Name,
-		Path:         worktree.Path,
-		Branch:       worktree.Branch,
-		BaseBranch:   worktree.BaseBranch,
-		BaseBranches: baseBranchesJSON,
-		ProjectID:    worktree.ProjectID,
-		ChatID:       ptrToNullString(worktree.ChatID),
-		Status:       worktree.Status,
-		IsMain:       worktree.IsMain,
-		CreatedAt:    worktree.CreatedAt,
-		UpdatedAt:    worktree.UpdatedAt,
-		LastActive:   worktree.LastActive,
-		DeletedAt:    projectPtrToNullTime(worktree.DeletedAt),
-		DaemonID:     ptrToNullString(worktree.DaemonID),
+		ID:             worktree.ID,
+		Name:           worktree.Name,
+		Path:           worktree.Path,
+		Branch:         worktree.Branch,
+		BaseBranch:     worktree.BaseBranch,
+		BaseBranches:   baseBranchesJSON,
+		ProjectID:      worktree.ProjectID,
+		ChatID:         ptrToNullString(worktree.ChatID),
+		Status:         worktree.Status,
+		IsMain:         worktree.IsMain,
+		CreatedAt:      worktree.CreatedAt,
+		UpdatedAt:      worktree.UpdatedAt,
+		LastActive:     worktree.LastActive,
+		DeletedAt:      projectPtrToNullTime(worktree.DeletedAt),
+		DaemonID:       ptrToNullString(worktree.DaemonID),
+		IdempotencyKey: ptrToNullString(worktree.IdempotencyKey),
 	})
+}
+
+// GetWorktreeByIdempotencyKey returns the worktree a previous create already
+// produced for this key, or nil when there is none. A nil result with a nil
+// error is the "no prior attempt" case and is not an error.
+func (s *worktreeStore) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*core.Worktree, error) {
+	row, err := s.q.GetWorktreeByIdempotencyKey(ctx, pgdb.GetWorktreeByIdempotencyKeyParams{
+		ProjectID:      projectID,
+		IdempotencyKey: sql.NullString{String: key, Valid: true},
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return worktreeFromPG(row), nil
 }
 
 // encodeBaseBranches marshals a per-repo base-branch map for storage.
@@ -301,6 +319,10 @@ func (s *worktreeStore) UpdateWorktree(ctx context.Context, worktree *core.Workt
 		BaseBranch:   worktree.BaseBranch,
 		BaseBranches: baseBranchesJSON,
 		LastActive:   worktree.LastActive,
+		// Load-bearing for async creation: the CREATING row is inserted with
+		// an empty path and only learns its on-disk location once the daemon
+		// reports it. Omitting this would compile fine and silently write "".
+		Path: worktree.Path,
 	})
 }
 
@@ -372,6 +394,7 @@ func worktreeFromPG(row pgdb.Worktree) *core.Worktree {
 		ChatID:          nullStringToPtr(row.ChatID),
 		DaemonID:        nullStringToPtr(row.DaemonID),
 		Status:          row.Status,
+		IdempotencyKey:  nullStringToPtr(row.IdempotencyKey),
 		IsMain:          row.IsMain,
 		CreatedAt:       row.CreatedAt,
 		UpdatedAt:       row.UpdatedAt,

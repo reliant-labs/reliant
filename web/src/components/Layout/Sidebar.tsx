@@ -602,6 +602,16 @@ function SidebarComponent({
 }: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
+  // Focus target for the "focus the chat list" shortcut. The list has no
+  // single natural control to focus, so the pane container takes it and
+  // ordinary tab-order takes over from there.
+  const sidebarRootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const handleFocus = () => sidebarRootRef.current?.focus();
+    window.addEventListener("focus-left-sidebar", handleFocus);
+    return () => window.removeEventListener("focus-left-sidebar", handleFocus);
+  }, []);
+
   // Activity from activityStore (SINGLE SOURCE OF TRUTH)
   const selectChat = useChatStore((state) => state.selectChat);
   const deleteChatMutation = useDeleteChat();
@@ -636,7 +646,6 @@ function SidebarComponent({
     Record<string, boolean>
   >({});
   const [isNoWorktreeExpanded, setIsNoWorktreeExpanded] = useState(true);
-  const [isArchivedExpanded, setIsArchivedExpanded] = useState(false);
   const [expandedArchivedGroups, setExpandedArchivedGroups] = useState<
     Record<string, boolean>
   >({});
@@ -1147,25 +1156,24 @@ function SidebarComponent({
     });
   }, [deleteChatMutation, unarchiveMutation]);
 
-  // Scroll active chat into view when it changes (e.g., via keyboard navigation)
-  // NOTE: Only trigger when activeChatId changes, NOT when chats list changes
-  // This prevents scrolling when unarchiving chats
+  // Reveal the active chat (switch tab, expand its group, scroll it into view)
+  // when the selection changes — e.g. via keyboard navigation.
+  //
+  // This runs at most once per (chat, view mode): revealing is a response to the
+  // selection changing, not a state the sidebar continuously enforces. Re-running
+  // it on tab/expansion state would undo the user's own clicks, and re-running it
+  // on every chat-list refetch would yank the sidebar around mid-browse.
+  const revealedChatKeyRef = useRef<string | null>(null);
   useEffect(() => {
     if (!activeChatId || !scrollContainerRef.current) return;
 
-    // Access current chats list inside the effect (not in dependencies)
-    // This way the effect only runs when activeChatId changes
-    const currentChatsWithActivity = chatsWithActivity;
-    const currentProjectArchivedChats = projectArchivedChats;
-    const currentArchivedGroups = archivedGroups;
-
     // Find the chat in the active list first
-    let chat = currentChatsWithActivity.find((c) => c.id === activeChatId);
+    let chat = chatsWithActivity.find((c) => c.id === activeChatId);
     let isArchived = false;
 
     // If not found in active chats, check archived chats
     if (!chat) {
-      const archivedChat = currentProjectArchivedChats.find(
+      const archivedChat = projectArchivedChats.find(
         (c) => c.id === activeChatId
       );
       if (archivedChat) {
@@ -1176,16 +1184,16 @@ function SidebarComponent({
       }
     }
 
+    // The chat lists load asynchronously, so an unknown id here just means the
+    // data hasn't arrived yet. Leave the key unclaimed and retry on the next
+    // list update.
     if (!chat) return;
 
-    if (isArchived) {
-      setChatListTab("archived");
-      if (!isArchivedExpanded) {
-        setIsArchivedExpanded(true);
-      }
-    } else {
-      setChatListTab("active");
-    }
+    const revealKey = `${activeChatId}:${viewMode}`;
+    if (revealedChatKeyRef.current === revealKey) return;
+    revealedChatKeyRef.current = revealKey;
+
+    setChatListTab(isArchived ? "archived" : "active");
 
     // If in grouped view and not archived, expand the worktree group containing this chat
     if (!isArchived && viewMode === "grouped") {
@@ -1211,7 +1219,7 @@ function SidebarComponent({
 
     // If archived and in grouped view, expand the archived group containing this chat
     if (isArchived && viewMode === "grouped") {
-      const containingGroup = currentArchivedGroups.find((group) =>
+      const containingGroup = archivedGroups.find((group) =>
         group.chats.some((c) => {
           return c.id === activeChatId;
         })
@@ -1242,18 +1250,11 @@ function SidebarComponent({
     }, 100);
 
     return () => clearTimeout(timeoutId);
+    // The expansion setters and getWorktreeForChat are intentionally omitted:
+    // reading them via the render closure keeps this effect from re-running when
+    // the user toggles a group open or closed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    activeChatId,
-    // Only include viewMode and expansion state - NOT the chats lists
-    // This prevents the effect from running when chats are unarchived
-    viewMode,
-    expandedWorktreeGroups,
-    expandedArchivedGroups,
-    isNoWorktreeExpanded,
-    isArchivedExpanded,
-    getWorktreeForChat,
-  ]);
+  }, [activeChatId, viewMode, chatsWithActivity, projectArchivedChats, archivedGroups]);
 
 
   const toggleWorktreeGroup = (worktreeId: string) => {
@@ -1440,7 +1441,15 @@ function SidebarComponent({
   }
 
   return (
-    <div className="flex h-full flex-col bg-card dense-ui" data-onboarding="left-sidebar">
+    <div
+      ref={sidebarRootRef}
+      className="flex h-full flex-col bg-card dense-ui"
+      data-onboarding="left-sidebar"
+      // Marks the focus context for the keyboard dispatcher and gives the pane
+      // something focusable, so "focus the chat list" has a target.
+      data-context="left-sidebar"
+      tabIndex={-1}
+    >
       {/* Header section - only when not fullscreen */}
       {paddingClass && (
         <div className="h-12 border-b border-border/40 bg-card"></div>
@@ -1512,7 +1521,10 @@ function SidebarComponent({
                 List
               </div>
               <button
-                onClick={() => setChatListTab("active")}
+                onClick={() => {
+                  setChatListTab("active");
+                  setIsSortMenuOpen(false);
+                }}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
                   chatListTab === "active" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -1525,7 +1537,10 @@ function SidebarComponent({
                 {chatListTab === "active" && <Check className="h-3.5 w-3.5 text-primary" />}
               </button>
               <button
-                onClick={() => setChatListTab("archived")}
+                onClick={() => {
+                  setChatListTab("archived");
+                  setIsSortMenuOpen(false);
+                }}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
                   chatListTab === "archived" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -1544,7 +1559,10 @@ function SidebarComponent({
               {SORT_OPTIONS.map((option) => (
                 <button
                   key={option.value}
-                  onClick={() => setSortOrder(option.value)}
+                  onClick={() => {
+                    setSortOrder(option.value);
+                    setIsSortMenuOpen(false);
+                  }}
                   className={cn(
                     "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
                     sortOrder === option.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -1595,7 +1613,10 @@ function SidebarComponent({
                 View
               </div>
               <button
-                onClick={() => setViewMode("grouped")}
+                onClick={() => {
+                  setViewMode("grouped");
+                  setIsViewMenuOpen(false);
+                }}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
                   viewMode === "grouped" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
@@ -1608,7 +1629,10 @@ function SidebarComponent({
                 {viewMode === "grouped" && <Check className="h-3.5 w-3.5 text-primary" />}
               </button>
               <button
-                onClick={() => setViewMode("flat")}
+                onClick={() => {
+                  setViewMode("flat");
+                  setIsViewMenuOpen(false);
+                }}
                 className={cn(
                   "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
                   viewMode === "flat" ? "text-foreground" : "text-muted-foreground hover:text-foreground"

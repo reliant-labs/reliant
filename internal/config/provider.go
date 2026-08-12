@@ -22,9 +22,20 @@ type ConfigProvider interface {
 	GetProjectConfig(ctx context.Context, ref ProjectRef) (*Config, error)
 }
 
+// SeedDaemonID is the sentinel daemon_id CreateProject writes on the
+// placeholder project_configs row it seeds so a workflow can start before the
+// daemon has answered. A row still carrying it has never been pushed by a real
+// daemon, and every column on it is NULL. It is the ONLY durable signal that
+// distinguishes "not synced yet" from "synced and genuinely empty" — see
+// Config.SnapshotSynced.
+const SeedDaemonID = "seed"
+
 // StoredProjectConfigRecord is a repository-backed config payload.
 type StoredProjectConfigRecord struct {
-	ProjectID            string
+	ProjectID string
+	// DaemonID is the daemon that pushed this snapshot, or SeedDaemonID for
+	// the placeholder row.
+	DaemonID             string
 	UserConfigYAML       *string
 	ProjectConfigYAML    *string
 	LocalConfigYAML      *string
@@ -95,6 +106,13 @@ func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error)
 	}
 
 	cfg := &Config{}
+
+	// A row still stamped SeedDaemonID is CreateProject's placeholder, not a
+	// daemon push — every payload column on it is NULL. Anything else means a
+	// daemon delivered this content, so an empty catalog is the real answer
+	// rather than a not-yet-filled one.
+	cfg.SnapshotSynced = strings.TrimSpace(record.DaemonID) != "" &&
+		strings.TrimSpace(record.DaemonID) != SeedDaemonID
 
 	// Merge in precedence order: user < project < local.
 	for _, blob := range []*string{record.UserConfigYAML, record.ProjectConfigYAML, record.LocalConfigYAML} {

@@ -36,6 +36,13 @@ export const api = {
           source: w.source,
           is_hidden: w.isHidden || false,
           is_valid: w.isValid !== false, // Default to true for builtin/project workflows
+          // The graph travels on the wire already, and dropping it here made
+          // the app contradict itself one tap apart: the catalog row read
+          // `step_count` and said "17 steps", while the detail screen read
+          // `nodes` and rendered "This workflow has no steps". Desktop never
+          // noticed because it fetches the graph separately.
+          nodes: w.nodes,
+          edges: w.edges,
         })),
         total: workflows.length,
       };
@@ -391,16 +398,20 @@ export const api = {
       };
     },
 
-    listMessages: async (chatId: string, options?: { recent?: number; beforeOrdinal?: number }) => {
+    listMessages: async (
+      chatId: string,
+      options?: { recent?: number; beforeSeq?: number; threadId?: string },
+    ) => {
       const result = await chatGrpc.listMessages(chatId, {
         recent: options?.recent,
-        before_ordinal: options?.beforeOrdinal,
+        before_seq: options?.beforeSeq,
+        thread_id: options?.threadId,
       });
       return {
         messages: result.messages as Message[],
         total: result.total,
         hasMore: result.has_more,
-        oldestOrdinal: result.oldest_ordinal,
+        oldestSeq: result.oldest_seq,
       };
     },
   },
@@ -619,8 +630,8 @@ export const api = {
   },
 
   git: {
-    getBranches: async (projectId: string) => {
-      const branches = await projectGrpc.getGitBranches(projectId);
+    getBranches: async (projectId: string, repoId?: string) => {
+      const branches = await projectGrpc.getGitBranches(projectId, repoId);
       return { branches };
     },
 

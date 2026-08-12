@@ -7,10 +7,10 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ptr"
 )
@@ -32,7 +32,7 @@ func (s *PlanService) getChatIDForPlan(ctx context.Context, plan *db.Plan) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to get thread for plan: %w", err)
 	}
-	return thread.ConversationID, nil
+	return thread.ChatID, nil
 }
 
 // planBelongsToUser checks if a plan belongs to a user via the thread's chat

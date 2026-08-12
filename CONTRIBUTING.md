@@ -17,7 +17,7 @@ make generate          # generate Go code (sqlc, protobuf, etc.)
 npm run dev            # starts Go backend + Vite + Electron with hot reload
 ```
 
-Ports are dynamically allocated — check `.env.ports` for current values.
+Ports are dynamically allocated — check `.dev-ports.sh` for current values.
 
 ## Running Tests
 

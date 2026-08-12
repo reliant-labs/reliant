@@ -12,7 +12,6 @@ export { ToolExecution } from "./Chat/ToolExecution";
 export { NewChatView } from "./Chat/NewChatView";
 export { ErrorMessage } from "./Chat/ErrorMessage";
 export { WorktreeSelector } from "./Chat/WorktreeSelector";
-export { PermissionPrompt } from "./Chat/PermissionPrompt";
 export { MarkdownRenderer } from "./Chat/MarkdownRenderer";
 export { PermissionsPanel } from "./Chat/PermissionsPanel";
 

@@ -1,7 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { describe, it, expect } from "vitest";
-import { flatToNestedParams, hasDefaultValue, isModelInputRequired } from "../paramUtils";
+import {
+  flatToNestedParams,
+  hasDefaultValue,
+  isModelInputRequired,
+  nestedToFlatParams,
+  paramValuesEqual,
+  reconcileParamsWithServer,
+} from "../paramUtils";
 import { buildWorkflowInputsFromProto } from "../../components/Chat/ChatInput";
 
 describe("flatToNestedParams", () => {
@@ -222,5 +229,117 @@ describe("buildWorkflowInputsFromProto", () => {
     expect(inputs["agent.model"].config.value.default).toMatchObject({
       tags: ["flagship"],
     });
+  });
+});
+
+describe("nestedToFlatParams", () => {
+  it("converts nested groups to flat dot-notation keys", () => {
+    const nested = {
+      agent: {
+        model: { id: "claude-5-sonnet" },
+        temperature: 0.7,
+      },
+      mode: "fast",
+    };
+
+    expect(nestedToFlatParams(nested)).toEqual({
+      "agent.model": { id: "claude-5-sonnet" },
+      "agent.temperature": 0.7,
+      mode: "fast",
+    });
+  });
+
+  it("round-trips with flatToNestedParams", () => {
+    const flat = {
+      "agent.model": { tags: ["moderate"] },
+      "agent.thinking_level": "high",
+      mode: "fast",
+    };
+
+    expect(nestedToFlatParams(flatToNestedParams(flat))).toEqual(flat);
+  });
+
+  it("leaves arrays as whole values rather than flattening them", () => {
+    expect(nestedToFlatParams({ skills: ["a", "b"] })).toEqual({
+      skills: ["a", "b"],
+    });
+  });
+});
+
+describe("paramValuesEqual", () => {
+  it("treats structurally equal model selectors as equal", () => {
+    // The server round-trip returns an equal-but-distinct object; reference
+    // equality would report a phantom unsaved edit.
+    expect(
+      paramValuesEqual({ tags: ["moderate"] }, { tags: ["moderate"] })
+    ).toBe(true);
+  });
+
+  it("distinguishes different model selectors", () => {
+    expect(
+      paramValuesEqual({ tags: ["moderate"] }, { tags: ["flagship"] })
+    ).toBe(false);
+    expect(
+      paramValuesEqual({ id: "claude-5-sonnet" }, { id: "claude-5-opus" })
+    ).toBe(false);
+  });
+
+  it("compares primitives and mismatched shapes", () => {
+    expect(paramValuesEqual("high", "high")).toBe(true);
+    expect(paramValuesEqual("high", "low")).toBe(false);
+    expect(paramValuesEqual(undefined, undefined)).toBe(true);
+    expect(paramValuesEqual({ id: "x" }, undefined)).toBe(false);
+    expect(paramValuesEqual({ id: "x" }, { id: "x", extra: 1 })).toBe(false);
+  });
+});
+
+describe("reconcileParamsWithServer", () => {
+  it("adopts the server value when it disagrees with what was sent", () => {
+    // The bug this guards: the UI displayed the user's typed value forever,
+    // even when the running workflow held something else.
+    const { params, changed } = reconcileParamsWithServer(
+      { "agent.model": { tags: ["moderate"] } },
+      { "agent.model": { tags: ["moderate"] } },
+      { "agent.model": { id: "claude-5-sonnet", tags: ["moderate"] } }
+    );
+
+    expect(changed).toBe(true);
+    expect(params["agent.model"]).toEqual({
+      id: "claude-5-sonnet",
+      tags: ["moderate"],
+    });
+  });
+
+  it("reports no change when the server agrees", () => {
+    const { params, changed } = reconcileParamsWithServer(
+      { "agent.thinking_level": "high" },
+      { "agent.thinking_level": "high" },
+      { "agent.thinking_level": "high" }
+    );
+
+    expect(changed).toBe(false);
+    expect(params).toEqual({ "agent.thinking_level": "high" });
+  });
+
+  it("keeps a user edit made while the sync was in flight", () => {
+    const { params, changed } = reconcileParamsWithServer(
+      { "agent.thinking_level": "xhigh" }, // user moved on
+      { "agent.thinking_level": "high" }, // what we pushed
+      { "agent.thinking_level": "high" } // what the server confirms
+    );
+
+    expect(changed).toBe(false);
+    expect(params["agent.thinking_level"]).toBe("xhigh");
+  });
+
+  it("ignores server keys the params panel does not surface", () => {
+    const { params, changed } = reconcileParamsWithServer(
+      { mode: "fast" },
+      { mode: "fast" },
+      { mode: "fast", prompt: "runtime-injected", thread: "abc" }
+    );
+
+    expect(changed).toBe(false);
+    expect(params).toEqual({ mode: "fast" });
   });
 });

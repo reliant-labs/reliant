@@ -114,7 +114,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 	// Pre-create child thread (simulating parent's V2_CreateWorkflowWithThread)
 	_, err = h.Repo().CreateThread(ctx, &db.Thread{
 		ID:             childWorkflowID,
-		ConversationID: chatID,
+		ChatID: chatID,
 		Title:          ptr.Of("Sub-Agent Task"),
 		WorkflowID:     &childWorkflowID,
 	})
@@ -299,7 +299,7 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 	// Pre-create child thread
 	_, err = h.Repo().CreateThread(ctx, &db.Thread{
 		ID:             childWorkflowID,
-		ConversationID: chatID,
+		ChatID: chatID,
 		WorkflowID:     &childWorkflowID,
 	})
 	require.NoError(t, err)

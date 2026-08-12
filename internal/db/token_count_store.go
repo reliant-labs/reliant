@@ -6,7 +6,7 @@ import (
 )
 
 type tokenCountStore interface {
-	GetThreadTokenCountAtOrdinal(ctx context.Context, threadID string, contextSequence int64, maxOrdinal sql.NullInt64) (int64, error)
+	GetThreadTokenCountAtSeq(ctx context.Context, threadID string, contextSequence int64, maxSeq sql.NullInt64) (int64, error)
 }
 
 type sqlTokenCountStore struct {
@@ -18,7 +18,7 @@ func newSQLTokenCountStore(db *WrappedDBTX, bind func(string) string) tokenCount
 	return &sqlTokenCountStore{db: db, bind: bind}
 }
 
-func (s *sqlTokenCountStore) GetThreadTokenCountAtOrdinal(ctx context.Context, threadID string, contextSequence int64, maxOrdinal sql.NullInt64) (int64, error) {
+func (s *sqlTokenCountStore) GetThreadTokenCountAtSeq(ctx context.Context, threadID string, contextSequence int64, maxSeq sql.NullInt64) (int64, error) {
 	query := s.bind(`SELECT CAST(COALESCE(
 		(
 			SELECT COALESCE(m.token_count, 0)
@@ -26,12 +26,12 @@ func (s *sqlTokenCountStore) GetThreadTokenCountAtOrdinal(ctx context.Context, t
 			JOIN context_windows cw ON cw.id = m.context_window_id
 			WHERE cw.thread_id = ? AND cw.sequence = ?
 			  AND m.token_count IS NOT NULL
-			  AND m.ordinal <= COALESCE(?, m.ordinal)
-			ORDER BY m.ordinal DESC
+			  AND m.seq <= COALESCE(?, m.seq)
+			ORDER BY m.seq DESC
 			LIMIT 1
 		), 0) AS BIGINT) AS total_tokens`)
 
 	var tokens int64
-	err := s.db.QueryRowContext(ctx, query, threadID, contextSequence, maxOrdinal).Scan(&tokens)
+	err := s.db.QueryRowContext(ctx, query, threadID, contextSequence, maxSeq).Scan(&tokens)
 	return tokens, err
 }

@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"database/sql"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -11,6 +12,50 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// A thread that never called create_plan must be told to call it. This used to
+// fall through to the generic "Failed to find plan: no plans found for thread
+// <uuid>" branch, which names no remedy — an agent was observed retrying it
+// eight times in a row against the same empty thread.
+func TestPlanTools_MissingPlanErrorNamesTheRemedy(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+	ctx := createTestContext(t, chatID)
+
+	// The store must report a missing plan as sql.ErrNoRows so every caller's
+	// errors.Is branch fires.
+	_, err := repo.GetPlanByThreadID(ctx.Context, chatID)
+	require.Error(t, err)
+	require.ErrorIs(t, err, sql.ErrNoRows,
+		"missing plan must wrap sql.ErrNoRows; the tool layer branches on it")
+
+	t.Run("list_tasks", func(t *testing.T) {
+		resp, err := (&ListTasksTool{repo: repo}).Execute(ctx, ListTasksParams{})
+		require.NoError(t, err)
+		assert.Contains(t, resp.Content, "create_plan")
+		assert.NotContains(t, resp.Content, "no plans found for thread")
+	})
+
+	t.Run("add_task", func(t *testing.T) {
+		resp, err := (&AddTaskTool{repo: repo}).Execute(ctx, AddTaskParams{Title: "orphan task"})
+		require.NoError(t, err)
+		assert.Contains(t, resp.Content, "create_plan")
+		assert.NotContains(t, resp.Content, "no plans found for thread")
+	})
+
+	t.Run("update_task by ordinal", func(t *testing.T) {
+		resp, err := (&UpdateTaskTool{repo: repo}).Execute(ctx, UpdateTaskParams{
+			TaskID: "1",
+			Status: "completed",
+		})
+		require.NoError(t, err)
+		assert.Contains(t, resp.Content, "create_plan")
+		assert.NotContains(t, resp.Content, "no plans found for thread")
+	})
+}
 
 func TestCreatePlan_InlineDependencies(t *testing.T) {
 	repo, cleanup := setupTestDB(t)

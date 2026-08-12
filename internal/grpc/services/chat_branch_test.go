@@ -108,6 +108,7 @@ func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
 		ContextWindowID: cwAID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
 		Ordinal:         1,
+		Seq:             1,
 		CreatedAt:       now,
 	}))
 
@@ -119,6 +120,7 @@ func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
 		ContextWindowID: cwAID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
 		Ordinal:         2,
+		Seq:             2,
 		CreatedAt:       now,
 	}))
 
@@ -245,6 +247,7 @@ func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
 		ContextWindowID: cwID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
 		Ordinal:         1,
+		Seq:             1,
 		CreatedAt:       now,
 	}))
 
@@ -340,6 +343,7 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 		ContextWindowID: cwID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
 		Ordinal:         1,
+		Seq:             1,
 		CreatedAt:       now,
 	}))
 
@@ -356,4 +360,177 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, branchedChat.ActiveDaemonID, "branched chat must be pinned to the worktree's daemon")
 	require.Equal(t, daemonID, *branchedChat.ActiveDaemonID)
+}
+
+// TestBranchChat_MultiThreadChat_ToolCallAdjustment_OrdinalSeqDiverge verifies
+// that branching from an assistant message with a pending tool call still
+// finds and includes the following tool-result message (chat_branch.go's
+// "msg.Ordinal > branchPointMsg.Ordinal && ... ContextWindowID ==" gate) in a
+// chat with a second, concurrently-writing thread — the scenario where a
+// per-thread ordinal and the chat-global seq numerically diverge, so a
+// mistaken flip of that comparison to Seq would hide here rather than in a
+// single-thread test.
+func TestBranchChat_MultiThreadChat_ToolCallAdjustment_OrdinalSeqDiverge(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	now := time.Now().UTC()
+
+	projectID := "test-project-branch-multithread-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID:         projectID,
+		UserID:     "test-user",
+		Name:       "Branch Multi-Thread Project",
+		Path:       t.TempDir(),
+		IsGitRepo:  false,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}))
+
+	chatID := uuid.NewString()
+	mainThreadID := chatID
+	mainCWID := chatID + ":" + mainThreadID + ":0"
+	spawnThreadID := uuid.NewString()
+	spawnCWID := chatID + ":" + spawnThreadID + ":0"
+
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID:        chatID,
+		UserID:    "test-user",
+		Title:     "Multi-thread Chat",
+		ProjectID: projectID,
+		State:     db.ChatStateIdle,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}))
+
+	threadsSvc := threads.NewService(repo)
+	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+		Workflow: &db.Workflow{
+			ID:           chatID,
+			ChatID:       chatID,
+			WorkflowName: "builtin://agent",
+			Thread:       mainThreadID,
+			Status:       db.WorkflowStatusPending,
+			CreatedAt:    now,
+		},
+		ThreadID: mainThreadID,
+		ChatID:   chatID,
+	})
+	require.NoError(t, err)
+
+	// A second thread (e.g. a parallel spawned sub-agent) sharing the chat.
+	_, err = repo.CreateThread(ctx, &db.Thread{
+		ID:        spawnThreadID,
+		ChatID:    chatID,
+		CreatedAt: now,
+	})
+	require.NoError(t, err)
+	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{
+		ID:        spawnCWID,
+		ThreadID:  spawnThreadID,
+		Sequence:  0,
+		CreatedAt: now,
+	})
+	require.NoError(t, err)
+
+	nextSeq := int64(0)
+	allocSeq := func() int64 {
+		s := nextSeq
+		nextSeq++
+		return s
+	}
+
+	// Interleave writes across the two threads so main-thread ordinal and
+	// chat-global seq diverge: spawn-a/spawn-b get seq 0/1 before any main
+	// message is written, pushing every main-thread message's seq well past
+	// its ordinal.
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID: "spawn-a", ChatID: chatID, ThreadID: spawnThreadID, ContextWindowID: spawnCWID,
+		Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Ordinal: 1, Seq: allocSeq(), CreatedAt: now,
+	}))
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID: "spawn-b", ChatID: chatID, ThreadID: spawnThreadID, ContextWindowID: spawnCWID,
+		Role: reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, Ordinal: 2, Seq: allocSeq(), CreatedAt: now,
+	}))
+
+	// main-1: assistant message with a tool call (ordinal=1, seq=2)
+	assistantMsgID := "main-assistant-with-toolcall"
+	toolCallID := "toolcall-1"
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID: assistantMsgID, ChatID: chatID, ThreadID: mainThreadID, ContextWindowID: mainCWID,
+		Role: reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, Ordinal: 1, Seq: allocSeq(), CreatedAt: now,
+	}))
+	require.NoError(t, repo.CreateContentBlock(ctx, &db.MessageContentBlock{
+		ID:         uuid.NewString(),
+		MessageID:  assistantMsgID,
+		BlockType:  reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL,
+		ToolCallID: &toolCallID,
+		Position:   0,
+	}))
+
+	// More spawn-thread traffic between the assistant message and its tool
+	// result, so the tool result's seq is even further from its ordinal.
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID: "spawn-c", ChatID: chatID, ThreadID: spawnThreadID, ContextWindowID: spawnCWID,
+		Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Ordinal: 3, Seq: allocSeq(), CreatedAt: now,
+	}))
+
+	// main-2: the tool result for main-1 (ordinal=2, seq=4)
+	toolResultMsgID := "main-tool-result"
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID: toolResultMsgID, ChatID: chatID, ThreadID: mainThreadID, ContextWindowID: mainCWID,
+		Role: reliantv1.MessageRole_MESSAGE_ROLE_TOOL, Ordinal: 2, Seq: allocSeq(), CreatedAt: now,
+	}))
+	require.NoError(t, repo.CreateContentBlock(ctx, &db.MessageContentBlock{
+		ID:         uuid.NewString(),
+		MessageID:  toolResultMsgID,
+		BlockType:  reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT,
+		ToolCallID: &toolCallID,
+		Position:   0,
+	}))
+
+	// Sanity: confirm ordinal and seq genuinely diverge for both messages
+	// involved, so this test exercises the divergence it's designed to catch.
+	assistantMsg, err := repo.GetMessage(ctx, assistantMsgID)
+	require.NoError(t, err)
+	toolResultMsg, err := repo.GetMessage(ctx, toolResultMsgID)
+	require.NoError(t, err)
+	require.NotEqual(t, assistantMsg.Ordinal, assistantMsg.Seq, "test setup invalid: assistant message ordinal must differ from seq")
+	require.NotEqual(t, toolResultMsg.Ordinal, toolResultMsg.Seq, "test setup invalid: tool result ordinal must differ from seq")
+	t.Logf("assistant: ordinal=%d seq=%d; tool result: ordinal=%d seq=%d",
+		assistantMsg.Ordinal, assistantMsg.Seq, toolResultMsg.Ordinal, toolResultMsg.Seq)
+
+	service := &ChatService{database: repo, threads: threadsSvc}
+
+	// ACT: branch from the assistant message (the one with the pending tool call).
+	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+		ChatId:    chatID,
+		MessageId: assistantMsgID,
+	}))
+	require.NoError(t, err)
+	require.NotNil(t, resp.Msg.Chat)
+
+	// ASSERT: the branched thread's messages should include the tool result,
+	// proving the branch point was auto-adjusted past the assistant message
+	// to include the matching tool response — by identity, not by ordinal
+	// magnitude.
+	branchWorkflowID := resp.Msg.Chat.Id
+	msgs, err := threadsSvc.LoadCurrentMessages(ctx, branchWorkflowID)
+	require.NoError(t, err)
+
+	var sawAssistant, sawToolResult bool
+	for _, m := range msgs {
+		switch m.ID {
+		case assistantMsgID:
+			sawAssistant = true
+		case toolResultMsgID:
+			sawToolResult = true
+		case "spawn-a", "spawn-b", "spawn-c":
+			t.Fatalf("FAIL: branched thread inherited spawn-thread message %q, which should not be visible", m.ID)
+		}
+	}
+	require.True(t, sawAssistant, "branched thread should include the assistant message with the tool call")
+	require.True(t, sawToolResult, "branched thread should include the tool result message (auto-adjustment past a pending tool call)")
 }

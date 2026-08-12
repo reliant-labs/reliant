@@ -55,7 +55,11 @@ interface CombinedGeneralSettingsProps {
 // Providers visible in the manual-entry UI (other providers are hidden but implementations remain).
 // `reliant` is included so users can see / open the admin portal; it is rendered with an
 // external-link CTA instead of an API-key input (auth is JWT-managed, not key-managed).
-const VISIBLE_PROVIDERS = [
+//
+// Exported (along with `providerConfigs`, `ProviderId`, and `parseErrorMessage` below) so
+// `MobileAIProvidersPanel` can reuse the exact same provider metadata and error parsing
+// instead of forking a second copy that could drift from this one.
+export const VISIBLE_PROVIDERS = [
   "claude",
   "codex",
   "copilot",
@@ -66,7 +70,7 @@ const VISIBLE_PROVIDERS = [
   "openrouter",
 ] as const;
 
-const providerConfigs = {
+export const providerConfigs = {
   claude: {
     name: "Claude Code",
     docsUrl: "https://claude.ai",
@@ -177,10 +181,10 @@ const providerConfigs = {
   },
 };
 
-type ProviderId = keyof typeof providerConfigs;
+export type ProviderId = keyof typeof providerConfigs;
 
 // Comprehensive error message parser for all API providers
-const parseErrorMessage = (errorText: string, provider: string): string => {
+export const parseErrorMessage = (errorText: string, provider: string): string => {
   const lowerError = errorText.toLowerCase();
 
   // Claude specific errors

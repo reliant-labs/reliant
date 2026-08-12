@@ -251,6 +251,24 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 		LastActive: now,
 	}), "create scenario project")
 
+	// CreateChat requires every project to have a main worktree
+	// (resolveChatWorktreeID in chat_helpers.go) — an omitted worktree id on
+	// CreateChat resolves to it. Production project creation provisions this
+	// automatically; this harness must do the same or every CreateChat below
+	// fails FailedPrecondition.
+	require.NoError(t, s.Repo.CreateWorktree(ctx, &db.Worktree{
+		ID:         uuid.New().String(),
+		Name:       "main",
+		Path:       projectPath,
+		Branch:     "main",
+		BaseBranch: "main",
+		ProjectID:  projectID,
+		IsMain:     true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}), "create scenario project's main worktree")
+
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
 	executor := newLocalDaemonExecutor(toolsFactory)
 

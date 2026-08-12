@@ -107,7 +107,7 @@ func TestGenerateCompactionSummary_UsesStandardRequestEnvelope(t *testing.T) {
 			compactActivity := NewCompactActivity(nil, capturingCompactionResolver(driver, captured))
 
 			chat := &db.Chat{ID: "chat-1", UserID: "user-1"}
-			summary, err := compactActivity.generateCompactionSummary(context.Background(), chat, toolBearingConversation())
+			summary, err := compactActivity.generateCompactionSummary(context.Background(), chat, toolBearingConversation(), nil)
 			require.NoError(t, err)
 			assert.Equal(t, "Mock response", summary)
 

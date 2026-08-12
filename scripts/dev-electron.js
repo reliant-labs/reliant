@@ -310,7 +310,7 @@ async function main() {
 
     // Write ports to file
     const portsContent = `export FRONTEND_PORT=${FRONTEND_PORT}\nexport BACKEND_PORT=${BACKEND_PORT}\nexport GRPC_PORT=${GRPC_PORT}\nexport TOOLS_DAEMON_PORT=${TOOLS_DAEMON_PORT}\nexport TEMPORAL_FRONTEND_PORT=${TEMPORAL_FRONTEND_PORT}\nexport TEMPORAL_UI_PORT=${TEMPORAL_UI_PORT}\n`;
-    fs.writeFileSync(path.join(PROJECT_ROOT, '.env.ports'), portsContent);
+    fs.writeFileSync(path.join(PROJECT_ROOT, '.dev-ports.sh'), portsContent);
 
     // Start Temporal UI if running V2 backend
     if (V2_BACKEND) {

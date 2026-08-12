@@ -1,5 +1,5 @@
 import { Editor } from '@monaco-editor/react';
-import { getMonacoLanguage, configureMonacoTheme, getCurrentMonacoTheme } from '../../lib/monacoTheme';
+import { getMonacoLanguage, configureMonacoTheme, getCurrentMonacoTheme, MONACO_FONT_FAMILY } from '../../lib/monacoTheme';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { logger } from '../../lib/logger';
 import { tabSwitchProfiler } from '../../lib/tabSwitchProfiler';
@@ -102,6 +102,7 @@ export function MonacoViewer({
           minimap: { enabled: false },
           scrollBeyondLastLine: false,
           fontSize: 11,
+          fontFamily: MONACO_FONT_FAMILY,
           lineHeight: 16,
           lineNumbers: 'on',
           folding: true,

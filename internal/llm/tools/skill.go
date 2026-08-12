@@ -16,6 +16,18 @@ type SkillParams struct {
 	Action string `json:"action" jsonschema:"required,description=Action to perform: load (load a skill by path)\\, list (list available skills)\\, search (search skills by keyword),enum=load,enum=list,enum=search"`
 	Path   string `json:"path,omitempty" jsonschema:"description=Skill path to load or list children of. Use skill name for top-level (e.g. 'go'\\, 'reliant-config')"`
 	Query  string `json:"query,omitempty" jsonschema:"description=Search query for finding skills (used with action=search)"`
+
+	// Windowed reading for action=load. Omit all of these to get the whole
+	// skill; every result reports its total size and whether more remains, so
+	// one call is enough to know whether a second is needed.
+	Section string `json:"section,omitempty" jsonschema:"description=Fetch only this markdown section (heading text\\, e.g. 'Seeding'). Exact match first\\, then unique substring. Every load lists the available sections. Cannot be combined with: regex"`
+	Offset  int    `json:"offset,omitempty" jsonschema:"description=Start reading from byte N of the selected view (default: 0). Combine with the same section/regex that produced the view. Can be combined with: limit section regex"`
+	Limit   int    `json:"limit,omitempty" jsonschema:"description=Read up to N bytes (default: the delivery budget). Can be combined with: offset section regex"`
+
+	Regex                string `json:"regex,omitempty" jsonschema:"description=Deliver only lines matching this regex\\, numbered\\, instead of the skill body. Use to locate content in a large skill\\, then fetch it with section or offset. Can be combined with: offset limit regex_case_insensitive regex_context_before regex_context_after. Cannot be combined with: section"`
+	RegexCaseInsensitive bool   `json:"regex_case_insensitive,omitempty" jsonschema:"description=Perform case-insensitive regex matching (default: false). Requires: regex"`
+	RegexContextBefore   int    `json:"regex_context_before,omitempty" jsonschema:"description=Include N lines before each match like grep -B (default: 0). Requires: regex"`
+	RegexContextAfter    int    `json:"regex_context_after,omitempty" jsonschema:"description=Include N lines after each match like grep -A (default: 0). Requires: regex"`
 }
 
 // skillTool operates entirely on a pre-loaded slice of skills. The skill data
@@ -35,7 +47,26 @@ Skills may suggest tools to load — use the load_tool tool if suggested tools a
 In multi-repo projects, skills are discovered recursively across all nested
 repos. Each skill's source repo is shown in brackets after its description
 (e.g. "[source: api]") and is reflected as a prefix on its path
-(e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.`
+(e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.
+
+READING A LARGE SKILL (action=load):
+Every load ends with its total size and whether anything remains, so ONE call
+tells you if you have the whole skill. Do not page defensively — page only when
+a result says bytes remain, and it will name the exact call to continue with.
+
+A skill too large to deliver at once is read with these, mirroring bash_output:
+- section: fetch one markdown section by heading. Preferred — every load lists
+  the skill's sections, so this is usually one targeted call rather than
+  guessing byte ranges.
+- offset / limit: page through the current view by byte range.
+- regex (+ regex_case_insensitive, regex_context_before, regex_context_after):
+  deliver only matching lines, numbered, to locate content before fetching it.
+
+Examples:
+  skill(action="load", path="db")                      whole skill + size report
+  skill(action="load", path="db", section="Seeding")   one section
+  skill(action="load", path="db", offset=23000)        continue where a window ended
+  skill(action="load", path="db", regex="foreign key") find the relevant part first`
 
 func NewSkillTool(skills []config.StoredSkill) Tool {
 	tool := &skillTool{skills: skills}
@@ -63,7 +94,7 @@ func (t *skillTool) Execute(_ *rctx.ToolContext, params SkillParams) (ToolRespon
 		if params.Path == "" {
 			return NewTextErrorResponse("path is required when action is 'load'"), nil
 		}
-		return t.loadSkill(params.Path)
+		return t.loadSkillWindowed(params)
 	case "search":
 		if params.Query == "" {
 			return NewTextErrorResponse("query is required when action is 'search'"), nil
@@ -261,6 +292,51 @@ func (t *skillTool) listSkills(filterPath string) (ToolResponse, error) {
 	return NewTextResponse(sb.String()), nil
 }
 
+// loadSkillWindowed delivers a skill for action=load: it renders the same
+// content loadSkill always has, then applies the caller's window and appends
+// the delivery report.
+//
+// The two halves are kept apart because they have different audiences.
+// loadSkill's output is CONTENT — the same bytes call_llm seeds as a preloaded
+// skill, which must stay byte-identical across both delivery paths. The window
+// and its footer are per-CALL facts (where you are, what remains, how to ask
+// for the rest) that are meaningless in a cached prompt prefix.
+func (t *skillTool) loadSkillWindowed(params SkillParams) (ToolResponse, error) {
+	resp, err := t.loadSkill(params.Path)
+	if err != nil || resp.IsError {
+		return resp, err
+	}
+
+	if err := validateSkillWindowParams(params); err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+
+	window, err := selectSkillWindow(resp.Content, params)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+
+	// A filter that matched nothing is a dead end unless the reply says what
+	// the skill does contain, so it carries the section outline back.
+	if params.Regex != "" && window.Matches == 0 {
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "No lines in skill %s match %q (skill is %d bytes).",
+			params.Path, params.Regex, window.SkillBytes)
+		if len(window.Sections) > 0 {
+			fmt.Fprintf(&sb, "\n\nSections (fetch one with section=\"<name>\"):\n- %s",
+				strings.Join(sectionTitles(window.Sections, maxOutlineEntries), "\n- "))
+		}
+		return NewTextResponse(sb.String()), nil
+	}
+
+	text, _ := renderSkillDelivery(params.Path, window)
+	return NewTextResponse(text), nil
+}
+
+// loadSkill renders a skill's delivered CONTENT: its body plus the sub-skill,
+// related-skill and suggested-tools pointers. It applies no window and no size
+// cap — see loadSkillWindowed for the delivery layer, and LoadSkillForInjection
+// for the preload path that depends on these exact bytes.
 func (t *skillTool) loadSkill(path string) (ToolResponse, error) {
 	normalizedPath := strings.ToLower(strings.TrimSpace(path))
 

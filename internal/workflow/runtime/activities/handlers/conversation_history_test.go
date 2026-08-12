@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,7 +56,11 @@ func createTestChatForConversation(t *testing.T, repo db.Repository) string {
 
 // createThreadWithContextWindow creates a thread and an initial context window
 // Returns threadID, contextWindowID
-// When forkAtContextWindowID is provided, sets up CW lineage (ParentContextWindowID, ForkAtOrdinal)
+// When forkAtContextWindowID is provided, sets up CW lineage (ParentContextWindowID, ForkAtMessageID).
+// forkAtOrdinal is a position in forkAtContextWindowID's messages, resolved
+// here to the message it names -- callers pass ordinals because fixtures
+// already track ordinals for message identity, and the resolution mirrors
+// 20260803010000_fork_points_reference_messages.sql's backfill.
 func createThreadWithContextWindow(t *testing.T, repo db.Repository, chatID string, parentThreadID *string, forkAtOrdinal *int64, forkAtContextWindowID *string, sequence int) (string, string) {
 	t.Helper()
 	ctx := context.Background()
@@ -64,14 +68,26 @@ func createThreadWithContextWindow(t *testing.T, repo db.Repository, chatID stri
 	threadID := uuid.New().String()
 	contextWindowID := uuid.New().String()
 
+	var forkAtMessageID *string
+	if forkAtOrdinal != nil && forkAtContextWindowID != nil {
+		msgs, err := repo.GetMessagesByContextWindow(ctx, *forkAtContextWindowID, nil)
+		require.NoError(t, err)
+		for _, m := range msgs {
+			if m.Ordinal == *forkAtOrdinal {
+				id := m.ID
+				forkAtMessageID = &id
+				break
+			}
+		}
+	}
+
 	// Create thread
 	_, err := repo.CreateThread(ctx, &db.Thread{
-		ID:                    threadID,
-		ConversationID:        chatID,
-		ParentThreadID:        parentThreadID,
-		ForkAtOrdinal:         forkAtOrdinal,
-		ForkAtContextWindowID: forkAtContextWindowID,
-		CreatedAt:             time.Now(),
+		ID:              threadID,
+		ChatID:          chatID,
+		ParentThreadID:  parentThreadID,
+		ForkAtMessageID: forkAtMessageID,
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -81,7 +97,7 @@ func createThreadWithContextWindow(t *testing.T, repo db.Repository, chatID stri
 		ThreadID:              threadID,
 		Sequence:              sequence,
 		ParentContextWindowID: forkAtContextWindowID, // Link to parent CW for resolution
-		ForkAtOrdinal:         forkAtOrdinal,         // Max ordinal to inherit from parent
+		ForkAtMessageID:       forkAtMessageID,       // Message to inherit from parent up to
 	})
 	require.NoError(t, err)
 
@@ -93,10 +109,14 @@ func createMessageWithParts(t *testing.T, repo db.Repository, chatID, threadID, 
 	t.Helper()
 	ctx := context.Background()
 
+	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	require.NoError(t, err)
+
 	msg := &db.Message{
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		ThreadID:        threadID,
 		ContextWindowID: contextWindowID,
 		Role:            role,
@@ -104,7 +124,7 @@ func createMessageWithParts(t *testing.T, repo db.Repository, chatID, threadID, 
 		UpdatedAt:       time.Now(),
 	}
 
-	err := repo.CreateMessage(ctx, msg)
+	err = repo.CreateMessage(ctx, msg)
 	require.NoError(t, err)
 
 	// Create text content block
@@ -128,10 +148,14 @@ func createMessageWithToolCall(t *testing.T, repo db.Repository, chatID, threadI
 	t.Helper()
 	ctx := context.Background()
 
+	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	require.NoError(t, err)
+
 	msg := &db.Message{
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		ThreadID:        threadID,
 		ContextWindowID: contextWindowID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -139,7 +163,7 @@ func createMessageWithToolCall(t *testing.T, repo db.Repository, chatID, threadI
 		UpdatedAt:       time.Now(),
 	}
 
-	err := repo.CreateMessage(ctx, msg)
+	err = repo.CreateMessage(ctx, msg)
 	require.NoError(t, err)
 
 	// Create tool_call content block
@@ -165,10 +189,14 @@ func createMessageWithToolResult(t *testing.T, repo db.Repository, chatID, threa
 	t.Helper()
 	ctx := context.Background()
 
+	seq, err := repo.GetNextSeq(ctx, chatID, threadID)
+	require.NoError(t, err)
+
 	msg := &db.Message{
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		ThreadID:        threadID,
 		ContextWindowID: contextWindowID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -176,7 +204,7 @@ func createMessageWithToolResult(t *testing.T, repo db.Repository, chatID, threa
 		UpdatedAt:       time.Now(),
 	}
 
-	err := repo.CreateMessage(ctx, msg)
+	err = repo.CreateMessage(ctx, msg)
 	require.NoError(t, err)
 
 	// Create tool_result content block
@@ -466,18 +494,23 @@ func TestLoadMessagesForLLM_MessageOrdering(t *testing.T) {
 	chatID := createTestChatForConversation(t, repo)
 	threadID, contextWindowID := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 
-	// Create messages out of order
-	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 3, reliantv1.MessageRole_MESSAGE_ROLE_USER, "Third")
-	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 1, reliantv1.MessageRole_MESSAGE_ROLE_USER, "First")
-	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 2, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "Second")
+	// Ordinals deliberately disagree with insertion order. seq is assigned at
+	// persistence time (GetNextSeq), so the load order must follow insertion,
+	// not the ordinal values.
+	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 3, reliantv1.MessageRole_MESSAGE_ROLE_USER, "First")
+	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 1, reliantv1.MessageRole_MESSAGE_ROLE_USER, "Second")
+	createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 2, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "Third")
 
 	messages, err := LoadMessagesForLLM(ctx, repo, chatID, threadID, nil)
 	require.NoError(t, err)
 	require.Len(t, messages, 3)
 
-	// Should be ordered by ordinal
-	for i := 0; i < len(messages)-1; i++ {
-		assert.Less(t, messages[i].Ordinal, messages[i+1].Ordinal,
-			"Messages should be ordered by ordinal")
+	// Ordered by seq, the chat-global total order — which here is insertion
+	// order, in spite of the ordinals saying otherwise.
+	got := make([]string, len(messages))
+	for i, msg := range messages {
+		got[i] = msg.Content().Text
 	}
+	assert.Equal(t, []string{"First", "Second", "Third"}, got,
+		"Messages should be ordered by seq (insertion order), not by ordinal")
 }

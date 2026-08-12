@@ -20,6 +20,7 @@ import {
 } from "@/services/controlPlane/daemon";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { RepoSelector } from "@/components/Projects/RepoSelector";
+import { cloudPathForRepo, repoNameFromUrl } from "@/lib/cloudProjectPath";
 import { projectGrpc } from "@/api/project-grpc";
 
 // Must match the name + type + size used by ComputeStep's createDaemon call so
@@ -35,25 +36,6 @@ const DAEMON_SIZE_SMALL = 1;
 // deletes), the picker phase surfaces a Reconnect button — no separate
 // "connect" landing page is needed.
 type Phase = "picker" | "confirm";
-
-const CLOUD_PROJECT_ROOT = "/home/workspace/projects";
-
-function slugify(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 48) || "github-repo";
-}
-
-function repoNameFromUrl(url: string): string {
-  const withoutGitSuffix = url.replace(/\.git$/, "");
-  return withoutGitSuffix.split("/").filter(Boolean).pop() || "github-repo";
-}
-
-function cloudPathForRepo(repo: GitRepo): string {
-  return `${CLOUD_PROJECT_ROOT}/${slugify(repoNameFromUrl(repo.cloneUrl) || repo.fullName)}`;
-}
 
 function isAlreadyExistsError(error: unknown): boolean {
   return (

@@ -89,7 +89,7 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	thread, err := repo.GetThread(ctx, threadID)
 	require.NoError(t, err)
 	assert.Equal(t, threadID, thread.ID)
-	assert.Equal(t, chatID, thread.ConversationID)
+	assert.Equal(t, chatID, thread.ChatID)
 	assert.Equal(t, workflowID, *thread.WorkflowID)
 }
 
@@ -127,7 +127,7 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	// Create parent thread using threads service
 	threadsService := threads.NewService(repo)
 	parentThread, parentCW, err := threadsService.CreateThread(ctx, threads.CreateThreadOpts{
-		ConversationID: chatID,
+		ChatID: chatID,
 	})
 	require.NoError(t, err)
 
@@ -168,7 +168,7 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	thread, err := repo.GetThread(ctx, childThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, childThreadID, thread.ID)
-	assert.Equal(t, chatID, thread.ConversationID)
+	assert.Equal(t, chatID, thread.ChatID)
 	assert.NotNil(t, thread.ParentThreadID)
 	assert.Equal(t, parentThread.ID, *thread.ParentThreadID)
 }

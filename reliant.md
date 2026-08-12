@@ -22,7 +22,7 @@ We optimize for **distributed** mode:
 
 ### Configuration
 
-**Dynamic Ports:** Reliant uses dynamic port allocation to support multiple instances. Ports are discovered at startup and written to `.env.ports`.
+**Dynamic Ports:** Reliant uses dynamic port allocation to support multiple instances. Ports are discovered at startup and written to `.dev-ports.sh`.
 
 ### Database
 
@@ -129,7 +129,7 @@ Key files:
 Ports are dynamically assigned. Check current ports:
 
 ```bash
-cat .env.ports
+cat .dev-ports.sh
 # or
 ./.reliant/tools/port-info.sh
 ```

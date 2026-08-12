@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/nats-io/nats.go"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // RouterDriver identifies which daemon router backend to use.

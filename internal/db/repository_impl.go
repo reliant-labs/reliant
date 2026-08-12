@@ -154,12 +154,39 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 		return nil, fmt.Errorf("role cannot be unspecified")
 	}
 
+	// A message's workflow_id must name the workflow running THIS thread.
+	//
+	// Callers pass the workflow they are operating on, which for a message
+	// addressed to a spawned thread is the PARENT's root workflow — the spawn
+	// runs inline inside it and has no Temporal execution of its own. Storing
+	// that made a "continue" sent to a spawn look like the thread had changed
+	// workflows, and the timeline draws a "handoff" divider on exactly that
+	// signal (workflow_id changed on the same thread). Measured here: 203 user
+	// messages across 51 chats carried the parent's id, and those accounted for
+	// every one of the 7 threads that appeared to span multiple workflows.
+	//
+	// The thread's own workflow row is the authority, so ask it. Best-effort:
+	// if no workflow row exists for this thread yet (the first message of a
+	// brand-new thread), the caller's value stands.
+	if workflowID != nil && *workflowID != "" && *workflowID != thread {
+		if wf, err := r.GetWorkflowByThread(ctx, chatID, thread); err == nil && wf != nil && wf.ID != "" {
+			owning := wf.ID
+			workflowID = &owning
+		}
+	}
+
 	var savedMsg *Message
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
 		// Get next ordinal for the thread
 		ordinal, err := r.GetNextOrdinal(txCtx, thread)
 		if err != nil {
 			return fmt.Errorf("failed to get next ordinal: %w", err)
+		}
+
+		// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
+		seq, err := r.GetNextSeq(txCtx, chatID, thread)
+		if err != nil {
+			return fmt.Errorf("failed to get next seq: %w", err)
 		}
 
 		// Get the current context_sequence for the thread
@@ -197,6 +224,7 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 			ID:              msgID,
 			ChatID:          chatID,
 			Ordinal:         ordinal,
+			Seq:             seq,
 			ThreadID:        thread,
 			ContextWindowID: contextWindowID,
 			Role:            reliantv1.MessageRole(role),
@@ -318,25 +346,28 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 		}
 
 		// Build update data matching the streaming service expectations
-		updateData := map[string]interface{}{
-			"update_type":      "message",
-			"id":               msgID,
-			"role":             role,
-			"ordinal":          ordinal,
-			"thread":           thread,
-			"context_sequence": contextSequence,
-			"created_at":       now.Format("2006-01-02T15:04:05.999999999Z07:00"),
-			"updated_at":       now.Format("2006-01-02T15:04:05.999999999Z07:00"),
-			"content_blocks":   contentBlocks,
-			"attachments":      attachments,
+		updateData := MessageUpdateData{
+			UpdateType: "message",
+			ID:         msgID,
+			Role:       role,
+			// seq is what the client sorts by; without it this message
+			// deserializes at seq 0 and jumps to the top of the transcript.
+			Seq:             seq,
+			Ordinal:         ordinal,
+			Thread:          thread,
+			ContextSequence: &contextSequence,
+			CreatedAt:       now.Format("2006-01-02T15:04:05.999999999Z07:00"),
+			UpdatedAt:       now.Format("2006-01-02T15:04:05.999999999Z07:00"),
+			ContentBlocks:   contentBlocks,
+			Attachments:     &attachments,
 		}
 
-		updateDataJSON, err := json.Marshal(updateData)
+		updateDataJSON, err := updateData.Marshal()
 		if err != nil {
 			return fmt.Errorf("failed to marshal chat_update data: %w", err)
 		}
 
-		if err := r.CreateChatUpdate(txCtx, chatID, UpdateTypeMessage, msgID, string(updateDataJSON)); err != nil {
+		if err := r.CreateChatUpdate(txCtx, chatID, UpdateTypeMessage, msgID, updateDataJSON); err != nil {
 			return fmt.Errorf("failed to create chat_update: %w", err)
 		}
 
@@ -369,6 +400,16 @@ func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, erro
 	return r.messages.GetNextOrdinal(ctx, threadID)
 }
 
+// GetNextSeq returns the next chat-global seq for a chat. See
+// 20260802000000_add_message_seq.sql for what seq is and why it exists
+// alongside the per-thread Ordinal.
+func (r *Repo) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.messages.GetNextSeq(ctx, chatID, threadID)
+}
+
 func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
@@ -385,6 +426,75 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 		}
 		return ids, nil
 	})
+}
+
+func (r *Repo) ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+
+	return r.messages.ListRecentMessages(ctx, chatID, limit)
+}
+
+func (r *Repo) ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*Message, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if mainThreadID == "" {
+		// Without a main thread there is nothing to measure the window against;
+		// fall back to the chat-wide bound rather than returning nothing.
+		return r.messages.ListRecentMessages(ctx, chatID, limit)
+	}
+
+	return r.messages.ListRecentChatWindow(ctx, chatID, mainThreadID, limit)
+}
+
+func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
+	}
+
+	return r.messages.CountMessagesInChat(ctx, chatID)
+}
+
+func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error) {
+	if contextWindowID == "" {
+		return 0, fmt.Errorf("context window ID cannot be empty")
+	}
+
+	return r.messages.CountMessagesByContextWindow(ctx, contextWindowID)
+}
+
+func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error) {
+	if contextWindowID == "" {
+		return 0, fmt.Errorf("context window ID cannot be empty")
+	}
+
+	return r.messages.CountMessagesByContextWindowUpToSeq(ctx, contextWindowID, maxSeq)
+}
+
+func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error) {
+	if contextWindowID == "" {
+		return nil, fmt.Errorf("context window ID cannot be empty")
+	}
+
+	return r.messages.ListRecentMessagesInContextWindowBeforeSeq(ctx, contextWindowID, beforeSeq, limit)
+}
+
+func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
+	if contextWindowID == "" {
+		return false, fmt.Errorf("context window ID cannot be empty")
+	}
+
+	return r.messages.HasMessagesBeforeInContextWindow(ctx, contextWindowID, beforeSeq)
+}
+
+func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
+	if contextWindowID == "" {
+		return nil, fmt.Errorf("context window ID cannot be empty")
+	}
+
+	return r.messages.ListMessagesInContextWindowRange(ctx, contextWindowID, fromSeq, toSeq)
 }
 
 func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error) {
@@ -420,20 +530,25 @@ func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID strin
 		return 0, nil
 	}
 
-	if threadRecord != nil && threadRecord.ParentThreadID != nil && threadRecord.ForkAtContextWindowID != nil {
-		// Get the parent's context_window sequence at the fork point
-		parentCW, err := r.GetContextWindow(ctx, *threadRecord.ForkAtContextWindowID)
-		if err == nil && parentCW != nil {
-			logging.Debug("[GetMaxContextSequenceInThread] Inheriting context_sequence from parent fork point",
-				"threadID", threadID,
-				"parentContextWindowID", *threadRecord.ForkAtContextWindowID,
-				"inheritedContextSeq", parentCW.Sequence)
-			return parentCW.Sequence, nil
+	if threadRecord != nil && threadRecord.ParentThreadID != nil && threadRecord.ForkAtMessageID != nil {
+		// Get the parent's context_window sequence at the fork point, via the
+		// fork message's own context window.
+		forkMsg, err := r.GetMessage(ctx, *threadRecord.ForkAtMessageID)
+		if err == nil && forkMsg != nil {
+			parentCW, err := r.GetContextWindow(ctx, forkMsg.ContextWindowID)
+			if err == nil && parentCW != nil {
+				logging.Debug("[GetMaxContextSequenceInThread] Inheriting context_sequence from parent fork point",
+					"threadID", threadID,
+					"forkAtMessageID", *threadRecord.ForkAtMessageID,
+					"parentContextWindowID", forkMsg.ContextWindowID,
+					"inheritedContextSeq", parentCW.Sequence)
+				return parentCW.Sequence, nil
+			}
 		}
 		logging.Debug("[GetMaxContextSequenceInThread] Failed to get parent context_window at fork point",
 			"threadID", threadID,
 			"parentThreadID", *threadRecord.ParentThreadID,
-			"forkContextWindowID", *threadRecord.ForkAtContextWindowID,
+			"forkAtMessageID", *threadRecord.ForkAtMessageID,
 			"error", err)
 	}
 
@@ -461,7 +576,7 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 func (r *Repo) GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*Message, error) {
 	// For now, use the legacy approach with thread + context_sequence
 	// This will be updated when we migrate messages to use context_window_id directly
-	cw, conversationID, _, _, err := r.GetContextWindowWithThread(ctx, contextWindowID)
+	cw, chatID, _, _, err := r.GetContextWindowWithThread(ctx, contextWindowID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get context window: %w", err)
 	}
@@ -471,7 +586,7 @@ func (r *Repo) GetMessagesByContextWindow(ctx context.Context, contextWindowID s
 		ContextSequence: &cw.Sequence,
 	}
 
-	msgs, err := r.ListMessages(ctx, conversationID, opts)
+	msgs, err := r.ListMessages(ctx, chatID, opts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list messages: %w", err)
 	}
@@ -1847,6 +1962,15 @@ func (r *Repo) GetWorktreeByPath(ctx context.Context, path string) (*Worktree, e
 	return r.worktrees.GetWorktreeByPath(ctx, path)
 }
 
+func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
+	// An empty key means the caller opted out of idempotency, not that it is
+	// asking about the rows that happen to have no key.
+	if projectID == "" || key == "" {
+		return nil, nil
+	}
+	return r.worktrees.GetWorktreeByIdempotencyKey(ctx, projectID, key)
+}
+
 func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error) {
 	return r.worktrees.ListWorktrees(ctx, filters)
 }
@@ -3085,17 +3209,17 @@ func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
 //
 // Parameters:
 // - thread: the thread ID
-// - maxOrdinal: optional - if set, returns tokens at that ordinal (for fork points)
+// - maxSeq: optional - if set, returns tokens at that chat-global seq (for fork points)
 //
 //	if nil, returns current tokens (most recent message with data)
 //
 // Returns 0 if no token data exists (caller should estimate if needed).
-func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxOrdinal *int64) (int64, error) {
+func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *int64) (int64, error) {
 	if thread == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	// Get the Thread record to find conversation_id and fork metadata
+	// Get the Thread record to find chat_id and fork metadata
 	threadRecord, _, err := r.GetThreadWithParent(ctx, thread)
 	if err != nil {
 		// Thread not found - try querying messages directly using thread as both chat_id and thread
@@ -3103,7 +3227,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxOrdina
 		logging.Debug("[GetThreadTokenCount] Thread record not found, trying direct query",
 			"thread", thread,
 			"error", err)
-		return r.getThreadTokenCountDirect(ctx, thread, thread, maxOrdinal)
+		return r.getThreadTokenCountDirect(ctx, thread, thread, maxSeq)
 	}
 
 	// Get current context sequence for the thread
@@ -3115,19 +3239,19 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxOrdina
 		contextSeq = 0
 	}
 
-	// Query for token count at or before maxOrdinal
-	var maxOrdinalSQL sql.NullInt64
-	if maxOrdinal != nil {
-		maxOrdinalSQL = sql.NullInt64{Int64: *maxOrdinal, Valid: true}
+	// Query for token count at or before maxSeq
+	var maxSeqSQL sql.NullInt64
+	if maxSeq != nil {
+		maxSeqSQL = sql.NullInt64{Int64: *maxSeq, Valid: true}
 	}
 
 	var localTokens int64
-	localTokens, err = r.tokenCounts.GetThreadTokenCountAtOrdinal(ctx, thread, int64(contextSeq), maxOrdinalSQL)
+	localTokens, err = r.tokenCounts.GetThreadTokenCountAtSeq(ctx, thread, int64(contextSeq), maxSeqSQL)
 	if err != nil {
 		logging.Warn("[GetThreadTokenCount] Error querying token count",
 			"thread", thread,
 			"contextSequence", contextSeq,
-			"maxOrdinal", maxOrdinal,
+			"maxSeq", maxSeq,
 			"error", err)
 		localTokens = 0
 	}
@@ -3141,7 +3265,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxOrdina
 	}
 
 	// No local token data - check for fork inheritance
-	if threadRecord.ParentThreadID == nil || threadRecord.ForkAtOrdinal == nil {
+	if threadRecord.ParentThreadID == nil || threadRecord.ForkAtMessageID == nil {
 		// No fork metadata, return 0
 		logging.Debug("[GetThreadTokenCount] No local tokens and no fork metadata",
 			"thread", thread)
@@ -3149,7 +3273,6 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxOrdina
 	}
 
 	parentThreadID := *threadRecord.ParentThreadID
-	forkAtOrdinal := *threadRecord.ForkAtOrdinal
 
 	// Guard against self-referential forks
 	if parentThreadID == thread {
@@ -3158,18 +3281,24 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxOrdina
 		return 0, nil
 	}
 
+	forkMsg, err := r.GetMessage(ctx, *threadRecord.ForkAtMessageID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get fork message %s: %w", *threadRecord.ForkAtMessageID, err)
+	}
+
 	// Recursively get parent's token count at the fork point
 	logging.Debug("[GetThreadTokenCount] Inheriting tokens from parent",
 		"thread", thread,
 		"parentThread", parentThreadID,
-		"forkAtOrdinal", forkAtOrdinal)
+		"forkAtMessageID", *threadRecord.ForkAtMessageID,
+		"forkSeq", forkMsg.Seq)
 
-	return r.GetThreadTokenCount(ctx, parentThreadID, &forkAtOrdinal)
+	return r.GetThreadTokenCount(ctx, parentThreadID, &forkMsg.Seq)
 }
 
 // getThreadTokenCountDirect queries token count directly using chat_id and thread.
 // Used as fallback when Thread record doesn't exist.
-func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxOrdinal *int64) (int64, error) {
+func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxSeq *int64) (int64, error) {
 	_ = chatID // kept for API compatibility
 
 	// Get context sequence
@@ -3181,7 +3310,7 @@ func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread str
 	// Build query
 	var query string
 	var args []interface{}
-	if maxOrdinal != nil {
+	if maxSeq != nil {
 		query = `
 			SELECT CAST(COALESCE(
 				(
@@ -3190,11 +3319,11 @@ func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread str
 					JOIN context_windows cw ON cw.id = m.context_window_id
 					WHERE cw.thread_id = ? AND cw.sequence = ?
 					  AND token_count IS NOT NULL
-					  AND ordinal <= ?
-					ORDER BY ordinal DESC
+					  AND seq <= ?
+					ORDER BY seq DESC
 					LIMIT 1
 				), 0) AS INTEGER)`
-		args = []interface{}{thread, contextSeq, *maxOrdinal}
+		args = []interface{}{thread, contextSeq, *maxSeq}
 	} else {
 		query = `
 			SELECT CAST(COALESCE(
@@ -3204,7 +3333,7 @@ func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread str
 					JOIN context_windows cw ON cw.id = m.context_window_id
 					WHERE cw.thread_id = ? AND cw.sequence = ?
 					  AND token_count IS NOT NULL
-					ORDER BY ordinal DESC
+					ORDER BY seq DESC
 					LIMIT 1
 				), 0) AS INTEGER)`
 		args = []interface{}{thread, contextSeq}
@@ -3252,8 +3381,9 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 // model that produced the thread's current token count, mirroring the fork
 // inheritance walk in GetThreadTokenCount so the indicator's denominator tracks
 // the same model the trigger evaluates. Falls back to the global default when
-// no model-bearing message is found.
-func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxOrdinal *int64) int {
+// no model-bearing message is found. maxSeq bounds inheritance to a fork
+// point, the same way maxOrdinal used to -- see GetThreadTokenCount.
+func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxSeq *int64) int {
 	if thread == "" {
 		return models.GlobalDefaultCompactionThreshold
 	}
@@ -3264,7 +3394,7 @@ func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread stri
 	}
 
 	msg, err := r.GetLatestMessageWithTokensInThread(ctx, thread, contextSeq)
-	if err == nil && msg != nil && msg.TokenCount != nil && (maxOrdinal == nil || msg.Ordinal <= *maxOrdinal) {
+	if err == nil && msg != nil && msg.TokenCount != nil && (maxSeq == nil || msg.Seq <= *maxSeq) {
 		if msg.Model != nil {
 			return models.CompactionThresholdForModel(*msg.Model)
 		}
@@ -3273,15 +3403,18 @@ func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread stri
 
 	// No local token-bearing message — follow fork inheritance like GetThreadTokenCount.
 	threadRecord, _, err := r.GetThreadWithParent(ctx, thread)
-	if err != nil || threadRecord.ParentThreadID == nil || threadRecord.ForkAtOrdinal == nil {
+	if err != nil || threadRecord.ParentThreadID == nil || threadRecord.ForkAtMessageID == nil {
 		return models.GlobalDefaultCompactionThreshold
 	}
 	parentThreadID := *threadRecord.ParentThreadID
 	if parentThreadID == thread {
 		return models.GlobalDefaultCompactionThreshold
 	}
-	forkAtOrdinal := *threadRecord.ForkAtOrdinal
-	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkAtOrdinal)
+	forkMsg, err := r.GetMessage(ctx, *threadRecord.ForkAtMessageID)
+	if err != nil {
+		return models.GlobalDefaultCompactionThreshold
+	}
+	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq)
 }
 
 // ==================== Workflows ====================
@@ -3538,8 +3671,8 @@ func (r *Repo) CreateThread(ctx context.Context, thread *Thread) (*Thread, error
 	if thread.ID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	if thread.ConversationID == "" {
-		return nil, fmt.Errorf("conversation ID cannot be empty")
+	if thread.ChatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	return r.threads.CreateThread(ctx, thread)
 }
@@ -3558,11 +3691,11 @@ func (r *Repo) GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thr
 	return r.threads.GetThreadByWorkflow(ctx, workflowID)
 }
 
-func (r *Repo) GetRootThread(ctx context.Context, conversationID string) (*Thread, error) {
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID cannot be empty")
+func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.GetRootThread(ctx, conversationID)
+	return r.threads.GetRootThread(ctx, chatID)
 }
 
 func (r *Repo) GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error) {
@@ -3572,11 +3705,11 @@ func (r *Repo) GetThreadWithParent(ctx context.Context, id string) (*Thread, *st
 	return r.threads.GetThreadWithParent(ctx, id)
 }
 
-func (r *Repo) ListThreadsByConversation(ctx context.Context, conversationID string) ([]*Thread, error) {
-	if conversationID == "" {
-		return nil, fmt.Errorf("conversation ID cannot be empty")
+func (r *Repo) ListThreadsByConversation(ctx context.Context, chatID string) ([]*Thread, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.ListThreadsByConversation(ctx, conversationID)
+	return r.threads.ListThreadsByConversation(ctx, chatID)
 }
 
 func (r *Repo) ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error) {
@@ -3593,11 +3726,11 @@ func (r *Repo) UpdateThreadWorkflow(ctx context.Context, threadID, workflowID st
 	return r.threads.UpdateThreadWorkflow(ctx, threadID, workflowID)
 }
 
-func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtOrdinal *int64, forkAtContextWindowID *string) (*Thread, error) {
+func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadForkPoint(ctx, threadID, forkAtOrdinal, forkAtContextWindowID)
+	return r.threads.UpdateThreadForkPoint(ctx, threadID, forkAtMessageID)
 }
 
 func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error) {
@@ -3621,18 +3754,18 @@ func (r *Repo) DeleteThread(ctx context.Context, id string) error {
 	return r.threads.DeleteThread(ctx, id)
 }
 
-func (r *Repo) DeleteThreadsByConversation(ctx context.Context, conversationID string) error {
-	if conversationID == "" {
-		return fmt.Errorf("conversation ID cannot be empty")
+func (r *Repo) DeleteThreadsByConversation(ctx context.Context, chatID string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.DeleteThreadsByConversation(ctx, conversationID)
+	return r.threads.DeleteThreadsByConversation(ctx, chatID)
 }
 
-func (r *Repo) CountThreadsInConversation(ctx context.Context, conversationID string) (int64, error) {
-	if conversationID == "" {
-		return 0, fmt.Errorf("conversation ID cannot be empty")
+func (r *Repo) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
+	if chatID == "" {
+		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CountThreadsInConversation(ctx, conversationID)
+	return r.threads.CountThreadsInConversation(ctx, chatID)
 }
 
 // ==================== Context Windows ====================
@@ -3672,7 +3805,7 @@ func (r *Repo) GetContextWindowBySequence(ctx context.Context, threadID string, 
 	return r.contextWindows.GetContextWindowBySequence(ctx, threadID, sequence)
 }
 
-func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *int64, error) {
+func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) {
 	if id == "" {
 		return nil, "", nil, nil, fmt.Errorf("context window ID cannot be empty")
 	}

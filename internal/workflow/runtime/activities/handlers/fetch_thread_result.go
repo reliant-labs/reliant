@@ -4,10 +4,7 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"strings"
 
-	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
@@ -27,13 +24,12 @@ type FetchThreadResultOutput struct {
 
 // FetchThreadResultActivity fetches the final assistant message from a child thread
 type FetchThreadResultActivity struct {
-	repo    db.Repository
 	threads *threads.Service
 }
 
 // NewFetchThreadResultActivity creates a new FetchThreadResultActivity
-func NewFetchThreadResultActivity(repo db.Repository, threads *threads.Service) *FetchThreadResultActivity {
-	return &FetchThreadResultActivity{repo: repo, threads: threads}
+func NewFetchThreadResultActivity(threads *threads.Service) *FetchThreadResultActivity {
+	return &FetchThreadResultActivity{threads: threads}
 }
 
 // Name returns the activity name for registration
@@ -63,97 +59,35 @@ func (a *FetchThreadResultActivity) Execute(ctx context.Context, input FetchThre
 		"chatID", input.ChatID,
 		"thread", input.Thread)
 
-	// Get all messages visible in this thread (including inherited from parent forks)
-	// Uses threads.Service for proper fork chain resolution
-	messages, err := a.threads.LoadCurrentMessages(ctx, input.Thread)
+	result, err := a.threads.LastAssistantMessage(ctx, input.Thread)
 	if err != nil {
 		return FetchThreadResultOutput{
 			Content: fmt.Sprintf("Failed to fetch thread messages: %v", err),
 			IsError: true,
 		}, nil
 	}
-
-	if len(messages) == 0 {
-		return FetchThreadResultOutput{
-			Content: "No messages found in child thread",
-			IsError: true,
-		}, nil
-	}
-
-	// Find the last assistant message and check for warning messages after it
-	var lastAssistantMessage *db.Message
-	var lastAssistantIndex = -1
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
-			lastAssistantMessage = messages[i]
-			lastAssistantIndex = i
-			break
-		}
-	}
-
-	if lastAssistantMessage == nil {
+	if !result.Found {
 		return FetchThreadResultOutput{
 			Content: "No assistant response found in child thread",
 			IsError: true,
 		}, nil
 	}
 
-	// Check if there's a warning message after the last assistant message
-	// This indicates the workflow ended abnormally (e.g., max turns reached)
-	// Warning messages now use display_style="warning" instead of role="warning"
-	var warningMessage *db.Message
-	for i := lastAssistantIndex + 1; i < len(messages); i++ {
-		if messages[i].DisplayStyle != nil && *messages[i].DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_WARNING {
-			warningMessage = messages[i]
-			break
-		}
-	}
-
-	// Get the content blocks for the assistant message
-	blocks, err := a.repo.ListContentBlocks(ctx, lastAssistantMessage.ID)
-	if err != nil {
-		return FetchThreadResultOutput{
-			Content: fmt.Sprintf("Failed to fetch message content: %v", err),
-			IsError: true,
-		}, nil
-	}
-
-	// Concatenate all text blocks
-	var textParts []string
-	for _, block := range blocks {
-		if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT && block.Content != nil {
-			textParts = append(textParts, *block.Content)
-		}
-	}
-
-	content := strings.Join(textParts, "\n")
+	content := result.Content
 	if content == "" {
 		content = "Agent completed but produced no text response"
 	}
 
-	// If there's a warning message, prepend it and mark as error
-	if warningMessage != nil {
-		warningBlocks, err := a.repo.ListContentBlocks(ctx, warningMessage.ID)
-		if err == nil {
-			var warningParts []string
-			for _, block := range warningBlocks {
-				if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT && block.Content != nil {
-					warningParts = append(warningParts, *block.Content)
-				}
-			}
-			if len(warningParts) > 0 {
-				warningContent := strings.Join(warningParts, "\n")
-				content = fmt.Sprintf("[WORKFLOW_WARNING] %s\n\nLast response before warning:\n%s", warningContent, content)
-				logger.Info("[FetchThreadResult] Found warning message in thread",
-					"chatID", input.ChatID,
-					"thread", input.Thread,
-					"warning", warningContent)
-				return FetchThreadResultOutput{
-					Content: content,
-					IsError: true,
-				}, nil
-			}
-		}
+	if result.Warning != "" {
+		content = fmt.Sprintf("[WORKFLOW_WARNING] %s\n\nLast response before warning:\n%s", result.Warning, content)
+		logger.Info("[FetchThreadResult] Found warning message in thread",
+			"chatID", input.ChatID,
+			"thread", input.Thread,
+			"warning", result.Warning)
+		return FetchThreadResultOutput{
+			Content: content,
+			IsError: true,
+		}, nil
 	}
 
 	logger.Info("[FetchThreadResult] Successfully fetched result",

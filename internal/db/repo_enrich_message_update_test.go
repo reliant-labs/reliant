@@ -35,9 +35,9 @@ func TestEnrichMessageUpdate_IncludesFileReferenceAttachments(t *testing.T) {
 	}))
 
 	_, err := repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      now,
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: now,
 	})
 	require.NoError(t, err)
 
@@ -130,9 +130,9 @@ func TestEnrichMessageUpdate_UsesCanonicalToolCallInputField(t *testing.T) {
 	}))
 
 	_, err := repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      now,
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: now,
 	})
 	require.NoError(t, err)
 

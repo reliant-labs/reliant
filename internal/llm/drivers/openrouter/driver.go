@@ -292,6 +292,18 @@ func (c *Client) convertMessagesForGemini(prompts []string, messages []message.M
 
 			result = append(result, asstMsg)
 
+		case message.System:
+			// History System messages are content (compaction summary, branch
+			// note, mailbox envelope), delivered as a user turn wrapped in
+			// <system> tags. Without this case they fall through the switch
+			// and are dropped before the request is built.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				result = append(result, map[string]interface{}{
+					"role":    "user",
+					"content": fmt.Sprintf("<system>\n%s\n</system>", systemText),
+				})
+			}
+
 		case message.Tool:
 			// Each tool result becomes a separate message in OpenAI format
 			for _, toolResult := range msg.ToolResults() {
@@ -439,6 +451,18 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 			}
 
 			result = append(result, asstMsg)
+
+		case message.System:
+			// History System messages are content (compaction summary, branch
+			// note, mailbox envelope), delivered as a user turn wrapped in
+			// <system> tags. Without this case they fall through the switch
+			// and are dropped before the request is built.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				result = append(result, map[string]interface{}{
+					"role":    "user",
+					"content": fmt.Sprintf("<system>\n%s\n</system>", systemText),
+				})
+			}
 
 		case message.Tool:
 			// Each tool result becomes a separate message in OpenAI format

@@ -3,8 +3,8 @@
 # Usage: ./scripts/capture-pprof.sh [port] [output_dir]
 
 # Source dynamic port if available
-if [ -f .env.ports ]; then
-    source .env.ports
+if [ -f .dev-ports.sh ]; then
+    source .dev-ports.sh
 fi
 PORT="${1:-${PPROF_PORT:-6060}}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)

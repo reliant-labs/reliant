@@ -25,7 +25,7 @@ npm install
 npm run dev
 ```
 
-This starts the Go backend (dynamic port via `.env.ports`), Vite dev server on port 3000, and Electron with hot reloading.
+This starts the Go backend (dynamic port via `.dev-ports.sh`), Vite dev server on port 3000, and Electron with hot reloading.
 
 ### From project root
 
@@ -178,7 +178,7 @@ electron/
 ## Troubleshooting
 
 ### Backend fails to start
-Check that a port was allocated in `.env.ports` and that Go is in PATH. Check console logs in DevTools.
+Check that a port was allocated in `.dev-ports.sh` and that Go is in PATH. Check console logs in DevTools.
 
 ### Build fails
 Ensure web app builds successfully first (`npm run build` in `web/`), then verify Go backend compiles.

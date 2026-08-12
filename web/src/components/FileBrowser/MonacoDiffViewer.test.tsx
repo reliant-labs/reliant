@@ -60,6 +60,7 @@ vi.mock("../../lib/monacoTheme", () => ({
   getMonacoLanguage: () => "plaintext",
   configureMonacoTheme: vi.fn(),
   getCurrentMonacoTheme: () => "vs-dark",
+  MONACO_FONT_FAMILY: "'JetBrains Mono', monospace",
 }));
 
 vi.mock("../../lib/monacoManager", () => ({

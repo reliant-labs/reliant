@@ -201,6 +201,11 @@ nodes:
         - id: compact
           type: compact
           timeout: 10m
+          args:
+            # Summarize with the loop's own model: compaction only fires because
+            # the thread outgrew THIS model's window, so a smaller-window
+            # summarizer cannot hold the history it is being asked to summarize.
+            model: "{{inputs.model}}"
       edges:
         - from: main_agent
           default: audit_check

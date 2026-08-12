@@ -183,6 +183,97 @@ func TestApprovalCreateActivity_Idempotency(t *testing.T) {
 	assert.False(t, output.AlreadyResolved)
 }
 
+// TestApprovalCreateActivity_ThreadIDAttribution verifies that an approval raised
+// from within a spawned sub-agent's thread carries THAT thread's id, not the
+// parent chat's root thread and not NULL. This is the fix for spec §7.6: with
+// several agents live at once, spawn_status must be able to say which agent is
+// gated, which requires the approval to name its own thread rather than the
+// chat as a whole.
+func TestApprovalCreateActivity_ThreadIDAttribution(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	workflowID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	h.CreateTestWorkflow(ctx, workflowID, chatID)
+
+	// The chat's own root thread (created by CreateTestChat, ID == chatID)
+	// stands in for the parent conversation. A spawned sub-agent runs in its
+	// own, separate thread underneath the same chat.
+	parentThreadID := chatID
+	subAgentThreadID := uuid.New().String()
+	h.CreateTestThread(ctx, chatID, subAgentThreadID)
+
+	activity := NewApprovalCreateActivity(h.Repo())
+
+	input := ApprovalCreateInput{
+		ChatID:             chatID,
+		WorkflowID:         workflowID,
+		TemporalWorkflowID: workflowID,
+		ThreadID:           subAgentThreadID,
+		StepID:             "agent_loop",
+		Title:              "Deploy to production?",
+	}
+
+	var output ApprovalCreateOutput
+	err := h.ExecuteActivity(activity.Execute, input, &output)
+	require.NoError(t, err)
+	assert.NotEmpty(t, output.ApprovalID)
+
+	stored, err := h.Repo().GetApproval(ctx, output.ApprovalID)
+	require.NoError(t, err)
+	require.NotNil(t, stored.ThreadID, "approval must carry the raising thread's id, not NULL")
+	assert.Equal(t, subAgentThreadID, *stored.ThreadID,
+		"approval must be attributed to the sub-agent's own thread")
+	assert.NotEqual(t, parentThreadID, *stored.ThreadID,
+		"approval must not be misattributed to the parent chat's root thread")
+}
+
+// TestApprovalCreateActivity_ThreadIDOmittedIsNull verifies that when no thread
+// is available (the empty-string case ApprovalCreateInput.ThreadID uses to mean
+// "not applicable"), the persisted approval leaves thread_id NULL rather than
+// guessing at an attribution.
+func TestApprovalCreateActivity_ThreadIDOmittedIsNull(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	workflowID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	h.CreateTestWorkflow(ctx, workflowID, chatID)
+
+	activity := NewApprovalCreateActivity(h.Repo())
+
+	input := ApprovalCreateInput{
+		ChatID:             chatID,
+		WorkflowID:         workflowID,
+		TemporalWorkflowID: workflowID,
+		StepID:             "agent_loop",
+		Title:              "Deploy to production?",
+	}
+
+	var output ApprovalCreateOutput
+	err := h.ExecuteActivity(activity.Execute, input, &output)
+	require.NoError(t, err)
+
+	stored, err := h.Repo().GetApproval(ctx, output.ApprovalID)
+	require.NoError(t, err)
+	assert.Nil(t, stored.ThreadID, "no thread supplied should leave thread_id NULL, never guessed")
+}
+
 // TestApprovalCreateActivity_IdempotencyAlreadyResolved verifies that if the existing
 // approval is already resolved (approved/denied), ApprovalCreate returns
 // AlreadyResolved=true with the correct status and action_taken.

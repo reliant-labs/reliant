@@ -15,7 +15,9 @@
 import React, { useMemo, useCallback, useRef, useState, useEffect, memo } from "react";
 import { MessageRole, DisplayStyle } from "../../../gen/reliant/v1/chat_pb";
 import { Virtuoso, type VirtuosoHandle, type ListRange } from "react-virtuoso";
-import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route } from "lucide-react";
+import { acknowledgeScrollToMessage } from "../../../lib/scrollToMessage";
+import { createFollowState, type FollowState } from "./followState";
+import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
 import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
@@ -36,6 +38,7 @@ import { getActivitySteps } from "./activityIndicators";
 import { ActivityIndicator } from "./ActivityIndicator";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreads } from "../../../store/threadActivityStore";
+import { logger } from "../../../lib/logger";
 import { settingsSync, SETTINGS_KEYS } from "../../../services/settingsSync";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { RubberBandScroller } from "./RubberBandScroller";
@@ -64,6 +67,15 @@ interface InterleavedTimelineProps {
   onSelectThread?: (threadId: string | null) => void;
   /** Callback exposed so external "scroll to bottom" buttons can resume follow mode */
   onResumeFollow?: (cb: () => void) => void;
+  /**
+   * Load the next page of older messages (scroll-back paging). Called when the
+   * user reaches the top of the list. Omit to disable paging entirely.
+   */
+  onLoadOlderMessages?: () => void;
+  /** Whether an older-message page is currently in flight (renders a spinner). */
+  isLoadingOlderMessages?: boolean;
+  /** Whether older messages remain to be loaded. Gates the startReached trigger. */
+  hasOlderMessages?: boolean;
 }
 
 /** Minimal info needed for rendering - derived from WorkflowExecution */
@@ -143,10 +155,25 @@ function buildWorkflowLookups(
       }
     }
 
-    // Origin comes from the threads table; fall back only when a thread
-    // predates the column and the API sent nothing.
-    const origin: ThreadOrigin =
-      wf.origin ?? (isMain ? "main" : wf.forkedFromThread ? "fork" : "node");
+    // Origin comes from the threads table, which owns thread identity, and is
+    // NOT NULL there — every one of the 703 threads in a real database has a
+    // value. So an empty origin here is never "this thread predates the
+    // column"; it means the value was lost somewhere between the row and this
+    // component, and the only honest thing to do is say so.
+    //
+    // There used to be a fallback of `isMain ? "main" : forkedFromThread ?
+    // "fork" : "node"`. It could not produce "spawn" at all, so a spawned
+    // sub-agent whose origin went missing was silently relabelled a node
+    // thread — which made isSpawn false and dumped the entire sub-agent
+    // transcript inline into the parent chat. The guess looked like a safety
+    // net and was actually the bug report.
+    const origin = wf.origin as ThreadOrigin;
+    if (!origin) {
+      logger.error(
+        "[InterleavedTimeline] Workflow arrived with no thread origin; spawned threads will render inline",
+        { workflowId: wf.id, thread: wf.thread, chatId },
+      );
+    }
 
     // Use authoritative parentThread from backend (thread table), fall back to tree-derived
     const parentThread = wf.parentThread || treeParentThread;
@@ -271,6 +298,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   footer,
   onSelectThread,
   onResumeFollow,
+  onLoadOlderMessages,
+  isLoadingOlderMessages = false,
+  hasOlderMessages = false,
 }: InterleavedTimelineProps) {
   const activeThreads = useActiveThreads(chatId);
   const [timelineVariant, setTimelineVariant] = useState<ChatTimelineVariant>(() => getStoredTimelineVariant());
@@ -306,10 +336,19 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         if (at.thread_title && existing.name === "Thread") {
           existing.name = formatNodeId(at.thread_title);
         }
-        // The stream carries origin for threads whose execution tree has not
-        // been refetched yet. It agrees with the persisted value rather than
-        // repairing it — both now read the same field.
-        if (at.origin) {
+        // The stream carries origin only to fill a GAP — a thread whose
+        // execution tree has not been fetched yet. It must never override a
+        // value that came from the workflow tree, because the tree reads
+        // threads.origin (the column that owns thread provenance) while the
+        // stream replays historical events that may predate a correction.
+        //
+        // Concretely: thread announcements are persisted in chat_updates and
+        // replayed on reconnect. A thread announced before the spawn-origin
+        // overwrite was fixed still has a stale "node" event on disk forever.
+        // Letting that event win re-poisoned already-correct threads on every
+        // reload, which is why the bug appeared fixed for new chats and stuck
+        // for old ones.
+        if (at.origin && !existing.origin) {
           existing.origin = at.origin;
           existing.isSpawn = isSpawnOrigin(at.origin);
         }
@@ -371,8 +410,21 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         const activeThread = activeThreads.find(at => at.thread === thread);
         const resolvedName = !isMain ? resolveThreadNameFromActiveThreads(thread, activeThreads) : undefined;
         const routerDec = !isMain ? resolveRouterDecisionFromActiveThreads(thread, activeThreads) : undefined;
-        const streamedOrigin =
-          activeThread?.origin ?? (isMain ? "main" : "node");
+        // Same rule as the workflow-tree path above: do not invent an origin.
+        // `activeThreads` is LIVE streaming state, so it is empty for every
+        // historical thread — defaulting to "node" here meant any spawned
+        // thread not currently running was reported as a node thread and
+        // rendered inline. Main is the one case we can assert from identity
+        // rather than guess, because the main thread IS the chat.
+        const streamedOrigin = isMain
+          ? ("main" as ThreadOrigin)
+          : (activeThread?.origin as ThreadOrigin | undefined);
+        if (!streamedOrigin) {
+          logger.error(
+            "[InterleavedTimeline] Thread has messages but no workflow row and no live origin; cannot classify it",
+            { thread, chatId },
+          );
+        }
         display = {
           id: thread,
           thread,
@@ -388,7 +440,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
       // In "preview" mode, spawn thread messages render inside the tool call instead
       // Only skip when viewing all threads — if a spawn thread is explicitly selected, show its messages
-      if (display.isSpawn && getSpawnDisplayMode() === "preview" && showAll) continue;
+      const shouldCollapseSpawn =
+        display.isSpawn && getSpawnDisplayMode() === "preview" && showAll;
+
+      if (shouldCollapseSpawn) continue;
 
       // Thread start: first time seeing a non-main thread
       let justStarted = false;
@@ -517,8 +572,18 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       }
     }
 
-    // Insert error events at correct positions based on timestamp
+    // Insert error events at correct positions based on timestamp.
+    //
+    // Scoped to the visible thread, exactly like messages and activity above.
+    // Without this an error was chat-global: a single "Paused: no machine is
+    // connected" from the main thread rendered inside EVERY thread of the chat,
+    // including spawns that started 12h later and never saw the outage.
+    //
+    // An error with no thread predates thread scoping. It stays visible
+    // everywhere rather than being assigned to a thread we'd have to guess —
+    // the guess is what produced the wrong-thread render in the first place.
     for (const error of errorEvents) {
+      if (error.thread && !isVisible(error.thread)) continue;
       const errorTime = new Date(error.timestamp).getTime();
 
       // Find insertion point: after last item with timestamp <= error time
@@ -649,37 +714,141 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return Array.from(selectedThreads).sort().join(",");
   }, [selectedThreads]);
 
+  // --- Virtuoso prepend protocol (firstItemIndex) ---
+  //
+  // Virtuoso's "inverse infinite scroll" contract: when you PREPEND N items to
+  // `data`, you must simultaneously DECREASE `firstItemIndex` by N. That delta
+  // is how Virtuoso knows the items shifted down rather than the content having
+  // changed, and it is what lets it hold the user's scroll anchored to the
+  // message they were reading. Prepending without it makes the viewport jump on
+  // every page load, so this is mandatory, not an optimization.
+  //
+  // It starts at a large constant because it must never go negative (Virtuoso
+  // logs an error and misbehaves): 100_000 allows ~1000 pages of scroll-back.
+  //
+  // ⚠️ INDEX SPACES. Setting firstItemIndex splits Virtuoso's callbacks into two
+  // different index spaces, and mixing them up silently corrupts scrolling:
+  //   - SHIFTED (data index + firstItemIndex): `rangeChanged`, `startReached`,
+  //     and the index passed to `itemContent` / `computeItemKey`.
+  //   - DATA (a plain index into `flatItems`): `scrollToIndex` and
+  //     `initialTopMostItemIndex`.
+  // Everything below this component's boundary works in DATA space; the single
+  // conversion happens in handleRangeChanged, which is the only place a SHIFTED
+  // value enters logic that later indexes flatItems or calls scrollToIndex.
+  const FIRST_ITEM_INDEX_BASE = 100_000;
+  const [firstItemIndex, setFirstItemIndex] = useState(FIRST_ITEM_INDEX_BASE);
+  // Mirrored in a ref so the shifted→data conversion can read the current value
+  // without making every scroll callback depend on it.
+  const firstItemIndexRef = useRef(FIRST_ITEM_INDEX_BASE);
+  firstItemIndexRef.current = firstItemIndex;
+
+  // Detect prepends by watching the identity of the FIRST rendered item. Derived
+  // during render (React's supported "adjust state when props change" pattern)
+  // rather than in an effect: firstItemIndex must land in the same commit as the
+  // grown `data`, otherwise Virtuoso sees the prepend for one frame without the
+  // delta and jumps before the effect can correct it.
+  const [prependAnchor, setPrependAnchor] = useState<{
+    firstKey: string | null;
+    threadKey: string;
+    chatId: string;
+  }>({ firstKey: flatItems[0]?.key ?? null, threadKey, chatId });
+
+  const currentFirstKey = flatItems[0]?.key ?? null;
+  if (prependAnchor.chatId !== chatId || prependAnchor.threadKey !== threadKey) {
+    // Different chat or thread filter — a different list entirely, not a
+    // prepend. Reset the protocol rather than trying to diff across it.
+    setFirstItemIndex(FIRST_ITEM_INDEX_BASE);
+    setPrependAnchor({ firstKey: currentFirstKey, threadKey, chatId });
+  } else if (currentFirstKey !== prependAnchor.firstKey) {
+    // The head of the list changed. If the previous head is still present, the
+    // items ahead of it are exactly what was prepended. If it is gone (a
+    // replacing snapshot, a filter change), there is no meaningful delta — just
+    // re-anchor, leaving firstItemIndex where it is.
+    const prependedCount =
+      prependAnchor.firstKey === null
+        ? 0
+        : flatItems.findIndex((item) => item.key === prependAnchor.firstKey);
+    if (prependedCount > 0) {
+      setFirstItemIndex((prev) => prev - prependedCount);
+    }
+    setPrependAnchor({ firstKey: currentFirstKey, threadKey, chatId });
+  }
+
   // Store scroll positions per thread: { startIndex, atBottom }
+  // startIndex is DATA space (see the index-space note above) — it is fed back
+  // to scrollToIndex on thread switch.
   const scrollPositions = useRef<Map<string, { startIndex: number; atBottom: boolean }>>(new Map());
   const prevThreadKey = useRef<string>(threadKey);
   const lastRangeRef = useRef<ListRange | null>(null);
+
+  // --- Scroll-follow state ---
+  // Whether new content pulls the viewport down, and how a user scroll is told
+  // apart from one of our own. See followState.ts.
+  const followRef = useRef<FollowState | null>(null);
+  if (followRef.current === null) {
+    followRef.current = createFollowState();
+  }
+  const follow = followRef.current;
 
   // Save current scroll position for the active thread whenever range changes.
   // Use a ref to track the computed pinned index and only call setState when
   // the value actually changes to avoid unnecessary re-renders during scroll
   // that can trigger Virtuoso layout recalculations and cause jitter.
   const pinnedUserMessageIdxRef = useRef<number | null>(null);
-  const handleRangeChanged = useCallback((range: ListRange) => {
-    lastRangeRef.current = range;
-    const firstVisible = range.startIndex;
 
-    // Compute pinned user message
+  // Resolve the pinned header for a given first-visible row.
+  //
+  // userMessageForItem is POSITIONAL: it maps a flatItems index to the index of
+  // the user message that heads its section. Every insertion above the viewport
+  // — a streamed reply landing, a tool card expanding, an older page prepending
+  // — shifts those indices, so a previously-correct pinned index silently comes
+  // to point at a different message.
+  const applyPinnedUserMessage = useCallback((firstVisible: number) => {
     const layerUserIdx = userMessageForItem[firstVisible] ?? null;
-    const nextPinned = (layerUserIdx !== null && layerUserIdx < firstVisible) ? layerUserIdx : null;
+    const nextPinned =
+      layerUserIdx !== null && layerUserIdx < firstVisible ? layerUserIdx : null;
 
-    // Only trigger a React re-render when the pinned index actually changes
+    // Only re-render when the pinned index actually changes; Virtuoso fires
+    // rangeChanged continuously during a scroll and extra setState calls there
+    // cause layout recalculation and visible jitter.
     if (nextPinned !== pinnedUserMessageIdxRef.current) {
       pinnedUserMessageIdxRef.current = nextPinned;
       setPinnedUserMessageIdx(nextPinned);
     }
   }, [userMessageForItem]);
 
+  // Recompute the pin whenever the mapping changes, not only when the user
+  // scrolls. Virtuoso fires rangeChanged on scroll, so without this the pinned
+  // header keeps whatever index it had when the last scroll ended — and after
+  // rows are inserted above the viewport that index now names the wrong
+  // message. That is the "wrong chat pinned at the header" report, and it needs
+  // no branching or thread switching to reproduce: a reply arriving while you
+  // sit still is enough.
+  useEffect(() => {
+    const startIndex = lastRangeRef.current?.startIndex;
+    if (startIndex === undefined) return;
+    applyPinnedUserMessage(startIndex);
+  }, [applyPinnedUserMessage]);
+
+  const handleRangeChanged = useCallback((range: ListRange) => {
+    // `range` arrives in SHIFTED space; everything downstream (userMessageForItem
+    // lookups, pinnedUserMessageIdx → flatItems[...], the saved scroll position
+    // → scrollToIndex) indexes flatItems directly. Convert once, here.
+    const offset = firstItemIndexRef.current;
+    const dataRange: ListRange = {
+      startIndex: range.startIndex - offset,
+      endIndex: range.endIndex - offset,
+    };
+    lastRangeRef.current = dataRange;
+    applyPinnedUserMessage(dataRange.startIndex);
+  }, [applyPinnedUserMessage]);
+
   // Persist scroll position for current thread on every range/atBottom change
   useEffect(() => {
     const startIndex = lastRangeRef.current?.startIndex ?? 0;
     scrollPositions.current.set(threadKey, {
       startIndex,
-      atBottom: atBottomRef.current,
+      atBottom: follow.atBottom,
     });
   });
 
@@ -688,15 +857,30 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     if (prevThreadKey.current === threadKey) return;
     prevThreadKey.current = threadKey;
 
+    // Drop the previous thread's viewport and pin.
+    //
+    // Both are POSITIONAL indices into flatItems, and flatItems is rebuilt
+    // wholesale when the thread changes — so index N in the old thread names a
+    // completely unrelated row in the new one. Carrying them across meant the
+    // pinned header rendered a message from the thread you just left (and, when
+    // the old index was past the end of a shorter thread, nothing at all).
+    //
+    // Clearing rather than recomputing: there is no correct pin until Virtuoso
+    // reports a real range for the new content. Showing no header briefly is
+    // honest; showing another thread's message is not.
+    lastRangeRef.current = null;
+    pinnedUserMessageIdxRef.current = null;
+    setPinnedUserMessageIdx(null);
+
     // Reset follow state for the new thread
-    userScrolledUpRef.current = false;
+    follow.resumeFollow();
 
     // Use requestAnimationFrame to let Virtuoso re-render with new data first
     const rafId = requestAnimationFrame(() => {
       const saved = scrollPositions.current.get(threadKey);
       if (saved && !saved.atBottom) {
         // Restore their previous position in this thread
-        userScrolledUpRef.current = true;
+        follow.releaseFollow();
         virtuosoRef?.current?.scrollToIndex({
           index: saved.startIndex,
           behavior: "auto",
@@ -711,7 +895,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       }
     });
     return () => cancelAnimationFrame(rafId);
-  }, [threadKey, virtuosoRef]);
+  }, [follow, threadKey, virtuosoRef]);
 
   const handleJumpToPinned = useCallback(() => {
     if (pinnedUserMessageIdx !== null && virtuosoRef?.current) {
@@ -723,76 +907,208 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
   }, [pinnedUserMessageIdx, virtuosoRef]);
 
+
+
   // Get the pinned user message data
   const pinnedMessage = pinnedUserMessageIdx !== null ? flatItems[pinnedUserMessageIdx] : null;
   const pinnedUserMsg = pinnedMessage?.type === "message" ? pinnedMessage.message : null;
 
-  // --- Scroll-follow state ---
-  // atBottomRef mirrors Virtuoso's atBottomStateChange.
-  // userScrolledUpRef tracks intentional user scroll-up to disable follow mode.
-  // programmaticScrollRef guards against Virtuoso's own scrolls being mistaken
-  // for user scrolls in the isScrolling callback.
-  const atBottomRef = useRef(true);
-  const userScrolledUpRef = useRef(false);
-  const programmaticScrollRef = useRef(false);
-
   const handleAtBottomChange = useCallback((atBottom: boolean) => {
-    atBottomRef.current = atBottom;
-    if (atBottom) {
-      userScrolledUpRef.current = false;
-      programmaticScrollRef.current = false;
-    }
+    follow.setAtBottom(atBottom);
     onAtBottomStateChange?.(atBottom);
-  }, [onAtBottomStateChange]);
+  }, [follow, onAtBottomStateChange]);
 
-  // Only mark userScrolledUp when the scroll is user-initiated (not programmatic)
   const handleIsScrolling = useCallback((scrolling: boolean) => {
-    if (scrolling && !atBottomRef.current && !programmaticScrollRef.current) {
-      userScrolledUpRef.current = true;
-    }
-    if (!scrolling) {
-      programmaticScrollRef.current = false;
-    }
+    follow.noteScrolling(scrolling);
     onIsScrolling?.(scrolling);
-  }, [onIsScrolling]);
+  }, [follow, onIsScrolling]);
 
   // Expose a "resume follow" callback so external scroll-to-bottom buttons
-  // can reset userScrolledUpRef and trigger a programmatic scroll.
+  // can re-enable following and trigger a programmatic scroll.
   const resumeFollow = useCallback(() => {
-    userScrolledUpRef.current = false;
-    programmaticScrollRef.current = true;
+    follow.resumeFollow();
     virtuosoRef?.current?.scrollToIndex({
       index: "LAST",
       align: "end",
       behavior: "auto",
     });
-  }, [virtuosoRef]);
+  }, [follow, virtuosoRef]);
 
   // Register the resumeFollow callback with the parent
   useEffect(() => {
     onResumeFollow?.(resumeFollow);
   }, [onResumeFollow, resumeFollow]);
 
-  // Detect user-initiated scroll-up via wheel events during streaming.
-  // Uses a threshold to ignore trackpad micro-jitter.
+  // Jump to a specific message, e.g. from a chat-search hit.
+  //
+  // The list is virtualized, so the target usually has no DOM node yet and we
+  // cannot scroll to an element — we resolve the message id to its index in
+  // `flatItems` and let Virtuoso render it. `scrollToIndex` takes DATA space,
+  // which is what flatItems is indexed in, so no firstItemIndex shift applies
+  // here (see the index-space note above).
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
+
+  useEffect(() => {
+    const handleScrollToMessage = (event: Event) => {
+      const messageId = (event as CustomEvent<{ messageId?: string }>).detail
+        ?.messageId;
+      if (!messageId || !virtuosoRef?.current) return;
+
+      const index = flatItems.findIndex(
+        (item) => item.type === "message" && item.message.id === messageId,
+      );
+      // Not in the loaded window — the message lives in a page we have not
+      // fetched yet, so there is nothing to scroll to.
+      if (index === -1) return;
+
+      // Mark as programmatic so follow-mode does not read this as the user
+      // scrolling away from the bottom — but do hold position at the target
+      // rather than snapping back down on the next streamed chunk.
+      follow.beginProgrammaticScroll();
+      follow.releaseFollow();
+      virtuosoRef.current.scrollToIndex({
+        index,
+        align: "center",
+        behavior: "auto",
+      });
+      setHighlightedMessageId(messageId);
+      // Tell the requester to stop retrying; it cannot observe this otherwise.
+      acknowledgeScrollToMessage(messageId);
+    };
+
+    window.addEventListener("scroll-to-message", handleScrollToMessage);
+    return () =>
+      window.removeEventListener("scroll-to-message", handleScrollToMessage);
+  }, [follow, flatItems, virtuosoRef]);
+
+  // Clear the highlight once it has had time to register visually.
+  useEffect(() => {
+    if (!highlightedMessageId) return;
+    const timer = setTimeout(() => setHighlightedMessageId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [highlightedMessageId]);
+
+  // "Focus the conversation" — hands the transcript keyboard focus so it can be
+  // scrolled and read without the mouse. Virtuoso renders into a scrollable
+  // child, so focus goes to that rather than the outer shell.
+  useEffect(() => {
+    const handleFocusTranscript = () => {
+      const shell = timelineContainerRef.current;
+      if (!shell) return;
+
+      // Virtuoso owns the scroll container and does not expose a stable hook
+      // for it, so find the element that actually scrolls rather than matching
+      // on a class name that could change with a library upgrade.
+      const scroller =
+        Array.from(shell.querySelectorAll<HTMLElement>("*")).find(
+          (el) =>
+            el.scrollHeight > el.clientHeight &&
+            /auto|scroll/.test(getComputedStyle(el).overflowY),
+        ) ?? shell;
+
+      // Focusable only as a keyboard target; it is not in the tab order.
+      if (!scroller.hasAttribute("tabindex")) {
+        scroller.setAttribute("tabindex", "-1");
+      }
+      scroller.focus({ preventScroll: true });
+    };
+
+    window.addEventListener("focus-transcript", handleFocusTranscript);
+    return () =>
+      window.removeEventListener("focus-transcript", handleFocusTranscript);
+  }, []);
+
   const isStreamingRef = useRef(isStreaming);
   isStreamingRef.current = isStreaming;
+  follow.setStreaming(isStreaming);
   const timelineContainerRef = useRef<HTMLDivElement>(null);
+
+  // Publish the pinned header's height so per-message hover toolbars can stick
+  // below it instead of underneath it. Measured rather than hard-coded: the
+  // header wraps a real message bubble whose height moves with the font size
+  // and the timeline variant.
+  const pinnedHeaderRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const shell = timelineContainerRef.current;
+    if (!shell) return;
+
+    const header = pinnedHeaderRef.current;
+    if (!header) {
+      shell.style.removeProperty("--chat-pinned-header-h");
+      return;
+    }
+
+    const publish = () => {
+      shell.style.setProperty("--chat-pinned-header-h", `${header.offsetHeight}px`);
+    };
+    publish();
+
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(publish);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [pinnedUserMsg]);
+  // Detect user-initiated scroll-up during streaming.
+  //
+  // While streaming, followState treats an unexplained scroll as one of ours
+  // (Virtuoso's SIZE_INCREASED correction cannot be announced), so intent has
+  // to come from the input device instead. Every device that can scroll this
+  // list therefore needs a listener here — a gap means that device silently
+  // cannot escape follow mode, which reads as the timeline yanking you back.
   useEffect(() => {
     const el = timelineContainerRef.current;
     if (!el) return;
-    const WHEEL_THRESHOLD = 5; // Ignore sub-5px jitter
+
     const onWheel = (e: WheelEvent) => {
       if (!isStreamingRef.current) return;
-      if (e.deltaY < -WHEEL_THRESHOLD) {
-        userScrolledUpRef.current = true;
+      follow.noteWheel(e.deltaY, e.timeStamp);
+    };
+
+    // Touch reports absolute positions, not deltas, and its sign is inverted
+    // relative to the wheel: dragging a finger DOWN reveals EARLIER content,
+    // which is the wheel's negative direction.
+    let lastTouchY: number | null = null;
+    const onTouchStart = (e: TouchEvent) => {
+      lastTouchY = e.touches[0]?.clientY ?? null;
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      const y = e.touches[0]?.clientY;
+      if (y === undefined) return;
+      if (lastTouchY !== null && isStreamingRef.current) {
+        follow.noteTouchMove(lastTouchY - y, e.timeStamp);
+      }
+      lastTouchY = y;
+    };
+    const onTouchEnd = () => {
+      lastTouchY = null;
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isStreamingRef.current) return;
+      if (e.key === "ArrowUp" || e.key === "PageUp" || e.key === "Home") {
+        follow.noteKeyScrollUp();
       }
     };
-    el.addEventListener('wheel', onWheel, { passive: true });
-    return () => el.removeEventListener('wheel', onWheel);
-  }, []);
 
-  // On mount, atBottomRef starts true and followOutput would return "smooth"
+    el.addEventListener('wheel', onWheel, { passive: true });
+    el.addEventListener('touchstart', onTouchStart, { passive: true });
+    el.addEventListener('touchmove', onTouchMove, { passive: true });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
+    el.addEventListener('keydown', onKeyDown);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
+      el.removeEventListener('keydown', onKeyDown);
+    };
+  }, [follow]);
+
+  // On mount we start at the bottom, and followOutput would return "smooth"
   // — causing Virtuoso to slowly smooth-scroll through the entire conversation.
   // Use "auto" (instant jump) until the first frame settles.
   const initialScrollDoneRef = useRef(false);
@@ -802,19 +1118,30 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }, []);
 
   const handleFollowOutput = useCallback(() => {
-    if (userScrolledUpRef.current) {
+    if (!follow.shouldFollow()) {
       return false;
     }
-    if (atBottomRef.current) {
-      // During streaming, always use "auto" (instant jump). "smooth" causes
-      // visible jitter because each new content update fires a new
-      // scrollTo({behavior:"smooth"}) that competes with Virtuoso's internal
-      // SIZE_INCREASED auto-scroll (which uses "auto"), creating
-      // discontinuities as smooth animations are interrupted mid-flight.
-      return initialScrollDoneRef.current && !isStreaming ? "smooth" : "auto";
-    }
-    return false;
-  }, [isStreaming]);
+    // Returning a behavior means Virtuoso is about to scroll on its own.
+    // Claim it, so the resulting isScrolling(true) is not read as the user
+    // scrolling away — see the note in followState.noteScrolling.
+    follow.beginProgrammaticScroll();
+    // During streaming, always use "auto" (instant jump). "smooth" causes
+    // visible jitter because each new content update fires a new
+    // scrollTo({behavior:"smooth"}) that competes with Virtuoso's internal
+    // SIZE_INCREASED auto-scroll (which uses "auto"), creating
+    // discontinuities as smooth animations are interrupted mid-flight.
+    return initialScrollDoneRef.current && !isStreaming ? "smooth" : "auto";
+  }, [follow, isStreaming]);
+
+  // Scroll-back trigger. Virtuoso fires startReached whenever the first item is
+  // rendered — including on initial mount for a short chat, and repeatedly while
+  // the user sits at the top. The store's own in-flight guard makes duplicate
+  // calls harmless; these checks just avoid the pointless round-trips.
+  const handleStartReached = useCallback(() => {
+    if (!onLoadOlderMessages) return;
+    if (!hasOlderMessages || isLoadingOlderMessages) return;
+    onLoadOlderMessages();
+  }, [hasOlderMessages, isLoadingOlderMessages, onLoadOlderMessages]);
 
   const computeItemKey = useCallback((_index: number, item: (typeof flatItems)[number]) => item.key, []);
 
@@ -848,7 +1175,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       return (
         <div
           className={cn(
-            "transition-all",
+            // Colors only — never transition-all. Virtuoso measures row heights
+            // with a ResizeObserver, so an animated height reports a new value
+            // every frame of the animation and each one triggers a re-measure
+            // and a follow-scroll correction.
+            "transition-colors",
             !item.workflow.isMain && "pl-3",
             !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
             timelineVariant === "card" && "rounded-xl border border-border/50 bg-card/60 p-2 shadow-sm"
@@ -901,7 +1232,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         <ChatMessage
           message={msg}
           approvals={approvals}
-          isLatestMessage={false}
+          isLatestMessage={isLastItem}
           chatId={chatId}
           isStreaming={false}
           onSelectThread={onSelectThread}
@@ -913,7 +1244,9 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     return (
       <div
         className={cn(
-          "transition-all",
+          // See the note on the activity row above: animated heights inside a
+          // virtualized list re-trigger measurement on every frame.
+          "transition-colors",
           !item.workflow.isMain && "pl-3",
           !item.workflow.isMain && timelineVariant !== "minimal" && "ml-1",
           timelineVariant === "card" && !item.workflow.isMain && "rounded-xl bg-background/30"
@@ -949,27 +1282,68 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
   // Wrap each Virtuoso item in the padding/max-width container
   const wrappedRenderItem = useCallback((index: number, item: (typeof flatItems)[number]) => {
+    // After a search jump, briefly ring the target so the eye can find it —
+    // landing mid-conversation with no cue makes the jump feel like it failed.
+    const isHighlighted =
+      highlightedMessageId !== null &&
+      item.type === "message" &&
+      item.message.id === highlightedMessageId;
+
     return (
       <div className={cn(timelineHorizontalPaddingClass, timelineGapClass)}>
-        <div className={cn(contentMaxWidthClass, "mx-auto")}>
+        <div
+          className={cn(
+            contentMaxWidthClass,
+            "mx-auto",
+            isHighlighted &&
+              "rounded-lg ring-2 ring-primary/60 transition-shadow duration-500",
+          )}
+        >
           {renderItem(index, item)}
         </div>
       </div>
     );
-  }, [contentMaxWidthClass, renderItem, timelineGapClass, timelineHorizontalPaddingClass]);
+  }, [contentMaxWidthClass, highlightedMessageId, renderItem, timelineGapClass, timelineHorizontalPaddingClass]);
 
   // Use Virtuoso's context prop to pass footer content to the Footer component.
   // This keeps the Footer component identity stable (preventing Virtuoso re-mounts
   // that cause layout recalculations) while still re-rendering when footer changes.
   const footerContext = useMemo(
-    () => ({ footer, isStreaming, contentMaxWidthClass, timelineHorizontalPaddingClass }),
-    [contentMaxWidthClass, footer, isStreaming, timelineHorizontalPaddingClass]
+    () => ({
+      footer,
+      isStreaming,
+      contentMaxWidthClass,
+      timelineHorizontalPaddingClass,
+      isLoadingOlderMessages,
+    }),
+    [
+      contentMaxWidthClass,
+      footer,
+      isLoadingOlderMessages,
+      isStreaming,
+      timelineHorizontalPaddingClass,
+    ]
   );
 
   const virtuosoComponents = useMemo(() => ({
     Scroller: RubberBandScroller,
-    Header: function VirtuosoHeader() {
-      return <div className="pt-2" />;
+    // The header doubles as the scroll-back loading indicator. It must keep a
+    // non-zero height in both states so the prepend does not also change the
+    // header's size while firstItemIndex is compensating for the new items.
+    Header: function VirtuosoHeader({
+      context,
+    }: {
+      context?: { isLoadingOlderMessages?: boolean };
+    }) {
+      if (!context?.isLoadingOlderMessages) {
+        return <div className="pt-2" />;
+      }
+      return (
+        <div className="flex items-center justify-center gap-2 py-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          <span>Loading earlier messages…</span>
+        </div>
+      );
     },
     Footer: function VirtuosoFooter({
       context,
@@ -986,7 +1360,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         return <div className="pb-10" />;
       }
       return (
-        <div className={cn(context.timelineHorizontalPaddingClass || "px-4 sm:px-6 lg:px-8", "pb-10")}>
+        <div className={cn(context.timelineHorizontalPaddingClass || "px-4 sm:px-6 lg:px-8", "pb-3")}>
           <div className={cn(context.contentMaxWidthClass || "max-w-[1200px]", "mx-auto")}>
             {context.footer}
           </div>
@@ -1002,42 +1376,53 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
   }
 
   return (
-    <div ref={timelineContainerRef} className={timelineShellClass} style={{ position: "relative" }}>
+    <div
+      ref={timelineContainerRef}
+      className={timelineShellClass}
+      style={{ position: "relative" }}
+      // Focus target for "focus the conversation" — makes the transcript
+      // keyboard-scrollable (arrows, PageUp/Down, Home/End) without stealing
+      // those keys from anywhere else, since they only apply while focused.
+      data-context="transcript"
+      tabIndex={-1}
+    >
       {/* Pinned user message overlay */}
       {pinnedUserMsg && (
         <div
-          className="absolute top-0 left-0 right-0 z-50"
-          style={{ backgroundColor: "hsl(var(--background))" }}
+          ref={pinnedHeaderRef}
+          // Fully opaque and elevated: the timeline scrolls underneath, so any
+          // translucency here would let message text show through the gaps
+          // around the floating bubble.
+          className="pointer-events-auto absolute inset-x-0 top-0 z-50 border-b border-border/60 bg-background pt-1 pb-1.5 shadow-md"
           onMouseEnter={() => setIsHoveringPinned(true)}
           onMouseLeave={() => setIsHoveringPinned(false)}
         >
-          {/* Jump to button */}
-          <div
-            className={`absolute right-6 top-2 z-10 transition-opacity duration-200 bg-background/95 backdrop-blur-sm rounded-full p-0.5 ${
-              isHoveringPinned ? "opacity-100" : "opacity-0 pointer-events-none"
-            }`}
-          >
-            <Tooltip content="Jump to" placement="left">
-              <button
-                onClick={handleJumpToPinned}
-                className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/90 text-primary-foreground hover:bg-primary transition-all duration-200 border border-primary-foreground/20 shadow-sm"
-                aria-label="Jump to message"
-              >
-                <ArrowUp className="w-3 h-3" />
-              </button>
-            </Tooltip>
-          </div>
           <div className={timelineHorizontalPaddingClass}>
-            <div className={cn(contentMaxWidthClass, "mx-auto")}>
-              <ChatMessage
-                message={pinnedUserMsg}
-                approvals={approvals}
-                isLatestMessage={false}
-                chatId={chatId}
-                isStreaming={false}
-                onSelectThread={onSelectThread}
-                timelineVariant={timelineVariant}
-              />
+            <div className={cn(contentMaxWidthClass, "mx-auto flex items-center gap-2")}>
+              <div className="min-w-0 flex-1">
+                <ChatMessage
+                  message={pinnedUserMsg}
+                  approvals={approvals}
+                  isLatestMessage={false}
+                  chatId={chatId}
+                  isStreaming={false}
+                  onSelectThread={onSelectThread}
+                  timelineVariant={timelineVariant}
+                  pinned
+                />
+              </div>
+              <Tooltip content="Jump to" placement="left">
+                <button
+                  onClick={handleJumpToPinned}
+                  className={cn(
+                    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-primary-foreground/20 bg-primary/90 text-primary-foreground shadow-sm transition-all duration-200 hover:bg-primary",
+                    isHoveringPinned ? "opacity-100" : "opacity-0"
+                  )}
+                  aria-label="Jump to message"
+                >
+                  <ArrowUp className="w-3 h-3" />
+                </button>
+              </Tooltip>
             </div>
           </div>
         </div>
@@ -1048,6 +1433,11 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
         context={footerContext}
         computeItemKey={computeItemKey}
         initialTopMostItemIndex={flatItems.length - 1}
+        // Prepend protocol — see the FIRST_ITEM_INDEX_BASE block above. Must be
+        // decremented by exactly the number of items prepended, in the same
+        // commit as the grown `data`, or the scroll position jumps.
+        firstItemIndex={firstItemIndex}
+        startReached={handleStartReached}
         followOutput={handleFollowOutput}
         atBottomThreshold={80}
         overscan={200}

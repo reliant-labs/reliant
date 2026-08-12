@@ -12,6 +12,11 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { getFileExtension } from "../../lib/fileUtils";
 import { useFileOpener } from "../../lib/fileOpener";
 import { parseFilePath } from "../../lib/filePath";
+import {
+  SlashCommandMenu,
+  type SlashCommand,
+  type SlashCommandMenuHandle,
+} from "./SlashCommandMenu";
 import "./chat-composer.css";
 
 interface ChatTextAreaProps {
@@ -19,10 +24,21 @@ interface ChatTextAreaProps {
   onChange: (value: string) => void;
   onSend: () => void;
   onStop?: () => void;
+  /**
+   * Called when Enter is pressed while streaming, instead of inserting a
+   * newline. Queues the message for the agent's next turn. Omit to preserve
+   * the default behavior (Enter inserts a newline while streaming).
+   */
+  onQueue?: () => void;
   disabled?: boolean;
   isStreaming?: boolean;
   placeholder?: string;
   chatId?: string;
+  /**
+   * Actions offered by the "/" menu. Omit to disable slash commands (e.g. in
+   * composers where a leading slash is ordinary text).
+   */
+  slashCommands?: SlashCommand[];
 }
 
 const MARKER_PATTERN = /\[\[([^\]]+):(\d+)-(\d+)\]\]/g;
@@ -220,6 +236,54 @@ function createMarkerElement(info: MarkerInfo): HTMLElement {
 }
 
 function serializeFromDom(root: HTMLElement): string {
+  // A <br> in final position is the "bogus break" browsers keep so that a
+  // trailing empty line stays selectable — it renders that line rather than
+  // adding one, so it carries no newline of its own. Every earlier <br> is a
+  // real line break the user typed. This holds inside block wrappers too: an
+  // empty line arrives as <div><br></div>.
+  const contentChildren = (node: Node): Node[] => {
+    const children = Array.from(node.childNodes);
+
+    // Empty text nodes carry no content but do hide the trailing <br> from the
+    // check below. Range.insertNode leaves one behind whenever it splits a text
+    // node at its end, which is exactly the insert-at-end case.
+    let end = children.length;
+    while (
+      end > 0 &&
+      children[end - 1].nodeType === Node.TEXT_NODE &&
+      (children[end - 1].textContent || "") === ""
+    ) {
+      end--;
+    }
+
+    if (end > 0 && children[end - 1].nodeName === "BR") {
+      end--;
+    }
+
+    return end === children.length ? children : children.slice(0, end);
+  };
+
+  const isBlockNode = (node: Node): boolean =>
+    node.nodeType === Node.ELEMENT_NODE &&
+    ((node as HTMLElement).tagName === "DIV" ||
+      (node as HTMLElement).tagName === "P");
+
+  // A block both closes the line before it and opens one of its own. Walking
+  // it as "content + trailing newline" only covers the closing half, which
+  // loses the break in `text<div>more</div>` — the exact shape execCommand
+  // leaves behind when a multi-line paste lands after existing text. Add the
+  // leading newline too, unless the line is already open.
+  const walkChildren = (nodes: Node[]): string => {
+    let acc = "";
+    for (const node of nodes) {
+      if (isBlockNode(node) && acc !== "" && !acc.endsWith("\n")) {
+        acc += "\n";
+      }
+      acc += walk(node);
+    }
+    return acc;
+  };
+
   const walk = (node: Node): string => {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent || "";
@@ -231,14 +295,20 @@ function serializeFromDom(root: HTMLElement): string {
     if (el.tagName === "BR") return "\n";
 
     // Treat block-ish nodes as newline separators
-    const isBlock = el.tagName === "DIV" || el.tagName === "P";
-    const text = Array.from(el.childNodes).map(walk).join("");
-    return isBlock ? text + "\n" : text;
+    const text = walkChildren(contentChildren(el));
+    return isBlockNode(el) ? text + "\n" : text;
   };
 
-  let out = Array.from(root.childNodes).map(walk).join("");
-  // Normalize trailing newline added by block wrappers
-  out = out.replace(/\n+$/g, "");
+  const children = contentChildren(root);
+  let out = walkChildren(children);
+
+  // Block wrappers each append "\n"; the last one closes the final line instead
+  // of starting a new one. Drop exactly that one — never a run of them, or
+  // deliberate blank lines at the end of a paste get eaten.
+  if (out.endsWith("\n") && children.some((n) => n.nodeName === "DIV" || n.nodeName === "P")) {
+    out = out.slice(0, -1);
+  }
+
   return out;
 }
 
@@ -395,6 +465,41 @@ function setCaretToStart(el: HTMLElement) {
 }
 
 /**
+ * Get the caret's on-screen box.
+ *
+ * A collapsed range between two elements — the caret sitting on an empty line
+ * between <br>s, which is exactly where a paste ending in a newline leaves it —
+ * has no text to measure, and Chrome returns an all-zero rect. Taken at face
+ * value that reads as "caret at y=0", i.e. above the viewport, so the caller
+ * scrolls to the top instead of following the caret down. Fall back to the
+ * geometry of the node the caret is anchored to.
+ */
+function getCaretRect(range: Range): DOMRect | null {
+  const rect = range.getBoundingClientRect();
+  if (rect.height > 0 || rect.width > 0 || rect.top !== 0 || rect.bottom !== 0) {
+    return rect;
+  }
+
+  const { startContainer, startOffset } = range;
+  if (startContainer.nodeType === Node.ELEMENT_NODE) {
+    const kids = startContainer.childNodes;
+    // The caret at offset N draws at the START of child N; only fall back to
+    // the preceding child when the caret is at the very end.
+    const anchor = kids[startOffset] || kids[startOffset - 1] || startContainer;
+    const target =
+      anchor.nodeType === Node.ELEMENT_NODE
+        ? (anchor as HTMLElement)
+        : anchor.parentElement;
+    if (target) {
+      const fallback = target.getBoundingClientRect();
+      if (fallback.height > 0 || fallback.width > 0) return fallback;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Scroll the caret into view within a scrollable contentEditable element.
  * This ensures the cursor remains visible when typing at the bottom of an overflowing textarea.
  */
@@ -406,7 +511,8 @@ function scrollCaretIntoView(el: HTMLElement) {
   if (!el.contains(range.commonAncestorContainer)) return;
 
   // Get caret position relative to viewport
-  const caretRect = range.getBoundingClientRect();
+  const caretRect = getCaretRect(range);
+  if (!caretRect) return;
   const elRect = el.getBoundingClientRect();
 
   // Check if caret is below the visible area
@@ -436,6 +542,25 @@ function insertNodeAtCursor(root: HTMLElement, node: Node) {
   range.collapse(true);
   sel?.removeAllRanges();
   sel?.addRange(range);
+}
+
+/**
+ * Is there nothing at all after this collapsed range?
+ *
+ * Used to decide whether a break inserted here needs its own trailing bogus
+ * <br>. If anything follows the caret — including a bogus <br> that is already
+ * there — the answer is no: real content makes this a mid-text break, and an
+ * existing trailing break is the scaffolding we would otherwise be adding.
+ */
+function hasNothingAfter(root: HTMLElement, range: Range): boolean {
+  const probe = document.createRange();
+  probe.selectNodeContents(root);
+  probe.setStart(range.endContainer, range.endOffset);
+
+  const rest = probe.cloneContents();
+  return Array.from(rest.childNodes).every(
+    (node) => node.nodeType === Node.TEXT_NODE && (node.textContent || "") === ""
+  );
 }
 
 function insertPlainTextAtCursor(root: HTMLElement, text: string): boolean {
@@ -477,10 +602,19 @@ function insertPlainTextAtCursor(root: HTMLElement, text: string): boolean {
   }
 
   range.deleteContents();
+
+  // A break inserted at the very end needs the bogus <br> that browsers add
+  // after a typed one, or the new final line has no geometry and reads back as
+  // scaffolding — the newline would silently vanish on the next serialize.
+  const lastNode = insertedNodes[insertedNodes.length - 1];
+  if (lastNode.nodeName === "BR" && hasNothingAfter(root, range)) {
+    fragment.appendChild(document.createElement("br"));
+  }
+
   range.insertNode(fragment);
 
   // Move caret after the last inserted node.
-  const lastInserted = insertedNodes[insertedNodes.length - 1];
+  const lastInserted = lastNode;
   const nextRange = document.createRange();
   nextRange.setStartAfter(lastInserted);
   nextRange.collapse(true);
@@ -493,6 +627,7 @@ function insertPlainTextAtCursor(root: HTMLElement, text: string): boolean {
 export const __chatTextAreaTestUtils = {
   normalizeComposerDom,
   serializeFromDom,
+  insertPlainTextAtCursor,
 };
 
 export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(function ChatTextArea({
@@ -500,12 +635,15 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
   onChange,
   onSend,
   onStop,
+  onQueue,
   disabled = false,
   isStreaming = false,
   placeholder,
   chatId: _chatId,
+  slashCommands,
 }, ref) {
   const editorRef = useRef<HTMLDivElement>(null);
+  const slashMenuRef = useRef<SlashCommandMenuHandle>(null);
   const skipNextSyncRef = useRef(false);
   const skipNormalizeNextRef = useRef(false);
   const savedCursorPositionRef = useRef<{ container: Node; offset: number } | null>(null);
@@ -663,6 +801,12 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
       } else {
         el.appendChild(createMarkerElement(part.info));
       }
+    }
+    // A value ending in "\n" needs a bogus trailing <br>, or the final empty
+    // line has no geometry: it can't be clicked into and the caret can't be
+    // scrolled to it. serializeFromDom drops this break back off on read.
+    if (value.endsWith("\n")) {
+      el.appendChild(document.createElement("br"));
     }
     el.dataset.empty = value.trim().length === 0 ? "true" : "false";
     adjustHeight();
@@ -851,29 +995,37 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
     };
   }, [insertMarker]);
 
-  // Handle Cmd+Enter to insert newline (must run before global shortcuts on window capture phase)
+  // Cmd+Enter inserts a newline while the composer has focus.
+  //
+  // This is registered as a shortcut in the `chat-input` context rather than a
+  // window capture-phase listener. The old listener ran before the dispatcher
+  // and stopped propagation, which silently killed the global Cmd+Enter
+  // ("approve tool requests") whenever the composer was focused.
   useEffect(() => {
-    const handleWindowKeyDown = (e: KeyboardEvent) => {
-      // Only handle if this component's editor is focused
+    const handleNewline = () => {
+      // The dispatcher resolved `chat-input`, but that context covers the whole
+      // composer subtree — confirm this editor is the focused one before
+      // mutating its DOM.
       if (document.activeElement !== editorRef.current) return;
-
-      // Cmd+Enter (or Ctrl+Enter on non-Mac) to insert newline
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && !e.shiftKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        const el = editorRef.current;
-        if (!el) return;
-        insertPlainTextAtCursor(el, "\n");
-        emitChangeFromDom();
-      }
+      const el = editorRef.current;
+      if (!el) return;
+      insertPlainTextAtCursor(el, "\n");
+      emitChangeFromDom();
     };
 
-    // Use window capture phase to run before document-level global shortcuts
-    window.addEventListener('keydown', handleWindowKeyDown, true);
-    return () => window.removeEventListener('keydown', handleWindowKeyDown, true);
+    window.addEventListener("composer-insert-newline", handleNewline);
+    return () =>
+      window.removeEventListener("composer-insert-newline", handleNewline);
   }, [emitChangeFromDom]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    // The slash menu gets first refusal: while it is open, Arrow/Enter/Escape
+    // belong to it, not to send/stop. It returns false for anything it does not
+    // use, so ordinary typing falls straight through.
+    if (slashMenuRef.current?.handleKeyDown(e)) {
+      return;
+    }
+
     if (e.key === "Escape" && isStreaming && onStop) {
       e.preventDefault();
       onStop();
@@ -883,6 +1035,12 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
     if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && !isStreaming) {
       e.preventDefault();
       onSend();
+      return;
+    }
+
+    if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey && isStreaming && onQueue) {
+      e.preventDefault();
+      onQueue();
       return;
     }
 
@@ -923,7 +1081,7 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
         }
       }
     }
-  }, [isStreaming, onStop, onSend, emitChangeFromDom]);
+  }, [isStreaming, onStop, onSend, onQueue, emitChangeFromDom]);
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
     // Let global/document listeners handle file pastes.
@@ -943,18 +1101,16 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
 
     // Use execCommand('insertText') to preserve the browser's native undo
     // stack so Cmd+Z works after paste.
+    //
+    // execCommand dispatches `input` synchronously, so it has already run (and
+    // consumed the skip flags) by the time this function returns. Setting the
+    // flags here would not affect this paste at all — they would simply sit set
+    // and be consumed by the NEXT input event, which is how a Shift+Enter right
+    // after a paste used to lose its newline. Multi-line pastes need the
+    // normalization pass anyway: that is what folds execCommand's <div>
+    // wrappers back into <br>s so the text round-trips.
     el.focus();
     document.execCommand('insertText', false, text);
-
-    // Skip normalization and DOM rebuild for the input event that follows.
-    // execCommand with multi-line text can produce DOM structures (e.g. <div>
-    // wrappers instead of <br>) that don't round-trip cleanly through
-    // serializeFromDom. We intentionally leave the DOM as-is to preserve
-    // the browser's undo stack. The useLayoutEffect sync will clear
-    // skipNextSyncRef and rebuild the DOM if there's a mismatch, which
-    // normalizes the structure without breaking undo history.
-    skipNormalizeNextRef.current = true;
-    skipNextSyncRef.current = true;
   }, []);
 
   const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -994,27 +1150,62 @@ export const ChatTextArea = forwardRef<HTMLDivElement, ChatTextAreaProps>(functi
     }
   }, [emitChangeFromDom, openFile]);
 
+  // Clear the composer before a slash command runs, so the "/whatever" text is
+  // not left behind as a message the user never meant to send.
+  const clearComposer = useCallback(() => {
+    const el = editorRef.current;
+    if (el) el.textContent = "";
+    onChange("");
+  }, [onChange]);
+
+  // Cmd+/ opens the menu without typing a slash, so it works mid-sentence.
+  // Routed through events because the shortcut is dispatched globally while the
+  // menu state lives here.
+  useEffect(() => {
+    const handleOpen = () => slashMenuRef.current?.open();
+    const handleDismiss = () => slashMenuRef.current?.dismiss();
+
+    window.addEventListener("open-slash-menu", handleOpen);
+    window.addEventListener("dismiss-slash-menu", handleDismiss);
+    return () => {
+      window.removeEventListener("open-slash-menu", handleOpen);
+      window.removeEventListener("dismiss-slash-menu", handleDismiss);
+    };
+  }, []);
+
   return (
-    <div
-      ref={editorRef}
-      role="textbox"
-      aria-multiline="true"
-      contentEditable={!disabled}
-      suppressContentEditableWarning
-      onInput={emitChangeFromDom}
-      onKeyDown={handleKeyDown}
-      onPaste={handlePaste}
-      onFocus={handleFocus}
-      onClick={handleClick}
-      data-testid="chat-input"
-      data-placeholder={placeholder || defaultPlaceholder}
-      data-empty={value.trim().length === 0 ? "true" : "false"}
-      className="chat-composer w-full px-0 py-0 text-sm chat-input disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
-      style={{
-        color: "var(--chat-input-text)",
-        backgroundColor: "transparent",
-        maxHeight: 200,
-      }}
-    />
+    <>
+      <div
+        ref={editorRef}
+        role="textbox"
+        aria-multiline="true"
+        contentEditable={!disabled}
+        suppressContentEditableWarning
+        onInput={emitChangeFromDom}
+        onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
+        onFocus={handleFocus}
+        onClick={handleClick}
+        data-testid="chat-input"
+        data-context="chat-input"
+        data-placeholder={placeholder || defaultPlaceholder}
+        data-empty={value.trim().length === 0 ? "true" : "false"}
+        className="chat-composer w-full px-0 py-0 text-sm chat-input disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
+        style={{
+          color: "var(--chat-input-text)",
+          backgroundColor: "transparent",
+          maxHeight: 200,
+        }}
+      />
+      {slashCommands && slashCommands.length > 0 && (
+        <SlashCommandMenu
+          ref={slashMenuRef}
+          value={value}
+          commands={slashCommands}
+          anchorRef={editorRef}
+          onConsume={clearComposer}
+        />
+      )}
+    </>
   );
 });

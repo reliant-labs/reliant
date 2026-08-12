@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
@@ -205,16 +206,22 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 				logging.Error("[Cleanup] Failed to check for tool result", "toolCallID", toolCallID, "error", err)
 				continue
 			}
-
-			// If no result exists, this is an orphaned tool call
-			if resultBlock == nil {
-				orphansByMessage[msg.ID] = append(orphansByMessage[msg.ID], orphanedToolCall{
-					ToolCallID: toolCallID,
-					ToolName:   toolName,
-					BlockID:    block.ID,
-				})
-				assistantMessages[msg.ID] = msg
+			if resultBlock != nil {
+				continue
 			}
+
+			// No result block YET is not the same as no result EVER, and this
+			// is where that distinction has to be made rather than assumed.
+			if a.callIsStillLive(ctx, toolCallID, toolName) {
+				continue
+			}
+
+			orphansByMessage[msg.ID] = append(orphansByMessage[msg.ID], orphanedToolCall{
+				ToolCallID: toolCallID,
+				ToolName:   toolName,
+				BlockID:    block.ID,
+			})
+			assistantMessages[msg.ID] = msg
 		}
 	}
 
@@ -263,6 +270,92 @@ func (a *CleanupActivity) cancelOrphanedToolCalls(ctx context.Context, chatID, t
 	return cancelledCount
 }
 
+// callIsStillLive reports whether a tool call that has no result block yet is
+// nonetheless still running, and therefore must not be declared orphaned.
+//
+// The absence of a tool_result block was previously the WHOLE test for
+// "orphaned". For an in-process tool that is nearly sound: the tool and the
+// workflow die together, so if the workflow is over and no result was written,
+// none is coming. For a SPAWN it is simply false. A spawn's result is written
+// minutes later by a different workflow running on a different thread, which
+// the parent's death does not touch — so at the moment cleanup runs, every
+// in-flight spawn looks exactly like an orphan.
+//
+// Cleanup runs from handleWorkflowCompletion on the three abnormal paths
+// (cancelled, panic, error), which is precisely when a worker has crashed
+// mid-run. Observed on real data: a parent hit a terminal path at 04:54:50
+// while two spawn children were writing messages every few seconds; cleanup
+// wrote "interrupted — outcome unknown" for both; both children carried on and
+// completed SUCCESSFULLY at 05:02 and 05:05, writing their genuine results.
+// The conversation was left with two tool_result blocks per call — a
+// fabricated failure and a real success — which the tool-pairing validator
+// then had to repair in memory on every subsequent load.
+//
+// Two durable facts already answer the question, and neither was consulted:
+//
+//	tool_calls.status            — non-terminal means the call is still going
+//	tool_calls.child_workflow_id — for a spawn, the workflow actually doing it
+//
+// Fails CLOSED: if the status cannot be read, the call is treated as live and
+// left alone. Skipping a genuinely dead call costs a stuck spinner that the
+// next cleanup pass or a later terminal write resolves. Fabricating a failure
+// for a live call writes a lie into conversation history that the model then
+// reads as fact, and no later pass can distinguish it from a real one.
+func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolName string) bool {
+	// ListToolCallsByIDs rather than GetToolCall: the latter reports a missing
+	// row as an error, which would be indistinguishable from a real read
+	// failure — and those two must go opposite ways. "No row exists" means
+	// nothing claims the call is live (repair it); "the read failed" means we
+	// do not know (leave it alone).
+	calls, err := a.repo.ListToolCallsByIDs(ctx, []string{toolCallID})
+	if err != nil {
+		logging.Warn("[Cleanup] Could not read tool call status; treating as live and skipping repair",
+			"toolCallID", toolCallID, "toolName", toolName, "error", err)
+		return true
+	}
+	if len(calls) == 0 {
+		// No durable row at all (pre-tool_calls-table history). Nothing claims
+		// this call is running, so the missing result is the only evidence
+		// available and it stands.
+		return false
+	}
+	call := calls[0]
+
+	if !call.Status.IsTerminal() {
+		// A spawn is the case that matters, and it can be checked exactly:
+		// ask the workflow that is executing it.
+		if call.ChildWorkflowID != nil && *call.ChildWorkflowID != "" {
+			if wf, err := a.repo.GetWorkflow(ctx, *call.ChildWorkflowID); err == nil && wf != nil {
+				if workflowStatusIsTerminal(wf.Status) {
+					// The child is over and still wrote no result: a real orphan.
+					return false
+				}
+			}
+		}
+
+		logging.Info("[Cleanup] Tool call has no result yet but is still executing; not repairing",
+			"toolCallID", toolCallID, "toolName", toolName, "status", call.Status)
+		return true
+	}
+
+	return false
+}
+
+// workflowStatusIsTerminal reports whether a workflow has reached a state it
+// will not leave on its own. PAUSED is deliberately NOT terminal: a paused
+// workflow resumes and finishes its work, so its tool calls are still live.
+func workflowStatusIsTerminal(status core.WorkflowStatus) bool {
+	switch status {
+	case core.WorkflowStatusCompleted,
+		core.WorkflowStatusFailed,
+		core.WorkflowStatusCancelled,
+		reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED:
+		return true
+	default:
+		return false
+	}
+}
+
 // createRepairToolMessage creates a tool role message with synthetic tool_result blocks
 // for orphaned tool calls. This persists the repair to the database so the conversation
 // state is valid for branching and LLM context resolution.
@@ -286,11 +379,18 @@ func (a *CleanupActivity) createRepairToolMessage(
 		return "", fmt.Errorf("failed to get next ordinal: %w", err)
 	}
 
+	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
+	nextSeq, err := a.repo.GetNextSeq(ctx, chatID, assistantMsg.ThreadID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get next seq: %w", err)
+	}
+
 	// Create the tool message with the same context_window_id as the assistant message
 	repairMsg := &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
 		Ordinal:         nextOrdinal,
+		Seq:             nextSeq,
 		ThreadID:        assistantMsg.ThreadID,
 		ContextWindowID: assistantMsg.ContextWindowID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -348,6 +448,12 @@ func (a *CleanupActivity) createRepairToolMessage(
 
 // emitToolCancelledStatus emits a tool_call cancelled status update to chat_updates
 // This notifies the UI to stop showing the spinner for this tool call
+//
+// The same transition is recorded durably. chat_updates is a live event stream:
+// on its own it stops the spinner for clients currently connected and tells any
+// later reader nothing, so the row would fall back to its last durable status
+// (EXECUTING) and the call would read as running again after a reload. The
+// cancel is a fact about the call, so it belongs on the call.
 func (a *CleanupActivity) emitToolCancelledStatus(ctx context.Context, chatID, contentBlockID, toolCallID, toolName string) {
 	updateData := map[string]interface{}{
 		"update_type":      "tool_call",
@@ -366,6 +472,20 @@ func (a *CleanupActivity) emitToolCancelledStatus(ctx context.Context, chatID, c
 
 	if err := a.repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeToolCall, contentBlockID, string(updateDataJSON)); err != nil {
 		logging.Error("[Cleanup] Failed to emit tool cancelled update", "error", err, "toolCallID", toolCallID)
+	}
+
+	now := time.Now().UTC()
+	if err := db.UpsertToolCallStatus(ctx, a.repo, &core.ToolCall{
+		ID:          toolCallID,
+		ChatID:      chatID,
+		ToolName:    toolName,
+		Status:      core.ToolCallStatusCancelled,
+		CompletedAt: &now,
+		RequestedAt: now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}); err != nil {
+		logging.Error("[Cleanup] Failed to persist tool cancelled status", "error", err, "toolCallID", toolCallID)
 	}
 }
 

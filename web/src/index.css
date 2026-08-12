@@ -93,9 +93,15 @@
     --status-processing: 199 89% 48%; /* Blue */
     --status-pending: 280 85% 56%;    /* Purple */
 
-    /* Font family variables - VS Code defaults */
-    --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', 'Ubuntu', 'Droid Sans', sans-serif;
-    --font-mono: Menlo, Monaco, Consolas, 'Courier New', monospace;
+    /*
+     * Font family variables. Both default to the typefaces we vendor under
+     * web/public/fonts, so the app renders identically on every OS instead of
+     * inheriting whatever the platform's UI/monospace default happens to be.
+     * The system stacks remain as fallbacks (and as an explicit user choice
+     * via data-font="system").
+     */
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Courier New', monospace;
 
     /* Neutral elevation */
     --surface-base: 0 0% 98%;
@@ -251,6 +257,13 @@
   }
 
   /* Font family presets override the default --font-sans token. */
+
+  /* "default" — the bundled Inter. Same stack as :root, named so the
+     Appearance picker has an explicit option for it. */
+  :root[data-font="default"] {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+  }
+
   :root[data-font="system"] {
     --font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   }
@@ -272,11 +285,15 @@
   }
 
   /*
-   * Inter (variable, roman) — vendored under web/public/fonts so the cloud
-   * settings sections have the admin-web typeface with no runtime dependency
-   * on fonts.gstatic.com. Declaring the @font-face here also makes the
-   * existing `data-font="inter"` preference resolve to a real bundled font
-   * instead of a system fallback (additive, harmless).
+   * Bundled typefaces, vendored under web/public/fonts — no runtime
+   * dependency on fonts.gstatic.com, and identical rendering in Electron,
+   * the browser, and the cloud build. Both are variable fonts, so the whole
+   * weight range costs one file each.
+   *
+   * Inter is the app's default UI face; JetBrains Mono is the default
+   * monospace (paths, code, the file viewer, terminals). Because
+   * --font-sans / --font-mono list them first, everything picks them up
+   * without touching call sites.
    */
   @font-face {
     font-family: 'Inter';
@@ -284,6 +301,14 @@
     font-weight: 100 900;
     font-display: swap;
     src: url('/fonts/Inter-roman.woff2') format('woff2');
+  }
+
+  @font-face {
+    font-family: 'JetBrains Mono';
+    font-style: normal;
+    font-weight: 100 800;
+    font-display: swap;
+    src: url('/fonts/JetBrainsMono-variable.woff2') format('woff2');
   }
 
   /*
@@ -308,12 +333,17 @@
   }
 
 
-  /* Chat Font Settings */
+  /* Chat Font Settings — "default" follows the app font so the chat doesn't
+     silently diverge from the rest of the UI; "system" is the explicit
+     opt-out back to the platform face. */
   :root {
-    --chat-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
+    --chat-font-family: var(--font-sans);
   }
 
-  :root[data-chat-font="default"],
+  :root[data-chat-font="default"] {
+    --chat-font-family: var(--font-sans);
+  }
+
   :root[data-chat-font="system"] {
     --chat-font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', 'Roboto', 'Helvetica Neue', Arial, sans-serif;
   }
@@ -345,10 +375,14 @@
     font-family: var(--chat-font-family);
   }
 
-  /* Editor Font Settings */
+  /* Editor Font Settings — "default" is the bundled monospace. Monaco also
+     receives fontFamily through its options so it measures glyph widths
+     against the same face these rules paint with. */
+  :root[data-editor-font="default"] .monaco-editor,
+  :root[data-editor-font="default"] .monaco-editor *,
   :root[data-editor-font="mono"] .monaco-editor,
   :root[data-editor-font="mono"] .monaco-editor * {
-    font-family: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', 'SF Mono', ui-monospace, Menlo, Monaco, Consolas, monospace !important;
+    font-family: 'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   }
 
   :root[data-editor-font="inherit"] .monaco-editor,
@@ -960,13 +994,18 @@
   }
 
   /* User message content - removed blue left border highlight */
+  /*
+   * Overflow deliberately is NOT set here. This rule is emitted after
+   * Tailwind's utilities, so an `overflow` declaration silently beats the
+   * `overflow-hidden` the bubble sets in ChatMessage — which is what has to
+   * clip the inner scroll container for a long expanded message to scroll.
+   */
   .user-message-content {
     display: block;
     position: relative;
-    padding: 6px!important;
+    padding: 4px 8px;
     box-sizing: border-box;
-    overflow: visible;
-    transition: all 0.2s ease-in-out;
+    transition: background-color 0.2s ease-in-out, border-color 0.2s ease-in-out;
   }
 
   /* Message layout - no avatar column */
@@ -992,20 +1031,14 @@
     font-size: 0.75rem;
   }
 
-  /* Button group styling */
-  .message-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    opacity: 0;
-    transform: translateY(-2px);
-    transition: all 0.2s ease-in-out;
-  }
-
-  .group:hover .message-actions {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  /*
+   * Visibility and layout for .message-actions now live entirely in
+   * ChatMessage's utility classes. The rules that used to be here duplicated
+   * the hover behaviour, overrode the component's `gap`, and animated a
+   * translateY on hover — movement we specifically don't want. Styling the
+   * toolbar from here again will silently beat the utilities, since this file
+   * is emitted after Tailwind's.
+   */
 
   /* Tool execution alignment - ensure proper alignment with avatar */
   .tool-executions-container {

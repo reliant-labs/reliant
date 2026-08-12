@@ -162,6 +162,11 @@ message ServerMessage {
     // (daemonID, conn) mapping lives only in gateway memory so the daemon
     // can never assert its own identity.
     GatewayHello hello = 14;
+
+    // Asks the daemon to detach an in-flight tool execution into a background
+    // process. Mirrors tool_cancel: both reach a RUNNING execution by
+    // request_id, which is the only handle the daemon keeps for one.
+    ToolExecutionBackground tool_background = 16;
   }
 }
 
@@ -333,6 +338,23 @@ message ToolExecutionCancel {
   string reason = 2;
 }
 
+// ToolExecutionBackground asks the daemon to detach an in-flight tool execution
+// into a background process, so the workflow can proceed while the command
+// keeps running.
+//
+// This exists because the execution lives in the DAEMON, which is a separate
+// process and may be on a different machine. The API server's in-memory
+// "backgrounded" signal (shell.BackgroundSignal) cannot be observed there, so a
+// message has to cross the wire — exactly as cancellation does.
+message ToolExecutionBackground {
+  // RequestID correlates to the in-flight execution, the same handle
+  // ToolExecutionCancel uses.
+  string request_id = 1;
+  // ToolCallID is the LLM tool-call id, carried so the daemon can report the
+  // resulting background process back against the right tool call.
+  string tool_call_id = 2;
+}
+
 // ReportToolResultRequest is used by the daemon to report a tool execution
 // result via a unary RPC when the bidirectional stream is unavailable.
 message ReportToolResultRequest {
@@ -372,6 +394,46 @@ message DaemonCommandRequest {
   string command_type = 2; // e.g. "worktree.create", "project.check_git"
   bytes payload = 3; // JSON-encoded command-specific payload
   int32 timeout_ms = 4;
+
+  // policy confines what this command may touch. It is set only for connector
+  // callers (third-party MCP clients driving the daemon on a user's behalf);
+  // first-party callers leave it unset, which means unrestricted and preserves
+  // the daemon's existing behavior exactly.
+  //
+  // The daemon enforces this at command dispatch rather than trusting the
+  // sender to have filtered, so any caller that speaks this protocol is
+  // covered.
+  optional ConnectorPolicy policy = 5;
+}
+
+// ConnectorPolicy is the wire form of a connector grant, resolved by the
+// server and enforced by the daemon.
+//
+// Every field is restrictive: an absent or empty field grants nothing rather
+// than everything, so a partially-populated policy fails closed.
+message ConnectorPolicy {
+  // grant_id identifies the originating grant, for audit records.
+  string grant_id = 1;
+
+  // allowed_tools lists permitted command types. Empty denies all commands.
+  // Matching is exact — a command added to the daemon later stays denied until
+  // a grant names it.
+  repeated string allowed_tools = 2;
+
+  // path_root confines filesystem access to a directory subtree. Empty grants
+  // no filesystem access at all.
+  string path_root = 3;
+
+  // exec_mode is one of "" (deny), "allowlist", or "unrestricted".
+  string exec_mode = 4;
+
+  // exec_allowlist holds permitted command basenames when exec_mode is
+  // "allowlist" (e.g. "git", "go").
+  repeated string exec_allowlist = 5;
+
+  // expires_at is an RFC3339 timestamp bounding the grant. Empty means no
+  // expiry.
+  string expires_at = 6;
 }
 
 // DaemonCommandResponse is the generic response from daemon back to server.

@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -633,6 +634,18 @@ func handleWorktreeGitChanges(ctx context.Context, payload []byte) ([]byte, erro
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	// An absent worktree path leaves cmd.Dir empty, which runs git in the
+	// DAEMON's working directory — a different repository entirely. For a
+	// confined caller that is an escape, and it is the default path: this
+	// tool's path argument is optional, so a model that simply omits it would
+	// otherwise read whatever repo the daemon happens to sit in. Resolving
+	// maps empty to the allowed root; a no-op for unconfined callers.
+	resolvedPath, err := daemonpolicy.ResolveDir(ctx, req.WorktreePath)
+	if err != nil {
+		return nil, err
+	}
+	req.WorktreePath = resolvedPath
+
 	resp := worktreeGitChangesResponse{Branch: req.Branch}
 
 	// Get current branch
@@ -695,6 +708,18 @@ func handleWorktreeGitStatus(ctx context.Context, payload []byte) ([]byte, error
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// An absent worktree path leaves cmd.Dir empty, which runs git in the
+	// DAEMON's working directory — a different repository entirely. For a
+	// confined caller that is an escape, and it is the default path: this
+	// tool's path argument is optional, so a model that simply omits it would
+	// otherwise read whatever repo the daemon happens to sit in. Resolving
+	// maps empty to the allowed root; a no-op for unconfined callers.
+	resolvedPath, err := daemonpolicy.ResolveDir(ctx, req.WorktreePath)
+	if err != nil {
+		return nil, err
+	}
+	req.WorktreePath = resolvedPath
 
 	resp := worktreeGitStatusResponse{Branch: req.Branch, Status: "clean"}
 

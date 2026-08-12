@@ -19,6 +19,10 @@ type Approval struct {
 	TemporalWorkflowID string     `json:"temporal_workflow_id"` // The actual Temporal execution ID for signaling (differs from WorkflowID for inline spawns)
 	CreatedAt          time.Time  `json:"created_at"`
 	ResolvedAt         *time.Time `json:"resolved_at,omitempty"`
+	// ThreadID attributes the approval to the thread that raised it. Nil for
+	// historical rows (not backfilled) and for approvals raised outside any
+	// sub-agent thread.
+	ThreadID *string `json:"thread_id,omitempty"`
 }
 
 // ApprovalStore is the shared contract for approval persistence across drivers.

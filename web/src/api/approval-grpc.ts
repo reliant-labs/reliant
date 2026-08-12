@@ -29,9 +29,10 @@ export interface ToolApprovalRequest {
   denial_reason?: string;
   action_taken?: string;  // Which action button was clicked
   // Tool call parameters surfaced to the permission UI. Not currently populated
-  // by protoToFrontend (the proto Approval message doesn't carry the args);
-  // PermissionPrompt reads it to drive the diff viewer and JSON fallback, so
+  // by protoToFrontend (the proto Approval message doesn't carry the args), so
   // it stays optional until the proto is extended or the join is wired up.
+  // The live approval UI renders inline in ToolExecution, which reads the tool
+  // call's own input rather than this field.
   params?: Record<string, unknown> | string;
 }
 

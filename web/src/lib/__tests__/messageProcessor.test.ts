@@ -132,3 +132,59 @@ describe("processMessage segment ordering", () => {
     expect(processed.segments[2]).toMatchObject({ text: "third" });
   });
 });
+
+describe("processMessage tool input", () => {
+  // A tool call whose input has not streamed in yet must stay undefined.
+  // Substituting a placeholder makes it indistinguishable from a call invoked
+  // with no arguments, and the renderers' pending state keys off undefined.
+  it("leaves input undefined while the call is still streaming", () => {
+    const processed = processMessage(
+      msg("s1", [
+        {
+          type: ContentBlockType.TOOL_CALL,
+          index: 0,
+          toolName: "bash",
+          toolCallId: "call-1",
+          // no input yet
+        },
+      ]),
+    );
+
+    expect(processed.toolExecutions?.[0].call.input).toBeUndefined();
+    expect(processed.toolExecutions?.[0].call.finished).toBe(false);
+    expect(processed.isStreaming).toBe(true);
+  });
+
+  it("parses input once it arrives", () => {
+    const processed = processMessage(
+      msg("s2", [
+        {
+          type: ContentBlockType.TOOL_CALL,
+          index: 0,
+          toolName: "bash",
+          toolCallId: "call-1",
+          input: JSON.stringify({ command: "ls -la" }),
+        },
+      ]),
+    );
+
+    expect(processed.toolExecutions?.[0].call.input).toEqual({ command: "ls -la" });
+    expect(processed.toolExecutions?.[0].call.finished).toBe(true);
+  });
+
+  it("preserves an empty argument object as distinct from absent input", () => {
+    const processed = processMessage(
+      msg("s3", [
+        {
+          type: ContentBlockType.TOOL_CALL,
+          index: 0,
+          toolName: "list_tasks",
+          toolCallId: "call-1",
+          input: "{}",
+        },
+      ]),
+    );
+
+    expect(processed.toolExecutions?.[0].call.input).toEqual({});
+  });
+});

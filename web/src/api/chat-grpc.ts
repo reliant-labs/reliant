@@ -13,6 +13,10 @@ import {
   SearchChatsRequestSchema,
   ListArchivedChatsRequestSchema,
   SendMessageRequestSchema,
+  SendAgentMessageRequestSchema,
+  ListQueuedAgentMessagesRequestSchema,
+  CancelQueuedAgentMessageRequestSchema,
+  ClaimQueuedAgentMessagesRequestSchema,
   ListMessagesRequestSchema,
   UpdateChatStateRequestSchema,
   CancelChatRequestSchema,
@@ -112,6 +116,26 @@ function convertProtoChat(proto: ProtoChat): Chat {
   return rest;
 }
 
+/**
+ * One undelivered entry in a running thread's mailbox.
+ *
+ * `sender_kind` mirrors the backend's AgentMessageKind: 5 is a message the
+ * human queued from the composer, 1 is one a peer agent sent via spawn_send.
+ * The strip above the composer only offers cancel/send-now on the human ones —
+ * revoking another agent's message from a human UI would be a lie about who
+ * owns it.
+ */
+export interface QueuedAgentMessageView {
+  id: string;
+  body: string;
+  created_at: string;
+  sender_kind: number;
+  attachments: string[];
+}
+
+/** AgentMessageKind values the UI distinguishes. */
+export const QUEUED_SENDER_KIND_HUMAN = 5;
+
 export interface BranchInfo {
   id: string;
   title: string;
@@ -185,7 +209,12 @@ export interface SendMessageOptions {
 
 export interface ListMessagesOptions {
   recent?: number;
-  before_ordinal?: number;
+  before_seq?: number;
+  /**
+   * Read exactly one thread instead of the whole chat. Returns that thread's
+   * visual thread (inherited history resolved) and nothing else.
+   */
+  thread_id?: string;
 }
 
 function hasDottedWorkflowParamKey(workflowParams: Record<string, unknown>): boolean {
@@ -394,6 +423,100 @@ export const chatGrpc = {
     };
   },
 
+  // Queue a message directly into a specific running thread's mailbox,
+  // without pausing or touching workflow/pause state. The human-facing
+  // counterpart to the spawn_send LLM tool -- lets a user steer a running
+  // sub-agent without pausing the whole chat.
+  async sendAgentMessage(
+    chatId: string,
+    threadId: string,
+    message: string,
+    attachments?: string[]
+  ): Promise<{ success: boolean; message: string }> {
+    const client = grpcClient.chat();
+    const request = create(SendAgentMessageRequestSchema, {
+      chatId,
+      threadId,
+      message,
+      attachments: attachments ?? [],
+    });
+    const response = await client.sendAgentMessage(request);
+    return { success: response.success, message: response.message };
+  },
+
+  // The still-undelivered mailbox entries addressed to one thread. Used by the
+  // composer's pending-queue strip: a queued message is not in the transcript
+  // yet, so this list is the only way the user can see it exists.
+  async listQueuedAgentMessages(
+    chatId: string,
+    threadId: string
+  ): Promise<{ messages: QueuedAgentMessageView[] }> {
+    const client = grpcClient.chat();
+    const request = create(ListQueuedAgentMessagesRequestSchema, {
+      chatId,
+      threadId,
+    });
+    const response = await client.listQueuedAgentMessages(request);
+    return {
+      messages: response.messages.map((m) => ({
+        id: m.id,
+        body: m.body,
+        created_at: m.createdAt,
+        sender_kind: m.senderKind,
+        attachments: m.attachments,
+      })),
+    };
+  },
+
+  // Revoke a queued entry before the agent drains it. This races the agent's
+  // own drain, so `success: false` is a legitimate outcome for a well-formed
+  // request — it means the message was already delivered and the row still
+  // stands. Callers must branch on it rather than assuming the cancel took.
+  async cancelQueuedAgentMessage(
+    chatId: string,
+    messageId: string
+  ): Promise<{ success: boolean; message: string }> {
+    const client = grpcClient.chat();
+    const request = create(CancelQueuedAgentMessageRequestSchema, {
+      chatId,
+      messageId,
+    });
+    const response = await client.cancelQueuedAgentMessage(request);
+    return { success: response.success, message: response.message };
+  },
+
+  // Take queued messages back off a thread's mailbox so they can be resent as
+  // ordinary turns. Omit messageId to claim the whole queue ("send all"), or
+  // pass one to claim a single entry ("send now").
+  //
+  // The returned list is authoritative and is the ONLY thing the caller may
+  // resend. The claim is a single atomic statement server-side, so an entry
+  // the agent's drain won first simply is not in the result — resending from
+  // a locally-cached queue view instead would put that message into the
+  // conversation twice, which is exactly what this endpoint replaced.
+  async claimQueuedAgentMessages(
+    chatId: string,
+    threadId: string,
+    messageId?: string
+  ): Promise<{ messages: QueuedAgentMessageView[] }> {
+    const client = grpcClient.chat();
+    const request = create(ClaimQueuedAgentMessagesRequestSchema, {
+      chatId,
+      threadId,
+      messageId,
+    });
+    const response = await client.claimQueuedAgentMessages(request);
+    return {
+      messages: response.messages.map((m) => ({
+        id: m.id,
+        body: m.body,
+        created_at: m.createdAt,
+        sender_kind: m.senderKind,
+        attachments: m.attachments,
+      })),
+    };
+  },
+
   // List messages with content blocks
   async listMessages(
     chatId: string,
@@ -403,15 +526,16 @@ export const chatGrpc = {
     total: number;
     count: number;
     has_more: boolean;
-    oldest_ordinal: number;
+    oldest_seq: number;
   }> {
     const client = grpcClient.chat();
     const request = create(ListMessagesRequestSchema, {
       chatId,
       recent: options?.recent,
-      beforeOrdinal: options?.before_ordinal
-        ? BigInt(options.before_ordinal)
+      beforeSeq: options?.before_seq
+        ? BigInt(options.before_seq)
         : undefined,
+      threadId: options?.thread_id,
     });
     const response = await client.listMessages(request);
     return {
@@ -419,7 +543,7 @@ export const chatGrpc = {
       total: response.total,
       count: response.count,
       has_more: response.hasMore,
-      oldest_ordinal: Number(response.oldestOrdinal),
+      oldest_seq: Number(response.oldestSeq),
     };
   },
 

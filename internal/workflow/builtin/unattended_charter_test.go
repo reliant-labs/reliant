@@ -42,7 +42,7 @@ func scaffoldInputs(unattended bool) map[string]interface{} {
 // inside get-it-right's loop, and scaffold_and_verify sets review_enabled: false,
 // so the edge is unreachable. Setting ask=false changed nothing.
 func TestScaffoldCharterDoesNotOpenWithAGateWhenNobodyIsWatching(t *testing.T) {
-	template := topLevelInjectContent(t, "forge-one-shot.yaml", "scaffold_and_verify")
+	template := topLevelInjectContent(t, "forge-one-shot.yaml", "build_app")
 
 	unattended := renderPrompt(t, template, scaffoldInputs(true), nil, nil, 0)
 
@@ -60,7 +60,7 @@ func TestScaffoldCharterDoesNotOpenWithAGateWhenNobodyIsWatching(t *testing.T) {
 
 // The interactive path must be unchanged when the input is off.
 func TestScaffoldCharterStillOpensTheConversationWhenAHumanIsThere(t *testing.T) {
-	template := topLevelInjectContent(t, "forge-one-shot.yaml", "scaffold_and_verify")
+	template := topLevelInjectContent(t, "forge-one-shot.yaml", "build_app")
 
 	interactive := renderPrompt(t, template, scaffoldInputs(false), nil, nil, 0)
 
@@ -83,7 +83,7 @@ func TestScaffoldCharterStillOpensTheConversationWhenAHumanIsThere(t *testing.T)
 // specific instruction to open by asking. The escape has to say plainly that an
 // explicit instruction overrides the directive to ask.
 func TestScaffoldCharterNeverAsksWhatTheOpeningMessageAlreadyAnswered(t *testing.T) {
-	template := topLevelInjectContent(t, "forge-one-shot.yaml", "scaffold_and_verify")
+	template := topLevelInjectContent(t, "forge-one-shot.yaml", "build_app")
 	interactive := renderPrompt(t, template, scaffoldInputs(false), nil, nil, 0)
 
 	require.Contains(t, interactive, "do not ask about that topic at all",

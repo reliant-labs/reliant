@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -172,10 +173,15 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("invalid DATABASE_DRIVER %q: %w", opts.DatabaseDriver, err)
 	}
 
+	// api-server is the single owner of the schema: it is the one process that
+	// applies migrations. temporal-worker and gateway wait for it (see
+	// db.MigrationPolicy). Keep it that way — a second migrator reintroduces
+	// the startup race this policy exists to remove.
 	repo, err := db.NewRepoFromConfig(db.DatabaseConfig{
 		Driver:  dbDriver,
 		DataDir: opts.DataDir,
 		URL:     opts.DatabaseURL,
+		Migrate: db.MigrateApply,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
@@ -318,10 +324,19 @@ func Run(ctx context.Context, opts Options) error {
 	bgProvider := services.NewDBBackgroundProcessProvider(repo, daemonRouter)
 
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
-		Port:                opts.GRPCPort,
-		BindAddress:         opts.BindAddress,
-		JWTPublicKey:        jwtPublicKey,
-		JWKSURL:             jwksURL,
+		Port:         opts.GRPCPort,
+		BindAddress:  opts.BindAddress,
+		JWTPublicKey: jwtPublicKey,
+		JWKSURL:      jwksURL,
+		// Connector/MCP surface. PUBLIC_URL is this server's externally
+		// reachable base URL, used to tell a user where to point a
+		// third-party MCP client and to build the OAuth discovery document.
+		// MCP_OAUTH_ISSUERS names the authorization servers whose tokens the
+		// connector endpoint accepts (typically the Supabase project URL);
+		// without it, connectors authenticate with rlnt_conn_ credentials
+		// only and OAuth discovery is not advertised.
+		PublicURL:           strings.TrimSpace(os.Getenv("PUBLIC_URL")),
+		OAuthIssuers:        splitAndTrim(os.Getenv("MCP_OAUTH_ISSUERS")),
 		CORSAllowedOrigins:  opts.CORSAllowedOrigins,
 		AllowedEmailDomains: opts.AllowedEmailDomains,
 		Database:            repo,
@@ -516,4 +531,16 @@ func Run(ctx context.Context, opts Options) error {
 
 	logging.Info("API server shut down gracefully")
 	return nil
+}
+
+// splitAndTrim parses a comma-separated environment list, dropping empties so
+// a trailing comma or a blank setting does not produce a phantom entry.
+func splitAndTrim(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if v := strings.TrimSpace(part); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }

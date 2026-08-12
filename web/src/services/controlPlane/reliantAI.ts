@@ -14,7 +14,10 @@
  */
 
 import { LLMGatewayService } from "@/gen/controlplane/v1/public/llm_gateway_service_pb";
-import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
+import {
+  BillingService,
+  RedeemedCouponKind,
+} from "@/gen/controlplane/v1/public/billing_service_pb";
 import type {
   LLMKey,
   LLMSpendEntry,
@@ -25,6 +28,7 @@ import { getControlPlaneClient } from "./client";
 import { hasControlPlane } from "./config";
 
 export type { LLMKey, LLMSpendEntry, WalletOverview, ReliantOverview };
+export { RedeemedCouponKind };
 
 /**
  * Whether the managed-AI surface is wired up in this build. `ReliantAISection`
@@ -133,4 +137,42 @@ export async function getLLMSpend(
     keyId: args.keyId,
   });
   return { entries: res.entries, totalSpend: res.totalSpend };
+}
+/** Result of redeeming a coupon code. */
+export interface RedeemCouponResult {
+  /** WALLET_CREDIT only: credit added to the org wallet, in cents. */
+  amountCents: number;
+  /** The code as stored server-side (uppercase). */
+  code: string;
+  /** WALLET_CREDIT only: wallet balance after the credit, in cents. */
+  newBalanceCents: number;
+  /** Which fields above/below are meaningful. */
+  kind: RedeemedCouponKind;
+  /** COMPUTE_MINUTES only: daemon compute minutes granted by this redemption. */
+  computeMinutes: number;
+  /** COMPUTE_MINUTES only: org's total unspent granted compute minutes after this redemption. */
+  newComputeMinutesRemaining: number;
+}
+
+/**
+ * RedeemCoupon — credit the current org's wallet, or grant daemon compute
+ * minutes, from a coupon code (see `kind` on the result).
+ *
+ * The org is resolved SERVER-side from the authenticated caller; there is
+ * deliberately no org parameter here, so a client cannot credit someone else's
+ * wallet. Redemption is idempotent per (coupon, org): redeeming twice returns
+ * an AlreadyExists error rather than crediting again.
+ */
+export async function redeemCoupon(code: string): Promise<RedeemCouponResult> {
+  const res = await getControlPlaneClient(BillingService).redeemCoupon({ code });
+  return {
+    // Wire values are bigint (int64); the UI works in numbers. Coupon amounts
+    // are dollars, so this is nowhere near Number's safe range.
+    amountCents: Number(res.amountCents),
+    code: res.code,
+    newBalanceCents: Number(res.newBalanceCents),
+    kind: res.kind,
+    computeMinutes: Number(res.computeMinutes),
+    newComputeMinutesRemaining: Number(res.newComputeMinutesRemaining),
+  };
 }

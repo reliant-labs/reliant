@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/openai/openai-go/v3"
@@ -127,6 +128,17 @@ func (c *LocalClient) ConvertMessages(prompts []string, messages []message.Messa
 			openaiMessages = append(openaiMessages, openai.ChatCompletionMessageParamUnion{
 				OfAssistant: &assistantMsg,
 			})
+
+		case message.System:
+			// History System messages are content (compaction summary, branch
+			// note, mailbox envelope), delivered as a user turn wrapped in
+			// <system> tags. Without this case they fall through the switch
+			// and are dropped before the request is built.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				openaiMessages = append(openaiMessages,
+					openai.UserMessage(fmt.Sprintf("<system>\n%s\n</system>", systemText)),
+				)
+			}
 
 		case message.Tool:
 			for _, result := range msg.ToolResults() {

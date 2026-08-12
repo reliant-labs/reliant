@@ -122,10 +122,16 @@ func (a *AddTaskTool) Execute(rctx *rctx.ToolContext, params AddTaskParams) (Too
 		return NewTextErrorResponse("No thread context available"), nil
 	}
 
-	// Get the current thread's plan
-	plan, err := a.repo.GetPlanByThreadID(rctx.Context, threadID)
+	// Writes bind to THIS thread's plan only. An ancestor's plan is readable
+	// (list_tasks/get_plan walk up) but has a single writer, so say so rather
+	// than advising create_plan — that advice would fragment the parent's
+	// board into private per-sub-agent copies.
+	plan, err := resolvePlanForWrite(rctx.Context, a.repo, threadID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			if inherited, resolveErr := resolvePlanForRead(rctx.Context, a.repo, threadID); resolveErr == nil && inherited.inherited {
+				return NewTextErrorResponse(inheritedPlanWriteRefusal(inherited.ownerThreadID)), nil
+			}
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan: %v", err)), nil

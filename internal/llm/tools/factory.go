@@ -150,6 +150,10 @@ func (f *ToolsFactory) BashKill() Tool {
 	return NewBashKillTool()
 }
 
+func (f *ToolsFactory) BashWait() Tool {
+	return NewBashWaitTool()
+}
+
 // Network tools
 func (f *ToolsFactory) Fetch() Tool {
 	return NewFetchTool()
@@ -199,6 +203,15 @@ func (f *ToolsFactory) RemoveDependency() Tool {
 
 func (f *ToolsFactory) ListReadyTasks() Tool {
 	return NewListReadyTasksTool(f.opts.Repo)
+}
+
+// Spawn observability/messaging tools
+func (f *ToolsFactory) SpawnStatus() Tool {
+	return NewSpawnStatusTool(f.opts.Repo)
+}
+
+func (f *ToolsFactory) SpawnSend() Tool {
+	return NewSpawnSendTool(f.opts.Repo)
 }
 
 // Analysis tools

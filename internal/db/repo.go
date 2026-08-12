@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -71,6 +72,7 @@ type Repo struct {
 	chats           core.ChatStore
 	messages        core.MessageStore
 	approvals       core.ApprovalStore
+	agentMessages   core.AgentMessageStore
 	projects        core.ProjectStore
 	worktrees       core.WorktreeStore
 	repos           core.RepoStore
@@ -102,15 +104,16 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 	})
 
 	return &Repo{
-		DB:        q,
-		driver:    driver,
-		planTasks: postgresstore.NewPlanTaskStore(pgQueries),
-		chats:     postgresstore.NewChatStore(pgQueries, q),
-		messages:  postgresstore.NewMessageStore(pgQueries, q),
-		approvals: postgresstore.NewApprovalStore(pgQueries),
-		projects:  postgresstore.NewProjectStore(pgQueries),
-		worktrees: postgresstore.NewWorktreeStore(pgQueries),
-		repos:     postgresstore.NewRepoStore(pgQueries),
+		DB:            q,
+		driver:        driver,
+		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
+		chats:         postgresstore.NewChatStore(pgQueries, q),
+		messages:      postgresstore.NewMessageStore(pgQueries, q),
+		approvals:     postgresstore.NewApprovalStore(pgQueries),
+		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
+		projects:      postgresstore.NewProjectStore(pgQueries),
+		worktrees:     postgresstore.NewWorktreeStore(pgQueries),
+		repos:         postgresstore.NewRepoStore(pgQueries),
 		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		}),
@@ -461,6 +464,14 @@ func (w *WrappedDBTX) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
 	})
 }
 
+// SQLDB exposes the underlying pool for stores that own their SQL rather than
+// going through sqlc-generated queries (see internal/connectorgrant). It
+// deliberately ignores any ambient transaction: callers of this are
+// self-contained stores, not participants in a caller's transaction.
+func (w *WrappedDBTX) SQLDB() *sql.DB {
+	return w.db
+}
+
 func (w *WrappedDBTX) Close() error {
 	return w.db.Close()
 }
@@ -659,6 +670,124 @@ func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType r
 	return nil
 }
 
+// GetLatestNonMessageUpdatesPerEntity returns, for each entity in a chat, only
+// the newest non-message chat_update row.
+//
+// This replaces the pattern of reading GetUpdatesSince(chatID, 0, 10000) and
+// discarding message updates in Go, which was both slow and WRONG:
+//
+//   - Wrong: the LIMIT applied to a sequence-ASCENDING scan of ALL update
+//     types. Message updates dominate the table, so on a long-lived chat the
+//     cap was consumed by rows the caller then threw away, and genuinely
+//     needed non-message updates past the cap never reached the client. The
+//     OLDEST rows evicted the NEWEST — the opposite of what a snapshot wants.
+//     Because the snapshot's sequence high-water mark is computed separately,
+//     those dropped updates were never backfilled by gap detection either.
+//
+//   - Slow: it read (and JSON-unmarshalled) every message update's payload,
+//     and GetUpdatesSince enriches message updates with an N+1 per-row
+//     GetMessage + ListContentBlocks fan-out — all of it wasted, since the
+//     caller drops every message row.
+//
+// Filtering by type in SQL and keeping one row per entity makes the result
+// complete by construction: there is no cap to evict anything.
+//
+// STREAM_FINALIZED is excluded as well. Those markers exist only to retire
+// in-flight streaming placeholders ("any delta carrying this message_id is a
+// stale tail"), and a fresh snapshot has no in-flight deltas to retire — the
+// finalized messages are already present as persisted rows. They are pure
+// weight on the initial load, and on a long chat they are thousands of rows.
+func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]ChatUpdate, error) {
+	// DISTINCT ON keeps the first row per identity under the ORDER BY, i.e.
+	// the highest sequence_number — matching the "last write per entity wins"
+	// dedup the Go caller used to do.
+	//
+	// Tool-call updates need a different identity than entity_id. Their entity
+	// id is built as "tool-<content_block_id>-<timestamp>"
+	// (EntityIDForToolCall), so every status transition of the SAME tool call
+	// — pending → executing → completed — lands under a DISTINCT entity_id and
+	// per-entity dedup can never collapse them. The frontend keys tool state by
+	// content_block_id and only ever renders the latest status, so replaying
+	// every historical transition is pure weight: deduping on the embedded
+	// content_block_id instead of the whole entity_id halves the update count
+	// on a long chat (measured 10,571 → 5,327).
+	//
+	// split_part(entity_id, '-', 2) is the content_block_id: the ids are
+	// "tool-<block>-<ts>" and block ids ("toolu_…") contain no '-'.
+	query := `
+		SELECT DISTINCT ON (dedup_key)
+			id,
+			chat_id,
+			sequence_number,
+			update_type,
+			entity_id,
+			data,
+			created_at
+		FROM (
+			SELECT
+				id,
+				chat_id,
+				sequence_number,
+				update_type,
+				entity_id,
+				data,
+				created_at,
+				CASE WHEN update_type = ?
+					THEN split_part(entity_id, '-', 2)
+					ELSE entity_id
+				END AS dedup_key
+			FROM chat_updates
+			WHERE chat_id = ? AND update_type NOT IN (?, ?)
+		) t
+		ORDER BY dedup_key, sequence_number DESC
+	`
+	query = r.bindQuery(query)
+
+	rows, err := r.DB.DB(ctx).QueryContext(ctx, query,
+		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL),
+		chatID,
+		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE),
+		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	updates := []ChatUpdate{}
+	for rows.Next() {
+		var update ChatUpdate
+		var dataJSON string
+
+		if err := rows.Scan(
+			&update.ID,
+			&update.ChatID,
+			&update.SequenceNumber,
+			&update.UpdateType,
+			&update.EntityID,
+			&dataJSON,
+			&update.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+
+		// No message-update enrichment here: this query excludes them by
+		// construction, which is the entire point.
+		update.Data = json.RawMessage(dataJSON)
+		updates = append(updates, update)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	// DISTINCT ON forces ORDER BY entity_id; restore sequence order so
+	// consumers see updates in the order they were emitted.
+	sort.Slice(updates, func(i, j int) bool {
+		return updates[i].SequenceNumber < updates[j].SequenceNumber
+	})
+
+	return updates, nil
+}
+
 // GetUpdatesSince returns all updates since a given sequence number
 // This is used for polling clients to fetch new updates
 // limit: maximum number of updates to return (defaults to 100 if <= 0)
@@ -844,31 +973,9 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 			}
 		}
 
-		blockData := map[string]interface{}{
-			"id":    block.ID,
-			"type":  block.BlockType,
-			"index": block.Position,
-		}
-
-		if block.Content != nil {
-			blockData["content"] = *block.Content
-		}
-		if block.ToolName != nil {
-			blockData["tool_name"] = *block.ToolName
-		}
-		if block.ToolInput != nil {
-			blockData["input"] = *block.ToolInput
-		}
-		if block.ToolCallID != nil {
-			blockData["tool_call_id"] = *block.ToolCallID
-		}
-		if block.IsError != nil {
-			blockData["is_error"] = *block.IsError
-		}
-		// Note: streaming state is now computed, not stored
-
-		contentBlocks = append(contentBlocks, blockData)
 	}
+	// One serializer for a block's wire shape (see ContentBlockPayloads).
+	contentBlocks = r.ContentBlockPayloads(ctx, blocks)
 
 	// Get context_sequence from context_window for frontend compatibility
 	var contextSequence int
@@ -881,24 +988,30 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 	}
 
 	// Build enriched message update matching MessageWithBlocks interface
-	enrichedData := map[string]interface{}{
-		"update_type":       "message",
-		"id":                msg.ID,
-		"role":              msg.Role,
-		"ordinal":           msg.Ordinal,
-		"thread":            msg.ThreadID, // Direct access
-		"context_sequence":  contextSequence,
-		"context_window_id": msg.ContextWindowID,
-		"streaming_state":   streamingState.State, // Use computed state instead of field
-		"created_at":        msg.CreatedAt.Format(time.RFC3339),
-		"updated_at":        msg.UpdatedAt.Format(time.RFC3339),
-		"content_blocks":    contentBlocks,
-		"attachments":       attachments, // Include attachments for image preview
+	// seq is the chat-global order the client sorts by. Omitting it makes a
+	// live message deserialize with seq 0, which sorts it to the top of the
+	// transcript instead of the bottom — the message arrives but appears to
+	// go missing. `ordinal` rides along only for consumers that have not
+	// moved off it yet; nothing orders by it.
+	enrichedData := MessageUpdateData{
+		UpdateType:      "message",
+		ID:              msg.ID,
+		Role:            msg.Role,
+		Seq:             msg.Seq,
+		Ordinal:         msg.Ordinal,
+		Thread:          msg.ThreadID, // Direct access
+		ContextSequence: &contextSequence,
+		ContextWindowID: msg.ContextWindowID,
+		StreamingState:  streamingState.State, // Use computed state instead of field
+		CreatedAt:       msg.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:       msg.UpdatedAt.Format(time.RFC3339),
+		ContentBlocks:   contentBlocks,
+		Attachments:     &attachments, // Include attachments for image preview
 	}
 
 	// Add optional fields
 	if msg.TokenCount != nil {
-		enrichedData["token_count"] = *msg.TokenCount
+		enrichedData.TokenCount = msg.TokenCount
 	}
 
 	// Marshal back to JSON

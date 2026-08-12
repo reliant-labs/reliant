@@ -6,11 +6,9 @@ import { Loader2, AlertCircle, FilePlus, FolderPlus } from "lucide-react";
 import type { FileNode } from "./index";
 import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
-import {
-  isDaemonConnectingError,
-  DAEMON_CONNECT_TIMEOUT_MS,
-} from "../../lib/daemon-errors";
-import { DaemonConnectingState } from "../DaemonConnectingState";
+import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { DaemonWaitState } from "../DaemonWaitState";
+import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useFileDeletionStore } from "../../store/fileDeletionStore";
@@ -192,10 +190,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   const [tree, setTree] = useState<FileNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Transient "cloud daemon still connecting" state: show a spinner + auto-retry
-  // instead of a red error while the daemon comes online (up to 60s).
-  const [connecting, setConnecting] = useState(false);
-  const connectingSinceRef = useRef<number | null>(null);
+  // "The machine isn't there yet" — distinct from a real error. useDaemonWait
+  // owns the stopwatch, the status poll, and the retry cadence; we only record
+  // that we're blocked on it.
+  const [waitingOnDaemon, setWaitingOnDaemon] = useState(false);
   // Lazy directory loading: which directories are currently fetching children
   // (for per-node spinners), and an in-flight guard to dedupe concurrent loads.
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -287,25 +285,17 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       // a refresh doesn't collapse already-expanded subtrees.
       const rootChildren = await getFileTree("/", showHidden, worktreeId, 2);
       setTree((prev) => reconcileChildren(rootChildren, prev, expandedPathsRef.current));
-      setConnecting(false);
-      connectingSinceRef.current = null;
+      setWaitingOnDaemon(false);
     } catch (err) {
       if (isDaemonConnectingError(err)) {
-        // Cloud daemon is still coming online — show the connecting state and
-        // keep auto-retrying, but give up after the provisioning window so we
-        // don't spin forever on a genuinely stuck daemon.
-        const since = connectingSinceRef.current ?? Date.now();
-        connectingSinceRef.current = since;
-        if (Date.now() - since >= DAEMON_CONNECT_TIMEOUT_MS) {
-          setConnecting(false);
-          connectingSinceRef.current = null;
-          setError("Couldn't connect to your environment. Please try again.");
-        } else {
-          setConnecting(true);
-        }
+        // The machine isn't serving yet. We no longer convert this into an
+        // error after 60s: that deadline was the frontend's invention, and it
+        // reported "couldn't connect" for machines that were still legitimately
+        // pulling an image or cloning a repo. The wait state escalates its copy
+        // instead, and only reports failure when the control plane says so.
+        setWaitingOnDaemon(true);
       } else {
-        setConnecting(false);
-        connectingSinceRef.current = null;
+        setWaitingOnDaemon(false);
         setError(err instanceof Error ? err.message : "Failed to load file tree");
       }
     } finally {
@@ -315,15 +305,14 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
     }
   }, [showHidden, worktreeId]);
 
-  // While connecting, silently retry every 2s so the tree loads automatically
-  // once the daemon flips to ACTIVE. The 60s cap lives in loadFileTree.
-  useEffect(() => {
-    if (!connecting) return;
-    const id = setInterval(() => {
+  // The retry cadence now lives in useDaemonWait, so the tree reloads on the
+  // same schedule as every other daemon-backed surface.
+  const daemonWait = useDaemonWait({
+    waiting: waitingOnDaemon,
+    onRetry: useCallback(() => {
       void loadFileTree(false);
-    }, 2_000);
-    return () => clearInterval(id);
-  }, [connecting, loadFileTree]);
+    }, [loadFileTree]),
+  });
 
   // Lazily fetch children for any expanded directory that hasn't loaded them yet
   // (children === undefined). Covers every expansion path — click, keyboard,
@@ -491,7 +480,13 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       }
     };
     
-    // Use capture phase to catch before other handlers
+    // Capture phase, deliberately outside the central shortcut dispatcher.
+    //
+    // This handler claims ONLY PageUp/PageDown, which no shortcut in
+    // config/shortcuts.yaml binds, so there is nothing for it to race. It stays
+    // a direct listener because it needs to work when the tree is visible but
+    // unfocused (Fn+Up/Down with focus elsewhere), which is a weaker condition
+    // than any focus context the dispatcher can express.
     window.addEventListener('keydown', handleGlobalPageKeys, true);
     return () => {
       window.removeEventListener('keydown', handleGlobalPageKeys, true);
@@ -1038,14 +1033,20 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-2">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground font-mono">Loading files...</p>
+          <p className="text-sm text-muted-foreground">Loading files...</p>
         </div>
       </div>
     );
   }
 
-  if (connecting) {
-    return <DaemonConnectingState />;
+  if (waitingOnDaemon && daemonWait.state) {
+    return (
+      <DaemonWaitState
+        state={daemonWait.state}
+        variant="panel"
+        onRetry={daemonWait.retryNow}
+      />
+    );
   }
 
   if (error) {
@@ -1053,10 +1054,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       <div className="flex items-center justify-center h-full p-4">
         <div className="text-center space-y-2">
           <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
-          <p className="text-sm text-destructive font-mono">{error}</p>
+          <p className="text-sm text-destructive">{error}</p>
           <button
             onClick={() => loadFileTree()}
-            className="text-xs text-primary hover:underline font-mono"
+            className="text-xs text-primary hover:underline"
           >
             Try again
           </button>
@@ -1068,7 +1069,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   if (tree.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-sm text-muted-foreground font-mono">No files found</p>
+        <p className="text-sm text-muted-foreground">No files found</p>
       </div>
     );
   }
@@ -1100,7 +1101,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
             placeholder={creatingType === "file" ? "filename.ext" : "folder-name"}
             className={cn(
               "flex-1 bg-transparent border-b border-primary",
-              "text-sm font-mono text-foreground",
+              "text-sm text-foreground",
               "outline-none focus:border-primary",
               "placeholder:text-muted-foreground/50"
             )}

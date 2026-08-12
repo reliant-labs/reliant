@@ -16,7 +16,7 @@ ORDER BY created_at DESC;
 -- name: ListPlansByChatID :many
 SELECT plans.* FROM plans
 JOIN threads ON threads.id = plans.thread_id
-WHERE threads.conversation_id = $1
+WHERE threads.chat_id = $1
 ORDER BY plans.created_at DESC;
 
 -- name: ListPlansByProject :many

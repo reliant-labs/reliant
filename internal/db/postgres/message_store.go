@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 type messageStore struct {
@@ -42,6 +42,17 @@ func (s *messageStore) GetMessage(ctx context.Context, id string) (*core.Message
 
 func (s *messageStore) GetNextOrdinal(ctx context.Context, threadID string) (int64, error) {
 	next, err := s.q.GetNextOrdinalByThread(ctx, threadID)
+	if err != nil {
+		return 0, err
+	}
+	return int64(next), nil
+}
+
+func (s *messageStore) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error) {
+	next, err := s.q.GetNextSeqByChat(ctx, pgdb.GetNextSeqByChatParams{
+		ChatID:   chatID,
+		ThreadID: threadID,
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -100,6 +111,65 @@ func (s *messageStore) ListMessages(ctx context.Context, chatID string, opts cor
 	return messagesFromPG(sqlcMsgs[start:end]), nil
 }
 
+// ListRecentMessages bounds the read in SQL. ListMessages above fetches the
+// chat's entire history and slices it in Go, so its Limit costs a full scan
+// plus a full materialization no matter how small the window; this one lets
+// postgres stop early against idx_messages_chat_id.
+func (s *messageStore) ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*core.Message, error) {
+	if limit <= 0 {
+		return []*core.Message{}, nil
+	}
+
+	// ORDER BY ordinal DESC keeps the NEWEST rows under the LIMIT; reverse to
+	// restore the ascending order every consumer expects.
+	sqlcMsgs, err := s.q.ListRecentMessages(ctx, pgdb.ListRecentMessagesParams{
+		ChatID: chatID,
+		Limit:  int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent messages: %w", err)
+	}
+
+	for i, j := 0, len(sqlcMsgs)-1; i < j; i, j = i+1, j-1 {
+		sqlcMsgs[i], sqlcMsgs[j] = sqlcMsgs[j], sqlcMsgs[i]
+	}
+	return messagesFromPG(sqlcMsgs), nil
+}
+
+// ListRecentChatWindow returns the initial snapshot's window: the newest
+// `limit` messages on mainThreadID, plus every sibling-thread message inside
+// that seq range. See the query comment in messages.sql for why the window is
+// measured on the main thread rather than across the whole chat.
+func (s *messageStore) ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*core.Message, error) {
+	if limit <= 0 {
+		return []*core.Message{}, nil
+	}
+
+	// Returned DESC so the LIMIT keeps the newest rows; reverse to restore the
+	// ascending order every consumer expects.
+	sqlcMsgs, err := s.q.ListRecentChatWindow(ctx, pgdb.ListRecentChatWindowParams{
+		ChatID:   chatID,
+		ThreadID: mainThreadID,
+		Limit:    int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent chat window: %w", err)
+	}
+
+	for i, j := 0, len(sqlcMsgs)-1; i < j; i, j = i+1, j-1 {
+		sqlcMsgs[i], sqlcMsgs[j] = sqlcMsgs[j], sqlcMsgs[i]
+	}
+	return messagesFromPG(sqlcMsgs), nil
+}
+
+func (s *messageStore) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
+	count, err := s.q.CountMessagesByChat(ctx, chatID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count messages: %w", err)
+	}
+	return int(count), nil
+}
+
 func (s *messageStore) GetLatestMessageInThread(ctx context.Context, threadID string) (*core.Message, error) {
 	msg, err := s.q.GetLatestMessageByThread(ctx, threadID)
 	if err != nil {
@@ -143,6 +213,73 @@ func (s *messageStore) CountMessagesInThread(ctx context.Context, threadID strin
 		return 0, fmt.Errorf("failed to count messages: %w", err)
 	}
 	return int(count), nil
+}
+
+func (s *messageStore) CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error) {
+	count, err := s.q.CountMessagesByContextWindow(ctx, contextWindowID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count messages by context window: %w", err)
+	}
+	return int(count), nil
+}
+
+func (s *messageStore) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error) {
+	count, err := s.q.CountMessagesByContextWindowUpToSeq(ctx, pgdb.CountMessagesByContextWindowUpToSeqParams{
+		ContextWindowID: contextWindowID,
+		Seq:             maxSeq,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to count messages by context window up to seq: %w", err)
+	}
+	return int(count), nil
+}
+
+// ListRecentMessagesInContextWindowBeforeSeq bounds the read in SQL: the
+// newest `limit` rows of a single context window strictly before beforeSeq.
+func (s *messageStore) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*core.Message, error) {
+	if limit <= 0 {
+		return []*core.Message{}, nil
+	}
+
+	sqlcMsgs, err := s.q.ListRecentMessagesInContextWindowBeforeSeq(ctx, pgdb.ListRecentMessagesInContextWindowBeforeSeqParams{
+		ContextWindowID: contextWindowID,
+		BeforeSeq:       beforeSeq,
+		RowLimit:        int32(limit),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent messages in context window before seq: %w", err)
+	}
+
+	for i, j := 0, len(sqlcMsgs)-1; i < j; i, j = i+1, j-1 {
+		sqlcMsgs[i], sqlcMsgs[j] = sqlcMsgs[j], sqlcMsgs[i]
+	}
+	return messagesFromPG(sqlcMsgs), nil
+}
+
+func (s *messageStore) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
+	hasMore, err := s.q.HasMessagesBeforeInContextWindow(ctx, pgdb.HasMessagesBeforeInContextWindowParams{
+		ContextWindowID: contextWindowID,
+		Seq:             beforeSeq,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to check for messages before seq: %w", err)
+	}
+	return hasMore, nil
+}
+
+func (s *messageStore) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*core.Message, error) {
+	params := pgdb.ListMessagesInContextWindowRangeParams{
+		ContextWindowID: contextWindowID,
+		FromSeq:         fromSeq,
+	}
+	if toSeq != nil {
+		params.ToSeq = sql.NullInt64{Int64: *toSeq, Valid: true}
+	}
+	sqlcMsgs, err := s.q.ListMessagesInContextWindowRange(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list messages in context window range: %w", err)
+	}
+	return messagesFromPG(sqlcMsgs), nil
 }
 
 func (s *messageStore) CreateContentBlock(ctx context.Context, block *core.MessageContentBlock) error {
@@ -251,6 +388,7 @@ func messageFromPG(sm pgdb.Message) *core.Message {
 		ID:              sm.ID,
 		ChatID:          sm.ChatID,
 		Ordinal:         sm.Ordinal,
+		Seq:             sm.Seq,
 		ThreadID:        sm.ThreadID,
 		ContextWindowID: sm.ContextWindowID,
 		Role:            reliantv1.MessageRole(sm.Role),
@@ -283,6 +421,7 @@ func messageToCreateParams(msg *core.Message) pgdb.CreateMessageParams {
 		ID:              msg.ID,
 		ChatID:          msg.ChatID,
 		Ordinal:         msg.Ordinal,
+		Seq:             msg.Seq,
 		ThreadID:        msg.ThreadID,
 		ContextWindowID: msg.ContextWindowID,
 		NodeID:          msgPtrToNullString(msg.NodeID),
@@ -306,6 +445,7 @@ func messageToCreateIfNotExistsParams(msg *core.Message) pgdb.CreateMessageIfNot
 		ID:              msg.ID,
 		ChatID:          msg.ChatID,
 		Ordinal:         msg.Ordinal,
+		Seq:             msg.Seq,
 		ThreadID:        msg.ThreadID,
 		ContextWindowID: msg.ContextWindowID,
 		NodeID:          msgPtrToNullString(msg.NodeID),

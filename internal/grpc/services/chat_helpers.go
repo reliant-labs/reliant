@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -153,6 +154,70 @@ func displayStyleProtoToInt32Ptr(ds *reliantv1.DisplayStyle) *int32 {
 	}
 	v := int32(*ds)
 	return &v
+}
+
+// worktreeLookupLimit bounds the main-worktree scan in resolveChatWorktreeID.
+// A project has a handful of worktrees, not thousands, so this is a sanity
+// ceiling rather than real pagination.
+const worktreeLookupLimit = 1000
+
+// resolveChatWorktreeID resolves the worktree a chat belongs to, and is the
+// single gate that keeps chat.worktree_id non-null.
+//
+// Every chat MUST name a resolvable worktree. The UI groups the chat list by
+// worktree and drops chats whose worktree does not resolve, so a chat persisted
+// with a null or dangling worktree_id runs to completion while staying
+// invisible — the failure mode `reliant workflow run` hit, because the CLI has
+// no worktree to name and sent none.
+//
+// Rather than teach every reader to tolerate the broken state, the write
+// boundary refuses it:
+//
+//   - a supplied id must exist and belong to this project (a foreign worktree
+//     would run the chat against another project's tree)
+//   - an omitted id defaults to the project's main worktree, which is what
+//     "run against the project itself" means
+//   - a project with no main worktree is a FailedPrecondition, never a null
+//
+// Callers pass the caller-supplied id (nil when absent) and get back the id to
+// persist, or a connect error to return as-is.
+func (s *ChatService) resolveChatWorktreeID(ctx context.Context, projectID string, requested *string) (*string, error) {
+	if requested != nil && *requested != "" {
+		worktree, err := s.database.GetWorktree(ctx, *requested)
+		if err != nil || worktree == nil {
+			return nil, connect.NewError(connect.CodeNotFound,
+				fmt.Errorf("worktree %s not found", *requested))
+		}
+		if worktree.ProjectID != projectID {
+			return nil, connect.NewError(connect.CodeInvalidArgument,
+				fmt.Errorf("worktree %s belongs to project %s, not %s", *requested, worktree.ProjectID, projectID))
+		}
+		return requested, nil
+	}
+
+	// No worktree named: bind to the project's main checkout. The limit is
+	// explicit because ListWorktrees defaults to 100 and orders by last_active,
+	// which could page the main worktree out of a project with many branches —
+	// and "main is missing" is reported below as a hard failure.
+	worktrees, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
+		ProjectID: &projectID,
+		Limit:     worktreeLookupLimit,
+	})
+	if err != nil {
+		logging.Error("Failed to list worktrees while resolving chat worktree", "error", err, "projectID", projectID)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve project worktree"))
+	}
+	for _, worktree := range worktrees {
+		if worktree.IsMain {
+			id := worktree.ID
+			return &id, nil
+		}
+	}
+
+	// ListWorktrees self-heals this for projects that predate the invariant, so
+	// reaching here means the project is genuinely unusable for chats.
+	return nil, connect.NewError(connect.CodeFailedPrecondition,
+		fmt.Errorf("project %s has no main worktree; cannot create a chat without one", projectID))
 }
 
 // getEffectiveWorkingPath returns the working directory path for a chat.

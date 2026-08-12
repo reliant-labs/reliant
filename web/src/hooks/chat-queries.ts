@@ -76,6 +76,51 @@ export function seedChatDetail(chat: Chat): void {
 }
 
 /**
+ * Seed or upsert a full chat into the project list cache.
+ *
+ * Create-chat flows already have the authoritative Chat returned by the server,
+ * so they can make subscribed list readers update synchronously instead of
+ * waiting for the global CHAT_CREATED invalidation/refetch path. Creates a
+ * minimal envelope when the list has not loaded yet.
+ */
+export function upsertChatInListCache(
+  projectId: string | undefined,
+  chat: Chat
+): void {
+  const resolvedProjectId = projectId ?? chat.projectId;
+  if (!resolvedProjectId) return;
+
+  queryClient.setQueryData(
+    chatKeys.list(resolvedProjectId),
+    (prev: ChatListEnvelope | undefined): ChatListEnvelope => {
+      if (!prev) {
+        return {
+          chats: [chat],
+          total: 1,
+          lastUserUpdateSequence: 0,
+        };
+      }
+
+      const existingIndex = prev.chats.findIndex((c) => c.id === chat.id);
+      if (existingIndex >= 0) {
+        return {
+          ...prev,
+          chats: prev.chats.map((c, index) =>
+            index === existingIndex ? { ...c, ...chat } : c
+          ),
+        };
+      }
+
+      return {
+        ...prev,
+        chats: [chat, ...prev.chats],
+        ...(prev.total !== undefined ? { total: prev.total + 1 } : {}),
+      };
+    }
+  );
+}
+
+/**
  * Read a single Chat from the detail cache (imperative, non-reactive).
  * Returns undefined when the chat has not been loaded/seeded.
  */

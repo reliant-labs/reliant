@@ -193,7 +193,7 @@ function isValidChatUpdate(
       );
     case "tool_call":
       return (
-        typeof data.content_block_id === "string" || typeof data.id === "string"
+        typeof data.tool_call_id === "string" || typeof data.id === "string"
       );
     case "error":
       return (
@@ -837,7 +837,7 @@ export class UserStreamingService {
           this.callbacks.onChatPaginationInfo({
             total: snapshot.total,
             hasMore: snapshot.hasMore,
-            oldestOrdinal: Number(snapshot.oldestOrdinal),
+            oldestSeq: Number(snapshot.oldestSeq),
           });
         }
 

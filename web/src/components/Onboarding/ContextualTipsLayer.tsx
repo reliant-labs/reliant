@@ -1,4 +1,5 @@
 import { useEffect, useMemo } from "react";
+import { useSurface } from "../../lib/surfaceContext";
 import { useTourStore } from "../../store/tourStore";
 import { useContextualTipsStore } from "../../store/contextualTipsStore";
 import { CONTEXTUAL_TIP_DEFINITIONS } from "./contextualTipsRegistry";
@@ -6,6 +7,10 @@ import { ContextualTipCoachmark } from "./ContextualTipCoachmark";
 import { useTourNavigation } from "./useTourNavigation";
 
 export function ContextualTipsLayer() {
+  // Coachmarks anchor to desktop chrome via DOM selectors that never match on
+  // the mobile surface, so a tip there would either float unanchored or point
+  // at nothing. See MobileLayout for the full overlay rationale.
+  const surface = useSurface();
   const isInitialized = useContextualTipsStore((state) => state.isInitialized);
   const loadFailed = useContextualTipsStore((state) => state.loadFailed);
   const activeTipId = useContextualTipsStore((state) => state.activeTipId);
@@ -43,6 +48,10 @@ export function ContextualTipsLayer() {
     if (!activeTipId) return null;
     return CONTEXTUAL_TIP_DEFINITIONS.find((tip) => tip.id === activeTipId) ?? null;
   }, [activeTipId]);
+
+  if (surface !== "desktop") {
+    return null;
+  }
 
   if (!onboardingReady || !onboardingComplete || isWizardActive || loadFailed || !activeTip) {
     return null;

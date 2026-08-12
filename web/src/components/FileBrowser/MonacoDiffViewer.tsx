@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
-import { getMonacoLanguage, configureMonacoTheme, getCurrentMonacoTheme } from "../../lib/monacoTheme";
+import { getMonacoLanguage, configureMonacoTheme, getCurrentMonacoTheme, MONACO_FONT_FAMILY } from "../../lib/monacoTheme";
 import { useEditorStore } from "../../store/editorStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { getFilePreviewInfo, type FilePreviewInfo } from "../../api/fileSystem";
@@ -86,6 +86,7 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
         automaticLayout: true,
         minimap: { enabled: settings.minimap },
         fontSize: settings.fontSize,
+        fontFamily: MONACO_FONT_FAMILY,
         wordWrap: settings.wordWrap ? "on" : "off",
         scrollBeyondLastLine: false,
         renderWhitespace: settings.renderWhitespace ? "all" : "none",
@@ -269,6 +270,7 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
     const commonOptions = {
       minimap: { enabled: settings.minimap },
       fontSize: settings.fontSize,
+      fontFamily: MONACO_FONT_FAMILY,
       wordWrap: settings.wordWrap ? "on" : "off",
       renderWhitespace: settings.renderWhitespace ? "all" : "none",
       bracketPairColorization: { enabled: settings.bracketPairColorization },
@@ -559,7 +561,7 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
       <div className="flex items-center justify-center h-full">
         <div className="text-center space-y-2">
           <Loader2 className="w-8 h-8 animate-spin text-muted-foreground mx-auto" />
-          <p className="text-sm text-muted-foreground font-mono">Loading diff...</p>
+          <p className="text-sm text-muted-foreground">Loading diff...</p>
         </div>
       </div>
     );
@@ -575,7 +577,7 @@ export function MonacoDiffViewer({ file }: MonacoDiffViewerProps) {
       <div className="flex items-center justify-center h-full p-4">
         <div className="text-center space-y-2">
           <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
-          <p className="text-sm text-destructive font-mono">{error}</p>
+          <p className="text-sm text-destructive">{error}</p>
         </div>
       </div>
     );

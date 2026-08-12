@@ -178,14 +178,10 @@ vi.mock("../steps", () => ({
 // ─── Lazy wizard import ──────────────────────────────────────────────────────
 
 async function loadWizard(): Promise<React.ComponentType<any> | null> {
-  try {
-    const mod = await import("../OnboardingWizard");
-    return (mod as any).OnboardingWizard ?? null;
-  } catch (err) {
-    // Re-throw so the test failure surfaces the actual import error instead
-    // of a generic "not importable" message.
-    throw err;
-  }
+  // Left unguarded on purpose: an import failure should surface as the real
+  // module error, which is exactly what an uncaught rejection already gives.
+  const mod = await import("../OnboardingWizard");
+  return (mod as any).OnboardingWizard ?? null;
 }
 
 // ─── Test router ─────────────────────────────────────────────────────────────

@@ -1,13 +1,7 @@
 // Simple theme manager - only font settings remain
 import { SETTINGS_KEYS } from "../services/settingsSync";
 
-const FONT_SIZE_MAP: Record<string, string> = {
-  xs: "12px",
-  sm: "13px",
-  md: "14px",
-  lg: "15px",
-  xl: "16px",
-};
+import { FONT_SIZE_MAP, applyRootFontSize } from "./rootFontSize";
 
 function safeGet(key: string, fallback: string): string {
   try {
@@ -28,7 +22,7 @@ export function loadFont() {
   document.documentElement.dataset.editorFont = editorFont;
 
   if (FONT_SIZE_MAP[fontSize]) {
-    document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize];
+    applyRootFontSize(fontSize);
   }
 }
 

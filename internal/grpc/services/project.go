@@ -665,7 +665,7 @@ Use ` + "`skill list`" + ` to see all available skills. Key skills:
 	// with real config data via ON CONFLICT ... DO UPDATE when it syncs.
 	seedRecord := &db.ProjectConfigRecord{
 		ProjectID: project.ID,
-		DaemonID:  "seed",
+		DaemonID:  config.SeedDaemonID,
 	}
 	if err := s.database.UpsertProjectConfigRecord(ctx, seedRecord); err != nil {
 		logging.Error("Failed to seed project config record", "error", err, "project_id", project.ID)
@@ -1417,8 +1417,19 @@ func (s *ProjectService) InitializeGitRepo(
 	// Register the project root as a Repo row. Worktree creation gates on
 	// ListReposByProject (not project.is_git_repo), so without this a
 	// freshly initialized project would still fail with "project has no git
-	// repos". Idempotent: skip if a root repo is already registered.
-	if existing, err := s.database.GetRepoByProjectAndPath(ctx, project.ID, ""); err != nil || existing == nil {
+	// repos".
+	//
+	// Skip when the project already has ANY repo row. That covers two cases
+	// with one rule: the root is already registered (idempotency), or the
+	// project has nested repos, in which case a root row must NOT be added.
+	// Adding one would contradict repo.Discover, which deliberately drops the
+	// root once nested repos are found, and would make worktree creation fan
+	// out an extra checkout for a repo the user never asked for.
+	existingRepos, err := s.database.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		logging.Warn("Failed to list repos after git init; skipping root repo registration",
+			"error", err, "projectID", project.ID)
+	} else if len(existingRepos) == 0 {
 		now := time.Now().UTC()
 		rootRepo := &core.Repo{
 			ID:           uuid.New().String(),

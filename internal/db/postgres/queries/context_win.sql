@@ -1,7 +1,7 @@
 -- name: CreateContextWindow :one
 INSERT INTO context_windows (
     id, thread_id, sequence, 
-    parent_context_window_id, fork_at_ordinal,
+    parent_context_window_id, fork_at_message_id,
     compaction_summary_message_id, created_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
@@ -45,9 +45,9 @@ WHERE thread_id = $1;
 -- Get context window with thread info for resolution
 SELECT 
     cw.*,
-    t.conversation_id,
+    t.chat_id,
     t.parent_thread_id,
-    t.fork_at_ordinal
+    t.fork_at_message_id
 FROM context_windows cw
 JOIN threads t ON t.id = cw.thread_id
 WHERE cw.id = $1;

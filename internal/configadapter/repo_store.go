@@ -26,7 +26,10 @@ func (s *repoConfigStore) GetProjectConfigRecord(ctx context.Context, projectID 
 	}
 
 	return &config.StoredProjectConfigRecord{
-		ProjectID:            record.ProjectID,
+		ProjectID: record.ProjectID,
+		// DaemonID distinguishes a real daemon push from CreateProject's seed
+		// placeholder — the fact behind Config.SnapshotSynced.
+		DaemonID:             record.DaemonID,
 		UserConfigYAML:       record.UserConfigYAML,
 		ProjectConfigYAML:    record.ProjectConfigYAML,
 		LocalConfigYAML:      record.LocalConfigYAML,
@@ -37,6 +40,11 @@ func (s *repoConfigStore) GetProjectConfigRecord(ctx context.Context, projectID 
 		ProjectPresetsJSON:   record.ProjectPresetsJSON,
 		ProjectScenariosJSON: record.ProjectScenariosJSON,
 		ProjectSkillsJSON:    record.ProjectSkillsJSON,
-		RuntimeType:          record.RuntimeType,
+		// RepoMemoriesJSON was absent here while both the db record and the
+		// config record carried the field, so per-repo reliant.md content the
+		// daemon had already synced was dropped on every read through this
+		// store and Config.RepoMemories was always empty.
+		RepoMemoriesJSON: record.RepoMemoriesJSON,
+		RuntimeType:      record.RuntimeType,
 	}, nil
 }

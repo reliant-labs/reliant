@@ -592,6 +592,24 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 	assert.Equal(t, flagship.Provider.Driver, moderate.Provider.Driver)
 }
 
+// Tag resolution breaks ties by YAML definition order, so adding models can
+// silently repoint a tag that nothing names explicitly. This pins the codex
+// tag targets so a future insertion has to change them on purpose.
+func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
+	reg := MustGetRegistry()
+
+	for tag, want := range map[string]string{
+		TagFlagship:  "gpt-5.5",
+		TagModerate:  "gpt-5.5",
+		TagFast:      "gpt-5.3-codex-spark",
+		TagReasoning: "gpt-5.5",
+	} {
+		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}}, []string{"codex"})
+		require.NoError(t, err, "resolving tag %q", tag)
+		assert.Equal(t, want, resolved.Definition.ID, "codex tag %q resolved to an unexpected model", tag)
+	}
+}
+
 func TestResolve_ReliantThinkingPolicyRegressionModels(t *testing.T) {
 	reg := MustGetRegistry()
 

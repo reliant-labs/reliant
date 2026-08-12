@@ -10,18 +10,66 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
+
+// HistoryLimitRestartMessage is what the user is told when their chat exceeded
+// Temporal's per-execution history limit and was restarted from its last
+// checkpoint.
+//
+// It says what happened, that the conversation is intact, and what to expect —
+// because the alternative (what happens today) is a chat that silently stops
+// responding and a "send a message" that produces one reply and dies again.
+const HistoryLimitRestartMessage = "Wow this is a long workflow! This conversation grew long enough to exceed our workflow engine's limit, so it was restarted from its last checkpoint. Your full message history is intact and the assistant continues from where it left off. Any pending or exeucting tasks might need to be redone. Any prior, completed work is safe."
+
+// notifyHistoryLimitRestart tells the user their chat hit the engine's history
+// limit and was restarted.
+//
+// Temporal TERMINATES a run that exceeds the limit — it does not fail in our
+// code — so no error path of ours runs and nothing is emitted. Observed on a
+// real chat: the run died at 51,201 events, the UI showed no reason, and the
+// chat simply appeared frozen. This is the only place that can explain it.
+//
+// Best-effort: a failed notification must never block the restart that actually
+// recovers the chat.
+func (s *ChatService) notifyHistoryLimitRestart(ctx context.Context, chatID, workflowID, thread string) {
+	errorID := uuid.New().String()
+	errorData := map[string]interface{}{
+		"update_type":   "error",
+		"id":            errorID,
+		"chat_id":       chatID,
+		"activity_type": "history_limit_restart",
+		"activity_id":   workflowID,
+		"error_message": HistoryLimitRestartMessage,
+		"error_summary": HistoryLimitRestartMessage,
+		"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
+		"workflow_id":   workflowID,
+	}
+	if thread != "" {
+		errorData["thread"] = thread
+	}
+
+	payload, err := json.Marshal(errorData)
+	if err != nil {
+		logging.Warn("Failed to marshal history-limit notice", "chatID", chatID, "error", err)
+		return
+	}
+	if err := s.database.CreateChatUpdate(ctx, chatID, db.UpdateTypeError, errorID, string(payload)); err != nil {
+		logging.Warn("Failed to emit history-limit notice", "chatID", chatID, "error", err)
+	}
+}
 
 // resumeInputForInterruptedRun builds the engine resume parameter for a new
 // run whose predecessor was interrupted (failed/terminated/wedged/lost) rather
@@ -44,13 +92,67 @@ func (s *ChatService) resumeInputForInterruptedRun(ctx context.Context, workflow
 	}
 }
 
-// saveInterruptedResumeMessages persists the system + user messages for a resume
-// of an interrupted (Failed/Terminated) run. It runs BEFORE the reset-and-replay
-// so the resumed run reads them at its next LLM boundary (LoadMessagesForLLM
-// always reads live DB state). The saved user-message ID is returned (empty when
-// there is no user content) and reused if the resume falls back to the coarse
-// restart, so messages are persisted exactly once either way.
-func (s *ChatService) saveInterruptedResumeMessages(
+// absorbQueuedMailbox takes every still-queued HUMAN message addressed to a
+// thread and writes each one into that thread's transcript as an ordinary user
+// message, oldest first.
+//
+// This exists because messages.seq — the chat-global counter the transcript is
+// ordered by — is allocated at SAVE time, not at send time. A message the user
+// queued into a busy agent is only drained at the agent's next loop-step
+// boundary, so if a new send starts the run that eventually drains it, the
+// OLDER queued text is saved AFTER the newer message and renders beneath it.
+// That is the "my most recent message shows first" bug. Absorbing the mailbox
+// immediately before the new message is saved restores send order.
+//
+// MUST be called inside the caller's transaction, alongside the save of the
+// new user message. ClaimQueuedAgentMessagesForThread is a DELETE ... RETURNING:
+// if the claim commits and the saves do not, the rows are gone and the user's
+// words exist nowhere. Every error here is therefore returned, never logged and
+// swallowed — an aborted transaction rolls the DELETE back and leaves the
+// messages queued for the next attempt, which is strictly recoverable. A
+// best-effort absorb would trade a visible ordering bug for silent data loss.
+//
+// Peer-agent rows (spawn_send, kind 1-4) are deliberately untouched: the claim
+// query is scoped to kind = 5, so a sub-agent's report still reaches the
+// orchestrator through the normal drain with its envelope framing intact.
+func (s *ChatService) absorbQueuedMailbox(ctx context.Context, chatID, thread, workflowID string) (int, error) {
+	claimed, err := s.database.ClaimQueuedAgentMessagesForThread(ctx, thread, chatID, "")
+	if err != nil {
+		return 0, fmt.Errorf("failed to claim queued messages for thread %s: %w", thread, err)
+	}
+	if len(claimed) == 0 {
+		return 0, nil
+	}
+
+	// Oldest first — the claim is sorted by created_at, and each save takes the
+	// next seq, so the transcript ends up in the order the user typed.
+	// Attachments carry through exactly as SendAgentMessage stored them, so a
+	// queued screenshot reaches the LLM as if it had been sent directly.
+	for _, m := range claimed {
+		if _, err := s.database.SaveMessageToThread(ctx, chatID, thread,
+			int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), m.Body, &workflowID, m.Attachments, nil); err != nil {
+			return 0, fmt.Errorf("failed to persist claimed message %s: %w", m.ID, err)
+		}
+	}
+
+	logging.Info("Absorbed queued mailbox messages into the transcript ahead of a new send",
+		"chatID", chatID, "thread", thread, "count", len(claimed))
+	return len(claimed), nil
+}
+
+// saveIncomingMessages persists everything a send contributes to a thread's
+// transcript, atomically and in the order the user experienced it: first any
+// messages they had QUEUED into this thread's mailbox while the agent was
+// busy, then this send's system messages, then the new user message. The saved
+// user-message ID is returned (empty when there is no user content).
+//
+// One transaction covers the mailbox claim and every save — see
+// absorbQueuedMailbox for why splitting them would destroy messages.
+//
+// Called ONLY on paths where the workflow is not running. A live agent drains
+// its own mailbox correctly at its next loop-step boundary; claiming those rows
+// out from under it would both reorder them and defeat the mailbox's purpose.
+func (s *ChatService) saveIncomingMessages(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
 	thread, workflowID string,
@@ -58,19 +160,31 @@ func (s *ChatService) saveInterruptedResumeMessages(
 	userContent string,
 	hasUserContent bool,
 ) (string, error) {
-	for _, sysMsg := range systemMessages {
-		if _, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
-			return "", connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
+	var savedMessageID string
+	err := s.database.RunTx(ctx, func(txCtx context.Context) error {
+		if _, err := s.absorbQueuedMailbox(txCtx, req.Msg.ChatId, thread, workflowID); err != nil {
+			return err
 		}
-	}
-	if hasUserContent || len(req.Msg.Attachments) > 0 {
-		savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-		if err != nil {
-			return "", connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
+
+		for _, sysMsg := range systemMessages {
+			if _, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
+				return fmt.Errorf("failed to save system message: %w", err)
+			}
 		}
-		return savedMsg.ID, nil
+
+		if hasUserContent || len(req.Msg.Attachments) > 0 {
+			savedMsg, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
+			if err != nil {
+				return fmt.Errorf("failed to save message: %w", err)
+			}
+			savedMessageID = savedMsg.ID
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
 	}
-	return "", nil
+	return savedMessageID, nil
 }
 
 // markResumeAnswer wraps a plain user message that is being delivered as a
@@ -153,16 +267,16 @@ func (s *ChatService) resumeFailedQuestionWorkflow(
 	if answerThread == "" {
 		answerThread = targetThread
 	}
-	for _, sysMsg := range systemMessages {
-		if _, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, answerThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
-			logging.Warn("Failed to save system message during question resume", "error", err)
-		}
-	}
-	presavedID := ""
-	if savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, answerThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), marked, &workflowID, req.Msg.Attachments, nil); err != nil {
-		logging.Warn("Failed to save resume message during question resume", "error", err)
-	} else {
-		presavedID = savedMsg.ID
+	// The dead run is parked, not looping, so nothing has drained this thread's
+	// mailbox — the answer is saved through the same absorb-first seam every
+	// other non-running path uses, so anything queued keeps its place ahead of
+	// it. Save failures stay non-fatal here (the question is already resolved
+	// and blocking the resume helps nobody), and that is only safe BECAUSE the
+	// seam is transactional: a failure rolls the mailbox claim back with the
+	// saves, so the queued rows survive to be absorbed by the next send.
+	presavedID, saveErr := s.saveIncomingMessages(ctx, req, answerThread, workflowID, systemMessages, marked, true)
+	if saveErr != nil {
+		logging.Warn("Failed to save resume messages during question resume", "error", saveErr)
 	}
 
 	// Deliver the answer. SignalWithRecovery reset-replays the dead run (honoring
@@ -241,29 +355,13 @@ func (s *ChatService) resurrectGhostWorkflow(
 		targetThread = *req.Msg.TargetThread
 	}
 
-	// Step 1: Save messages BEFORE starting workflow
-	// System messages first, then user message
-	for _, sysMsg := range systemMessages {
-		_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
-		if err != nil {
-			logging.Error("[Ghost Recovery] Failed to save system message", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
-		}
-	}
-
-	var savedMessageID string
-	if hasUserContent || len(req.Msg.Attachments) > 0 {
-		savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-		if err != nil {
-			logging.Error("[Ghost Recovery] Failed to save message", "error", err, "chatID", req.Msg.ChatId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
-		}
-		savedMessageID = savedMsg.ID
-		logging.Info("[Ghost Recovery] Saved user message",
-			"chatID", req.Msg.ChatId,
-			"messageID", savedMessageID,
-			"thread", targetThread,
-		)
+	// Step 1: Save messages BEFORE starting workflow. The DB said running but
+	// Temporal lost the execution, so nothing is draining this thread's
+	// mailbox — anything queued there is absorbed ahead of the new message.
+	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+	if err != nil {
+		logging.Error("[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
+		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
 	// Step 2: Build workflow options - same ID, fresh execution
@@ -417,9 +515,7 @@ func (s *ChatService) SendMessage(
 
 	// Check workflow status to decide: resume paused, send to running, or start new
 	// This must happen atomically to avoid race conditions
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		workflowID := *chat.WorkflowID
-
+	if workflowID := chat.MainThreadID(); workflowID != "" {
 		// Use transaction to atomically check status and update
 		var existingWorkflow *db.Workflow
 
@@ -502,24 +598,18 @@ func (s *ChatService) SendMessage(
 					targetThread = *req.Msg.TargetThread
 				}
 
-				// Atomically: save messages + update status to running
+				// Atomically: absorb the mailbox, save messages, mark running.
+				// A paused run takes no loop steps, so nothing has drained the
+				// thread's mailbox — saveIncomingMessages claims it first so
+				// queued text keeps its place ahead of this new message. RunTx
+				// is re-entrant, so its transaction joins this one and the
+				// claim commits with the saves.
 				var savedMessageID string
 				err := s.database.RunTx(ctx, func(txCtx context.Context) error {
-					// Save system messages first
-					for _, sysMsg := range systemMessages {
-						_, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
-						if err != nil {
-							return fmt.Errorf("failed to save system message: %w", err)
-						}
-					}
-
-					// Save the user message
-					if hasUserContent || len(req.Msg.Attachments) > 0 {
-						savedMsg, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-						if err != nil {
-							return fmt.Errorf("failed to save message: %w", err)
-						}
-						savedMessageID = savedMsg.ID
+					var saveErr error
+					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					if saveErr != nil {
+						return saveErr
 					}
 
 					// Update workflow status to running
@@ -717,22 +807,13 @@ func (s *ChatService) SendMessage(
 					targetThread = *req.Msg.TargetThread
 				}
 
-				// Save messages before reset
-				var savedMessageID string
-				for _, sysMsg := range systemMessages {
-					_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
-					if err != nil {
-						logging.Error("Failed to save system message", "error", err)
-						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message: %w", err))
-					}
-				}
-				if hasUserContent || len(req.Msg.Attachments) > 0 {
-					savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-					if err != nil {
-						logging.Error("Failed to save message", "error", err)
-						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
-					}
-					savedMessageID = savedMsg.ID
+				// Save messages before reset — mailbox first, so anything the
+				// user queued while the run was alive keeps its place ahead of
+				// this message rather than being drained after it.
+				savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+				if err != nil {
+					logging.Error("Failed to save messages for expired workflow resume", "error", err, "workflowID", workflowID)
+					return nil, connect.NewError(connect.CodeInternal, err)
 				}
 
 				// Reset expired workflow (handles orphan repair, reset, resume signal)
@@ -811,10 +892,13 @@ func (s *ChatService) SendMessage(
 					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
 						targetThread = *req.Msg.TargetThread
 					}
-					// Persist messages BEFORE reset so the resumed run reads them.
-					presavedID, saveErr := s.saveInterruptedResumeMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+					// Persist messages BEFORE reset so the resumed run reads
+					// them, mailbox first: the interrupted run never reached
+					// another drain boundary, so whatever was queued for this
+					// thread still belongs ahead of the new message.
+					presavedID, saveErr := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					if saveErr != nil {
-						return nil, saveErr
+						return nil, connect.NewError(connect.CodeInternal, saveErr)
 					}
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
@@ -838,7 +922,19 @@ func (s *ChatService) SendMessage(
 							MessageId:      presavedID,
 						}), nil
 					}
-					if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) {
+					if errors.Is(resumeErr, workflow.ErrHistoryLimitExceeded) {
+						// The run exhausted Temporal's per-execution history
+						// limit. Resetting cannot help (it forks from inside
+						// the oversized history), so this goes to the coarse
+						// fresh restart — and the user is told, because
+						// otherwise the chat simply stops with no explanation
+						// and "send a message" appears to do nothing.
+						logging.Warn("Workflow hit Temporal's history limit - fresh restart at position",
+							"chatID", req.Msg.ChatId,
+							"workflowID", workflowID,
+						)
+						s.notifyHistoryLimitRestart(ctx, req.Msg.ChatId, workflowID, targetThread)
+					} else if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) {
 						logging.Info("Interrupted workflow not reset-resumable - coarse restart at position",
 							"chatID", req.Msg.ChatId,
 							"workflowID", workflowID,
@@ -882,8 +978,8 @@ func (s *ChatService) SendMessage(
 
 	// Use existing workflow ID from chat, or use chat ID as root workflow ID
 	var workflowID string
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		workflowID = *chat.WorkflowID
+	if id := chat.MainThreadID(); id != "" {
+		workflowID = id
 	} else {
 		workflowID = req.Msg.ChatId // Root workflow ID = chat ID
 		chat.WorkflowID = &workflowID
@@ -990,30 +1086,24 @@ func (s *ChatService) SendMessage(
 		execContext.UserJWT = jwt
 	}
 
-	// Save messages BEFORE starting workflow for consistency
-	// System messages first, then user message.
+	// Save messages BEFORE starting workflow for consistency: any mailbox the
+	// user queued into this thread, then system messages, then the new user
+	// message. Nothing has been draining this thread (the prior run completed,
+	// was cancelled, or died), so absorbing here is what keeps the queued text
+	// ahead of the message that follows it instead of behind it.
+	//
 	// A resume branch (reset-and-replay fallback) may have already persisted the
 	// messages before its reset attempt — skip re-saving so they aren't doubled.
 	var savedMessageID string
 	if resumeMessagesSaved {
 		savedMessageID = resumePresavedMessageID
 	} else {
-		for _, sysMsg := range systemMessages {
-			_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
-			if err != nil {
-				logging.Error("Failed to save system message for new workflow", "error", err, "chatID", req.Msg.ChatId)
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message"))
-			}
+		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+		if err != nil {
+			logging.Error("Failed to save messages for new workflow", "error", err, "chatID", req.Msg.ChatId)
+			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-
-		if hasUserContent || len(req.Msg.Attachments) > 0 {
-			savedMsg, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-			if err != nil {
-				logging.Error("Failed to save message for new workflow", "error", err, "chatID", req.Msg.ChatId)
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message"))
-			}
-			savedMessageID = savedMsg.ID
-		}
+		savedMessageID = saved
 	}
 
 	// Validate workflow inputs before starting
@@ -1055,5 +1145,309 @@ func (s *ChatService) SendMessage(
 		Status:         "processing",
 		WorkflowStatus: &workflowStatus,
 		MessageId:      savedMessageID,
+	}), nil
+}
+
+// SendAgentMessage queues a HUMAN message directly into a specific running
+// thread's mailbox (agent_messages), without pausing or otherwise touching
+// the chat's workflow/pause state. It is the human-facing counterpart to the
+// spawn_send LLM tool: today a user's only way to steer a running sub-agent
+// is to pause the whole chat first, which this RPC exists to close.
+//
+// Delivery reuses the same drain machinery spawn_send does — the message is
+// folded into the target thread's history at its next agent-loop step
+// boundary, not synchronously.
+func (s *ChatService) SendAgentMessage(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SendAgentMessageRequest],
+) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ChatId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+	if req.Msg.ThreadId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("thread_id is required"))
+	}
+	if strings.TrimSpace(req.Msg.Message) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message is required"))
+	}
+
+	// Ownership check: the chat must belong to the caller. Combined with the
+	// thread.ChatID check below, this is what stops a user from addressing
+	// an arbitrary thread in someone else's chat.
+	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	if err != nil || chat == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+
+	target, err := s.database.GetThread(ctx, req.Msg.ThreadId)
+	if err != nil || target == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+	if target.ChatID != req.Msg.ChatId {
+		// Deliberately the same NotFound the chat-ownership check above
+		// returns, rather than a distinguishable error: revealing that a
+		// thread ID exists but belongs to a different chat is an
+		// enumeration leak we don't need to offer.
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+
+	if core.ThreadStatusIsTerminal(target.Status) {
+		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+			Success: false,
+			Message: fmt.Sprintf(
+				"This agent has already finished (status: %s) — its loop has exited and there is nothing to deliver into. "+
+					"Send a new message to the chat instead.",
+				core.ThreadStatusLabel(target.Status)),
+		}), nil
+	}
+
+	// A non-terminal thread status is NOT sufficient to prove there is a next
+	// turn to deliver into, so the terminal check above cannot stand alone.
+	//
+	// Delivery only happens in drainAgentMessagesAtBoundary, which runs at an
+	// agent loop-step boundary. An agent that is not executing takes no steps
+	// and never drains, so a message queued to one sits at status=queued
+	// indefinitely while the receipt claims it will be read next turn.
+	//
+	// threads.status cannot answer this. It is written by the ThreadStatus
+	// activity, which only ever records "started" (=running) and a terminal
+	// verb — there is no "went idle" transition, so a thread that stopped
+	// without its workflow completing keeps claiming running forever. That is
+	// not a corner case: in the live DB every one of the 142 main threads is
+	// status=running with zero exceptions and no completed_at, including
+	// chats last active weeks ago. Trusting it is exactly the bug.
+	//
+	// The workflow that owns the thread is the signal that does move. It is
+	// reconciled against Temporal (the actual execution), so it is the same
+	// truth the send path and the reconciler already act on, and it is one
+	// indexed primary-key read rather than a Temporal round trip on this hot
+	// user-facing path.
+	//
+	// PENDING and PAUSED count as live — see WorkflowStatusIsLive. A message
+	// queued to either IS drained when the run starts or resumes, and
+	// refusing it would lose a message that would have arrived.
+	owningWorkflowID := target.ID
+	if target.WorkflowID != nil && *target.WorkflowID != "" {
+		owningWorkflowID = *target.WorkflowID
+	}
+	owningWorkflow, err := s.database.GetWorkflow(ctx, owningWorkflowID)
+	if err != nil || owningWorkflow == nil {
+		// Fail open. A thread whose workflow row we cannot read is not proof
+		// the agent is idle, and wrongly refusing loses the message outright,
+		// whereas wrongly accepting only reproduces today's late delivery.
+		logging.Warn("Could not read owning workflow for agent-message liveness check; allowing the queue",
+			"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId, "workflowID", owningWorkflowID)
+	} else if !core.WorkflowStatusIsLive(owningWorkflow.Status) {
+		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+			Success: false,
+			Message: fmt.Sprintf(
+				"This agent isn't currently running (its run is %s), so there is no next turn to deliver into. "+
+					"Send a normal message to the chat to start one.",
+				core.WorkflowStatusLabel(owningWorkflow.Status)),
+		}), nil
+	}
+
+	msg := &db.AgentMessage{
+		ID: uuid.New().String(),
+		// FromThreadID is a required FK to threads(id), and the human
+		// sending this has no thread of their own. The chat's root thread
+		// is the closest stable stand-in for "the user's side of this
+		// conversation" — Kind (HumanMessage) is what actually tells the
+		// drain envelope this came from the user rather than a peer agent,
+		// so FromThreadID here is not read as a sender label for this kind.
+		FromThreadID: chat.MainThreadID(),
+		ChatID:       req.Msg.ChatId,
+		ToThreadID:   req.Msg.ThreadId,
+		Kind:         core.AgentMessageKindHumanMessage,
+		Body:         req.Msg.Message,
+		Attachments:  req.Msg.Attachments,
+		Status:       core.AgentMessageStatusQueued,
+		CreatedAt:    time.Now(),
+	}
+	if err := s.database.EnqueueAgentMessage(ctx, msg); err != nil {
+		logging.Error("Failed to queue agent message", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
+	}
+
+	// The receipt is deliberately as honest as spawn_send's: queued does not
+	// mean read, and does not mean acted on.
+	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+		Success: true,
+		Message: "Queued for delivery. It will be read at that agent's next turn — it has not been read yet.",
+	}), nil
+}
+
+// ListQueuedAgentMessages returns the entries currently sitting in a
+// thread's mailbox (agent_messages) with status = queued -- what
+// SendAgentMessage (or spawn_send) put there but the target thread hasn't
+// drained yet. This is what makes a queued message visible to the user
+// instead of it being invisible until the agent happens to drain it.
+func (s *ChatService) ListQueuedAgentMessages(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ListQueuedAgentMessagesRequest],
+) (*connect.Response[reliantv1.ListQueuedAgentMessagesResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ChatId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+	if req.Msg.ThreadId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("thread_id is required"))
+	}
+
+	// Ownership check: mirrors SendAgentMessage exactly -- the chat must
+	// belong to the caller, and the thread must belong to that chat, both
+	// returning the same NotFound so thread IDs can't be enumerated.
+	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	if err != nil || chat == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+
+	target, err := s.database.GetThread(ctx, req.Msg.ThreadId)
+	if err != nil || target == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+	if target.ChatID != req.Msg.ChatId {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+
+	queued, err := s.database.ListQueuedAgentMessagesForThread(ctx, req.Msg.ThreadId)
+	if err != nil {
+		logging.Error("Failed to list queued agent messages", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list queued messages"))
+	}
+
+	messages := make([]*reliantv1.QueuedAgentMessage, len(queued))
+	for i, msg := range queued {
+		messages[i] = &reliantv1.QueuedAgentMessage{
+			Id:          msg.ID,
+			Body:        msg.Body,
+			CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
+			SenderKind:  int32(msg.Kind),
+			Attachments: msg.Attachments,
+		}
+	}
+
+	return connect.NewResponse(&reliantv1.ListQueuedAgentMessagesResponse{
+		Messages: messages,
+	}), nil
+}
+
+// CancelQueuedAgentMessage revokes a single queued mailbox entry before the
+// target agent drains it.
+//
+// This is a race against the agent's own loop boundary: drainAgentMessagesAtBoundary
+// may pick the row up between the user seeing it and clicking cancel. The
+// deletion is conditioned on status = queued at the database level (see
+// CancelQueuedAgentMessage in the postgres store), so the outcome is never
+// ambiguous -- either this call wins the row and deletes it, or the drain
+// already won it and this call reports failure without touching the row.
+func (s *ChatService) CancelQueuedAgentMessage(
+	ctx context.Context,
+	req *connect.Request[reliantv1.CancelQueuedAgentMessageRequest],
+) (*connect.Response[reliantv1.CancelQueuedAgentMessageResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ChatId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+	if req.Msg.MessageId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message_id is required"))
+	}
+
+	// Ownership check: the chat must belong to the caller. The DELETE
+	// itself is additionally scoped to chat_id, so even if a caller guessed
+	// a message ID from another chat, this ownership check is what stops
+	// them from cancelling it.
+	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	if err != nil || chat == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+
+	cancelled, err := s.database.CancelQueuedAgentMessage(ctx, req.Msg.MessageId, req.Msg.ChatId)
+	if err != nil {
+		logging.Error("Failed to cancel queued agent message", "error", err, "chatID", req.Msg.ChatId, "messageID", req.Msg.MessageId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to cancel message"))
+	}
+
+	if !cancelled {
+		return connect.NewResponse(&reliantv1.CancelQueuedAgentMessageResponse{
+			Success: false,
+			Message: "Already delivered to the agent — too late to cancel.",
+		}), nil
+	}
+
+	return connect.NewResponse(&reliantv1.CancelQueuedAgentMessageResponse{
+		Success: true,
+		Message: "Cancelled. The agent will never see this message.",
+	}), nil
+}
+
+// ClaimQueuedAgentMessages takes queued messages back off a thread's mailbox
+// and hands them to the caller to resend as ordinary turns. It backs both
+// "send now" (one entry) and "send all" (the whole queue).
+//
+// The UI used to do this as cancel-then-send from the client: cancel, check
+// whether the cancel took, and only then send. That has a real gap between
+// the two calls, and a bulk version multiplies it by the size of the queue —
+// with partial failure leaving some messages sent and some delivered as
+// queued, in an order nobody chose. Here the take is one DELETE ... RETURNING,
+// so the rows that come back are exactly the rows this caller now owns; a row
+// the drain won first never appears. There is no window to lose.
+//
+// The caller must resend precisely what was returned. Anything else — a stale
+// local list, an optimistic assumption that the queue it rendered is still
+// the queue — is what would let a message be both delivered and resent.
+func (s *ChatService) ClaimQueuedAgentMessages(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ClaimQueuedAgentMessagesRequest],
+) (*connect.Response[reliantv1.ClaimQueuedAgentMessagesResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ChatId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	}
+	if req.Msg.ThreadId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("thread_id is required"))
+	}
+
+	// Ownership: same two checks, same indistinguishable NotFound, as
+	// SendAgentMessage and ListQueuedAgentMessages.
+	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
+	if err != nil || chat == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+
+	target, err := s.database.GetThread(ctx, req.Msg.ThreadId)
+	if err != nil || target == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+	if target.ChatID != req.Msg.ChatId {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+
+	claimed, err := s.database.ClaimQueuedAgentMessagesForThread(
+		ctx, req.Msg.ThreadId, req.Msg.ChatId, req.Msg.GetMessageId())
+	if err != nil {
+		logging.Error("Failed to claim queued agent messages",
+			"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to claim queued messages"))
+	}
+
+	messages := make([]*reliantv1.QueuedAgentMessage, len(claimed))
+	for i, msg := range claimed {
+		messages[i] = &reliantv1.QueuedAgentMessage{
+			Id:          msg.ID,
+			Body:        msg.Body,
+			CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
+			SenderKind:  int32(msg.Kind),
+			Attachments: msg.Attachments,
+		}
+	}
+
+	return connect.NewResponse(&reliantv1.ClaimQueuedAgentMessagesResponse{
+		Messages: messages,
 	}), nil
 }

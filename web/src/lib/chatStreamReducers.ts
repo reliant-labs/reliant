@@ -81,6 +81,13 @@ export const bySequenceNumber = (
 // not resurrect it.
 export const TERMINAL_TOOL_STATUSES = new Set(["cancelled", "backgrounded"]);
 
+// Statuses a tool reached by actually running to an outcome. A late "cancelled"
+// must not overwrite one: cancelling a single tool used to take its siblings
+// down with it, and a completed tool repainted as cancelled is a lie about work
+// the user already has the results of. Whichever terminal status lands first is
+// the one that describes what the tool did.
+const SETTLED_TOOL_STATUSES = new Set(["completed", "failed"]);
+
 /**
  * Fold tool-execution-state updates into the per-call status Map (keyed by
  * tool_call_id). Maps "denied" → "failed", and guards terminal statuses. Pure:
@@ -104,6 +111,14 @@ export function applyToolCallStateUpdates(
       mappedStatus === "completed"
     ) {
       continue; // don't overwrite a terminal state with a stale completion
+    }
+
+    if (
+      prev &&
+      SETTLED_TOOL_STATUSES.has(prev.status) &&
+      mappedStatus === "cancelled"
+    ) {
+      continue; // a tool that ran to an outcome was not cancelled
     }
 
     next.set(update.tool_call_id, {
@@ -152,8 +167,50 @@ export function mergeActiveThreads(
 }
 
 /**
+ * Whether a snapshot should REPLACE the cached message list outright, or be
+ * merged onto it.
+ *
+ * Replace is the default: it is the guard against a snapshot for a DIFFERENT
+ * (or stale) chat contaminating this list. But the initial snapshot is BOUNDED
+ * to the newest N messages, so a mid-session reconnect re-delivers that same
+ * bounded window — and replacing then would silently discard every older page
+ * the user had scrolled back and loaded, yanking them to the bottom of the chat
+ * mid-read.
+ *
+ * What distinguishes the two cases is overlap: a reconnect snapshot for this
+ * chat shares message ids with what we hold, a foreign/stale one shares none.
+ * So we preserve history only when both hold:
+ *   1. the snapshot overlaps the cached list by at least one id (proves it is
+ *      continuous with the history we already have), and
+ *   2. the cache holds MORE messages than the snapshot (proves there is loaded
+ *      history the snapshot would destroy).
+ * Otherwise nothing would be lost by replacing, so we replace.
+ *
+ * Deliberately keyed on overlap rather than on "the snapshot's newest message
+ * is already present": messages that arrive while the stream is down make the
+ * newest snapshot message genuinely new, and that is exactly a reconnect — the
+ * case this is meant to survive. Those new messages are upserted by the merge.
+ *
+ * Exported because the snapshot's replace/merge decision is not local to the
+ * message list: chatStore rebuilds the per-chat tool-result index from scratch
+ * on a replacing snapshot, and that index must be MERGED whenever the messages
+ * were, or preserved older assistant messages render tool calls with no results.
+ */
+export function snapshotReplacesMessages(
+  existing: Message[],
+  incoming: Message[],
+): boolean {
+  const existingIds = new Set(existing.map((m) => m.id));
+  const overlaps = incoming.some((m) => existingIds.has(m.id));
+  const wouldLoseHistory = existing.length > incoming.length;
+  return !overlaps || !wouldLoseHistory;
+}
+
+/**
  * Merge a batch of persisted messages into a chat's message list.
- * - Snapshot: replace the whole list (prevents cross-chat/stale contamination).
+ * - Snapshot: replace the whole list (prevents cross-chat/stale contamination),
+ *   unless it is a reconnect re-delivery of history we already hold — see
+ *   snapshotReplacesMessages.
  * - Incremental: upsert by id onto `existing`, and drop the optimistic user
  *   placeholder (`optimistic-user-*`) once a real user message arrives.
  * Pure — `existing` comes from the RQ message cache; the result is written back
@@ -164,7 +221,9 @@ export function mergeMessages(
   incoming: Message[],
   isSnapshot: boolean,
 ): Message[] {
-  if (isSnapshot) return [...incoming];
+  if (isSnapshot && snapshotReplacesMessages(existing, incoming)) {
+    return [...incoming];
+  }
 
   let next = [...existing];
 

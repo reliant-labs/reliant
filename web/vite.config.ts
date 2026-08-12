@@ -97,6 +97,25 @@ export default defineConfig({
     host: "127.0.0.1",
     port: parseInt(process.env.FRONTEND_PORT || "5173"),
     strictPort: true,
+    // Hosts the dev server will answer for, beyond localhost.
+    //
+    // Vite rejects unknown Host headers by default (DNS-rebinding defence), so
+    // reaching this dev server through a tunnel returns "Blocked request"
+    // rather than the app. That matters for the OAuth consent screen: Supabase
+    // redirects the user's browser to whatever public URL is configured as the
+    // Site URL, and if Vite refuses the Host the flow dies at consent.
+    //
+    // Tunnel hostnames are regenerated every session, so this allows the
+    // provider domains rather than a specific URL that would go stale
+    // immediately. DEV ONLY — vite's server block does not apply to a
+    // production build, which is served by a real static host.
+    allowedHosts: [
+      ".ngrok-free.app",
+      ".ngrok.app",
+      ".ngrok.io",
+      ".trycloudflare.com",
+      ...(process.env.VITE_ALLOWED_HOSTS?.split(",").map((h) => h.trim()).filter(Boolean) ?? []),
+    ],
     proxy: {
       // Same-origin RPC routing. admin-web's Connect transport uses
       // http://localhost:<vite-port> as its baseUrl, so EVERY RPC is

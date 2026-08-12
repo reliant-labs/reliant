@@ -48,8 +48,13 @@ WHEN TO USE:
 - Deleting specific content (empty new_string)
 - Renaming a variable/function (with replace_all)
 
+ALWAYS PREFER THIS TOOL OVER write. Turn latency is set by how many tokens you
+GENERATE, so rewriting an existing file costs minutes of generation for a change
+edit makes in seconds. write is for creating NEW files; for anything that already
+exists, use edit. If an old_string fails to match, re-read the exact region and
+retry the edit — falling back to a full rewrite is the most expensive move available.
+
 WHEN NOT TO USE:
-- Complete file rewrite: Use Write tool
 - Moving/renaming files: Use Bash mv command
 
 COMMON MISTAKES TO AVOID:

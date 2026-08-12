@@ -14,7 +14,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/tools_daemon.proto.
  */
 export const file_reliant_v1_tools_daemon: GenFile = /*@__PURE__*/
-  fileDesc("Ch1yZWxpYW50L3YxL3Rvb2xzX2RhZW1vbi5wcm90bxIKcmVsaWFudC52MSKQBgoNRGFlbW9uTWVzc2FnZRIuCghyZWdpc3RlchgBIAEoCzIaLnJlbGlhbnQudjEuRGFlbW9uUmVnaXN0ZXJIABIxCg10b29sX3Jlc3BvbnNlGAIgASgLMhgucmVsaWFudC52MS5Ub29sUmVzcG9uc2VIABIwCgloZWFydGJlYXQYAyABKAsyGy5yZWxpYW50LnYxLkRhZW1vbkhlYXJ0YmVhdEgAEjkKEXByb2plY3RfZGlzY292ZXJ5GAQgASgLMhwucmVsaWFudC52MS5Qcm9qZWN0RGlzY292ZXJ5SAASTwodbG9hZF9wcm9qZWN0X2NvbmZpZ3NfcmVzcG9uc2UYBSABKAsyJi5yZWxpYW50LnYxLkxvYWRQcm9qZWN0Q29uZmlnc1Jlc3BvbnNlSAASPgoUcHJvamVjdF9jb25maWdfZGVsdGEYBiABKAsyHi5yZWxpYW50LnYxLlByb2plY3RDb25maWdEZWx0YUgAEkYKFWtpbGxfcHJvY2Vzc19yZXNwb25zZRgHIAEoCzIlLnJlbGlhbnQudjEuRGFlbW9uS2lsbFByb2Nlc3NSZXNwb25zZUgAEkQKF2RhZW1vbl9jb21tYW5kX3Jlc3BvbnNlGAggASgLMiEucmVsaWFudC52MS5EYWVtb25Db21tYW5kUmVzcG9uc2VIABI8Cg90ZXJtaW5hbF9vdXRwdXQYCSABKAsyIS5yZWxpYW50LnYxLlRlcm1pbmFsT3V0cHV0TWVzc2FnZUgAEkIKFnRlcm1pbmFsX3Nlc3Npb25fZXZlbnQYCiABKAsyIC5yZWxpYW50LnYxLlRlcm1pbmFsU2Vzc2lvbkV2ZW50SAASRQoUcHJvY2Vzc19vdXRwdXRfY2h1bmsYCyABKAsyJS5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRDaHVua01lc3NhZ2VIABI8ChNmaWxlX3N5c3RlbV9jaGFuZ2VkGAwgASgLMh0ucmVsaWFudC52MS5GaWxlU3lzdGVtQ2hhbmdlZEgAQgkKB21lc3NhZ2UijgIKDkRhZW1vblJlZ2lzdGVyEhAKCGhvc3RuYW1lGAMgASgJEhAKCHBsYXRmb3JtGAQgASgJEhMKC3dvcmtpbmdfZGlyGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIMCgRuYW1lGAggASgJEjYKBmxhYmVscxgJIAMoCzImLnJlbGlhbnQudjEuRGFlbW9uUmVnaXN0ZXIuTGFiZWxzRW50cnkSEwoLZGFlbW9uX3R5cGUYCiABKAkSEQoJZGFlbW9uX2lkGAsgASgJGi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFKBAgBEAJKBAgCEANKBAgHEAgiqQEKDFRvb2xSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSEAoIaXNfZXJyb3IYAyABKAgSDwoHY29udGVudBgEIAEoCRIQCghtZXRhZGF0YRgFIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAYgASgJEhIKCmVycm9yX2NvZGUYByABKAkSFAoMYmFja2dyb3VuZGVkGAggASgIIowBCg9EYWVtb25IZWFydGJlYXQSEQoJdGltZXN0YW1wGAEgASgDEhkKEW1lbW9yeV91c2VkX2J5dGVzGAIgASgEEhoKEm1lbW9yeV9saW1pdF9ieXRlcxgDIAEoBBIXCg9tZW1vcnlfcHJlc3N1cmUYBCABKAgSFgoOZGV0ZWN0ZWRfcG9ydHMYBSADKA0i3QcKDVNlcnZlck1lc3NhZ2USLwoMdG9vbF9yZXF1ZXN0GAEgASgLMhcucmVsaWFudC52MS5Ub29sUmVxdWVzdEgAEjAKCWhlYXJ0YmVhdBgCIAEoCzIbLnJlbGlhbnQudjEuU2VydmVySGVhcnRiZWF0SAASNwoQcmVnaXN0cmF0aW9uX2FjaxgDIAEoCzIbLnJlbGlhbnQudjEuUmVnaXN0cmF0aW9uQWNrSAASNgoLdG9vbF9jYW5jZWwYBCABKAsyHy5yZWxpYW50LnYxLlRvb2xFeGVjdXRpb25DYW5jZWxIABJFChRsb2FkX3Byb2plY3RfY29uZmlncxgFIAEoCzIlLnJlbGlhbnQudjEuTG9hZFByb2plY3RDb25maWdzUmVxdWVzdEgAEkcKFXdhdGNoX3Byb2plY3RfY29uZmlncxgGIAEoCzImLnJlbGlhbnQudjEuV2F0Y2hQcm9qZWN0Q29uZmlnc1JlcXVlc3RIABJLChd1bndhdGNoX3Byb2plY3RfY29uZmlncxgHIAEoCzIoLnJlbGlhbnQudjEuVW53YXRjaFByb2plY3RDb25maWdzUmVxdWVzdEgAEjwKDGtpbGxfcHJvY2VzcxgIIAEoCzIkLnJlbGlhbnQudjEuRGFlbW9uS2lsbFByb2Nlc3NSZXF1ZXN0SAASOgoOZGFlbW9uX2NvbW1hbmQYCSABKAsyIC5yZWxpYW50LnYxLkRhZW1vbkNvbW1hbmRSZXF1ZXN0SAASOgoOdGVybWluYWxfaW5wdXQYCiABKAsyIC5yZWxpYW50LnYxLlRlcm1pbmFsSW5wdXRNZXNzYWdlSAASPAoPdGVybWluYWxfcmVzaXplGAsgASgLMiEucmVsaWFudC52MS5UZXJtaW5hbFJlc2l6ZU1lc3NhZ2VIABJNChhwcm9jZXNzX291dHB1dF9zdWJzY3JpYmUYDCABKAsyKS5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRTdWJzY3JpYmVNZXNzYWdlSAASUQoacHJvY2Vzc19vdXRwdXRfdW5zdWJzY3JpYmUYDSABKAsyKy5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRVbnN1YnNjcmliZU1lc3NhZ2VIABJPChl0ZXJtaW5hbF9vdXRwdXRfc3Vic2NyaWJlGA8gASgLMioucmVsaWFudC52MS5UZXJtaW5hbE91dHB1dFN1YnNjcmliZU1lc3NhZ2VIABIpCgVoZWxsbxgOIAEoCzIYLnJlbGlhbnQudjEuR2F0ZXdheUhlbGxvSABCCQoHbWVzc2FnZSIOCgxHYXRld2F5SGVsbG8iqAEKC1Rvb2xSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSEQoJdG9vbF9uYW1lGAIgASgJEhIKCnRvb2xfaW5wdXQYAyABKAkSFAoMdG9vbF9jYWxsX2lkGAQgASgJEhgKEGNvbnRlbnRfYmxvY2tfaWQYBSABKAkSFAoMY29udGV4dF9qc29uGAYgASgJEhIKCnRpbWVvdXRfbXMYCCABKAVKBAgHEAgiJAoPU2VydmVySGVhcnRiZWF0EhEKCXRpbWVzdGFtcBgBIAEoAyJoCg9SZWdpc3RyYXRpb25BY2sSEAoIYWNjZXB0ZWQYASABKAgSHwoXcmVxdWVzdGVkX3Byb2plY3RfcGF0aHMYAiADKAkSEQoJZGFlbW9uX2lkGAMgASgJEg8KB3VzZXJfaWQYBCABKAkiRQoZTG9hZFByb2plY3RDb25maWdzUmVxdWVzdBIUCgxwcm9qZWN0X3BhdGgYASABKAkSEgoKcmVxdWVzdF9pZBgCIAEoCSJ0ChpMb2FkUHJvamVjdENvbmZpZ3NSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEjMKCHNuYXBzaG90GAIgASgLMiEucmVsaWFudC52MS5Qcm9qZWN0Q29uZmlnU25hcHNob3QSDQoFZXJyb3IYAyABKAkiSwoaV2F0Y2hQcm9qZWN0Q29uZmlnc1JlcXVlc3QSFAoMcHJvamVjdF9wYXRoGAEgASgJEhcKD2luY2x1ZGVfaW5pdGlhbBgCIAEoCCI0ChxVbndhdGNoUHJvamVjdENvbmZpZ3NSZXF1ZXN0EhQKDHByb2plY3RfcGF0aBgBIAEoCSKnBQoVUHJvamVjdENvbmZpZ1NuYXBzaG90EhQKDHByb2plY3RfcGF0aBgBIAEoCRIWCg5jb25maWdfdmVyc2lvbhgCIAEoCRIgChhkYWVtb25fdGltZXN0YW1wX3VuaXhfbXMYAyABKAMSGAoQdXNlcl9jb25maWdfeWFtbBgEIAEoDBIbChNwcm9qZWN0X2NvbmZpZ195YW1sGAUgASgMEhkKEWxvY2FsX2NvbmZpZ195YW1sGAYgASgMEkYKC21jcF9jb25maWdzGAcgAygLMjEucmVsaWFudC52MS5Qcm9qZWN0Q29uZmlnU25hcHNob3QuTWNwQ29uZmlnc0VudHJ5Ei4KCXdvcmtmbG93cxgIIAMoCzIbLnJlbGlhbnQudjEuSW5kZXhlZFdvcmtmbG93EioKB3ByZXNldHMYCSADKAsyGS5yZWxpYW50LnYxLkluZGV4ZWRQcmVzZXQSLgoJc2NlbmFyaW9zGAogAygLMhsucmVsaWFudC52MS5JbmRleGVkU2NlbmFyaW8SGAoQZ2xvYmFsX21lbW9yeV9tZBgLIAEoDBIZChFwcm9qZWN0X21lbW9yeV9tZBgMIAEoDBIoCgZza2lsbHMYDSADKAsyGC5yZWxpYW50LnYxLkluZGV4ZWRTa2lsbBJPChByZXBvX21lbW9yaWVzX21kGA4gAygLMjUucmVsaWFudC52MS5Qcm9qZWN0Q29uZmlnU25hcHNob3QuUmVwb01lbW9yaWVzTWRFbnRyeRoxCg9NY3BDb25maWdzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgMOgI4ARo1ChNSZXBvTWVtb3JpZXNNZEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoDDoCOAEi1gEKElByb2plY3RDb25maWdEZWx0YRIUCgxwcm9qZWN0X3BhdGgYASABKAkSFgoOY29uZmlnX3ZlcnNpb24YAiABKAkSIAoYZGFlbW9uX3RpbWVzdGFtcF91bml4X21zGAMgASgDEi4KDWNoYW5nZWRfZmlsZXMYBCADKAsyFy5yZWxpYW50LnYxLkNoYW5nZWRGaWxlEkAKFXNuYXBzaG90X2lmX2NvbXBhY3RlZBgFIAEoCzIhLnJlbGlhbnQudjEuUHJvamVjdENvbmZpZ1NuYXBzaG90ImsKC0NoYW5nZWRGaWxlEhUKDXJlbGF0aXZlX3BhdGgYASABKAkSLwoLY2hhbmdlX3R5cGUYAiABKA4yGi5yZWxpYW50LnYxLkZpbGVDaGFuZ2VUeXBlEhQKDGNvbnRlbnRfaGFzaBgDIAEoCSJEChFGaWxlU3lzdGVtQ2hhbmdlZBIUCgxwcm9qZWN0X3BhdGgYASABKAkSGQoRdGltZXN0YW1wX3VuaXhfbXMYAiABKAMihwEKD0luZGV4ZWRXb3JrZmxvdxIMCgRzbHVnGAEgASgJEgwKBG5hbWUYAiABKAkSFQoNcmVsYXRpdmVfcGF0aBgDIAEoCRIUCgxjb250ZW50X2hhc2gYBCABKAkSFQoNbXRpbWVfdW5peF9tcxgFIAEoAxIUCgx5YW1sX2NvbnRlbnQYBiABKAwidwoNSW5kZXhlZFByZXNldBIMCgRuYW1lGAEgASgJEhUKDXJlbGF0aXZlX3BhdGgYAiABKAkSFAoMY29udGVudF9oYXNoGAMgASgJEhUKDW10aW1lX3VuaXhfbXMYBCABKAMSFAoMeWFtbF9jb250ZW50GAUgASgMIpABCg9JbmRleGVkU2NlbmFyaW8SFQoNd29ya2Zsb3dfc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJEhUKDXJlbGF0aXZlX3BhdGgYAyABKAkSFAoMY29udGVudF9oYXNoGAQgASgJEhUKDW10aW1lX3VuaXhfbXMYBSABKAMSFAoMeWFtbF9jb250ZW50GAYgASgMIq4DCgxJbmRleGVkU2tpbGwSEgoKc2tpbGxfcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEhUKDXJlbGF0aXZlX3BhdGgYBCABKAkSFAoMY29udGVudF9oYXNoGAUgASgJEhUKDW10aW1lX3VuaXhfbXMYBiABKAMSDQoFc2NvcGUYByABKAkSDAoEYm9keRgIIAEoCRIVCg1hbGxvd2VkX3Rvb2xzGAkgAygJEjgKCG1ldGFkYXRhGAogAygLMiYucmVsaWFudC52MS5JbmRleGVkU2tpbGwuTWV0YWRhdGFFbnRyeRIUCgxoYXNfY2hpbGRyZW4YCyABKAgSIAoYZGlzYWJsZV9tb2RlbF9pbnZvY2F0aW9uGAwgASgIEhYKDnVzZXJfaW52b2NhYmxlGA0gASgJEhUKDWFyZ3VtZW50X2hpbnQYDiABKAkSDQoFcGF0aHMYDyABKAkSDgoGc291cmNlGBAgASgJGi8KDU1ldGFkYXRhRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJDChBQcm9qZWN0RGlzY292ZXJ5Ei8KCHByb2plY3RzGAEgAygLMh0ucmVsaWFudC52MS5EaXNjb3ZlcmVkUHJvamVjdCJEChFEaXNjb3ZlcmVkUHJvamVjdBIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEwoLaXNfZ2l0X3JlcG8YAyABKAgiOQoTVG9vbEV4ZWN1dGlvbkNhbmNlbBISCgpyZXF1ZXN0X2lkGAEgASgJEg4KBnJlYXNvbhgCIAEoCSLYAQoXUmVwb3J0VG9vbFJlc3VsdFJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIPCgdzdWNjZXNzGAIgASgIEhAKCGlzX2Vycm9yGAMgASgIEg8KB2NvbnRlbnQYBCABKAkSEAoIbWV0YWRhdGEYBSABKAkSFQoNZXJyb3JfbWVzc2FnZRgGIAEoCRISCgplcnJvcl9jb2RlGAcgASgJEhEKCWRhZW1vbl9pZBgIIAEoCRIPCgd1c2VyX2lkGAkgASgJEhQKDGJhY2tncm91bmRlZBgKIAEoCCIsChhSZXBvcnRUb29sUmVzdWx0UmVzcG9uc2USEAoIYWNjZXB0ZWQYASABKAgiLgoYRGFlbW9uS2lsbFByb2Nlc3NSZXF1ZXN0EhIKCnByb2Nlc3NfaWQYASABKAkiVwoZRGFlbW9uS2lsbFByb2Nlc3NSZXNwb25zZRISCgpwcm9jZXNzX2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSFQoNZXJyb3JfbWVzc2FnZRgDIAEoCSJlChREYWVtb25Db21tYW5kUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEhQKDGNvbW1hbmRfdHlwZRgCIAEoCRIPCgdwYXlsb2FkGAMgASgMEhIKCnRpbWVvdXRfbXMYBCABKAUiegoVRGFlbW9uQ29tbWFuZFJlc3BvbnNlEhIKCnJlcXVlc3RfaWQYASABKAkSFAoMY29tbWFuZF90eXBlGAIgASgJEg8KB3N1Y2Nlc3MYAyABKAgSDwoHcGF5bG9hZBgEIAEoDBIVCg1lcnJvcl9tZXNzYWdlGAUgASgJIjgKFFRlcm1pbmFsSW5wdXRNZXNzYWdlEhIKCnNlc3Npb25faWQYASABKAkSDAoEZGF0YRgCIAEoDCJHChVUZXJtaW5hbFJlc2l6ZU1lc3NhZ2USEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgRjb2xzGAIgASgNEgwKBHJvd3MYAyABKA0iOQoVVGVybWluYWxPdXRwdXRNZXNzYWdlEhIKCnNlc3Npb25faWQYASABKAkSDAoEZGF0YRgCIAEoDCL2AQoUVGVybWluYWxTZXNzaW9uRXZlbnQSEgoKc2Vzc2lvbl9pZBgBIAEoCRI+CgpldmVudF90eXBlGAIgASgOMioucmVsaWFudC52MS5UZXJtaW5hbFNlc3Npb25FdmVudC5FdmVudFR5cGUSDwoHbWVzc2FnZRgDIAEoCRILCgNwaWQYBCABKAUibAoJRXZlbnRUeXBlEhoKFkVWRU5UX1RZUEVfVU5TUEVDSUZJRUQQABIWChJFVkVOVF9UWVBFX0NSRUFURUQQARIVChFFVkVOVF9UWVBFX0NMT1NFRBACEhQKEEVWRU5UX1RZUEVfRVJST1IQAyI0Ch5UZXJtaW5hbE91dHB1dFN1YnNjcmliZU1lc3NhZ2USEgoKc2Vzc2lvbl9pZBgBIAEoCSJFCh1Qcm9jZXNzT3V0cHV0U3Vic2NyaWJlTWVzc2FnZRISCgpwcm9jZXNzX2lkGAEgASgJEhAKCG5ld19vbmx5GAIgASgIIjUKH1Byb2Nlc3NPdXRwdXRVbnN1YnNjcmliZU1lc3NhZ2USEgoKcHJvY2Vzc19pZBgBIAEoCSKHAQoZUHJvY2Vzc091dHB1dENodW5rTWVzc2FnZRISCgpwcm9jZXNzX2lkGAEgASgJEgwKBGRhdGEYAiABKAkSDgoGc3RyZWFtGAMgASgJEhAKCHNlcXVlbmNlGAQgASgEEhMKC2lzX2NvbXBsZXRlGAUgASgIEhEKCWV4aXRfY29kZRgGIAEoBSqMAQoORmlsZUNoYW5nZVR5cGUSIAocRklMRV9DSEFOR0VfVFlQRV9VTlNQRUNJRklFRBAAEhwKGEZJTEVfQ0hBTkdFX1RZUEVfQ1JFQVRFRBABEhwKGEZJTEVfQ0hBTkdFX1RZUEVfVVBEQVRFRBACEhwKGEZJTEVfQ0hBTkdFX1RZUEVfREVMRVRFRBADMpACChJUb29sc0RhZW1vblNlcnZpY2USSwoNQ29ubmVjdERhZW1vbhIZLnJlbGlhbnQudjEuRGFlbW9uTWVzc2FnZRoZLnJlbGlhbnQudjEuU2VydmVyTWVzc2FnZSIAKAEwARJMCg5Db25uZWN0R2F0ZXdheRIZLnJlbGlhbnQudjEuU2VydmVyTWVzc2FnZRoZLnJlbGlhbnQudjEuRGFlbW9uTWVzc2FnZSIAKAEwARJfChBSZXBvcnRUb29sUmVzdWx0EiMucmVsaWFudC52MS5SZXBvcnRUb29sUmVzdWx0UmVxdWVzdBokLnJlbGlhbnQudjEuUmVwb3J0VG9vbFJlc3VsdFJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Ch1yZWxpYW50L3YxL3Rvb2xzX2RhZW1vbi5wcm90bxIKcmVsaWFudC52MSKQBgoNRGFlbW9uTWVzc2FnZRIuCghyZWdpc3RlchgBIAEoCzIaLnJlbGlhbnQudjEuRGFlbW9uUmVnaXN0ZXJIABIxCg10b29sX3Jlc3BvbnNlGAIgASgLMhgucmVsaWFudC52MS5Ub29sUmVzcG9uc2VIABIwCgloZWFydGJlYXQYAyABKAsyGy5yZWxpYW50LnYxLkRhZW1vbkhlYXJ0YmVhdEgAEjkKEXByb2plY3RfZGlzY292ZXJ5GAQgASgLMhwucmVsaWFudC52MS5Qcm9qZWN0RGlzY292ZXJ5SAASTwodbG9hZF9wcm9qZWN0X2NvbmZpZ3NfcmVzcG9uc2UYBSABKAsyJi5yZWxpYW50LnYxLkxvYWRQcm9qZWN0Q29uZmlnc1Jlc3BvbnNlSAASPgoUcHJvamVjdF9jb25maWdfZGVsdGEYBiABKAsyHi5yZWxpYW50LnYxLlByb2plY3RDb25maWdEZWx0YUgAEkYKFWtpbGxfcHJvY2Vzc19yZXNwb25zZRgHIAEoCzIlLnJlbGlhbnQudjEuRGFlbW9uS2lsbFByb2Nlc3NSZXNwb25zZUgAEkQKF2RhZW1vbl9jb21tYW5kX3Jlc3BvbnNlGAggASgLMiEucmVsaWFudC52MS5EYWVtb25Db21tYW5kUmVzcG9uc2VIABI8Cg90ZXJtaW5hbF9vdXRwdXQYCSABKAsyIS5yZWxpYW50LnYxLlRlcm1pbmFsT3V0cHV0TWVzc2FnZUgAEkIKFnRlcm1pbmFsX3Nlc3Npb25fZXZlbnQYCiABKAsyIC5yZWxpYW50LnYxLlRlcm1pbmFsU2Vzc2lvbkV2ZW50SAASRQoUcHJvY2Vzc19vdXRwdXRfY2h1bmsYCyABKAsyJS5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRDaHVua01lc3NhZ2VIABI8ChNmaWxlX3N5c3RlbV9jaGFuZ2VkGAwgASgLMh0ucmVsaWFudC52MS5GaWxlU3lzdGVtQ2hhbmdlZEgAQgkKB21lc3NhZ2UijgIKDkRhZW1vblJlZ2lzdGVyEhAKCGhvc3RuYW1lGAMgASgJEhAKCHBsYXRmb3JtGAQgASgJEhMKC3dvcmtpbmdfZGlyGAUgASgJEhQKDGNhcGFiaWxpdGllcxgGIAMoCRIMCgRuYW1lGAggASgJEjYKBmxhYmVscxgJIAMoCzImLnJlbGlhbnQudjEuRGFlbW9uUmVnaXN0ZXIuTGFiZWxzRW50cnkSEwoLZGFlbW9uX3R5cGUYCiABKAkSEQoJZGFlbW9uX2lkGAsgASgJGi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFKBAgBEAJKBAgCEANKBAgHEAgiqQEKDFRvb2xSZXNwb25zZRISCgpyZXF1ZXN0X2lkGAEgASgJEg8KB3N1Y2Nlc3MYAiABKAgSEAoIaXNfZXJyb3IYAyABKAgSDwoHY29udGVudBgEIAEoCRIQCghtZXRhZGF0YRgFIAEoCRIVCg1lcnJvcl9tZXNzYWdlGAYgASgJEhIKCmVycm9yX2NvZGUYByABKAkSFAoMYmFja2dyb3VuZGVkGAggASgIIowBCg9EYWVtb25IZWFydGJlYXQSEQoJdGltZXN0YW1wGAEgASgDEhkKEW1lbW9yeV91c2VkX2J5dGVzGAIgASgEEhoKEm1lbW9yeV9saW1pdF9ieXRlcxgDIAEoBBIXCg9tZW1vcnlfcHJlc3N1cmUYBCABKAgSFgoOZGV0ZWN0ZWRfcG9ydHMYBSADKA0inQgKDVNlcnZlck1lc3NhZ2USLwoMdG9vbF9yZXF1ZXN0GAEgASgLMhcucmVsaWFudC52MS5Ub29sUmVxdWVzdEgAEjAKCWhlYXJ0YmVhdBgCIAEoCzIbLnJlbGlhbnQudjEuU2VydmVySGVhcnRiZWF0SAASNwoQcmVnaXN0cmF0aW9uX2FjaxgDIAEoCzIbLnJlbGlhbnQudjEuUmVnaXN0cmF0aW9uQWNrSAASNgoLdG9vbF9jYW5jZWwYBCABKAsyHy5yZWxpYW50LnYxLlRvb2xFeGVjdXRpb25DYW5jZWxIABJFChRsb2FkX3Byb2plY3RfY29uZmlncxgFIAEoCzIlLnJlbGlhbnQudjEuTG9hZFByb2plY3RDb25maWdzUmVxdWVzdEgAEkcKFXdhdGNoX3Byb2plY3RfY29uZmlncxgGIAEoCzImLnJlbGlhbnQudjEuV2F0Y2hQcm9qZWN0Q29uZmlnc1JlcXVlc3RIABJLChd1bndhdGNoX3Byb2plY3RfY29uZmlncxgHIAEoCzIoLnJlbGlhbnQudjEuVW53YXRjaFByb2plY3RDb25maWdzUmVxdWVzdEgAEjwKDGtpbGxfcHJvY2VzcxgIIAEoCzIkLnJlbGlhbnQudjEuRGFlbW9uS2lsbFByb2Nlc3NSZXF1ZXN0SAASOgoOZGFlbW9uX2NvbW1hbmQYCSABKAsyIC5yZWxpYW50LnYxLkRhZW1vbkNvbW1hbmRSZXF1ZXN0SAASOgoOdGVybWluYWxfaW5wdXQYCiABKAsyIC5yZWxpYW50LnYxLlRlcm1pbmFsSW5wdXRNZXNzYWdlSAASPAoPdGVybWluYWxfcmVzaXplGAsgASgLMiEucmVsaWFudC52MS5UZXJtaW5hbFJlc2l6ZU1lc3NhZ2VIABJNChhwcm9jZXNzX291dHB1dF9zdWJzY3JpYmUYDCABKAsyKS5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRTdWJzY3JpYmVNZXNzYWdlSAASUQoacHJvY2Vzc19vdXRwdXRfdW5zdWJzY3JpYmUYDSABKAsyKy5yZWxpYW50LnYxLlByb2Nlc3NPdXRwdXRVbnN1YnNjcmliZU1lc3NhZ2VIABJPChl0ZXJtaW5hbF9vdXRwdXRfc3Vic2NyaWJlGA8gASgLMioucmVsaWFudC52MS5UZXJtaW5hbE91dHB1dFN1YnNjcmliZU1lc3NhZ2VIABIpCgVoZWxsbxgOIAEoCzIYLnJlbGlhbnQudjEuR2F0ZXdheUhlbGxvSAASPgoPdG9vbF9iYWNrZ3JvdW5kGBAgASgLMiMucmVsaWFudC52MS5Ub29sRXhlY3V0aW9uQmFja2dyb3VuZEgAQgkKB21lc3NhZ2UiDgoMR2F0ZXdheUhlbGxvIqgBCgtUb29sUmVxdWVzdBISCgpyZXF1ZXN0X2lkGAEgASgJEhEKCXRvb2xfbmFtZRgCIAEoCRISCgp0b29sX2lucHV0GAMgASgJEhQKDHRvb2xfY2FsbF9pZBgEIAEoCRIYChBjb250ZW50X2Jsb2NrX2lkGAUgASgJEhQKDGNvbnRleHRfanNvbhgGIAEoCRISCgp0aW1lb3V0X21zGAggASgFSgQIBxAIIiQKD1NlcnZlckhlYXJ0YmVhdBIRCgl0aW1lc3RhbXAYASABKAMiaAoPUmVnaXN0cmF0aW9uQWNrEhAKCGFjY2VwdGVkGAEgASgIEh8KF3JlcXVlc3RlZF9wcm9qZWN0X3BhdGhzGAIgAygJEhEKCWRhZW1vbl9pZBgDIAEoCRIPCgd1c2VyX2lkGAQgASgJIkUKGUxvYWRQcm9qZWN0Q29uZmlnc1JlcXVlc3QSFAoMcHJvamVjdF9wYXRoGAEgASgJEhIKCnJlcXVlc3RfaWQYAiABKAkidAoaTG9hZFByb2plY3RDb25maWdzUmVzcG9uc2USEgoKcmVxdWVzdF9pZBgBIAEoCRIzCghzbmFwc2hvdBgCIAEoCzIhLnJlbGlhbnQudjEuUHJvamVjdENvbmZpZ1NuYXBzaG90Eg0KBWVycm9yGAMgASgJIksKGldhdGNoUHJvamVjdENvbmZpZ3NSZXF1ZXN0EhQKDHByb2plY3RfcGF0aBgBIAEoCRIXCg9pbmNsdWRlX2luaXRpYWwYAiABKAgiNAocVW53YXRjaFByb2plY3RDb25maWdzUmVxdWVzdBIUCgxwcm9qZWN0X3BhdGgYASABKAkipwUKFVByb2plY3RDb25maWdTbmFwc2hvdBIUCgxwcm9qZWN0X3BhdGgYASABKAkSFgoOY29uZmlnX3ZlcnNpb24YAiABKAkSIAoYZGFlbW9uX3RpbWVzdGFtcF91bml4X21zGAMgASgDEhgKEHVzZXJfY29uZmlnX3lhbWwYBCABKAwSGwoTcHJvamVjdF9jb25maWdfeWFtbBgFIAEoDBIZChFsb2NhbF9jb25maWdfeWFtbBgGIAEoDBJGCgttY3BfY29uZmlncxgHIAMoCzIxLnJlbGlhbnQudjEuUHJvamVjdENvbmZpZ1NuYXBzaG90Lk1jcENvbmZpZ3NFbnRyeRIuCgl3b3JrZmxvd3MYCCADKAsyGy5yZWxpYW50LnYxLkluZGV4ZWRXb3JrZmxvdxIqCgdwcmVzZXRzGAkgAygLMhkucmVsaWFudC52MS5JbmRleGVkUHJlc2V0Ei4KCXNjZW5hcmlvcxgKIAMoCzIbLnJlbGlhbnQudjEuSW5kZXhlZFNjZW5hcmlvEhgKEGdsb2JhbF9tZW1vcnlfbWQYCyABKAwSGQoRcHJvamVjdF9tZW1vcnlfbWQYDCABKAwSKAoGc2tpbGxzGA0gAygLMhgucmVsaWFudC52MS5JbmRleGVkU2tpbGwSTwoQcmVwb19tZW1vcmllc19tZBgOIAMoCzI1LnJlbGlhbnQudjEuUHJvamVjdENvbmZpZ1NuYXBzaG90LlJlcG9NZW1vcmllc01kRW50cnkaMQoPTWNwQ29uZmlnc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoDDoCOAEaNQoTUmVwb01lbW9yaWVzTWRFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAw6AjgBItYBChJQcm9qZWN0Q29uZmlnRGVsdGESFAoMcHJvamVjdF9wYXRoGAEgASgJEhYKDmNvbmZpZ192ZXJzaW9uGAIgASgJEiAKGGRhZW1vbl90aW1lc3RhbXBfdW5peF9tcxgDIAEoAxIuCg1jaGFuZ2VkX2ZpbGVzGAQgAygLMhcucmVsaWFudC52MS5DaGFuZ2VkRmlsZRJAChVzbmFwc2hvdF9pZl9jb21wYWN0ZWQYBSABKAsyIS5yZWxpYW50LnYxLlByb2plY3RDb25maWdTbmFwc2hvdCJrCgtDaGFuZ2VkRmlsZRIVCg1yZWxhdGl2ZV9wYXRoGAEgASgJEi8KC2NoYW5nZV90eXBlGAIgASgOMhoucmVsaWFudC52MS5GaWxlQ2hhbmdlVHlwZRIUCgxjb250ZW50X2hhc2gYAyABKAkiRAoRRmlsZVN5c3RlbUNoYW5nZWQSFAoMcHJvamVjdF9wYXRoGAEgASgJEhkKEXRpbWVzdGFtcF91bml4X21zGAIgASgDIocBCg9JbmRleGVkV29ya2Zsb3cSDAoEc2x1ZxgBIAEoCRIMCgRuYW1lGAIgASgJEhUKDXJlbGF0aXZlX3BhdGgYAyABKAkSFAoMY29udGVudF9oYXNoGAQgASgJEhUKDW10aW1lX3VuaXhfbXMYBSABKAMSFAoMeWFtbF9jb250ZW50GAYgASgMIncKDUluZGV4ZWRQcmVzZXQSDAoEbmFtZRgBIAEoCRIVCg1yZWxhdGl2ZV9wYXRoGAIgASgJEhQKDGNvbnRlbnRfaGFzaBgDIAEoCRIVCg1tdGltZV91bml4X21zGAQgASgDEhQKDHlhbWxfY29udGVudBgFIAEoDCKQAQoPSW5kZXhlZFNjZW5hcmlvEhUKDXdvcmtmbG93X3NsdWcYASABKAkSDAoEbmFtZRgCIAEoCRIVCg1yZWxhdGl2ZV9wYXRoGAMgASgJEhQKDGNvbnRlbnRfaGFzaBgEIAEoCRIVCg1tdGltZV91bml4X21zGAUgASgDEhQKDHlhbWxfY29udGVudBgGIAEoDCKuAwoMSW5kZXhlZFNraWxsEhIKCnNraWxsX3BhdGgYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIVCg1yZWxhdGl2ZV9wYXRoGAQgASgJEhQKDGNvbnRlbnRfaGFzaBgFIAEoCRIVCg1tdGltZV91bml4X21zGAYgASgDEg0KBXNjb3BlGAcgASgJEgwKBGJvZHkYCCABKAkSFQoNYWxsb3dlZF90b29scxgJIAMoCRI4CghtZXRhZGF0YRgKIAMoCzImLnJlbGlhbnQudjEuSW5kZXhlZFNraWxsLk1ldGFkYXRhRW50cnkSFAoMaGFzX2NoaWxkcmVuGAsgASgIEiAKGGRpc2FibGVfbW9kZWxfaW52b2NhdGlvbhgMIAEoCBIWCg51c2VyX2ludm9jYWJsZRgNIAEoCRIVCg1hcmd1bWVudF9oaW50GA4gASgJEg0KBXBhdGhzGA8gASgJEg4KBnNvdXJjZRgQIAEoCRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiQwoQUHJvamVjdERpc2NvdmVyeRIvCghwcm9qZWN0cxgBIAMoCzIdLnJlbGlhbnQudjEuRGlzY292ZXJlZFByb2plY3QiRAoRRGlzY292ZXJlZFByb2plY3QSDAoEcGF0aBgBIAEoCRIMCgRuYW1lGAIgASgJEhMKC2lzX2dpdF9yZXBvGAMgASgIIjkKE1Rvb2xFeGVjdXRpb25DYW5jZWwSEgoKcmVxdWVzdF9pZBgBIAEoCRIOCgZyZWFzb24YAiABKAkiQwoXVG9vbEV4ZWN1dGlvbkJhY2tncm91bmQSEgoKcmVxdWVzdF9pZBgBIAEoCRIUCgx0b29sX2NhbGxfaWQYAiABKAki2AEKF1JlcG9ydFRvb2xSZXN1bHRSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSDwoHc3VjY2VzcxgCIAEoCBIQCghpc19lcnJvchgDIAEoCBIPCgdjb250ZW50GAQgASgJEhAKCG1ldGFkYXRhGAUgASgJEhUKDWVycm9yX21lc3NhZ2UYBiABKAkSEgoKZXJyb3JfY29kZRgHIAEoCRIRCglkYWVtb25faWQYCCABKAkSDwoHdXNlcl9pZBgJIAEoCRIUCgxiYWNrZ3JvdW5kZWQYCiABKAgiLAoYUmVwb3J0VG9vbFJlc3VsdFJlc3BvbnNlEhAKCGFjY2VwdGVkGAEgASgIIi4KGERhZW1vbktpbGxQcm9jZXNzUmVxdWVzdBISCgpwcm9jZXNzX2lkGAEgASgJIlcKGURhZW1vbktpbGxQcm9jZXNzUmVzcG9uc2USEgoKcHJvY2Vzc19pZBgBIAEoCRIPCgdzdWNjZXNzGAIgASgIEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiogEKFERhZW1vbkNvbW1hbmRSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSFAoMY29tbWFuZF90eXBlGAIgASgJEg8KB3BheWxvYWQYAyABKAwSEgoKdGltZW91dF9tcxgEIAEoBRIwCgZwb2xpY3kYBSABKAsyGy5yZWxpYW50LnYxLkNvbm5lY3RvclBvbGljeUgAiAEBQgkKB19wb2xpY3kijAEKD0Nvbm5lY3RvclBvbGljeRIQCghncmFudF9pZBgBIAEoCRIVCg1hbGxvd2VkX3Rvb2xzGAIgAygJEhEKCXBhdGhfcm9vdBgDIAEoCRIRCglleGVjX21vZGUYBCABKAkSFgoOZXhlY19hbGxvd2xpc3QYBSADKAkSEgoKZXhwaXJlc19hdBgGIAEoCSJ6ChVEYWVtb25Db21tYW5kUmVzcG9uc2USEgoKcmVxdWVzdF9pZBgBIAEoCRIUCgxjb21tYW5kX3R5cGUYAiABKAkSDwoHc3VjY2VzcxgDIAEoCBIPCgdwYXlsb2FkGAQgASgMEhUKDWVycm9yX21lc3NhZ2UYBSABKAkiOAoUVGVybWluYWxJbnB1dE1lc3NhZ2USEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgRkYXRhGAIgASgMIkcKFVRlcm1pbmFsUmVzaXplTWVzc2FnZRISCgpzZXNzaW9uX2lkGAEgASgJEgwKBGNvbHMYAiABKA0SDAoEcm93cxgDIAEoDSI5ChVUZXJtaW5hbE91dHB1dE1lc3NhZ2USEgoKc2Vzc2lvbl9pZBgBIAEoCRIMCgRkYXRhGAIgASgMIvYBChRUZXJtaW5hbFNlc3Npb25FdmVudBISCgpzZXNzaW9uX2lkGAEgASgJEj4KCmV2ZW50X3R5cGUYAiABKA4yKi5yZWxpYW50LnYxLlRlcm1pbmFsU2Vzc2lvbkV2ZW50LkV2ZW50VHlwZRIPCgdtZXNzYWdlGAMgASgJEgsKA3BpZBgEIAEoBSJsCglFdmVudFR5cGUSGgoWRVZFTlRfVFlQRV9VTlNQRUNJRklFRBAAEhYKEkVWRU5UX1RZUEVfQ1JFQVRFRBABEhUKEUVWRU5UX1RZUEVfQ0xPU0VEEAISFAoQRVZFTlRfVFlQRV9FUlJPUhADIjQKHlRlcm1pbmFsT3V0cHV0U3Vic2NyaWJlTWVzc2FnZRISCgpzZXNzaW9uX2lkGAEgASgJIkUKHVByb2Nlc3NPdXRwdXRTdWJzY3JpYmVNZXNzYWdlEhIKCnByb2Nlc3NfaWQYASABKAkSEAoIbmV3X29ubHkYAiABKAgiNQofUHJvY2Vzc091dHB1dFVuc3Vic2NyaWJlTWVzc2FnZRISCgpwcm9jZXNzX2lkGAEgASgJIocBChlQcm9jZXNzT3V0cHV0Q2h1bmtNZXNzYWdlEhIKCnByb2Nlc3NfaWQYASABKAkSDAoEZGF0YRgCIAEoCRIOCgZzdHJlYW0YAyABKAkSEAoIc2VxdWVuY2UYBCABKAQSEwoLaXNfY29tcGxldGUYBSABKAgSEQoJZXhpdF9jb2RlGAYgASgFKowBCg5GaWxlQ2hhbmdlVHlwZRIgChxGSUxFX0NIQU5HRV9UWVBFX1VOU1BFQ0lGSUVEEAASHAoYRklMRV9DSEFOR0VfVFlQRV9DUkVBVEVEEAESHAoYRklMRV9DSEFOR0VfVFlQRV9VUERBVEVEEAISHAoYRklMRV9DSEFOR0VfVFlQRV9ERUxFVEVEEAMykAIKElRvb2xzRGFlbW9uU2VydmljZRJLCg1Db25uZWN0RGFlbW9uEhkucmVsaWFudC52MS5EYWVtb25NZXNzYWdlGhkucmVsaWFudC52MS5TZXJ2ZXJNZXNzYWdlIgAoATABEkwKDkNvbm5lY3RHYXRld2F5EhkucmVsaWFudC52MS5TZXJ2ZXJNZXNzYWdlGhkucmVsaWFudC52MS5EYWVtb25NZXNzYWdlIgAoATABEl8KEFJlcG9ydFRvb2xSZXN1bHQSIy5yZWxpYW50LnYxLlJlcG9ydFRvb2xSZXN1bHRSZXF1ZXN0GiQucmVsaWFudC52MS5SZXBvcnRUb29sUmVzdWx0UmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * DaemonMessage is the message sent from daemon to server
@@ -442,6 +442,16 @@ export type ServerMessage = Message<"reliant.v1.ServerMessage"> & {
      */
     value: GatewayHello;
     case: "hello";
+  } | {
+    /**
+     * Asks the daemon to detach an in-flight tool execution into a background
+     * process. Mirrors tool_cancel: both reach a RUNNING execution by
+     * request_id, which is the only handle the daemon keeps for one.
+     *
+     * @generated from field: reliant.v1.ToolExecutionBackground tool_background = 16;
+     */
+    value: ToolExecutionBackground;
+    case: "toolBackground";
   } | { case: undefined; value?: undefined };
 };
 
@@ -1195,6 +1205,43 @@ export const ToolExecutionCancelSchema: GenMessage<ToolExecutionCancel> = /*@__P
   messageDesc(file_reliant_v1_tools_daemon, 23);
 
 /**
+ * ToolExecutionBackground asks the daemon to detach an in-flight tool execution
+ * into a background process, so the workflow can proceed while the command
+ * keeps running.
+ *
+ * This exists because the execution lives in the DAEMON, which is a separate
+ * process and may be on a different machine. The API server's in-memory
+ * "backgrounded" signal (shell.BackgroundSignal) cannot be observed there, so a
+ * message has to cross the wire — exactly as cancellation does.
+ *
+ * @generated from message reliant.v1.ToolExecutionBackground
+ */
+export type ToolExecutionBackground = Message<"reliant.v1.ToolExecutionBackground"> & {
+  /**
+   * RequestID correlates to the in-flight execution, the same handle
+   * ToolExecutionCancel uses.
+   *
+   * @generated from field: string request_id = 1;
+   */
+  requestId: string;
+
+  /**
+   * ToolCallID is the LLM tool-call id, carried so the daemon can report the
+   * resulting background process back against the right tool call.
+   *
+   * @generated from field: string tool_call_id = 2;
+   */
+  toolCallId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ToolExecutionBackground.
+ * Use `create(ToolExecutionBackgroundSchema)` to create a new message.
+ */
+export const ToolExecutionBackgroundSchema: GenMessage<ToolExecutionBackground> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_tools_daemon, 24);
+
+/**
  * ReportToolResultRequest is used by the daemon to report a tool execution
  * result via a unary RPC when the bidirectional stream is unavailable.
  *
@@ -1257,7 +1304,7 @@ export type ReportToolResultRequest = Message<"reliant.v1.ReportToolResultReques
  * Use `create(ReportToolResultRequestSchema)` to create a new message.
  */
 export const ReportToolResultRequestSchema: GenMessage<ReportToolResultRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 24);
+  messageDesc(file_reliant_v1_tools_daemon, 25);
 
 /**
  * @generated from message reliant.v1.ReportToolResultResponse
@@ -1274,7 +1321,7 @@ export type ReportToolResultResponse = Message<"reliant.v1.ReportToolResultRespo
  * Use `create(ReportToolResultResponseSchema)` to create a new message.
  */
 export const ReportToolResultResponseSchema: GenMessage<ReportToolResultResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 25);
+  messageDesc(file_reliant_v1_tools_daemon, 26);
 
 /**
  * DaemonKillProcessRequest asks the daemon to kill a background process.
@@ -1293,7 +1340,7 @@ export type DaemonKillProcessRequest = Message<"reliant.v1.DaemonKillProcessRequ
  * Use `create(DaemonKillProcessRequestSchema)` to create a new message.
  */
 export const DaemonKillProcessRequestSchema: GenMessage<DaemonKillProcessRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 26);
+  messageDesc(file_reliant_v1_tools_daemon, 27);
 
 /**
  * DaemonKillProcessResponse is sent back from the daemon after attempting to kill a process.
@@ -1322,7 +1369,7 @@ export type DaemonKillProcessResponse = Message<"reliant.v1.DaemonKillProcessRes
  * Use `create(DaemonKillProcessResponseSchema)` to create a new message.
  */
 export const DaemonKillProcessResponseSchema: GenMessage<DaemonKillProcessResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 27);
+  messageDesc(file_reliant_v1_tools_daemon, 28);
 
 /**
  * DaemonCommandRequest is a generic command envelope sent from server to daemon.
@@ -1355,6 +1402,20 @@ export type DaemonCommandRequest = Message<"reliant.v1.DaemonCommandRequest"> & 
    * @generated from field: int32 timeout_ms = 4;
    */
   timeoutMs: number;
+
+  /**
+   * policy confines what this command may touch. It is set only for connector
+   * callers (third-party MCP clients driving the daemon on a user's behalf);
+   * first-party callers leave it unset, which means unrestricted and preserves
+   * the daemon's existing behavior exactly.
+   *
+   * The daemon enforces this at command dispatch rather than trusting the
+   * sender to have filtered, so any caller that speaks this protocol is
+   * covered.
+   *
+   * @generated from field: optional reliant.v1.ConnectorPolicy policy = 5;
+   */
+  policy?: ConnectorPolicy | undefined;
 };
 
 /**
@@ -1362,7 +1423,72 @@ export type DaemonCommandRequest = Message<"reliant.v1.DaemonCommandRequest"> & 
  * Use `create(DaemonCommandRequestSchema)` to create a new message.
  */
 export const DaemonCommandRequestSchema: GenMessage<DaemonCommandRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 28);
+  messageDesc(file_reliant_v1_tools_daemon, 29);
+
+/**
+ * ConnectorPolicy is the wire form of a connector grant, resolved by the
+ * server and enforced by the daemon.
+ *
+ * Every field is restrictive: an absent or empty field grants nothing rather
+ * than everything, so a partially-populated policy fails closed.
+ *
+ * @generated from message reliant.v1.ConnectorPolicy
+ */
+export type ConnectorPolicy = Message<"reliant.v1.ConnectorPolicy"> & {
+  /**
+   * grant_id identifies the originating grant, for audit records.
+   *
+   * @generated from field: string grant_id = 1;
+   */
+  grantId: string;
+
+  /**
+   * allowed_tools lists permitted command types. Empty denies all commands.
+   * Matching is exact — a command added to the daemon later stays denied until
+   * a grant names it.
+   *
+   * @generated from field: repeated string allowed_tools = 2;
+   */
+  allowedTools: string[];
+
+  /**
+   * path_root confines filesystem access to a directory subtree. Empty grants
+   * no filesystem access at all.
+   *
+   * @generated from field: string path_root = 3;
+   */
+  pathRoot: string;
+
+  /**
+   * exec_mode is one of "" (deny), "allowlist", or "unrestricted".
+   *
+   * @generated from field: string exec_mode = 4;
+   */
+  execMode: string;
+
+  /**
+   * exec_allowlist holds permitted command basenames when exec_mode is
+   * "allowlist" (e.g. "git", "go").
+   *
+   * @generated from field: repeated string exec_allowlist = 5;
+   */
+  execAllowlist: string[];
+
+  /**
+   * expires_at is an RFC3339 timestamp bounding the grant. Empty means no
+   * expiry.
+   *
+   * @generated from field: string expires_at = 6;
+   */
+  expiresAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.ConnectorPolicy.
+ * Use `create(ConnectorPolicySchema)` to create a new message.
+ */
+export const ConnectorPolicySchema: GenMessage<ConnectorPolicy> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_tools_daemon, 30);
 
 /**
  * DaemonCommandResponse is the generic response from daemon back to server.
@@ -1403,7 +1529,7 @@ export type DaemonCommandResponse = Message<"reliant.v1.DaemonCommandResponse"> 
  * Use `create(DaemonCommandResponseSchema)` to create a new message.
  */
 export const DaemonCommandResponseSchema: GenMessage<DaemonCommandResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 29);
+  messageDesc(file_reliant_v1_tools_daemon, 31);
 
 /**
  * TerminalInputMessage sends raw PTY input bytes (server -> daemon)
@@ -1429,7 +1555,7 @@ export type TerminalInputMessage = Message<"reliant.v1.TerminalInputMessage"> & 
  * Use `create(TerminalInputMessageSchema)` to create a new message.
  */
 export const TerminalInputMessageSchema: GenMessage<TerminalInputMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 30);
+  messageDesc(file_reliant_v1_tools_daemon, 32);
 
 /**
  * TerminalResizeMessage requests a terminal resize (server -> daemon)
@@ -1458,7 +1584,7 @@ export type TerminalResizeMessage = Message<"reliant.v1.TerminalResizeMessage"> 
  * Use `create(TerminalResizeMessageSchema)` to create a new message.
  */
 export const TerminalResizeMessageSchema: GenMessage<TerminalResizeMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 31);
+  messageDesc(file_reliant_v1_tools_daemon, 33);
 
 /**
  * TerminalOutputMessage sends raw PTY output bytes (daemon -> server)
@@ -1484,7 +1610,7 @@ export type TerminalOutputMessage = Message<"reliant.v1.TerminalOutputMessage"> 
  * Use `create(TerminalOutputMessageSchema)` to create a new message.
  */
 export const TerminalOutputMessageSchema: GenMessage<TerminalOutputMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 32);
+  messageDesc(file_reliant_v1_tools_daemon, 34);
 
 /**
  * TerminalSessionEvent reports terminal session lifecycle events (daemon -> server)
@@ -1522,7 +1648,7 @@ export type TerminalSessionEvent = Message<"reliant.v1.TerminalSessionEvent"> & 
  * Use `create(TerminalSessionEventSchema)` to create a new message.
  */
 export const TerminalSessionEventSchema: GenMessage<TerminalSessionEvent> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 33);
+  messageDesc(file_reliant_v1_tools_daemon, 35);
 
 /**
  * @generated from enum reliant.v1.TerminalSessionEvent.EventType
@@ -1553,7 +1679,7 @@ export enum TerminalSessionEvent_EventType {
  * Describes the enum reliant.v1.TerminalSessionEvent.EventType.
  */
 export const TerminalSessionEvent_EventTypeSchema: GenEnum<TerminalSessionEvent_EventType> = /*@__PURE__*/
-  enumDesc(file_reliant_v1_tools_daemon, 33, 0);
+  enumDesc(file_reliant_v1_tools_daemon, 35, 0);
 
 /**
  * TerminalOutputSubscribeMessage subscribes to a terminal session's output
@@ -1575,7 +1701,7 @@ export type TerminalOutputSubscribeMessage = Message<"reliant.v1.TerminalOutputS
  * Use `create(TerminalOutputSubscribeMessageSchema)` to create a new message.
  */
 export const TerminalOutputSubscribeMessageSchema: GenMessage<TerminalOutputSubscribeMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 34);
+  messageDesc(file_reliant_v1_tools_daemon, 36);
 
 /**
  * ProcessOutputSubscribeMessage subscribes to a process's output (server -> daemon)
@@ -1601,7 +1727,7 @@ export type ProcessOutputSubscribeMessage = Message<"reliant.v1.ProcessOutputSub
  * Use `create(ProcessOutputSubscribeMessageSchema)` to create a new message.
  */
 export const ProcessOutputSubscribeMessageSchema: GenMessage<ProcessOutputSubscribeMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 35);
+  messageDesc(file_reliant_v1_tools_daemon, 37);
 
 /**
  * ProcessOutputUnsubscribeMessage unsubscribes from a process's output (server -> daemon)
@@ -1620,7 +1746,7 @@ export type ProcessOutputUnsubscribeMessage = Message<"reliant.v1.ProcessOutputU
  * Use `create(ProcessOutputUnsubscribeMessageSchema)` to create a new message.
  */
 export const ProcessOutputUnsubscribeMessageSchema: GenMessage<ProcessOutputUnsubscribeMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 36);
+  messageDesc(file_reliant_v1_tools_daemon, 38);
 
 /**
  * ProcessOutputChunkMessage sends a chunk of process output (daemon -> server)
@@ -1674,7 +1800,7 @@ export type ProcessOutputChunkMessage = Message<"reliant.v1.ProcessOutputChunkMe
  * Use `create(ProcessOutputChunkMessageSchema)` to create a new message.
  */
 export const ProcessOutputChunkMessageSchema: GenMessage<ProcessOutputChunkMessage> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_tools_daemon, 37);
+  messageDesc(file_reliant_v1_tools_daemon, 39);
 
 /**
  * FileChangeType categorizes file system change events

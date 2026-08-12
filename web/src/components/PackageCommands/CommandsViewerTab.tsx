@@ -1588,7 +1588,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       {/* Command info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className={cn("font-mono truncate", isCompact ? "text-sm" : "text-sm")}>{command.name}</span>
+          <span className={cn("truncate", isCompact ? "text-sm" : "text-sm")}>{command.name}</span>
           {/* Show directory path badge in favorites */}
           {showPath && command.relative_path && (
             <span className="text-[10px] text-muted-foreground bg-muted/70 border border-border/50 px-1.5 py-0.5 rounded flex-shrink-0">
@@ -1651,7 +1651,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
         
         {!isCompact && (
           <code className={cn(
-            "text-[10px] text-muted-foreground/70 font-mono truncate max-w-[100px]",
+            "text-[10px] text-muted-foreground/70 truncate max-w-[100px]",
             (runningProcess || recentProcess) ? "hidden" : "hidden group-hover:block"
           )}>
             {command.command}
@@ -1826,7 +1826,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           "flex items-center mt-0.5 text-xs text-muted-foreground",
           isCompact ? "gap-2" : "gap-3"
         )}>
-          <span className="flex items-center gap-1 font-mono flex-shrink-0">
+          <span className="flex items-center gap-1 tabular-nums flex-shrink-0">
             <Clock className="w-3 h-3" />
             {duration}
           </span>

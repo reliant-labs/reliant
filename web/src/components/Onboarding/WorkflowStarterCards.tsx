@@ -121,7 +121,13 @@ const STARTER_OPTIONS: StarterOption[] = [
     label: "Just chat",
     description: "Skip the workflow picker — start with a basic agentic chat.",
     workflowId: "builtin://agent",
-    workflowParams: { mode: "plan" },
+    // No param overrides ON PURPOSE: this card's whole promise is "skip the
+    // picker", so it chooses the workflow and nothing else — `mode` resolves
+    // from builtin://agent's own default like it would if you picked the
+    // workflow by hand. It previously forced `mode: "plan"`, which is
+    // read-only tools — the opposite of the "basic agentic chat" it advertises,
+    // and the only card of the seven that overrode the mode this way.
+    workflowParams: {},
     accent: "slate",
   },
 ];

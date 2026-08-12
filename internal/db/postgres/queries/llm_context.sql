@@ -1,9 +1,9 @@
 -- name: GetNodeMessages :many
 -- Get all messages in a specific context window
--- Ordered by ordinal for deterministic ordering
+-- Ordered by seq for deterministic ordering
 SELECT * FROM messages
 WHERE context_window_id = $1
-ORDER BY ordinal ASC;
+ORDER BY seq ASC;
 
 -- name: GetNodeContentBlocks :many
 -- Get all content blocks for messages in a specific context window
@@ -23,7 +23,7 @@ SELECT
 FROM message_content_blocks mcb
 INNER JOIN messages m ON m.id = mcb.message_id
 WHERE m.context_window_id = $1
-ORDER BY m.ordinal ASC, mcb.position ASC;
+ORDER BY m.seq ASC, mcb.position ASC;
 
 -- name: GetMessagesWithContentBlocks :many
 -- Get messages with their content blocks in a single query for efficiency
@@ -53,7 +53,7 @@ SELECT
 FROM messages m
 LEFT JOIN message_content_blocks mcb ON mcb.message_id = m.id
 WHERE m.context_window_id = $1
-ORDER BY m.ordinal ASC, mcb.position ASC;
+ORDER BY m.seq ASC, mcb.position ASC;
 
 -- name: GetMessagesForThread :many
 -- Get all messages for a thread across all context windows
@@ -62,4 +62,4 @@ SELECT m.*, cw.sequence as context_sequence
 FROM messages m
 JOIN context_windows cw ON cw.id = m.context_window_id
 WHERE cw.thread_id = $1
-ORDER BY cw.sequence ASC, m.ordinal ASC;
+ORDER BY cw.sequence ASC, m.seq ASC;

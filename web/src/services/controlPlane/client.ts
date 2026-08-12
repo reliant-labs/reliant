@@ -19,7 +19,7 @@ import { createClient, type Client } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type { DescService } from "@bufbuild/protobuf";
 import { buildInterceptors } from "@/api/transport";
-import { useSameOriginTransport } from "@/lib/protocol";
+import { isSameOriginTransport } from "@/lib/protocol";
 import { CONTROL_PLANE_API_URL } from "./config";
 
 /**
@@ -40,14 +40,14 @@ export function getControlPlaneClient<T extends DescService>(
     );
   }
 
-  // Same-origin (Vite-proxy) path — see useSameOriginTransport. When the
+  // Same-origin (Vite-proxy) path — see isSameOriginTransport. When the
   // renderer is served over http(s) (web-dev AND electron-dev), point the
   // transport at the document origin so Vite's `/controlplane.v1.*` proxy
   // forwards these RPCs to admin-server — first-party, ZERO CORS. The absolute
   // CONTROL_PLANE_API_URL stays the `hasControlPlane` gate + the Vite proxy
   // TARGET (vite.config.ts reads it from process.env); it is only used as a
   // direct transport baseUrl in packaged Electron (file://), which has no proxy.
-  const baseUrl = useSameOriginTransport()
+  const baseUrl = isSameOriginTransport()
     ? window.location.origin
     : CONTROL_PLANE_API_URL;
 

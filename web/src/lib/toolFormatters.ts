@@ -38,6 +38,7 @@ export interface FormattedToolParams {
     filePaths?: string[]; // Can include :line format for FileLink
     query?: string;
     command?: string;
+    description?: string;
     lineRange?: { start: number; end?: number };
     [key: string]: unknown;
   };
@@ -258,21 +259,27 @@ export const formatWebsearchParams: ToolFormatter = (input) => {
  */
 export const formatShellParams: ToolFormatter = (input) => {
   let command: string | undefined;
-  
+  let description: string | undefined;
+
   if (typeof input === 'string') {
     command = input;
   } else if (typeof input === 'object' && input !== null) {
     command = (input.command as string) || (input.Command as string);
+    const raw = (input.description as string) || (input.Description as string);
+    description = typeof raw === 'string' && raw.trim() ? raw.trim() : undefined;
   }
-  
+
   if (!command) {
     return { summary: '', fullText: 'shell()' };
   }
-  
+
+  // The model-authored description says what the command does in prose, which
+  // reads better in a collapsed row than the command line itself. The command
+  // is still the fullText/structured value so expanded views and copy are exact.
   return {
-    summary: command,
+    summary: description ?? command,
     fullText: `shell(${command})`,
-    structured: { command },
+    structured: { command, description },
   };
 };
 
@@ -945,8 +952,21 @@ export function isLoadToolTool(toolName: string): boolean {
 }
 
 /**
- * Check if a tool is a spawn tool
+ * Spawn tool — creates a sub-agent and has a child workflow. Does NOT include
+ * sibling tools like spawn_status / spawn_send, which are ordinary read/write
+ * calls against an existing spawn: they have no child workflow, so treating
+ * them as spawns strands them on a status derived from a workflow that will
+ * never appear.
+ */
+export const SPAWN_TOOLS = ['spawn'] as const;
+
+/**
+ * Check if a tool is the spawn tool. Matches the base name exactly, after
+ * stripping any MCP prefix (mcp__reliant__spawn -> spawn), so spawn_status
+ * and spawn_send do not match in either their bare or MCP-prefixed form.
  */
 export function isSpawnTool(toolName: string): boolean {
-  return toolName.toLowerCase().includes('spawn');
+  const lower = toolName.toLowerCase();
+  const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
+  return SPAWN_TOOLS.includes(baseName as typeof SPAWN_TOOLS[number]);
 }

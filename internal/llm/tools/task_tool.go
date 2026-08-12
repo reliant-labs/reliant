@@ -39,10 +39,20 @@ WHEN TO USE:
 - When you need to see all tasks in the plan
 - To check task progress and status
 - To understand what work needs to be done
+- BEFORE delegating: the ready set tells you what can be worked at once
 
 RETURNS:
 - List of all tasks with their status, title, and hierarchy
-- Tasks are ordered by position and show parent-child relationships`
+- Tasks are ordered by position and show parent-child relationships
+- Assignee for any task that has been claimed, so you can see what other agents
+  are already working on and avoid handing out the same task twice
+- A count of tasks that are READY (pending with no incomplete blocker). Ready
+  tasks have no dependency between them, so they are meant to be delegated
+  together in one turn rather than one after another.
+
+If this thread has no plan of its own, the plan of the nearest ancestor thread
+is shown — the board you were spawned from. It is read-only here; you can still
+update the status of a task assigned to you.`
 }
 
 // ListTasksParams represents the parameters for listing tasks
@@ -72,13 +82,17 @@ func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) 
 		return NewTextErrorResponse("No thread context available"), nil
 	}
 
-	plan, err := l.repo.GetPlanByThreadID(rctx.Context, threadID)
+	// Reads walk up to an ancestor's plan: a spawned sub-agent has its own
+	// thread and usually no plan of its own, and the board it needs is the one
+	// its parent used to delegate the work.
+	resolved, err := resolvePlanForRead(rctx.Context, l.repo, threadID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan for thread: %v", err)), nil
 	}
+	plan := resolved.plan
 	planID := plan.ID
 
 	allTasks, err := l.repo.ListTasksByPlan(rctx.Context, planID)
@@ -131,17 +145,39 @@ func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) 
 		}
 	}
 
-	// Compute ready state
+	// Compute ready state. A pending task with no INCOMPLETE blocker can start
+	// now; collect them by display number so the summary can name them rather
+	// than just count them.
 	readyCount := 0
+	readyLabels := []string{}
+	unassignedReady := 0
+	for i, task := range rootTasks {
+		if task.Status == int32(db.TaskStatusPending) && len(displayInfo[task.ID].blockedBy) == 0 {
+			readyLabels = append(readyLabels, fmt.Sprintf("%d", i+1))
+		}
+	}
 	for _, task := range allTasks {
 		if task.Status == int32(db.TaskStatusPending) && len(displayInfo[task.ID].blockedBy) == 0 {
 			displayInfo[task.ID].isReady = true
 			readyCount++
+			if task.Assignee == nil || *task.Assignee == "" {
+				unassignedReady++
+			}
 		}
 	}
 
 	// Format response
 	responseText := fmt.Sprintf("Tasks for Plan (Total: %d):\n\n", len(allTasks))
+
+	// Say whose board this is. "No task is assigned to me" and "I am reading
+	// my parent's plan" call for different next moves, and only the agent can
+	// tell them apart if the plan says which it is.
+	if resolved.inherited {
+		responseText += fmt.Sprintf(
+			"This plan belongs to an ancestor thread (%s) — you are reading the board you were spawned from.\n"+
+				"You cannot modify it; update the task you were given, or create_plan for work of your own.\n\n",
+			resolved.ownerThreadID)
+	}
 
 	responseText += "Status Summary:\n"
 	if stats != nil {
@@ -170,6 +206,22 @@ func (l *ListTasksTool) Execute(rctx *rctx.ToolContext, params ListTasksParams) 
 	// Show dependency graph summary if any dependencies exist
 	if len(allDeps) > 0 {
 		responseText += fmt.Sprintf("Dependencies: %d relationship(s)\n\n", len(allDeps))
+	}
+
+	// The ready set is the fan-out plan, so say it as one. This count was
+	// already computed and printed as a bare statistic ("Pending: 12 (5
+	// ready)"); stated as work that can start now, it is the input to a batch
+	// of spawns instead of a number to scroll past.
+	if readyCount > 1 && !resolved.inherited {
+		responseText += fmt.Sprintf("%d tasks are ready now (no incomplete blockers)", readyCount)
+		if len(readyLabels) > 0 {
+			responseText += fmt.Sprintf(": %s", strings.Join(readyLabels, ", "))
+		}
+		responseText += ".\n"
+		if unassignedReady > 1 {
+			responseText += "Tasks with no dependency between them are independent — delegate them in ONE turn (several spawn calls in a single message) rather than one after another.\n"
+		}
+		responseText += "\n"
 	}
 
 	responseText += "Task List:\n"
@@ -339,8 +391,13 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 			return NewTextErrorResponse("No thread context available for ordinal lookup"), nil
 		}
 
-		// Get the current thread's plan
-		plan, err := u.repo.GetPlanByThreadID(rctx.Context, threadID)
+		// Resolve the ordinal against the plan this thread can SEE, which for
+		// a sub-agent is its parent's board. This is the claim path: an agent
+		// spawned to do task 4 has to be able to say "4 is mine, and now it is
+		// done". Updating one task row it was handed is single-writer — it is
+		// mutating the plan's SHAPE (adding tasks, retitling it) that stays
+		// with the owning thread.
+		resolved, err := resolvePlanForRead(rctx.Context, u.repo, threadID)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
@@ -348,8 +405,14 @@ func (u *UpdateTaskTool) Execute(rctx *rctx.ToolContext, params UpdateTaskParams
 			return NewTextErrorResponse(fmt.Sprintf("Failed to find plan for ordinal lookup: %v", err)), nil
 		}
 
-		// Get task by position
-		task, err = u.repo.GetTaskByPosition(rctx.Context, plan.ID, position)
+		// Ordinals are 1-indexed, matching what list_tasks prints and what
+		// create_plan's task_position documents; GetTaskByPosition slices
+		// 0-indexed. Without this conversion "1" silently updated the SECOND
+		// task and the last task in the list was unreachable.
+		if position < 1 {
+			return NewTextErrorResponse(fmt.Sprintf("Task position %d is out of range: task numbering starts at 1", position)), nil
+		}
+		task, err = u.repo.GetTaskByPosition(rctx.Context, resolved.plan.ID, position-1)
 		if err != nil {
 			return NewTextErrorResponse(fmt.Sprintf("Failed to find task at position %d: %v", position, err)), nil
 		}

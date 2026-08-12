@@ -10,7 +10,7 @@ import {
   type JSX,
 } from "react";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
-import { GitBranch, Copy, Check, ChevronDown } from "lucide-react";
+import { GitBranch, FolderSync, Copy, Check, ChevronDown } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
@@ -23,6 +23,7 @@ import { MessageAttachments } from "./MessageAttachments";
 import { BranchOptionsMenu } from "./BranchOptionsMenu";
 import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
 import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
+import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageActionsSheet";
 import { CodeContextPill } from "./CodeContextPill";
 import type { Message, ToolApprovalRequest } from "../../api/client";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
@@ -32,6 +33,8 @@ import {
   useToolCallStates,
   useChat,
 } from "../../store/chatStoreHooks";
+import { useSurface } from "../../lib/surfaceContext";
+import { useLongPress } from "../../hooks/useLongPress";
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
@@ -46,6 +49,25 @@ import {
 
 export type ChatTimelineVariant = "compact" | "card" | "minimal";
 
+/**
+ * User-message bubble heights.
+ *
+ * Collapsed is the teaser shown by default. Expanded is a scroll cap, not a
+ * fit — a pasted stack trace or a wall of prose stays a bounded block the user
+ * scrolls inside of, so it can never dominate the viewport. It is capped in
+ * `vh` so the bubble can never outgrow the viewport it scrolls within; a `rem`
+ * cap taller than the window leaves the tail unreachable, because the
+ * virtualized timeline scrolls the row rather than the bubble. Pinned is the
+ * single-line breadcrumb in the sticky header.
+ */
+const COLLAPSED_MESSAGE_MAX_HEIGHT = "3rem";
+const COLLAPSED_MESSAGE_MAX_HEIGHT_PX = 48;
+const EXPANDED_MESSAGE_MAX_HEIGHT = "50vh";
+const PINNED_MESSAGE_MAX_HEIGHT = "1.5rem";
+
+/** Fades the last line of a clipped message out instead of cutting it mid-glyph. */
+const COLLAPSED_FADE_MASK = "linear-gradient(to bottom, #000 60%, transparent 100%)";
+
 interface ChatMessageProps {
   message: Message;
   approvals?: ToolApprovalRequest[];
@@ -55,6 +77,12 @@ interface ChatMessageProps {
   chatId?: string; // Chat ID for branching functionality
   onSelectThread?: (threadId: string | null) => void;
   timelineVariant?: ChatTimelineVariant;
+  /**
+   * Rendered as the sticky header above the timeline rather than in the flow.
+   * Clamps to a single line, drops attachments and hover actions, and never
+   * expands — the pin is a breadcrumb, not a copy of the message.
+   */
+  pinned?: boolean;
 }
 
 // Re-export for components that import from here
@@ -141,6 +169,7 @@ function ChatMessageComponent({
   chatId: propChatId,
   onSelectThread,
   timelineVariant = "compact",
+  pinned = false,
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
   const activeChatId = useActiveChatId();
@@ -179,6 +208,9 @@ function ChatMessageComponent({
     showBranchToExistingWorktreeModal,
     setShowBranchToExistingWorktreeModal,
   ] = useState(false);
+  const surface = useSurface();
+  const isMobile = surface === "mobile";
+  const [showActionsSheet, setShowActionsSheet] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   // Track prop changes to diagnose re-renders
@@ -451,9 +483,9 @@ function ChatMessageComponent({
     const checkOverflow = () => {
       rafId = requestAnimationFrame(() => {
         if (element) {
-          // 3rem = 48px for max height
           // Reading scrollHeight here is batched with the browser's layout
-          const isCurrentlyOverflowing = element.scrollHeight > 48;
+          const isCurrentlyOverflowing =
+            element.scrollHeight > COLLAPSED_MESSAGE_MAX_HEIGHT_PX;
           setIsOverflowing(isCurrentlyOverflowing);
         }
       });
@@ -485,12 +517,12 @@ function ChatMessageComponent({
 
     const result = parsed.toolExecutions.map(
       (execution): EnhancedToolExecution => {
-        // Get the live tool call state from the store
-        // CRITICAL: Use content_block_id for lookup, as that's what the backend sends in WebSocket updates
-        // The execution.call.id is the LLM-generated tool_use ID (e.g., toolu_01...)
-        // but the backend tracks by content_block_id
-        const lookupKey = execution.call.content_block_id || execution.call.id;
-        const toolCallState = toolCallStates.get(lookupKey);
+        // Get the live tool call state from the store. Keyed by the LLM
+        // tool_use id (execution.call.id, e.g. "toolu_01..."), which is what
+        // the backend addresses tool status by. Note this is a DIFFERENT
+        // identifier space from the content_block_id the approval lookup just
+        // below uses — status and approvals are not interchangeable keys.
+        const toolCallState = toolCallStates.get(execution.call.id);
 
         // Prefer embedded approval, but fall back to separate approvals list
         // Match approvals by content_block_id (unique identifier for content blocks)
@@ -546,6 +578,16 @@ function ChatMessageComponent({
       renderStartRef.current = undefined; // Reset for next render
     }
   });
+
+  // Long-press is wired unconditionally (before the early return, per Rules
+  // of Hooks); the handlers are only spread onto message markup on mobile.
+  const handleLongPress = useCallback(() => {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      navigator.vibrate(10);
+    }
+    setShowActionsSheet(true);
+  }, []);
+  const longPressHandlers = useLongPress(handleLongPress);
 
   const hasAttachments = Boolean(message.attachments?.length);
 
@@ -658,24 +700,62 @@ function ChatMessageComponent({
 
   const isOptimistic = message.id.startsWith("optimistic-");
   const timestampText = message.createdAt ? formatTimestamp(message.createdAt) : "";
+  const fullTimestampText = message.createdAt
+    ? new Date(message.createdAt).toLocaleString()
+    : "";
   const variantClass = `chat-message-${timelineVariant}`;
 
-  const messageActions = (
-    <div
-      className={cn(
-        "message-actions mt-0.5 flex items-center gap-0.5 text-[9px] text-muted-foreground/70 opacity-0 transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100",
-        isUser ? "justify-start pl-0.5" : "justify-start px-0.5"
-      )}
-    >
+  // Mobile-only: the bottom sheet substitute for the hover toolbar. Built
+  // from the same handlers the desktop buttons call, so branch/copy behavior
+  // never diverges between surfaces — only the affordance to reach them does.
+  const mobileMessageActions: MessageActionsSheetAction[] = isMobile
+    ? [
+        {
+          key: "copy",
+          label: copied ? "Copied" : "Copy message",
+          icon: copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />,
+          onSelect: () => void handleCopy(),
+        },
+        {
+          key: "branch",
+          label: "Branch in place",
+          icon: <GitBranch className="h-4 w-4" />,
+          disabled: isOptimistic,
+          onSelect: () => void handleBranchChat(),
+        },
+        {
+          key: "branch-existing",
+          label: "Branch to existing workspace",
+          icon: <FolderSync className="h-4 w-4" />,
+          disabled: isOptimistic,
+          onSelect: handleBranchToExistingWorkspace,
+        },
+      ]
+    : [];
+
+  // The floating toolbar's box is inert (see `floatingMessageActions`), so each
+  // control has to opt back in for itself — and only while the toolbar is
+  // actually visible. Reviving them unconditionally would leave invisible
+  // buttons swallowing clicks at rest, which is the bug this avoids.
+  //
+  // The inline variant is in the flow with nothing underneath it and does not
+  // disable its box, so these classes are simply redundant there.
+  const revealedControl =
+    "pointer-events-none group-hover:pointer-events-auto group-focus-within:pointer-events-auto";
+
+  const actionControls = (
+    <>
       {timestampText && (
         <time
           dateTime={message.createdAt}
-          className="px-0.5 text-[9px] leading-none text-muted-foreground/70"
-          title={new Date(message.createdAt).toLocaleString()}
+          className="px-1 text-[11px] leading-none text-muted-foreground"
+          title={fullTimestampText}
         >
           {timestampText}
         </time>
       )}
+      {/* Separates the timestamp (information) from the buttons (actions). */}
+      {timestampText && <span aria-hidden className="h-3 w-px bg-border" />}
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -684,12 +764,13 @@ function ChatMessageComponent({
         title={copied ? "Copied" : "Copy"}
         aria-label={copied ? "Copied" : "Copy message"}
         className={cn(
-          "rounded p-0.5 transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          revealedControl,
           copied && "text-success"
         )}
         type="button"
       >
-        {copied ? <Check className="h-2.5 w-2.5" /> : <Copy className="h-2.5 w-2.5" />}
+        {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
       <button
         onClick={(e) => {
@@ -701,15 +782,126 @@ function ChatMessageComponent({
         aria-label="Branch from message"
         data-contextual-tip="branch-button"
         className={cn(
-          "rounded p-0.5 transition-colors duration-150 hover:bg-muted/70 hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          "rounded p-1 text-foreground/70 transition-colors duration-150 hover:bg-muted hover:text-foreground focus:outline-none focus:ring-1 focus:ring-ring/40",
+          revealedControl,
           isOptimistic && "cursor-not-allowed opacity-50"
         )}
         type="button"
       >
-        <GitBranch className="h-2.5 w-2.5" />
+        <GitBranch className="h-3.5 w-3.5" />
       </button>
+    </>
+  );
+
+  // The newest message is the one being read, so its toolbar sits in the flow
+  // underneath instead of floating over the text. Nothing follows it, so the
+  // row it reserves shifts nothing, and it needs none of the opaque backing the
+  // floating variant requires to stay legible over text.
+  //
+  // Because the row is reserved either way, it stays on screen rather than
+  // fading in — dimmed at rest so it reads as chrome, full strength on hover.
+  const inlineMessageActions = (
+    <div
+      className={cn(
+        "message-actions mt-1 flex w-max items-center gap-1 whitespace-nowrap",
+        "rounded-md px-1 py-0.5 text-[11px] font-medium",
+        "opacity-60 transition-opacity duration-150",
+        "hover:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
+      )}
+    >
+      {actionControls}
     </div>
   );
+
+  // Floated out of flow for every older message. In-flow controls would reserve
+  // their height under all of them even while hidden (that was ~24px of dead
+  // space per message), and revealing them in flow would shove the conversation
+  // on hover. Absolute positioning costs nothing when idle and moves nothing
+  // when shown.
+  //
+  // The wrapper spans the message's full height and the toolbar sticks inside
+  // it, so hovering a message taller than the viewport still shows the toolbar:
+  // anchoring it to the message's top hid it above the fold exactly when the
+  // message was long enough to need it. The sticky offset clears the pinned
+  // user-message header the timeline floats over the top of the transcript
+  // (`--chat-pinned-header-h`, 0 when there is no header or no timeline).
+  //
+  // Anchored to the message ROW — the full content column — for both roles,
+  // never to the message's own box. A user bubble is only as wide as its text,
+  // so hanging the toolbar off the bubble's edge (`left-full`) put it at an
+  // x-position that depended on message length and on how much room the column
+  // had left. Every ancestor between here and the viewport clips overflow (the
+  // Virtuoso scroller, ChatMessagesContainer, #layout-main-content, <main>), so
+  // as soon as the sidebar, file viewer, or terminal squeezed the column, a
+  // long message's toolbar ran past the column edge and was cut off — reading
+  // as the toolbar hiding behind the neighbouring panel.
+  //
+  // Anchoring to the column instead makes overflow impossible: the toolbar can
+  // never be wider than the column it is right-aligned inside. It also lands in
+  // the same place for every message regardless of role or length, so it is a
+  // stationary mouse target rather than one that moves with the text.
+  //
+  // The overlap is resolved on the VERTICAL axis: the column reserves a band of
+  // height above its content (`pt-7`), and since `inset-y-0` measures from the
+  // padding box, `top-0` is the top of that band. So at rest the toolbar sits in
+  // a strip of its own with the message starting below it, and it covers nothing.
+  //
+  // Vertical is the right axis because the collision is with things that are
+  // pinned to the right edge — an assistant message is a stack of tool rows
+  // whose own controls sit flush right, exactly where a right-aligned toolbar
+  // wants to be. Buying room horizontally means narrowing every message to hold
+  // a toolbar that is only visible on hover, and it has to be wide enough for
+  // the timestamp too. Buying it vertically costs one 28px strip that the
+  // message was already leaving empty above its first line.
+  //
+  // It still needs the opaque backing: sticky keeps it reachable on a message
+  // taller than the viewport (see above), and once stuck mid-message it does
+  // float over text. That is the pre-existing trade, and `pointer-events-none`
+  // on the box means even then it only ever intercepts its own two buttons.
+  const floatingMessageActions = (
+    <div className="pointer-events-none absolute inset-y-0 right-2 z-20">
+      <div
+        className={cn(
+          "message-actions sticky flex items-center gap-1",
+          // Out of flow, so the toolbar has no width to lay out against and
+          // will happily wrap "1 minute ago" onto three lines. Size to content.
+          "w-max whitespace-nowrap",
+          // The fill must be fully opaque: this floats over message text, and
+          // anything translucent lets that text read through the toolbar.
+          //
+          // Do NOT express the lift as a `bg-gradient-*` wash over `bg-popover` —
+          // tailwind-merge treats both as the `bg-*` group and drops the opaque
+          // colour, leaving only the translucent gradient. The raised tone is a
+          // solid custom value instead, so there is exactly one background.
+          //
+          // It also has to separate from a pure-black page (--background 0%,
+          // --popover 6%: a 1.10:1 edge, i.e. invisible), hence the lighter fill
+          // plus a white-alpha hairline and a real shadow.
+          "rounded-md text-popover-foreground",
+          "bg-[hsl(var(--popover))] dark:bg-[hsl(0_0%_14%)]",
+          "border border-foreground/15 shadow-lg shadow-black/50",
+          "px-1 py-0.5 text-[11px] font-medium",
+          "pointer-events-none opacity-0 transition-opacity duration-150",
+          "group-hover:opacity-100",
+          "group-focus-within:opacity-100"
+        )}
+        style={{ top: "var(--chat-pinned-header-h, 0px)" }}
+      >
+        {actionControls}
+      </div>
+    </div>
+  );
+
+  // The pin is a breadcrumb of a message that already exists below; it gets no
+  // toolbar at all.
+  const showInlineActions = isLatestMessage && !pinned;
+
+  // Only the floating variant overlaps the message, so only it needs the column
+  // to reserve the band. Charging it unconditionally would push every message
+  // down for a toolbar that is not there: mobile shows these actions in a
+  // long-press sheet and never reveals the hover toolbar at all, the pinned
+  // breadcrumb has no toolbar, and the newest message uses the inline variant.
+  const reservesToolbarBand = !pinned && !showInlineActions && !isMobile;
 
   return (
     <div
@@ -724,21 +916,50 @@ function ChatMessageComponent({
       data-chat-timeline-variant={timelineVariant}
     >
       <div className="message-layout lg:message-layout-lg">
-        {/* Message Content */}
-        <div className="flex-1 min-w-0">
+        {/* Message Content. `relative` so the floating toolbar below anchors to
+            the full content column for every message, rather than to whatever
+            width the individual message happens to occupy.
+
+            `pt-7` reserves a 28px band above the content for the floating
+            toolbar to occupy. The toolbar's wrapper is `inset-y-0`, which
+            measures from the padding box, so its `top-0` is the top of that
+            band and the message starts underneath it — the toolbar covers
+            nothing at rest, whatever its width.
+
+            The band is vertical rather than a right-hand gutter because what it
+            collides with is right-pinned: a tool row keeps its own controls
+            flush right, precisely where a right-aligned toolbar sits. Reserving
+            width would narrow every message permanently to make room for chrome
+            that only appears on hover, and would have to fit the timestamp too.
+            The strip above the first line is space the message was already
+            leaving blank. */}
+        <div
+          className={cn(
+            "relative flex-1 min-w-0",
+            reservesToolbarBand && "pt-7"
+          )}
+        >
           {/* User message bubble - stable width */}
           {isUser ? (
-            <div className="group/usermsg relative inline-flex max-w-[85%] flex-col items-start sm:max-w-2xl">
-              <div className="relative">
+            <div
+              className={cn(
+                "group/usermsg relative flex flex-col items-start",
+                pinned ? "w-full" : "inline-flex max-w-[85%] sm:max-w-2xl"
+              )}
+            >
+              <div className={cn("relative", pinned && "w-full")}>
                 <div
                   ref={bubbleRef}
                   className={cn(
-                    "user-message-content relative block cursor-pointer overflow-hidden rounded-2xl border border-primary/25 bg-primary/15 text-foreground shadow-sm transition-colors duration-200",
-                    "hover:border-primary/35 hover:bg-primary/20",
-                    timelineVariant === "card" && "shadow-md",
-                    timelineVariant === "minimal" && "shadow-none"
+                    "user-message-content relative block overflow-hidden rounded-2xl border border-primary/25 bg-primary/15 text-foreground shadow-sm transition-colors duration-200",
+                    pinned
+                      ? "w-full cursor-default"
+                      : "cursor-pointer hover:border-primary/35 hover:bg-primary/20",
+                    !pinned && timelineVariant === "card" && "shadow-md",
+                    !pinned && timelineVariant === "minimal" && "shadow-none"
                   )}
                   onClick={() => {
+                    if (pinned) return;
                     setIsExpanded((prev) => {
                       const willExpand = !prev;
                       if (willExpand) {
@@ -751,44 +972,75 @@ function ChatMessageComponent({
                       return willExpand;
                     });
                   }}
+                  {...(isMobile && !pinned ? longPressHandlers : {})}
                 >
                   {/* Text Content - show exactly as sent */}
                   {parsed.text && (
                     <div
                       ref={contentRef}
-                      className="overflow-hidden text-sm leading-relaxed text-foreground"
+                      className={cn(
+                        "text-sm leading-relaxed text-foreground",
+                        // Expanded messages scroll inside the bubble instead of
+                        // growing without bound — a pasted log should not push
+                        // the whole conversation off screen.
+                        isExpanded && !pinned ? "overflow-y-auto" : "overflow-hidden"
+                      )}
                       style={{
-                        maxHeight: isExpanded ? "none" : "3rem",
+                        maxHeight: pinned
+                          ? PINNED_MESSAGE_MAX_HEIGHT
+                          : isExpanded
+                            ? EXPANDED_MESSAGE_MAX_HEIGHT
+                            : COLLAPSED_MESSAGE_MAX_HEIGHT,
                         transition: "max-height 0.2s ease-in-out",
+                        // Truncation reads as text fading out rather than a
+                        // full-width button bar, which cost more vertical space
+                        // than the teaser it labelled. A mask is used instead of
+                        // a gradient overlay because the bubble is a translucent
+                        // tint — an opaque gradient would not match it.
+                        ...(!pinned && !isExpanded && isOverflowing
+                          ? { maskImage: COLLAPSED_FADE_MASK, WebkitMaskImage: COLLAPSED_FADE_MASK }
+                          : {}),
                       }}
                     >
-                      <div className="whitespace-pre-wrap break-words">
+                      <div
+                        className={cn(
+                          "whitespace-pre-wrap break-words",
+                          // The pin is a one-line breadcrumb; ellipsize rather
+                          // than reflow the sticky header as the user scrolls.
+                          pinned && "line-clamp-1"
+                        )}
+                      >
                         {renderTextWithContextPills(parsed.text, chatWorktreeId)}
                       </div>
                     </div>
                   )}
 
-                  {/* Expand button - styled like diff expand button */}
-                  {!isExpanded && isOverflowing && (
-                    <div className="mt-1 flex justify-center border-t border-primary/15 pt-1">
-                      <div className="flex w-full items-center justify-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-foreground">
-                        <ChevronDown className="w-3 h-3" />
-                        Show more
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Attachments */}
-                  {hasAttachments && (
+                  {/* Attachments — the pin is text-only, images belong in the flow */}
+                  {!pinned && hasAttachments && (
                     <MessageAttachments
                       attachments={message.attachments}
                       isUser={isUser}
-                      className={!parsed.text ? "pt-1" : ""}
+                      className={!parsed.text ? "pt-0.5" : ""}
                     />
+                  )}
+
+                  {/* Expand/collapse affordance — a single compact chevron row.
+                      Also renders when expanded so a long message can be closed
+                      without scrolling back to find the top of the bubble. */}
+                  {!pinned && (isOverflowing || isExpanded) && (
+                    <div className="flex items-center gap-1 pt-0.5 text-[11px] font-medium text-muted-foreground/80">
+                      <ChevronDown
+                        className={cn(
+                          "h-3 w-3 transition-transform duration-200",
+                          isExpanded && "rotate-180"
+                        )}
+                      />
+                      {isExpanded ? "Show less" : "Show more"}
+                    </div>
                   )}
                 </div>
               </div>
-              {messageActions}
+              {showInlineActions && inlineMessageActions}
             </div>
           ) : (
             // Assistant message - full width
@@ -798,6 +1050,7 @@ function ChatMessageComponent({
                 timelineVariant === "card" && "rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm",
                 timelineVariant === "minimal" && "px-0"
               )}
+              {...(isMobile && !pinned ? longPressHandlers : {})}
             >
               {/* Ordered content: text and tool runs interleaved exactly as
                   they occurred in the message, so a mid-message tool call
@@ -848,11 +1101,14 @@ function ChatMessageComponent({
                 />
               )}
 
-              {messageActions}
+              {showInlineActions && inlineMessageActions}
             </div>
           )}
 
-
+          {/* Rendered once, outside the role branches, so it anchors to the
+              content column rather than to the user bubble or the assistant
+              block. The pin is a breadcrumb and gets no toolbar at all. */}
+          {!pinned && !showInlineActions && floatingMessageActions}
         </div>
       </div>
 
@@ -888,6 +1144,17 @@ function ChatMessageComponent({
           messageId={message.id}
           projectId={currentProject.id}
           sourceWorktreeId={chatWorktreeId}
+        />
+      )}
+
+      {/* Mobile long-press actions sheet — the touch substitute for the
+          desktop hover toolbar (see the long-press wiring above). */}
+      {isMobile && (
+        <MessageActionsSheet
+          isOpen={showActionsSheet}
+          onClose={() => setShowActionsSheet(false)}
+          actions={mobileMessageActions}
+          timestampLabel={fullTimestampText || undefined}
         />
       )}
     </div>

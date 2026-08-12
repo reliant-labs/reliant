@@ -47,7 +47,7 @@ func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 	threadID := uuid.New().String()
 	_, err = repo.CreateThread(ctx, &db.Thread{
 		ID:             threadID,
-		ConversationID: chatID, // Thread belongs to this chat
+		ChatID: chatID, // Thread belongs to this chat
 		CreatedAt:      time.Now(),
 	})
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 	threadInChatA := uuid.New().String()
 	_, err = repo.CreateThread(ctx, &db.Thread{
 		ID:             threadInChatA,
-		ConversationID: chatA, // Thread belongs to chat A
+		ChatID: chatA, // Thread belongs to chat A
 		CreatedAt:      time.Now(),
 	})
 	require.NoError(t, err)
@@ -204,7 +204,7 @@ func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
 	rootThreadID := uuid.New().String()
 	_, err = repo.CreateThread(ctx, &db.Thread{
 		ID:             rootThreadID,
-		ConversationID: chatID,
+		ChatID: chatID,
 		CreatedAt:      time.Now(),
 	})
 	require.NoError(t, err)
@@ -213,7 +213,7 @@ func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
 	subAgentThreadID := uuid.New().String()
 	_, err = repo.CreateThread(ctx, &db.Thread{
 		ID:             subAgentThreadID,
-		ConversationID: chatID, // Same chat as root
+		ChatID: chatID, // Same chat as root
 		ParentThreadID: &rootThreadID,
 		CreatedAt:      time.Now(),
 	})

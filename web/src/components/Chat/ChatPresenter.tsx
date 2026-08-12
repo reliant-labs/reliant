@@ -17,6 +17,7 @@ import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
+import { BackgroundWorkPill } from "./BackgroundWorkPill";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
@@ -30,7 +31,10 @@ import type {
 } from "../../types/streaming";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
+import { useViewerStore } from "../../store/viewerStore";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { useCapability } from "../../lib/surfaceContext";
+import { useThreadMessages } from "../../hooks/message-queries";
 
 interface ChatPresenterProps {
   // Message data
@@ -78,6 +82,12 @@ interface ChatPresenterProps {
 
   // Question (ask_user) state
   hasPendingQuestion?: boolean;
+
+  // Scroll-back paging (the initial message snapshot is bounded, so older
+  // history is fetched on demand when the user scrolls to the top)
+  onLoadOlderMessages?: () => void;
+  isLoadingOlderMessages?: boolean;
+  hasOlderMessages?: boolean;
 }
 
 export const ChatPresenter = memo(function ChatPresenter({
@@ -102,11 +112,33 @@ export const ChatPresenter = memo(function ChatPresenter({
   isDiscussMode,
   onToggleDiscuss,
   hasPendingQuestion,
+  onLoadOlderMessages,
+  isLoadingOlderMessages,
+  hasOlderMessages,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLDivElement>(null);
 
+  // The workflow viewer (side/inline panel, its mouse-drag resize handles,
+  // and the execution-detail chrome it exposes) is desktop-only: it can't
+  // fit an iPhone viewport even at its resize floor, and its handles have no
+  // touch equivalent. chatExecutionSidebar is false for both mobile and
+  // embed, so this single flag decides whether any of that state, effects,
+  // or markup mount at all — never render-and-hide.
+  const showDesktopChrome = useCapability("chatExecutionSidebar");
+
   // Thread selection state (lifted up to share between header and timeline)
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
+
+  // Background-work pill reveals a running command in the Commands tab, which
+  // already accepts a processId to preselect.
+  const openCommandsViewer = useViewerStore((state) => state.openCommandsViewer);
+  const handleSelectBackgroundCommand = useCallback(
+    (processId: string) => {
+      if (!projectId) return;
+      openCommandsViewer(projectId, worktreeId ?? undefined, processId);
+    },
+    [openCommandsViewer, projectId, worktreeId],
+  );
 
   // Workspace state store for persisting workflow viewer state
   const getWorkflowViewerOpen = useWorkspaceStateStore((state) => state.getWorkflowViewerOpen);
@@ -115,8 +147,11 @@ export const ChatPresenter = memo(function ChatPresenter({
   const setWorkflowViewerModeStore = useWorkspaceStateStore((state) => state.setWorkflowViewerMode);
 
   // Workflow viewer mode: 'inline' (above chat) or 'side' (beside chat)
-  // Initialize from settings immediately
+  // Initialize from settings immediately. Skipped entirely off desktop —
+  // the value is never read once showDesktopChrome is false, and reading
+  // it anyway would just be dead code exercising settingsSync for nothing.
   const [workflowViewerMode, setWorkflowViewerMode] = useState<'inline' | 'side'>(() => {
+    if (!showDesktopChrome) return 'side';
     const stored = settingsSync.getSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, 'side');
     return (stored === 'inline' || stored === 'side') ? stored : 'side';
   });
@@ -147,9 +182,11 @@ export const ChatPresenter = memo(function ChatPresenter({
     }
   }, [chatId, projectId, worktreeId, setWorkflowViewerModeStore]);
 
-  // Load persisted workflow viewer state when chatId changes
+  // Load persisted workflow viewer state when chatId changes. Skipped off
+  // desktop: the viewer never renders there (showDesktopChrome below), so
+  // there is nothing for this state to drive.
   useEffect(() => {
-    if (!chatId || !projectId) return;
+    if (!showDesktopChrome || !chatId || !projectId) return;
 
     // Load persisted state
     const persistedOpen = getWorkflowViewerOpen(projectId, worktreeId ?? null, chatId);
@@ -182,7 +219,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // When workflowExecution appears, restore persisted mode if it exists
   // This handles the case where a workflow starts after the chat is already loaded
   useEffect(() => {
-    if (!chatId || !projectId || !workflowExecution) return;
+    if (!showDesktopChrome || !chatId || !projectId || !workflowExecution) return;
     
     const persistedMode = getWorkflowViewerMode(projectId, worktreeId ?? null, chatId);
     
@@ -207,54 +244,27 @@ export const ChatPresenter = memo(function ChatPresenter({
   // Keep ref in sync with state (already handled in updateWorkflowViewerMode)
 
   // Determine if viewers should be open based on mode and open state
-  const isInlineWorkflowViewerOpen = workflowViewerMode === 'inline' && isWorkflowViewerOpen && workflowExecution !== undefined;
-  const isSidePanelWorkflowViewerOpen = workflowViewerMode === 'side' && isWorkflowViewerOpen && workflowExecution !== undefined;
+  const isInlineWorkflowViewerOpen = showDesktopChrome && workflowViewerMode === 'inline' && isWorkflowViewerOpen && workflowExecution !== undefined;
+  const isSidePanelWorkflowViewerOpen = showDesktopChrome && workflowViewerMode === 'side' && isWorkflowViewerOpen && workflowExecution !== undefined;
 
 
+  // Show/hide the viewer, keeping whichever mode (inline or side) is already
+  // set from the persisted per-chat preference or the global setting. Mode is
+  // switched from inside the viewer panel itself, not from here.
+  const handleToggleWorkflowViewer = useCallback(() => {
+    updateWorkflowViewerOpen(!isWorkflowViewerOpen);
+  }, [isWorkflowViewerOpen, updateWorkflowViewerOpen]);
+
+  // Mode switch, driven by the viewer panel's own inline/side control.
   const handleToggleWorkflowViewerMode = useCallback(() => {
-    // If currently closed, open it using the current mode (which should already be set from persisted or setting)
-    if (!isWorkflowViewerOpen) {
-      updateWorkflowViewerOpen(true);
-    } else {
-      // Toggle between inline and side - this is an explicit user action, so persist it
-      const newMode = workflowViewerMode === 'inline' ? 'side' : 'inline';
-      updateWorkflowViewerMode(newMode);
-    }
-  }, [isWorkflowViewerOpen, workflowViewerMode, updateWorkflowViewerOpen, updateWorkflowViewerMode]);
-
-  // Legacy handlers for compatibility
-  const handleToggleInlineWorkflowViewer = useCallback(() => {
-    // If viewer is closed, open it in inline mode
-    if (!isWorkflowViewerOpen) {
-      updateWorkflowViewerOpen(true);
-      updateWorkflowViewerMode('inline');
-    } else if (workflowViewerMode === 'inline') {
-      // If already in inline mode, close it
-      updateWorkflowViewerOpen(false);
-    } else {
-      // If in side mode, switch to inline
-      updateWorkflowViewerMode('inline');
-    }
-  }, [workflowViewerMode, isWorkflowViewerOpen, updateWorkflowViewerOpen, updateWorkflowViewerMode]);
-
-  const handleToggleSidePanelWorkflowViewer = useCallback(() => {
-    // If viewer is closed, open it using the current mode (which should be set from setting)
-    if (!isWorkflowViewerOpen) {
-      updateWorkflowViewerOpen(true);
-      // Don't change mode - use whatever is already set (from setting or persisted)
-    } else if (workflowViewerMode === 'side') {
-      // If already in side mode, close it
-      updateWorkflowViewerOpen(false);
-    } else {
-      // If in inline mode, switch to side
-      updateWorkflowViewerMode('side');
-    }
-  }, [workflowViewerMode, isWorkflowViewerOpen, updateWorkflowViewerOpen, updateWorkflowViewerMode]);
-
+    updateWorkflowViewerMode(workflowViewerMode === 'inline' ? 'side' : 'inline');
+  }, [workflowViewerMode, updateWorkflowViewerMode]);
 
   // Listen for settings changes (only update if no persisted mode exists - i.e., new chats)
-  // This ensures new chats use the updated setting, but existing chats keep their preference
+  // This ensures new chats use the updated setting, but existing chats keep their preference.
+  // No-op off desktop — nothing here is read once showDesktopChrome is false.
   useEffect(() => {
+    if (!showDesktopChrome) return;
     const handleSettingsChange = () => {
       if (!chatId || !projectId) return;
       
@@ -274,7 +284,7 @@ export const ChatPresenter = memo(function ChatPresenter({
     return () => {
       window.removeEventListener('appearance-updated', handleSettingsChange);
     };
-  }, [chatId, projectId, worktreeId, getWorkflowViewerMode]);
+  }, [showDesktopChrome, chatId, projectId, worktreeId, getWorkflowViewerMode]);
 
   // Reset thread selection when navigating to a different chat
   // Workflow viewer state is now loaded from persisted state in the effect above
@@ -287,6 +297,22 @@ export const ChatPresenter = memo(function ChatPresenter({
     if (selectedThreadId === null) return null; // null = show all
     return new Set([selectedThreadId]);
   }, [selectedThreadId]);
+
+  // A selected SIDE thread is fetched on its own; the main thread keeps
+  // reading the chat-wide list, which is already exactly the main transcript
+  // (plus the interleaved thread-start / handoff markers the timeline draws
+  // around it, which only exist in the chat-wide view).
+  const selectedSideThreadId =
+    selectedThreadId &&
+    selectedThreadId !== chatId &&
+    selectedThreadId !== "0" &&
+    selectedThreadId !== ""
+      ? selectedThreadId
+      : undefined;
+  const { data: selectedThreadMessages } = useThreadMessages(
+    chatId,
+    selectedSideThreadId,
+  );
 
   // Wrapper to inject selectedThreadId into onSendMessage
   const handleSendWithThread = useCallback(
@@ -330,12 +356,20 @@ export const ChatPresenter = memo(function ChatPresenter({
 
   // Thinking indicator element, passed as Virtuoso footer
   const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingQuestion;
-  const thinkingFooter = hasThinkingFooter ? (
-    <ChatThinkingIndicator
-      chatId={chatId || undefined}
-      filterThreadId={selectedThreadId}
-    />
-  ) : undefined;
+  // Memoized because this element's identity flows into Virtuoso's `context`
+  // prop (via footerContext below). A fresh element on every render defeats
+  // that memo and re-renders the header, footer, and every visible row on each
+  // pass — which, during streaming, is many times per second.
+  const thinkingFooter = useMemo(
+    () =>
+      hasThinkingFooter ? (
+        <ChatThinkingIndicator
+          chatId={chatId || undefined}
+          filterThreadId={selectedThreadId}
+        />
+      ) : undefined,
+    [hasThinkingFooter, chatId, selectedThreadId]
+  );
 
   // When thinking indicator appears, scroll to bottom so it's visible
   const prevHasThinkingFooterRef = useRef(false);
@@ -356,7 +390,13 @@ export const ChatPresenter = memo(function ChatPresenter({
 
   // Render the timeline
   const renderTimeline = () => {
-    const filteredMessages = messages.filter(
+    // With a thread selected, render THAT THREAD's own messages rather than
+    // the chat-wide list narrowed down to it. Filtering only showed whatever
+    // part of the thread happened to survive a window sized for the main
+    // transcript, so selecting a busy spawn could show a fraction of it and
+    // look complete. The thread-scoped read has the whole thread.
+    const timelineMessages = selectedThreadMessages ?? messages;
+    const filteredMessages = timelineMessages.filter(
       (message: Message) => message.role !== MessageRole.TOOL
     );
 
@@ -376,6 +416,9 @@ export const ChatPresenter = memo(function ChatPresenter({
         onResumeFollow={handleResumeFollow}
         footer={thinkingFooter}
         onSelectThread={setSelectedThreadId}
+        onLoadOlderMessages={onLoadOlderMessages}
+        isLoadingOlderMessages={isLoadingOlderMessages}
+        hasOlderMessages={hasOlderMessages}
       />
     );
   };
@@ -393,12 +436,11 @@ export const ChatPresenter = memo(function ChatPresenter({
           selectedThreadId={selectedThreadId}
           onSelectThread={setSelectedThreadId}
           workflowExecution={workflowExecution}
-          onToggleInlineWorkflowViewer={handleToggleInlineWorkflowViewer}
-          isInlineWorkflowViewerOpen={isInlineWorkflowViewerOpen}
-          onToggleSidePanelWorkflowViewer={handleToggleSidePanelWorkflowViewer}
-          isSidePanelWorkflowViewerOpen={isSidePanelWorkflowViewerOpen}
-          workflowViewerMode={workflowViewerMode}
-          onToggleWorkflowViewerMode={handleToggleWorkflowViewerMode}
+          // Omitting the callback (rather than passing a no-op) is what
+          // suppresses the "Show/Hide Workflow" menu entry — ChatHeader
+          // gates on `onToggleWorkflowViewer &&`.
+          onToggleWorkflowViewer={showDesktopChrome ? handleToggleWorkflowViewer : undefined}
+          isWorkflowViewerOpen={isWorkflowViewerOpen}
         />
 
         <ResumeDaemonPill />
@@ -484,6 +526,16 @@ export const ChatPresenter = memo(function ChatPresenter({
             renderTimeline()}
         </ChatMessagesContainer>
         )}
+
+        {/* Background work (async spawns + running commands) — the spawn tool
+            call that started them scrolls away, so this is the fixed surface
+            that keeps them reachable. */}
+        <BackgroundWorkPill
+          chatId={chatId || undefined}
+          worktreeId={worktreeId ?? undefined}
+          onSelectThread={setSelectedThreadId}
+          onSelectCommand={handleSelectBackgroundCommand}
+        />
 
         {/* Permissions Panel - positioned above chat input */}
         <PermissionsPanelWrapper>

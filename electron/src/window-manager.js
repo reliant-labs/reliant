@@ -2,6 +2,7 @@ const { BrowserWindow, ipcMain, dialog, shell, app } = require('electron');
 const path = require('path');
 const log = require('./logger');
 const windowConfig = require('./window-config');
+const { shouldOpenExternally } = require('./navigation-policy');
 // Note: Window state persistence is now handled in main.js via the backend API
 // Each worktree stores its own window state in ./data/window-state.json
 
@@ -49,7 +50,7 @@ class WindowManager {
     });
 
     window.webContents.on('will-navigate', (event, url) => {
-      if (url !== window.webContents.getURL()) {
+      if (shouldOpenExternally(url, window.webContents.getURL())) {
         event.preventDefault();
         shell.openExternal(url);
       }

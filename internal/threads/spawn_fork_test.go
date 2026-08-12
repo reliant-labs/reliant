@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // ============================================================================
@@ -65,15 +65,15 @@ func TestSpawnFork_E2E_ChildInheritsParentMessages(t *testing.T) {
 	if *childThread.ParentThreadID != parentThread.ID {
 		t.Errorf("expected parent thread ID %s, got %s", parentThread.ID, *childThread.ParentThreadID)
 	}
-	if childThread.ForkAtContextWindowID == nil {
-		t.Fatal("FAIL: child thread has nil ForkAtContextWindowID - fork metadata not set")
+	if childThread.ForkAtMessageID == nil {
+		t.Fatal("FAIL: child thread has nil ForkAtMessageID - fork metadata not set")
 	}
-	if *childThread.ForkAtContextWindowID != parentCW.ID {
-		t.Errorf("expected fork at CW %s, got %s", parentCW.ID, *childThread.ForkAtContextWindowID)
+	if forkMsg, err := h.repo.GetMessage(ctx, *childThread.ForkAtMessageID); err != nil || forkMsg.ContextWindowID != parentCW.ID {
+		t.Errorf("expected fork message in CW %s, got message in %s (err=%v)", parentCW.ID, forkMsg.ContextWindowID, err)
 	}
 
-	t.Logf("✓ Child thread fork metadata correct: ParentThreadID=%s, ForkAtCWID=%s",
-		*childThread.ParentThreadID, *childThread.ForkAtContextWindowID)
+	t.Logf("✓ Child thread fork metadata correct: ParentThreadID=%s, ForkAtMessageID=%s",
+		*childThread.ParentThreadID, *childThread.ForkAtMessageID)
 
 	// ASSERT: Child context window has parent chain
 	if childCW.ParentContextWindowID == nil {
@@ -169,24 +169,22 @@ func TestCreateWorkflowWithThread_ForkFromThread_SetsForkMetadata(t *testing.T) 
 	}
 	t.Logf("✓ Thread.ParentThreadID = %s", *thread.ParentThreadID)
 
-	// ASSERT: Thread has ForkAtContextWindowID set
-	if thread.ForkAtContextWindowID == nil {
-		t.Fatal("FAIL: ForkAtContextWindowID is nil")
+	// ASSERT: Thread has ForkAtMessageID set, in the parent's CW
+	if thread.ForkAtMessageID == nil {
+		t.Fatal("FAIL: ForkAtMessageID is nil")
 	}
-	if *thread.ForkAtContextWindowID != parentCW.ID {
-		t.Errorf("expected ForkAtContextWindowID=%s, got %s", parentCW.ID, *thread.ForkAtContextWindowID)
+	forkMsg, err := h.repo.GetMessage(ctx, *thread.ForkAtMessageID)
+	if err != nil || forkMsg.ContextWindowID != parentCW.ID {
+		t.Errorf("expected fork message in CW %s, got message in %s (err=%v)", parentCW.ID, forkMsg.ContextWindowID, err)
 	}
-	t.Logf("✓ Thread.ForkAtContextWindowID = %s", *thread.ForkAtContextWindowID)
+	t.Logf("✓ Thread.ForkAtMessageID = %s", *thread.ForkAtMessageID)
 
-	// ASSERT: Thread has ForkAtOrdinal = maxOrdinal (ForkFromThread calculates this)
-	// Parent has 1 message at ordinal 1, so maxOrdinal = 1
-	if thread.ForkAtOrdinal == nil {
-		t.Fatal("FAIL: ForkAtOrdinal is nil")
+	// ASSERT: Thread's fork message is the parent's latest (ForkFromThread
+	// calculates this). Parent has 1 message at ordinal 1, so that's it.
+	if forkMsg.Ordinal != 1 {
+		t.Errorf("expected fork message ordinal=1, got %d", forkMsg.Ordinal)
 	}
-	if *thread.ForkAtOrdinal != 1 {
-		t.Errorf("expected ForkAtOrdinal=1, got %d", *thread.ForkAtOrdinal)
-	}
-	t.Logf("✓ Thread.ForkAtOrdinal = %d", *thread.ForkAtOrdinal)
+	t.Logf("✓ Thread's fork message ordinal = %d", forkMsg.Ordinal)
 
 	// ASSERT: Context window has ParentContextWindowID set
 	if cw.ParentContextWindowID == nil {
@@ -197,14 +195,14 @@ func TestCreateWorkflowWithThread_ForkFromThread_SetsForkMetadata(t *testing.T) 
 	}
 	t.Logf("✓ ContextWindow.ParentContextWindowID = %s", *cw.ParentContextWindowID)
 
-	// ASSERT: Context window has ForkAtOrdinal
-	if cw.ForkAtOrdinal == nil {
-		t.Fatal("FAIL: Context window ForkAtOrdinal is nil")
+	// ASSERT: Context window has ForkAtMessageID matching the thread's
+	if cw.ForkAtMessageID == nil {
+		t.Fatal("FAIL: Context window ForkAtMessageID is nil")
 	}
-	if *cw.ForkAtOrdinal != 1 {
-		t.Errorf("expected CW.ForkAtOrdinal=1, got %d", *cw.ForkAtOrdinal)
+	if *cw.ForkAtMessageID != *thread.ForkAtMessageID {
+		t.Errorf("expected CW.ForkAtMessageID=%s, got %s", *thread.ForkAtMessageID, *cw.ForkAtMessageID)
 	}
-	t.Logf("✓ ContextWindow.ForkAtOrdinal = %d", *cw.ForkAtOrdinal)
+	t.Logf("✓ ContextWindow.ForkAtMessageID = %s", *cw.ForkAtMessageID)
 
 	t.Logf("✓ PASS: All fork metadata correctly set")
 }
@@ -348,9 +346,9 @@ func TestForkFromThread_OrdinalZero_IncludesAllMessages(t *testing.T) {
 	// ACT: Fork using maxOrdinal=5 (ForkFromThread behavior - include all 5 messages)
 	childThread, _ := h.forkThread("ordinal-test-child", h.chatID, parentThread.ID, 5, parentCW.ID)
 
-	// Verify fork used maxOrdinal=5
-	if childThread.ForkAtOrdinal == nil || *childThread.ForkAtOrdinal != 5 {
-		t.Fatalf("test setup: expected ForkAtOrdinal=5, got %v", childThread.ForkAtOrdinal)
+	// Verify fork used the message at ordinal 5
+	if childThread.ForkAtMessageID == nil || *childThread.ForkAtMessageID != "msg-5" {
+		t.Fatalf("test setup: expected ForkAtMessageID=msg-5, got %v", childThread.ForkAtMessageID)
 	}
 
 	// ACT: Load messages
@@ -359,8 +357,8 @@ func TestForkFromThread_OrdinalZero_IncludesAllMessages(t *testing.T) {
 		t.Fatalf("LoadCurrentMessages failed: %v", err)
 	}
 
-	// ASSERT: With maxOrdinal=5, all messages should be included
-	t.Logf("ForkAtOrdinal=5 returned %d messages", len(msgs))
+	// ASSERT: With fork at msg-5 (ordinal 5), all messages should be included
+	t.Logf("ForkAtMessageID=msg-5 returned %d messages", len(msgs))
 
 	// Verify all 5 messages are included
 	if len(msgs) != 5 {
@@ -448,8 +446,8 @@ func TestSpawnFork_ForkFromMessage_IncludesMessagesUpToPoint(t *testing.T) {
 	childThread, _ := h.forkThread("fork-at-3", h.chatID, parentThread.ID, 3, parentCW.ID)
 
 	// ASSERT: Verify fork metadata
-	if childThread.ForkAtOrdinal == nil || *childThread.ForkAtOrdinal != 3 {
-		t.Fatalf("test setup: expected ForkAtOrdinal=3, got %v", childThread.ForkAtOrdinal)
+	if childThread.ForkAtMessageID == nil || *childThread.ForkAtMessageID != "msg-3" {
+		t.Fatalf("test setup: expected ForkAtMessageID=msg-3, got %v", childThread.ForkAtMessageID)
 	}
 
 	// ACT: Load messages
@@ -559,7 +557,7 @@ func TestSpawnFork_TokenCount_InheritedWithOrdinalZero(t *testing.T) {
 
 	// Create a message with token counts using the helper
 	// Helper creates InputTokens and OutputTokens, total = 100 + 50 = 150
-	h.addMessageWithTokens(h.chatID, parentThread.ID, parentCW.ID, 1, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT), 100, 50)
+	parentMsg := h.addMessageWithTokens(h.chatID, parentThread.ID, parentCW.ID, 1, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT), 100, 50)
 
 	// ACT: Get parent's token count
 	parentTokens, err := h.repo.GetThreadTokenCount(ctx, parentThread.ID, nil)
@@ -579,8 +577,8 @@ func TestSpawnFork_TokenCount_InheritedWithOrdinalZero(t *testing.T) {
 	childThread, _ := h.forkThread("child-tokens", h.chatID, parentThread.ID, 1, parentCW.ID)
 
 	// Verify fork metadata
-	if childThread.ForkAtOrdinal == nil || *childThread.ForkAtOrdinal != 1 {
-		t.Fatalf("test setup: expected ForkAtOrdinal=1, got %v", childThread.ForkAtOrdinal)
+	if childThread.ForkAtMessageID == nil || *childThread.ForkAtMessageID != parentMsg.ID {
+		t.Fatalf("test setup: expected ForkAtMessageID=%s, got %v", parentMsg.ID, childThread.ForkAtMessageID)
 	}
 
 	// ACT: Get child's token count (should inherit from parent)
@@ -597,4 +595,98 @@ func TestSpawnFork_TokenCount_InheritedWithOrdinalZero(t *testing.T) {
 	}
 
 	t.Logf("✓ PASS: Child thread correctly inherited %d tokens from parent", childTokens)
+}
+
+// ============================================================================
+// REGRESSION TEST: Forking in a multi-thread chat where ordinal and seq diverge
+// ============================================================================
+//
+// Context: messages.seq replaced messages.ordinal as the chat-global total
+// order (see 20260802000000_add_message_seq.sql). Fork filtering
+// (resolveMessagesFromCW in messages.go, BranchChat in chat_branch.go)
+// deliberately stayed on ordinal, since ordinal — not seq — is the
+// per-thread position a fork point is defined against. This test proves
+// that filtering still works correctly in the one case where a mistaken
+// migration to seq would hide: a chat with multiple threads writing
+// concurrently, so each thread's ordinal sequence and the chat's seq
+// sequence numerically diverge (interleaved writes mean a message's
+// ordinal is no longer equal to, or even ordered the same as, its seq).
+//
+// Setup: a chat with a "main" thread and a "spawn" thread (simulating a
+// parallel spawned sub-agent) both writing messages, interleaved so that
+// seq allocation order does NOT match either thread's ordinal order.
+// We then fork the main thread partway through and assert the forked
+// thread inherits exactly the right main-thread messages by identity —
+// no spawn-thread messages, and nothing past the fork point.
+// ============================================================================
+
+func TestSpawnFork_MultiThreadChat_OrdinalSeqDiverge(t *testing.T) {
+	h := newTestHelper(t)
+	defer h.Close()
+	ctx := context.Background()
+
+	mainThread, mainCW := h.createThread("main-thread", h.chatID)
+	spawnThread, spawnCW := h.createThread("spawn-thread", h.chatID)
+
+	// ARRANGE: interleave writes across the two threads so seq (chat-global,
+	// allocated in call order below) and ordinal (per-thread) diverge.
+	//
+	//   write order   thread   ordinal   seq
+	//   spawn-a       spawn    1         0
+	//   spawn-b       spawn    2         1
+	//   main-1        main     1         2
+	//   spawn-c       spawn    3         3
+	//   main-2        main     2         4   <- fork point (ordinal=2, seq=4)
+	//   spawn-d       spawn    4         5
+	//   main-3        main     3         6   <- must NOT be inherited
+	h.addMessageWithID("spawn-a", h.chatID, spawnThread.ID, spawnCW.ID, 1, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
+	h.addMessageWithID("spawn-b", h.chatID, spawnThread.ID, spawnCW.ID, 2, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT))
+	main1 := h.addMessageWithID("main-1", h.chatID, mainThread.ID, mainCW.ID, 1, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
+	h.addMessageWithID("spawn-c", h.chatID, spawnThread.ID, spawnCW.ID, 3, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
+	main2 := h.addMessageWithID("main-2", h.chatID, mainThread.ID, mainCW.ID, 2, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT))
+	h.addMessageWithID("spawn-d", h.chatID, spawnThread.ID, spawnCW.ID, 4, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT))
+	h.addMessageWithID("main-3", h.chatID, mainThread.ID, mainCW.ID, 3, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
+
+	// Sanity: confirm the fork point's ordinal and seq genuinely differ.
+	// If they ever coincided, this test wouldn't exercise the ordinal-vs-seq
+	// distinction it's designed to catch.
+	if main2.Ordinal == main2.Seq {
+		t.Fatalf("test setup invalid: fork point ordinal (%d) must differ from seq (%d) to exercise ordinal/seq divergence", main2.Ordinal, main2.Seq)
+	}
+	t.Logf("fork point: ordinal=%d seq=%d (diverged as required)", main2.Ordinal, main2.Seq)
+
+	// ACT: fork the main thread at ordinal 2 (main-1, main-2), leaving out
+	// main-3 and every spawn-thread message.
+	childThread, _ := h.forkThread("child-of-main", h.chatID, mainThread.ID, main2.Ordinal, mainCW.ID)
+
+	msgs, err := h.svc.LoadCurrentMessages(ctx, childThread.ID)
+	if err != nil {
+		t.Fatalf("LoadCurrentMessages failed: %v", err)
+	}
+
+	// ASSERT: exactly main-1 and main-2, in that order, by identity/content —
+	// not by numeric ordinal/seq values (those are allocation details).
+	expectedIDs := []string{"main-1", "main-2"}
+	gotIDs := make([]string, len(msgs))
+	for i, m := range msgs {
+		gotIDs[i] = m.ID
+	}
+	if len(gotIDs) != len(expectedIDs) {
+		t.Fatalf("FAIL: expected messages %v, got %v", expectedIDs, gotIDs)
+	}
+	for i, expectedID := range expectedIDs {
+		if gotIDs[i] != expectedID {
+			t.Fatalf("FAIL: expected messages %v, got %v", expectedIDs, gotIDs)
+		}
+	}
+
+	// ASSERT: no spawn-thread message and no post-fork-point main message leaked in.
+	forbidden := map[string]bool{"spawn-a": true, "spawn-b": true, "spawn-c": true, "spawn-d": true, "main-3": true}
+	for _, m := range msgs {
+		if forbidden[m.ID] {
+			t.Fatalf("FAIL: forked thread inherited message %q which should not be visible (spawn-thread message or past the fork point)", m.ID)
+		}
+	}
+
+	t.Logf("✓ PASS: fork correctly inherited exactly main-1, main-2 in a multi-thread chat with diverged ordinal/seq (main1=%+v)", main1.ID)
 }

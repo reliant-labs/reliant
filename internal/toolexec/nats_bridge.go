@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
@@ -37,7 +38,17 @@ type NATSToolBridge struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// inFlight bounds the number of concurrently-handled request/reply
+	// messages. See handleAsync.
+	inFlight chan struct{}
 }
+
+// maxInFlightRequests bounds concurrent request/reply handlers across all
+// daemons on this pod. Each slot costs one goroutine parked on a channel
+// receive, so this is generous — it exists to stop a runaway agent loop from
+// spawning unbounded goroutines, not to pace normal traffic.
+const maxInFlightRequests = 512
 
 // NewNATSToolBridge creates a new bridge.
 func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnectionManager) *NATSToolBridge {
@@ -50,6 +61,7 @@ func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnecti
 		daemonCancels: make(map[string]context.CancelFunc),
 		ctx:           ctx,
 		cancel:        cancel,
+		inFlight:      make(chan struct{}, maxInFlightRequests),
 	}
 }
 
@@ -57,6 +69,51 @@ func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnecti
 func (b *NATSToolBridge) Start() error {
 	logging.Info("[NATSToolBridge] Started — subscriptions will be created per-daemon on connect")
 	return nil
+}
+
+// handleAsync runs fn on its own goroutine so the NATS subscription callback
+// can return immediately.
+//
+// nats.go delivers messages for a subscription to its callback ONE AT A TIME,
+// in order. Any request/reply handler that waits on the daemon round-trip
+// inline therefore blocks every other message on the same subject for the full
+// duration of that tool call — and the subject is per-{user,daemon}, so a
+// single `go test` stalled every other chat sharing the daemon behind it. A
+// 3ms `sed` was observed taking 209s, completing 12ms after the slow neighbour
+// ahead of it released the callback.
+//
+// The reply is published from the goroutine; msg.Respond is just a publish to
+// msg.Reply, so it is safe off-callback.
+//
+// If the in-flight budget is exhausted, fail the request immediately rather
+// than blocking the callback — blocking here would reintroduce exactly the
+// head-of-line stall this exists to prevent. onOverload should send whatever
+// error shape the caller's subject expects.
+func (b *NATSToolBridge) handleAsync(subject string, msg *nats.Msg, onOverload func(), fn func()) {
+	select {
+	case b.inFlight <- struct{}{}:
+	default:
+		logging.Error("[NATSToolBridge] In-flight request budget exhausted, rejecting",
+			"subject", subject, "limit", maxInFlightRequests)
+		onOverload()
+		return
+	}
+
+	b.wg.Add(1)
+	go func() {
+		defer b.wg.Done()
+		defer func() { <-b.inFlight }()
+		defer func() {
+			// A panic here would otherwise take down the whole gateway
+			// process, since this no longer runs on nats.go's callback
+			// goroutine. The caller is left to time out.
+			if r := recover(); r != nil {
+				logging.Error("[NATSToolBridge] Panic in async handler",
+					"subject", subject, "panic", r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // OnDaemonConnected implements DaemonConnectionListener. It creates per-daemon
@@ -122,6 +179,27 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		if err := b.mgr.SendToolExecutionCancel(ctx, userID, cancel.RequestID, cancel.Reason); err != nil {
 			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_cancel").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward cancel", "error", err, "userID", userID, "requestID", cancel.RequestID)
+		}
+	}))
+
+	// 2b. tools.background.{userID}.{daemonID}
+	addSub(b.nc.Subscribe(daemonSubject(toolBackgroundSubj, userID, daemonID), func(msg *nats.Msg) {
+		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.background")
+		defer span.End()
+		observability.NATSReceiveTotal.WithLabelValues("tools.background").Inc()
+
+		var bg struct {
+			RequestID  string `json:"request_id"`
+			ToolCallID string `json:"tool_call_id"`
+		}
+		if err := json.Unmarshal(msg.Data, &bg); err != nil {
+			logging.Error("[NATSToolBridge] Failed to unmarshal background request", "error", err)
+			return
+		}
+
+		if err := b.mgr.SendToolExecutionBackground(ctx, userID, bg.RequestID, bg.ToolCallID); err != nil {
+			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_background").Inc()
+			logging.Warn("[NATSToolBridge] Failed to forward background", "error", err, "userID", userID, "requestID", bg.RequestID)
 		}
 	}))
 
@@ -299,148 +377,190 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 	// 10. daemon.command.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(daemonCommandSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.command")
-		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.command").Inc()
 
-		var req struct {
-			RequestID   string          `json:"request_id"`
-			CommandType string          `json:"command_type"`
-			Payload     json.RawMessage `json:"payload"`
-			TimeoutMs   int32           `json:"timeout_ms"`
-		}
+		var req daemonCommandWire
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
+			span.End()
 			_ = msg.Respond([]byte(`{"success":false,"error_message":"invalid payload"}`))
 			return
 		}
 
-		protoReq := &reliantv1.DaemonCommandRequest{
-			RequestId:   req.RequestID,
-			CommandType: req.CommandType,
-			Payload:     req.Payload,
-			TimeoutMs:   req.TimeoutMs,
-		}
-
-		resp, err := b.mgr.SendDaemonCommand(ctx, userID, protoReq)
-		if err != nil {
-			errResp, _ := json.Marshal(map[string]interface{}{
-				"success":       false,
-				"error_message": err.Error(),
-			})
-			_ = msg.Respond(errResp)
-			return
-		}
-
-		respData, _ := json.Marshal(map[string]interface{}{
-			"success":       resp.Success,
-			"payload":       resp.Payload,
-			"error_message": resp.ErrorMessage,
+		// Off the callback goroutine: SendDaemonCommand blocks on the daemon
+		// round-trip. See handleAsync.
+		b.handleAsync("daemon.command", msg, func() {
+			span.End()
+			_ = msg.Respond([]byte(`{"success":false,"error_message":"daemon gateway overloaded: in-flight request budget exhausted"}`))
+		}, func() {
+			defer span.End()
+			b.respondDaemonCommand(ctx, msg, userID, &req)
 		})
-		// A reply exceeding the NATS server's max_payload can't transit as a
-		// single message — and the old `_ = msg.Respond(...)` DISCARDED the
-		// publish error, so the caller waited out its full timeout with zero
-		// diagnostics (2026-07-09: worktree.git_changes / fs.search replies of
-		// 1.7-5.4MB against the 1MB default surfaced as bare "nats: timeout").
-		// publishReply keeps the single-message fast path for small replies
-		// (byte-identical to Respond) and transparently chunks oversize ones;
-		// the router reassembles, so user RPCs get the full payload. Only
-		// beyond the absolute cap do we substitute a structured, actionable
-		// error reply in the same envelope format.
-		chunks, err := publishReply(b.nc, msg.Reply, respData)
-		switch {
-		case errors.Is(err, errReplyExceedsAbsoluteCap):
-			logging.Error("[NATSToolBridge] Daemon command reply exceeds absolute reply cap",
-				"commandType", req.CommandType, "requestID", req.RequestID,
-				"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
-			errResp, _ := json.Marshal(map[string]interface{}{
-				"success":       false,
-				"error_message": oversizeNATSPayloadError("response", len(respData), maxChunkedReplyBytes, oversizeReplyHint),
-			})
-			if rerr := msg.Respond(errResp); rerr != nil {
-				logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for daemon command",
-					"commandType", req.CommandType, "requestID", req.RequestID, "error", rerr)
-			}
-			return
-		case err != nil:
-			logging.Error("[NATSToolBridge] Failed to publish daemon command reply",
-				"commandType", req.CommandType, "requestID", req.RequestID,
-				"replyBytes", len(respData), "error", err)
-		case chunks > 1:
-			logging.Info("[NATSToolBridge] Chunked oversize daemon command reply",
-				"commandType", req.CommandType, "requestID", req.RequestID,
-				"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
-		}
-
-		// NOTE: terminal output forwarding is NOT started here. It is now
-		// subscribe-driven — started only when a terminal-output-subscribe
-		// request arrives on daemon.terminal.subscribe.* (see below), mirroring
-		// the process-output subscribe flow. This ensures the daemon's PTY pump
-		// does not start until the full subscriber interest chain is up, so the
-		// initial shell prompt cannot be dropped.
 	}))
 
 	// 11. tools.request.sync.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(toolRequestSyncSubject, userID, daemonID), func(msg *nats.Msg) {
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request.sync")
-		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.request.sync").Inc()
 
 		var request ToolExecutionRequest
 		if err := json.Unmarshal(msg.Data, &request); err != nil {
+			span.End()
 			_ = msg.Respond([]byte(`{"success":false,"is_error":true,"error_message":"invalid payload","error_code":"INVALID_REQUEST"}`))
 			return
 		}
 
-		resp, err := b.mgr.SendToolRequestSync(ctx, userID, &request)
-		if err != nil {
-			errResp, _ := json.Marshal(&ToolExecutionResponse{
-				Success:      false,
-				IsError:      true,
-				ErrorMessage: err.Error(),
-				ErrorCode:    ErrorCodeDaemonRoundTrip,
-			})
-			_ = msg.Respond(errResp)
-			return
-		}
-
-		respData, _ := json.Marshal(resp)
-		// Same transparent chunking as daemon.command above — the transport
-		// doesn't decide policy, it just moves the bytes; how much of an
-		// oversize tool result an LLM actually sees is capped at the
-		// tool-result consumption layer (RemoteExecutor). Only beyond the
-		// absolute cap do we substitute a structured error, with Content set
-		// (not just ErrorMessage) because the LLM sees the tool result's
-		// Content — that's what lets the model react by narrowing its search.
-		chunks, err := publishReply(b.nc, msg.Reply, respData)
-		switch {
-		case errors.Is(err, errReplyExceedsAbsoluteCap):
-			logging.Error("[NATSToolBridge] Tool sync reply exceeds absolute reply cap",
-				"toolName", request.ToolName, "requestID", request.RequestID,
-				"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
-			oversizeMsg := oversizeNATSPayloadError("tool result", len(respData), maxChunkedReplyBytes, oversizeReplyHint)
+		// Off the callback goroutine: SendToolRequestSync blocks for the whole
+		// tool execution (up to 600s). See handleAsync.
+		b.handleAsync("tools.request.sync", msg, func() {
+			span.End()
 			errResp, _ := json.Marshal(&ToolExecutionResponse{
 				RequestID:    request.RequestID,
 				Success:      false,
 				IsError:      true,
-				Content:      oversizeMsg,
-				ErrorMessage: oversizeMsg,
-				ErrorCode:    "RESPONSE_TOO_LARGE",
+				Content:      "Daemon gateway is overloaded; too many tool requests in flight.",
+				ErrorMessage: "in-flight request budget exhausted",
+				ErrorCode:    ErrorCodeDaemonRoundTrip,
 			})
-			if rerr := msg.Respond(errResp); rerr != nil {
-				logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for tool sync request",
-					"toolName", request.ToolName, "requestID", request.RequestID, "error", rerr)
-			}
-			return
-		case err != nil:
-			logging.Error("[NATSToolBridge] Failed to publish tool sync reply",
-				"toolName", request.ToolName, "requestID", request.RequestID,
-				"replyBytes", len(respData), "error", err)
-		case chunks > 1:
-			logging.Info("[NATSToolBridge] Chunked oversize tool sync reply",
-				"toolName", request.ToolName, "requestID", request.RequestID,
-				"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
-		}
+			_ = msg.Respond(errResp)
+		}, func() {
+			defer span.End()
+			b.respondToolRequestSync(ctx, msg, userID, &request)
+		})
 	}))
 
+	b.finishDaemonConnected(daemonCtx, userID, daemonID, subs)
+}
+
+// daemonCommandWire is the JSON envelope for a daemon.command NATS request.
+type daemonCommandWire struct {
+	RequestID   string                   `json:"request_id"`
+	CommandType string                   `json:"command_type"`
+	Payload     json.RawMessage          `json:"payload"`
+	TimeoutMs   int32                    `json:"timeout_ms"`
+	Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
+}
+
+// respondDaemonCommand performs the daemon round-trip for a daemon.command
+// message and publishes the reply. Runs off the NATS callback goroutine.
+func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg, userID string, req *daemonCommandWire) {
+	protoReq := &reliantv1.DaemonCommandRequest{
+		RequestId:   req.RequestID,
+		CommandType: req.CommandType,
+		Payload:     req.Payload,
+		TimeoutMs:   req.TimeoutMs,
+		// Forwarded so the daemon can enforce connector confinement. Nil
+		// for first-party traffic, which the daemon treats as unrestricted.
+		Policy: daemonpolicy.WireToProto(req.Policy),
+	}
+
+	resp, err := b.mgr.SendDaemonCommand(ctx, userID, protoReq)
+	if err != nil {
+		errResp, _ := json.Marshal(map[string]interface{}{
+			"success":       false,
+			"error_message": err.Error(),
+		})
+		_ = msg.Respond(errResp)
+		return
+	}
+
+	respData, _ := json.Marshal(map[string]interface{}{
+		"success":       resp.Success,
+		"payload":       resp.Payload,
+		"error_message": resp.ErrorMessage,
+	})
+	// A reply exceeding the NATS server's max_payload can't transit as a
+	// single message — and the old `_ = msg.Respond(...)` DISCARDED the
+	// publish error, so the caller waited out its full timeout with zero
+	// diagnostics (2026-07-09: worktree.git_changes / fs.search replies of
+	// 1.7-5.4MB against the 1MB default surfaced as bare "nats: timeout").
+	// publishReply keeps the single-message fast path for small replies
+	// (byte-identical to Respond) and transparently chunks oversize ones;
+	// the router reassembles, so user RPCs get the full payload. Only
+	// beyond the absolute cap do we substitute a structured, actionable
+	// error reply in the same envelope format.
+	chunks, err := publishReply(b.nc, msg.Reply, respData)
+	switch {
+	case errors.Is(err, errReplyExceedsAbsoluteCap):
+		logging.Error("[NATSToolBridge] Daemon command reply exceeds absolute reply cap",
+			"commandType", req.CommandType, "requestID", req.RequestID,
+			"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
+		errResp, _ := json.Marshal(map[string]interface{}{
+			"success":       false,
+			"error_message": oversizeNATSPayloadError("response", len(respData), maxChunkedReplyBytes, oversizeReplyHint),
+		})
+		if rerr := msg.Respond(errResp); rerr != nil {
+			logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for daemon command",
+				"commandType", req.CommandType, "requestID", req.RequestID, "error", rerr)
+		}
+		return
+	case err != nil:
+		logging.Error("[NATSToolBridge] Failed to publish daemon command reply",
+			"commandType", req.CommandType, "requestID", req.RequestID,
+			"replyBytes", len(respData), "error", err)
+	case chunks > 1:
+		logging.Info("[NATSToolBridge] Chunked oversize daemon command reply",
+			"commandType", req.CommandType, "requestID", req.RequestID,
+			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
+	}
+}
+
+// respondToolRequestSync performs the daemon round-trip for a tools.request.sync
+// message and publishes the reply. Runs off the NATS callback goroutine.
+func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.Msg, userID string, request *ToolExecutionRequest) {
+	resp, err := b.mgr.SendToolRequestSync(ctx, userID, request)
+	if err != nil {
+		errResp, _ := json.Marshal(&ToolExecutionResponse{
+			Success:      false,
+			IsError:      true,
+			ErrorMessage: err.Error(),
+			ErrorCode:    ErrorCodeDaemonRoundTrip,
+		})
+		_ = msg.Respond(errResp)
+		return
+	}
+
+	respData, _ := json.Marshal(resp)
+	// Same transparent chunking as daemon.command — the transport doesn't
+	// decide policy, it just moves the bytes; how much of an oversize tool
+	// result an LLM actually sees is capped at the tool-result consumption
+	// layer (RemoteExecutor). Only beyond the absolute cap do we substitute a
+	// structured error, with Content set (not just ErrorMessage) because the
+	// LLM sees the tool result's Content — that's what lets the model react by
+	// narrowing its search.
+	chunks, err := publishReply(b.nc, msg.Reply, respData)
+	switch {
+	case errors.Is(err, errReplyExceedsAbsoluteCap):
+		logging.Error("[NATSToolBridge] Tool sync reply exceeds absolute reply cap",
+			"toolName", request.ToolName, "requestID", request.RequestID,
+			"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
+		oversizeMsg := oversizeNATSPayloadError("tool result", len(respData), maxChunkedReplyBytes, oversizeReplyHint)
+		errResp, _ := json.Marshal(&ToolExecutionResponse{
+			RequestID:    request.RequestID,
+			Success:      false,
+			IsError:      true,
+			Content:      oversizeMsg,
+			ErrorMessage: oversizeMsg,
+			ErrorCode:    "RESPONSE_TOO_LARGE",
+		})
+		if rerr := msg.Respond(errResp); rerr != nil {
+			logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for tool sync request",
+				"toolName", request.ToolName, "requestID", request.RequestID, "error", rerr)
+		}
+		return
+	case err != nil:
+		logging.Error("[NATSToolBridge] Failed to publish tool sync reply",
+			"toolName", request.ToolName, "requestID", request.RequestID,
+			"replyBytes", len(respData), "error", err)
+	case chunks > 1:
+		logging.Info("[NATSToolBridge] Chunked oversize tool sync reply",
+			"toolName", request.ToolName, "requestID", request.RequestID,
+			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
+	}
+}
+
+// finishDaemonConnected stores the subscription set for a daemon and kicks off
+// the pending-command drain.
+func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID, daemonID string, subs []*nats.Subscription) {
 	// Store all subscriptions for this daemon.
 	b.subsMu.Lock()
 	b.daemonSubs[daemonID] = subs
@@ -698,10 +818,11 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 			gotMessages = true
 
 			var envelope struct {
-				RequestID   string          `json:"request_id"`
-				CommandType string          `json:"command_type"`
-				Payload     json.RawMessage `json:"payload"`
-				TimeoutMs   int32           `json:"timeout_ms"`
+				RequestID   string                   `json:"request_id"`
+				CommandType string                   `json:"command_type"`
+				Payload     json.RawMessage          `json:"payload"`
+				TimeoutMs   int32                    `json:"timeout_ms"`
+				Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
 			}
 			if err := json.Unmarshal(msg.Data(), &envelope); err != nil {
 				logging.Warn("[NATSToolBridge] Failed to unmarshal pending command",
@@ -715,6 +836,10 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				CommandType: envelope.CommandType,
 				Payload:     envelope.Payload,
 				TimeoutMs:   envelope.TimeoutMs,
+				// A replayed command must carry the same confinement it was
+				// issued under; a queued request that woke up unrestricted
+				// would be a policy bypass with a delay fuse.
+				Policy: daemonpolicy.WireToProto(envelope.Policy),
 			}
 
 			if _, err := b.mgr.SendDaemonCommand(fetchCtx, userID, protoReq); err != nil {

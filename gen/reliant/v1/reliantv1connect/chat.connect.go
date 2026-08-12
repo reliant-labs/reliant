@@ -52,6 +52,18 @@ const (
 	ChatServiceListArchivedChatsProcedure = "/reliant.v1.ChatService/ListArchivedChats"
 	// ChatServiceSendMessageProcedure is the fully-qualified name of the ChatService's SendMessage RPC.
 	ChatServiceSendMessageProcedure = "/reliant.v1.ChatService/SendMessage"
+	// ChatServiceSendAgentMessageProcedure is the fully-qualified name of the ChatService's
+	// SendAgentMessage RPC.
+	ChatServiceSendAgentMessageProcedure = "/reliant.v1.ChatService/SendAgentMessage"
+	// ChatServiceListQueuedAgentMessagesProcedure is the fully-qualified name of the ChatService's
+	// ListQueuedAgentMessages RPC.
+	ChatServiceListQueuedAgentMessagesProcedure = "/reliant.v1.ChatService/ListQueuedAgentMessages"
+	// ChatServiceCancelQueuedAgentMessageProcedure is the fully-qualified name of the ChatService's
+	// CancelQueuedAgentMessage RPC.
+	ChatServiceCancelQueuedAgentMessageProcedure = "/reliant.v1.ChatService/CancelQueuedAgentMessage"
+	// ChatServiceClaimQueuedAgentMessagesProcedure is the fully-qualified name of the ChatService's
+	// ClaimQueuedAgentMessages RPC.
+	ChatServiceClaimQueuedAgentMessagesProcedure = "/reliant.v1.ChatService/ClaimQueuedAgentMessages"
 	// ChatServiceListMessagesProcedure is the fully-qualified name of the ChatService's ListMessages
 	// RPC.
 	ChatServiceListMessagesProcedure = "/reliant.v1.ChatService/ListMessages"
@@ -114,6 +126,32 @@ type ChatServiceClient interface {
 	ListArchivedChats(context.Context, *connect.Request[v1.ListArchivedChatsRequest]) (*connect.Response[v1.ListArchivedChatsResponse], error)
 	// SendMessage sends a user message to a chat and continues workflow
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
+	// SendAgentMessage lets a human queue a message into a SPECIFIC running
+	// thread's mailbox (the agent_messages table) without pausing or otherwise
+	// touching the chat's workflow/pause state. This is the human-facing
+	// counterpart to the spawn_send LLM tool: it is the only way a user can
+	// steer a running sub-agent without first pausing the whole chat.
+	//
+	// The message is delivered at the target thread's next agent-loop step
+	// boundary, same as spawn_send. It is queued, not delivered synchronously.
+	SendAgentMessage(context.Context, *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error)
+	// ListQueuedAgentMessages returns the messages currently sitting in a
+	// thread's mailbox (agent_messages) with status = queued -- i.e. sent via
+	// SendAgentMessage or spawn_send but not yet drained into that thread's
+	// history. This is what lets a human see what they queued instead of it
+	// being invisible until the agent happens to drain it.
+	ListQueuedAgentMessages(context.Context, *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error)
+	// CancelQueuedAgentMessage revokes a single queued mailbox entry before
+	// the target agent drains it. This is a race against the agent's own loop
+	// boundary -- see CancelQueuedAgentMessageResponse for the honesty
+	// contract when the message was already delivered.
+	CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error)
+	// ClaimQueuedAgentMessages takes queued messages back off a thread's
+	// mailbox and returns them, so the caller can resend them as ordinary
+	// turns. One atomic statement, so the caller either owns a message or the
+	// agent does -- never both. This is what "Send now" / "Send all" use
+	// instead of cancel-then-send.
+	ClaimQueuedAgentMessages(context.Context, *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error)
 	// ListMessages lists messages for a chat with content blocks
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
@@ -208,6 +246,30 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			httpClient,
 			baseURL+ChatServiceSendMessageProcedure,
 			connect.WithSchema(chatServiceMethods.ByName("SendMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		sendAgentMessage: connect.NewClient[v1.SendAgentMessageRequest, v1.SendAgentMessageResponse](
+			httpClient,
+			baseURL+ChatServiceSendAgentMessageProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("SendAgentMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		listQueuedAgentMessages: connect.NewClient[v1.ListQueuedAgentMessagesRequest, v1.ListQueuedAgentMessagesResponse](
+			httpClient,
+			baseURL+ChatServiceListQueuedAgentMessagesProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelQueuedAgentMessage: connect.NewClient[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse](
+			httpClient,
+			baseURL+ChatServiceCancelQueuedAgentMessageProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("CancelQueuedAgentMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		claimQueuedAgentMessages: connect.NewClient[v1.ClaimQueuedAgentMessagesRequest, v1.ClaimQueuedAgentMessagesResponse](
+			httpClient,
+			baseURL+ChatServiceClaimQueuedAgentMessagesProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("ClaimQueuedAgentMessages")),
 			connect.WithClientOptions(opts...),
 		),
 		listMessages: connect.NewClient[v1.ListMessagesRequest, v1.ListMessagesResponse](
@@ -311,30 +373,34 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
-	createChat              *connect.Client[v1.CreateChatRequest, v1.CreateChatResponse]
-	listChats               *connect.Client[v1.ListChatsRequest, v1.ListChatsResponse]
-	getChat                 *connect.Client[v1.GetChatRequest, v1.GetChatResponse]
-	updateChat              *connect.Client[v1.UpdateChatRequest, v1.UpdateChatResponse]
-	deleteChat              *connect.Client[v1.DeleteChatRequest, v1.DeleteChatResponse]
-	searchChats             *connect.Client[v1.SearchChatsRequest, v1.SearchChatsResponse]
-	listArchivedChats       *connect.Client[v1.ListArchivedChatsRequest, v1.ListArchivedChatsResponse]
-	sendMessage             *connect.Client[v1.SendMessageRequest, v1.SendMessageResponse]
-	listMessages            *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
-	updateChatState         *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
-	cancelChat              *connect.Client[v1.CancelChatRequest, v1.CancelChatResponse]
-	pauseChat               *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
-	resumeChat              *connect.Client[v1.ResumeChatRequest, v1.ResumeChatResponse]
-	dismissChat             *connect.Client[v1.DismissChatRequest, v1.DismissChatResponse]
-	markUnreadChat          *connect.Client[v1.MarkUnreadChatRequest, v1.MarkUnreadChatResponse]
-	compactChat             *connect.Client[v1.CompactChatRequest, v1.CompactChatResponse]
-	branchChat              *connect.Client[v1.BranchChatRequest, v1.BranchChatResponse]
-	listBranches            *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
-	updateWorkflowParams    *connect.Client[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse]
-	getChatUpdates          *connect.Client[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse]
-	listChatPlans           *connect.Client[v1.ListChatPlansRequest, v1.ListChatPlansResponse]
-	getWorkflowExecutions   *connect.Client[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse]
-	getThreadWorkflowInputs *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
-	setChatDaemon           *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
+	createChat               *connect.Client[v1.CreateChatRequest, v1.CreateChatResponse]
+	listChats                *connect.Client[v1.ListChatsRequest, v1.ListChatsResponse]
+	getChat                  *connect.Client[v1.GetChatRequest, v1.GetChatResponse]
+	updateChat               *connect.Client[v1.UpdateChatRequest, v1.UpdateChatResponse]
+	deleteChat               *connect.Client[v1.DeleteChatRequest, v1.DeleteChatResponse]
+	searchChats              *connect.Client[v1.SearchChatsRequest, v1.SearchChatsResponse]
+	listArchivedChats        *connect.Client[v1.ListArchivedChatsRequest, v1.ListArchivedChatsResponse]
+	sendMessage              *connect.Client[v1.SendMessageRequest, v1.SendMessageResponse]
+	sendAgentMessage         *connect.Client[v1.SendAgentMessageRequest, v1.SendAgentMessageResponse]
+	listQueuedAgentMessages  *connect.Client[v1.ListQueuedAgentMessagesRequest, v1.ListQueuedAgentMessagesResponse]
+	cancelQueuedAgentMessage *connect.Client[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse]
+	claimQueuedAgentMessages *connect.Client[v1.ClaimQueuedAgentMessagesRequest, v1.ClaimQueuedAgentMessagesResponse]
+	listMessages             *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
+	updateChatState          *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
+	cancelChat               *connect.Client[v1.CancelChatRequest, v1.CancelChatResponse]
+	pauseChat                *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
+	resumeChat               *connect.Client[v1.ResumeChatRequest, v1.ResumeChatResponse]
+	dismissChat              *connect.Client[v1.DismissChatRequest, v1.DismissChatResponse]
+	markUnreadChat           *connect.Client[v1.MarkUnreadChatRequest, v1.MarkUnreadChatResponse]
+	compactChat              *connect.Client[v1.CompactChatRequest, v1.CompactChatResponse]
+	branchChat               *connect.Client[v1.BranchChatRequest, v1.BranchChatResponse]
+	listBranches             *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
+	updateWorkflowParams     *connect.Client[v1.UpdateWorkflowParamsRequest, v1.UpdateWorkflowParamsResponse]
+	getChatUpdates           *connect.Client[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse]
+	listChatPlans            *connect.Client[v1.ListChatPlansRequest, v1.ListChatPlansResponse]
+	getWorkflowExecutions    *connect.Client[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse]
+	getThreadWorkflowInputs  *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
+	setChatDaemon            *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
 }
 
 // CreateChat calls reliant.v1.ChatService.CreateChat.
@@ -375,6 +441,26 @@ func (c *chatServiceClient) ListArchivedChats(ctx context.Context, req *connect.
 // SendMessage calls reliant.v1.ChatService.SendMessage.
 func (c *chatServiceClient) SendMessage(ctx context.Context, req *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
 	return c.sendMessage.CallUnary(ctx, req)
+}
+
+// SendAgentMessage calls reliant.v1.ChatService.SendAgentMessage.
+func (c *chatServiceClient) SendAgentMessage(ctx context.Context, req *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error) {
+	return c.sendAgentMessage.CallUnary(ctx, req)
+}
+
+// ListQueuedAgentMessages calls reliant.v1.ChatService.ListQueuedAgentMessages.
+func (c *chatServiceClient) ListQueuedAgentMessages(ctx context.Context, req *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error) {
+	return c.listQueuedAgentMessages.CallUnary(ctx, req)
+}
+
+// CancelQueuedAgentMessage calls reliant.v1.ChatService.CancelQueuedAgentMessage.
+func (c *chatServiceClient) CancelQueuedAgentMessage(ctx context.Context, req *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error) {
+	return c.cancelQueuedAgentMessage.CallUnary(ctx, req)
+}
+
+// ClaimQueuedAgentMessages calls reliant.v1.ChatService.ClaimQueuedAgentMessages.
+func (c *chatServiceClient) ClaimQueuedAgentMessages(ctx context.Context, req *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error) {
+	return c.claimQueuedAgentMessages.CallUnary(ctx, req)
 }
 
 // ListMessages calls reliant.v1.ChatService.ListMessages.
@@ -475,6 +561,32 @@ type ChatServiceHandler interface {
 	ListArchivedChats(context.Context, *connect.Request[v1.ListArchivedChatsRequest]) (*connect.Response[v1.ListArchivedChatsResponse], error)
 	// SendMessage sends a user message to a chat and continues workflow
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
+	// SendAgentMessage lets a human queue a message into a SPECIFIC running
+	// thread's mailbox (the agent_messages table) without pausing or otherwise
+	// touching the chat's workflow/pause state. This is the human-facing
+	// counterpart to the spawn_send LLM tool: it is the only way a user can
+	// steer a running sub-agent without first pausing the whole chat.
+	//
+	// The message is delivered at the target thread's next agent-loop step
+	// boundary, same as spawn_send. It is queued, not delivered synchronously.
+	SendAgentMessage(context.Context, *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error)
+	// ListQueuedAgentMessages returns the messages currently sitting in a
+	// thread's mailbox (agent_messages) with status = queued -- i.e. sent via
+	// SendAgentMessage or spawn_send but not yet drained into that thread's
+	// history. This is what lets a human see what they queued instead of it
+	// being invisible until the agent happens to drain it.
+	ListQueuedAgentMessages(context.Context, *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error)
+	// CancelQueuedAgentMessage revokes a single queued mailbox entry before
+	// the target agent drains it. This is a race against the agent's own loop
+	// boundary -- see CancelQueuedAgentMessageResponse for the honesty
+	// contract when the message was already delivered.
+	CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error)
+	// ClaimQueuedAgentMessages takes queued messages back off a thread's
+	// mailbox and returns them, so the caller can resend them as ordinary
+	// turns. One atomic statement, so the caller either owns a message or the
+	// agent does -- never both. This is what "Send now" / "Send all" use
+	// instead of cancel-then-send.
+	ClaimQueuedAgentMessages(context.Context, *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error)
 	// ListMessages lists messages for a chat with content blocks
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
@@ -565,6 +677,30 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		ChatServiceSendMessageProcedure,
 		svc.SendMessage,
 		connect.WithSchema(chatServiceMethods.ByName("SendMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceSendAgentMessageHandler := connect.NewUnaryHandler(
+		ChatServiceSendAgentMessageProcedure,
+		svc.SendAgentMessage,
+		connect.WithSchema(chatServiceMethods.ByName("SendAgentMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceListQueuedAgentMessagesHandler := connect.NewUnaryHandler(
+		ChatServiceListQueuedAgentMessagesProcedure,
+		svc.ListQueuedAgentMessages,
+		connect.WithSchema(chatServiceMethods.ByName("ListQueuedAgentMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceCancelQueuedAgentMessageHandler := connect.NewUnaryHandler(
+		ChatServiceCancelQueuedAgentMessageProcedure,
+		svc.CancelQueuedAgentMessage,
+		connect.WithSchema(chatServiceMethods.ByName("CancelQueuedAgentMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceClaimQueuedAgentMessagesHandler := connect.NewUnaryHandler(
+		ChatServiceClaimQueuedAgentMessagesProcedure,
+		svc.ClaimQueuedAgentMessages,
+		connect.WithSchema(chatServiceMethods.ByName("ClaimQueuedAgentMessages")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListMessagesHandler := connect.NewUnaryHandler(
@@ -681,6 +817,14 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceListArchivedChatsHandler.ServeHTTP(w, r)
 		case ChatServiceSendMessageProcedure:
 			chatServiceSendMessageHandler.ServeHTTP(w, r)
+		case ChatServiceSendAgentMessageProcedure:
+			chatServiceSendAgentMessageHandler.ServeHTTP(w, r)
+		case ChatServiceListQueuedAgentMessagesProcedure:
+			chatServiceListQueuedAgentMessagesHandler.ServeHTTP(w, r)
+		case ChatServiceCancelQueuedAgentMessageProcedure:
+			chatServiceCancelQueuedAgentMessageHandler.ServeHTTP(w, r)
+		case ChatServiceClaimQueuedAgentMessagesProcedure:
+			chatServiceClaimQueuedAgentMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceListMessagesProcedure:
 			chatServiceListMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceUpdateChatStateProcedure:
@@ -752,6 +896,22 @@ func (UnimplementedChatServiceHandler) ListArchivedChats(context.Context, *conne
 
 func (UnimplementedChatServiceHandler) SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SendMessage is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SendAgentMessage(context.Context, *connect.Request[v1.SendAgentMessageRequest]) (*connect.Response[v1.SendAgentMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.SendAgentMessage is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) ListQueuedAgentMessages(context.Context, *connect.Request[v1.ListQueuedAgentMessagesRequest]) (*connect.Response[v1.ListQueuedAgentMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListQueuedAgentMessages is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.CancelQueuedAgentMessage is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) ClaimQueuedAgentMessages(context.Context, *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ClaimQueuedAgentMessages is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/gitutil"
+	"github.com/reliant-labs/reliant/internal/repo"
 )
 
 func init() {
@@ -35,18 +36,31 @@ type checkGitResponse struct {
 	IsGitRepo bool `json:"is_git_repo"`
 }
 
-func handleCheckGit(_ context.Context, payload []byte) ([]byte, error) {
+func handleCheckGit(ctx context.Context, payload []byte) ([]byte, error) {
 	var req checkGitRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	// Always stat the filesystem — a bare os.Stat is cheap, and caching a
-	// positive result would make the daemon lie after a `.git` is removed,
-	// which would in turn pin the API's cached is_git_repo flag to a stale
-	// true. The flag is a bidirectional cache of this observation, so this
-	// answer must reflect the live filesystem in both directions.
-	return json.Marshal(checkGitResponse{IsGitRepo: gitutil.IsGitRepository(req.Path)})
+	// Always scan the filesystem — the scan is cheap and caching a positive
+	// result would make the daemon lie after a `.git` is removed, which would
+	// in turn pin the API's cached is_git_repo flag to a stale true. The flag
+	// is a bidirectional cache of this observation, so this answer must
+	// reflect the live filesystem in both directions.
+	//
+	// This uses the same nested-aware discovery as repo.discover rather than a
+	// bare root stat. A multi-repo project (root with no `.git`, children that
+	// have one) is a git project; answering false here would contradict
+	// CreateProject, which derives the same flag from repo.Discover, and the
+	// API would then persist that false over the correct value on every read.
+	found, err := repo.Discover(ctx, req.Path, 0)
+	if err != nil {
+		// A path that can't be scanned (missing, not a dir) is not a git repo.
+		// Report false rather than failing: the caller keeps its last-known
+		// value on error, which would mask a genuinely removed `.git`.
+		return json.Marshal(checkGitResponse{IsGitRepo: false})
+	}
+	return json.Marshal(checkGitResponse{IsGitRepo: len(found) > 0})
 }
 
 // --- project.init_files ---

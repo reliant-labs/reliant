@@ -8,13 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
@@ -63,7 +63,12 @@ type BackgroundProcess struct {
 	WorktreeID string     `json:"worktree_id,omitempty"` // Worktree this process belongs to
 	SessionID  string     `json:"session_id"`
 	ChatID     string     `json:"chat_id,omitempty"`
-	Ports      []PortInfo `json:"ports,omitempty"` // Currently used ports
+	// GrantID records the connector grant that started this process, empty for
+	// first-party ones. The registry is process-global and keyed by id alone,
+	// so without this a connector holding a guessed id could read the output
+	// of — or kill — the user's own build, test run, or dev server.
+	GrantID string     `json:"grant_id,omitempty"`
+	Ports   []PortInfo `json:"ports,omitempty"` // Currently used ports
 
 	// Internal fields
 	cmd            *exec.Cmd
@@ -317,7 +322,13 @@ type StartProcessOptions struct {
 	WorktreeID string
 	SessionID  string
 	ChatID     string
-	Env        map[string]string
+	// GrantID scopes the process to a connector grant. Empty for first-party
+	// callers; see BackgroundProcess.GrantID.
+	GrantID string
+	Env     map[string]string
+	// Argv, when set, runs the command with no shell (see
+	// daemon.RunCommandRequest.Argv). Command is used for display only.
+	Argv []string
 }
 
 // StartProcessWithEnv starts a new background process with custom environment variables
@@ -346,25 +357,36 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 
 	// Create command with context for cancellation
 	cmdCtx, cancel := context.WithCancel(context.Background())
-	// Use platform-specific shell (bash on Unix, PowerShell on Windows)
-	cmd := createShellCommand(cmdCtx, opts.Command)
+	// Argv runs the program directly with no shell, so a caller confined to an
+	// allowlist gets the same guarantee here as for a synchronous command.
+	// Without it, use the platform shell (bash on Unix, PowerShell on Windows).
+	var cmd *exec.Cmd
+	if len(opts.Argv) > 0 {
+		cmd = exec.CommandContext(cmdCtx, opts.Argv[0], opts.Argv[1:]...)
+	} else {
+		cmd = createShellCommand(cmdCtx, opts.Command)
+	}
 	cmd.Dir = opts.WorkingDir
 
 	// Set up process group so we can kill all child processes
 	// This is critical for commands that spawn subprocesses (e.g., npm run dev)
 	setProcessGroup(cmd)
 
-	// Set up environment variables
-	// RELIANT_SPAWNED=1 allows scripts to detect they're running from Reliant
-	cmd.Env = append(os.Environ(),
-		"GIT_EDITOR=true",
-		"RELIANT_SPAWNED=1",
-	)
-	if len(opts.Env) > 0 {
-		for key, value := range opts.Env {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
-		}
+	// Set up environment variables.
+	// RELIANT_SPAWNED=1 allows scripts to detect they're running from Reliant.
+	//
+	// ChildEnv returns the daemon's full environment for a first-party caller
+	// and an allowlisted subset for a confined one, so a connector's
+	// background job cannot read the user's git token out of its own
+	// environment. See internal/daemonpolicy/env.go.
+	env := map[string]string{
+		"GIT_EDITOR":      "true",
+		"RELIANT_SPAWNED": "1",
 	}
+	for key, value := range opts.Env {
+		env[key] = value
+	}
+	cmd.Env = daemonpolicy.ChildEnv(ctx, env)
 
 	// Create buffers for output
 	stdout := &bytes.Buffer{}
@@ -392,6 +414,7 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 		WorktreeID:     opts.WorktreeID,
 		SessionID:      opts.SessionID,
 		ChatID:         opts.ChatID,
+		GrantID:        opts.GrantID,
 		cmd:            cmd,
 		stdout:         stdout,
 		stderr:         stderr,
@@ -605,6 +628,36 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 }
 
 // GetProcess retrieves a process by ID
+// ErrProcessNotOwned is returned when a caller asks about a process started
+// under a different grant. It is deliberately indistinguishable from
+// "not found" to the caller, so a connector cannot probe for the existence of
+// the user's own processes.
+var ErrProcessNotOwned = errors.New("process not found")
+
+// GetProcessForGrant returns a process only if grantID matches the one that
+// started it.
+//
+// The registry is process-global and keyed by id alone, so ownership has to be
+// checked on every read: a connector holding a guessed or enumerated id would
+// otherwise reach the output of the user's own build or test run, which
+// routinely contains secrets.
+//
+// An empty grantID is a first-party caller and may see everything, which is
+// the behavior that existed before connectors.
+func (m *BackgroundManager) GetProcessForGrant(processID, grantID string) (*BackgroundProcess, error) {
+	process, err := m.GetProcess(processID)
+	if err != nil {
+		return nil, err
+	}
+	if grantID == "" {
+		return process, nil
+	}
+	if process.GrantID != grantID {
+		return nil, ErrProcessNotOwned
+	}
+	return process, nil
+}
+
 func (m *BackgroundManager) GetProcess(processID string) (*BackgroundProcess, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

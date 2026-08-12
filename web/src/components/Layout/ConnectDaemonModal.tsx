@@ -1,10 +1,16 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Check, Loader2, RefreshCw } from "lucide-react";
+import { ArrowLeft, Check, RefreshCw } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { ComputeStep } from "../OnboardingFlow/steps/ComputeStep";
 import type { LaunchPlan } from "../OnboardingFlow/types";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
-import { daemonStartCommand } from "../../lib/cli-commands";
+import { useDaemonWait } from "../../hooks/useDaemonWait";
+import { DaemonWaitState } from "../DaemonWaitState";
+import {
+  daemonStartCommand,
+  daemonStartCommandNeedsEditing,
+  GATEWAY_URL_PLACEHOLDER,
+} from "../../lib/cli-commands";
 
 interface ConnectDaemonModalProps {
   isOpen: boolean;
@@ -42,6 +48,12 @@ export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps)
 
   const isCloud = plan.compute === "cloud_free_trial";
 
+  // Waiting is only meaningful in the wait phase and before a machine lands.
+  const daemonWait = useDaemonWait({
+    waiting: isOpen && phase === "wait" && !activeDaemon,
+    onRetry: refresh,
+  });
+
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
@@ -71,19 +83,17 @@ export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps)
         </div>
       ) : (
         <div className="space-y-5">
-          <div className="flex items-start gap-3 rounded-lg border border-border/50 bg-muted/30 p-4">
-            <Loader2 className="mt-0.5 h-5 w-5 flex-shrink-0 animate-spin text-primary" />
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-foreground">
-                {isCloud ? "Provisioning your cloud daemon" : "Waiting for your daemon to connect"}
-              </p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                {isCloud
-                  ? "This usually takes 30 to 60 seconds. The chat will open as soon as the daemon is ready — you can leave this window open or close it and come back."
-                  : "Run the command below in a terminal. This window will close automatically when the daemon connects."}
-              </p>
-            </div>
-          </div>
+          {/* Same words, same escalation, same failure reasons as every other
+              surface — this modal used to invent its own copy and never time
+              out or explain anything. */}
+          {daemonWait.state && (
+            <DaemonWaitState
+              state={daemonWait.state}
+              variant="panel"
+              onRetry={daemonWait.retryNow}
+              className="h-auto rounded-lg border border-border/50 bg-muted/30 p-4"
+            />
+          )}
 
           {!isCloud && (
             <div className="space-y-1.5">
@@ -91,6 +101,13 @@ export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps)
               <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
                 {daemonStartCommand()}
               </code>
+              {daemonStartCommandNeedsEditing() && (
+                <p className="text-[11px] text-yellow-600 dark:text-yellow-400">
+                  Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway
+                  address before running this. It is a separate process from the
+                  API server, so the daemon cannot infer it on localhost.
+                </p>
+              )}
             </div>
           )}
 

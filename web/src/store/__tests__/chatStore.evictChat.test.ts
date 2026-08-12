@@ -38,7 +38,7 @@ function reset() {
   useThreadActivityStore.setState({ threads: {} } as never);
 }
 
-function completeMessage(chatId: string, id: string, ordinal: number): ChatUpdate {
+function completeMessage(chatId: string, id: string, seq: number): ChatUpdate {
   return {
     update_type: "message",
     message: {
@@ -56,7 +56,7 @@ function completeMessage(chatId: string, id: string, ordinal: number): ChatUpdat
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
+      seq: BigInt(seq),
       thread: "",
       sequenceNumber: 0n,
       attachments: [],
@@ -86,10 +86,10 @@ function infoUpdate(chatId: string, id: string): ChatUpdate {
   } as unknown as ChatUpdate;
 }
 
-function toolCall(contentBlockId: string): ChatUpdate {
+function toolCall(toolCallId: string): ChatUpdate {
   return {
     update_type: "tool_call",
-    content_block_id: contentBlockId,
+    tool_call_id: toolCallId,
     tool_name: "bash",
     status: "executing",
     node_id: "",

@@ -236,7 +236,7 @@ export function useChatInputState({
         }
       }
     }
-  }, [chatId, isPendingChat, currentChat?.workflowName, effectiveDefaultWorkflow]);
+  }, [chatId, isPendingChat, currentChat?.workflowName, effectiveDefaultWorkflow, currentProjectId]);
 
   return {
     // State

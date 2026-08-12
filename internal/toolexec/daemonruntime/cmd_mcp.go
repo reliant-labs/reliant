@@ -8,18 +8,28 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/mcp"
 )
 
-// mcpMgr is the package-level MCP manager instance used by MCP runtime commands.
-var mcpMgr *mcp.Manager
+// mcpMgrPtr is the package-level MCP manager instance used by MCP runtime
+// commands. Atomic for the same reason as terminalMgr: written by
+// newDaemonClient, read from handler goroutines with no happens-before between
+// them.
+var mcpMgrPtr atomic.Pointer[mcp.Manager]
 
 // SetMCPManager sets the MCP manager used by MCP runtime command handlers.
+// Safe for concurrent use.
 func SetMCPManager(m *mcp.Manager) {
-	mcpMgr = m
+	mcpMgrPtr.Store(m)
+}
+
+// mcpMgr returns the current MCP manager, or nil if unset.
+func mcpMgr() *mcp.Manager {
+	return mcpMgrPtr.Load()
 }
 
 func init() {
@@ -263,7 +273,10 @@ type mcpServerStatusResponse struct {
 }
 
 func handleMCPServerStatus(_ context.Context, payload []byte) ([]byte, error) {
-	if mcpMgr == nil {
+	// Load once: a concurrent SetMCPManager must not swap the manager out from
+	// under this handler mid-way through.
+	mgr := mcpMgr()
+	if mgr == nil {
 		return json.Marshal(mcpServerStatusResponse{Servers: []mcpServerStatusEntry{}})
 	}
 
@@ -275,11 +288,11 @@ func handleMCPServerStatus(_ context.Context, payload []byte) ([]byte, error) {
 	var clients map[string]mcp.Client
 	var healthStatus map[string]bool
 	if req.ProjectPath != "" {
-		clients = mcpMgr.GetProjectClients(req.ProjectPath)
-		healthStatus = mcpMgr.GetProjectHealthStatus(req.ProjectPath)
+		clients = mgr.GetProjectClients(req.ProjectPath)
+		healthStatus = mgr.GetProjectHealthStatus(req.ProjectPath)
 	} else {
-		clients = mcpMgr.GetAllClients()
-		healthStatus = mcpMgr.GetHealthStatus()
+		clients = mgr.GetAllClients()
+		healthStatus = mgr.GetHealthStatus()
 	}
 
 	entries := make([]mcpServerStatusEntry, 0, len(clients))
@@ -300,9 +313,9 @@ func handleMCPServerStatus(_ context.Context, payload []byte) ([]byte, error) {
 
 		var lastErr error
 		if req.ProjectPath != "" {
-			lastErr = mcpMgr.GetProjectLastError(req.ProjectPath, name)
+			lastErr = mgr.GetProjectLastError(req.ProjectPath, name)
 		} else {
-			lastErr = mcpMgr.GetLastError(name)
+			lastErr = mgr.GetLastError(name)
 		}
 		if lastErr != nil {
 			entry.LastError = lastErr.Error()
@@ -313,16 +326,16 @@ func handleMCPServerStatus(_ context.Context, payload []byte) ([]byte, error) {
 
 	// Also include servers that have errors but no running client
 	// (they failed to start and are in healthChecks but not in clients)
-	healthAll := mcpMgr.GetHealthStatus()
+	healthAll := mgr.GetHealthStatus()
 	for name := range healthAll {
 		if _, exists := clients[name]; exists {
 			continue // already included
 		}
 		var lastErr error
 		if req.ProjectPath != "" {
-			lastErr = mcpMgr.GetProjectLastError(req.ProjectPath, name)
+			lastErr = mgr.GetProjectLastError(req.ProjectPath, name)
 		} else {
-			lastErr = mcpMgr.GetLastError(name)
+			lastErr = mgr.GetLastError(name)
 		}
 		if lastErr != nil {
 			entries = append(entries, mcpServerStatusEntry{
@@ -352,7 +365,8 @@ type mcpManageServerResponse struct {
 }
 
 func handleMCPManageServer(ctx context.Context, payload []byte) ([]byte, error) {
-	if mcpMgr == nil {
+	mgr := mcpMgr()
+	if mgr == nil {
 		return json.Marshal(mcpManageServerResponse{Error: "MCP manager not initialized"})
 	}
 
@@ -368,26 +382,26 @@ func handleMCPManageServer(ctx context.Context, payload []byte) ([]byte, error) 
 			return json.Marshal(mcpManageServerResponse{Error: "config is required for add action"})
 		}
 		if req.ProjectPath != "" {
-			err = mcpMgr.AddProjectServer(ctx, req.ProjectPath, req.ServerName, *req.Config)
+			err = mgr.AddProjectServer(ctx, req.ProjectPath, req.ServerName, *req.Config)
 		} else {
-			err = mcpMgr.AddServer(ctx, req.ServerName, *req.Config)
+			err = mgr.AddServer(ctx, req.ServerName, *req.Config)
 		}
 	case "remove":
 		if req.ProjectPath != "" {
-			err = mcpMgr.RemoveProjectServer(req.ProjectPath, req.ServerName)
+			err = mgr.RemoveProjectServer(req.ProjectPath, req.ServerName)
 		} else {
-			err = mcpMgr.RemoveServer(req.ServerName)
+			err = mgr.RemoveServer(req.ServerName)
 		}
 	case "restart":
 		if req.Config == nil {
 			return json.Marshal(mcpManageServerResponse{Error: "config is required for restart action"})
 		}
 		if req.ProjectPath != "" {
-			err = mcpMgr.RestartProjectServer(ctx, req.ProjectPath, req.ServerName, *req.Config)
+			err = mgr.RestartProjectServer(ctx, req.ProjectPath, req.ServerName, *req.Config)
 		} else {
 			// restart = remove + add
-			_ = mcpMgr.RemoveServer(req.ServerName)
-			err = mcpMgr.AddServer(ctx, req.ServerName, *req.Config)
+			_ = mgr.RemoveServer(req.ServerName)
+			err = mgr.AddServer(ctx, req.ServerName, *req.Config)
 		}
 	default:
 		return json.Marshal(mcpManageServerResponse{Error: fmt.Sprintf("unknown action: %s", req.Action)})
@@ -412,7 +426,8 @@ type mcpListToolsResponse struct {
 }
 
 func handleMCPListTools(_ context.Context, payload []byte) ([]byte, error) {
-	if mcpMgr == nil {
+	mgr := mcpMgr()
+	if mgr == nil {
 		return json.Marshal(mcpListToolsResponse{Error: "MCP manager not initialized"})
 	}
 
@@ -424,9 +439,9 @@ func handleMCPListTools(_ context.Context, payload []byte) ([]byte, error) {
 	var client mcp.Client
 	var exists bool
 	if req.ProjectPath != "" {
-		client, exists = mcpMgr.GetProjectClient(req.ProjectPath, req.ServerName)
+		client, exists = mgr.GetProjectClient(req.ProjectPath, req.ServerName)
 	} else {
-		client, exists = mcpMgr.GetClient(req.ServerName)
+		client, exists = mgr.GetClient(req.ServerName)
 	}
 	if !exists {
 		return json.Marshal(mcpListToolsResponse{Error: fmt.Sprintf("server %q not found", req.ServerName)})
@@ -460,7 +475,8 @@ type mcpCallToolResponse struct {
 }
 
 func handleMCPCallTool(_ context.Context, payload []byte) ([]byte, error) {
-	if mcpMgr == nil {
+	mgr := mcpMgr()
+	if mgr == nil {
 		return json.Marshal(mcpCallToolResponse{Error: "MCP manager not initialized"})
 	}
 
@@ -477,9 +493,9 @@ func handleMCPCallTool(_ context.Context, payload []byte) ([]byte, error) {
 		err    error
 	)
 	if req.ProjectPath != "" {
-		result, err = mcpMgr.ProjectCallTool(req.SessionKey, req.ProjectPath, req.ServerName, req.ToolName, req.Arguments)
+		result, err = mgr.ProjectCallTool(req.SessionKey, req.ProjectPath, req.ServerName, req.ToolName, req.Arguments)
 	} else {
-		result, err = mcpMgr.CallTool(req.SessionKey, req.ServerName, req.ToolName, req.Arguments)
+		result, err = mgr.CallTool(req.SessionKey, req.ServerName, req.ToolName, req.Arguments)
 	}
 	if err != nil {
 		return json.Marshal(mcpCallToolResponse{Error: err.Error()})
@@ -500,7 +516,8 @@ type mcpEnsureLoadedResponse struct {
 }
 
 func handleMCPEnsureLoaded(ctx context.Context, payload []byte) ([]byte, error) {
-	if mcpMgr == nil {
+	mgr := mcpMgr()
+	if mgr == nil {
 		return json.Marshal(mcpEnsureLoadedResponse{})
 	}
 
@@ -513,7 +530,7 @@ func handleMCPEnsureLoaded(ctx context.Context, payload []byte) ([]byte, error) 
 		return nil, fmt.Errorf("project_path is required")
 	}
 
-	result := mcpMgr.EnsureProjectServersLoaded(ctx, req.ProjectPath)
+	result := mgr.EnsureProjectServersLoaded(ctx, req.ProjectPath)
 
 	resp := mcpEnsureLoadedResponse{
 		LoadedServers: result.LoadedServers,

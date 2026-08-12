@@ -14,7 +14,7 @@ func (s *Service) CreateThread(ctx context.Context, opts CreateThreadOpts) (*db.
 	if origin == "" {
 		origin = db.ThreadOriginMain
 	}
-	return s.createThreadInternal(ctx, opts.ConversationID, opts.ID, opts.Title, nil, nil, origin, opts.OriginNodeID)
+	return s.createThreadInternal(ctx, opts.ChatID, opts.ID, opts.Title, nil, nil, origin, opts.OriginNodeID)
 }
 
 // createThreadInternal creates a thread with an initial context window.
@@ -23,9 +23,9 @@ func (s *Service) CreateThread(ctx context.Context, opts CreateThreadOpts) (*db.
 // origin records HOW the thread was created and is required — it is the field
 // readers use to tell a spawn from a graph-node thread, and guessing it after
 // the fact is exactly the ambiguity this column exists to remove.
-func (s *Service) createThreadInternal(ctx context.Context, conversationID, id string, title *string, parentThreadID *string, workflowID *string, origin db.ThreadOrigin, originNodeID *string) (*db.Thread, *db.ContextWindow, error) {
-	if conversationID == "" {
-		return nil, nil, fmt.Errorf("conversation ID is required")
+func (s *Service) createThreadInternal(ctx context.Context, chatID, id string, title *string, parentThreadID *string, workflowID *string, origin db.ThreadOrigin, originNodeID *string) (*db.Thread, *db.ContextWindow, error) {
+	if chatID == "" {
+		return nil, nil, fmt.Errorf("chat ID is required")
 	}
 	if origin == "" {
 		return nil, nil, fmt.Errorf("thread origin is required")
@@ -35,7 +35,7 @@ func (s *Service) createThreadInternal(ctx context.Context, conversationID, id s
 
 	thread := &db.Thread{
 		ID:             threadID,
-		ConversationID: conversationID,
+		ChatID:         chatID,
 		ParentThreadID: parentThreadID,
 		WorkflowID:     workflowID,
 		Title:          title,
@@ -52,7 +52,7 @@ func (s *Service) createThreadInternal(ctx context.Context, conversationID, id s
 
 	// Create initial context window (sequence 0)
 	cw := &db.ContextWindow{
-		ID:        contextWindowID(conversationID, threadID, 0),
+		ID:        contextWindowID(chatID, threadID, 0),
 		ThreadID:  threadID,
 		Sequence:  0,
 		CreatedAt: now(),

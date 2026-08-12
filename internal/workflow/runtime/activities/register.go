@@ -217,10 +217,12 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	v2.RegisterActivity(registry, handlers.NewUnknownStepTypeActivity())
 	v2.RegisterActivity(registry, handlers.NewFailStepActivity())
 	v2.RegisterActivity(registry, handlers.NewSkippedStepActivity())
-	v2.RegisterActivity(registry, handlers.NewFetchThreadResultActivity(deps.Repo, deps.Threads))
+	v2.RegisterActivity(registry, handlers.NewFetchThreadResultActivity(deps.Threads))
 	v2.RegisterActivity(registry, handlers.NewValidateThreadOwnershipActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewLoadPresetParamsActivity(deps.Repo))
 	v2.RegisterActivity(registry, handlers.NewEmitToolCallStatusActivity(deps.Repo))
+	v2.RegisterActivity(registry, handlers.NewDrainAgentMessagesActivity(deps.Repo, deps.Threads))
+	v2.RegisterActivity(registry, handlers.NewEnqueueAgentMessageActivity(deps.Repo))
 
 }
 

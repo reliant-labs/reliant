@@ -41,6 +41,42 @@ var knownErrorPatterns = []struct {
 	{"connection reset", "Connection to the AI provider was reset"},
 }
 
+// Temporal wraps every failure in scaffolding frames naming the history event
+// that failed. Those identifiers mean nothing outside the Temporal history UI
+// and crowd out the actual cause. These patterns mirror the Error() methods in
+// go.temporal.io/sdk/internal/error.go and must track the version in go.mod.
+var temporalFrames = []*regexp.Regexp{
+	regexp.MustCompile(`activity error \(type: [^,)]*, scheduledEventID: \d+, startedEventID: \d+, identity: [^)]*\): ?`),
+	regexp.MustCompile(`child workflow execution error \(type: [^,)]*, workflowID: [^,)]*, runID: [^,)]*, initiatedEventID: \d+, startedEventID: \d+\): ?`),
+	regexp.MustCompile(`workflow execution error \(type: [^,)]*, workflowID: [^,)]*, runID: [^)]*\): ?`),
+}
+
+// applicationErrorSuffix matches the Go error type and retry disposition that
+// ApplicationError appends at every layer. Retryability is already conveyed by
+// the retry badge in the UI header.
+var applicationErrorSuffix = regexp.MustCompile(` \(type: [^,)]*, retryable: (?:true|false)\)`)
+
+// cleanTemporalError strips Temporal's bookkeeping from an error string,
+// leaving the causal chain that explains the failure. It returns the input
+// unchanged when the scaffolding turns out to be the whole message.
+func cleanTemporalError(errMsg string) string {
+	if errMsg == "" {
+		return errMsg
+	}
+
+	cleaned := errMsg
+	for _, frame := range temporalFrames {
+		cleaned = frame.ReplaceAllString(cleaned, "")
+	}
+	cleaned = applicationErrorSuffix.ReplaceAllString(cleaned, "")
+	cleaned = strings.TrimSpace(strings.TrimLeft(cleaned, ": "))
+
+	if cleaned == "" {
+		return errMsg
+	}
+	return cleaned
+}
+
 // extractProviderReconnectSummary recognizes provider-specific auth failures that
 // should surface a concrete reconnect action instead of a generic auth error.
 func extractProviderReconnectSummary(errLower string) string {

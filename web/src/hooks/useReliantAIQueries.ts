@@ -17,9 +17,11 @@ import {
   createManagedLLMKey,
   revokeLLMKey,
   rotateLLMKey,
+  redeemCoupon,
   type CreateManagedKeyArgs,
   type GetLLMSpendArgs,
 } from "@/services/controlPlane/reliantAI";
+import { cloudBillingKeys } from "./useCloudBillingQueries";
 
 const KEY = {
   reliantOverview: ["reliantAI", "reliantOverview"] as const,
@@ -45,6 +47,37 @@ export function useWalletOverview() {
     queryFn: () => getWalletOverview(),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * Redeem a coupon code — either wallet credit or daemon compute minutes,
+ * per the response's `kind` (see RedeemCouponResult).
+ *
+ * Invalidates both the wallet/Reliant-overview reads AND the compute
+ * subscription read on success. The response's kind isn't known until after
+ * the call, and one redeem box serves both coupon kinds, so it's simplest
+ * (and harmless) to invalidate both sets unconditionally rather than branch
+ * on `kind` here.
+ *
+ * Errors are surfaced to the CALLER rather than toasted here: the distinct
+ * failures (unknown code / already redeemed / fully claimed / expired) each
+ * need their own message next to the input, not a generic toast.
+ */
+export function useRedeemCoupon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (code: string) => redeemCoupon(code),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: KEY.walletOverview });
+      void queryClient.invalidateQueries({ queryKey: KEY.reliantOverview });
+      void queryClient.invalidateQueries({
+        queryKey: cloudBillingKeys.computeSubscription,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: cloudBillingKeys.walletOverview,
+      });
+    },
   });
 }
 

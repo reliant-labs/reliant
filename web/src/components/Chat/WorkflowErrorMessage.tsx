@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cn } from '../../lib/utils';
 import { ChevronDown, ChevronRight, AlertTriangle, RotateCw, Copy, Check } from 'lucide-react';
 import type { ErrorUpdate } from '../../types/streaming';
+import { cleanTemporalErrorMessage, hasTemporalScaffolding } from '../../lib/temporalErrors';
 
 interface WorkflowErrorMessageProps {
   error: ErrorUpdate;
@@ -9,9 +10,15 @@ interface WorkflowErrorMessageProps {
 
 export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [showRaw, setShowRaw] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const isRetrying = error.is_retrying === true;
+
+  // The detail pane shows the causal chain with Temporal's event bookkeeping
+  // removed; the untouched string stays one click away for bug reports.
+  const cleanedMessage = cleanTemporalErrorMessage(error.error_message);
+  const canShowRaw = hasTemporalScaffolding(error.error_message);
 
   // Format timestamp for display
   const formatTimestamp = (timestamp: string) => {
@@ -34,7 +41,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
       return error.error_summary;
     }
     // Client-side fallback: try to extract from the error_message
-    const extracted = extractErrorSummaryClientSide(error.error_message);
+    const extracted = extractErrorSummaryClientSide(cleanedMessage);
     if (extracted) {
       return extracted;
     }
@@ -71,7 +78,10 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
       lines.push(`Workflow ID: ${error.workflow_id}`);
     }
     
-    lines.push('', 'Full Error:', error.error_message);
+    lines.push('', 'Error:', cleanedMessage);
+    if (canShowRaw) {
+      lines.push('', 'Raw error:', error.error_message);
+    }
     
     try {
       await navigator.clipboard.writeText(lines.join('\n'));
@@ -162,12 +172,28 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
 
           <div>
             <div className="text-xs text-muted-foreground mb-1 font-medium">
-              Full Error:
+              Error:
             </div>
             <pre className="text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50" data-sentry-mask>
-              {error.error_message}
+              {cleanedMessage}
             </pre>
           </div>
+
+          {canShowRaw && (
+            <div>
+              <button
+                onClick={() => setShowRaw(!showRaw)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showRaw ? 'Hide raw error' : 'Show raw error'}
+              </button>
+              {showRaw && (
+                <pre className="mt-1 text-xs font-mono text-muted-foreground whitespace-pre-wrap break-words bg-background/50 p-2 rounded border border-border/50" data-sentry-mask>
+                  {error.error_message}
+                </pre>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

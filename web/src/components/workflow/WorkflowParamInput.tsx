@@ -23,6 +23,7 @@ import {
   getInputMin,
   getInputMax,
   getInputProperties,
+  setInputEnumValues,
 } from "../../lib/inputHelpers";
 
 // JSON Schema property definition
@@ -118,10 +119,7 @@ export function WorkflowParamInput({
     if (!(name === "thinking_level" || name.endsWith(".thinking_level"))) return schema;
 
     if (!thinkingCapability.modelId || !thinkingCapability.supportsThinking) {
-      return {
-        ...schema,
-        enum: [],
-      };
+      return setInputEnumValues(schema, []);
     }
 
     const schemaOptions = getInputEnumValues(schema) || [];
@@ -132,10 +130,7 @@ export function WorkflowParamInput({
       filtered = filtered.filter((option) => schemaSet.has(option));
     }
 
-    return {
-      ...schema,
-      enum: filtered,
-    };
+    return setInputEnumValues(schema, filtered);
   }, [schema, name, thinkingCapability]);
 
   // Keep thinking_level value valid when model changes.

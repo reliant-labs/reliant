@@ -331,10 +331,15 @@ export const projectGrpc = {
     };
   },
 
-  // Get git branches for a project
-  async getGitBranches(projectId: string): Promise<GitBranch[]> {
+  // Get git branches for a project. repoId selects which nested repo to read
+  // in a multi-repo project; the backend rejects an empty repoId when the
+  // project has 2+ repos, so callers must supply it there.
+  async getGitBranches(projectId: string, repoId?: string): Promise<GitBranch[]> {
     const client = grpcClient.project();
-    const request = create(GetProjectGitBranchesRequestSchema, { projectId });
+    const request = create(GetProjectGitBranchesRequestSchema, {
+      projectId,
+      repoId: repoId ?? "",
+    });
     const response = await client.getProjectGitBranches(request);
     return response.branches.map(protoBranchToFrontend);
   },

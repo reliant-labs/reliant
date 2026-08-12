@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )

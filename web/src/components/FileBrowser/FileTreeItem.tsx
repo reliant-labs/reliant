@@ -539,7 +539,7 @@ export const FileTreeItem = memo(function FileTreeItem({
           onContextMenu={handleContextMenu}
           tabIndex={-1}
           className={cn(
-            "file-tree-item w-full flex items-center gap-2 px-2 py-1.5 text-sm font-mono transition-all duration-200 text-left group relative"
+            "file-tree-item w-full flex items-center gap-2 px-2 py-1.5 text-sm transition-all duration-200 text-left group relative"
           )}
           style={{
             paddingLeft,
@@ -680,7 +680,7 @@ export const FileTreeItem = memo(function FileTreeItem({
             onKeyDown={handleInlineKeyDown}
             onBlur={handleInlineCancel}
             placeholder={creatingInline === "file" ? "filename.ext" : "folder-name"}
-            className="flex-1 bg-transparent border-b border-primary text-sm font-mono focus:outline-none text-foreground placeholder:text-muted-foreground/60"
+            className="flex-1 bg-transparent border-b border-primary text-sm focus:outline-none text-foreground placeholder:text-muted-foreground/60"
           />
         </div>
       )}
@@ -688,7 +688,7 @@ export const FileTreeItem = memo(function FileTreeItem({
       {/* Per-node loading state while a lazily-expanded directory fetches. */}
       {isDirectory && effectiveIsExpanded && isLoadingChildren && (
         <div
-          className="flex items-center gap-2 px-2 py-1 text-xs font-mono text-muted-foreground"
+          className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground"
           style={{ paddingLeft: `${(level + 1) * 0.75}rem` }}
         >
           <Loader2 className="w-3 h-3 animate-spin" />

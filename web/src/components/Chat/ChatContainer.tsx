@@ -5,7 +5,7 @@
  * Passes all data as props to ChatPresenter for rendering.
  */
 
-import { useMemo, useCallback } from "react";
+import { useMemo, useCallback, useState, useEffect } from "react";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { sortMessagesForDisplay } from "../../lib/messageOrder";
 import { ChatPresenter } from "./ChatPresenter";
@@ -17,6 +17,7 @@ import {
   useRunOutputs,
   useStreamingMessages,
   useDiscussMode,
+  useHasOlderMessages,
 } from "../../store/chatStoreHooks";
 import {
   usePendingApprovals,
@@ -33,10 +34,8 @@ import { transformWorkflowExecution } from "./ExecutionSidebar";
 import * as Sentry from "@sentry/react";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
-import {
-  isDaemonConnectingError,
-  DAEMON_CONNECTING_MESSAGE,
-} from "../../lib/daemon-errors";
+import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { sendWithDaemonWait } from "../../lib/daemon-retry";
 
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
@@ -94,6 +93,21 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
   const isDiscussMode = useDiscussMode(chatId);
   const { data: pendingQuestion } = usePendingQuestion(chatId);
 
+  // Self-healing subscription invariant: this component renders the active
+  // chat, so it's the natural place to assert "the rendered chat is the
+  // subscribed chat" — re-checked whenever the chat or the connection state
+  // changes, not just once at selection time. Without this, another
+  // component stealing the single subscription slot (e.g. WorkflowBuilderChat
+  // subscribing to its own chat, or a reconnect forwarding a stale id) leaves
+  // this chat silently unsubscribed with no error and no recovery path short
+  // of a manual refresh. See globalUpdatesStore.reconcileChatSubscription.
+  const reconcileChatSubscription = useGlobalUpdatesStore(
+    (s) => s.reconcileChatSubscription,
+  );
+  useEffect(() => {
+    reconcileChatSubscription(chatId);
+  }, [chatId, connectionStatus, reconcileChatSubscription]);
+
   // Process messages: canonical order (lib/messageOrder), filter out tool messages
   const processedMessages = useMemo(() => {
     if (messages.length === 0) {
@@ -129,7 +143,10 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
         selectedPresets,
       });
 
-      try {
+      // The send is wrapped so a machine that is still coming online defers the
+      // message instead of rejecting it. The composer only clears once this
+      // resolves, so the user's text survives either way.
+      const performSend = async () => {
         if (!currentChat) {
           logger.info(
             "📝 Creating new chat with workspace:",
@@ -174,14 +191,25 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
             throw new Error("No chat ID available");
           }
         }
+      };
+
+      try {
+        await sendWithDaemonWait({
+          action: performSend,
+          onWaiting: () => {
+            // Only fires if the first attempt was actually deferred, so a
+            // healthy send stays silent.
+            toast.info("Your machine is starting — this message will send automatically.");
+          },
+        });
       } catch (error) {
         logger.error("Error sending message:", error);
         if (isDaemonConnectingError(error)) {
-          // Cloud daemon is still coming online — surface a calm "connecting"
-          // toast instead of the raw `[internal] unavailable: no daemon
-          // connected` error so the user knows to resend in a moment.
-          toast.info(
-            `${DAEMON_CONNECTING_MESSAGE} Please resend in a moment.`,
+          // Retried for the full budget and the machine never came up. This is
+          // now a real failure, so say so plainly rather than implying it will
+          // resolve on its own.
+          toast.error(
+            new Error("Your machine didn't come online, so the message wasn't sent."),
           );
         } else {
           // Show error toast to user
@@ -217,6 +245,26 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
     if (!chatId) return;
     const store = useChatStore.getState();
     store.setDiscussMode(chatId, !store.discussMode[chatId]);
+  }, [chatId]);
+
+  // --- Scroll-back paging ---
+  // The initial snapshot is bounded to the newest messages, so older history is
+  // fetched on demand when the user scrolls to the top of the timeline.
+  // hasOlderMessages comes from the server (via the message envelope); the
+  // in-flight flag is local because loadOlderMessages is an imperative store
+  // action rather than a query. The store guards against duplicate concurrent
+  // fetches independently — this flag exists to drive the spinner.
+  const hasOlderMessages = useHasOlderMessages(chatId);
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false);
+
+  const handleLoadOlderMessages = useCallback(async () => {
+    if (!chatId) return;
+    setIsLoadingOlderMessages(true);
+    try {
+      await useChatStore.getState().loadOlderMessages(chatId);
+    } finally {
+      setIsLoadingOlderMessages(false);
+    }
   }, [chatId]);
 
   // Fetch workflow executions for sidebar
@@ -267,6 +315,9 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       isDiscussMode={isDiscussMode}
       onToggleDiscuss={handleToggleDiscuss}
       hasPendingQuestion={!!pendingQuestion}
+      onLoadOlderMessages={handleLoadOlderMessages}
+      isLoadingOlderMessages={isLoadingOlderMessages}
+      hasOlderMessages={hasOlderMessages}
     />
   );
 }

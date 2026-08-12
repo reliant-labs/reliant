@@ -50,7 +50,7 @@ function chatToolCallUpdate(seq: number) {
     entityId: `cb-${seq}`,
     sequenceNumber: BigInt(seq),
     dataJson: JSON.stringify({
-      content_block_id: `cb-${seq}`,
+      tool_call_id: `cb-${seq}`,
       tool_name: "view",
       status: "completed",
     }),
@@ -171,7 +171,7 @@ describe("chat detail stream gap detection", () => {
     const applied = onChatUpdate.mock.calls.flatMap((c) => c[0]);
     expect(applied).toHaveLength(1);
     expect(
-      (applied[0] as unknown as { content_block_id: string }).content_block_id,
+      (applied[0] as unknown as { tool_call_id: string }).tool_call_id,
     ).toBe("cb-6");
     expect(internals.lastChatSequence).toBe(6n);
     expect(reconnectSpy).toHaveBeenCalledTimes(1);

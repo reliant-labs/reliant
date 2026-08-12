@@ -144,6 +144,17 @@ func (o *OpenaiClient) ConvertMessages(prompts []string, messages []message.Mess
 				OfAssistant: &assistantMsg,
 			})
 
+		case message.System:
+			// A System message in HISTORY is content (compaction summary,
+			// branch note, mailbox envelope), not an instruction, so it goes
+			// in as a user turn wrapped in <system> tags rather than as a
+			// system-role message that would compete with the real prompts.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				openaiMessages = append(openaiMessages,
+					openai.UserMessage(fmt.Sprintf("<system>\n%s\n</system>", systemText)),
+				)
+			}
+
 		case message.Tool:
 			for _, result := range msg.ToolResults() {
 				openaiMessages = append(openaiMessages,
@@ -652,6 +663,16 @@ func (o *OpenaiClient) convertMessagesToResponsesInput(prompts []string, message
 			for _, tc := range msg.ToolCalls() {
 				// openai-go signature is (arguments, callID, name)
 				items = append(items, responses.ResponseInputItemParamOfFunctionCall(tc.Input, tc.ID, truncate64(tc.Name)))
+			}
+
+		case message.System:
+			// See ConvertMessages: history System messages are content, and a
+			// dropped one is invisible on this provider family only.
+			if systemText := strings.TrimSpace(msg.Content().String()); systemText != "" {
+				items = append(items, responses.ResponseInputItemParamOfMessage(
+					fmt.Sprintf("<system>\n%s\n</system>", systemText),
+					responses.EasyInputMessageRoleUser,
+				))
 			}
 
 		case message.Tool:

@@ -16,6 +16,25 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// messageIDAtOrdinal resolves the message with the given ordinal in the given
+// context window. Test fixtures below build fork points from ordinals because
+// that's how they already track message identity; this mirrors the
+// resolution 20260803010000_fork_points_reference_messages.sql's backfill
+// does against real data.
+func messageIDAtOrdinal(t *testing.T, ctx context.Context, repo *Repo, cwID string, ordinal int64) *string {
+	t.Helper()
+	msgs, err := repo.GetMessagesByContextWindow(ctx, cwID, nil)
+	require.NoError(t, err)
+	for _, m := range msgs {
+		if m.Ordinal == ordinal {
+			id := m.ID
+			return &id
+		}
+	}
+	t.Fatalf("no message with ordinal %d in context window %s", ordinal, cwID)
+	return nil
+}
+
 // =============================================================================
 // BASIC FUNCTIONALITY TESTS
 // =============================================================================
@@ -42,9 +61,9 @@ func TestGetThreadTokenCount_EmptyThread(t *testing.T) {
 
 	// Create thread with no messages
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -86,9 +105,9 @@ func TestGetThreadTokenCount_SingleMessage(t *testing.T) {
 
 	// Create thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -108,6 +127,7 @@ func TestGetThreadTokenCount_SingleMessage(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         1,
+		Seq:             1,
 		ContextWindowID: cwID,
 		ThreadID:        threadID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -146,9 +166,9 @@ func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
 
 	// Create thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -168,6 +188,7 @@ func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         1,
+		Seq:             1,
 		ContextWindowID: cwID,
 		ThreadID:        threadID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -182,6 +203,7 @@ func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         2,
+		Seq:             2,
 		ContextWindowID: cwID,
 		ThreadID:        threadID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -196,6 +218,7 @@ func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         3,
+		Seq:             3,
 		ContextWindowID: cwID,
 		ThreadID:        threadID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -210,6 +233,7 @@ func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         4,
+		Seq:             4,
 		ContextWindowID: cwID,
 		ThreadID:        threadID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -247,9 +271,9 @@ func TestGetThreadTokenCount_MaxOrdinal(t *testing.T) {
 
 	// Create thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -271,6 +295,7 @@ func TestGetThreadTokenCount_MaxOrdinal(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i + 1),
+			Seq:             int64(i + 1),
 			ContextWindowID: cwID,
 			ThreadID:        threadID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -331,9 +356,9 @@ func TestGetThreadTokenCount_ForkInheritance(t *testing.T) {
 
 	// Create parent thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             parentThread,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        parentThread,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -353,6 +378,7 @@ func TestGetThreadTokenCount_ForkInheritance(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: parentCW,
 			ThreadID:        parentThread,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -365,12 +391,11 @@ func TestGetThreadTokenCount_ForkInheritance(t *testing.T) {
 
 	// Create child thread forked at ordinal 3
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:                    childThread,
-		ConversationID:        chatID,
-		ParentThreadID:        &parentThread,
-		ForkAtOrdinal:         &forkOrdinal,
-		ForkAtContextWindowID: &parentCW,
-		CreatedAt:             time.Now(),
+		ID:              childThread,
+		ChatID:          chatID,
+		ParentThreadID:  &parentThread,
+		ForkAtMessageID: messageIDAtOrdinal(t, ctx, repo, parentCW, forkOrdinal),
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -418,9 +443,9 @@ func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
 
 	// Thread A (root)
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadA,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadA,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -439,6 +464,7 @@ func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: cwA,
 			ThreadID:        threadA,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -451,12 +477,11 @@ func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
 
 	// Thread B (forked from A at ordinal 2)
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:                    threadB,
-		ConversationID:        chatID,
-		ParentThreadID:        &threadA,
-		ForkAtOrdinal:         &forkBAtOrdinal,
-		ForkAtContextWindowID: &cwA,
-		CreatedAt:             time.Now(),
+		ID:              threadB,
+		ChatID:          chatID,
+		ParentThreadID:  &threadA,
+		ForkAtMessageID: messageIDAtOrdinal(t, ctx, repo, cwA, forkBAtOrdinal),
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -475,6 +500,7 @@ func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: cwB,
 			ThreadID:        threadB,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -487,12 +513,11 @@ func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
 
 	// Thread C (forked from B at ordinal 4)
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:                    threadC,
-		ConversationID:        chatID,
-		ParentThreadID:        &threadB,
-		ForkAtOrdinal:         &forkCAtOrdinal,
-		ForkAtContextWindowID: &cwB,
-		CreatedAt:             time.Now(),
+		ID:              threadC,
+		ChatID:          chatID,
+		ParentThreadID:  &threadB,
+		ForkAtMessageID: messageIDAtOrdinal(t, ctx, repo, cwB, forkCAtOrdinal),
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -549,9 +574,9 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 
 	// Create parent thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             parentThread,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        parentThread,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -569,6 +594,7 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         1,
+		Seq:             1,
 		ContextWindowID: parentCW,
 		ThreadID:        parentThread,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -583,6 +609,7 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         2,
+		Seq:             2,
 		ContextWindowID: parentCW,
 		ThreadID:        parentThread,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -597,6 +624,7 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         3,
+		Seq:             3,
 		ContextWindowID: parentCW,
 		ThreadID:        parentThread,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -611,6 +639,7 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         4,
+		Seq:             4,
 		ContextWindowID: parentCW,
 		ThreadID:        parentThread,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -622,12 +651,11 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 
 	// Create child thread forked at ordinal 3 (user message)
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:                    childThread,
-		ConversationID:        chatID,
-		ParentThreadID:        &parentThread,
-		ForkAtOrdinal:         &forkOrdinal,
-		ForkAtContextWindowID: &parentCW,
-		CreatedAt:             time.Now(),
+		ID:              childThread,
+		ChatID:          chatID,
+		ParentThreadID:  &parentThread,
+		ForkAtMessageID: messageIDAtOrdinal(t, ctx, repo, parentCW, forkOrdinal),
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -654,7 +682,7 @@ func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
 
 	chatID := uuid.New().String()
 	threadID := uuid.New().String()
-	forkOrdinal := int64(1)
+	cwID := uuid.New().String()
 
 	// Create chat
 	err := repo.CreateChat(ctx, &Chat{
@@ -670,19 +698,39 @@ func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
 	// Create thread that references itself as parent (invalid but testing guard)
 	_, err = repo.CreateThread(ctx, &Thread{
 		ID:             threadID,
-		ConversationID: chatID,
+		ChatID:         chatID,
 		ParentThreadID: &threadID, // Self-reference!
-		ForkAtOrdinal:  &forkOrdinal,
 		CreatedAt:      time.Now(),
 	})
 	require.NoError(t, err)
 
 	_, err = repo.CreateContextWindow(ctx, &ContextWindow{
-		ID:        uuid.New().String(),
+		ID:        cwID,
 		ThreadID:  threadID,
 		Sequence:  0,
 		CreatedAt: time.Now(),
 	})
+	require.NoError(t, err)
+
+	// fork_at_message_id is a foreign key, so it needs a real row -- but the
+	// self-referential guard fires before that row is ever looked up, so its
+	// content doesn't matter for what this test exercises.
+	err = repo.CreateMessage(ctx, &Message{
+		ID:              uuid.New().String(),
+		ChatID:          chatID,
+		Ordinal:         1,
+		Seq:             1,
+		ContextWindowID: cwID,
+		ThreadID:        threadID,
+		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	})
+	require.NoError(t, err)
+	msgs, err := repo.GetMessagesByContextWindow(ctx, cwID, nil)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+	_, err = repo.UpdateThreadForkPoint(ctx, threadID, &msgs[0].ID)
 	require.NoError(t, err)
 
 	// Should return 0 without infinite loop
@@ -717,9 +765,9 @@ func TestGetThreadTokenCount_PostCompaction(t *testing.T) {
 
 	// Create thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -740,6 +788,7 @@ func TestGetThreadTokenCount_PostCompaction(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: cw0,
 			ThreadID:        threadID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -767,6 +816,7 @@ func TestGetThreadTokenCount_PostCompaction(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: cw1, // Post-compaction
 			ThreadID:        threadID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -810,9 +860,9 @@ func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
 
 	// Create parent thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             parentThread,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        parentThread,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -832,6 +882,7 @@ func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: parentCW0,
 			ThreadID:        parentThread,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -859,6 +910,7 @@ func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i + 4),
+			Seq:             int64(i + 4),
 			ContextWindowID: parentCW1, // Post-compaction
 			ThreadID:        parentThread,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -871,12 +923,11 @@ func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
 
 	// Create child thread forked at ordinal 5 (in post-compaction context)
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:                    childThread,
-		ConversationID:        chatID,
-		ParentThreadID:        &parentThread,
-		ForkAtOrdinal:         &forkOrdinal,
-		ForkAtContextWindowID: &parentCW1, // Post-compaction CW
-		CreatedAt:             time.Now(),
+		ID:              childThread,
+		ChatID:          chatID,
+		ParentThreadID:  &parentThread,
+		ForkAtMessageID: messageIDAtOrdinal(t, ctx, repo, parentCW1, forkOrdinal), // Post-compaction CW
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -935,9 +986,9 @@ func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
 
 	// Create parent thread in parent conversation
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             parentThread,
-		ConversationID: parentChatID,
-		CreatedAt:      time.Now(),
+		ID:        parentThread,
+		ChatID:    parentChatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -956,6 +1007,7 @@ func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          parentChatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: parentCW,
 			ThreadID:        parentThread,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -968,12 +1020,11 @@ func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
 
 	// Create child thread in DIFFERENT conversation, forked from parent
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:                    childThread,
-		ConversationID:        childChatID, // Different conversation
-		ParentThreadID:        &parentThread,
-		ForkAtOrdinal:         &forkOrdinal,
-		ForkAtContextWindowID: &parentCW,
-		CreatedAt:             time.Now(),
+		ID:              childThread,
+		ChatID:          childChatID, // Different conversation
+		ParentThreadID:  &parentThread,
+		ForkAtMessageID: messageIDAtOrdinal(t, ctx, repo, parentCW, forkOrdinal),
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -1040,9 +1091,9 @@ func TestGetThreadTokenCount_OnlyUserMessages(t *testing.T) {
 
 	// Create thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -1061,6 +1112,7 @@ func TestGetThreadTokenCount_OnlyUserMessages(t *testing.T) {
 			ID:              uuid.New().String(),
 			ChatID:          chatID,
 			Ordinal:         int64(i),
+			Seq:             int64(i),
 			ContextWindowID: cwID,
 			ThreadID:        threadID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -1098,9 +1150,9 @@ func TestGetThreadTokenCount_ZeroTokenValues(t *testing.T) {
 
 	// Create thread
 	_, err = repo.CreateThread(ctx, &Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(t, err)
 
@@ -1119,6 +1171,7 @@ func TestGetThreadTokenCount_ZeroTokenValues(t *testing.T) {
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		Ordinal:         1,
+		Seq:             1,
 		ContextWindowID: cwID,
 		ThreadID:        threadID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
