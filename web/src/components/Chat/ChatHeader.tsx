@@ -7,14 +7,10 @@
  * - Stats row: file changes, processes, tasks, context usage, time ago
  */
 
-import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { useContextUsage, useContextUsageByThread } from "../../store/chatStoreHooks";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useTerminalStore } from "../../store/terminalStore";
-import { useTaskStats } from "../../hooks/task-queries";
-import { useProcessStore } from "../../store/processStore";
-import { useProjectStore } from "../../store/projectStore";
-import { useWorkspaceStateStore, type RightSidebarTab } from "../../store/workspaceStateStore";
 import {
   MoreHorizontal,
   Copy,
@@ -22,25 +18,16 @@ import {
   Trash2,
   Download,
   Terminal,
-  ListTodo,
-  GitBranch,
   Workflow,
-  Activity,
-  BookMarked,
   ArrowLeft,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries";
 import { useMessages } from "../../hooks/message-queries";
-import { useWorktreeChanges } from "../../hooks/useWorktreeChanges";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { Tooltip } from "../ui/Tooltip";
 import { useThreads, ThreadTabs } from "./thread-views";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
-import { isDev } from "../../lib/constants";
-import { useLoadedSkills } from "../../hooks/useLoadedSkills";
-import { openExternalLink } from "../../lib/open-link";
-import { BackgroundProcessStatus } from "../../gen/reliant/v1/common_pb";
 import { ContentBlockType, MessageRole } from "../../gen/reliant/v1/chat_pb";
 
 interface ChatHeaderProps {
@@ -55,52 +42,38 @@ interface ChatHeaderProps {
   onSelectThread?: (threadId: string | null) => void;
   /** Workflow execution for thread metadata */
   workflowExecution?: WorkflowExecution;
-  /** Callback to toggle inline workflow viewer (original position - above chat) */
-  onToggleInlineWorkflowViewer?: () => void;
-  /** Whether inline workflow viewer is currently shown */
-  isInlineWorkflowViewerOpen?: boolean;
-  /** Callback to toggle side panel workflow viewer */
-  onToggleSidePanelWorkflowViewer?: () => void;
-  /** Whether side panel workflow viewer is currently shown */
-  isSidePanelWorkflowViewerOpen?: boolean;
-  /** Current workflow viewer mode - used to determine which handler to call when opening */
-  workflowViewerMode?: 'inline' | 'side';
-  /** Callback to toggle workflow viewer mode (uses setting) */
-  onToggleWorkflowViewerMode?: () => void;
+  /**
+   * Opens/closes the workflow viewer. The always-visible workflow chip was
+   * removed from the header for compactness; this moved into the overflow menu
+   * so the viewer stays reachable.
+   */
+  onToggleWorkflowViewer?: () => void;
+  /** Whether the workflow viewer is currently open (labels the menu item) */
+  isWorkflowViewerOpen?: boolean;
 }
 
-export function ChatHeader({ 
-  chatId, 
-  isNewChat = false, 
+export function ChatHeader({
+  chatId,
+  isNewChat = false,
   worktreeId: propWorktreeId,
   selectedThreadId,
   onSelectThread,
   workflowExecution,
-  onToggleInlineWorkflowViewer,
-  isInlineWorkflowViewerOpen,
-  onToggleSidePanelWorkflowViewer,
-  isSidePanelWorkflowViewerOpen,
-  workflowViewerMode: _workflowViewerMode,
-  onToggleWorkflowViewerMode,
+  onToggleWorkflowViewer,
+  isWorkflowViewerOpen,
 }: ChatHeaderProps) {
   const chatQuery = useChat(chatId || undefined);
   const chat = chatQuery.data;
   const messagesQuery = useMessages(chatId || undefined);
   const messages = messagesQuery.data?.messages ?? [];
   const worktrees = useWorktreeStore((state) => state.worktrees);
-  const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
-  const currentProject = useProjectStore((state) => state.currentProject);
   const deleteMutation = useDeleteChat();
   const renameMutation = useRenameChat();
   const createTerminalSession = useTerminalStore((state) => state.createSession);
   const showTerminal = useTerminalStore((state) => state.showTerminal);
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
   const getWorktreeSessions = useTerminalStore((state) => state.getWorktreeSessions);
-  
-  // Right sidebar tab control
-  const setRightSidebarTab = useWorkspaceStateStore((state) => state.setRightSidebarTab);
-  const setRightPanelState = useWorkspaceStateStore((state) => state.setRightPanelState);
-  
+
   // Get threads from messages with workflow metadata for better names.
   // Spawn-tool threads are short-lived sub-agents owned by a single tool call;
   // they're surfaced inline via the spawn preview, not in the header.
@@ -120,39 +93,12 @@ export function ChatHeader({
     return allThreads.find((t) => t.id === selectedThread.parentThread && !t.isMain);
   }, [allThreads, selectedThread]);
   const showBackButton = Boolean(selectedThread && !selectedThread.isMain && onSelectThread);
-  
-  // Task stats from React Query
-  const taskStats = useTaskStats(chatId);
-  
-  // Process stats - get running processes for the worktree
+
   const effectiveWorktreeId = propWorktreeId || chat?.worktreeId;
-  const processes = useProcessStore((state) => state.processes);
-  const runningProcessCount = useMemo(() => {
-    if (!effectiveWorktreeId) return 0;
-    return processes.filter(
-      (p) =>
-        p.status === BackgroundProcessStatus.RUNNING &&
-        p.worktree_id === effectiveWorktreeId,
-    ).length;
-  }, [processes, effectiveWorktreeId]);
-  
-  // File change stats
-  const fileStats = useWorktreeChanges(effectiveWorktreeId);
-  
+
   // Context usage for compaction indicator
   const contextUsage = useContextUsage(chatId || "");
   const contextUsageByThread = useContextUsageByThread(chatId || "");
-  
-  // Handler to open right sidebar tab
-  const openSidebarTab = useCallback((tab: RightSidebarTab) => {
-    if (currentProject?.id) {
-      setRightSidebarTab(currentProject.id, currentWorktree?.id ?? null, tab);
-      // Also open the right sidebar if it's closed
-      setRightPanelState(currentProject.id, currentWorktree?.id ?? null, { fileBrowser: true });
-      // Dispatch event for ModernApp to update its local state (avoids store subscription issues)
-      window.dispatchEvent(new CustomEvent("open-file-browser"));
-    }
-  }, [currentProject?.id, currentWorktree?.id, setRightSidebarTab, setRightPanelState]);
 
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -187,14 +133,6 @@ export function ChatHeader({
       return null;
     }
   }, [chat?.createdAt, isNewChat]);
-
-  // Dev-only Temporal deep link for this chat's active workflow run
-  const hasTemporalRunLink = Boolean(chat?.workflowId && chat?.runId);
-  const temporalRunHistoryUrl = useMemo(() => {
-    if (!hasTemporalRunLink) return null;
-    const temporalUIPort = window.RELIANT_CONFIG?.temporalUIPort || 8233;
-    return `http://localhost:${temporalUIPort}/namespaces/reliant/workflows/${chat?.workflowId}/${chat?.runId}/history`;
-  }, [hasTemporalRunLink, chat?.workflowId, chat?.runId]);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -374,19 +312,9 @@ export function ChatHeader({
     }
   }, [isEditingTitle]);
 
-  // Load processes for this worktree on mount/worktree change
-  const lastFetchedWorktreeRef = useRef<string | null>(null);
-  useEffect(() => {
-    // Only fetch if we have a worktree and it's different from what we last fetched
-    if (effectiveWorktreeId && effectiveWorktreeId !== lastFetchedWorktreeRef.current) {
-      lastFetchedWorktreeRef.current = effectiveWorktreeId;
-      useProcessStore.getState().fetchProcesses(effectiveWorktreeId);
-    }
-  }, [effectiveWorktreeId]);
-
   return (
     <div className="flex items-center bg-card/30 flex-shrink-0">
-      <div className="px-4 sm:px-6 lg:px-8 py-2 w-full">
+      <div className="px-4 sm:px-6 lg:px-8 py-1 w-full">
         <div className="max-w-[1200px] mx-auto">
           <div className="flex flex-col gap-0.5">
             {/* Row 1: Title, Menu, and Time */}
@@ -454,6 +382,19 @@ export function ChatHeader({
                         Edit Title
                       </button>
                       
+                      {workflowExecution && onToggleWorkflowViewer && (
+                        <button
+                          onClick={() => {
+                            onToggleWorkflowViewer();
+                            setIsMenuOpen(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm hover:bg-accent flex items-center gap-2"
+                        >
+                          <Workflow className="h-4 w-4" />
+                          {isWorkflowViewerOpen ? "Hide" : "Show"} Workflow
+                        </button>
+                      )}
+
                       {workspacePath && (
                         <button
                           onClick={handleOpenTerminal}
@@ -496,124 +437,8 @@ export function ChatHeader({
               
               {/* Spacer to push time to the right */}
               <div className="flex-1" />
-              
-              {/* Time ago - top right */}
-              {timeAgo && (
-                <span className="text-sm text-muted-foreground flex-shrink-0">{timeAgo}</span>
-              )}
-            </div>
-            
-            {/* Row 2: Stats row with graph view button */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              {/* File changes with additions/deletions - clickable */}
-              <Tooltip 
-                content={fileStats.totalFiles > 0 
-                  ? `${fileStats.totalFiles} file${fileStats.totalFiles !== 1 ? 's' : ''} changed: +${fileStats.additions} -${fileStats.deletions}` 
-                  : 'No file changes'
-                } 
-                placement="bottom"
-              >
-                <button 
-                  onClick={() => openSidebarTab('changes')}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border border-border rounded hover:bg-accent hover:text-foreground transition-colors text-xs"
-                >
-                  <GitBranch className="h-3.5 w-3.5" />
-                  <span className="tabular-nums">{fileStats.totalFiles}</span>
-                  <span className="text-green-500 tabular-nums">+{fileStats.additions}</span>
-                  <span className="text-red-500 tabular-nums">-{fileStats.deletions}</span>
-                </button>
-              </Tooltip>
-              
-              {/* Running processes - clickable */}
-              <Tooltip content={runningProcessCount > 0 ? `${runningProcessCount} process${runningProcessCount !== 1 ? 'es' : ''} running` : 'No processes running'} placement="bottom">
-                <button 
-                  onClick={() => openSidebarTab('processes')}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border border-border rounded hover:bg-accent hover:text-foreground transition-colors text-xs"
-                >
-                  <Terminal className={`h-3.5 w-3.5 ${runningProcessCount > 0 ? 'text-green-500' : ''}`} />
-                  <span className="tabular-nums">{runningProcessCount}</span>
-                </button>
-              </Tooltip>
-              
-              {/* Task stats - clickable */}
-              <Tooltip content={taskStats.total > 0 ? `${taskStats.completed} of ${taskStats.total} tasks completed` : 'No tasks'} placement="bottom">
-                <button 
-                  onClick={() => openSidebarTab('tasks')}
-                  className="inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border border-border rounded hover:bg-accent hover:text-foreground transition-colors text-xs"
-                >
-                  <ListTodo className="h-3.5 w-3.5" />
-                  <span className="tabular-nums">{taskStats.completed}/{taskStats.total}</span>
-                </button>
-              </Tooltip>
-              
-              {/* Loaded skills indicator */}
-              <LoadedSkillsBadge chatId={chatId} />
 
-              {/* Workflow status indicator - clickable button */}
-              {workflowExecution && (
-                <Tooltip 
-                  content={`Workflow: ${workflowExecution.workflowName} (${workflowExecution.status})`}
-                  placement="bottom"
-                >
-                  <button 
-                    onClick={() => {
-                      // Open or toggle the workflow viewer
-                      // If viewer is open, close it using the appropriate handler
-                      // If viewer is closed, use the toggle handler which respects the setting
-                      if (isSidePanelWorkflowViewerOpen || isInlineWorkflowViewerOpen) {
-                        // Viewer is open - close it using the appropriate handler
-                        if (isSidePanelWorkflowViewerOpen) {
-                          onToggleSidePanelWorkflowViewer?.();
-                        } else {
-                          onToggleInlineWorkflowViewer?.();
-                        }
-                      } else {
-                        // Viewer is closed - use the toggle handler which respects the setting
-                        onToggleWorkflowViewerMode?.();
-                      }
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border rounded hover:bg-accent hover:text-foreground transition-colors text-xs ${
-                      (isSidePanelWorkflowViewerOpen || isInlineWorkflowViewerOpen)
-                        ? 'border-primary bg-primary/10 text-primary' 
-                        : 'border-border text-muted-foreground'
-                    }`}
-                  >
-                    <Workflow className={`h-3.5 w-3.5 ${
-                      workflowExecution.status === 'running' ? 'text-blue-500 animate-pulse' : ''
-                    }`} />
-                    <span>{workflowExecution.workflowName}</span>
-                  </button>
-                </Tooltip>
-              )}
-              
-              {/* Spacer to push right-side items */}
-              <div className="flex-1" />
-              
-              {/* Dev-only: open this chat's current Temporal workflow run */}
-              {!isNewChat && isDev && (
-                <Tooltip
-                  content={
-                    hasTemporalRunLink
-                      ? 'Open current chat workflow run in Temporal (dev only)'
-                      : 'No workflow run available for this chat yet (dev only)'
-                  }
-                  placement="bottom"
-                >
-                  <button
-                    onClick={() => {
-                      if (!temporalRunHistoryUrl) return;
-                      void openExternalLink(temporalRunHistoryUrl);
-                    }}
-                    disabled={!hasTemporalRunLink}
-                    className="inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border border-border rounded hover:bg-accent hover:text-foreground transition-colors text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-                    aria-label="Open current chat Temporal workflow run"
-                  >
-                    <Activity className="h-3.5 w-3.5" />
-                  </button>
-                </Tooltip>
-              )}
-
-              {/* Context usage indicator */}
+              {/* Context usage - the one stat that changes what you do next */}
               {!isNewChat && (
                 <ContextUsageIndicator
                   threadTokenCount={contextUsage?.threadTokenCount ?? 0}
@@ -621,9 +446,14 @@ export function ChatHeader({
                   compact={true}
                 />
               )}
+
+              {/* Time ago - top right */}
+              {timeAgo && (
+                <span className="text-xs text-muted-foreground flex-shrink-0">{timeAgo}</span>
+              )}
             </div>
             
-            {/* Row 3: Thread tabs (only show if multiple threads) */}
+            {/* Row 2: Thread tabs (only show if multiple threads) */}
             {!isNewChat && hasMultipleThreads && onSelectThread && (
               <ThreadTabs
                 threads={threads}
@@ -639,23 +469,5 @@ export function ChatHeader({
         </div>
       </div>
     </div>
-  );
-}
-
-/** Small badge showing loaded skills count with tooltip */
-function LoadedSkillsBadge({ chatId }: { chatId: string | null }) {
-  const skills = useLoadedSkills(chatId || undefined);
-  if (skills.length === 0) return null;
-
-  return (
-    <Tooltip
-      content={`Skills: ${skills.join(', ')}`}
-      placement="bottom"
-    >
-      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 h-6 border border-border rounded hover:bg-accent hover:text-foreground transition-colors text-xs">
-        <BookMarked className="h-3.5 w-3.5 text-primary" />
-        <span className="tabular-nums">{skills.length}</span>
-      </div>
-    </Tooltip>
   );
 }

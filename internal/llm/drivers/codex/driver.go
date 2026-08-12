@@ -33,13 +33,14 @@ const (
 
 	// CodexVersion is the version header to send.
 	// Keep aligned with a current codex-tui (CLI) release; backend may gate on this.
-	CodexVersion = "0.143.0"
+	// 0.146.0 is the release observed serving the gpt-5.6 family.
+	CodexVersion = "0.146.0"
 
 	// CodexOriginator identifies the client to the Codex backend.
 	CodexOriginator = "codex-tui"
 
 	// CodexUserAgent is the user agent string, matching the codex-tui CLI identity.
-	CodexUserAgent = "codex-tui/0.143.0 (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; 0.143.0)"
+	CodexUserAgent = "codex-tui/0.146.0 (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; 0.146.0)"
 
 	// CodexBetaFeatures advertises the beta features the codex-tui client opts into.
 	CodexBetaFeatures = "remote_compaction_v2"
@@ -567,14 +568,17 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 	}
 
 	// Set instructions from prompts
-	if inst := c.convertInstructions(prompts); inst != "" {
-		params.Instructions = openai.String(inst)
+	instructions := c.convertInstructions(prompts)
+	if instructions != "" {
+		params.Instructions = openai.String(instructions)
 	}
 
 	// Add tools
+	var convertedTools []responses.ToolUnionParam
 	if len(toolList) > 0 {
 		validatedTools := pruneDuplicateCodexToolNames(toolList)
-		convertedTools, err := c.convertTools(validatedTools)
+		var err error
+		convertedTools, err = c.convertTools(validatedTools)
 		if err != nil {
 			return responses.ResponseNewParams{}, err
 		}
@@ -600,36 +604,47 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 		if effort == "" {
 			effort = "medium"
 		}
-		reasoningEffort := shared.ReasoningEffortMedium
-		switch effort {
-		case "low":
-			reasoningEffort = shared.ReasoningEffortLow
-		case "medium":
-			reasoningEffort = shared.ReasoningEffortMedium
-		case "high":
-			reasoningEffort = shared.ReasoningEffortHigh
-		case "xhigh":
-			reasoningEffort = shared.ReasoningEffort("xhigh")
-		}
 
-		// Use model-specific reasoning summary mode.
-		// GPT-5.3-Codex-Spark does not support reasoning summaries, so omit Summary entirely.
-		if c.options.Model.ID == models.GPT53CodexSpark {
-			params.Reasoning = shared.ReasoningParam{
-				Effort: reasoningEffort,
-			}
-		} else {
-			summaryMode := shared.ReasoningSummaryConcise
+		// A model that returns no summary still returns encrypted reasoning we
+		// must round-trip, so only Spark (which rejects the include) opts out.
+		var summaryMode shared.ReasoningSummary
+		if modelSupportsReasoningSummaries(c.options.Model.ID) {
+			summaryMode = shared.ReasoningSummaryConcise
 			if c.options.Model.ReasoningSummaryMode == models.ReasoningSummaryDetailedOnly {
 				summaryMode = shared.ReasoningSummaryDetailed
 			}
+		}
+
+		switch {
+		case isGPT56(c.options.Model.ID):
+			params.Reasoning = newGPT56ReasoningParam(effort, summaryMode)
+			params.Include = []responses.ResponseIncludable{
+				responses.ResponseIncludableReasoningEncryptedContent,
+			}
+
+		case c.options.Model.ID == models.GPT53CodexSpark:
+			// Spark takes effort only — no summary and no encrypted-content include.
 			params.Reasoning = shared.ReasoningParam{
-				Effort:  reasoningEffort,
+				Effort: codexReasoningEffort(effort),
+			}
+
+		default:
+			params.Reasoning = shared.ReasoningParam{
+				Effort:  codexReasoningEffort(effort),
 				Summary: summaryMode,
 			}
 			params.Include = []responses.ResponseIncludable{
 				responses.ResponseIncludableReasoningEncryptedContent,
 			}
+		}
+	}
+
+	// GPT-5.6 delivers the system prompt and tools inside `input` rather than as
+	// top-level fields. Applied last, as a transform over the assembled params,
+	// so the two envelopes cannot drift apart.
+	if isGPT56(c.options.Model.ID) {
+		if err := applyGPT56Envelope(&params, instructions, convertedTools); err != nil {
+			return responses.ResponseNewParams{}, fmt.Errorf("failed to build gpt-5.6 request envelope: %w", err)
 		}
 	}
 
@@ -644,6 +659,7 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 		return nil, fmt.Errorf("invalid codex request: %w", err)
 	}
 	c.applyClientMetadata(&params, tc)
+	c.logRequestShape(&params)
 
 	var rawResp *http.Response
 	resp, err := c.client.Responses.New(ctx, params, c.requestOptions(tc, &rawResp)...)
@@ -680,6 +696,7 @@ func (c *CodexClient) SendMessages(ctx context.Context, prompts []string, messag
 	}
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
+	c.logServedResponse(resp, upstreamRequestID)
 
 	return &llm.DriverResponse{
 		Content:            content,
@@ -710,6 +727,8 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 			return
 		}
 		c.applyClientMetadata(&params, tc)
+		c.logRequestShape(&params)
+
 		var streamResp *http.Response
 		stream := c.client.Responses.NewStreaming(ctx, params, c.requestOptions(tc, &streamResp)...)
 
@@ -862,6 +881,7 @@ func (c *CodexClient) StreamResponse(ctx context.Context, prompts []string, mess
 		}
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)
+		c.logServedResponse(finalResp, upstreamRequestID)
 
 		eventChan <- llm.DriverEvent{
 			Type: llm.EventComplete,

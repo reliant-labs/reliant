@@ -37,7 +37,7 @@ function seedChat() {
 function completeAssistantMessage(
   chatId: string,
   id: string,
-  ordinal: number,
+  seq: number,
   createdAt = "2026-01-01T00:00:10.000Z",
 ): ChatUpdate {
   return {
@@ -57,7 +57,7 @@ function completeAssistantMessage(
       createdAt,
       updatedAt: createdAt,
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
+      seq: BigInt(seq),
       thread: "",
       sequenceNumber: 0n,
       attachments: [],
@@ -243,6 +243,118 @@ describe("delta identity: buffered flush after finalize", () => {
 
     // The flush must be dropped: the id was finalized, so no placeholder.
     expect(slicePlaceholders(chatId)).toHaveLength(0);
+  });
+});
+
+// The sentinel-seq contract: a client placeholder carries seq 999999 so it
+// sorts after every real message. When the server's persisted message for the
+// SAME id arrives with a real (small) seq, the placeholder must be retired —
+// leaving exactly one entry, at its real seq, with no stale sentinel behind.
+describe("delta identity: sentinel placeholder → real server message", () => {
+  it("replaces the sentinel-seq placeholder with the real message (same id, real seq, no duplicate)", () => {
+    const chatId = "chat-sentinel-replace";
+    const store = useChatStore.getState();
+
+    // A stream starts for a pre-allocated id. The placeholder lives only in
+    // the streamingMessages slice and carries the sentinel seq.
+    store.processChatStreamUpdates(chatId, [
+      contentStart("assistant-sentinel"),
+      contentDelta("assistant-sentinel", "partial\n"),
+    ]);
+
+    const placeholders = slicePlaceholders(chatId);
+    expect(placeholders).toHaveLength(1);
+    expect(placeholders[0].id).toBe("assistant-sentinel");
+    expect(Number(placeholders[0].seq)).toBe(999999);
+    // Never co-mingled into the persisted list while in flight.
+    expect(getMessagesFromCache(chatId)).toHaveLength(0);
+
+    // The real persisted message arrives under the same id with a real seq.
+    store.processChatStreamUpdates(chatId, [
+      completeAssistantMessage(chatId, "assistant-sentinel", 3),
+    ]);
+
+    // Exactly one entry, at the real seq — no duplicate.
+    const persisted = getMessagesFromCache(chatId);
+    expect(persisted.map((m) => m.id)).toEqual(["assistant-sentinel"]);
+    expect(Number(persisted[0].seq)).toBe(3);
+
+    // And no stale sentinel placeholder left behind.
+    expect(slicePlaceholders(chatId)).toHaveLength(0);
+    const anySentinel = [...persisted, ...slicePlaceholders(chatId)].some(
+      (m) => Number(m.seq) === 999999,
+    );
+    expect(anySentinel).toBe(false);
+  });
+});
+
+// Two threads streaming at once must each own their own placeholder: neither
+// blocks nor overwrites the other, and finalizing one leaves the other in
+// flight. Placeholders are keyed per thread in the streamingMessages slice.
+describe("delta identity: concurrent streams on two threads", () => {
+  function threadedDelta(
+    messageId: string,
+    thread: string,
+    text: string,
+  ): ChatUpdate {
+    return {
+      update_type: "streaming_delta",
+      delta_type: "content_block_delta",
+      block_index: 0,
+      delta: text,
+      message_id: messageId,
+      thread,
+    } as unknown as ChatUpdate;
+  }
+
+  function threadedStart(messageId: string, thread: string): ChatUpdate {
+    return {
+      update_type: "streaming_delta",
+      delta_type: "content_block_start",
+      block_index: 0,
+      message_id: messageId,
+      thread,
+    } as unknown as ChatUpdate;
+  }
+
+  it("interleaves two threads' streams without one blocking or clobbering the other", () => {
+    const chatId = "chat-concurrent-threads";
+    const store = useChatStore.getState();
+
+    // Interleaved deltas from the main thread and a spawn thread.
+    store.processChatStreamUpdates(chatId, [
+      threadedStart("assistant-main", ""),
+      threadedDelta("assistant-main", "", "main one\n"),
+      threadedStart("assistant-spawn", "spawn"),
+      threadedDelta("assistant-spawn", "spawn", "spawn one\n"),
+      threadedDelta("assistant-main", "", "main two\n"),
+      threadedDelta("assistant-spawn", "spawn", "spawn two\n"),
+    ]);
+
+    const placeholders = slicePlaceholders(chatId);
+    expect(placeholders.map((m) => m.id).sort()).toEqual([
+      "assistant-main",
+      "assistant-spawn",
+    ]);
+
+    // Each thread accumulated only its own text — no cross-thread bleed.
+    const textOf = (id: string) =>
+      (placeholders.find((m) => m.id === id)?.contentBlocks || [])
+        .map((b) => b.content || "")
+        .join("");
+    expect(textOf("assistant-main")).toBe("main one\nmain two\n");
+    expect(textOf("assistant-spawn")).toBe("spawn one\nspawn two\n");
+
+    // Finalizing the main thread must not disturb the spawn thread's stream.
+    store.processChatStreamUpdates(chatId, [
+      streamFinalized("assistant-main", "completed"),
+    ]);
+
+    const afterFinalize = slicePlaceholders(chatId);
+    expect(afterFinalize.map((m) => m.id)).toEqual(["assistant-spawn"]);
+    expect(
+      (afterFinalize[0].contentBlocks || []).map((b) => b.content || "").join(""),
+    ).toBe("spawn one\nspawn two\n");
   });
 });
 

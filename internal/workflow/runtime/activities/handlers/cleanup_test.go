@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/require"
 )
 
@@ -59,7 +59,7 @@ func createTestChatWithContextWindow(t *testing.T, repo db.Repository) (string, 
 	threadID := chatID
 	_, err = repo.CreateThread(ctx, &db.Thread{
 		ID:             threadID,
-		ConversationID: chatID,
+		ChatID: chatID,
 	})
 	require.NoError(t, err)
 
@@ -155,7 +155,7 @@ func TestCleanupActivity_CancelsOrphanedToolCalls(t *testing.T) {
 
 	// Create an assistant message with a tool_call block
 	msgID := uuid.New().String()
-	err := repo.CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
 		Ordinal:         1,
@@ -245,7 +245,7 @@ func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
 
 	// Create an assistant message with a tool_call block
 	asstMsgID := uuid.New().String()
-	err := repo.CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              asstMsgID,
 		ChatID:          chatID,
 		Ordinal:         1,
@@ -277,7 +277,7 @@ func TestCleanupActivity_SkipsToolCallsWithResults(t *testing.T) {
 
 	// Create a tool message with the tool_result block
 	toolMsgID := uuid.New().String()
-	err = repo.CreateMessage(ctx, &db.Message{
+	err = createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              toolMsgID,
 		ChatID:          chatID,
 		Ordinal:         2,
@@ -373,7 +373,7 @@ func TestCleanupActivity_IdempotentRepair(t *testing.T) {
 
 	// Create an assistant message with an orphaned tool_call
 	msgID := uuid.New().String()
-	err := repo.CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
 		Ordinal:         1,
@@ -434,7 +434,7 @@ func TestCleanupActivity_MultipleOrphanedToolCalls(t *testing.T) {
 
 	// Create an assistant message with multiple tool_calls
 	msgID := uuid.New().String()
-	err := repo.CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
 		Ordinal:         1,

@@ -280,7 +280,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       {/* Status Badge */}
       <span
         className={cn(
-          "text-xs font-mono font-semibold w-4 h-4 flex items-center justify-center rounded",
+          "text-xs font-semibold w-4 h-4 flex items-center justify-center rounded",
           getStatusColor()
         )}
         title={getDiffStatusTitle()}
@@ -291,7 +291,7 @@ function ViewerTab({ viewer, isActive, onSelect, onClose }: ViewerTabProps) {
       {/* Title */}
       <span
         className={cn(
-          "text-sm font-mono truncate min-w-[80px]",
+          "text-sm truncate min-w-[80px]",
           isDiff && isActive && "font-semibold"
         )}
       >
@@ -347,7 +347,7 @@ function WorktreesViewerContent() {
           <button
             onClick={() => setWorktreeView("active")}
             className={cn(
-              "flex-1 px-3 h-full text-xs font-mono transition-colors border-b-2",
+              "flex-1 px-3 h-full text-xs transition-colors border-b-2",
               worktreeView === "active"
                 ? "text-foreground"
                 : "text-muted-foreground bg-accent hover:bg-muted"
@@ -366,7 +366,7 @@ function WorktreesViewerContent() {
           <button
             onClick={() => setWorktreeView("archived")}
             className={cn(
-              "flex-1 px-3 h-full text-xs font-mono transition-colors border-b-2",
+              "flex-1 px-3 h-full text-xs transition-colors border-b-2",
               worktreeView === "archived"
                 ? "text-foreground"
                 : "text-muted-foreground bg-accent hover:bg-muted"

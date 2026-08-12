@@ -17,7 +17,7 @@ import (
 type ViewParams struct {
 	FilePath string `json:"file_path" jsonschema:"required,description=the file to view"`
 	Offset   int    `json:"offset,omitempty" jsonschema:"description=The 1-based line number to start reading from. Line 1 is the first line of the file. Default 1 — omit it to read from the start."`
-	Limit    int    `json:"limit,omitempty" jsonschema:"description=The amount of lines to read, maximum is 256000, and the default (if empty), is 300. Only set the limit for large files."`
+	Limit    int    `json:"limit,omitempty" jsonschema:"description=The amount of lines to read, maximum is 256000, and the default (if empty), is 1500. Omit it for ordinary source files — the default reads most files whole. Only set it for very large files."`
 	Pages    string `json:"pages,omitempty" jsonschema:"description=PDF files only. Page range to read (e.g. '1-5'\\, '3'\\, '10-20'). Maximum 20 pages per request. Required for PDFs larger than 10 pages; ignored for non-PDF files."`
 	Repo     string `json:"repo,omitempty" jsonschema:"description=Multi-repo only. Which repo the path is relative to: 'root' for the project root\\, or a repo name (e.g. 'api'\\, 'web'). Used as the base for relative paths. Omit in single-repo projects or when path is absolute."`
 }
@@ -31,16 +31,29 @@ type ViewResponseMetadata struct {
 }
 
 const (
-	ViewToolName      = "view"
-	MaxReadSize       = 16 * 1024       // 16KB - matches MaxOutputSize to avoid reading more than we'll output
+	ViewToolName = "view"
+	// MaxReadSize matches MaxOutputSize so view reads exactly as much as the
+	// wrapper will deliver. It read 16KB while MaxOutputSize was 24_000, so a
+	// third of the available budget was discarded before truncation was even
+	// considered: measured over one long run, all 114 reads that stopped at
+	// DefaultReadLimit averaged 15178 bytes — every one of them was already at
+	// the old byte ceiling, so raising the line limit alone would have changed
+	// nothing.
+	MaxReadSize       = MaxOutputSize
 	MaxBinaryFileSize = 5 * 1024 * 1024 // 5MB max for binary files (images, PDFs)
-	DefaultReadLimit  = 300
-	MaxLineLength     = 500
+	// DefaultReadLimit is the line ceiling for a read that does not ask for
+	// one. Every view costs a full model round-trip while the read itself
+	// costs milliseconds, so paging a 900-line file 300 lines at a time buys
+	// nothing and spends two extra turns. The byte ceiling above is the real
+	// protection against a huge file; this number only has to be large enough
+	// that ordinary source files arrive whole.
+	DefaultReadLimit = 1500
+	MaxLineLength    = 500
 	// PDFAutoInlinePageLimit is the largest PDF (in pages) returned whole without
 	// requiring an explicit page range. Larger PDFs must be read a range at a time
 	// so a single view call doesn't flood the context window.
 	PDFAutoInlinePageLimit = 10
-	viewDescription   = `File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
+	viewDescription        = `File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
 
 WHEN TO USE:
 - Reading contents of specific files (source code, configs, logs)
@@ -60,18 +73,21 @@ FEATURES:
 - Suggests similar file names when the requested file isn't found
 
 LIMITATIONS:
-- Maximum output size is 16KB (~4K tokens) - larger files are truncated with head+tail
-- Default reading limit is 300 lines
+- Maximum output size is 24KB (~6K tokens) - larger files are truncated with head+tail
+- Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
 - Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
 - PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
+- Prefer ONE whole-file read over several paged reads: each call costs a model
+  round-trip, while the read itself takes milliseconds. Omit offset/limit unless
+  the file is genuinely too big to arrive in one piece.
+- Issue several view calls in a SINGLE message to read independent files at once
 - Use with Glob tool to first find files you want to view
 - For code exploration, first use Grep to find relevant files, then View to examine them
-- When viewing large files, use the offset parameter to read specific sections
-- If output is truncated, use offset to read the middle section`
+- If output is truncated, use offset to read the remaining section`
 )
 
 func NewViewTool() Tool {

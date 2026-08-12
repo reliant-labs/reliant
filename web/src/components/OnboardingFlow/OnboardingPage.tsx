@@ -2,7 +2,7 @@ import { ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { useOnboardingPlan } from './useOnboardingPlan';
-import { BACK_CLEARS, deriveStep, getStepsForPlan, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
+import { BACK_CLEARS, deriveStep, getStepsForPlan, stepMaxWidth, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
 import { useOnboardingTracking } from './analytics';
 import { useTitleBarChrome } from '@/hooks/useTitleBarChrome';
 import type { LaunchPlan } from './types';
@@ -75,7 +75,9 @@ export function OnboardingPage() {
       {/* Card */}
       <div
         className={cn(
-          "relative w-full max-w-[840px] rounded-[1.35rem] border border-white/15 bg-background/88 font-sans shadow-[0_28px_90px_rgba(2,6,23,0.55)] backdrop-blur-2xl flex flex-col overflow-hidden",
+          "relative w-full rounded-[1.35rem] border border-white/15 bg-background/88 font-sans shadow-[0_28px_90px_rgba(2,6,23,0.55)] backdrop-blur-2xl flex flex-col overflow-hidden",
+          stepMaxWidth(actualStep),
+          "transition-[max-width] duration-300",
           "max-h-[calc(100vh-80px)]",
           "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/50 before:to-transparent",
           "animate-in fade-in-0 zoom-in-98 duration-300"

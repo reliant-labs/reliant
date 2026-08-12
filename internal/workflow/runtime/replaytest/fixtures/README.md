@@ -33,6 +33,7 @@ fixtures make that class of change fail at **test time** instead.
 | `router_dispatch.json` | `replay-router` (user-draft workflow, node-router → `builtin://agent` sub-workflow node) | Pitch-deck-like router dispatch: routing CallLLM with `node_routing_decision` response tool, dynamic dispatch, inline sub-workflow execution with `thread.mode: new` + inject, `save_message`. |
 | `pause_resume.json` | `builtin://agent` (`ask: true`) | Signal machinery: `signal.question.*` blocking, `signal.pause` delivered while blocked, question resolution with feedback, park on the epoch-broadcast pause `Await`, `signal.resume`, second turn, second question, completion. |
 | `compaction.json` | `builtin://agent` (tiny `compaction_threshold`) | Compaction edge: token count exceeds threshold after execute_tools → compact node (summary LLM request, new context window) → post-compaction turn → completion. |
+| `spawn.json` | `builtin://agent` | Spawn: a spawn tool call dispatches the child agent detached (`dispatchSpawnBackground`), settling immediately with a handle; the parent's loop blocks without spinning (`InlineLoopExecutor.awaitLiveDetachedSpawns`) until the detached child's completion lands in its mailbox, then reacts to it on its next turn. |
 
 ## When `TestReplayFixtures` fails
 
@@ -116,8 +117,8 @@ jq -r '.events[].eventType' fixtures/agent_tool_loop.json
 ## Caveats
 
 - The replay test only covers the shapes captured here. A non-deterministic
-  change on a path no fixture exercises (e.g. parallel loops, spawn,
-  daemon-offline breaker) will not be caught — add a fixture when you add or
-  materially change such a path.
+  change on a path no fixture exercises (e.g. parallel loops, multiple
+  concurrent spawns, daemon-offline breaker) will not be caught — add a
+  fixture when you add or materially change such a path.
 - Fixtures pin the workflow-side contract of activity *interfaces* recorded in
   history (names, payload decoding), not activity implementations.

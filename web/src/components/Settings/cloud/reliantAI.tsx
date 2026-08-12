@@ -16,6 +16,7 @@
  */
 
 import { useMemo, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   CreditCard,
   KeyRound,
@@ -46,6 +47,7 @@ import {
 } from "./ui";
 import {
   reliantAIAvailable,
+  RedeemedCouponKind,
   type LLMKey,
   type LLMSpendEntry,
 } from "../../../services/controlPlane/reliantAI";
@@ -58,6 +60,7 @@ import {
   useCreateLLMKey,
   useRevokeLLMKey,
   useRotateLLMKey,
+  useRedeemCoupon,
 } from "../../../hooks/useReliantAIQueries";
 import { LLMKeyStatus } from "../../../gen/controlplane/v1/public/shared_pb";
 
@@ -75,6 +78,16 @@ const usd = (value: number): string =>
 
 const usdFromNanos = (nanos?: bigint): string => usd(Number(nanos ?? 0n) / 1e9);
 const usdFromCents = (cents?: bigint): string => usd(Number(cents ?? 0n) / 100);
+
+// Minutes are the unit the backend meters, but hours are how people think
+// about machine time — show both.
+const formatMachineMinutes = (minutes: number): string => {
+  const hours = minutes / 60;
+  const hoursLabel = Number.isInteger(hours) ? hours.toString() : hours.toFixed(1);
+  return `${minutes} machine minute${minutes === 1 ? "" : "s"} (${hoursLabel} hour${
+    hours === 1 ? "" : "s"
+  })`;
+};
 
 const formatModelLabel = (model?: string | null): string => {
   if (!model) return "—";
@@ -167,6 +180,7 @@ function ReliantAIPanel() {
     kind: "created" | "rotated";
   } | null>(null);
 
+  const navigate = useNavigate();
   const overviewQ = useReliantOverview();
   const walletQ = useWalletOverview();
 
@@ -217,6 +231,8 @@ function ReliantAIPanel() {
   }, [spendEntries]);
 
   const loading = overviewQ.isLoading || walletQ.isLoading;
+  const balanceNanos = wallet?.wallet?.balanceUsdNanos;
+  const hasFunds = balanceNanos != null && BigInt(balanceNanos) > 0n;
   const fatalError =
     overviewQ.error && walletQ.error
       ? (overviewQ.error as Error).message || "Failed to load Reliant AI data."
@@ -254,6 +270,35 @@ function ReliantAIPanel() {
       {fatalError && (
         <div className="rounded-md border border-destructive/20 bg-destructive/10 p-3 text-sm text-destructive">
           {fatalError}
+        </div>
+      )}
+
+      {/* Without funds every card below reads as empty — zero balance, no
+          spend, no keys — which looks like a broken page rather than an
+          unfunded account. Say which it is, and point at the two ways out
+          (redeem below, or billing) instead of leaving the user to guess. */}
+      {!loading && !hasFunds && (
+        <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+          <p className="font-medium text-foreground">
+            Reliant AI has no credit yet
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Redeem a coupon code below, or{" "}
+            <button
+              type="button"
+              onClick={() =>
+                navigate({
+                  to: "/settings/$section",
+                  params: { section: "billing" },
+                })
+              }
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              set up billing
+            </button>{" "}
+            to add credit. Until then, requests through Reliant will be
+            declined.
+          </p>
         </div>
       )}
 
@@ -303,6 +348,7 @@ function ReliantAIPanel() {
                     </div>
                   </div>
                 )}
+                <RedeemCouponRow />
               </CardContent>
             </Card>
 
@@ -825,5 +871,93 @@ function CreateKeyForm({
         </Button>
       </div>
     </div>
+  );
+}
+/**
+ * Redeem a coupon code into the org wallet, inline under the credit balance.
+ *
+ * Lives here because this is where a user looks when they want more credit —
+ * the balance and the way to increase it belong in the same place.
+ *
+ * Collapsed to a link by default: most visits are not redemptions, and a
+ * permanently-open input on a balance card invites people to hunt for a code
+ * they do not have.
+ */
+function RedeemCouponRow() {
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [redeemed, setRedeemed] = useState("");
+  const redeem = useRedeemCoupon();
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setRedeemed("");
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setError("Enter a coupon code.");
+      return;
+    }
+    redeem.mutate(trimmed, {
+      onSuccess: (res) => {
+        setRedeemed(
+          res.kind === RedeemedCouponKind.COMPUTE_MINUTES
+            ? // There is no RPC yet to read an org's total granted compute
+              // minutes back later, so this confirmation is the only place a
+              // user can see the new total — show it alongside the amount
+              // just added.
+              `Added ${formatMachineMinutes(res.computeMinutes)}. You now have ` +
+              `${formatMachineMinutes(res.newComputeMinutesRemaining)} available.`
+            : `Added $${(res.amountCents / 100).toFixed(2)} to your balance.`,
+        );
+        setCode("");
+      },
+      // The server's message is already user-facing and per-case (unknown
+      // code / already redeemed / fully claimed / expired), so it is shown
+      // verbatim rather than flattened into one generic string.
+      onError: (err: unknown) =>
+        setError(
+          err instanceof Error && err.message
+            ? err.message.replace(/^\[[a-z_]+\]\s*/i, "")
+            : "Could not redeem that code.",
+        ),
+    });
+  };
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-4 text-sm font-medium text-primary hover:underline"
+      >
+        Have a coupon code?
+      </button>
+    );
+  }
+
+  return (
+    <form className="mt-4 space-y-2" onSubmit={submit}>
+      <label htmlFor="coupon-code" className="text-xs uppercase tracking-wide text-muted-foreground">
+        Coupon code
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="coupon-code"
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          placeholder="Enter code"
+          disabled={redeem.isPending}
+          autoComplete="off"
+          className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <Button type="submit" disabled={redeem.isPending}>
+          {redeem.isPending ? "Redeeming…" : "Redeem"}
+        </Button>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {redeemed && <p className="text-sm text-emerald-600">{redeemed}</p>}
+    </form>
   );
 }

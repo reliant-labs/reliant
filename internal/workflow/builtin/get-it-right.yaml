@@ -268,9 +268,41 @@ nodes:
         # reviewer on a green gate must not open with "the gate failed" over three
         # lanes it then lists as PASSED.
         gate_failed: "{{nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0}}"
+        # THE GATE IS AUTHORITATIVE — a red gate can never yield 'pass'.
+        #
+        # This phase used to be run twice: once with review_enabled:false, where
+        # lint/test/build were the ONLY input to the verdict, and once with a
+        # reviewer. Those merged into a single loop with review ON. The gate
+        # itself survived the merge (each lane is conditioned on its command
+        # being non-empty, never on review_enabled) but its AUTHORITY did not:
+        # when a review existed its verdict won outright and the exit codes were
+        # not consulted at all, so a reviewer answering 'pass' over a red build
+        # reported the phase a success.
+        #
+        # The override below is deliberately ONE-WAY, and the asymmetry is the
+        # point. Only 'pass' is overridden, and only when a lane that RAN came
+        # back non-zero. The reviewer keeps full authority to FAIL a green build
+        # — it sees what exit codes cannot (a page that renders blank, a handler
+        # that was never wired) — so this is not a swap of precedence.
+        #
+        # 'stuck' is passed through untouched even on a red gate. It does not
+        # claim the code is right; it reports that the REVIEW could not be
+        # performed (a tool the reviewer was not granted, a URL it could not
+        # obtain), and it routes to stuck_checkpoint to ask a human. Downgrading
+        # it to 'continue' would drop that escalation and re-run the implementer
+        # against a blocker only a human can clear.
+        #
+        # Dereferencing the three lanes here is safe for a consumer that
+        # configures none of them: a skipped run node is given zero-value
+        # defaults (model.SkippedRunOutputMap), so an unconfigured lane reports
+        # exit 0 and "did not run" is indistinguishable from "ran and passed".
+        # gate_failed above already relies on exactly that.
         eval_strategy: >
           {{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null
-            ? nodes.review.response.strategy
+            ? ((nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0)
+                 && nodes.review.response.strategy == 'pass'
+               ? 'continue'
+               : nodes.review.response.strategy)
             : (nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0)
               ? 'continue' : 'pass'}}
         review_grade: "{{has(nodes.review) && has(nodes.review.response) && nodes.review.response != null && has(nodes.review.response.grade) ? nodes.review.response.grade : 'pass'}}"
@@ -434,6 +466,8 @@ nodes:
                 - Lint: {{inputs.lint_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.lint.exit_code == 0 ? 'passed' : 'FAILED')}}
                 - Test: {{inputs.test_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.test.exit_code == 0 ? 'passed' : 'FAILED')}}
                 - Build: {{inputs.build_command == '' ? 'not configured (see implementer self-run checks above)' : (nodes.build.exit_code == 0 ? 'passed' : 'FAILED')}}
+
+                {{(nodes.lint.exit_code != 0 || nodes.test.exit_code != 0 || nodes.build.exit_code != 0) ? '**A lane above FAILED, so `pass` is not available to you this iteration.** The deterministic gate is authoritative: the loop overrides a `pass` filed over a red gate to `continue`, so filing one spends an iteration and discards your verdict. Judge the failing lane on its merits — `continue` if the fix is incremental, `refactor` if the approach is what broke it, `stuck` ONLY if you could not perform the review at all. Your feedback is what the next attempt gets, so name the failing lane and what you think caused it.' : ''}}
 
                 {{has(outputs.eval_strategy) && outputs.eval_strategy == 'stuck' && has(outputs.has_feedback) && outputs.has_feedback ? '### Re-review — you filed `stuck` and a human answered\n\n**Nothing was re-implemented.** The implement step was SKIPPED for this iteration: the code is byte-identical to what you looked at last time, so there is no new diff to read. The check results above were re-measured just now against that same code. What changed is that a human replied:\n\n> ' + string(has(outputs.stuck_feedback) ? outputs.stuck_feedback : '') + '\n\nFinish the review you could not finish. If your blocker was a tool or a URL you could not obtain, act on the answer above and try again BEFORE you reach for `stuck` a second time — a `stuck` that repeats the same blocker without attempting the remedy is not a verdict, it is a loop, and it is the human who pays for it.\n' : ''}}
 

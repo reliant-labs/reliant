@@ -82,7 +82,11 @@ describe('ProtoFieldRenderer', () => {
     expect((screen.getByLabelText('Role') as HTMLSelectElement).value).toBe('assistant')
   })
 
-  it('applies config input theme tokens for select chrome', () => {
+  // Select chrome is owned by the .cpv2-field-select rule in config-panel.css,
+  // which is where the --config-input-* tokens and the ring focus treatment now
+  // live. jsdom does not load that stylesheet, so the ownership class at the
+  // component boundary is what this can assert.
+  it('applies the config select ownership class for select chrome', () => {
     const onChange = vi.fn()
 
     render(
@@ -102,9 +106,7 @@ describe('ProtoFieldRenderer', () => {
     )
 
     const select = screen.getByLabelText('Role')
-    expect(select.className).toContain('border-[hsl(var(--config-input-border))]')
-    expect(select.className).toContain('bg-[hsl(var(--config-input-bg))]')
-    expect(select.className).toContain('focus:ring-ring/20')
+    expect(select.className).toContain('cpv2-field-select')
   })
 
   it('renders checkbox and emits boolean values', () => {

@@ -80,7 +80,10 @@ export function useCloudEligibility() {
   return { eligible, reason, isLoading };
 }
 
-export function useDaemonList(options?: { refetchInterval?: number }) {
+// `false` disables polling for this observer — the mobile daemon list passes
+// it while the tab is hidden so a backgrounded phone stops spending battery
+// and quota on a screen nobody is looking at.
+export function useDaemonList(options?: { refetchInterval?: number | false }) {
   return useQuery({
     queryKey: ['onboarding', 'daemons'],
     queryFn: async () => {

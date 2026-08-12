@@ -9,7 +9,10 @@ import { logger } from "../../lib/logger";
 import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { MONACO_FONT_FAMILY } from "../../lib/monacoTheme";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { useDaemonWait } from "../../hooks/useDaemonWait";
+import { DaemonWaitState } from "../DaemonWaitState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { getGRPCBaseURLPublic } from "../../api/grpc-client";
@@ -117,7 +120,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     const term = new XTerm({
       // Basic configuration
       fontSize: 12,
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      // xterm measures cell width from this string, so it must name the same
+      // face the rest of the app uses for code — see MONACO_FONT_FAMILY.
+      fontFamily: MONACO_FONT_FAMILY,
       scrollback: 10000,
       rows: 24,
       cols: 80,
@@ -393,8 +398,13 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         // and let the daemon-status subscription trigger the reconnect, with
         // a slow fallback retry in case that status is stale.
         if (daemonUnavailableRef.current || !daemonOnlineRef.current) {
+          // Deliberately NOT written into the buffer. Machine availability is
+          // transient state, not session output — writing it to the scrollback
+          // left "Waiting for daemon to come online..." permanently interleaved
+          // with the user's actual shell history, once per episode, and it
+          // stayed there long after the machine came back. The overlay says
+          // this while it's true and disappears when it isn't.
           if (connectionStateRef.current !== "waiting_for_daemon") {
-            term.write("\r\n\x1b[93mWaiting for daemon to come online...\x1b[0m\r\n");
             updateConnectionState("waiting_for_daemon");
           }
           reconnectTimerRef.current = setTimeout(() => {
@@ -419,10 +429,9 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         // Small jitter so many mounted terminals don't retry in lockstep.
         const delay = Math.round(baseDelay * (0.85 + Math.random() * 0.3));
 
-        // Announce the reconnect episode once — the overlay reflects ongoing
-        // state; a per-attempt write spammed the buffer.
+        // Same reasoning as the waiting-for-machine branch: the overlay owns
+        // transient connection state, the buffer holds session output.
         if (connectionStateRef.current !== "reconnecting") {
-          term.write("\r\n\x1b[93mConnection lost. Reconnecting...\x1b[0m\r\n");
           updateConnectionState("reconnecting");
         }
 
@@ -678,7 +687,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     }
   }, [sessionId, sidebarWidth, diffHeightPercent]);
 
-  const handleReconnectClick = () => {
+  const handleReconnectClick = useCallback(() => {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
@@ -687,7 +696,17 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     daemonUnavailableRef.current = false;
     updateConnectionState("connecting");
     void connectWebSocketRef.current?.();
-  };
+  }, [updateConnectionState]);
+
+  // The terminal keeps its own websocket backoff (that's a connection concern),
+  // but the words shown while a machine is down come from the shared policy —
+  // so a booting machine reads the same here as in the file tree and chat.
+  // Retry is left to the existing DAEMON_OFFLINE_RETRY_DELAY timer and the
+  // daemon-status subscription; passing no onRetry avoids a second reconnect
+  // loop racing the first.
+  const daemonWait = useDaemonWait({
+    waiting: connectionState === "waiting_for_daemon",
+  });
 
   return (
     <div className={cn("relative w-full h-full", className)}>
@@ -715,21 +734,12 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
           Reconnecting...
         </div>
       )}
-      {connectionState === "waiting_for_daemon" && (
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex flex-col items-center gap-1.5"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="flex items-center gap-2 font-mono text-xs">
-            <span
-              className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse shadow-[0_0_0_3px_rgba(234,179,8,0.15)]"
-              aria-hidden="true"
-            />
-            Waiting for daemon to come online...
-          </div>
-          <span className="text-xs text-muted-foreground">The terminal will connect automatically.</span>
-        </div>
+      {connectionState === "waiting_for_daemon" && daemonWait.state && (
+        <DaemonWaitState
+          state={daemonWait.state}
+          variant="overlay"
+          onRetry={handleReconnectClick}
+        />
       )}
       {connectionState === "disconnected" && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex flex-col items-center gap-2">

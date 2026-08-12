@@ -60,6 +60,17 @@ type Config struct {
 	// and threaded here so the LLM context can carry runtime capability
 	// limitations. Ephemeral, in-memory only.
 	DaemonRuntimeType string `yaml:"-" json:"-"`
+	// SnapshotSynced reports whether a DAEMON has actually pushed a config
+	// snapshot for this project, as opposed to the row being the placeholder
+	// CreateProject seeds (see SeedDaemonID) or missing outright.
+	//
+	// It exists because the two states are otherwise indistinguishable: an
+	// unsynced project and a synced project that genuinely contains nothing
+	// both arrive here as a Config with empty Skills/Workflows. Consumers were
+	// left inferring "empty means not filled yet, so retry" — which is right
+	// for a project mid-sync and wrong (an unwinnable retry loop) for one whose
+	// snapshot will never arrive. Branch on this instead of on emptiness.
+	SnapshotSynced bool `yaml:"-" json:"-"`
 }
 
 // DaemonRuntimeTypeLabelKey is the daemon-registration label key that carries

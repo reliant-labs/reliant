@@ -56,7 +56,8 @@ func (t *terminalPumpTracker) stopAll() {
 func (d *daemonClient) handleTerminalInput(
 	msg *reliantv1.TerminalInputMessage,
 ) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		logging.Warn(logPrefix + " Terminal input received but terminal manager not initialized")
 		return
 	}
@@ -66,7 +67,7 @@ func (d *daemonClient) handleTerminalInput(
 		return
 	}
 
-	if err := terminalManager.Write(sessionID, data); err != nil {
+	if err := tm.Write(sessionID, data); err != nil {
 		logging.Warn(logPrefix+" Failed to write terminal input",
 			"sessionID", sessionID, "error", err)
 		// Notify the server that the session has an error.
@@ -86,7 +87,8 @@ func (d *daemonClient) handleTerminalInput(
 func (d *daemonClient) handleTerminalResize(
 	msg *reliantv1.TerminalResizeMessage,
 ) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		logging.Warn(logPrefix + " Terminal resize received but terminal manager not initialized")
 		return
 	}
@@ -97,7 +99,7 @@ func (d *daemonClient) handleTerminalResize(
 	cols := uint16(msg.GetCols())
 	rows := uint16(msg.GetRows())
 
-	if err := terminalManager.Resize(sessionID, cols, rows); err != nil {
+	if err := tm.Resize(sessionID, cols, rows); err != nil {
 		logging.Warn(logPrefix+" Failed to resize terminal",
 			"sessionID", sessionID, "cols", cols, "rows", rows, "error", err)
 		_ = d.send(&reliantv1.DaemonMessage{
@@ -119,7 +121,8 @@ func (d *daemonClient) handleTerminalResize(
 func (d *daemonClient) startTerminalOutputPump(
 	sessionID string,
 ) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		logging.Warn(logPrefix + " Cannot start terminal output pump: terminal manager not initialized")
 		return
 	}
@@ -153,7 +156,7 @@ func (d *daemonClient) startTerminalOutputPump(
 			default:
 			}
 
-			n, err := terminalManager.Read(sessionID, buf)
+			n, err := tm.Read(sessionID, buf)
 			if n > 0 {
 				chunk := make([]byte, n)
 				copy(chunk, buf[:n])

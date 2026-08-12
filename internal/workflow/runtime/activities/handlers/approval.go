@@ -23,6 +23,7 @@ type ApprovalCreateInput struct {
 	ChatID             string `json:"chat_id" reliant:"-"`
 	WorkflowID         string `json:"workflow_id" reliant:"-"`
 	TemporalWorkflowID string `json:"temporal_workflow_id" reliant:"-"`
+	ThreadID           string `json:"thread_id,omitempty" reliant:"-"`
 	StepID             string `json:"step_id" reliant:"-"`
 	Title              string `json:"title" reliant:"-"`
 	Timeout            string `json:"timeout,omitempty" reliant:"-"` // Duration string, e.g. "1h"
@@ -158,6 +159,11 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		temporalWorkflowID = input.WorkflowID
 	}
 
+	var threadID *string
+	if input.ThreadID != "" {
+		threadID = &input.ThreadID
+	}
+
 	approval := &db.Approval{
 		ID:                 approvalID,
 		ChatID:             input.ChatID,
@@ -169,6 +175,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		TemporalWorkflowID: temporalWorkflowID,
 		CreatedAt:          time.Now().UTC(),
 		ResolvedAt:         nil,
+		ThreadID:           threadID,
 	}
 
 	// Dual-write: create approval record + chat_update + mark chat unread atomically

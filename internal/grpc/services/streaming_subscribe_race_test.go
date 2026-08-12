@@ -76,6 +76,18 @@ func (r *snapshotGateRepo) ListMessages(context.Context, string, db.MessageListO
 	return nil, nil
 }
 
+func (r *snapshotGateRepo) ListRecentMessages(context.Context, string, int) ([]*db.Message, error) {
+	return nil, nil
+}
+
+func (r *snapshotGateRepo) CountMessagesInChat(context.Context, string) (int, error) {
+	return 0, nil
+}
+
+func (r *snapshotGateRepo) GetLatestNonMessageUpdatesPerEntity(context.Context, string) ([]db.ChatUpdate, error) {
+	return nil, nil
+}
+
 func (r *snapshotGateRepo) ListContentBlocksForMessages(context.Context, []string) ([]*db.MessageContentBlock, error) {
 	return nil, nil
 }
@@ -85,6 +97,12 @@ func (r *snapshotGateRepo) GetAttachmentsByIDs(context.Context, []string) ([]*db
 }
 
 func (r *snapshotGateRepo) GetContextUsage(context.Context, string, string) (*db.ContextUsage, error) {
+	return nil, nil
+}
+
+// The snapshot enriches tool-call blocks with their durable rows (status and,
+// for a spawn, the thread it owns) via assembleMessagesForDisplay.
+func (r *snapshotGateRepo) ListToolCallsByMessageIDs(context.Context, []string) ([]*db.ToolCall, error) {
 	return nil, nil
 }
 

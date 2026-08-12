@@ -91,3 +91,55 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanTemporalError(t *testing.T) {
+	tests := []struct {
+		name     string
+		errMsg   string
+		expected string
+	}{
+		{
+			name:     "strips activity error frame",
+			errMsg:   `activity error (type: CallLLM, scheduledEventID: 104, startedEventID: 105, identity: 53948@host): failed to stream LLM response: upstream reset`,
+			expected: "failed to stream LLM response: upstream reset",
+		},
+		{
+			name:     "handles identity with trailing at sign",
+			errMsg:   `activity error (type: CallLLM, scheduledEventID: 35, startedEventID: 36, identity: 82721@MacBook-Pro-5.local@): boom`,
+			expected: "boom",
+		},
+		{
+			name:     "strips nested workflow frames",
+			errMsg:   `workflow execution error (type: ReliantWorkflow, workflowID: wf-1, runID: r-1): child workflow execution error (type: Sub, workflowID: wf-2, runID: r-2, initiatedEventID: 12, startedEventID: 13): tool failed`,
+			expected: "tool failed",
+		},
+		{
+			name:     "strips application error type and retryable suffix",
+			errMsg:   `activity error (type: CallLLM, scheduledEventID: 1, startedEventID: 2, identity: host): model rejected (type: ProviderError, retryable: true)`,
+			expected: "model rejected",
+		},
+		{
+			name:     "leaves plain errors untouched",
+			errMsg:   "rate limit exceeded for model claude-opus-4-20250514",
+			expected: "rate limit exceeded for model claude-opus-4-20250514",
+		},
+		{
+			name:     "preserves original when scaffolding is the whole message",
+			errMsg:   `activity error (type: CallLLM, scheduledEventID: 1, startedEventID: 2, identity: host)`,
+			expected: `activity error (type: CallLLM, scheduledEventID: 1, startedEventID: 2, identity: host)`,
+		},
+		{
+			name:     "empty string",
+			errMsg:   "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if result := cleanTemporalError(tt.errMsg); result != tt.expected {
+				t.Errorf("cleanTemporalError() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}

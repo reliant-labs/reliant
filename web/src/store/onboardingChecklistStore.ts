@@ -11,7 +11,7 @@ import { api } from "../api/client";
 import { mcpGrpc } from "../api/mcp-grpc";
 import { logger } from "../lib/logger";
 import {
-  safeGetSetting,
+  readSetting,
   upsertStringSetting,
 } from "../lib/settingsPersistence";
 import {
@@ -80,6 +80,14 @@ interface OnboardingChecklistState {
   setPanelState: (state: ChecklistPanelState) => Promise<void>;
 
   /**
+   * Bring a dismissed guide back — the one sanctioned way to undo a
+   * dismissal. Used by "Restart Onboarding Guide" and the post-onboarding
+   * hand-off. Unlike a raw setState this persists, so the revival survives a
+   * reload instead of silently reverting to the stored `dismissed`.
+   */
+  revive: () => Promise<void>;
+
+  /**
    * Detect which items are already completed by checking current app state.
    * Called on init and periodically to catch actions the user took outside
    * the checklist flow.
@@ -109,6 +117,57 @@ function deserializeItems(json: string): Set<ChecklistItemId> {
   } catch {
     return new Set();
   }
+}
+
+// ─── Local mirror ─────────────────────────────────────────────────────────────
+// The settings table is the system of record, but it is reachable only over an
+// RPC that can be slow, unauthenticated, or down at exactly the moment we have
+// to decide whether to show the guide. Every write is mirrored to localStorage
+// synchronously so a reload can answer "did they already dismiss this?" without
+// the network. On conflict the two are merged rather than overwritten — see
+// resolvePanelState.
+
+const LOCAL_KEYS = {
+  PANEL_STATE: "reliant.checklist.panelState",
+  COMPLETED_ITEMS: "reliant.checklist.completedItems",
+  WELCOME_SHOWN: "reliant.checklist.welcomeShown",
+} as const;
+
+function readLocal(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writeLocal(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Private-mode / quota. The backend write is still in flight.
+  }
+}
+
+/**
+ * Dismissal is monotonic and sticky: if either side says the user dismissed
+ * the guide, it stays dismissed. Anything else is a display preference, where
+ * a successful remote read wins (it may carry another device's choice) and a
+ * failed one falls back to whatever this device last saw.
+ *
+ * Reviving a dismissed guide is possible only through revive(), which clears
+ * both records at once.
+ */
+function resolvePanelState(
+  remote: ChecklistPanelState | null,
+  local: ChecklistPanelState | null,
+): ChecklistPanelState {
+  if (remote === "dismissed" || local === "dismissed") return "dismissed";
+  return remote ?? local ?? "collapsed";
+}
+
+function isPanelState(value: string | null): value is ChecklistPanelState {
+  return value === "collapsed" || value === "expanded" || value === "dismissed";
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -149,26 +208,52 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       if (get().isLoading) return;
       set({ isLoading: true });
 
-      const [
-        completedSetting,
-        panelSetting,
-        welcomeSetting,
-      ] = await Promise.all([
-        safeGetSetting(CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS),
-        safeGetSetting(CHECKLIST_SETTINGS_KEYS.PANEL_STATE),
-        safeGetSetting(CHECKLIST_SETTINGS_KEYS.WELCOME_SHOWN),
+      const [completedRead, panelRead, welcomeRead] = await Promise.all([
+        readSetting(CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS),
+        readSetting(CHECKLIST_SETTINGS_KEYS.PANEL_STATE),
+        readSetting(CHECKLIST_SETTINGS_KEYS.WELCOME_SHOWN),
       ]);
 
-      const completedItems = completedSetting?.value
-        ? deserializeItems(completedSetting.value)
-        : new Set<ChecklistItemId>();
+      const remotePanel =
+        panelRead.status === "found" && isPanelState(panelRead.value)
+          ? panelRead.value
+          : null;
+      const localPanelRaw = readLocal(LOCAL_KEYS.PANEL_STATE);
+      const localPanel = isPanelState(localPanelRaw) ? localPanelRaw : null;
+      const panelState = resolvePanelState(remotePanel, localPanel);
 
-      const panelState =
-        (panelSetting?.value as ChecklistPanelState) || "collapsed";
+      // Union the two records. Completions are monotonic — an item once earned
+      // is never un-earned — so merging is always safe, and it stops a failed
+      // read from resetting the user's progress to zero.
+      const completedItems = new Set<ChecklistItemId>([
+        ...(completedRead.status === "found"
+          ? deserializeItems(completedRead.value)
+          : []),
+        ...deserializeItems(readLocal(LOCAL_KEYS.COMPLETED_ITEMS) ?? "[]"),
+      ]);
 
       const welcomeShown =
-        welcomeSetting?.value === "true" ||
-        localStorage.getItem("reliant.checklist.welcomeShown") === "true";
+        (welcomeRead.status === "found" && welcomeRead.value === "true") ||
+        readLocal(LOCAL_KEYS.WELCOME_SHOWN) === "true";
+
+      // Re-mirror the resolved answer so the next boot is decidable offline and
+      // so a dismissal made on another device is honored on this one.
+      writeLocal(LOCAL_KEYS.PANEL_STATE, panelState);
+      if (completedItems.size > 0) {
+        writeLocal(LOCAL_KEYS.COMPLETED_ITEMS, serializeItems(completedItems));
+      }
+
+      // Heal the backend when this device knows something it doesn't. Without
+      // this a dismissal recorded during an outage would never reach the
+      // server, and every other device would keep showing the guide.
+      if (remotePanel !== panelState) {
+        void upsertStringSetting(
+          CHECKLIST_SETTINGS_KEYS.PANEL_STATE,
+          panelState,
+        ).catch(() => {
+          /* best-effort; the local mirror already holds the truth */
+        });
+      }
 
       set({
         completedItems,
@@ -187,9 +272,11 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       newItems.add(itemId);
       set({ completedItems: newItems });
 
+      const serialized = serializeItems(newItems);
+      writeLocal(LOCAL_KEYS.COMPLETED_ITEMS, serialized);
       await upsertStringSetting(
         CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS,
-        serializeItems(newItems),
+        serialized,
       );
 
       logger.info("[ChecklistStore] Marked complete", { itemId });
@@ -197,7 +284,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
     markWelcomeShown: async () => {
       set({ welcomeShown: true });
-      localStorage.setItem("reliant.checklist.welcomeShown", "true");
+      writeLocal(LOCAL_KEYS.WELCOME_SHOWN, "true");
       try {
         await upsertStringSetting(CHECKLIST_SETTINGS_KEYS.WELCOME_SHOWN, "true");
       } catch (e) {
@@ -207,7 +294,30 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
     setPanelState: async (panelState: ChecklistPanelState) => {
       set({ panelState });
-      await upsertStringSetting(CHECKLIST_SETTINGS_KEYS.PANEL_STATE, panelState);
+      // Mirror first, and synchronously. If the RPC below is slow or fails, a
+      // reload still has to remember that the user closed this.
+      writeLocal(LOCAL_KEYS.PANEL_STATE, panelState);
+      try {
+        await upsertStringSetting(
+          CHECKLIST_SETTINGS_KEYS.PANEL_STATE,
+          panelState,
+        );
+      } catch (e) {
+        logger.warn("[ChecklistStore] Failed to persist panelState to DB", e);
+      }
+    },
+
+    revive: async () => {
+      set({ panelState: "expanded" });
+      writeLocal(LOCAL_KEYS.PANEL_STATE, "expanded");
+      try {
+        await upsertStringSetting(
+          CHECKLIST_SETTINGS_KEYS.PANEL_STATE,
+          "expanded",
+        );
+      } catch (e) {
+        logger.warn("[ChecklistStore] Failed to persist revive to DB", e);
+      }
     },
 
     detectCompletedItems: async () => {
@@ -317,9 +427,11 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       if (changed) {
         set({ completedItems: newItems });
+        const serialized = serializeItems(newItems);
+        writeLocal(LOCAL_KEYS.COMPLETED_ITEMS, serialized);
         await upsertStringSetting(
           CHECKLIST_SETTINGS_KEYS.COMPLETED_ITEMS,
-          serializeItems(newItems),
+          serialized,
         );
         logger.info("[ChecklistStore] Auto-detected completions", {
           items: Array.from(newItems),
@@ -415,7 +527,15 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         isInitialized: false,
         isLoading: false,
       });
-      localStorage.removeItem("reliant.checklist.welcomeShown");
+      // Clear the local mirror too, or loadState() would immediately resolve
+      // the cleared state back to whatever this device last recorded.
+      for (const key of Object.values(LOCAL_KEYS)) {
+        try {
+          localStorage.removeItem(key);
+        } catch {
+          /* private mode */
+        }
+      }
     },
   }),
 );

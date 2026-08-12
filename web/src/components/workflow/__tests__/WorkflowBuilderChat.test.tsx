@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { act, type ReactNode } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EventBusProvider } from "../../../lib/event-context";
 import { WorkflowBuilderChat } from "../WorkflowBuilderChat";
 import type { Workflow } from "../../../types/workflow";
 
@@ -52,6 +54,7 @@ const mocks = vi.hoisted(() => {
     subscribeToChatDetails: vi.fn(),
     unsubscribeFromChatDetails: vi.fn(),
     updateWorkflowParams: vi.fn(),
+    listApprovalsByChat: vi.fn(async () => [] as unknown[]),
     logger: {
       error: vi.fn(),
       debug: vi.fn(),
@@ -133,6 +136,9 @@ vi.mock("../../../api/client", () => ({
     chatsV2: {
       updateWorkflowParams: mocks.updateWorkflowParams,
     },
+    approvals: {
+      listByChat: mocks.listApprovalsByChat,
+    },
   },
 }));
 
@@ -147,7 +153,6 @@ vi.mock("../../../store/chatStore", () => ({
 vi.mock("../../../store/chatStoreHooks", () => ({
   useChatMessages: (chatId?: string) => (chatId ? (mocks.chatMessages[chatId] ?? []) : []),
   useStreamingMessages: () => [],
-  useChatApprovals: () => [],
   useErrorEvents: () => [],
   useInfoEvents: () => [],
   useRunOutputs: () => [],
@@ -208,17 +213,31 @@ const workflow: Workflow = {
 };
 
 function renderWorkflowBuilderChat(props: Partial<Parameters<typeof WorkflowBuilderChat>[0]> = {}) {
+  // Mirrors the provider nesting in App.tsx: the panel reads approvals through
+  // React Query (useApprovals) and subscribes to "api-key:saved" through the
+  // event bus, so it only mounts under both. Retries and caching are off so a
+  // query never outlives the test that started it.
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: 0, staleTime: 0 },
+    },
+  });
+
   return render(
-    <WorkflowBuilderChat
-      workflow={workflow}
-      onWorkflowChange={vi.fn()}
-      projectId="project-1"
-      isOpen
-      onOpenChange={vi.fn()}
-      panelSize="normal"
-      onPanelSizeChange={vi.fn()}
-      {...props}
-    />,
+    <EventBusProvider>
+      <QueryClientProvider client={queryClient}>
+        <WorkflowBuilderChat
+          workflow={workflow}
+          onWorkflowChange={vi.fn()}
+          projectId="project-1"
+          isOpen
+          onOpenChange={vi.fn()}
+          panelSize="normal"
+          onPanelSizeChange={vi.fn()}
+          {...props}
+        />
+      </QueryClientProvider>
+    </EventBusProvider>,
   );
 }
 

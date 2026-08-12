@@ -22,6 +22,12 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
 import { ChatTextArea } from "./ChatTextArea";
+import { useSlashCommands } from "../../hooks/useSlashCommands";
+import { PromptPicker } from "./PromptPicker";
+import { useThinkingCapability } from "../../hooks/useThinkingCapability";
+import { getMessagesFromCache } from "../../hooks/message-queries";
+import { formatTranscript } from "../../lib/transcript";
+import { toast } from "../../lib/toast-manager";
 import { ChatActionButtons } from "./ChatActionButtons";
 import { useChatInputState } from "./useChatInputState";
 import { useDragAndDrop } from "../../hooks/useDragAndDrop";
@@ -49,8 +55,15 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { getInputDefault, getInputNestedInputs, getInputPresetConfig, getInputUI } from "../../lib/inputHelpers";
+import {
+  nestedToFlatParams,
+  paramValuesEqual,
+  reconcileParamsWithServer,
+} from "../../lib/paramUtils";
 import { parseAskUserMetadata } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
+import { QueuedMessages } from "./QueuedMessages";
+import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { loadTagModelConfigs } from "../Settings/ModelPreferences";
 import { useGlobalDataStore } from "../../store/globalDataStore";
 
@@ -146,7 +159,18 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLDivElement>(null);
+    // Guards against double-queueing from a fast second Enter while the RPC is
+    // in flight. A ref, not state: it must be readable synchronously.
+    const queueingRef = useRef(false);
     const [isCompact, setIsCompact] = useState(false);
+
+    // Actions offered by the "/" menu in the composer.
+    const slashCommandList = useSlashCommands();
+
+    // Controlled so the "change workflow" shortcut can open the picker.
+    const [workflowSelectorOpen, setWorkflowSelectorOpen] = useState(false);
+    // Opened by the "/prompt" slash command.
+    const [showPromptPicker, setShowPromptPicker] = useState(false);
 
     // Models list for resolving tags to display names in the toolbar pill
     const { models: availableModels } = useModels();
@@ -423,20 +447,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
             workflow?.inputs as Record<string, any> | undefined
           );
 
-          // Flatten the nested inputs from Temporal into dot-notation values
           // The backend returns nested structure like { agent: { model: {...} } }
-          // But the params panel expects flat keys like "agent.model"
-          const flatValues: Record<string, unknown> = {};
-          for (const [key, value] of Object.entries(result.inputs)) {
-            if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-              // Nested group — flatten it
-              for (const [nestedKey, nestedValue] of Object.entries(value as Record<string, unknown>)) {
-                flatValues[`${key}.${nestedKey}`] = nestedValue;
-              }
-            } else {
-              flatValues[key] = value;
-            }
-          }
+          // but the params panel expects flat keys like "agent.model".
+          const flatValues = nestedToFlatParams(result.inputs);
 
           setThreadParamsOverride({
             workflowName: result.workflowName,
@@ -856,6 +869,72 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       [chatId]
     );
 
+    // Mirror of workflowParams for async callbacks that must read the latest
+    // value without being re-created (and re-triggering the debounced sync)
+    // on every keystroke.
+    const workflowParamsRef = useRef(workflowParams);
+    useEffect(() => {
+      workflowParamsRef.current = workflowParams;
+    }, [workflowParams]);
+
+    // Read the running workflow's actual inputs back from Temporal and adopt
+    // them as the displayed values.
+    //
+    // Without this the popover only ever shows what the user typed: the params
+    // are seeded from chatParamsStore (a local, persisted cache) and a sync
+    // that the server rejected, clamped, or normalized would still display the
+    // rejected value. Querying the root thread returns what the workflow is
+    // really running with.
+    //
+    // A param the user edited while the request was in flight is left alone —
+    // their newer edit wins, and the debounced sync will push it next.
+    const reconcileRootParamsFromServer = useCallback(
+      async (sentParams: Record<string, unknown>) => {
+        if (!chatId) return;
+
+        let serverValues: Record<string, unknown>;
+        try {
+          const result = await chatGrpc.getThreadWorkflowInputs(chatId, chatId);
+          // Only a running workflow holds live inputs; a finished one reports
+          // defaults that would clobber the user's staged params.
+          if (!result.isRunning) return;
+          serverValues = nestedToFlatParams(result.inputs);
+        } catch (error) {
+          logger.warn("[ChatInput] Failed to read back workflow params", {
+            error,
+            chatId,
+          });
+          return;
+        }
+
+        const { params: reconciled, changed } = reconcileParamsWithServer(
+          workflowParamsRef.current,
+          sentParams,
+          serverValues
+        );
+
+        if (changed) {
+          logger.info("[ChatInput] Reconciled params from server", {
+            chatId,
+            reconciled,
+          });
+          handleWorkflowParamsChange(reconciled);
+        }
+
+        // Track server truth as the sync baseline either way, so a value the
+        // server normalized doesn't read as a pending local edit and retrigger
+        // the debounced sync in a loop.
+        setSyncedParams((previous) => {
+          const next = { ...previous };
+          for (const key of Object.keys(sentParams)) {
+            if (key in serverValues) next[key] = serverValues[key];
+          }
+          return next;
+        });
+      },
+      [chatId, handleWorkflowParamsChange]
+    );
+
     // Check if there are unsaved param changes
     // Only show sync button when chat is active (has a running workflow)
     const hasUnsyncedChanges = useMemo(() => {
@@ -863,7 +942,9 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       if (!isChatBusy) return false; // No active workflow = can't sync (params applied on next send)
 
       for (const [key, value] of Object.entries(workflowParams)) {
-        if (syncedParams[key] !== value) {
+        // Value equality, not reference: syncedParams holds values read back
+        // from the server, which are structurally equal but distinct objects.
+        if (!paramValuesEqual(syncedParams[key], value)) {
           return true;
         }
       }
@@ -876,7 +957,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
       const changedParams: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(workflowParams)) {
-        if (syncedParams[key] !== value) {
+        if (!paramValuesEqual(syncedParams[key], value)) {
           changedParams[key] = value;
         }
       }
@@ -890,15 +971,16 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           changedParams,
         });
         await api.chatsV2.updateWorkflowParams(chatId, changedParams);
-        // Update synced state to match current
+        // Optimistic baseline; reconcile below replaces it with server truth.
         setSyncedParams({ ...syncedParams, ...changedParams });
         logger.info("[ChatInput] Params synced successfully");
+        await reconcileRootParamsFromServer(changedParams);
       } catch (error) {
         logger.error("[ChatInput] Failed to sync params", { error, chatId });
       } finally {
         setIsSyncing(false);
       }
-    }, [chatId, workflowParams, syncedParams, isSyncing]);
+    }, [chatId, workflowParams, syncedParams, isSyncing, reconcileRootParamsFromServer]);
 
     // Thread-specific param change handler (receives full values map from WorkflowParamsPanel)
     const handleThreadParamsChange = useCallback(
@@ -920,7 +1002,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       for (const [key, value] of Object.entries(threadParamValues)) {
         // Compare against last-synced value if available, otherwise against fetched baseline
         const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
-        if (reference !== value) return true;
+        if (!paramValuesEqual(reference, value)) return true;
       }
       return false;
     }, [isViewingThreadParams, threadParamsOverride, chatId, threadParamValues, threadSyncedParams]);
@@ -933,7 +1015,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       const changedParams: Record<string, unknown> = {};
       for (const [key, value] of Object.entries(threadParamValues)) {
         const reference = key in threadSyncedParams ? threadSyncedParams[key] : baseline[key];
-        if (reference !== value) {
+        if (!paramValuesEqual(reference, value)) {
           changedParams[key] = value;
         }
       }
@@ -1020,6 +1102,16 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const chatForStatusQuery = useChat(chatId || undefined);
     const chatForStatus = chatForStatusQuery.data;
     const isPaused = chatForStatus?.workflowStatus === ChatWorkflowStatus.PAUSED;
+
+    // Is there still a run that will reach another loop-step boundary, and so
+    // drain its own mailbox? Mirrors WorkflowStatusIsLive in
+    // internal/db/core/chat.go: PENDING has its first iteration ahead of it and
+    // PAUSED resumes, so both deliver queued messages normally. Only a run that
+    // is none of these leaves queued rows stranded with nothing to send them.
+    const isWorkflowLive =
+      chatForStatus?.workflowStatus === ChatWorkflowStatus.RUNNING ||
+      chatForStatus?.workflowStatus === ChatWorkflowStatus.PENDING ||
+      isPaused;
 
     // Thread color for border - non-main threads get their color
     const threadBorderColor = useMemo(() => {
@@ -1223,16 +1315,31 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
           {} as Record<string, string>
         );
 
-        await onSend(
-          messageWithContexts,
-          allAttachmentIds.length > 0 ? allAttachmentIds : undefined,
-          workflowToSend,
-          paramsToSend,
-          undefined, // targetThread
-          Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
-        );
+        // Clear before awaiting, not after. The send can take a while (a cold
+        // daemon defers it and retries for a full budget) and it can reject; in
+        // both cases the user has already committed the message, so leaving the
+        // text in the box reads as "not sent" and invites a double-send. The
+        // message is recoverable from history either way, and a failed send
+        // raises its own toast from ChatContainer.
         handleClearInput(); // This will clear both input and auto-draft
         clearAttachments(attachmentSessionId);
+
+        try {
+          await onSend(
+            messageWithContexts,
+            allAttachmentIds.length > 0 ? allAttachmentIds : undefined,
+            workflowToSend,
+            paramsToSend,
+            undefined, // targetThread
+            Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
+          );
+        } catch (error) {
+          // ChatContainer already reported this to the user before rethrowing.
+          // Swallow it here so an Enter keypress — which cannot await this
+          // handler — doesn't surface as an unhandled rejection.
+          logger.error("[ChatInput] Send failed", { error, chatId });
+          return;
+        }
 
         // Don't restore params from chatParamsStore after sending - keep current state
         // The params were already sent and saved. Restoring from store would overwrite
@@ -1247,9 +1354,255 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       }
     };
 
+    // Queue a message into the running agent's mailbox instead of sending it as
+    // a new turn. Delivered at the agent's next loop-step boundary -- the same
+    // mechanism spawn_send uses for agent-to-agent messages, so the receipt says
+    // "queued", not "delivered". Attachments ride along as attachment IDs,
+    // exactly like an ordinary send -- the drain fold gives the delivered
+    // message the same content blocks a direct SendMessage would.
+    const mainThreadId = chatForStatus?.workflowId;
+    const targetThreadId =
+      selectedThreadId && selectedThreadId !== chatId
+        ? selectedThreadId
+        : mainThreadId;
+
+    // The mailbox we are queueing INTO. Polled only while the agent is
+    // running, because an idle agent never drains it.
+    const {
+      messages: queuedMessages,
+      refresh: refreshQueuedMessages,
+      forget: forgetQueuedMessage,
+    } = useQueuedAgentMessages(chatId, targetThreadId, effectiveStreaming);
+
+    const handleQueue = useCallback(async () => {
+      const message = input.trim();
+      if (!message || queueingRef.current) return;
+      if (!chatId || !targetThreadId) {
+        toast.error("Can't queue a message: this chat has no running agent yet.");
+        return;
+      }
+
+      const attachmentIds = attachments.map((a) => a.id);
+
+      queueingRef.current = true;
+      try {
+        const response = await chatGrpc.sendAgentMessage(
+          chatId,
+          targetThreadId,
+          message,
+          attachmentIds
+        );
+        if (response.success === false) {
+          toast.error(response.message);
+          return;
+        }
+        handleClearInput();
+        clearAttachments(attachmentSessionId);
+        toast.info("Queued for delivery — it will be read at the agent's next turn.");
+        // Populate the strip now rather than up to a poll interval later, so
+        // the message the user just queued appears with the toast.
+        await refreshQueuedMessages();
+      } catch (error) {
+        logger.error("[ChatInput] Failed to queue agent message", {
+          error,
+          chatId,
+          targetThreadId,
+        });
+        toast.error(error);
+      } finally {
+        queueingRef.current = false;
+      }
+    }, [
+      input,
+      chatId,
+      targetThreadId,
+      attachments,
+      attachmentSessionId,
+      handleClearInput,
+      clearAttachments,
+      refreshQueuedMessages,
+    ]);
+
+    // "Send now" on a queued message: the strip has already revoked it, so
+    // this puts the text back through the ordinary turn-starting path. Params
+    // and presets mirror handleSend so a force-pushed message is configured
+    // exactly like one typed into the composer.
+    const handleSendQueuedNow = useCallback(
+      async (body: string, attachmentIds?: string[]) => {
+        const validTargetNames = new Set(presetTargets.map((t) => t.name));
+        const presetsToSend = Object.entries(selectedPresets).reduce(
+          (acc, [k, v]) => (v && validTargetNames.has(k) ? { ...acc, [k]: v } : acc),
+          {} as Record<string, string>
+        );
+        const paramsToSend =
+          Object.keys(workflowParams).length > 0 ? workflowParams : undefined;
+
+        await onSend(
+          body,
+          attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
+          selectedWorkflow ?? workflowName,
+          paramsToSend,
+          undefined,
+          Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
+        );
+      },
+      [
+        onSend,
+        presetTargets,
+        selectedPresets,
+        workflowParams,
+        selectedWorkflow,
+        workflowName,
+      ]
+    );
+
     const handleAttachClick = () => {
       fileInputRef.current?.click();
     };
+
+    // --- Keyboard shortcuts that act on the composer's parameters ---
+    //
+    // These live here rather than in ModernApp because the state they touch
+    // (settingsPage, workflowParams) is local to this component. ModernApp's
+    // handlers dispatch the events; this is the only place that can serve them.
+    const thinkingCapability = useThinkingCapability(
+      "thinking_level",
+      workflowParams
+    );
+
+    useEffect(() => {
+      // Open the settings popover directly to a given page. Toggles, so
+      // pressing the same shortcut again closes it.
+      const openPage = (page: "model" | "params") => () => {
+        if (disabled || !isMessagingAllowed) return;
+        setSettingsPage((current) => (current === page ? null : page));
+      };
+
+      const handleOpenModel = openPage("model");
+      const handleOpenParams = openPage("params");
+
+      const handleOpenWorkflow = () => {
+        if (disabled || !isMessagingAllowed) return;
+        // The workflow picker is its own dropdown, not a settings page.
+        setWorkflowSelectorOpen((open) => !open);
+      };
+
+      // Cycle reasoning effort through the levels this model actually supports,
+      // rather than a fixed list — models expose different subsets.
+      const handleCycleThinking = () => {
+        if (disabled || !isMessagingAllowed) return;
+        const levels = thinkingCapability.levels;
+        if (!thinkingCapability.supportsThinking || levels.length === 0) {
+          toast.info("This model does not support adjustable thinking");
+          return;
+        }
+
+        const current = workflowParams.thinking_level as string | undefined;
+        const index = current ? levels.indexOf(current) : -1;
+        const next = levels[(index + 1) % levels.length];
+
+        handleWorkflowParamsChange({ ...workflowParams, thinking_level: next });
+        toast.info(`Thinking level: ${next}`);
+      };
+
+      window.addEventListener("open-model-selector", handleOpenModel);
+      window.addEventListener("open-workflow-params", handleOpenParams);
+      window.addEventListener("open-workflow-selector", handleOpenWorkflow);
+      window.addEventListener("cycle-thinking-level", handleCycleThinking);
+      return () => {
+        window.removeEventListener("open-model-selector", handleOpenModel);
+        window.removeEventListener("open-workflow-params", handleOpenParams);
+        window.removeEventListener("open-workflow-selector", handleOpenWorkflow);
+        window.removeEventListener("cycle-thinking-level", handleCycleThinking);
+      };
+    }, [
+      disabled,
+      isMessagingAllowed,
+      workflowParams,
+      thinkingCapability,
+      handleWorkflowParamsChange,
+    ]);
+
+    // --- Slash-menu commands that act on this conversation ---
+    //
+    // These have no keyboard shortcut by design: they operate on the message or
+    // chat in front of you, so they only make sense from the composer. The
+    // slash menu addresses them by command id via a `run-command` event.
+    useEffect(() => {
+      const handlers: Record<string, () => void | Promise<void>> = {
+        attach: () => {
+          if (disabled || !isMessagingAllowed) return;
+          handleAttachClick();
+        },
+
+        compact: async () => {
+          if (!chatId) {
+            toast.info("Start a conversation before compacting it");
+            return;
+          }
+          try {
+            // Empty threadId targets the main thread, which is what "compact
+            // this conversation" means from the composer.
+            await api.chatsV2.compact(chatId, selectedThreadId ?? "");
+            toast.success("Compacting conversation…");
+          } catch (error) {
+            logger.error("[ChatInput] Compaction failed", error);
+            toast.error("Could not compact the conversation");
+          }
+        },
+
+        branch: async () => {
+          if (!chatId) {
+            toast.info("Start a conversation before branching it");
+            return;
+          }
+          const messages = getMessagesFromCache(chatId);
+          const lastMessage = messages[messages.length - 1];
+          if (!lastMessage) {
+            toast.info("Nothing to branch from yet");
+            return;
+          }
+          try {
+            await useChatStore.getState().branchChat(chatId, lastMessage.id);
+          } catch (error) {
+            logger.error("[ChatInput] Branch failed", error);
+            toast.error("Could not branch this chat");
+          }
+        },
+
+        "copy-transcript": async () => {
+          if (!chatId) return;
+          const transcript = formatTranscript(getMessagesFromCache(chatId));
+          if (!transcript) {
+            toast.info("Nothing to copy yet");
+            return;
+          }
+          try {
+            await navigator.clipboard.writeText(transcript);
+            toast.success("Transcript copied");
+          } catch (error) {
+            logger.error("[ChatInput] Clipboard write failed", error);
+            toast.error("Could not copy the transcript");
+          }
+        },
+
+        prompt: () => {
+          // Opens the prompt picker; insertion happens there so the composer
+          // does not need to know about prompt storage.
+          setShowPromptPicker(true);
+        },
+      };
+
+      const handleRunCommand = (event: Event) => {
+        const id = (event as CustomEvent<{ id?: string }>).detail?.id;
+        if (!id) return;
+        void handlers[id]?.();
+      };
+
+      window.addEventListener("run-command", handleRunCommand);
+      return () => window.removeEventListener("run-command", handleRunCommand);
+    }, [chatId, disabled, isMessagingAllowed, selectedThreadId]);
+
 
     const handleFileSelect = async (
       event: React.ChangeEvent<HTMLInputElement>
@@ -1354,7 +1707,21 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       >
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="max-w-[1200px] mx-auto">
-            <div ref={containerRef} className="my-2">
+            <div ref={containerRef} className="mt-1 mb-1.5">
+              {/* Messages already queued into the running agent's mailbox.
+                  Sits above the tray, outside the composer's border, because
+                  it is not part of the thing you are typing — it is what you
+                  already sent and can still take back. */}
+              <QueuedMessages
+                chatId={chatId}
+                threadId={targetThreadId}
+                messages={queuedMessages}
+                onRefresh={refreshQueuedMessages}
+                onForget={forgetQueuedMessage}
+                onSendNow={handleSendQueuedNow}
+                isRunning={effectiveStreaming}
+                isWorkflowLive={isWorkflowLive}
+              />
               <div
                 className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${isDiscussMode ? "border-blue-500/70" : hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
                 data-onboarding="chat-input"
@@ -1408,10 +1775,12 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         onChange={setInput}
                         onSend={handleSend}
                         onStop={handleStop}
+                        onQueue={handleQueue}
                         disabled={disabled || !isMessagingAllowed}
                         isStreaming={effectiveStreaming}
                         chatId={chatId}
                         placeholder={placeholder}
+                        slashCommands={slashCommandList}
                       />
                     </div>
 
@@ -1455,6 +1824,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                       {/* Workflow Selector - disabled once chat has started (not pending) */}
                       <div>
                         <WorkflowSelector
+                          isOpen={workflowSelectorOpen}
+                          onOpenChange={setWorkflowSelectorOpen}
                           value={selectedWorkflow}
                           onChange={(wf) => {
                             // Mark the workflow user explicitly changed to - skip loading defaults for it
@@ -1630,6 +2001,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                       <ChatActionButtons
                         onSend={handleSend}
                         onStop={handleStop}
+                        onQueue={handleQueue}
                         canSend={
                           input.trim().length > 0 ||
                           attachments.length > 0
@@ -1656,6 +2028,18 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                     accept={getAcceptedMimeTypes()}
                     onChange={handleFileSelect}
                     className="hidden"
+                  />
+
+                  {/* Opened by the "/prompt" slash command. Inserts the prompt
+                      body into the composer so it can be edited before sending. */}
+                  <PromptPicker
+                    isOpen={showPromptPicker}
+                    projectId={currentProjectFromStore?.id}
+                    onClose={() => setShowPromptPicker(false)}
+                    onSelect={(content) => {
+                      setInput(input ? `${input}\n\n${content}` : content);
+                      window.dispatchEvent(new CustomEvent("focus-chat-input"));
+                    }}
                   />
                 </div>
               </div>

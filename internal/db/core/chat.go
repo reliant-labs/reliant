@@ -28,7 +28,49 @@ const (
 	WorkflowStatusFailed      WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_FAILED
 	WorkflowStatusCancelled   WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_CANCELLED
 	WorkflowStatusPaused      WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_PAUSED
+	WorkflowStatusExpired     WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED
 )
+
+// WorkflowStatusIsLive reports whether a workflow run is still executing, or
+// will execute again on its own. It is the complement of "has reached a state
+// it will not leave", and it is what any caller asking "is there a next agent
+// turn to deliver into" should consult.
+//
+// PENDING and PAUSED are deliberately live. PENDING is a chat whose run has
+// not started yet — its first loop iteration is still ahead of it, so work
+// queued now IS drained when it starts. PAUSED resumes and finishes. Treating
+// either as dead would drop a message that would in fact have been delivered.
+func WorkflowStatusIsLive(status WorkflowStatus) bool {
+	switch status {
+	case WorkflowStatusPending, WorkflowStatusRunning, WorkflowStatusPaused:
+		return true
+	default:
+		return false
+	}
+}
+
+// WorkflowStatusLabel renders a workflow status for display in user-facing
+// messages, matching ThreadStatusLabel's role for threads.
+func WorkflowStatusLabel(status WorkflowStatus) string {
+	switch status {
+	case WorkflowStatusPending:
+		return "pending"
+	case WorkflowStatusRunning:
+		return "running"
+	case WorkflowStatusCompleted:
+		return "completed"
+	case WorkflowStatusFailed:
+		return "failed"
+	case WorkflowStatusCancelled:
+		return "cancelled"
+	case WorkflowStatusPaused:
+		return "paused"
+	case WorkflowStatusExpired:
+		return "expired"
+	default:
+		return "unknown"
+	}
+}
 
 // Chat represents a top-level conversation.
 type Chat struct {
@@ -50,6 +92,15 @@ type Chat struct {
 	Activity             *int              `json:"activity,omitempty"`
 	Unread               bool              `json:"unread"`
 	ActiveDaemonID       *string           `json:"active_daemon_id,omitempty"`
+}
+
+// MainThreadID returns the chat's root thread id, or "" if no root workflow
+// has been created yet. The root workflow's thread id equals its workflow id.
+func (c *Chat) MainThreadID() string {
+	if c.WorkflowID != nil && *c.WorkflowID != "" {
+		return *c.WorkflowID
+	}
+	return ""
 }
 
 // ArchivedChatInfo represents an archived chat with worktree information.

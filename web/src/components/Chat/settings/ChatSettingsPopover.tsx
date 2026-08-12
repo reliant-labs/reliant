@@ -180,8 +180,12 @@ export function ChatSettingsPopover({
   const modeKey = findModeParamKey(inputs);
   const extraParamCount = countExtraParams(inputs, modelKey, modeKey);
 
-  // Current values
-  const modelValue = modelKey ? values[modelKey] : undefined;
+  // Current values. An untouched param has no entry in `values`, so fall back to
+  // the schema default — the model page derives the available thinking levels
+  // from the selected model, and without it every model looks like "no model".
+  const modelValue = modelKey
+    ? values[modelKey] ?? getInputDefault(inputs![modelKey])
+    : undefined;
   const modeValue = modeKey ? (values[modeKey] as string) : undefined;
   const modeOptions = modeKey ? getInputEnumValues(inputs![modeKey]) : null;
   const modeDefault = modeKey ? getInputDefault(inputs![modeKey]) : null;

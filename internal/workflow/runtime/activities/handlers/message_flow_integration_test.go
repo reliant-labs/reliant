@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -115,7 +115,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	threadService := threads.NewService(repo)
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:             thread,
-		ConversationID: chatID,
+		ChatID: chatID,
 	})
 	require.NoError(t, err)
 
@@ -621,7 +621,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	threadService := threads.NewService(repo)
 	_, _, err = threadService.CreateThread(ctx, threads.CreateThreadOpts{
 		ID:             thread,
-		ConversationID: chatID,
+		ChatID: chatID,
 	})
 	require.NoError(t, err)
 
@@ -648,7 +648,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	// Create assistant message with tool call
 	assistantMsgID := uuid.New().String()
 	toolCallID := "call_error_123"
-	err = repo.CreateMessage(ctx, &db.Message{
+	err = createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              assistantMsgID,
 		ChatID:          chatID,
 		Ordinal:         1,

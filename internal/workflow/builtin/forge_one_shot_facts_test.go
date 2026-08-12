@@ -633,7 +633,13 @@ var scaffoldStepRe = regexp.MustCompile(`\*\*Step (\d+):`)
 // interchangeable with it.
 var fencedBashRe = regexp.MustCompile("(?s)```bash\n(.*?)```")
 
-// scaffoldPhase returns the scaffold node's agent-facing prompt and the set of
+// buildPhaseNodeID is the single get-it-right loop that carries the whole arc —
+// scope, scaffold, green gate, fan-out, synthesis. The scaffold half used to be
+// its own node (`scaffold_and_verify`); collapsing the two phases into one loop
+// left every guard below reading the same prompt, so the id lives here once.
+const buildPhaseNodeID = "build_app"
+
+// scaffoldPhase returns the build node's agent-facing prompt and the set of
 // lane commands the ENGINE runs for that node, derived from the node itself.
 func scaffoldPhase(t *testing.T) (prompt string, lanes []string) {
 	t.Helper()
@@ -648,7 +654,7 @@ func scaffoldPhase(t *testing.T) (prompt string, lanes []string) {
 
 	seen := map[string]bool{}
 	for _, n := range doc.Nodes {
-		if n.ID != "scaffold_and_verify" {
+		if n.ID != buildPhaseNodeID {
 			continue
 		}
 		prompt = n.Thread.Inject.Content
@@ -662,9 +668,9 @@ func scaffoldPhase(t *testing.T) (prompt string, lanes []string) {
 		}
 	}
 
-	require.NotEmpty(t, prompt, "no scaffold_and_verify node with an injected prompt — either "+
+	require.NotEmpty(t, prompt, "no "+buildPhaseNodeID+" node with an injected prompt — either "+
 		"the node was renamed or the prompt moved, and every guard reading it just went blind")
-	require.NotEmpty(t, lanes, "derived NO gate lanes from scaffold_and_verify's lint/test/build "+
+	require.NotEmpty(t, lanes, "derived NO gate lanes from "+buildPhaseNodeID+"'s lint/test/build "+
 		"commands. That set is what the phase is actually checked against; an empty one means "+
 		"the args were renamed and these guards can no longer tell the charter from the engine")
 	sort.Strings(lanes)
@@ -1024,47 +1030,46 @@ func schemaReviewStep(t *testing.T) schemaReview {
 }
 
 // TestForgeOneShotSchemaReviewRebuildsTheBornCRUDFixtures pins the consequence
-// that makes the step's own done-condition reachable.
+// that makes the step's own done-condition reachable, and the correct remedy
+// for it.
 //
 // `internal/handlers/<svc>/handlers_crud_test.go` is scaffold-once and
 // user-owned from line one, and its fixtures are derived from the schema AS
 // BORN — CHECK-satisfying literals and a seeded FK parent closure, introspected
 // on the first-scaffold path only (forge internal/codegen/crud_gen.go
-// GenerateCRUDTests, which returns early the moment the file exists). Correcting
-// the schema therefore invalidates fixtures that `forge generate` will never
-// re-derive, and the step's own gate goes red in `TestCRUD_<Entity>_Lifecycle`
-// on the constraints the agent just added, with nothing anywhere saying why.
+// GenerateCRUDTests). Correcting the schema therefore invalidates fixtures
+// that nothing will refresh, and the step's own gate goes red in
+// `TestCRUD_<Entity>_Lifecycle` on the constraints the agent just added, with
+// nothing anywhere saying why.
 //
-// The remedy is to delete the file and let generate re-emit it against the
-// corrected schema. Hand-editing the literals instead re-does by hand what the
-// generator does from the schema, and is wrong again the next time the schema
-// moves — so the step has to name the delete, not merely warn about the red.
+// Deleting the file is NOT the remedy, and a prior version of this charter
+// said it was. Verified against forge directly: the scaffold-once decision is
+// answered by a birth ledger (forge internal/checksums/scaffoldledger.go
+// ScaffoldOnceDecision), not by os.Stat, precisely so that a deleted
+// scaffold-once file stays deleted — `forge generate`, `forge scaffold`, and
+// `forge generate --force` all leave it gone. The only thing that brings the
+// fixtures in line with a corrected schema is hand-editing the literals in
+// place, in the same edit as the migration — which is also what forge's own
+// e2e corpus proves works (forge internal/cli/scaffold_crud_check_constraints_e2e_test.go,
+// scaffold_crud_fixture_constraints_e2e_test.go).
 func TestForgeOneShotSchemaReviewRebuildsTheBornCRUDFixtures(t *testing.T) {
 	r := schemaReviewStep(t)
 
-	// The regenerate verb comes from the node's OWN lane commands, so a lane
-	// rename cannot leave the remedy pointing at a command nothing runs.
-	generate := ""
-	for _, lane := range r.lanes {
-		if strings.HasSuffix(lane, " generate") {
-			generate = lane
-			break
-		}
-	}
-	require.NotEmpty(t, generate,
-		"derived no generate lane from scaffold_and_verify's own commands (%v) — the remedy "+
-			"below has no verb to name and this guard would assert nothing", r.lanes)
+	// The property that cost the measured run ~50 minutes: an instruction to
+	// `rm` a scaffold-once artifact and expect a generator to bring it back.
+	// No wording of the remedy should ever tell the agent to delete this
+	// file — deletion is permanent, by forge's own design.
+	deletes := regexp.MustCompile(`rm\s+\S*handlers_crud_test\.go`).FindAllString(r.review, -1)
+	require.Empty(t, deletes,
+		"the schema-review step tells the agent to `rm` the born CRUD lifecycle test. "+
+			"That file is scaffold-once and forge's birth ledger makes a deletion permanent — "+
+			"no `forge generate`/`scaffold`/`--force` re-emits it, so this instruction sends "+
+			"the agent chasing a file that is never coming back")
 
-	deletes := regexp.MustCompile(`rm\s+\S*internal/handlers/\S+_test\.go`).FindAllString(r.review, -1)
-	require.NotEmpty(t, deletes,
-		"the schema-review step never tells the agent to delete the born CRUD lifecycle test. "+
-			"Its fixtures were derived from the schema at birth and `forge generate` will not "+
-			"re-derive them while the file exists, so the step's own gate fails on the "+
-			"constraints the agent just added and the failure explains nothing")
-
-	require.Contains(t, r.review, generate,
-		"the step must name `%s` as what re-emits the deleted CRUD test — a delete with no "+
-			"regenerate leaves the phase with no lifecycle test at all", generate)
+	require.Contains(t, r.review, "handlers_crud_test.go",
+		"the schema-review step must still name the born CRUD lifecycle test — a schema "+
+			"correction with no guidance on its now-invalid fixtures leaves the phase's own "+
+			"gate to fail unexplained, which is the defect this step exists to prevent")
 }
 
 // TestForgeOneShotSchemaReviewProvesARowAgainstARealDatabase pins the step's

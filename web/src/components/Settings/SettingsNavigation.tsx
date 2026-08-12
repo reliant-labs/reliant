@@ -1,5 +1,5 @@
 import { cn } from "../../lib/utils";
-import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink } from "lucide-react";
+import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink, Plug } from "lucide-react";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import type { SettingsSection } from "../../routeSchemas";
@@ -82,6 +82,7 @@ const sectionGroups: SectionGroup[] = [
     label: "System",
     items: [
       { id: "tokens", label: "Access Tokens", icon: KeyRound },
+      { id: "connectors", label: "Connectors", icon: Plug },
       { id: "about", label: "About", icon: Info },
       { id: "developer", label: "Developer", icon: Code },
     ],

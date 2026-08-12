@@ -36,7 +36,44 @@ type Repository interface {
 	// GetEffectiveMessageCount returns message count including inherited messages from parent branches.
 	GetEffectiveMessageCount(ctx context.Context, chatID, threadID string) (int, error)
 	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
+	// GetNextSeq returns the next seq for a message being written to threadID in
+	// chatID. threadID is required because a branched chat displays inherited
+	// history it does not own; the allocator has to clear that history's seqs or
+	// the branch restarts at 0 and new messages sort beneath everything shown
+	// above them. See 20260802000000_add_message_seq.sql.
+	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
 	ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error)
+	// ListRecentMessages returns the most recent `limit` messages for a chat in
+	// ascending order, bounded in SQL. Prefer this over ListMessages+Limit for
+	// display paths: ListMessages materializes the whole history and slices it
+	// in Go, so its Limit saves transfer but none of the query cost.
+	ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*Message, error)
+	// ListRecentChatWindow returns the newest `limit` messages on mainThreadID
+	// plus every sibling-thread message inside that seq range, ascending. The
+	// initial snapshot uses this rather than ListRecentMessages: a chat-wide
+	// newest-N can be entirely spawn-thread messages, which render collapsed
+	// inside their tool call and so leave the transcript looking empty.
+	ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*Message, error)
+	// CountMessagesInChat returns the true message count for a chat.
+	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
+	// CountMessagesByContextWindow returns the row count of a single context
+	// window, for CW-chain-aware totals that don't require fetching rows.
+	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
+	// CountMessagesByContextWindowUpToSeq counts messages in a context window
+	// with seq <= maxSeq -- the count-only mirror of the fork filter used
+	// when resolving inherited messages.
+	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
+	// ListRecentMessagesInContextWindowBeforeSeq returns the newest `limit`
+	// messages in a single context window strictly before beforeSeq (0 means
+	// unbounded), ascending, bounded in SQL.
+	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error)
+	// HasMessagesBeforeInContextWindow reports whether any message in this
+	// context window precedes beforeSeq.
+	HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error)
+	// ListMessagesInContextWindowRange returns messages in a single context
+	// window with seq >= fromSeq, ascending. toSeq is an exclusive upper
+	// bound, or nil for unbounded above.
+	ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error)
 	// GetMessagesByContextWindow loads messages from a specific context window.
 	// Used by the threads package for fork chain resolution.
 	GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*Message, error)
@@ -98,6 +135,9 @@ type Repository interface {
 	CreateWorktree(ctx context.Context, worktree *Worktree) error
 	GetWorktree(ctx context.Context, id string) (*Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error)
+	// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
+	// key, or (nil, nil) when there is none.
+	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)
 	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *Worktree) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error
@@ -112,6 +152,34 @@ type Repository interface {
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	UpdateRepo(ctx context.Context, repo *core.Repo) error
 	DeleteRepo(ctx context.Context, id string) error
+
+	// Tool Calls
+	// Upserts rather than creates: the callers are Temporal activities, which
+	// retry, so a repeated write of the same call must converge on one row.
+	UpsertToolCall(ctx context.Context, call *ToolCall) error
+	UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error
+	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
+	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
+	// Batch reads for the message read path — one query per page of messages,
+	// not one per message.
+	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCall, error)
+	// ListToolCallsByIDs reads calls by their own primary key — the lookup
+	// that does not depend on tool_calls.message_id being populated.
+	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error)
+	// ListStrandedSpawnToolCalls reads spawn calls whose child workflow is
+	// terminal but which never received a result — a sub-agent whose work was
+	// silently dropped because the worker died between the two writes.
+	ListStrandedSpawnToolCalls(ctx context.Context) ([]*ToolCall, error)
+	// ListStrandedBackgroundSpawnToolCalls is the async-spawn counterpart:
+	// a backgrounded spawn whose child workflow is terminal but which never
+	// reported back to the parent's mailbox (spec §7.1).
+	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*StrandedBackgroundSpawn, error)
+	ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCallResult, error)
+	// ListSpawnChildren returns every spawn call issued BY threadID (the
+	// caller's own thread — tool_calls.thread_id is always the parent's, so
+	// this cannot return another thread's children), joined to each child's
+	// live workflow/thread state. Backs spawn_status's listing mode.
+	ListSpawnChildren(ctx context.Context, threadID string) ([]*SpawnChild, error)
 
 	// Plans
 	CreatePlan(ctx context.Context, plan *Plan) error
@@ -215,6 +283,33 @@ type Repository interface {
 	ListApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error)
 	UpdateApprovalStatus(ctx context.Context, id string, status int32, denialReason *string, actionTaken *string, metadata *string) error
 
+	// Agent mailbox (spawn_send, sub-agent completion notifications)
+	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
+	// EnqueueAgentMessageIfAbsent is the conditional insert the stranded-
+	// background-spawn reconciler sweep uses so two concurrent passes cannot
+	// double-deliver a completion (spec §7.1). See AgentMessageStore for the
+	// constraint it relies on.
+	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessage) (bool, error)
+	// ListQueuedAgentMessagesForThread returns queued messages in send order
+	// -- delivery order must match send order.
+	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error)
+	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) error
+	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	// CancelQueuedAgentMessage deletes a mailbox row only if it is still
+	// queued -- see core.AgentMessageStore for the race it guards against.
+	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
+	// ClaimQueuedAgentMessagesForThread atomically takes queued human
+	// messages off a thread's mailbox and returns exactly the rows it took,
+	// oldest first. messageID is optional; "" claims the whole queue.
+	ClaimQueuedAgentMessagesForThread(ctx context.Context, toThreadID, chatID, messageID string) ([]*AgentMessage, error)
+	// MarkQueuedAgentMessagesUndeliveredForThread resolves the mailbox of a
+	// thread whose loop has exited: still-queued rows become undelivered,
+	// because no future loop boundary will drain them. Returns how many moved.
+	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
+	// ListThreadsWithOrphanedAgentMessages returns threads that are already
+	// terminal but still have queued rows addressed to them.
+	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
+
 	// Daemon Registry + Config Snapshots
 	UpsertDaemon(ctx context.Context, daemon *Daemon) error
 	GetDaemon(ctx context.Context, id string) (*Daemon, error)
@@ -269,6 +364,10 @@ type Repository interface {
 	// Sequence-based Synchronization for Polling (per-chat)
 	GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error)
 	GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int64, limit int) ([]ChatUpdate, error)
+	// GetLatestNonMessageUpdatesPerEntity returns the newest non-message update
+	// per entity for a chat, filtered and deduped in SQL. Use this for snapshot
+	// builds instead of scanning all update types with a limit.
+	GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]ChatUpdate, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	GetNextSequenceNumber(ctx context.Context, chatID string) (int64, error)
 
@@ -278,6 +377,15 @@ type Repository interface {
 	GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error)
 	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
+	// PendingQuestionsByThread returns each thread's newest PENDING question
+	// for a chat, keyed by thread id. Used by spawn_status's listing mode to
+	// report whether a child agent is gated on a question.
+	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*Question, error)
+
+	// LastThreadActivityByChat returns, for every thread of a chat, the
+	// timestamp of its newest message — the only durable per-thread progress
+	// evidence a spawned agent thread has. Used by spawn_status's listing mode.
+	LastThreadActivityByChat(ctx context.Context, chatID string) (map[string]time.Time, error)
 
 	// Typed Chat Update Emitters (type-safe alternatives to CreateChatUpdate)
 	EmitQuestionUpdate(ctx context.Context, chatID string, update QuestionUpdate) error
@@ -364,8 +472,8 @@ type Repository interface {
 	// revisits those rows — the reconciler skips workflows with a parent_id — so
 	// without this they are reported as running forever.
 	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
-	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error         // Pause all running workflows for a chat
-	ResumeWorkflowsByChat(ctx context.Context, chatID string) error               // Resume all paused workflows for a chat
+	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error // Pause all running workflows for a chat
+	ResumeWorkflowsByChat(ctx context.Context, chatID string) error       // Resume all paused workflows for a chat
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	// Startup recovery queries
@@ -381,23 +489,24 @@ type Repository interface {
 	RecordProviderBackoff(ctx context.Context, chatID, threadID string, attempt, maxAttempts, statusCode int, reason string, delay time.Duration, now time.Time) error
 	ClearProviderBackoff(ctx context.Context, threadID string, now time.Time) error
 	ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]ProviderBackoff, error)
-	// Threads - First-class entity for thread hierarchy and fork relationships
-	// Thread type is derived: NULL parent = root, parent in same conversation = sub_agent,
-	// parent in different conversation = branch
+	// Threads - First-class entity for thread hierarchy and fork relationships.
+	// Thread.Origin (main/spawn/fork/node) is a stored column, not re-derived
+	// at read time from a workflow row's spawned_by_node_id sentinel -- see
+	// core.ThreadOrigin and 20260729000000_add_origin_to_threads.sql.
 	CreateThread(ctx context.Context, thread *Thread) (*Thread, error)
 	GetThread(ctx context.Context, id string) (*Thread, error)
 	GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thread, error)
-	GetRootThread(ctx context.Context, conversationID string) (*Thread, error)
-	GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error) // Returns thread and parent's conversation_id
-	ListThreadsByConversation(ctx context.Context, conversationID string) ([]*Thread, error)
+	GetRootThread(ctx context.Context, chatID string) (*Thread, error)
+	GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error) // Returns thread and parent's chat_id
+	ListThreadsByConversation(ctx context.Context, chatID string) ([]*Thread, error)
 	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
-	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtOrdinal *int64, forkAtContextWindowID *string) (*Thread, error)
+	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
 	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
-	ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error)
+	ListThreadsByOrigin(ctx context.Context, chatID string, origin ThreadOrigin) ([]*Thread, error)
 	DeleteThread(ctx context.Context, id string) error
-	DeleteThreadsByConversation(ctx context.Context, conversationID string) error
-	CountThreadsInConversation(ctx context.Context, conversationID string) (int64, error)
+	DeleteThreadsByConversation(ctx context.Context, chatID string) error
+	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 
 	// Context Windows - Atomic unit for what gets sent to the LLM
 	// Each thread has one or more context windows (sequence increments on compaction)
@@ -405,7 +514,7 @@ type Repository interface {
 	GetContextWindow(ctx context.Context, id string) (*ContextWindow, error)
 	GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error)
 	GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error)
-	GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *int64, error) // Returns cw, conversationID, parentThreadID, forkAtOrdinal
+	GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) // Returns cw, chatID, parentThreadID, forkAtMessageID
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error)
 	SetCompactionSummaryMessage(ctx context.Context, cwID, messageID string) (*ContextWindow, error)

@@ -314,7 +314,7 @@ nodes:
   - id: apply_winner
     type: run
     command: |
-      rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.env.ports' --exclude='data' --exclude='.env.local' \
+      rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.dev-ports.sh' --exclude='data' --exclude='.env.local' \
         "{{nodes.implementations._results[string(nodes.review.response.winner)].worktree_path}}/" \
         "{{workflow.path}}/"
 

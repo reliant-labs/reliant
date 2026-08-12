@@ -289,6 +289,15 @@ func (pc *pauseCoordinator) ActivityCtx() workflow.Context {
 	return pc.activityCtx
 }
 
+// PauseArmed reports whether a pause is currently armed (by either a user
+// signal or the workflow itself). Read by the ContinueAsNew boundary check: a
+// continuation started while a pause is armed would drop the resume signal
+// that is the only thing able to restart this run, and come back running —
+// silently undoing the pause.
+func (pc *pauseCoordinator) PauseArmed() bool {
+	return pc.requested
+}
+
 // RequestPause triggers a self-pause from within the workflow, cancelling all
 // in-flight activities. Used by executors when a retryable error (like a rate
 // limit) exhausts retries.

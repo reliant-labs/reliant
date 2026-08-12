@@ -2,8 +2,21 @@ package core
 
 import (
 	"context"
+	"database/sql"
+	"fmt"
 	"time"
 )
+
+// ErrPlanNotFound reports that a thread has no plan yet.
+//
+// It wraps sql.ErrNoRows because "this thread never called create_plan" and
+// "the row is missing" are the same condition to every caller, and the tool
+// layer already branches on sql.ErrNoRows to emit its actionable message.
+// Returning a bare fmt.Errorf here instead sent that branch down the generic
+// path, so an agent that had simply not created a plan was told
+// "Failed to find plan: no plans found for thread <uuid>" — which names no
+// remedy, and was observed being retried eight times in a row.
+var ErrPlanNotFound = fmt.Errorf("plan not found: %w", sql.ErrNoRows)
 
 // Plan represents a high-level project plan.
 type Plan struct {

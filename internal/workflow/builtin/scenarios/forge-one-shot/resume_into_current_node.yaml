@@ -1,34 +1,25 @@
-# Resume-into-current-node (Task 4) on a real multi-get-it-right chain.
+# Resume-into-current-node (Task 4) on the single-loop forge-one-shot chain.
 #
-# The user paused while the FINAL get-it-right loop (build_mvp) was running, then
-# sent a message. Resume must re-enter build_mvp — the currently-active node — and
-# continue through build_done to the launch_preview handoff. It must NOT restart
-# from scope/scaffold or re-run scaffold_and_verify.
+# The user paused while build_app — the one get-it-right loop that carries the
+# whole arc — was running, then sent a message. Resume must re-enter build_app
+# (the currently-active node) and continue through build_done to the
+# launch_preview handoff, rather than restarting the workflow from node zero.
 #
 # Mirrors the runtime resume-at-checkpoint path (resolveResumeTarget /
 # resume_test.go TestDynamicWorkflow_Resume_EntersAtCheckpointNode): a new run
 # begins at the checkpointed node, earlier node outputs are not reconstructed, so
-# the workflow's cross-phase edge refs are all has()-guarded. start_at models it.
+# the workflow's cross-node edge refs are all has()-guarded. start_at models it.
 #
-# The simulator models start_at by firing the target's PREDECESSOR completion event
-# (here scaffold_and_verify) and evaluating its outbound edges, rather than entering
-# build_mvp directly the way real runtime resume does. scaffold_and_verify's edges
-# route on nodes.scaffold_and_verify alone, so the `state` below is all the upstream
-# state needed to land on build_mvp.
+# build_app is the entry node, so resuming into it is also the shortest possible
+# chain: its own completion event drives every edge the rest of the run takes.
 
 name: resume_into_current_node
-description: Pausing during build_mvp resumes into that node, not from node zero
+description: Pausing during build_app resumes into that node and runs on to the preview
 
-start_at: build_mvp
-
-# The scaffold phase already ran in the paused run; its outputs are not
-# reconstructed on resume.
-state:
-  scaffold_and_verify:
-    strategy: pass
+start_at: build_app
 
 events:
-  - node: build_mvp
+  - node: build_app
     output:
       response_text: "The build resumed from where it paused and completed."
       strategy: pass
@@ -43,11 +34,10 @@ events:
 expect:
   outcome: completed
   reached:
-    - build_mvp
+    - build_app
     - build_done
     - launch_preview
     - success
   not_reached:
-    - scaffold_and_verify
     - stuck
     - failed

@@ -112,7 +112,7 @@ message ChatSyncSnapshot {
   int64 latest_sequence = 3;                   // Latest sequence number for tracking
   int32 total = 4;                             // Total message count
   bool has_more = 5;                           // Whether there are more messages to load
-  int64 oldest_ordinal = 6;                    // Ordinal of oldest message (for pagination)
+  int64 oldest_seq = 6;                        // Seq of oldest message (for pagination)
   // Context usage for compaction indicator
   int64 thread_token_count = 7;                // Sum of output_tokens in current context
   int64 compaction_threshold = 8;              // Threshold at which compaction triggers (default 20000)

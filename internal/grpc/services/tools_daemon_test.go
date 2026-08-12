@@ -148,7 +148,7 @@ func TestResolveDaemonIDFallsBackToHostnameForOlderDaemons(t *testing.T) {
 
 func TestResolveUnboundDaemonIDReusesExistingByHostname(t *testing.T) {
 	existingID := "existing-daemon-id"
-	hostname := "Seans-MacBook-Pro-2.local"
+	hostname := "dev-machine.local"
 	repo := &fakeDaemonRepo{daemons: []*db.Daemon{
 		{ID: "other-host-daemon", UserID: "u1", Hostname: ptrStr("other-host")},
 		{ID: existingID, UserID: "u1", Hostname: ptrStr(hostname)},
@@ -164,7 +164,7 @@ func TestResolveUnboundDaemonIDMintsNewWhenHostnameDoesNotMatch(t *testing.T) {
 		{ID: "old-id", UserID: "u1", Hostname: ptrStr("DifferentHost")},
 	}}
 
-	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "Seans-MacBook-Pro-2.local")
+	got := resolveUnboundDaemonID(context.Background(), repo, "u1", "dev-machine.local")
 	require.NotEmpty(t, got)
 	require.NotEqual(t, "old-id", got)
 	require.Equal(t, 1, repo.calls)
@@ -199,7 +199,7 @@ func TestResolveUnboundDaemonIDIgnoresOtherUsersWithSameHostname(t *testing.T) {
 		// them — the helper trusts the contract, so we model the contract
 		// (only user-scoped rows show up) and verify the new-mint path.
 	}}
-	got := resolveUnboundDaemonID(context.Background(), repo, "u2", "Seans-MacBook-Pro-2.local")
+	got := resolveUnboundDaemonID(context.Background(), repo, "u2", "dev-machine.local")
 	require.NotEmpty(t, got)
 }
 
@@ -227,7 +227,7 @@ func TestResolveUnboundDaemonIDTrimsHostnameWhitespace(t *testing.T) {
 // one daemon_id, not two — the Electron-restart-loop failure mode.
 func TestResolveUnboundDaemonIDReusesAcrossReconnectsInMemory(t *testing.T) {
 	userID := "user-1"
-	hostname := "Seans-MacBook-Pro-2.local"
+	hostname := "dev-machine.local"
 	repo := &fakeDaemonRepo{}
 	ctx := context.Background()
 

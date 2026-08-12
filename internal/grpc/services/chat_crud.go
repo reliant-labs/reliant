@@ -12,9 +12,9 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -72,7 +72,6 @@ func (s *ChatService) CreateChat(
 		UserID:          userID,
 		Title:           title,
 		ProjectID:       req.Msg.ProjectId,
-		WorktreeID:      req.Msg.WorktreeId,
 		WorkflowName:    &workflowName,
 		State:           db.ChatStateIdle,
 		WorkflowID:      &workflowID,
@@ -91,6 +90,17 @@ func (s *ChatService) CreateChat(
 	if err := validateWorkflowParamStructure(req.Msg.WorkflowParams); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+
+	// Every chat must name a resolvable worktree, or the UI's worktree-grouped
+	// chat list silently hides it. Callers that omit one (e.g. the CLI) bind to
+	// the project's main worktree. Resolved after the request validators so a
+	// malformed request still reports its own error rather than a project-state
+	// precondition, but before getEffectiveWorkingPath below, which reads it.
+	worktreeID, err := s.resolveChatWorktreeID(ctx, req.Msg.ProjectId, req.Msg.WorktreeId)
+	if err != nil {
+		return nil, err
+	}
+	chat.WorktreeID = worktreeID
 
 	// DEBUG: Log raw proto tools value before any processing
 	if toolsProto, ok := req.Msg.WorkflowParams["tools"]; ok {
@@ -123,14 +133,93 @@ func (s *ChatService) CreateChat(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 	}
 
-	// All validations passed - now create chat in transaction
+	// Build execution context for the workflow
+	// This is the source of truth for thread, message, and execution state
+	execContext := &v2.ExecutionContext{
+		WorkflowID:   workflowID,
+		ChatID:       chatID,
+		WorkflowName: workflowName,
+		Thread:       workflowID,
+		ThreadMode:   model.ThreadModeNew,
+	}
+
+	// Root workflow + thread, created atomically with the chat below.
+	rootWorkflow := &db.Workflow{
+		ID:           workflowID,
+		ChatID:       chatID,
+		WorkflowName: workflowName,
+		Thread:       workflowID, // Root workflow: thread = workflow ID
+		Status:       db.WorkflowStatusPending,
+		CreatedAt:    now,
+	}
+
+	// chat_created payload for the global websocket, computed from data we
+	// already have (no DB round trip) so it can be emitted inside the same
+	// transaction as the row it announces.
+	chatCreatedData := map[string]interface{}{
+		"chat_id":     chatID,
+		"title":       chat.Title,
+		"project_id":  chat.ProjectID,
+		"worktree_id": chat.WorktreeID,
+		"workflow":    chat.WorkflowName,
+		"state":       string(chat.State),
+		"created_at":  chat.CreatedAt.Format(time.RFC3339),
+	}
+	chatCreatedJSON, marshalErr := json.Marshal(chatCreatedData)
+	if marshalErr != nil {
+		logging.Error("Failed to marshal chat_created data", "error", marshalErr, "chatID", chatID)
+	}
+
+	// The chat row, its root workflow+thread, the initial messages, and the
+	// chat_created announcement must not be observed apart: a client that
+	// sees chat_created must be able to load a chat that already has a
+	// thread. Group them in one transaction so any failure leaves nothing
+	// behind (no orphan chat, no thread-less chat, no announcement for a
+	// chat that doesn't exist).
 	if err := s.database.RunTx(ctx, func(txCtx context.Context) error {
 		if err := s.database.CreateChat(txCtx, chat); err != nil {
 			return fmt.Errorf("failed to create chat: %w", err)
 		}
+
+		if _, _, _, err := s.threads.CreateWorkflowWithThread(txCtx, threads.CreateWorkflowWithThreadOpts{
+			Workflow: rootWorkflow,
+			ThreadID: workflowID,
+			ChatID:   chatID,
+		}); err != nil {
+			return fmt.Errorf("failed to create workflow and thread: %w", err)
+		}
+
+		// Save messages BEFORE starting workflow for consistency.
+		// System messages are saved first, then the user message.
+		for _, sysMsg := range systemMessages {
+			if _, err := s.database.SaveMessageToThread(txCtx, chatID, workflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
+				return fmt.Errorf("failed to save system message: %w", err)
+			}
+		}
+		if hasUserContent || len(req.Msg.Attachments) > 0 {
+			if _, err := s.database.SaveMessageToThread(txCtx, chatID, workflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil); err != nil {
+				return fmt.Errorf("failed to save first message: %w", err)
+			}
+		}
+
+		if chatCreatedJSON != nil {
+			if err := s.database.CreateUserUpdate(txCtx, &db.UserUpdate{
+				UserID:     userID,
+				ProjectID:  &chat.ProjectID,
+				WorktreeID: chat.WorktreeID,
+				ChatID:     &chatID,
+				UpdateType: db.UserUpdateChatCreated,
+				EntityType: db.EntityTypeChat,
+				EntityID:   chatID,
+				Data:       chatCreatedJSON,
+			}); err != nil {
+				return fmt.Errorf("failed to create chat_created user update: %w", err)
+			}
+		}
+
 		return nil
 	}); err != nil {
-		logging.Error("Failed to create chat", "error", err)
+		logging.Error("Failed to create chat", "error", err, "chatID", chatID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create chat"))
 	}
 
@@ -138,6 +227,8 @@ func (s *ChatService) CreateChat(
 	// For existing workflows: frontend passes builder_workflow_slug, backend looks up and associates.
 	// For new workflows: frontend creates draft via CreateWorkflowDraft, then calls
 	// AssociateChatWithWorkflowDraft after chat creation.
+	// Best-effort: the chat already exists, so a failure here just means the
+	// builder association is missing, not that the chat is broken.
 	var createdDraftID string
 	if isWorkflowBuilderChat(req.Msg.SelectedPresets) {
 		if builderSlug, ok := req.Msg.WorkflowParams["builder_workflow_slug"]; ok {
@@ -156,37 +247,6 @@ func (s *ChatService) CreateChat(
 		}
 	}
 
-	// Emit chat_created user update for global websocket
-	// This allows other browser windows to see the new chat
-	chatCreatedData := map[string]interface{}{
-		"chat_id":     chatID,
-		"title":       chat.Title,
-		"project_id":  chat.ProjectID,
-		"worktree_id": chat.WorktreeID,
-		"workflow":    chat.WorkflowName,
-		"state":       string(chat.State),
-		"created_at":  chat.CreatedAt.Format(time.RFC3339),
-	}
-	chatCreatedJSON, err := json.Marshal(chatCreatedData)
-	if err != nil {
-		logging.Error("Failed to marshal chat_created data", "error", err, "chatID", chatID)
-	} else {
-		chatCreatedUpdate := &db.UserUpdate{
-			UserID:     userID,
-			ProjectID:  &chat.ProjectID,
-			WorktreeID: chat.WorktreeID,
-			ChatID:     &chatID,
-			UpdateType: db.UserUpdateChatCreated,
-			EntityType: db.EntityTypeChat,
-			EntityID:   chatID,
-			Data:       chatCreatedJSON,
-		}
-		if err := s.database.CreateUserUpdate(ctx, chatCreatedUpdate); err != nil {
-			// Log but don't fail - the chat was created successfully
-			logging.Error("Failed to create chat_created user update", "error", err, "chatID", chatID)
-		}
-	}
-
 	// Start workflow on shared task queue
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                       workflowID,
@@ -196,55 +256,6 @@ func (s *ChatService) CreateChat(
 	}
 
 	// initialData was already built and validated before chat creation
-
-	// Build execution context for the workflow
-	// This is the source of truth for thread, message, and execution state
-	execContext := &v2.ExecutionContext{
-		WorkflowID:   workflowID,
-		ChatID:       chatID,
-		WorkflowName: workflowName,
-		Thread:       workflowID,
-		ThreadMode:   model.ThreadModeNew,
-	}
-
-	// Create workflow and thread atomically BEFORE saving messages
-	// This ensures proper FK relationships and allows WorkflowStatus to update status to running
-	rootWorkflow := &db.Workflow{
-		ID:           workflowID,
-		ChatID:       chatID,
-		WorkflowName: workflowName,
-		Thread:       workflowID, // Root workflow: thread = workflow ID
-		Status:       db.WorkflowStatusPending,
-		CreatedAt:    now,
-	}
-	_, _, _, err = s.threads.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
-		Workflow: rootWorkflow,
-		ThreadID: workflowID,
-		ChatID:   chatID,
-	})
-	if err != nil {
-		logging.Error("Failed to create workflow with thread for chat", "error", err, "chatID", chatID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create workflow and thread"))
-	}
-
-	// Save messages BEFORE starting workflow for consistency
-	// System messages are saved first, then user message
-	for _, sysMsg := range systemMessages {
-		_, err := s.database.SaveMessageToThread(ctx, chatID, workflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle))
-		if err != nil {
-			logging.Error("Failed to save system message", "error", err, "chatID", chatID)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save system message"))
-		}
-	}
-
-	// Save first user message to thread (message is saved BEFORE workflow starts)
-	if hasUserContent || len(req.Msg.Attachments) > 0 {
-		_, err := s.database.SaveMessageToThread(ctx, chatID, workflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
-		if err != nil {
-			logging.Error("Failed to save first message", "error", err, "chatID", chatID)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save first message"))
-		}
-	}
 
 	// Inject session daemon if set on chat
 	injectSessionDaemonID(initialData, chat)
@@ -379,9 +390,7 @@ func (s *ChatService) GetChat(
 	// Status transitions are handled by WorkflowStatus("completed") activity
 	// callbacks and EnsureWorkflowRunning belt-and-suspenders in ActivityWrapper.
 	needsRecovery := false
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		workflowID := *chat.WorkflowID
-
+	if workflowID := chat.MainThreadID(); workflowID != "" {
 		// Check if the root workflow needs ghost recovery
 		wf, wfErr := s.database.GetWorkflow(ctx, workflowID)
 		if wfErr == nil && wf != nil && wf.Status == db.WorkflowStatusRunning {
@@ -434,7 +443,13 @@ func (s *ChatService) UpdateChat(
 		chat.Title = *req.Msg.Title
 	}
 	if req.Msg.WorktreeId != nil {
-		chat.WorktreeID = req.Msg.WorktreeId
+		// Same invariant as creation: a chat may be moved between the project's
+		// worktrees, but never to a foreign one and never cleared to null.
+		resolved, err := s.resolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
+		if err != nil {
+			return nil, err
+		}
+		chat.WorktreeID = resolved
 	}
 
 	// Handle workflow name change - only allowed when root workflow is pending
@@ -569,8 +584,8 @@ func (s *ChatService) DeleteChat(
 	// If already archived, hard delete permanently
 	if chat.State == db.ChatStateArchived {
 		// Cancel workflow if still running (belt-and-suspenders for hard delete)
-		if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-			_ = s.tempClient.CancelWorkflow(ctx, *chat.WorkflowID, "")
+		if workflowID := chat.MainThreadID(); workflowID != "" {
+			_ = s.tempClient.CancelWorkflow(ctx, workflowID, "")
 		}
 
 		if err := s.database.DeleteChat(ctx, req.Msg.ChatId); err != nil {
@@ -592,13 +607,13 @@ func (s *ChatService) DeleteChat(
 	}
 
 	// Cancel the workflow if running
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
+	if workflowID := chat.MainThreadID(); workflowID != "" {
 		runID := ""
 		if chat.RunID != nil {
 			runID = *chat.RunID
 		}
-		if err := s.tempClient.CancelWorkflow(ctx, *chat.WorkflowID, runID); err != nil {
-			logging.Error("Failed to cancel workflow for archived chat", "error", err, "chatID", req.Msg.ChatId, "workflowID", *chat.WorkflowID)
+		if err := s.tempClient.CancelWorkflow(ctx, workflowID, runID); err != nil {
+			logging.Error("Failed to cancel workflow for archived chat", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
 		}
 	}
 
@@ -718,108 +733,103 @@ func (s *ChatService) ListMessages(
 		recentLimit = int(*req.Msg.Recent)
 	}
 
-	var beforeOrdinal int64
-	if req.Msg.BeforeOrdinal != nil && *req.Msg.BeforeOrdinal > 0 {
-		beforeOrdinal = *req.Msg.BeforeOrdinal
+	var beforeSeq int64
+	if req.Msg.BeforeSeq != nil && *req.Msg.BeforeSeq > 0 {
+		beforeSeq = *req.Msg.BeforeSeq
 	}
 
 	// Determine the main thread ID for this chat
 	mainThreadID := req.Msg.ChatId
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		mainThreadID = *chat.WorkflowID
+	if id := chat.MainThreadID(); id != "" {
+		mainThreadID = id
 	}
 
-	// Use CW chain resolution to get messages for the main thread.
-	// This resolves inherited messages from parent chats for branched conversations.
 	threadsSvc := threads.NewService(s.database)
-	mainThreadMessages, err := threadsSvc.LoadCurrentMessages(ctx, mainThreadID)
+
+	var messages []*db.Message
+	var totalCount int
+	var oldestSeq int64
+	var hasMore bool
+
+	// The thread whose point of view these messages are read from; governs
+	// tool-call status resolution (see MessageToProtoOptions.ViewingThreadID).
+	viewingThreadID := mainThreadID
+
+	switch {
+	case req.Msg.ThreadId != nil && *req.Msg.ThreadId != "":
+		// Single-thread read: return exactly this thread's visual thread. No
+		// merge with siblings and no main-thread window — the caller asked for
+		// one thread, so the answer is that thread or an error, never a
+		// best-effort slice of something else.
+		threadID := *req.Msg.ThreadId
+		viewingThreadID = threadID
+
+		thread, err := s.database.GetThread(ctx, threadID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+		}
+		// Ownership is transitive through the chat, which is already
+		// authorized above. A thread from another chat is NotFound rather
+		// than a silent fall back to the chat-wide list: answering a
+		// different question than the one asked is how the spawn preview
+		// came to render the wrong thing in the first place.
+		if thread.ChatID != req.Msg.ChatId {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+		}
+
+		messages, hasMore, err = s.listThreadMessages(ctx, threadsSvc, threadID, beforeSeq, recentLimit)
+		if err != nil {
+			logging.Error("Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+		}
+		totalCount, err = threadsSvc.CountCurrentMessages(ctx, threadID)
+		if err != nil {
+			logging.Error("Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+		}
+		if len(messages) > 0 {
+			oldestSeq = messages[0].Seq
+		}
+
+	case recentLimit > 0:
+		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
+			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
+		if err != nil {
+			logging.Error("Failed to load bounded messages", "error", err, "chatID", req.Msg.ChatId)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+		}
+	default:
+		// No page size given: the caller wants the whole chat (e.g. the cold
+		// initial load before any pagination has happened). Resolve every
+		// thread's full history and hand it to paginateBySeq unbounded.
+		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
+		if err != nil {
+			logging.Error("Failed to resolve messages", "error", err, "chatID", req.Msg.ChatId)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
+		}
+
+		var page messagePage
+		messages, page = paginateBySeq(messages, beforeSeq, recentLimit, mainThreadID)
+		oldestSeq, hasMore = page.OldestSeq, page.HasMore
+	}
+
+	// Batch-fetch content blocks for the paginated page of messages in one
+	// query, then group by message id. This replaces three separate
+	// ListContentBlocks (single-message) round trips per message with a
+	// single ListContentBlocksForMessages call.
+	messageIDs := make([]string, len(messages))
+	for i, msg := range messages {
+		messageIDs[i] = msg.ID
+	}
+	allBlocks, err := s.database.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
-		logging.Error("Failed to resolve main thread messages", "error", err, "threadID", mainThreadID)
+		logging.Error("Failed to batch list content blocks", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
 	}
-
-	// Normalize thread IDs: inherited messages should appear as part of the current chat's thread
-	// This gives the UI a single unified thread view instead of showing messages from multiple threads
-	for _, msg := range mainThreadMessages {
-		if msg.ThreadID != mainThreadID {
-			msg.ThreadID = mainThreadID // Normalize inherited message to current thread
-		}
+	blocksByMessageID := make(map[string][]*db.MessageContentBlock, len(messages))
+	for _, block := range allBlocks {
+		blocksByMessageID[block.MessageID] = append(blocksByMessageID[block.MessageID], block)
 	}
-
-	// Get all threads for this conversation to find child workflow threads (sub-agents)
-	allThreads, err := s.database.ListThreadsByConversation(ctx, req.Msg.ChatId)
-	if err != nil {
-		logging.Warn("Failed to list threads for conversation", "error", err, "chatID", req.Msg.ChatId)
-		allThreads = []*db.Thread{} // Continue with just main thread messages
-	}
-
-	// Collect messages from child threads (sub-agents, taskforces)
-	// These are threads that belong to this chat but aren't the main thread
-	var childThreadMessages []*db.Message
-	for _, thread := range allThreads {
-		if thread.ID == mainThreadID {
-			continue // Skip main thread, already resolved via CW chain
-		}
-		// Get messages for this child thread directly (they don't inherit from elsewhere)
-		childMsgs, err := threadsSvc.LoadCurrentMessages(ctx, thread.ID)
-		if err != nil {
-			logging.Warn("Failed to load child thread messages", "error", err, "threadID", thread.ID)
-			continue
-		}
-		childThreadMessages = append(childThreadMessages, childMsgs...)
-	}
-
-	// Combine main thread messages (with inheritance) and child thread messages
-	// Deduplicate by message ID: main thread messages take priority because they
-	// have the correct primary thread assignment. Child threads inherit parent
-	// messages via CW chain, and LoadCurrentMessages normalizes their ThreadID
-	// to the child thread — without dedup, the same message appears once per
-	// thread that inherits it.
-	messageMap := make(map[string]*db.Message, len(mainThreadMessages)+len(childThreadMessages))
-	for _, msg := range mainThreadMessages {
-		messageMap[msg.ID] = msg
-	}
-	for _, msg := range childThreadMessages {
-		if _, exists := messageMap[msg.ID]; !exists {
-			messageMap[msg.ID] = msg
-		}
-	}
-	messages := make([]*db.Message, 0, len(messageMap))
-	for _, msg := range messageMap {
-		messages = append(messages, msg)
-	}
-
-	// Sort by ordinal to maintain conversation order
-	sort.Slice(messages, func(i, j int) bool {
-		return messages[i].Ordinal < messages[j].Ordinal
-	})
-
-	// Total count is the number of messages we loaded
-	totalCount := len(messages)
-
-	// Apply pagination: filter by before_ordinal first, then take recent N from end
-	if beforeOrdinal > 0 {
-		filtered := make([]*db.Message, 0, len(messages))
-		for _, msg := range messages {
-			if msg.Ordinal < beforeOrdinal {
-				filtered = append(filtered, msg)
-			}
-		}
-		messages = filtered
-	}
-
-	// Take only the most recent N messages (from the end)
-	// Note: messages are ordered by ordinal ASC (oldest first), so we take from the end
-	if recentLimit > 0 && len(messages) > recentLimit {
-		messages = messages[len(messages)-recentLimit:]
-	}
-
-	// Calculate if there are more older messages available
-	var oldestOrdinal int64
-	if len(messages) > 0 {
-		oldestOrdinal = messages[0].Ordinal
-	}
-	hasMore := len(messages) < totalCount || beforeOrdinal > 0
 
 	// Collect all attachment IDs from image and file_reference blocks
 	attachmentIDSet := make(map[string]bool)
@@ -827,11 +837,7 @@ func (s *ChatService) ListMessages(
 		if msg.Role == reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM {
 			continue
 		}
-		blocks, err := s.database.ListContentBlocks(ctx, msg.ID)
-		if err != nil {
-			continue
-		}
-		for _, block := range blocks {
+		for _, block := range blocksByMessageID[msg.ID] {
 			if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
 				attachmentIDSet[*block.Content] = true
 			}
@@ -853,70 +859,15 @@ func (s *ChatService) ListMessages(
 		}
 	}
 
-	// Build a map of tool_results by tool_call_id for matching
-	toolResultsByCallID := make(map[string]*reliantv1.MatchedToolResult)
-	for _, msg := range messages {
-		if msg.Role != reliantv1.MessageRole_MESSAGE_ROLE_TOOL {
-			continue
-		}
-		blocks, err := s.database.ListContentBlocks(ctx, msg.ID)
-		if err != nil {
-			continue
-		}
-		for _, block := range blocks {
-			if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT && block.ToolCallID != nil {
-				result := &reliantv1.MatchedToolResult{
-					ToolCallId: *block.ToolCallID,
-					Type:       "tool_result",
-				}
-				if block.Content != nil {
-					result.Content = block.Content
-				}
-				if block.IsError != nil {
-					result.IsError = block.IsError
-				}
-				toolResultsByCallID[*block.ToolCallID] = result
-			}
-		}
-	}
-
-	// Build response messages
-	var protoMessages []*reliantv1.Message
-	for _, msg := range messages {
-		// Get content blocks for this message
-		blocks, err := s.database.ListContentBlocks(ctx, msg.ID)
-		if err != nil {
-			logging.Error("Failed to list content blocks", "error", err, "messageID", msg.ID)
-			continue
-		}
-
-		// Skip hidden messages from UI (they are still sent to LLM)
-		// This includes compaction summaries which are saved with display_style=hidden
-		if msg.DisplayStyle != nil && *msg.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN {
-			continue
-		}
-
-		// Collect attachments for this message
-		var msgAttachments []*db.Attachment
-		for _, block := range blocks {
-			if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
-				if att, found := attachmentMap[*block.Content]; found {
-					msgAttachments = append(msgAttachments, att)
-				}
-			}
-		}
-
-		protoMessages = append(protoMessages, messageToProto(msg, blocks, msgAttachments, &MessageToProtoOptions{
-			ToolResultsByCallID: toolResultsByCallID,
-		}))
-	}
+	protoMessages := assembleMessagesForDisplay(
+		ctx, s.database, messages, messageIDs, blocksByMessageID, attachmentMap, viewingThreadID, 0)
 
 	return connect.NewResponse(&reliantv1.ListMessagesResponse{
-		Messages:      protoMessages,
-		Total:         int32(totalCount),
-		Count:         int32(len(protoMessages)),
-		HasMore:       hasMore,
-		OldestOrdinal: oldestOrdinal,
+		Messages:  protoMessages,
+		Total:     int32(totalCount),
+		Count:     int32(len(protoMessages)),
+		HasMore:   hasMore,
+		OldestSeq: oldestSeq,
 	}), nil
 }
 
@@ -980,16 +931,16 @@ func (s *ChatService) UpdateChatState(
 	}
 
 	// If archiving, also cancel any running workflow
-	if newState == db.ChatStateArchived && chat.WorkflowID != nil && *chat.WorkflowID != "" {
+	if workflowID := chat.MainThreadID(); newState == db.ChatStateArchived && workflowID != "" {
 		runID := ""
 		if chat.RunID != nil {
 			runID = *chat.RunID
 		}
-		if err := s.tempClient.CancelWorkflow(ctx, *chat.WorkflowID, runID); err != nil {
+		if err := s.tempClient.CancelWorkflow(ctx, workflowID, runID); err != nil {
 			logging.Error("Failed to cancel workflow for archived chat",
 				"error", err,
 				"chatID", req.Msg.ChatId,
-				"workflowID", *chat.WorkflowID)
+				"workflowID", workflowID)
 		}
 	}
 
@@ -1395,13 +1346,13 @@ func (s *ChatService) CompactChat(
 	}
 
 	// Check if a workflow is already running - use Temporal as source of truth
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		temporalState, err := s.getTemporalWorkflowState(ctx, *chat.WorkflowID)
+	if workflowID := chat.MainThreadID(); workflowID != "" {
+		temporalState, err := s.getTemporalWorkflowState(ctx, workflowID)
 		if err != nil {
 			logging.Error("Failed to check workflow status for compaction",
 				"error", err,
 				"chatID", req.Msg.ChatId,
-				"workflowID", *chat.WorkflowID,
+				"workflowID", workflowID,
 			)
 			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", err))
 		}
@@ -1595,4 +1546,324 @@ func (s *ChatService) ListChatPlans(
 		Plans: protoPlans,
 		Total: int32(len(plans)),
 	}), nil
+}
+
+// listMessagesUnbounded resolves EVERY message this chat has -- the main
+// thread's full CW-chain-resolved history plus every child thread's full
+// history -- for the legacy "recent not specified" path. This is the
+// pre-existing (unbounded) ListMessages behavior, extracted unchanged so
+// paginateBySeq keeps operating over a truly complete slice for that one
+// caller shape.
+func (s *ChatService) listMessagesUnbounded(
+	ctx context.Context, threadsSvc *threads.Service, chatID, mainThreadID string,
+) ([]*db.Message, int, error) {
+	mainThreadMessages, err := threadsSvc.LoadDisplayMessages(ctx, mainThreadID)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to resolve main thread messages: %w", err)
+	}
+	for _, msg := range mainThreadMessages {
+		if msg.ThreadID != mainThreadID {
+			msg.ThreadID = mainThreadID
+		}
+	}
+
+	allThreads, err := s.database.ListThreadsByConversation(ctx, chatID)
+	if err != nil {
+		logging.Warn("Failed to list threads for conversation", "error", err, "chatID", chatID)
+		allThreads = []*db.Thread{}
+	}
+
+	var childThreadMessages []*db.Message
+	for _, thread := range allThreads {
+		if thread.ID == mainThreadID {
+			continue
+		}
+		childMsgs, err := threadsSvc.LoadDisplayMessages(ctx, thread.ID)
+		if err != nil {
+			logging.Warn("Failed to load child thread messages", "error", err, "threadID", thread.ID)
+			continue
+		}
+		childThreadMessages = append(childThreadMessages, childMsgs...)
+	}
+
+	messageMap := make(map[string]*db.Message, len(mainThreadMessages)+len(childThreadMessages))
+	for _, msg := range mainThreadMessages {
+		messageMap[msg.ID] = msg
+	}
+	for _, msg := range childThreadMessages {
+		if _, exists := messageMap[msg.ID]; !exists {
+			messageMap[msg.ID] = msg
+		}
+	}
+	messages := make([]*db.Message, 0, len(messageMap))
+	for _, msg := range messageMap {
+		messages = append(messages, msg)
+	}
+
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Seq < messages[j].Seq
+	})
+
+	return messages, len(messages), nil
+}
+
+// listThreadMessages reads exactly one thread's visual thread — the read
+// behind ListMessagesRequest.thread_id.
+//
+// It is the whole implementation of a single-thread read, and it is this
+// short on purpose: one thread's history is a thing the threads service
+// already knows how to resolve (fork points, compaction chains and visual-
+// thread normalization included). The chat-wide paths above are long because
+// they merge N threads and then have to decide what to keep; there is nothing
+// to merge here, so there is nothing to decide.
+//
+// recentLimit <= 0 means "the whole thread", which is what a spawn preview
+// wants: the child is bounded by its own length, not by a page size borrowed
+// from the main transcript.
+func (s *ChatService) listThreadMessages(
+	ctx context.Context, threadsSvc *threads.Service, threadID string, beforeSeq int64, recentLimit int,
+) ([]*db.Message, bool, error) {
+	if recentLimit > 0 {
+		return threadsSvc.LoadRecentMessagesBefore(ctx, threadID, beforeSeq, recentLimit)
+	}
+
+	messages, err := threadsSvc.LoadDisplayMessages(ctx, threadID)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to load thread messages: %w", err)
+	}
+	if beforeSeq > 0 {
+		filtered := messages[:0]
+		for _, msg := range messages {
+			if msg.Seq < beforeSeq {
+				filtered = append(filtered, msg)
+			}
+		}
+		messages = filtered
+	}
+	// The whole thread was read, so nothing precedes it.
+	return messages, false, nil
+}
+
+// listMessagesBounded is the SQL-bounded counterpart to
+// listMessagesUnbounded, for the normal (recentLimit > 0) path. It reads
+// only the window a page actually needs instead of the chat's entire
+// history:
+//
+//   - Main thread: LoadRecentMessagesBefore bounds the read in SQL for the
+//     common (unforked) case, falling back to the full resolution only for a
+//     forked/compacted main thread.
+//   - Sibling threads: bounded to the seq span the main-thread window
+//     resolved to (LoadMessagesInSeqRange), rather than each sibling's whole
+//     history -- exactly mirroring what windowByMainThread would have kept
+//     from an unbounded read, at a fraction of the read cost.
+//   - Total: CountCurrentMessages(main) covers the main thread's own
+//     CW-chain-resolved count; CountMessagesInChat(chat) - CountMessagesInThread(main)
+//     covers every sibling thread's messages (siblings don't inherit from
+//     elsewhere, so their own chat_id-scoped rows are their whole count).
+//   - HasMore: taken directly from the main thread's own hasMoreOlder. This
+//     is sufficient because seq is a chat-global, densely-allocated order
+//     (GetNextSeqByChat walks the full CW chain when allocating) and every
+//     message a branch chat displays -- inherited or local -- carries a seq
+//     from that same allocator, so no sibling thread's oldest message can
+//     precede the resolved main thread's oldest message.
+func (s *ChatService) listMessagesBounded(
+	ctx context.Context, threadsSvc *threads.Service, chatID, mainThreadID string, beforeSeq int64, recentLimit int,
+) ([]*db.Message, int, int64, bool, error) {
+	mainThreadMessages, mainHasMoreOlder, err := threadsSvc.LoadRecentMessagesBefore(ctx, mainThreadID, beforeSeq, recentLimit)
+	if err != nil {
+		return nil, 0, 0, false, fmt.Errorf("failed to load recent main thread messages: %w", err)
+	}
+	for _, msg := range mainThreadMessages {
+		if msg.ThreadID != mainThreadID {
+			msg.ThreadID = mainThreadID
+		}
+	}
+
+	// The seq span this page's main-thread window actually covers. Sibling
+	// threads are bounded to this range rather than their whole history --
+	// same effect as windowByMainThread's "every sibling message inside that
+	// seq range". The upper bound mirrors ListRecentChatWindow's own
+	// snapshot window (messages.sql), which is intentionally open above: a
+	// spawn thread can out-write and out-live the main thread, finishing
+	// after the main thread's newest message in this page, and the
+	// tool-call preview those spawn messages render from must still appear.
+	// The cursor itself is still the right upper bound on a page OTHER than
+	// the newest -- everything at or after beforeSeq belongs to a page
+	// already served.
+	var fromSeq int64
+	var toSeq *int64
+	if len(mainThreadMessages) > 0 {
+		fromSeq = mainThreadMessages[0].Seq
+	} else if beforeSeq > 0 {
+		fromSeq = beforeSeq
+	}
+	if beforeSeq > 0 {
+		toSeq = &beforeSeq
+	}
+
+	allThreads, err := s.database.ListThreadsByConversation(ctx, chatID)
+	if err != nil {
+		logging.Warn("Failed to list threads for conversation", "error", err, "chatID", chatID)
+		allThreads = []*db.Thread{}
+	}
+
+	messageMap := make(map[string]*db.Message, len(mainThreadMessages))
+	for _, msg := range mainThreadMessages {
+		messageMap[msg.ID] = msg
+	}
+	for _, thread := range allThreads {
+		if thread.ID == mainThreadID {
+			continue
+		}
+		childMsgs, err := threadsSvc.LoadMessagesInSeqRange(ctx, thread.ID, fromSeq, toSeq)
+		if err != nil {
+			logging.Warn("Failed to load child thread messages in range", "error", err, "threadID", thread.ID)
+			continue
+		}
+		for _, msg := range childMsgs {
+			if _, exists := messageMap[msg.ID]; !exists {
+				messageMap[msg.ID] = msg
+			}
+		}
+	}
+
+	messages := make([]*db.Message, 0, len(messageMap))
+	for _, msg := range messageMap {
+		messages = append(messages, msg)
+	}
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Seq < messages[j].Seq
+	})
+
+	// The window above is already the correctly-sized page (the same shape
+	// windowByMainThread would produce), but re-apply it for safety: a
+	// sibling thread with messages exactly AT the boundary could otherwise
+	// push the reported page past recentLimit main-thread messages.
+	messages = windowByMainThread(messages, mainThreadID, recentLimit)
+
+	mainCount, err := threadsSvc.CountCurrentMessages(ctx, mainThreadID)
+	if err != nil {
+		return nil, 0, 0, false, fmt.Errorf("failed to count main thread messages: %w", err)
+	}
+	chatCount, err := s.database.CountMessagesInChat(ctx, chatID)
+	if err != nil {
+		return nil, 0, 0, false, fmt.Errorf("failed to count chat messages: %w", err)
+	}
+	mainOwnCount, err := s.database.CountMessagesInThread(ctx, mainThreadID)
+	if err != nil {
+		return nil, 0, 0, false, fmt.Errorf("failed to count main thread's own messages: %w", err)
+	}
+	totalCount := mainCount + chatCount - mainOwnCount
+
+	var oldestSeq int64
+	if len(messages) > 0 {
+		oldestSeq = messages[0].Seq
+	}
+
+	return messages, totalCount, oldestSeq, mainHasMoreOlder, nil
+}
+
+// messagePage carries the cursor facts a paginated message read has to report
+// back to the client.
+type messagePage struct {
+	// OldestSeq is the lowest seq in the returned page, i.e. the cursor the
+	// client passes as before_seq to ask for the page before this one.
+	OldestSeq int64
+	// HasMore reports whether any message older than this page exists.
+	HasMore bool
+}
+
+// windowByMainThread returns the tail of messages containing the newest `limit`
+// main-thread messages, plus every sibling-thread message inside that range.
+//
+// Counting the window across every thread makes a page of a spawn-heavy chat
+// almost entirely spawn messages, which render collapsed inside their tool
+// call rather than in the transcript — so a full page loads and the visible
+// conversation barely moves. Below one cursor in a real chat there were 5,675
+// messages chat-wide but only 781 on the main thread, so a 200-message page
+// advanced the transcript by ~27 rows. Counting the MAIN thread and carrying
+// siblings along keeps both the transcript's N rows and the spawn messages
+// the tool-call previews render from.
+//
+// messages must be sorted by seq ascending. mainThreadID == "" falls back to
+// a plain newest-N cut. If limit <= 0 or there are already at most `limit`
+// messages, messages is returned unchanged.
+func windowByMainThread(messages []*db.Message, mainThreadID string, limit int) []*db.Message {
+	if limit <= 0 || len(messages) <= limit {
+		return messages
+	}
+	if mainThreadID == "" {
+		return messages[len(messages)-limit:]
+	}
+	// Walk back until we have `limit` main-thread messages, then cut there —
+	// sibling messages above that point come along for free.
+	mainSeen, cutoff := 0, -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].ThreadID == mainThreadID {
+			mainSeen++
+			if mainSeen == limit {
+				cutoff = i
+				break
+			}
+		}
+	}
+	if cutoff > 0 {
+		return messages[cutoff:]
+	}
+	// cutoff < 0 means the remaining history holds fewer than `limit`
+	// main-thread messages; return all of it.
+	return messages
+}
+
+// paginateBySeq narrows a seq-ascending message slice to one page and reports
+// the cursor facts for it.
+//
+// hasMore is derived by comparing the page's oldest seq against the oldest seq
+// in the whole chat, which is the only formulation that answers the question the
+// client is actually asking ("is there anything before what I'm holding?").
+//
+// The previous implementation was `len(messages) < totalCount || beforeSeq > 0`
+// with totalCount taken AFTER the before_seq filter. Both halves were wrong.
+// totalCount measured the already-filtered set, so it shrank in step with the
+// slice it was compared against; and `beforeSeq > 0` forced hasMore true for
+// every paginated request, so scrollback could never terminate. Together they
+// made the client unable to distinguish "more history exists" from "you have
+// reached the beginning" — the user-visible symptom being a chat that refuses
+// to load older messages no matter how far you scroll.
+//
+// The page size is counted in MAIN-THREAD messages via windowByMainThread; see
+// its doc comment for why.
+//
+// messages must already be sorted by seq ascending.
+func paginateBySeq(messages []*db.Message, beforeSeq int64, recentLimit int, mainThreadID string) ([]*db.Message, messagePage) {
+	if len(messages) == 0 {
+		return messages, messagePage{}
+	}
+
+	// The oldest seq the chat has, captured before either filter runs.
+	chatOldestSeq := messages[0].Seq
+
+	if beforeSeq > 0 {
+		filtered := make([]*db.Message, 0, len(messages))
+		for _, msg := range messages {
+			if msg.Seq < beforeSeq {
+				filtered = append(filtered, msg)
+			}
+		}
+		messages = filtered
+	}
+
+	// Messages are oldest-first, so the most recent N are at the end.
+	messages = windowByMainThread(messages, mainThreadID, recentLimit)
+
+	if len(messages) == 0 {
+		// Paginated past the beginning: nothing to return and nothing older.
+		return messages, messagePage{}
+	}
+
+	oldest := messages[0].Seq
+	return messages, messagePage{
+		OldestSeq: oldest,
+		HasMore:   oldest > chatOldestSeq,
+	}
 }

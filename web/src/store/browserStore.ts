@@ -19,7 +19,6 @@ export interface BrowserTab {
 interface BrowserState {
   tabs: BrowserTab[];
   activeTabId: string | null;
-  isOpen: boolean;
 
   // Actions
   createTab: (worktreeId: string, url?: string, projectId?: string, paneId?: string) => Promise<string>;
@@ -39,11 +38,6 @@ interface BrowserState {
   goBack: (id: string) => void;
   goForward: (id: string) => void;
   reload: (id: string) => void;
-  toggleBrowser: () => void; // Show/hide the browser panel
-  showBrowser: () => void; // Expand/show the browser panel
-  hideBrowser: () => void; // Collapse/hide the browser panel
-  openBrowser: () => void; // Alias for showBrowser
-  closeBrowser: () => void; // Alias for hideBrowser
 }
 
 // Define what we want to persist
@@ -54,7 +48,6 @@ export const useBrowserStore = create(
     (set, get) => ({
       tabs: [],
       activeTabId: null,
-      isOpen: false,
 
       createTab: async (worktreeId: string, url?: string, projectId?: string, paneId?: string) => {
         // If no URL provided, use the default page from settings
@@ -233,23 +226,6 @@ export const useBrowserStore = create(
         // Reload is handled by webview element directly
       },
 
-      toggleBrowser: () => {
-        set((state) => ({ isOpen: !state.isOpen }));
-        logger.info("[BrowserStore] Toggled browser panel", { isOpen: !get().isOpen });
-      },
-
-      showBrowser: () => {
-        set({ isOpen: true });
-        logger.info("[BrowserStore] Showed browser panel");
-      },
-
-      hideBrowser: () => {
-        set({ isOpen: false });
-        logger.info("[BrowserStore] Hid browser panel");
-      },
-
-      openBrowser: () => get().showBrowser(),
-      closeBrowser: () => get().hideBrowser(),
     }),
     {
       name: "browser-storage",

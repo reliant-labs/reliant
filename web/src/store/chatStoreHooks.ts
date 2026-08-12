@@ -104,6 +104,18 @@ export function useChatMessages(chatId: string | undefined): Message[] {
 }
 
 /**
+ * Scroll-back paging state for a chat's message list.
+ *
+ * `hasOlder` is the server's has_more from the bounded initial snapshot, kept
+ * on the message envelope (see message-queries.ts). `isLoadingOlder` is local
+ * to the caller: the fetch is an imperative store action, not a query, so the
+ * in-flight flag is owned by whoever awaits it (see ChatContainer).
+ */
+export function useHasOlderMessages(chatId: string | undefined): boolean {
+  return useMessages(chatId).data?.hasMore ?? false;
+}
+
+/**
  * Get the normalized tool-result index for a chat (tool_call_id -> result).
  * Tool results arrive as separate TOOL messages; the store keeps them here so
  * consumers resolve a tool call's result by id instead of relying on results

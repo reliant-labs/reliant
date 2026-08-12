@@ -72,10 +72,10 @@ func (a *ValidateThreadOwnershipActivity) Execute(ctx context.Context, input Val
 	}
 
 	// Check if the thread belongs to the expected chat
-	if thread.ConversationID != input.ExpectedChatID {
+	if thread.ChatID != input.ExpectedChatID {
 		logger.Warn("[ValidateThreadOwnership] Thread belongs to different chat",
 			"threadID", input.ThreadID,
-			"threadChatID", thread.ConversationID,
+			"threadChatID", thread.ChatID,
 			"expectedChatID", input.ExpectedChatID)
 		return ValidateThreadOwnershipOutput{
 			Valid:        false,
@@ -85,7 +85,7 @@ func (a *ValidateThreadOwnershipActivity) Execute(ctx context.Context, input Val
 
 	logger.Info("[ValidateThreadOwnership] Thread ownership validated successfully",
 		"threadID", input.ThreadID,
-		"chatID", thread.ConversationID)
+		"chatID", thread.ChatID)
 
 	return ValidateThreadOwnershipOutput{
 		Valid: true,

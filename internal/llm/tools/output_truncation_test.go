@@ -126,7 +126,6 @@ func TestViewToolLongLineTruncation(t *testing.T) {
 	})
 }
 
-
 // TestTruncationMessagesContainGuidance tests that truncation messages include actionable hints
 func TestTruncationMessagesContainGuidance(t *testing.T) {
 	t.Run("View truncation message mentions offset", func(t *testing.T) {

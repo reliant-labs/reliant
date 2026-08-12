@@ -1,0 +1,260 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// ConnectorService manages connector grants: the stored consent that lets a
+// third-party MCP client (ChatGPT, Claude, and their mobile apps) run tools
+// inside one of the user's cloud workspaces.
+//
+// Every RPC here is user-JWT-authed and scoped to the caller. The connector
+// credentials these RPCs mint authenticate a different surface entirely — the
+// MCP endpoint at /mcp — and are never accepted here: you create a connector
+// from a logged-in session, and the connector cannot mint or widen itself.
+//
+// The value is mobile. A phone cannot spawn a local MCP server, so a hosted
+// daemon is the only way to give a phone-based assistant a real shell and
+// filesystem.
+service ConnectorService {
+  // CreateConnector mints a connector credential bound to one daemon.
+  // Returns the raw credential exactly once — it is stored only as a hash and
+  // is unrecoverable afterward.
+  rpc CreateConnector(CreateConnectorRequest) returns (CreateConnectorResponse) {}
+
+  // ListConnectors returns the caller's connectors, including revoked ones so
+  // the UI can show history. Credentials are never returned.
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {}
+
+  // RevokeConnector marks a connector revoked. It stops working on its very
+  // next request; sessions are not allowed to outlive revocation.
+  rpc RevokeConnector(RevokeConnectorRequest) returns (RevokeConnectorResponse) {}
+
+  // ListConnectorActivity returns the audit log — what connectors actually
+  // did, including refused attempts. A burst of denials is the signal that a
+  // connector has been talked into trying something it should not.
+  rpc ListConnectorActivity(ListConnectorActivityRequest) returns (ListConnectorActivityResponse) {}
+
+  // ListAvailableTools returns the tool catalog a connector can be granted,
+  // so the UI does not hardcode a list that drifts from the server's.
+  rpc ListAvailableTools(ListAvailableToolsRequest) returns (ListAvailableToolsResponse) {}
+
+  // AuthorizeClient records which connector an OAuth client may act through.
+  //
+  // This is the consent decision. An OAuth token identifies a user, not a
+  // grant; without this the server would have to guess which of the user's
+  // connectors a client meant, and a wrong guess hands an application
+  // authority its user never intended.
+  //
+  // Passing an existing connector_id binds to it. Passing new_connector
+  // creates one first, so consent and connector creation are a single step
+  // rather than a detour through settings.
+  rpc AuthorizeClient(AuthorizeClientRequest) returns (AuthorizeClientResponse) {}
+
+  // ListAuthorizedClients returns the applications acting through the caller's
+  // connectors, so a user can see what is connected.
+  rpc ListAuthorizedClients(ListAuthorizedClientsRequest) returns (ListAuthorizedClientsResponse) {}
+
+  // RevokeClientAuthorization disconnects one application. The connector
+  // survives, since it may serve several applications.
+  rpc RevokeClientAuthorization(RevokeClientAuthorizationRequest) returns (RevokeClientAuthorizationResponse) {}
+}
+
+message AuthorizeClientRequest {
+  // client_id identifies the requesting application, as supplied by the
+  // consent redirect.
+  string client_id = 1;
+
+  // client_name is shown in settings so a user can recognize what they
+  // authorized.
+  string client_name = 2;
+
+  // connector_id binds to an existing connector. Mutually exclusive with
+  // new_connector.
+  optional string connector_id = 3;
+
+  // new_connector creates a connector as part of consent, using the same
+  // fields as CreateConnector so the consent screen and the settings editor
+  // stay one vocabulary rather than two that can drift.
+  optional CreateConnectorRequest new_connector = 4;
+}
+
+message AuthorizeClientResponse {
+  Connector connector = 1;
+
+  // credential is populated ONLY when a connector was created here, and only
+  // once. An OAuth client does not need it — it authenticates with its own
+  // token — but it is returned so a user who wants a fallback credential can
+  // copy it while it exists.
+  string credential = 2;
+}
+
+message ListAuthorizedClientsRequest {}
+
+// AuthorizedClient is one application acting through one connector.
+message AuthorizedClient {
+  string client_id = 1;
+  string client_name = 2;
+  string connector_id = 3;
+  string connector_name = 4;
+  string authorized_at = 5;
+}
+
+message ListAuthorizedClientsResponse {
+  repeated AuthorizedClient clients = 1;
+}
+
+message RevokeClientAuthorizationRequest {
+  string client_id = 1;
+}
+
+message RevokeClientAuthorizationResponse {
+  bool revoked = 1;
+}
+
+// ConnectorExecMode controls shell access, the most dangerous thing a grant
+// can confer.
+enum ConnectorExecMode {
+  // Unspecified is treated as DENY. The safe reading of an unset field.
+  CONNECTOR_EXEC_MODE_UNSPECIFIED = 0;
+
+  // No shell execution at all.
+  CONNECTOR_EXEC_MODE_DENY = 1;
+
+  // Only commands whose first word is in exec_allowlist. A guard rail against
+  // casual damage, not a security boundary — any allowed interpreter reaches
+  // everything. The real boundary is the workspace pod.
+  CONNECTOR_EXEC_MODE_ALLOWLIST = 2;
+
+  // Any shell command. Only appropriate for a disposable per-user cloud
+  // workspace, never for a daemon on the user's own machine.
+  CONNECTOR_EXEC_MODE_UNRESTRICTED = 3;
+}
+
+// Connector is a grant as shown to the user. It deliberately carries no
+// credential material.
+message Connector {
+  string id = 1;
+  string daemon_id = 2;
+  string name = 3;
+
+  // token_prefix is the visible leading fragment (e.g. "rlnt_conn_AbCdEfGh"),
+  // enough to identify a credential without exposing it.
+  string token_prefix = 4;
+
+  repeated string allowed_tools = 5;
+  string path_root = 6;
+  ConnectorExecMode exec_mode = 7;
+  repeated string exec_allowlist = 8;
+
+  optional string expires_at = 9;
+  optional string last_used_at = 10;
+  optional string revoked_at = 11;
+  string created_at = 12;
+}
+
+message CreateConnectorRequest {
+  // daemon_id is required: a connector is bound to exactly one workspace.
+  // There is deliberately no "all my daemons" form.
+  string daemon_id = 1;
+
+  string name = 2;
+
+  // allowed_tools names MCP tools (see ListAvailableTools). Must be non-empty.
+  repeated string allowed_tools = 3;
+
+  // path_root confines filesystem access. Must be non-empty; an empty root
+  // means no access rather than unrestricted access.
+  string path_root = 4;
+
+  ConnectorExecMode exec_mode = 5;
+  repeated string exec_allowlist = 6;
+
+  // expires_at is an optional RFC3339 bound on the grant.
+  optional string expires_at = 7;
+}
+
+message CreateConnectorResponse {
+  Connector connector = 1;
+
+  // credential is the raw value, returned exactly once. The caller must show
+  // it to the user immediately; it cannot be retrieved again.
+  string credential = 2;
+
+  // mcp_url is the endpoint to paste into the third-party client.
+  string mcp_url = 3;
+}
+
+message ListConnectorsRequest {}
+
+message ListConnectorsResponse {
+  repeated Connector connectors = 1;
+}
+
+message RevokeConnectorRequest {
+  string id = 1;
+}
+
+message RevokeConnectorResponse {
+  // revoked is false when the connector was already revoked, distinguishing a
+  // no-op from a change without making a repeated revoke an error.
+  bool revoked = 1;
+}
+
+// ConnectorActivity is one recorded tool invocation.
+message ConnectorActivity {
+  string id = 1;
+  string grant_id = 2;
+  string daemon_id = 3;
+  string tool_name = 4;
+  string command_type = 5;
+  string arguments = 6;
+
+  // denied marks an attempt the policy refused.
+  bool denied = 7;
+
+  string error_message = 8;
+  int32 duration_ms = 9;
+  string created_at = 10;
+
+  // status is "started", "completed", or "denied". A row left in "started"
+  // means the call was dispatched to the workspace and its outcome was never
+  // recorded — the server died mid-command — so the command may or may not
+  // have run. Surfaced rather than hidden, because that ambiguity is exactly
+  // what someone reviewing an incident needs to see.
+  string status = 11;
+}
+
+message ListConnectorActivityRequest {
+  // grant_id optionally narrows the log to one connector.
+  optional string grant_id = 1;
+
+  // limit caps the rows returned. Server-clamped.
+  optional int32 limit = 2;
+}
+
+message ListConnectorActivityResponse {
+  repeated ConnectorActivity activity = 1;
+}
+
+message ListAvailableToolsRequest {}
+
+// ConnectorTool describes one grantable tool for the consent UI.
+message ConnectorTool {
+  string name = 1;
+  string description = 2;
+
+  // mutating marks tools that change state, so the UI can label them. It does
+  // not drive the default selection — new grants start with every tool
+  // selected; see the consent screen.
+  bool mutating = 3;
+
+  // needs_exec marks tools that run shell commands, gated additionally by
+  // exec_mode.
+  bool needs_exec = 4;
+}
+
+message ListAvailableToolsResponse {
+  repeated ConnectorTool tools = 1;
+}

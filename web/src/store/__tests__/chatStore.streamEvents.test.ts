@@ -77,13 +77,13 @@ function nodeExec(
 }
 
 function toolCall(
-  contentBlockId: string,
+  toolCallId: string,
   status: string,
   toolName = "bash",
 ): ChatUpdate {
   return {
     update_type: "tool_call",
-    content_block_id: contentBlockId,
+    tool_call_id: toolCallId,
     tool_name: toolName,
     status,
     node_id: "",

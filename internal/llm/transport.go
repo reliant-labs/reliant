@@ -50,7 +50,31 @@ type dnsCacheEntry struct {
 	expires time.Time
 }
 
-// ResilientTransport returns an *http.Transport hardened against DNS failures.
+// sharedResilientTransport is the ONE transport — and therefore the one
+// connection pool — every LLM client in the process uses.
+//
+// It is a process-wide singleton because an *http.Transport IS the connection
+// pool: a per-call transport pools nothing, since it is garbage two seconds
+// after the call ends. That made MaxIdleConnsPerHost below dead config and
+// forced a fresh TCP + TLS handshake for every single LLM request (1,271 of
+// them in one afternoon's logs), which is both wasteful and the reason a
+// single transient network event could kill every in-flight stream at once —
+// observed as idle-timeout/EOF failures arriving in the same SECOND across
+// unrelated chats and workflows.
+//
+// One pool is correct even with several providers configured. Go's Transport
+// keys its idle connections by (scheme, host, proxy), so Anthropic, OpenAI and
+// Gemini traffic never share a connection with each other — they share only
+// the pool's bookkeeping and the DNS cache. MaxIdleConnsPerHost is per-host,
+// so providers cannot starve one another either.
+//
+// Safe to share: http.Transport is explicitly documented as safe for
+// concurrent use by multiple goroutines, and no caller mutates the returned
+// value (they wrap it in otelhttp/idle-timeout decorators, which is additive).
+var sharedResilientTransport = newResilientTransport()
+
+// ResilientTransport returns the shared *http.Transport hardened against DNS
+// failures.
 //
 // Three layers of defense:
 //  1. Retry: DNS failures are retried 3 times with the system resolver (handles transient packet loss).
@@ -59,7 +83,18 @@ type dnsCacheEntry struct {
 //
 // Also increases MaxIdleConnsPerHost from Go's default of 2 to 10, promoting
 // HTTP/2 connection reuse and reducing the frequency of DNS lookups.
+//
+// Callers MUST NOT mutate the returned transport — it is shared process-wide.
+// A caller needing different transport settings should build its own with
+// newResilientTransport.
 func ResilientTransport() *http.Transport {
+	return sharedResilientTransport
+}
+
+// newResilientTransport builds a fresh resilient transport with its own
+// connection pool. Prefer ResilientTransport; this exists for the singleton
+// above and for tests that need pool isolation.
+func newResilientTransport() *http.Transport {
 	base := http.DefaultTransport.(*http.Transport).Clone()
 
 	// Promote connection reuse — Go's default of 2 causes frequent connection

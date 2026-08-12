@@ -6,8 +6,20 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
+
+// DefaultToolTimeout bounds a single tool call. It is the hard ceiling every
+// blocking tool must stay under: the execution context cancels the call when
+// it elapses, which surfaces to the model as an error rather than as a result.
+//
+// Sized for the blocking waiters (bash_wait) rather than for a typical
+// command, because those are what press against it. bash_wait deliberately
+// returns a minute early so it can answer "still running, call again" instead
+// of being cancelled mid-flight, so this is defined in terms of that budget —
+// the two cannot drift apart.
+const DefaultToolTimeout = tools.MaxBlockingToolWait + time.Minute
 
 // ToolExecutor defines the interface for executing tools
 // Implementation: RemoteExecutor (DB-backed queue + daemon gRPC stream delivery)

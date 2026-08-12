@@ -186,6 +186,7 @@ export function OnboardingChecklist() {
     setPanelState,
     totalCompleted,
     completionPercentage,
+    allRequiredComplete,
   } = useOnboardingChecklistStore();
 
   const navigate = useNavigate();
@@ -204,6 +205,11 @@ export function OnboardingChecklist() {
 
   if (panelState === "dismissed") return null;
 
+  // A finished guide retires itself. Bonus items are genuinely optional, so
+  // clearing the required set is what "done" means — otherwise the panel sat
+  // in the corner at full progress with nothing left to act on.
+  if (allRequiredComplete()) return null;
+
   const completed = totalCompleted();
   const total = CHECKLIST_ITEMS.length;
   const percentage = completionPercentage();
@@ -211,25 +217,38 @@ export function OnboardingChecklist() {
   // ─── Collapsed pill ───────────────────────────────────────────────────
 
   if (panelState === "collapsed") {
+    // The pill carries its own dismiss. Without one, collapsing was a
+    // one-way door: the only way back out was to expand the panel again and
+    // hunt for the footer link.
     return (
-      <button
-        onClick={() => setPanelState("expanded")}
+      <div
         className={cn(
           "fixed bottom-4 right-4 z-40",
-          "flex items-center gap-2.5 px-5 py-2.5 font-sans",
+          "flex items-center gap-1.5 pl-5 pr-2 py-2.5 font-sans",
           "bg-primary text-primary-foreground rounded-full",
-          "shadow-lg shadow-primary/25 cursor-pointer",
-          "hover:bg-primary/90 transition-colors",
+          "shadow-lg shadow-primary/25",
         )}
       >
-        <ProgressRing percentage={percentage} size={24} strokeWidth={2.5} variant="inverted" />
-        <span className="text-sm font-medium">
-          Setup Guide
-        </span>
-        <span className="text-xs text-primary-foreground/70 tabular-nums">
-          {completed}/{total}
-        </span>
-      </button>
+        <button
+          onClick={() => setPanelState("expanded")}
+          className="flex items-center gap-2.5 cursor-pointer hover:opacity-90 transition-opacity"
+        >
+          <ProgressRing percentage={percentage} size={24} strokeWidth={2.5} variant="inverted" />
+          <span className="text-sm font-medium">
+            Setup Guide
+          </span>
+          <span className="text-xs text-primary-foreground/70 tabular-nums">
+            {completed}/{total}
+          </span>
+        </button>
+        <button
+          onClick={() => setPanelState("dismissed")}
+          className="p-1 rounded-full text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15 transition-colors"
+          aria-label="Dismiss setup guide"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
     );
   }
 
@@ -251,13 +270,26 @@ export function OnboardingChecklist() {
           <h3 className="text-sm font-semibold text-foreground">
             Setup Guide
           </h3>
-          <button
-            onClick={() => setPanelState("collapsed")}
-            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
-            aria-label="Collapse setup guide"
-          >
-            <X className="size-4" />
-          </button>
+          {/* Two distinct affordances. ✕ means "go away" — the gesture users
+              already expect — and the chevron minimises to the pill. Wiring ✕
+              to collapse made the guide impossible to get rid of by the one
+              control people actually reach for. */}
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => setPanelState("collapsed")}
+              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              aria-label="Collapse setup guide"
+            >
+              <ChevronDown className="size-4" />
+            </button>
+            <button
+              onClick={() => setPanelState("dismissed")}
+              className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+              aria-label="Dismiss setup guide"
+            >
+              <X className="size-4" />
+            </button>
+          </div>
         </div>
         <Progress
           value={percentage}
@@ -319,14 +351,9 @@ export function OnboardingChecklist() {
         )}
       </div>
 
-      {/* Footer */}
-      <div className="px-4 py-3 border-t border-border/30 flex items-center justify-between">
-        <button
-          onClick={() => setPanelState("dismissed")}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          Dismiss guide
-        </button>
+      {/* Footer. Dismissal now lives on the header ✕ where users look for it,
+          so the old grey "Dismiss guide" text link is gone. */}
+      <div className="px-4 py-3 border-t border-border/30 flex items-center justify-end">
         <a
           href="https://cal.com/team/reliant/onboarding"
           target="_blank"

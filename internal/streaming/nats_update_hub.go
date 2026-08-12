@@ -93,6 +93,10 @@ func (h *NATSUpdateHub[T]) Publish(ctx context.Context, event UpdateEvent[T]) {
 }
 
 // Subscribe creates a new subscription for events matching the given key.
+//
+// Delivery is SYNCHRONOUS (SubscribeSync + a consume goroutine), not an async
+// nats.Handler callback, so that exactly one goroutine ever sends on
+// sub.events and can therefore own its close. See consumeLoop.
 func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubscription[T] {
 	id := h.nextID.Add(1)
 	subCtx, cancel := context.WithCancel(ctx)
@@ -110,38 +114,18 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 	keySubs.(*sync.Map).Store(id, sub)
 
 	subject := h.subjectPrefix + "." + key
-	natsSub, err := h.nc.Subscribe(subject, func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.consume.update")
-		defer span.End()
-
-		observability.NATSReceiveTotal.WithLabelValues("updates").Inc()
-
-		var event UpdateEvent[T]
-		if err := json.Unmarshal(msg.Data, &event); err != nil {
-			logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to unmarshal event",
-				"subject", subject,
-				"error", err)
-			return
-		}
-
-		select {
-		case sub.events <- event:
-		default:
-			observability.StreamingErrorsTotal.WithLabelValues("slow_consumer").Inc()
-			logging.Warn("[NATSUpdateHub:"+h.name+"] Dropped event (slow consumer)",
-				"key", truncateKey(key),
-				"subscriberID", id,
-				"seq", event.SequenceNumber)
-		}
-	})
+	natsSub, err := h.nc.SubscribeSync(subject)
 	if err != nil {
 		observability.StreamingErrorsTotal.WithLabelValues("subscribe").Inc()
 		logging.Error("[NATSUpdateHub:"+h.name+"] Failed to subscribe",
 			"subject", subject,
 			"error", err)
-		// Return a dead subscription — events channel will never receive
-		close(sub.events)
+		// Return a dead subscription — events channel will never receive.
+		// No consume loop was started, so nothing can send on sub.events and
+		// closing it here is the one safe exception to the ownership rule.
+		h.deregister(sub)
 		cancel()
+		close(sub.events)
 		return sub
 	}
 	sub.natsSub = natsSub
@@ -150,13 +134,67 @@ func (h *NATSUpdateHub[T]) Subscribe(ctx context.Context, key string) UpdateSubs
 		"subject", subject,
 		"subscriberID", id)
 
-	// Clean up on context cancellation
-	go func() {
-		<-subCtx.Done()
-		h.unsubscribe(sub)
-	}()
+	go h.consumeLoop(subCtx, sub)
 
 	return sub
+}
+
+// consumeLoop drains the subscription's NATS messages onto sub.events until
+// the subscription context is cancelled.
+//
+// It is the SOLE sender on sub.events, so it owns the close: deregister
+// (idempotent) unhooks the subscriber and tears down the NATS subscription,
+// then — because the loop has returned and no send is in flight — we close
+// the channel exactly once. unsubscribe() only signals via cancel; it never
+// closes, so a NATS delivery can't race a close and panic with "send on
+// closed channel". This is the same ownership rule NATSHub.consumeLoop
+// (nats.go) follows; the async-callback form this replaced had no owning
+// goroutine and did panic, because nats.Subscription.Unsubscribe does not
+// wait for a callback already dispatched into waitForMsgs.
+func (h *NATSUpdateHub[T]) consumeLoop(ctx context.Context, sub *natsUpdateSubscription[T]) {
+	defer func() {
+		h.deregister(sub)
+		close(sub.events)
+	}()
+
+	subject := h.subjectPrefix + "." + sub.key
+
+	for {
+		msg, err := sub.natsSub.NextMsgWithContext(ctx)
+		if err != nil {
+			// Context cancelled, subscription unsubscribed, or connection
+			// closed — all normal teardown. Exit and run the deferred close.
+			return
+		}
+
+		func() {
+			_, span := observability.StartNATSSpan(context.Background(), msg, "nats.consume.update")
+			defer span.End()
+
+			observability.NATSReceiveTotal.WithLabelValues("updates").Inc()
+
+			var event UpdateEvent[T]
+			if err := json.Unmarshal(msg.Data, &event); err != nil {
+				logging.Warn("[NATSUpdateHub:"+h.name+"] Failed to unmarshal event",
+					"subject", subject,
+					"error", err)
+				return
+			}
+
+			// Non-blocking by design: these events are already durable in the
+			// database, so a slow consumer misses a notification and catches
+			// up from the DB rather than stalling the reader.
+			select {
+			case sub.events <- event:
+			default:
+				observability.StreamingErrorsTotal.WithLabelValues("slow_consumer").Inc()
+				logging.Warn("[NATSUpdateHub:"+h.name+"] Dropped event (slow consumer)",
+					"key", truncateKey(sub.key),
+					"subscriberID", sub.id,
+					"seq", event.SequenceNumber)
+			}
+		}()
+	}
 }
 
 // Close drains the NATS connection (caller is responsible for connection lifecycle
@@ -174,11 +212,23 @@ func (h *NATSUpdateHub[T]) Close() error {
 	return nil
 }
 
+// unsubscribe tears the subscription down by CANCELLING it — it deliberately
+// does not touch sub.events. Cancelling unblocks the consume loop's
+// NextMsgWithContext, so the loop returns and performs the deregister + close
+// itself (see consumeLoop). Closing here instead would race an in-flight send
+// from the consume loop and panic.
+//
+// Idempotent and safe to call from any goroutine, including after the
+// subscription has already torn itself down.
 func (h *NATSUpdateHub[T]) unsubscribe(sub *natsUpdateSubscription[T]) {
-	sub.once.Do(func() {
-		// Cancel context
-		sub.cancelFn()
+	sub.cancelFn()
+}
 
+// deregister unhooks sub from NATS and from the hub's subscriber index. Called
+// only from the consume loop's teardown (and from Subscribe's error path,
+// where no loop exists). Idempotent via sub.once.
+func (h *NATSUpdateHub[T]) deregister(sub *natsUpdateSubscription[T]) {
+	sub.once.Do(func() {
 		// Unsubscribe from NATS
 		if sub.natsSub != nil {
 			_ = sub.natsSub.Unsubscribe()
@@ -197,8 +247,6 @@ func (h *NATSUpdateHub[T]) unsubscribe(sub *natsUpdateSubscription[T]) {
 				h.subscribers.Delete(sub.key)
 			}
 		}
-
-		close(sub.events)
 
 		logging.Debug("[NATSUpdateHub:"+h.name+"] Subscriber unsubscribed",
 			"key", truncateKey(sub.key),

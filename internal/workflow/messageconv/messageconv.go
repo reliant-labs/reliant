@@ -23,13 +23,75 @@ func ProtoMessageRoleToModelRole(role reliantv1.MessageRole) message.MessageRole
 	return message.MessageRole(strings.ToLower(name))
 }
 
-// DbMessageToMessage converts a DB message to a message.Message.
+// DbMessageToMessage converts a DB message to a message.Message, loading the
+// message's content blocks and context window on demand.
+//
+// Converting a whole thread this way is one round trip per message per lookup.
+// Prefer DbMessagesToMessages, which fetches both in bulk.
 func DbMessageToMessage(ctx context.Context, dbMsg *db.Message, repo db.Repository) (message.Message, error) {
 	blocks, err := repo.ListContentBlocks(ctx, dbMsg.ID)
 	if err != nil {
 		return message.Message{}, fmt.Errorf("failed to load content blocks: %w", err)
 	}
 
+	cw, err := repo.GetContextWindow(ctx, dbMsg.ContextWindowID)
+	if err != nil {
+		return message.Message{}, fmt.Errorf("failed to get context window for message %s: %w", dbMsg.ID, err)
+	}
+
+	return buildMessage(ctx, dbMsg, blocks, cw, repo), nil
+}
+
+// DbMessagesToMessages converts a batch of DB messages, fetching content blocks
+// and context windows in bulk rather than per message.
+//
+// The per-message path issues two queries for every message, so a long thread
+// becomes hundreds of sequential round trips. That is slow, and it holds the
+// caller's context open across all of them — which turns any mid-flight
+// cancellation into a failure of the whole history load.
+func DbMessagesToMessages(ctx context.Context, dbMessages []*db.Message, repo db.Repository) ([]message.Message, error) {
+	if len(dbMessages) == 0 {
+		return []message.Message{}, nil
+	}
+
+	messageIDs := make([]string, 0, len(dbMessages))
+	for _, dbMsg := range dbMessages {
+		messageIDs = append(messageIDs, dbMsg.ID)
+	}
+
+	allBlocks, err := repo.ListContentBlocksForMessages(ctx, messageIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load content blocks: %w", err)
+	}
+
+	blocksByMessage := make(map[string][]*db.MessageContentBlock, len(dbMessages))
+	for _, block := range allBlocks {
+		blocksByMessage[block.MessageID] = append(blocksByMessage[block.MessageID], block)
+	}
+
+	// Context windows repeat heavily across a thread, so resolve each distinct
+	// one once.
+	windows := make(map[string]*db.ContextWindow)
+	for _, dbMsg := range dbMessages {
+		if _, seen := windows[dbMsg.ContextWindowID]; seen {
+			continue
+		}
+		cw, err := repo.GetContextWindow(ctx, dbMsg.ContextWindowID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get context window for message %s: %w", dbMsg.ID, err)
+		}
+		windows[dbMsg.ContextWindowID] = cw
+	}
+
+	msgs := make([]message.Message, 0, len(dbMessages))
+	for _, dbMsg := range dbMessages {
+		msgs = append(msgs, buildMessage(ctx, dbMsg, blocksByMessage[dbMsg.ID], windows[dbMsg.ContextWindowID], repo))
+	}
+	return msgs, nil
+}
+
+// buildMessage assembles a message.Message from already-loaded rows.
+func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageContentBlock, cw *db.ContextWindow, repo db.Repository) message.Message {
 	parts := make([]message.ContentPart, 0, len(blocks))
 	for _, block := range blocks {
 		part := ContentBlockToPart(ctx, dbMsg.ChatID, block, repo)
@@ -40,10 +102,6 @@ func DbMessageToMessage(ctx context.Context, dbMsg *db.Message, repo db.Reposito
 
 	// Get context_sequence from context_window for API compatibility
 	var contextSequence int64
-	cw, err := repo.GetContextWindow(ctx, dbMsg.ContextWindowID)
-	if err != nil {
-		return message.Message{}, fmt.Errorf("failed to get context window for message %s: %w", dbMsg.ID, err)
-	}
 	if cw != nil {
 		contextSequence = int64(cw.Sequence)
 	}
@@ -62,7 +120,7 @@ func DbMessageToMessage(ctx context.Context, dbMsg *db.Message, repo db.Reposito
 		msg.TokenCount = int64(*dbMsg.TokenCount)
 	}
 
-	return msg, nil
+	return msg
 }
 
 // ContentBlockToPart converts a content block to a message part.

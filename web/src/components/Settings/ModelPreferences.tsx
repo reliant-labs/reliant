@@ -35,6 +35,8 @@ const THINKING_LEVELS = [
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
   { value: "xhigh", label: "Extra High" },
+  { value: "max", label: "Max" },
+  { value: "ultra", label: "Ultra" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -72,7 +74,8 @@ export async function loadTagModelConfigs(): Promise<
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function saveTagConfig(tag: string, config: TagModelConfig) {
+/** Save a tag's model config to settings. Callable outside React (e.g. the mobile default-model picker). */
+export async function saveTagConfig(tag: string, config: TagModelConfig) {
   const key = tagSettingsKey(tag);
   const isEmpty =
     !config.model_id &&

@@ -9,8 +9,8 @@
 //
 // See proto/controlplane/v1/public/README.md for stability/versioning policy.
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Invoice, ManagedReliantAccess, Plan, ReliantEntitlement, ReliantOverview, Subscription, UsageSummary, WalletOverview, WalletTopup } from "./shared_pb";
@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/public/billing_service.proto.
  */
 export const file_controlplane_v1_public_billing_service: GenFile = /*@__PURE__*/
-  fileDesc("Cixjb250cm9scGxhbmUvdjEvcHVibGljL2JpbGxpbmdfc2VydmljZS5wcm90bxIPY29udHJvbHBsYW5lLnYxIiQKIkJpbGxpbmdJc3N1ZU15UmVsaWFudEFQSUtleVJlcXVlc3QiPAojQmlsbGluZ0lzc3VlTXlSZWxpYW50QVBJS2V5UmVzcG9uc2USFQoNcGxhaW50ZXh0X2tleRgBIAEoCSI6ChBMaXN0UGxhbnNSZXF1ZXN0EhcKCnByb2R1Y3RfaWQYASABKAlIAIgBAUINCgtfcHJvZHVjdF9pZCI5ChFMaXN0UGxhbnNSZXNwb25zZRIkCgVwbGFucxgBIAMoCzIVLmNvbnRyb2xwbGFuZS52MS5QbGFuIiEKDkdldFBsYW5SZXF1ZXN0Eg8KB3BsYW5faWQYASABKAkiNgoPR2V0UGxhblJlc3BvbnNlEiMKBHBsYW4YASABKAsyFS5jb250cm9scGxhbmUudjEuUGxhbiIjCiFHZXRDdXJyZW50VXNlclN1YnNjcmlwdGlvblJlcXVlc3QiWQoiR2V0Q3VycmVudFVzZXJTdWJzY3JpcHRpb25SZXNwb25zZRIzCgxzdWJzY3JpcHRpb24YASABKAsyHS5jb250cm9scGxhbmUudjEuU3Vic2NyaXB0aW9uImMKJ0NyZWF0ZUN1cnJlbnRVc2VyQ2hlY2tvdXRTZXNzaW9uUmVxdWVzdBIPCgdwbGFuX2lkGAEgASgJEhMKC3N1Y2Nlc3NfdXJsGAIgASgJEhIKCmNhbmNlbF91cmwYAyABKAkiQAooQ3JlYXRlQ3VycmVudFVzZXJDaGVja291dFNlc3Npb25SZXNwb25zZRIUCgxjaGVja291dF91cmwYASABKAkiVAojR2V0Q3VycmVudFVzZXJXYWxsZXRPdmVydmlld1JlcXVlc3QSEwoLbGVkZ2VyX3BhZ2UYASABKAUSGAoQbGVkZ2VyX3BhZ2Vfc2l6ZRgCIAEoBSJZCiRHZXRDdXJyZW50VXNlcldhbGxldE92ZXJ2aWV3UmVzcG9uc2USMQoIb3ZlcnZpZXcYASABKAsyHy5jb250cm9scGxhbmUudjEuV2FsbGV0T3ZlcnZpZXciKgooR2V0Q3VycmVudFVzZXJDb21wdXRlU3Vic2NyaXB0aW9uUmVxdWVzdCJgCilHZXRDdXJyZW50VXNlckNvbXB1dGVTdWJzY3JpcHRpb25SZXNwb25zZRIzCgxzdWJzY3JpcHRpb24YASABKAsyHS5jb250cm9scGxhbmUudjEuU3Vic2NyaXB0aW9uImsKKkNyZWF0ZUN1cnJlbnRVc2VyV2FsbGV0VG9wdXBTZXNzaW9uUmVxdWVzdBIUCgxhbW91bnRfY2VudHMYASABKAMSEwoLc3VjY2Vzc191cmwYAiABKAkSEgoKY2FuY2VsX3VybBgDIAEoCSJwCitDcmVhdGVDdXJyZW50VXNlcldhbGxldFRvcHVwU2Vzc2lvblJlc3BvbnNlEisKBXRvcHVwGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLldhbGxldFRvcHVwEhQKDGNoZWNrb3V0X3VybBgCIAEoCSJCCixDcmVhdGVDdXJyZW50VXNlckJpbGxpbmdQb3J0YWxTZXNzaW9uUmVxdWVzdBISCgpyZXR1cm5fdXJsGAEgASgJIkMKLUNyZWF0ZUN1cnJlbnRVc2VyQmlsbGluZ1BvcnRhbFNlc3Npb25SZXNwb25zZRISCgpwb3J0YWxfdXJsGAEgASgJIiAKHkxpc3RDdXJyZW50VXNlckludm9pY2VzUmVxdWVzdCJNCh9MaXN0Q3VycmVudFVzZXJJbnZvaWNlc1Jlc3BvbnNlEioKCGludm9pY2VzGAEgAygLMhguY29udHJvbHBsYW5lLnYxLkludm9pY2UiKAoWR2V0VXNhZ2VTdW1tYXJ5UmVxdWVzdBIOCgZvcmdfaWQYASABKAkiSwoXR2V0VXNhZ2VTdW1tYXJ5UmVzcG9uc2USMAoJc3VtbWFyaWVzGAEgAygLMh0uY29udHJvbHBsYW5lLnYxLlVzYWdlU3VtbWFyeSIoChZHZXRDb21wdXRlVXNhZ2VSZXF1ZXN0Eg4KBm9yZ19pZBgBIAEoCSJgChZDb21wdXRlVXNhZ2VCeVNpemVUaWVyEhEKCXNpemVfdGllchgBIAEoCRIVCg10b3RhbF9taW51dGVzGAIgASgBEhwKFGVzdGltYXRlZF9jb3N0X2NlbnRzGAMgASgBIrACChdHZXRDb21wdXRlVXNhZ2VSZXNwb25zZRIVCg10b3RhbF9taW51dGVzGAEgASgBEhgKEGluY2x1ZGVkX21pbnV0ZXMYAiABKAUSFwoPb3ZlcmFnZV9taW51dGVzGAMgASgBEiQKHGVzdGltYXRlZF9vdmVyYWdlX2Nvc3RfY2VudHMYBCABKAESQwoScGVyX3NpemVfYnJlYWtkb3duGAUgAygLMicuY29udHJvbHBsYW5lLnYxLkNvbXB1dGVVc2FnZUJ5U2l6ZVRpZXISMAoMcGVyaW9kX3N0YXJ0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpwZXJpb2RfZW5kGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIjCiFHZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlcXVlc3QinQEKIkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlUmVzcG9uc2USOAoLZW50aXRsZW1lbnQYASABKAsyIy5jb250cm9scGxhbmUudjEuUmVsaWFudEVudGl0bGVtZW50Ej0KDm1hbmFnZWRfYWNjZXNzGAIgASgLMiUuY29udHJvbHBsYW5lLnYxLk1hbmFnZWRSZWxpYW50QWNjZXNzIicKJVJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1JlcXVlc3QiswEKJlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcxIQCghyZXBhaXJlZBgDIAEoCCJTCiVSb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0EhkKDGdyYWNlX3BlcmlvZBgBIAEoCUgAiAEBQg8KDV9ncmFjZV9wZXJpb2Qi2wEKJlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcxIPCgdyb3RhdGVkGAMgASgIEhAKCHJlcGxhY2VkGAQgASgIEhUKDXBsYWludGV4dF9rZXkYBSABKAkiJgokR2V0Q3VycmVudFVzZXJSZWxpYW50T3ZlcnZpZXdSZXF1ZXN0IlsKJUdldEN1cnJlbnRVc2VyUmVsaWFudE92ZXJ2aWV3UmVzcG9uc2USMgoIb3ZlcnZpZXcYASABKAsyIC5jb250cm9scGxhbmUudjEuUmVsaWFudE92ZXJ2aWV3IjYKI1NldEN1cnJlbnRVc2VyQ29tcHV0ZU92ZXJhZ2VSZXF1ZXN0Eg8KB2VuYWJsZWQYASABKAgiWwokU2V0Q3VycmVudFVzZXJDb21wdXRlT3ZlcmFnZVJlc3BvbnNlEjMKDHN1YnNjcmlwdGlvbhgBIAEoCzIdLmNvbnRyb2xwbGFuZS52MS5TdWJzY3JpcHRpb24ifwoXQ29tcHV0ZVVzYWdlQnlXb3Jrc3BhY2USFAoMd29ya3NwYWNlX2lkGAEgASgJEhYKDndvcmtzcGFjZV9uYW1lGAIgASgJEgwKBHNpemUYAyABKAkSDwoHbWludXRlcxgEIAEoARIXCg9vdmVyYWdlX21pbnV0ZXMYBSABKAEiTQoRQ29tcHV0ZVVzYWdlQnlEYXkSJwoDZGF5GAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdtaW51dGVzGAIgASgBIkMKIUdldEN1cnJlbnRVc2VyQ29tcHV0ZVVzYWdlUmVxdWVzdBITCgZwZXJpb2QYASABKAlIAIgBAUIJCgdfcGVyaW9kIukCCiJHZXRDdXJyZW50VXNlckNvbXB1dGVVc2FnZVJlc3BvbnNlEhgKEGluY2x1ZGVkX21pbnV0ZXMYASABKAUSFAoMdXNlZF9taW51dGVzGAIgASgBEhcKD292ZXJhZ2VfbWludXRlcxgDIAEoARIkChxlc3RpbWF0ZWRfb3ZlcmFnZV9jb3N0X2NlbnRzGAQgASgBEjAKDHBlcmlvZF9zdGFydBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKcGVyaW9kX2VuZBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASPgoMYnlfd29ya3NwYWNlGAcgAygLMiguY29udHJvbHBsYW5lLnYxLkNvbXB1dGVVc2FnZUJ5V29ya3NwYWNlEjIKBmJ5X2RheRgIIAMoCzIiLmNvbnRyb2xwbGFuZS52MS5Db21wdXRlVXNhZ2VCeURheSJAChhHZXRJbnZvaWNlUHJldmlld1JlcXVlc3QSDAoEc2l6ZRgBIAEoCRIWCg5xdWFudGl0eV9kZWx0YRgCIAEoBSJPChlHZXRJbnZvaWNlUHJldmlld1Jlc3BvbnNlEhcKD3Byb3JhdGlvbl9jZW50cxgBIAEoBRIZChFuZXdfbW9udGhseV9jZW50cxgCIAEoBSIjCiFHZXRDdXJyZW50VXNlckJpbGxpbmdFbWFpbFJlcXVlc3QiUwoiR2V0Q3VycmVudFVzZXJCaWxsaW5nRW1haWxSZXNwb25zZRIVCg1iaWxsaW5nX2VtYWlsGAEgASgJEhYKDmZhbGxiYWNrX2VtYWlsGAIgASgJIioKGVVwZGF0ZUJpbGxpbmdFbWFpbFJlcXVlc3QSDQoFZW1haWwYASABKAkiHAoaVXBkYXRlQmlsbGluZ0VtYWlsUmVzcG9uc2Uy/RUKDkJpbGxpbmdTZXJ2aWNlElQKCUxpc3RQbGFucxIhLmNvbnRyb2xwbGFuZS52MS5MaXN0UGxhbnNSZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkxpc3RQbGFuc1Jlc3BvbnNlIgASTgoHR2V0UGxhbhIfLmNvbnRyb2xwbGFuZS52MS5HZXRQbGFuUmVxdWVzdBogLmNvbnRyb2xwbGFuZS52MS5HZXRQbGFuUmVzcG9uc2UiABKHAQoaR2V0Q3VycmVudFVzZXJTdWJzY3JpcHRpb24SMi5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJTdWJzY3JpcHRpb25SZXF1ZXN0GjMuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyU3Vic2NyaXB0aW9uUmVzcG9uc2UiABKZAQogQ3JlYXRlQ3VycmVudFVzZXJDaGVja291dFNlc3Npb24SOC5jb250cm9scGxhbmUudjEuQ3JlYXRlQ3VycmVudFVzZXJDaGVja291dFNlc3Npb25SZXF1ZXN0GjkuY29udHJvbHBsYW5lLnYxLkNyZWF0ZUN1cnJlbnRVc2VyQ2hlY2tvdXRTZXNzaW9uUmVzcG9uc2UiABKoAQolQ3JlYXRlQ3VycmVudFVzZXJCaWxsaW5nUG9ydGFsU2Vzc2lvbhI9LmNvbnRyb2xwbGFuZS52MS5DcmVhdGVDdXJyZW50VXNlckJpbGxpbmdQb3J0YWxTZXNzaW9uUmVxdWVzdBo+LmNvbnRyb2xwbGFuZS52MS5DcmVhdGVDdXJyZW50VXNlckJpbGxpbmdQb3J0YWxTZXNzaW9uUmVzcG9uc2UiABJ+ChdMaXN0Q3VycmVudFVzZXJJbnZvaWNlcxIvLmNvbnRyb2xwbGFuZS52MS5MaXN0Q3VycmVudFVzZXJJbnZvaWNlc1JlcXVlc3QaMC5jb250cm9scGxhbmUudjEuTGlzdEN1cnJlbnRVc2VySW52b2ljZXNSZXNwb25zZSIAEo0BChxHZXRDdXJyZW50VXNlcldhbGxldE92ZXJ2aWV3EjQuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyV2FsbGV0T3ZlcnZpZXdSZXF1ZXN0GjUuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyV2FsbGV0T3ZlcnZpZXdSZXNwb25zZSIAEqIBCiNDcmVhdGVDdXJyZW50VXNlcldhbGxldFRvcHVwU2Vzc2lvbhI7LmNvbnRyb2xwbGFuZS52MS5DcmVhdGVDdXJyZW50VXNlcldhbGxldFRvcHVwU2Vzc2lvblJlcXVlc3QaPC5jb250cm9scGxhbmUudjEuQ3JlYXRlQ3VycmVudFVzZXJXYWxsZXRUb3B1cFNlc3Npb25SZXNwb25zZSIAEocBChpHZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZRIyLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlcXVlc3QaMy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZWxpYW50U3RhdGVSZXNwb25zZSIAEpMBCh5SZXBhaXJDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3MSNi5jb250cm9scGxhbmUudjEuUmVwYWlyQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzUmVxdWVzdBo3LmNvbnRyb2xwbGFuZS52MS5SZXBhaXJDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXNwb25zZSIAEpMBCh5Sb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3MSNi5jb250cm9scGxhbmUudjEuUm90YXRlQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzUmVxdWVzdBo3LmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXNwb25zZSIAEpABCh1HZXRDdXJyZW50VXNlclJlbGlhbnRPdmVydmlldxI1LmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlbGlhbnRPdmVydmlld1JlcXVlc3QaNi5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZWxpYW50T3ZlcnZpZXdSZXNwb25zZSIAEoMBChRJc3N1ZU15UmVsaWFudEFQSUtleRIzLmNvbnRyb2xwbGFuZS52MS5CaWxsaW5nSXNzdWVNeVJlbGlhbnRBUElLZXlSZXF1ZXN0GjQuY29udHJvbHBsYW5lLnYxLkJpbGxpbmdJc3N1ZU15UmVsaWFudEFQSUtleVJlc3BvbnNlIgAShwEKGkdldEN1cnJlbnRVc2VyQmlsbGluZ0VtYWlsEjIuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyQmlsbGluZ0VtYWlsUmVxdWVzdBozLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlckJpbGxpbmdFbWFpbFJlc3BvbnNlIgASbwoSVXBkYXRlQmlsbGluZ0VtYWlsEiouY29udHJvbHBsYW5lLnYxLlVwZGF0ZUJpbGxpbmdFbWFpbFJlcXVlc3QaKy5jb250cm9scGxhbmUudjEuVXBkYXRlQmlsbGluZ0VtYWlsUmVzcG9uc2UiABKcAQohR2V0Q3VycmVudFVzZXJDb21wdXRlU3Vic2NyaXB0aW9uEjkuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyQ29tcHV0ZVN1YnNjcmlwdGlvblJlcXVlc3QaOi5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJDb21wdXRlU3Vic2NyaXB0aW9uUmVzcG9uc2UiABKNAQocU2V0Q3VycmVudFVzZXJDb21wdXRlT3ZlcmFnZRI0LmNvbnRyb2xwbGFuZS52MS5TZXRDdXJyZW50VXNlckNvbXB1dGVPdmVyYWdlUmVxdWVzdBo1LmNvbnRyb2xwbGFuZS52MS5TZXRDdXJyZW50VXNlckNvbXB1dGVPdmVyYWdlUmVzcG9uc2UiABKHAQoaR2V0Q3VycmVudFVzZXJDb21wdXRlVXNhZ2USMi5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJDb21wdXRlVXNhZ2VSZXF1ZXN0GjMuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyQ29tcHV0ZVVzYWdlUmVzcG9uc2UiABJmCg9HZXRVc2FnZVN1bW1hcnkSJy5jb250cm9scGxhbmUudjEuR2V0VXNhZ2VTdW1tYXJ5UmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5HZXRVc2FnZVN1bW1hcnlSZXNwb25zZSIAEmYKD0dldENvbXB1dGVVc2FnZRInLmNvbnRyb2xwbGFuZS52MS5HZXRDb21wdXRlVXNhZ2VSZXF1ZXN0GiguY29udHJvbHBsYW5lLnYxLkdldENvbXB1dGVVc2FnZVJlc3BvbnNlIgASbAoRR2V0SW52b2ljZVByZXZpZXcSKS5jb250cm9scGxhbmUudjEuR2V0SW52b2ljZVByZXZpZXdSZXF1ZXN0GiouY29udHJvbHBsYW5lLnYxLkdldEludm9pY2VQcmV2aWV3UmVzcG9uc2UiAEJTWlFnaXRodWIuY29tL3JlbGlhbnQtbGFicy9jb250cm9sLXBsYW5lL2ludGVybmFsL2dlbi9jb250cm9scGxhbmUvdjE7Y29udHJvbHBsYW5ldjFiBnByb3RvMw", [file_google_protobuf_timestamp, file_controlplane_v1_public_shared]);
+  fileDesc("Cixjb250cm9scGxhbmUvdjEvcHVibGljL2JpbGxpbmdfc2VydmljZS5wcm90bxIPY29udHJvbHBsYW5lLnYxIiQKIkJpbGxpbmdJc3N1ZU15UmVsaWFudEFQSUtleVJlcXVlc3QiPAojQmlsbGluZ0lzc3VlTXlSZWxpYW50QVBJS2V5UmVzcG9uc2USFQoNcGxhaW50ZXh0X2tleRgBIAEoCSI6ChBMaXN0UGxhbnNSZXF1ZXN0EhcKCnByb2R1Y3RfaWQYASABKAlIAIgBAUINCgtfcHJvZHVjdF9pZCI5ChFMaXN0UGxhbnNSZXNwb25zZRIkCgVwbGFucxgBIAMoCzIVLmNvbnRyb2xwbGFuZS52MS5QbGFuIiEKDkdldFBsYW5SZXF1ZXN0Eg8KB3BsYW5faWQYASABKAkiNgoPR2V0UGxhblJlc3BvbnNlEiMKBHBsYW4YASABKAsyFS5jb250cm9scGxhbmUudjEuUGxhbiIjCiFHZXRDdXJyZW50VXNlclN1YnNjcmlwdGlvblJlcXVlc3QiWQoiR2V0Q3VycmVudFVzZXJTdWJzY3JpcHRpb25SZXNwb25zZRIzCgxzdWJzY3JpcHRpb24YASABKAsyHS5jb250cm9scGxhbmUudjEuU3Vic2NyaXB0aW9uImMKJ0NyZWF0ZUN1cnJlbnRVc2VyQ2hlY2tvdXRTZXNzaW9uUmVxdWVzdBIPCgdwbGFuX2lkGAEgASgJEhMKC3N1Y2Nlc3NfdXJsGAIgASgJEhIKCmNhbmNlbF91cmwYAyABKAkiQAooQ3JlYXRlQ3VycmVudFVzZXJDaGVja291dFNlc3Npb25SZXNwb25zZRIUCgxjaGVja291dF91cmwYASABKAkiVAojR2V0Q3VycmVudFVzZXJXYWxsZXRPdmVydmlld1JlcXVlc3QSEwoLbGVkZ2VyX3BhZ2UYASABKAUSGAoQbGVkZ2VyX3BhZ2Vfc2l6ZRgCIAEoBSJZCiRHZXRDdXJyZW50VXNlcldhbGxldE92ZXJ2aWV3UmVzcG9uc2USMQoIb3ZlcnZpZXcYASABKAsyHy5jb250cm9scGxhbmUudjEuV2FsbGV0T3ZlcnZpZXciKgooR2V0Q3VycmVudFVzZXJDb21wdXRlU3Vic2NyaXB0aW9uUmVxdWVzdCJgCilHZXRDdXJyZW50VXNlckNvbXB1dGVTdWJzY3JpcHRpb25SZXNwb25zZRIzCgxzdWJzY3JpcHRpb24YASABKAsyHS5jb250cm9scGxhbmUudjEuU3Vic2NyaXB0aW9uImsKKkNyZWF0ZUN1cnJlbnRVc2VyV2FsbGV0VG9wdXBTZXNzaW9uUmVxdWVzdBIUCgxhbW91bnRfY2VudHMYASABKAMSEwoLc3VjY2Vzc191cmwYAiABKAkSEgoKY2FuY2VsX3VybBgDIAEoCSJwCitDcmVhdGVDdXJyZW50VXNlcldhbGxldFRvcHVwU2Vzc2lvblJlc3BvbnNlEisKBXRvcHVwGAEgASgLMhwuY29udHJvbHBsYW5lLnYxLldhbGxldFRvcHVwEhQKDGNoZWNrb3V0X3VybBgCIAEoCSIjChNSZWRlZW1Db3Vwb25SZXF1ZXN0EgwKBGNvZGUYASABKAkiyAEKFFJlZGVlbUNvdXBvblJlc3BvbnNlEhQKDGFtb3VudF9jZW50cxgBIAEoAxIMCgRjb2RlGAIgASgJEhkKEW5ld19iYWxhbmNlX2NlbnRzGAMgASgDEjEKBGtpbmQYBCABKA4yIy5jb250cm9scGxhbmUudjEuUmVkZWVtZWRDb3Vwb25LaW5kEhcKD2NvbXB1dGVfbWludXRlcxgFIAEoAxIlCh1uZXdfY29tcHV0ZV9taW51dGVzX3JlbWFpbmluZxgGIAEoAyJCCixDcmVhdGVDdXJyZW50VXNlckJpbGxpbmdQb3J0YWxTZXNzaW9uUmVxdWVzdBISCgpyZXR1cm5fdXJsGAEgASgJIkMKLUNyZWF0ZUN1cnJlbnRVc2VyQmlsbGluZ1BvcnRhbFNlc3Npb25SZXNwb25zZRISCgpwb3J0YWxfdXJsGAEgASgJIiAKHkxpc3RDdXJyZW50VXNlckludm9pY2VzUmVxdWVzdCJNCh9MaXN0Q3VycmVudFVzZXJJbnZvaWNlc1Jlc3BvbnNlEioKCGludm9pY2VzGAEgAygLMhguY29udHJvbHBsYW5lLnYxLkludm9pY2UiKAoWR2V0VXNhZ2VTdW1tYXJ5UmVxdWVzdBIOCgZvcmdfaWQYASABKAkiSwoXR2V0VXNhZ2VTdW1tYXJ5UmVzcG9uc2USMAoJc3VtbWFyaWVzGAEgAygLMh0uY29udHJvbHBsYW5lLnYxLlVzYWdlU3VtbWFyeSIoChZHZXRDb21wdXRlVXNhZ2VSZXF1ZXN0Eg4KBm9yZ19pZBgBIAEoCSJgChZDb21wdXRlVXNhZ2VCeVNpemVUaWVyEhEKCXNpemVfdGllchgBIAEoCRIVCg10b3RhbF9taW51dGVzGAIgASgBEhwKFGVzdGltYXRlZF9jb3N0X2NlbnRzGAMgASgBIrACChdHZXRDb21wdXRlVXNhZ2VSZXNwb25zZRIVCg10b3RhbF9taW51dGVzGAEgASgBEhgKEGluY2x1ZGVkX21pbnV0ZXMYAiABKAUSFwoPb3ZlcmFnZV9taW51dGVzGAMgASgBEiQKHGVzdGltYXRlZF9vdmVyYWdlX2Nvc3RfY2VudHMYBCABKAESQwoScGVyX3NpemVfYnJlYWtkb3duGAUgAygLMicuY29udHJvbHBsYW5lLnYxLkNvbXB1dGVVc2FnZUJ5U2l6ZVRpZXISMAoMcGVyaW9kX3N0YXJ0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgpwZXJpb2RfZW5kGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIjCiFHZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlcXVlc3QinQEKIkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlUmVzcG9uc2USOAoLZW50aXRsZW1lbnQYASABKAsyIy5jb250cm9scGxhbmUudjEuUmVsaWFudEVudGl0bGVtZW50Ej0KDm1hbmFnZWRfYWNjZXNzGAIgASgLMiUuY29udHJvbHBsYW5lLnYxLk1hbmFnZWRSZWxpYW50QWNjZXNzIicKJVJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1JlcXVlc3QiswEKJlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcxIQCghyZXBhaXJlZBgDIAEoCCJTCiVSb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0EhkKDGdyYWNlX3BlcmlvZBgBIAEoCUgAiAEBQg8KDV9ncmFjZV9wZXJpb2Qi2wEKJlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcxIPCgdyb3RhdGVkGAMgASgIEhAKCHJlcGxhY2VkGAQgASgIEhUKDXBsYWludGV4dF9rZXkYBSABKAkiJgokR2V0Q3VycmVudFVzZXJSZWxpYW50T3ZlcnZpZXdSZXF1ZXN0IlsKJUdldEN1cnJlbnRVc2VyUmVsaWFudE92ZXJ2aWV3UmVzcG9uc2USMgoIb3ZlcnZpZXcYASABKAsyIC5jb250cm9scGxhbmUudjEuUmVsaWFudE92ZXJ2aWV3IjYKI1NldEN1cnJlbnRVc2VyUmVsaWFudEVuYWJsZWRSZXF1ZXN0Eg8KB2VuYWJsZWQYASABKAgiYAokU2V0Q3VycmVudFVzZXJSZWxpYW50RW5hYmxlZFJlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudCI2CiNTZXRDdXJyZW50VXNlckNvbXB1dGVPdmVyYWdlUmVxdWVzdBIPCgdlbmFibGVkGAEgASgIIlsKJFNldEN1cnJlbnRVc2VyQ29tcHV0ZU92ZXJhZ2VSZXNwb25zZRIzCgxzdWJzY3JpcHRpb24YASABKAsyHS5jb250cm9scGxhbmUudjEuU3Vic2NyaXB0aW9uIn8KF0NvbXB1dGVVc2FnZUJ5V29ya3NwYWNlEhQKDHdvcmtzcGFjZV9pZBgBIAEoCRIWCg53b3Jrc3BhY2VfbmFtZRgCIAEoCRIMCgRzaXplGAMgASgJEg8KB21pbnV0ZXMYBCABKAESFwoPb3ZlcmFnZV9taW51dGVzGAUgASgBIk0KEUNvbXB1dGVVc2FnZUJ5RGF5EicKA2RheRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASDwoHbWludXRlcxgCIAEoASJDCiFHZXRDdXJyZW50VXNlckNvbXB1dGVVc2FnZVJlcXVlc3QSEwoGcGVyaW9kGAEgASgJSACIAQFCCQoHX3BlcmlvZCKMAwoiR2V0Q3VycmVudFVzZXJDb21wdXRlVXNhZ2VSZXNwb25zZRIYChBpbmNsdWRlZF9taW51dGVzGAEgASgFEhQKDHVzZWRfbWludXRlcxgCIAEoARIXCg9vdmVyYWdlX21pbnV0ZXMYAyABKAESJAocZXN0aW1hdGVkX292ZXJhZ2VfY29zdF9jZW50cxgEIAEoARIwCgxwZXJpb2Rfc3RhcnQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnBlcmlvZF9lbmQYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEj4KDGJ5X3dvcmtzcGFjZRgHIAMoCzIoLmNvbnRyb2xwbGFuZS52MS5Db21wdXRlVXNhZ2VCeVdvcmtzcGFjZRIyCgZieV9kYXkYCCADKAsyIi5jb250cm9scGxhbmUudjEuQ29tcHV0ZVVzYWdlQnlEYXkSIQoZZ3JhbnRlZF9taW51dGVzX3JlbWFpbmluZxgJIAEoAyJAChhHZXRJbnZvaWNlUHJldmlld1JlcXVlc3QSDAoEc2l6ZRgBIAEoCRIWCg5xdWFudGl0eV9kZWx0YRgCIAEoBSJPChlHZXRJbnZvaWNlUHJldmlld1Jlc3BvbnNlEhcKD3Byb3JhdGlvbl9jZW50cxgBIAEoBRIZChFuZXdfbW9udGhseV9jZW50cxgCIAEoBSIjCiFHZXRDdXJyZW50VXNlckJpbGxpbmdFbWFpbFJlcXVlc3QiUwoiR2V0Q3VycmVudFVzZXJCaWxsaW5nRW1haWxSZXNwb25zZRIVCg1iaWxsaW5nX2VtYWlsGAEgASgJEhYKDmZhbGxiYWNrX2VtYWlsGAIgASgJIioKGVVwZGF0ZUJpbGxpbmdFbWFpbFJlcXVlc3QSDQoFZW1haWwYASABKAkiHAoaVXBkYXRlQmlsbGluZ0VtYWlsUmVzcG9uc2UqjAEKElJlZGVlbWVkQ291cG9uS2luZBIkCiBSRURFRU1FRF9DT1VQT05fS0lORF9VTlNQRUNJRklFRBAAEiYKIlJFREVFTUVEX0NPVVBPTl9LSU5EX1dBTExFVF9DUkVESVQQARIoCiRSRURFRU1FRF9DT1VQT05fS0lORF9DT01QVVRFX01JTlVURVMQAjLsFwoOQmlsbGluZ1NlcnZpY2USVAoJTGlzdFBsYW5zEiEuY29udHJvbHBsYW5lLnYxLkxpc3RQbGFuc1JlcXVlc3QaIi5jb250cm9scGxhbmUudjEuTGlzdFBsYW5zUmVzcG9uc2UiABJOCgdHZXRQbGFuEh8uY29udHJvbHBsYW5lLnYxLkdldFBsYW5SZXF1ZXN0GiAuY29udHJvbHBsYW5lLnYxLkdldFBsYW5SZXNwb25zZSIAEocBChpHZXRDdXJyZW50VXNlclN1YnNjcmlwdGlvbhIyLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclN1YnNjcmlwdGlvblJlcXVlc3QaMy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJTdWJzY3JpcHRpb25SZXNwb25zZSIAEpkBCiBDcmVhdGVDdXJyZW50VXNlckNoZWNrb3V0U2Vzc2lvbhI4LmNvbnRyb2xwbGFuZS52MS5DcmVhdGVDdXJyZW50VXNlckNoZWNrb3V0U2Vzc2lvblJlcXVlc3QaOS5jb250cm9scGxhbmUudjEuQ3JlYXRlQ3VycmVudFVzZXJDaGVja291dFNlc3Npb25SZXNwb25zZSIAEqgBCiVDcmVhdGVDdXJyZW50VXNlckJpbGxpbmdQb3J0YWxTZXNzaW9uEj0uY29udHJvbHBsYW5lLnYxLkNyZWF0ZUN1cnJlbnRVc2VyQmlsbGluZ1BvcnRhbFNlc3Npb25SZXF1ZXN0Gj4uY29udHJvbHBsYW5lLnYxLkNyZWF0ZUN1cnJlbnRVc2VyQmlsbGluZ1BvcnRhbFNlc3Npb25SZXNwb25zZSIAEn4KF0xpc3RDdXJyZW50VXNlckludm9pY2VzEi8uY29udHJvbHBsYW5lLnYxLkxpc3RDdXJyZW50VXNlckludm9pY2VzUmVxdWVzdBowLmNvbnRyb2xwbGFuZS52MS5MaXN0Q3VycmVudFVzZXJJbnZvaWNlc1Jlc3BvbnNlIgASjQEKHEdldEN1cnJlbnRVc2VyV2FsbGV0T3ZlcnZpZXcSNC5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJXYWxsZXRPdmVydmlld1JlcXVlc3QaNS5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJXYWxsZXRPdmVydmlld1Jlc3BvbnNlIgASogEKI0NyZWF0ZUN1cnJlbnRVc2VyV2FsbGV0VG9wdXBTZXNzaW9uEjsuY29udHJvbHBsYW5lLnYxLkNyZWF0ZUN1cnJlbnRVc2VyV2FsbGV0VG9wdXBTZXNzaW9uUmVxdWVzdBo8LmNvbnRyb2xwbGFuZS52MS5DcmVhdGVDdXJyZW50VXNlcldhbGxldFRvcHVwU2Vzc2lvblJlc3BvbnNlIgASXQoMUmVkZWVtQ291cG9uEiQuY29udHJvbHBsYW5lLnYxLlJlZGVlbUNvdXBvblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuUmVkZWVtQ291cG9uUmVzcG9uc2UiABKHAQoaR2V0Q3VycmVudFVzZXJSZWxpYW50U3RhdGUSMi5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZWxpYW50U3RhdGVSZXF1ZXN0GjMuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlUmVzcG9uc2UiABKTAQoeUmVwYWlyQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzEjYuY29udHJvbHBsYW5lLnYxLlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1JlcXVlc3QaNy5jb250cm9scGxhbmUudjEuUmVwYWlyQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzUmVzcG9uc2UiABKTAQoeUm90YXRlQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzEjYuY29udHJvbHBsYW5lLnYxLlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1JlcXVlc3QaNy5jb250cm9scGxhbmUudjEuUm90YXRlQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzUmVzcG9uc2UiABKQAQodR2V0Q3VycmVudFVzZXJSZWxpYW50T3ZlcnZpZXcSNS5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZWxpYW50T3ZlcnZpZXdSZXF1ZXN0GjYuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyUmVsaWFudE92ZXJ2aWV3UmVzcG9uc2UiABKNAQocU2V0Q3VycmVudFVzZXJSZWxpYW50RW5hYmxlZBI0LmNvbnRyb2xwbGFuZS52MS5TZXRDdXJyZW50VXNlclJlbGlhbnRFbmFibGVkUmVxdWVzdBo1LmNvbnRyb2xwbGFuZS52MS5TZXRDdXJyZW50VXNlclJlbGlhbnRFbmFibGVkUmVzcG9uc2UiABKDAQoUSXNzdWVNeVJlbGlhbnRBUElLZXkSMy5jb250cm9scGxhbmUudjEuQmlsbGluZ0lzc3VlTXlSZWxpYW50QVBJS2V5UmVxdWVzdBo0LmNvbnRyb2xwbGFuZS52MS5CaWxsaW5nSXNzdWVNeVJlbGlhbnRBUElLZXlSZXNwb25zZSIAEocBChpHZXRDdXJyZW50VXNlckJpbGxpbmdFbWFpbBIyLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlckJpbGxpbmdFbWFpbFJlcXVlc3QaMy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJCaWxsaW5nRW1haWxSZXNwb25zZSIAEm8KElVwZGF0ZUJpbGxpbmdFbWFpbBIqLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVCaWxsaW5nRW1haWxSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLlVwZGF0ZUJpbGxpbmdFbWFpbFJlc3BvbnNlIgASnAEKIUdldEN1cnJlbnRVc2VyQ29tcHV0ZVN1YnNjcmlwdGlvbhI5LmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlckNvbXB1dGVTdWJzY3JpcHRpb25SZXF1ZXN0GjouY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyQ29tcHV0ZVN1YnNjcmlwdGlvblJlc3BvbnNlIgASjQEKHFNldEN1cnJlbnRVc2VyQ29tcHV0ZU92ZXJhZ2USNC5jb250cm9scGxhbmUudjEuU2V0Q3VycmVudFVzZXJDb21wdXRlT3ZlcmFnZVJlcXVlc3QaNS5jb250cm9scGxhbmUudjEuU2V0Q3VycmVudFVzZXJDb21wdXRlT3ZlcmFnZVJlc3BvbnNlIgAShwEKGkdldEN1cnJlbnRVc2VyQ29tcHV0ZVVzYWdlEjIuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyQ29tcHV0ZVVzYWdlUmVxdWVzdBozLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlckNvbXB1dGVVc2FnZVJlc3BvbnNlIgASZgoPR2V0VXNhZ2VTdW1tYXJ5EicuY29udHJvbHBsYW5lLnYxLkdldFVzYWdlU3VtbWFyeVJlcXVlc3QaKC5jb250cm9scGxhbmUudjEuR2V0VXNhZ2VTdW1tYXJ5UmVzcG9uc2UiABJmCg9HZXRDb21wdXRlVXNhZ2USJy5jb250cm9scGxhbmUudjEuR2V0Q29tcHV0ZVVzYWdlUmVxdWVzdBooLmNvbnRyb2xwbGFuZS52MS5HZXRDb21wdXRlVXNhZ2VSZXNwb25zZSIAEmwKEUdldEludm9pY2VQcmV2aWV3EikuY29udHJvbHBsYW5lLnYxLkdldEludm9pY2VQcmV2aWV3UmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5HZXRJbnZvaWNlUHJldmlld1Jlc3BvbnNlIgBCU1pRZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvY29udHJvbC1wbGFuZS9pbnRlcm5hbC9nZW4vY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_controlplane_v1_public_shared]);
 
 /**
  * @generated from message controlplane.v1.BillingIssueMyReliantAPIKeyRequest
@@ -317,6 +317,83 @@ export const CreateCurrentUserWalletTopupSessionResponseSchema: GenMessage<Creat
   messageDesc(file_controlplane_v1_public_billing_service, 15);
 
 /**
+ * Field numbers MUST match control-plane's
+ * proto/services/billing/v1/billing.proto — these two files define the same
+ * wire package (controlplane.v1) and are hand-mirrored, so a divergence here
+ * is a silent wire break rather than a compile error.
+ *
+ * @generated from message controlplane.v1.RedeemCouponRequest
+ */
+export type RedeemCouponRequest = Message<"controlplane.v1.RedeemCouponRequest"> & {
+  /**
+   * Case-insensitive and trimmed server-side.
+   *
+   * @generated from field: string code = 1;
+   */
+  code: string;
+};
+
+/**
+ * Describes the message controlplane.v1.RedeemCouponRequest.
+ * Use `create(RedeemCouponRequestSchema)` to create a new message.
+ */
+export const RedeemCouponRequestSchema: GenMessage<RedeemCouponRequest> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_public_billing_service, 16);
+
+/**
+ * @generated from message controlplane.v1.RedeemCouponResponse
+ */
+export type RedeemCouponResponse = Message<"controlplane.v1.RedeemCouponResponse"> & {
+  /**
+   * WALLET_CREDIT only.
+   *
+   * @generated from field: int64 amount_cents = 1;
+   */
+  amountCents: bigint;
+
+  /**
+   * @generated from field: string code = 2;
+   */
+  code: string;
+
+  /**
+   * WALLET_CREDIT only.
+   *
+   * @generated from field: int64 new_balance_cents = 3;
+   */
+  newBalanceCents: bigint;
+
+  /**
+   * kind selects which fields above/below are meaningful.
+   *
+   * @generated from field: controlplane.v1.RedeemedCouponKind kind = 4;
+   */
+  kind: RedeemedCouponKind;
+
+  /**
+   * COMPUTE_MINUTES only.
+   *
+   * @generated from field: int64 compute_minutes = 5;
+   */
+  computeMinutes: bigint;
+
+  /**
+   * Org's total unspent granted compute minutes after this redemption (grants
+   * stack). COMPUTE_MINUTES only.
+   *
+   * @generated from field: int64 new_compute_minutes_remaining = 6;
+   */
+  newComputeMinutesRemaining: bigint;
+};
+
+/**
+ * Describes the message controlplane.v1.RedeemCouponResponse.
+ * Use `create(RedeemCouponResponseSchema)` to create a new message.
+ */
+export const RedeemCouponResponseSchema: GenMessage<RedeemCouponResponse> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_public_billing_service, 17);
+
+/**
  * @generated from message controlplane.v1.CreateCurrentUserBillingPortalSessionRequest
  */
 export type CreateCurrentUserBillingPortalSessionRequest = Message<"controlplane.v1.CreateCurrentUserBillingPortalSessionRequest"> & {
@@ -331,7 +408,7 @@ export type CreateCurrentUserBillingPortalSessionRequest = Message<"controlplane
  * Use `create(CreateCurrentUserBillingPortalSessionRequestSchema)` to create a new message.
  */
 export const CreateCurrentUserBillingPortalSessionRequestSchema: GenMessage<CreateCurrentUserBillingPortalSessionRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 16);
+  messageDesc(file_controlplane_v1_public_billing_service, 18);
 
 /**
  * @generated from message controlplane.v1.CreateCurrentUserBillingPortalSessionResponse
@@ -348,7 +425,7 @@ export type CreateCurrentUserBillingPortalSessionResponse = Message<"controlplan
  * Use `create(CreateCurrentUserBillingPortalSessionResponseSchema)` to create a new message.
  */
 export const CreateCurrentUserBillingPortalSessionResponseSchema: GenMessage<CreateCurrentUserBillingPortalSessionResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 17);
+  messageDesc(file_controlplane_v1_public_billing_service, 19);
 
 /**
  * @generated from message controlplane.v1.ListCurrentUserInvoicesRequest
@@ -361,7 +438,7 @@ export type ListCurrentUserInvoicesRequest = Message<"controlplane.v1.ListCurren
  * Use `create(ListCurrentUserInvoicesRequestSchema)` to create a new message.
  */
 export const ListCurrentUserInvoicesRequestSchema: GenMessage<ListCurrentUserInvoicesRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 18);
+  messageDesc(file_controlplane_v1_public_billing_service, 20);
 
 /**
  * @generated from message controlplane.v1.ListCurrentUserInvoicesResponse
@@ -378,7 +455,7 @@ export type ListCurrentUserInvoicesResponse = Message<"controlplane.v1.ListCurre
  * Use `create(ListCurrentUserInvoicesResponseSchema)` to create a new message.
  */
 export const ListCurrentUserInvoicesResponseSchema: GenMessage<ListCurrentUserInvoicesResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 19);
+  messageDesc(file_controlplane_v1_public_billing_service, 21);
 
 /**
  * @generated from message controlplane.v1.GetUsageSummaryRequest
@@ -395,7 +472,7 @@ export type GetUsageSummaryRequest = Message<"controlplane.v1.GetUsageSummaryReq
  * Use `create(GetUsageSummaryRequestSchema)` to create a new message.
  */
 export const GetUsageSummaryRequestSchema: GenMessage<GetUsageSummaryRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 20);
+  messageDesc(file_controlplane_v1_public_billing_service, 22);
 
 /**
  * @generated from message controlplane.v1.GetUsageSummaryResponse
@@ -412,7 +489,7 @@ export type GetUsageSummaryResponse = Message<"controlplane.v1.GetUsageSummaryRe
  * Use `create(GetUsageSummaryResponseSchema)` to create a new message.
  */
 export const GetUsageSummaryResponseSchema: GenMessage<GetUsageSummaryResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 21);
+  messageDesc(file_controlplane_v1_public_billing_service, 23);
 
 /**
  * GetComputeUsage returns daemon compute usage for the current billing period.
@@ -431,7 +508,7 @@ export type GetComputeUsageRequest = Message<"controlplane.v1.GetComputeUsageReq
  * Use `create(GetComputeUsageRequestSchema)` to create a new message.
  */
 export const GetComputeUsageRequestSchema: GenMessage<GetComputeUsageRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 22);
+  messageDesc(file_controlplane_v1_public_billing_service, 24);
 
 /**
  * @generated from message controlplane.v1.ComputeUsageBySizeTier
@@ -458,7 +535,7 @@ export type ComputeUsageBySizeTier = Message<"controlplane.v1.ComputeUsageBySize
  * Use `create(ComputeUsageBySizeTierSchema)` to create a new message.
  */
 export const ComputeUsageBySizeTierSchema: GenMessage<ComputeUsageBySizeTier> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 23);
+  messageDesc(file_controlplane_v1_public_billing_service, 25);
 
 /**
  * @generated from message controlplane.v1.GetComputeUsageResponse
@@ -505,7 +582,7 @@ export type GetComputeUsageResponse = Message<"controlplane.v1.GetComputeUsageRe
  * Use `create(GetComputeUsageResponseSchema)` to create a new message.
  */
 export const GetComputeUsageResponseSchema: GenMessage<GetComputeUsageResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 24);
+  messageDesc(file_controlplane_v1_public_billing_service, 26);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserReliantStateRequest
@@ -518,7 +595,7 @@ export type GetCurrentUserReliantStateRequest = Message<"controlplane.v1.GetCurr
  * Use `create(GetCurrentUserReliantStateRequestSchema)` to create a new message.
  */
 export const GetCurrentUserReliantStateRequestSchema: GenMessage<GetCurrentUserReliantStateRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 25);
+  messageDesc(file_controlplane_v1_public_billing_service, 27);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserReliantStateResponse
@@ -540,7 +617,7 @@ export type GetCurrentUserReliantStateResponse = Message<"controlplane.v1.GetCur
  * Use `create(GetCurrentUserReliantStateResponseSchema)` to create a new message.
  */
 export const GetCurrentUserReliantStateResponseSchema: GenMessage<GetCurrentUserReliantStateResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 26);
+  messageDesc(file_controlplane_v1_public_billing_service, 28);
 
 /**
  * @generated from message controlplane.v1.RepairCurrentUserReliantAccessRequest
@@ -553,7 +630,7 @@ export type RepairCurrentUserReliantAccessRequest = Message<"controlplane.v1.Rep
  * Use `create(RepairCurrentUserReliantAccessRequestSchema)` to create a new message.
  */
 export const RepairCurrentUserReliantAccessRequestSchema: GenMessage<RepairCurrentUserReliantAccessRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 27);
+  messageDesc(file_controlplane_v1_public_billing_service, 29);
 
 /**
  * @generated from message controlplane.v1.RepairCurrentUserReliantAccessResponse
@@ -580,7 +657,7 @@ export type RepairCurrentUserReliantAccessResponse = Message<"controlplane.v1.Re
  * Use `create(RepairCurrentUserReliantAccessResponseSchema)` to create a new message.
  */
 export const RepairCurrentUserReliantAccessResponseSchema: GenMessage<RepairCurrentUserReliantAccessResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 28);
+  messageDesc(file_controlplane_v1_public_billing_service, 30);
 
 /**
  * @generated from message controlplane.v1.RotateCurrentUserReliantAccessRequest
@@ -597,7 +674,7 @@ export type RotateCurrentUserReliantAccessRequest = Message<"controlplane.v1.Rot
  * Use `create(RotateCurrentUserReliantAccessRequestSchema)` to create a new message.
  */
 export const RotateCurrentUserReliantAccessRequestSchema: GenMessage<RotateCurrentUserReliantAccessRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 29);
+  messageDesc(file_controlplane_v1_public_billing_service, 31);
 
 /**
  * @generated from message controlplane.v1.RotateCurrentUserReliantAccessResponse
@@ -634,7 +711,7 @@ export type RotateCurrentUserReliantAccessResponse = Message<"controlplane.v1.Ro
  * Use `create(RotateCurrentUserReliantAccessResponseSchema)` to create a new message.
  */
 export const RotateCurrentUserReliantAccessResponseSchema: GenMessage<RotateCurrentUserReliantAccessResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 30);
+  messageDesc(file_controlplane_v1_public_billing_service, 32);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserReliantOverviewRequest
@@ -647,7 +724,7 @@ export type GetCurrentUserReliantOverviewRequest = Message<"controlplane.v1.GetC
  * Use `create(GetCurrentUserReliantOverviewRequestSchema)` to create a new message.
  */
 export const GetCurrentUserReliantOverviewRequestSchema: GenMessage<GetCurrentUserReliantOverviewRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 31);
+  messageDesc(file_controlplane_v1_public_billing_service, 33);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserReliantOverviewResponse
@@ -664,7 +741,41 @@ export type GetCurrentUserReliantOverviewResponse = Message<"controlplane.v1.Get
  * Use `create(GetCurrentUserReliantOverviewResponseSchema)` to create a new message.
  */
 export const GetCurrentUserReliantOverviewResponseSchema: GenMessage<GetCurrentUserReliantOverviewResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 32);
+  messageDesc(file_controlplane_v1_public_billing_service, 34);
+
+/**
+ * @generated from message controlplane.v1.SetCurrentUserReliantEnabledRequest
+ */
+export type SetCurrentUserReliantEnabledRequest = Message<"controlplane.v1.SetCurrentUserReliantEnabledRequest"> & {
+  /**
+   * @generated from field: bool enabled = 1;
+   */
+  enabled: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.SetCurrentUserReliantEnabledRequest.
+ * Use `create(SetCurrentUserReliantEnabledRequestSchema)` to create a new message.
+ */
+export const SetCurrentUserReliantEnabledRequestSchema: GenMessage<SetCurrentUserReliantEnabledRequest> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_public_billing_service, 35);
+
+/**
+ * @generated from message controlplane.v1.SetCurrentUserReliantEnabledResponse
+ */
+export type SetCurrentUserReliantEnabledResponse = Message<"controlplane.v1.SetCurrentUserReliantEnabledResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.ReliantEntitlement entitlement = 1;
+   */
+  entitlement?: ReliantEntitlement | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.SetCurrentUserReliantEnabledResponse.
+ * Use `create(SetCurrentUserReliantEnabledResponseSchema)` to create a new message.
+ */
+export const SetCurrentUserReliantEnabledResponseSchema: GenMessage<SetCurrentUserReliantEnabledResponse> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_public_billing_service, 36);
 
 /**
  * @generated from message controlplane.v1.SetCurrentUserComputeOverageRequest
@@ -681,7 +792,7 @@ export type SetCurrentUserComputeOverageRequest = Message<"controlplane.v1.SetCu
  * Use `create(SetCurrentUserComputeOverageRequestSchema)` to create a new message.
  */
 export const SetCurrentUserComputeOverageRequestSchema: GenMessage<SetCurrentUserComputeOverageRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 33);
+  messageDesc(file_controlplane_v1_public_billing_service, 37);
 
 /**
  * @generated from message controlplane.v1.SetCurrentUserComputeOverageResponse
@@ -698,7 +809,7 @@ export type SetCurrentUserComputeOverageResponse = Message<"controlplane.v1.SetC
  * Use `create(SetCurrentUserComputeOverageResponseSchema)` to create a new message.
  */
 export const SetCurrentUserComputeOverageResponseSchema: GenMessage<SetCurrentUserComputeOverageResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 34);
+  messageDesc(file_controlplane_v1_public_billing_service, 38);
 
 /**
  * @generated from message controlplane.v1.ComputeUsageByWorkspace
@@ -735,7 +846,7 @@ export type ComputeUsageByWorkspace = Message<"controlplane.v1.ComputeUsageByWor
  * Use `create(ComputeUsageByWorkspaceSchema)` to create a new message.
  */
 export const ComputeUsageByWorkspaceSchema: GenMessage<ComputeUsageByWorkspace> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 35);
+  messageDesc(file_controlplane_v1_public_billing_service, 39);
 
 /**
  * @generated from message controlplane.v1.ComputeUsageByDay
@@ -757,7 +868,7 @@ export type ComputeUsageByDay = Message<"controlplane.v1.ComputeUsageByDay"> & {
  * Use `create(ComputeUsageByDaySchema)` to create a new message.
  */
 export const ComputeUsageByDaySchema: GenMessage<ComputeUsageByDay> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 36);
+  messageDesc(file_controlplane_v1_public_billing_service, 40);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserComputeUsageRequest
@@ -776,7 +887,7 @@ export type GetCurrentUserComputeUsageRequest = Message<"controlplane.v1.GetCurr
  * Use `create(GetCurrentUserComputeUsageRequestSchema)` to create a new message.
  */
 export const GetCurrentUserComputeUsageRequestSchema: GenMessage<GetCurrentUserComputeUsageRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 37);
+  messageDesc(file_controlplane_v1_public_billing_service, 41);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserComputeUsageResponse
@@ -821,6 +932,19 @@ export type GetCurrentUserComputeUsageResponse = Message<"controlplane.v1.GetCur
    * @generated from field: repeated controlplane.v1.ComputeUsageByDay by_day = 8;
    */
   byDay: ComputeUsageByDay[];
+
+  /**
+   * granted_minutes_remaining is unspent compute minutes from redeemed
+   * compute coupons.
+   *
+   * Reported alongside included_minutes rather than folded into it: included
+   * minutes refill every billing period, whereas a grant is a one-time bucket
+   * that depletes and does not renew. Spent after included minutes, before
+   * overage.
+   *
+   * @generated from field: int64 granted_minutes_remaining = 9;
+   */
+  grantedMinutesRemaining: bigint;
 };
 
 /**
@@ -828,7 +952,7 @@ export type GetCurrentUserComputeUsageResponse = Message<"controlplane.v1.GetCur
  * Use `create(GetCurrentUserComputeUsageResponseSchema)` to create a new message.
  */
 export const GetCurrentUserComputeUsageResponseSchema: GenMessage<GetCurrentUserComputeUsageResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 38);
+  messageDesc(file_controlplane_v1_public_billing_service, 42);
 
 /**
  * @generated from message controlplane.v1.GetInvoicePreviewRequest
@@ -852,7 +976,7 @@ export type GetInvoicePreviewRequest = Message<"controlplane.v1.GetInvoicePrevie
  * Use `create(GetInvoicePreviewRequestSchema)` to create a new message.
  */
 export const GetInvoicePreviewRequestSchema: GenMessage<GetInvoicePreviewRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 39);
+  messageDesc(file_controlplane_v1_public_billing_service, 43);
 
 /**
  * @generated from message controlplane.v1.GetInvoicePreviewResponse
@@ -878,7 +1002,7 @@ export type GetInvoicePreviewResponse = Message<"controlplane.v1.GetInvoicePrevi
  * Use `create(GetInvoicePreviewResponseSchema)` to create a new message.
  */
 export const GetInvoicePreviewResponseSchema: GenMessage<GetInvoicePreviewResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 40);
+  messageDesc(file_controlplane_v1_public_billing_service, 44);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserBillingEmailRequest
@@ -891,7 +1015,7 @@ export type GetCurrentUserBillingEmailRequest = Message<"controlplane.v1.GetCurr
  * Use `create(GetCurrentUserBillingEmailRequestSchema)` to create a new message.
  */
 export const GetCurrentUserBillingEmailRequestSchema: GenMessage<GetCurrentUserBillingEmailRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 41);
+  messageDesc(file_controlplane_v1_public_billing_service, 45);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserBillingEmailResponse
@@ -922,7 +1046,7 @@ export type GetCurrentUserBillingEmailResponse = Message<"controlplane.v1.GetCur
  * Use `create(GetCurrentUserBillingEmailResponseSchema)` to create a new message.
  */
 export const GetCurrentUserBillingEmailResponseSchema: GenMessage<GetCurrentUserBillingEmailResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 42);
+  messageDesc(file_controlplane_v1_public_billing_service, 46);
 
 /**
  * @generated from message controlplane.v1.UpdateBillingEmailRequest
@@ -943,7 +1067,7 @@ export type UpdateBillingEmailRequest = Message<"controlplane.v1.UpdateBillingEm
  * Use `create(UpdateBillingEmailRequestSchema)` to create a new message.
  */
 export const UpdateBillingEmailRequestSchema: GenMessage<UpdateBillingEmailRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 43);
+  messageDesc(file_controlplane_v1_public_billing_service, 47);
 
 /**
  * @generated from message controlplane.v1.UpdateBillingEmailResponse
@@ -956,7 +1080,41 @@ export type UpdateBillingEmailResponse = Message<"controlplane.v1.UpdateBillingE
  * Use `create(UpdateBillingEmailResponseSchema)` to create a new message.
  */
 export const UpdateBillingEmailResponseSchema: GenMessage<UpdateBillingEmailResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_public_billing_service, 44);
+  messageDesc(file_controlplane_v1_public_billing_service, 48);
+
+/**
+ * RedeemedCouponKind tells the client WHAT a redemption granted, so it can say
+ * "$20 added to your balance" or "600 machine minutes added" rather than
+ * guessing from which field happens to be non-zero.
+ *
+ * @generated from enum controlplane.v1.RedeemedCouponKind
+ */
+export enum RedeemedCouponKind {
+  /**
+   * @generated from enum value: REDEEMED_COUPON_KIND_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Wallet credit, which funds LLM spend.
+   *
+   * @generated from enum value: REDEEMED_COUPON_KIND_WALLET_CREDIT = 1;
+   */
+  WALLET_CREDIT = 1,
+
+  /**
+   * Daemon compute minutes — the Machine product.
+   *
+   * @generated from enum value: REDEEMED_COUPON_KIND_COMPUTE_MINUTES = 2;
+   */
+  COMPUTE_MINUTES = 2,
+}
+
+/**
+ * Describes the enum controlplane.v1.RedeemedCouponKind.
+ */
+export const RedeemedCouponKindSchema: GenEnum<RedeemedCouponKind> = /*@__PURE__*/
+  enumDesc(file_controlplane_v1_public_billing_service, 0);
 
 /**
  * @generated from service controlplane.v1.BillingService
@@ -1036,6 +1194,19 @@ export const BillingService: GenService<{
     output: typeof CreateCurrentUserWalletTopupSessionResponseSchema;
   },
   /**
+   * RedeemCoupon credits the caller's org wallet from a coupon code.
+   * Idempotent per (coupon, org). Coupon MANAGEMENT (issue/list/adjust) is
+   * deliberately NOT on this public surface — it is operator-only and served
+   * by a separate internal deployment.
+   *
+   * @generated from rpc controlplane.v1.BillingService.RedeemCoupon
+   */
+  redeemCoupon: {
+    methodKind: "unary";
+    input: typeof RedeemCouponRequestSchema;
+    output: typeof RedeemCouponResponseSchema;
+  },
+  /**
    * Reliant managed-LLM access (per-user).
    *
    * @generated from rpc controlplane.v1.BillingService.GetCurrentUserReliantState
@@ -1068,6 +1239,18 @@ export const BillingService: GenService<{
     methodKind: "unary";
     input: typeof GetCurrentUserReliantOverviewRequestSchema;
     output: typeof GetCurrentUserReliantOverviewResponseSchema;
+  },
+  /**
+   * SetCurrentUserReliantEnabled turns managed Reliant LLM access on or off
+   * for the caller. Sole writer of reliant_enabled — the flag is a user
+   * preference, never inferred from wallet balance or provisioning state.
+   *
+   * @generated from rpc controlplane.v1.BillingService.SetCurrentUserReliantEnabled
+   */
+  setCurrentUserReliantEnabled: {
+    methodKind: "unary";
+    input: typeof SetCurrentUserReliantEnabledRequestSchema;
+    output: typeof SetCurrentUserReliantEnabledResponseSchema;
   },
   /**
    * Mints / fetches the caller's opaque rlnt_ Reliant API key. Idempotent: returns

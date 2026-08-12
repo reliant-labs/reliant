@@ -3,10 +3,12 @@ import { useModels } from "../store/globalDataStore";
 
 interface CatalogModel {
   id: string;
+  tags?: string[];
   supportedThinkingLevels?: string[];
 }
 
-const THINKING_ORDER = ["xhigh", "high", "medium", "low"] as const;
+// Descending capability order. gpt-5.6 adds "ultra" and "max" above "xhigh".
+const THINKING_ORDER = ["ultra", "max", "xhigh", "high", "medium", "low"] as const;
 
 export interface ThinkingCapability {
   modelId?: string;
@@ -15,17 +17,30 @@ export interface ThinkingCapability {
   defaultLevel: string;
 }
 
-function extractModelId(candidate: unknown): string | undefined {
+/**
+ * Resolve a model selector to a catalog model id. A selector is either an
+ * explicit id or a tag list ({tags: ["flagship"]}), which is what an untouched
+ * model param carries — resolve tags the same way the backend does, to the
+ * first catalog model carrying the tag.
+ */
+function extractModelId(candidate: unknown, models: CatalogModel[]): string | undefined {
   if (typeof candidate === "string") {
     return candidate || undefined;
   }
   if (typeof candidate === "object" && candidate !== null) {
-    return (candidate as { id?: string }).id;
+    const selector = candidate as { id?: string; tags?: string[] };
+    if (selector.id) return selector.id;
+    const tag = selector.tags?.[0];
+    if (tag) return models.find((model) => model.tags?.includes(tag))?.id;
   }
   return undefined;
 }
 
-function findModelIdForThinkingField(name: string, formValues?: Record<string, unknown>): string | undefined {
+function findModelIdForThinkingField(
+  name: string,
+  models: CatalogModel[],
+  formValues?: Record<string, unknown>,
+): string | undefined {
   if (!formValues) return undefined;
 
   const keys: string[] = [];
@@ -37,7 +52,7 @@ function findModelIdForThinkingField(name: string, formValues?: Record<string, u
   }
 
   for (const key of keys) {
-    const modelId = extractModelId(formValues[key]);
+    const modelId = extractModelId(formValues[key], models);
     if (modelId) return modelId;
   }
 
@@ -59,7 +74,10 @@ export function resolveThinkingCapabilityForModel(modelId: string | undefined, m
     };
   }
 
-  const model = models.find((m) => m.id === modelId);
+  // Catalog ids are "modelId@driverId"; a selector may carry either form.
+  const model =
+    models.find((m) => m.id === modelId) ??
+    models.find((m) => m.id.split("@")[0] === modelId);
   const levels = (model?.supportedThinkingLevels || []).slice();
 
   levels.sort((a, b) => {
@@ -83,7 +101,7 @@ export function useThinkingCapability(name: string, formValues?: Record<string, 
   const { models } = useModels();
 
   return useMemo(() => {
-    const modelId = findModelIdForThinkingField(name, formValues);
+    const modelId = findModelIdForThinkingField(name, models, formValues);
     return resolveThinkingCapabilityForModel(modelId, models);
   }, [models, name, formValues]);
 }

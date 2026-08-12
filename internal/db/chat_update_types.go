@@ -57,21 +57,98 @@ const (
 	ToolCallStatusBackgrounded ToolCallStatus = "backgrounded"
 )
 
-// ToolCallUpdate represents a tool execution status update
+// ToolCallUpdate represents a tool execution status update.
+//
+// ToolCallID is the canonical identity of the card this status describes: the
+// LLM-issued tool-call id (e.g. "toolu_01..."). It is the ONLY id that can key
+// live status, because it is the only one that exists for the whole lifetime
+// of a tool call. It arrives with the very first streaming event and is
+// carried through persistence unchanged.
+//
+// A content-block UUID cannot do either job. It is empty while the assistant
+// message is still streaming, and it is minted fresh when the message is
+// persisted — which happens BEFORE tools execute. Keying status on it means
+// every status emitted after persistence is filed under an id no reader ever
+// asks for, so live status silently misses every card. That is why this struct
+// carries no content-block id: the tool-status channel is addressed purely by
+// tool-call id.
+//
+// Note this is a DIFFERENT identifier space from the one approvals use.
+// Approvals legitimately key on content_block_id; tool status does not. The
+// two must not be conflated.
 type ToolCallUpdate struct {
-	UpdateType     UpdateType     `json:"update_type"` // Always "tool_call"
-	ContentBlockID string         `json:"content_block_id"`
-	ToolCallID     string         `json:"tool_call_id"`
-	ToolName       string         `json:"tool_name"`
-	Status         ToolCallStatus `json:"status"`
-	Timestamp      string         `json:"timestamp,omitempty"`
-	NodeID         string         `json:"node_id,omitempty"`
-	RequestedAt    string         `json:"requested_at,omitempty"`
-	StartedAt      string         `json:"started_at,omitempty"`
-	CompletedAt    string         `json:"completed_at,omitempty"`
+	UpdateType  UpdateType     `json:"update_type"` // Always "tool_call"
+	ToolCallID  string         `json:"tool_call_id"`
+	ToolName    string         `json:"tool_name"`
+	Status      ToolCallStatus `json:"status"`
+	Timestamp   string         `json:"timestamp,omitempty"`
+	NodeID      string         `json:"node_id,omitempty"`
+	RequestedAt string         `json:"requested_at,omitempty"`
+	StartedAt   string         `json:"started_at,omitempty"`
+	CompletedAt string         `json:"completed_at,omitempty"`
 }
 
 func (u ToolCallUpdate) Type() UpdateType { return UpdateTypeToolCall }
+
+// ============================================================================
+// MESSAGE UPDATES
+// ============================================================================
+
+// MessageUpdateData is the payload for update_type="message" chat_updates —
+// the row that renders as a message in the transcript. Four call sites build
+// this payload (SaveMessage's hot path in internal/threads, EnrichMessageUpdate,
+// SaveMessageToThreadWithID, and the tool-denial message in
+// internal/grpc/services/approval.go); route all of them through this struct
+// instead of a hand-built map so a field rename (e.g. ordinal -> seq) fails to
+// compile at every call site instead of silently vanishing from the JSON.
+//
+// The four writers populate different subsets of these fields. Model that
+// with omitempty + pointers rather than forcing every caller to supply every
+// field — a nil pointer omits the key entirely, matching a writer that never
+// set it, while a non-nil pointer to a zero value (0, or an empty slice)
+// still serializes, matching a writer that always sets it. Do not infer "this
+// field is unused" from one caller; check all four before removing one.
+type MessageUpdateData struct {
+	UpdateType string `json:"update_type"` // always "message"
+	ID         string `json:"id"`
+	// Role is the MessageRole proto enum (int32) on three writers, and the
+	// literal string "tool" on the approval-denial writer. That
+	// inconsistency predates this struct; interface{} preserves each
+	// caller's existing wire value rather than silently normalizing it.
+	Role          interface{}              `json:"role"`
+	Seq           int64                    `json:"seq"`
+	Ordinal       int64                    `json:"ordinal"`
+	Thread        string                   `json:"thread"`
+	ContentBlocks []map[string]interface{} `json:"content_blocks"`
+	CreatedAt     string                   `json:"created_at"`
+
+	ChatID          string `json:"chat_id,omitempty"`
+	UpdatedAt       string `json:"updated_at,omitempty"`
+	ContextWindowID string `json:"context_window_id,omitempty"`
+	StreamingState  string `json:"streaming_state,omitempty"`
+	// ContextSequence is a pointer because 0 is a valid sequence: only a nil
+	// pointer (the approval-denial writer, which never sets it) omits the key.
+	ContextSequence *int `json:"context_sequence,omitempty"`
+	// Attachments is a pointer to a slice so a writer that always emits
+	// attachments (even as "[]") is distinguishable from the approval-denial
+	// writer, which never sets this field at all.
+	Attachments         *[]map[string]interface{} `json:"attachments,omitempty"`
+	ThreadTokenCount    *int                      `json:"thread_token_count,omitempty"`
+	CompactionThreshold *int                      `json:"compaction_threshold,omitempty"`
+	DisplayStyle        *int32                    `json:"display_style,omitempty"`
+	TokenCount          *int                      `json:"token_count,omitempty"`
+}
+
+func (u MessageUpdateData) Type() UpdateType { return UpdateTypeMessage }
+
+// Marshal serializes the update to the JSON string CreateChatUpdate expects.
+func (u MessageUpdateData) Marshal() (string, error) {
+	data, err := json.Marshal(u)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
 
 // ============================================================================
 // APPROVAL UPDATES
@@ -164,9 +241,11 @@ func EntityIDForQuestion(questionID string) string {
 	return "question-" + questionID + "-" + formatTimestamp()
 }
 
-// EntityIDForToolCall generates entity ID for tool call updates
-func EntityIDForToolCall(contentBlockID string) string {
-	return "tool-" + contentBlockID + "-" + formatTimestamp()
+// EntityIDForToolCall generates entity ID for tool call updates.
+// The embedded id is the LLM tool-call id; GetLatestNonMessageUpdatesPerEntity
+// parses it back out to dedup a call's status transitions down to the latest.
+func EntityIDForToolCall(toolCallID string) string {
+	return "tool-" + toolCallID + "-" + formatTimestamp()
 }
 
 // EntityIDForToolCancelled generates entity ID for cancelled tool updates

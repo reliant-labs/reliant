@@ -3,13 +3,14 @@
  * Similar to Cursor's "Explored X files Y searches" grouping
  */
 
-import { useState, memo } from 'react';
+import { useState, useEffect, memo } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ToolExecution, type ToolResultData } from './ToolExecution';
 import type { ToolApprovalRequest } from '../../api/client';
 import { generateReadOnlyToolsSummary } from '../../lib/toolFormatters';
-import { shouldToolBeCollapsed } from '../Settings/ToolCallSettings';
+import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from '../Settings/ToolCallSettings';
+import { useSurface } from '../../lib/surfaceContext';
 
 type ToolCallData = {
   id: string;
@@ -44,10 +45,20 @@ function ToolExecutionCollapsibleGroupComponent({
 }: ToolExecutionCollapsibleGroupProps) {
   // Determine initial expanded state based on first tool's settings
   // If any tool in the group should be expanded, expand the group
+  const surface = useSurface();
   const [isExpanded, setIsExpanded] = useState(() => {
     // Check if any tool in the group should be expanded by default
-    return executions.some(({ call }) => !shouldToolBeCollapsed(call.name));
+    return executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface));
   });
+
+  // Pick up preference changes made in Settings without a reload.
+  useEffect(() => {
+    const applyNewDefault = () => {
+      setIsExpanded(executions.some(({ call }) => !shouldToolBeCollapsed(call.name, surface)));
+    };
+    window.addEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
+    return () => window.removeEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
+  }, [executions, surface]);
 
   // Generate summary text like "Explored 2 files 1 search"
   const summaryText = generateReadOnlyToolsSummary(

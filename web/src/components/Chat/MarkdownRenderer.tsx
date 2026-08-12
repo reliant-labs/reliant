@@ -6,6 +6,7 @@ import type { Components } from 'react-markdown';
 import { useState, useMemo, useCallback } from 'react';
 import { ImagePreviewModal } from '../ui/ImagePreviewModal';
 import { isFilePath } from '../../lib/filePath';
+import { isHttpUrl } from '../../lib/url';
 import { FileLink } from './FileLink';
 import { CodeBlock } from './CodeBlock';
 import { openLink } from '../../lib/open-link';
@@ -131,6 +132,29 @@ function createMarkdownComponents(
             <FileLink path={text} worktreeId={worktreeId} inline className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/50" />
           );
         }
+
+        // Markdown exempts code spans from autolinking, so a URL the model wrapped
+        // in backticks arrives here as literal text. It stays styled as code —
+        // keeping the code foreground rather than the link color, since the author
+        // marked it up as something to read, not somewhere to go — but hover
+        // underline and the pointer make it clear it is still clickable.
+        if (isHttpUrl(text)) {
+          const url = text.trim();
+          return (
+            <a
+              href={url}
+              className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/50 text-foreground no-underline hover:underline cursor-pointer"
+              onClick={(e) => {
+                if (onLinkClick) {
+                  e.preventDefault();
+                  onLinkClick(url);
+                }
+              }}
+            >
+              {children}
+            </a>
+          );
+        }
         
         return (
           <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono border border-border/50 text-foreground whitespace-pre-wrap break-words break-all" {...props}>
@@ -254,7 +278,10 @@ function createMarkdownComponents(
     a: ({ children, href, ...props }) => (
       <a
         href={href}
-        className="text-primary no-underline hover:underline transition-all duration-200 cursor-pointer"
+        // --info rather than --primary: primary is the theme accent, which is
+        // mocha/teal/pink/orange depending on the color scheme, so links only
+        // read as blue on some themes. --info is blue in every scheme.
+        className="text-info no-underline hover:underline transition-all duration-200 cursor-pointer"
         onClick={(e) => {
           if (href && onLinkClick) {
             e.preventDefault();

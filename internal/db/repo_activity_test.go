@@ -28,6 +28,23 @@ func createActivityTestChat(t *testing.T, repo *Repo, chatID string) {
 	if err := repo.CreateChat(ctx, chat); err != nil {
 		t.Fatalf("createActivityTestChat: %v", err)
 	}
+	// Every real chat gets a root thread whose id equals the chat id, and
+	// messages/context windows reference it. Fixtures that skipped it were
+	// relying on the absence of foreign keys.
+	createTestRootThread(t, repo, chatID)
+}
+
+// createTestRootThread creates the root thread row for a chat, matching the
+// production invariant that a chat's root thread id equals the chat id.
+func createTestRootThread(t *testing.T, repo *Repo, chatID string) {
+	t.Helper()
+	if _, err := repo.CreateThread(context.Background(), &Thread{
+		ID:        chatID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
+	}); err != nil {
+		t.Fatalf("createTestRootThread: %v", err)
+	}
 }
 
 func insertTestWorkflow(t *testing.T, repo *Repo, id, chatID, workflowName string, status WorkflowStatus) {
@@ -193,6 +210,44 @@ func TestGetChatActivity_ApprovalTakesPriorityOverRunning(t *testing.T) {
 	}
 }
 
+func TestGetChatActivity_Paused(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-paused"
+	createActivityTestChat(t, repo, chatID)
+	insertTestWorkflow(t, repo, "wf-paused", chatID, "builtin://agent", WorkflowStatusPaused)
+
+	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("GetChatActivity: %v", err)
+	}
+	if activity != 4 {
+		t.Fatalf("expected activity=4 (PAUSED), got %d", activity)
+	}
+}
+
+func TestGetChatActivity_RunningTakesPriorityOverPaused(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-running-and-paused"
+	createActivityTestChat(t, repo, chatID)
+
+	// One workflow running, another paused (e.g. a paused thread alongside a
+	// live one). The chat must still read RUNNING.
+	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", WorkflowStatusRunning)
+	insertTestWorkflow(t, repo, "wf-paused", chatID, "thread:abc123", WorkflowStatusPaused)
+
+	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("GetChatActivity: %v", err)
+	}
+	if activity != 1 {
+		t.Fatalf("expected activity=1 (RUNNING takes priority over PAUSED), got %d", activity)
+	}
+}
+
 func TestEmitChatActivityIfChanged_AlwaysEmits(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -271,5 +326,118 @@ func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
 	}
 	if !foundRunning {
 		t.Fatal("expected at least one activity event with activity=1 (RUNNING)")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// ERROR recency (recovered chats must not stay red)
+// ---------------------------------------------------------------------------
+
+// completeWorkflowNow drives a workflow to a terminal status through the
+// production path, which is what stamps completed_at (see the CASE in
+// queries/workflows.sql). The ERROR branch compares those timestamps, so a
+// fixture that only INSERTed rows would not exercise it.
+func completeWorkflowNow(t *testing.T, repo *Repo, id string, status WorkflowStatus) {
+	t.Helper()
+	if err := repo.UpdateWorkflowStatus(context.Background(), id, status); err != nil {
+		t.Fatalf("completeWorkflowNow(%s, %d): %v", id, status, err)
+	}
+}
+
+func TestGetChatActivity_Error_WhenNothingSucceededAfterFailure(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-failed"
+	createActivityTestChat(t, repo, chatID)
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
+	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+
+	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("GetChatActivity: %v", err)
+	}
+	if activity != 3 {
+		t.Fatalf("a chat whose only terminal workflow failed must read ERROR (3), got %d", activity)
+	}
+}
+
+// The regression this file exists to pin: a chat that failed once and then
+// recovered must stop reading ERROR. The old view asked
+// `EXISTS (status = 4)` over the chat's whole history, so a single failure
+// pinned the chat red forever and the sidebar sorted it up as "needs
+// attention" for the rest of its life.
+//
+// Observed on chat c0ce9449-…: two spawned workflows failed, twenty later
+// workflows completed (the last five hours afterwards), and the view still
+// returned 3.
+func TestGetChatActivity_ErrorClearedAfterRecovery(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-recovered"
+	createActivityTestChat(t, repo, chatID)
+
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
+	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+
+	// The user retries and it works. completed_at is stamped by the same
+	// production path, so the retry lands strictly after the failure.
+	insertTestWorkflow(t, repo, "wf-retry", chatID, "builtin://agent", WorkflowStatusRunning)
+	completeWorkflowNow(t, repo, "wf-retry", WorkflowStatusCompleted)
+
+	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("GetChatActivity: %v", err)
+	}
+	if activity != 0 {
+		t.Fatalf("a chat that recovered after a failure must read IDLE (0), got %d "+
+			"(the red dot must clear once work succeeds again)", activity)
+	}
+}
+
+// A success that happened BEFORE the failure must not clear it — otherwise any
+// chat with one early success would be permanently immune to showing an error.
+func TestGetChatActivity_ErrorNotClearedByEarlierSuccess(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-success-then-failure"
+	createActivityTestChat(t, repo, chatID)
+
+	insertTestWorkflow(t, repo, "wf-ok", chatID, "builtin://agent", WorkflowStatusRunning)
+	completeWorkflowNow(t, repo, "wf-ok", WorkflowStatusCompleted)
+
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
+	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+
+	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("GetChatActivity: %v", err)
+	}
+	if activity != 3 {
+		t.Fatalf("a failure after a success must still read ERROR (3), got %d", activity)
+	}
+}
+
+// A live run outranks a past failure: the chat is working again, so it reads
+// RUNNING rather than advertising an error the user can do nothing about.
+func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-failed-then-running"
+	createActivityTestChat(t, repo, chatID)
+
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
+	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+	insertTestWorkflow(t, repo, "wf-live", chatID, "builtin://agent", WorkflowStatusRunning)
+
+	activity, err := repo.GetChatActivity(context.Background(), chatID)
+	if err != nil {
+		t.Fatalf("GetChatActivity: %v", err)
+	}
+	if activity != 1 {
+		t.Fatalf("expected activity=1 (RUNNING takes priority over a past failure), got %d", activity)
 	}
 }

@@ -27,6 +27,7 @@ func (s *approvalStore) CreateApproval(ctx context.Context, approval *core.Appro
 		TemporalWorkflowID: approval.TemporalWorkflowID,
 		CreatedAt:          approval.CreatedAt,
 		ResolvedAt:         approvalPtrToNullTime(approval.ResolvedAt),
+		ThreadID:           approvalPtrToNullString(approval.ThreadID),
 	})
 }
 
@@ -93,6 +94,7 @@ func approvalFromPG(row pgdb.Approval) *core.Approval {
 		TemporalWorkflowID: row.TemporalWorkflowID,
 		CreatedAt:          row.CreatedAt,
 		ResolvedAt:         approvalNullTimeToPtr(row.ResolvedAt),
+		ThreadID:           approvalNullStringToPtr(row.ThreadID),
 	}
 }
 

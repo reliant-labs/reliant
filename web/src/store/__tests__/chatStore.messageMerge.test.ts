@@ -36,7 +36,7 @@ function seedChat() {
   } as never);
 }
 
-function assistantMessage(id: string, ordinal: number, text: string): ChatUpdate {
+function assistantMessage(id: string, seq: number, text: string): ChatUpdate {
   return {
     update_type: "message",
     message: {
@@ -49,7 +49,7 @@ function assistantMessage(id: string, ordinal: number, text: string): ChatUpdate
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
+      seq: BigInt(seq),
       thread: "",
       sequenceNumber: 0n,
       attachments: [],
@@ -57,7 +57,7 @@ function assistantMessage(id: string, ordinal: number, text: string): ChatUpdate
   } as unknown as ChatUpdate;
 }
 
-function userMessage(id: string, ordinal: number): ChatUpdate {
+function userMessage(id: string, seq: number): ChatUpdate {
   return {
     update_type: "message",
     message: {
@@ -70,12 +70,29 @@ function userMessage(id: string, ordinal: number): ChatUpdate {
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
+      seq: BigInt(seq),
       thread: "",
       sequenceNumber: 0n,
       attachments: [],
     },
   } as unknown as ChatUpdate;
+}
+
+/** A bare Message value (not a ChatUpdate) for seeding the cache directly. */
+function messageValue(id: string, seq: number) {
+  return {
+    id,
+    chatId: CHAT,
+    role: MessageRole.ASSISTANT,
+    contentBlocks: [],
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+    streamingState: StreamingState.COMPLETE,
+    seq: BigInt(seq),
+    thread: "",
+    sequenceNumber: 0n,
+    attachments: [],
+  } as never;
 }
 
 function ids() {
@@ -111,6 +128,64 @@ describe("message merge (snapshot)", () => {
     store.processChatStreamUpdates(CHAT, [assistantMessage("m2", 2, "snapshot")], true);
     expect(ids()).toEqual(["m2"]);
   });
+
+  // The snapshot is BOUNDED to the newest N messages, so a reconnect re-delivers
+  // that window. Replacing then would throw away pages the user scrolled back to
+  // load; overlap tells us the snapshot is continuous with what we already hold.
+  it("preserves already-loaded older pages on a reconnect snapshot", () => {
+    // Cache holds 4 messages (older m1/m2 were loaded via scroll-back).
+    setMessagesInCache(CHAT, [
+      messageValue("m1", 1),
+      messageValue("m2", 2),
+      messageValue("m3", 3),
+      messageValue("m4", 4),
+    ]);
+
+    // Reconnect snapshot carries only the newest 2 — both already known.
+    useChatStore
+      .getState()
+      .processChatStreamUpdates(
+        CHAT,
+        [assistantMessage("m3", 3, "snap"), assistantMessage("m4", 4, "snap")],
+        true,
+      );
+
+    expect(ids()).toEqual(["m1", "m2", "m3", "m4"]);
+  });
+
+  it("upserts messages that arrived while the stream was down", () => {
+    setMessagesInCache(CHAT, [
+      messageValue("m1", 1),
+      messageValue("m2", 2),
+      messageValue("m3", 3),
+    ]);
+
+    // Overlaps on m3, and m4 is new (sent while disconnected).
+    useChatStore
+      .getState()
+      .processChatStreamUpdates(
+        CHAT,
+        [assistantMessage("m3", 3, "snap"), assistantMessage("m4", 4, "new")],
+        true,
+      );
+
+    expect(ids()).toEqual(["m1", "m2", "m3", "m4"]);
+  });
+
+  it("still replaces when the snapshot shares no ids (cross-chat guard)", () => {
+    setMessagesInCache(CHAT, [
+      messageValue("m1", 1),
+      messageValue("m2", 2),
+      messageValue("m3", 3),
+    ]);
+
+    // No overlap at all — stale/foreign snapshot. Replace, do not merge.
+    useChatStore
+      .getState()
+      .processChatStreamUpdates(CHAT, [assistantMessage("x1", 1, "other")], true);
+
+    expect(ids()).toEqual(["x1"]);
+  });
 });
 
 describe("message merge (optimistic user replacement)", () => {
@@ -122,7 +197,7 @@ describe("message merge (optimistic user replacement)", () => {
         chatId: CHAT,
         role: MessageRole.USER,
         contentBlocks: [],
-        ordinal: 999998n,
+        seq: 999998n,
         thread: "",
         sequenceNumber: 0n,
         attachments: [],

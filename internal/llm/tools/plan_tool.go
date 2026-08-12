@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -142,10 +142,20 @@ func (p *CreatePlanTool) Description() string {
 WHEN TO USE:
 - AFTER you preform your initial research and analyze the problem.
 - Use this tool when you need to organize complex work into structured steps
-- Only available in the 'research' state
 - You typically should create plans AFTER your findings. Avoid creating tasks to research, explore, identify, or search through the codebase. You should first perform your research so you can create an informed plan.
+- ESPECIALLY when you are going to delegate. If you are about to spawn
+  sub-agents, plan first: the task graph is what tells you which of them can run
+  at the same time. An orchestrator that spawns without a plan has no record of
+  what is independent, and ends up delegating one agent at a time.
 
-IMPORTANT NOTE: Plans are only visible in your current thread. Any spawned workflows, agents, or sub threads will not see the plan or any associated tasks.
+VISIBILITY: Sub-agents you spawn CAN read this plan. A spawned thread with no
+plan of its own resolves list_tasks / get_plan / list_ready_tasks against its
+nearest ancestor's plan, so the board you build here is the board they see.
+They can update the status of a task you assigned them; only this thread can
+change the plan's shape (add tasks, edit the plan itself).
+
+So a plan is how you delegate, not just how you take notes. Tasks are the units
+of work you hand out — write them at the size of one sub-agent's job.
 
 PLAN STRUCTURE:
 - Title: Clear, concise title for the plan
@@ -162,17 +172,39 @@ INLINE DEPENDENCIES:
 You can specify dependencies between tasks at creation time using 1-indexed task positions.
 Each task can have a "dependencies" array where each entry specifies:
 - task_position: The 1-indexed position of another task in the tasks array
-- type: "blocks" (must complete first), "related" (informational), or "parallel_with" (safe to run together)
+- type: "blocks" (the other task must COMPLETE first — a real data dependency),
+  "related" (informational only), or "parallel_with" (emphasis that two tasks are
+  safe together; rarely needed, since anything without a "blocks" edge already is)
 
 The dependency means: "the task at task_position has this relationship TO the current task."
 For example, if task 3 has dependencies: [{task_position: 1, type: "blocks"}], it means task 1 blocks task 3.
 
-Example with dependencies:
+INDEPENDENT IS THE DEFAULT. Tasks with no "blocks" edge between them can run at
+the same time — you do NOT need to mark that. Add "blocks" only where a real
+data dependency exists: task B consumes something task A creates. Name it in
+the task description when you do.
+
+A chain of "blocks" edges says every task must wait for the previous one, which
+serializes the whole plan. Only write one when that is true.
+
+Example — fan-out (the common shape; four independent tasks, then a join):
   tasks: [
     {title: "Design schema"},
-    {title: "Write migrations", dependencies: [{task_position: 1, type: "blocks"}]},
-    {title: "Implement API", dependencies: [{task_position: 2, type: "blocks"}]},
-    {title: "Write tests", dependencies: [{task_position: 3, type: "blocks"}]}
+    {title: "Implement API",       dependencies: [{task_position: 1, type: "blocks"}]},
+    {title: "Implement worker",    dependencies: [{task_position: 1, type: "blocks"}]},
+    {title: "Implement frontend",  dependencies: [{task_position: 1, type: "blocks"}]},
+    {title: "End-to-end tests",    dependencies: [
+        {task_position: 2, type: "blocks"},
+        {task_position: 3, type: "blocks"},
+        {task_position: 4, type: "blocks"}]}
+  ]
+Tasks 2, 3 and 4 all wait on the schema and on nothing else, so once it lands
+all three are ready together and should be delegated in ONE turn.
+
+Example — a genuine chain (each step consumes the last):
+  tasks: [
+    {title: "Write migration"},
+    {title: "Regenerate ORM from applied schema", dependencies: [{task_position: 1, type: "blocks"}]}
   ]
 
 TASK METADATA:
@@ -185,8 +217,10 @@ Each task can optionally include metadata with agent hints:
 
 BEST PRACTICES:
 - Break down work into clear, actionable tasks
-- Order tasks logically
-- Use inline dependencies to define the task graph upfront
+- Cut tasks along boundaries that do not overlap (package, module, directory),
+  so independent tasks can be worked at the same time without collisions
+- Use inline dependencies to define the task graph upfront, and add "blocks"
+  ONLY where one task genuinely consumes another's output
 - Include a mini-roadmap in the description
 - Document alternative approaches for pivoting
 - Be specific about what needs to be done
@@ -523,10 +557,13 @@ func (u *UpdatePlanTool) Execute(rctx *rctx.ToolContext, params UpdatePlanParams
 		return NewTextErrorResponse("No thread context available"), nil
 	}
 
-	// Get the current thread's plan
-	plan, err := u.repo.GetPlanByThreadID(rctx.Context, threadID)
+	// Writes bind to THIS thread's plan only — an ancestor's is read-only.
+	plan, err := resolvePlanForWrite(rctx.Context, u.repo, threadID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
+			if inherited, resolveErr := resolvePlanForRead(rctx.Context, u.repo, threadID); resolveErr == nil && inherited.inherited {
+				return NewTextErrorResponse(inheritedPlanWriteRefusal(inherited.ownerThreadID)), nil
+			}
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan: %v", err)), nil
@@ -684,14 +721,16 @@ func (g *GetPlanTool) Execute(rctx *rctx.ToolContext, params GetPlanParams) (Too
 		return NewTextErrorResponse("No thread context available"), nil
 	}
 
-	// Get the current thread's plan
-	plan, err := g.repo.GetPlanByThreadID(rctx.Context, threadID)
+	// Reads walk up to an ancestor's plan — a spawned sub-agent needs to see
+	// the board it was delegated from.
+	resolved, err := resolvePlanForRead(rctx.Context, g.repo, threadID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return NewTextErrorResponse("No plan found for this thread. Use create_plan to create one."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan: %v", err)), nil
 	}
+	plan := resolved.plan
 
 	// Format response
 	complexityStr := ""
@@ -725,6 +764,12 @@ Description:
 
 	if plan.CompletedAt != nil {
 		responseText += fmt.Sprintf("\nCompleted: %s", plan.CompletedAt.Format("2006-01-02 15:04:05"))
+	}
+
+	if resolved.inherited {
+		responseText += fmt.Sprintf(
+			"\n\nThis plan belongs to an ancestor thread (%s) — you are reading the board you were spawned from, and cannot modify it.",
+			resolved.ownerThreadID)
 	}
 
 	// Add task progress summary

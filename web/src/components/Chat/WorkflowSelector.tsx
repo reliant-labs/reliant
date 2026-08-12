@@ -28,6 +28,14 @@ interface WorkflowSelectorProps {
   disabled?: boolean;
   className?: string;
   compact?: boolean;
+
+  /**
+   * Optional controlled open state, so a keyboard shortcut can open the picker.
+   * Follows the same convention as the Dropdown primitive: when `isOpen` is
+   * provided the parent owns the state, otherwise it stays internal.
+   */
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function WorkflowSelector({
@@ -37,8 +45,20 @@ export function WorkflowSelector({
   disabled = false,
   className = "",
   compact = false,
+  isOpen: controlledIsOpen,
+  onOpenChange,
 }: WorkflowSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [uncontrolledIsOpen, setUncontrolledIsOpen] = useState(false);
+  const isOpen = controlledIsOpen ?? uncontrolledIsOpen;
+  const setIsOpen = useCallback(
+    (next: boolean | ((prev: boolean) => boolean)) => {
+      const resolve = (prev: boolean) =>
+        typeof next === "function" ? next(prev) : next;
+      if (onOpenChange) onOpenChange(resolve(isOpen));
+      else setUncontrolledIsOpen(resolve);
+    },
+    [isOpen, onOpenChange],
+  );
   const [contextMenu, setContextMenu] = useState<{ workflowName: string; x: number; y: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const contextMenuRef = useRef<HTMLDivElement>(null);
@@ -128,12 +148,12 @@ export function WorkflowSelector({
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [isOpen, contextMenu]);
+  }, [isOpen, contextMenu, setIsOpen]);
 
   const handleSelect = useCallback((workflowName: string | null) => {
     onChange?.(workflowName);
     setIsOpen(false);
-  }, [onChange]);
+  }, [onChange, setIsOpen]);
 
   const handleContextMenu = useCallback((e: React.MouseEvent, workflowName: string) => {
     e.preventDefault();

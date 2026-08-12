@@ -86,6 +86,54 @@ func TestGenerateFixture_StructuredAgentLoop(t *testing.T) {
 	h.ExportHistory(workflowID, "structured_agent_loop")
 }
 
+// TestGenerateFixture_Spawn pins the spawn shape: a spawn tool call dispatches
+// the child agent DETACHED — its own call_llm/execute_tools loop runs inside
+// this same Temporal workflow execution (InlineWorkflowExecutor via
+// dispatchSpawnBackground / runSpawnInlineChild — see workflow.go) via a
+// tracked workflow.Go goroutine, while the spawn tool call itself settles
+// immediately with a dispatch handle instead of waiting for the child.
+//
+// Because the parent no longer blocks on the child, its very next call_llm
+// turn (the exit candidate, since it has no tool calls of its own) races the
+// child's single turn — either may consume the scripted turn first depending
+// on Temporal's coroutine scheduling. Whichever runs second still leaves the
+// parent's loop blocked on InlineLoopExecutor.awaitLiveDetachedSpawns until
+// the child's completion lands in the parent's mailbox, so the parent takes
+// one more call_llm turn after that to react to it. Four scripted turns
+// total: parent-turn-1 (spawn call) + {parent-exit-candidate, child's-turn}
+// in either order + parent's final turn (after mailbox delivery).
+func TestGenerateFixture_Spawn(t *testing.T) {
+	script := NewScriptedLLM(
+		// Turn 1: parent delegates to a sub-agent via the spawn tool.
+		Turn{
+			Text: "I'll delegate this to a sub-agent.",
+			ToolCalls: []message.ToolCall{
+				ToolCall("call-spawn-1", "spawn", `{"preset":"implementer","prompt":"Echo something for the parent."}`),
+			},
+		},
+		// Turns 2-3: race between the parent's exit-candidate turn and the
+		// spawned child's only turn — neither has tool calls, so either
+		// ordering ends its respective loop the same way.
+		Turn{Text: "No tool calls needed right now."},
+		Turn{Text: "Child agent here — done."},
+		// Turn 4: parent's final turn, reacting to the mailbox-delivered
+		// spawn result, no more tool calls.
+		Turn{Text: "The sub-agent finished; all done."},
+	)
+	h := newHarness(t, script)
+
+	created := h.CreateChat("builtin://agent", "Please delegate a small task to a sub-agent", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	assert.False(t, h.LLM.Exhausted(), "spawn must not over-consume the script")
+
+	h.ExportHistory(workflowID, "spawn")
+}
+
 // replayRouterWorkflowYAML is a minimal pitch-deck-shaped workflow: an
 // LLM-backed node router (like pitch-deck's `classify`) that dynamically
 // dispatches to an inline builtin://agent sub-workflow node. It is stored as

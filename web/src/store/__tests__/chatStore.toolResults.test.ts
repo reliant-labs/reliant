@@ -48,7 +48,7 @@ function assistantWithToolCall(
   chatId: string,
   id: string,
   callId: string,
-  ordinal: number,
+  seq: number,
   toolName = "bash",
 ): ChatUpdate {
   return {
@@ -70,7 +70,7 @@ function assistantWithToolCall(
       createdAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:00.000Z",
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
+      seq: BigInt(seq),
       thread: "",
       sequenceNumber: 0n,
       attachments: [],
@@ -82,7 +82,7 @@ function toolResultMessage(
   chatId: string,
   id: string,
   callId: string,
-  ordinal: number,
+  seq: number,
   content: string,
   opts: { isError?: boolean; toolName?: string } = {},
 ): ChatUpdate {
@@ -106,7 +106,7 @@ function toolResultMessage(
       createdAt: "2026-01-01T00:00:01.000Z",
       updatedAt: "2026-01-01T00:00:01.000Z",
       streamingState: StreamingState.COMPLETE,
-      ordinal: BigInt(ordinal),
+      seq: BigInt(seq),
       thread: "",
       sequenceNumber: 0n,
       attachments: [],
@@ -184,5 +184,46 @@ describe("tool-result matching (characterization)", () => {
     const result = resultForCall(CHAT, "t1", "call-orphan");
     expect(result).toBeDefined();
     expect(result?.content).toBe("orphan output");
+  });
+
+  it("first-write-wins when two TOOL messages in the SAME batch carry the same tool_call_id", () => {
+    // tool_call_results.tool_call_id is a PRIMARY KEY at rest, so a second
+    // TOOL message for the same call within one batch is a re-delivery, not
+    // a genuinely different result. The first copy processed must win, not
+    // be silently overwritten by the duplicate.
+    const store = useChatStore.getState();
+    store.processChatStreamUpdates(CHAT, [
+      assistantWithToolCall(CHAT, "m1", "call-1", 1),
+      toolResultMessage(CHAT, "t1", "call-1", 2, "first output"),
+      toolResultMessage(CHAT, "t2", "call-1", 3, "duplicate output", {
+        isError: true,
+      }),
+    ]);
+
+    const result = resultForCall(CHAT, "m1", "call-1");
+    expect(result).toBeDefined();
+    expect(result?.content).toBe("first output");
+    expect(result?.is_error).toBe(false);
+  });
+
+  it("first-write-wins when a duplicate tool_call_id arrives in a LATER batch", () => {
+    const store = useChatStore.getState();
+    store.processChatStreamUpdates(CHAT, [
+      assistantWithToolCall(CHAT, "m1", "call-1", 1),
+      toolResultMessage(CHAT, "t1", "call-1", 2, "first output"),
+    ]);
+
+    // A re-delivery (retry / reconnect snapshot overlap) of the same
+    // tool_call_id in a subsequent batch must not clobber the original.
+    store.processChatStreamUpdates(CHAT, [
+      toolResultMessage(CHAT, "t2", "call-1", 3, "redelivered output", {
+        isError: true,
+      }),
+    ]);
+
+    const result = resultForCall(CHAT, "m1", "call-1");
+    expect(result).toBeDefined();
+    expect(result?.content).toBe("first output");
+    expect(result?.is_error).toBe(false);
   });
 });

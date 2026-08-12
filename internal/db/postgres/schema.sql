@@ -10,7 +10,6 @@
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
-SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -32,6 +31,26 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 SET default_tablespace = '';
 
 SET default_table_access_method = heap;
+
+--
+-- Name: agent_messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_messages (
+    id text NOT NULL,
+    chat_id text NOT NULL,
+    from_thread_id text NOT NULL,
+    to_thread_id text NOT NULL,
+    kind integer NOT NULL,
+    body text NOT NULL,
+    tool_call_id text,
+    status integer NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    delivered_at timestamp with time zone,
+    delivered_message_id text,
+    attachments jsonb,
+    CONSTRAINT agent_messages_delivered_has_time CHECK (((status <> 2) OR (delivered_at IS NOT NULL)))
+);
 
 --
 -- Name: api_keys; Type: TABLE; Schema: public; Owner: -
@@ -62,7 +81,8 @@ CREATE TABLE public.approvals (
     created_at timestamp with time zone NOT NULL,
     resolved_at timestamp with time zone,
     action_taken text,
-    temporal_workflow_id text DEFAULT ''::text NOT NULL
+    temporal_workflow_id text DEFAULT ''::text NOT NULL,
+    thread_id text
 );
 
 --
@@ -198,7 +218,8 @@ CREATE TABLE public.messages (
     node_path text,
     activity_id text,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone NOT NULL,
+    seq bigint NOT NULL
 );
 
 --
@@ -276,9 +297,14 @@ CREATE VIEW public.chats_with_activity AS
             WHEN (EXISTS ( SELECT 1
                FROM public.workflows w
               WHERE ((w.chat_id = c.id) AND (w.status = 2)))) THEN 1
+            WHEN (( SELECT max(w.completed_at) FILTER (WHERE (w.status = 4)) AS max
+               FROM public.workflows w
+              WHERE (w.chat_id = c.id)) > COALESCE(( SELECT max(w.completed_at) FILTER (WHERE (w.status = 3)) AS max
+               FROM public.workflows w
+              WHERE (w.chat_id = c.id)), '-infinity'::timestamp with time zone)) THEN 3
             WHEN (EXISTS ( SELECT 1
                FROM public.workflows w
-              WHERE ((w.chat_id = c.id) AND (w.status = 4)))) THEN 3
+              WHERE ((w.chat_id = c.id) AND (w.status = 6)))) THEN 4
             ELSE 0
         END AS activity
    FROM public.chats c;
@@ -330,6 +356,66 @@ CREATE TABLE public.command_favorites (
 );
 
 --
+-- Name: connector_audit_log; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connector_audit_log (
+    id text NOT NULL,
+    grant_id text NOT NULL,
+    user_id text NOT NULL,
+    daemon_id text NOT NULL,
+    tool_name text NOT NULL,
+    command_type text NOT NULL,
+    arguments jsonb DEFAULT '{}'::jsonb NOT NULL,
+    denied boolean DEFAULT false NOT NULL,
+    error_message text,
+    duration_ms integer,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    status text DEFAULT 'completed'::text NOT NULL,
+    CONSTRAINT connector_audit_status_valid CHECK ((status = ANY (ARRAY['started'::text, 'completed'::text, 'denied'::text])))
+);
+
+--
+-- Name: connector_client_bindings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connector_client_bindings (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    client_id text NOT NULL,
+    grant_id text NOT NULL,
+    client_name text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
+-- Name: connector_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.connector_grants (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    daemon_id text NOT NULL,
+    name text NOT NULL,
+    token_hash text NOT NULL,
+    token_prefix text NOT NULL,
+    allowed_tools jsonb NOT NULL,
+    path_root text NOT NULL,
+    exec_mode text DEFAULT 'deny'::text NOT NULL,
+    exec_allowlist jsonb DEFAULT '[]'::jsonb NOT NULL,
+    expires_at timestamp with time zone,
+    last_used_at timestamp with time zone,
+    revoked_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT connector_grants_allowlist_populated CHECK (((exec_mode <> 'allowlist'::text) OR ((jsonb_typeof(exec_allowlist) = 'array'::text) AND (jsonb_array_length(exec_allowlist) > 0)))),
+    CONSTRAINT connector_grants_exec_mode_valid CHECK ((exec_mode = ANY (ARRAY['deny'::text, 'allowlist'::text, 'unrestricted'::text]))),
+    CONSTRAINT connector_grants_path_root_not_empty CHECK ((length(TRIM(BOTH FROM path_root)) > 0)),
+    CONSTRAINT connector_grants_tools_not_empty CHECK (((jsonb_typeof(allowed_tools) = 'array'::text) AND (jsonb_array_length(allowed_tools) > 0)))
+);
+
+--
 -- Name: context_windows; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -340,7 +426,7 @@ CREATE TABLE public.context_windows (
     compaction_summary_message_id text,
     created_at timestamp with time zone NOT NULL,
     parent_context_window_id text,
-    fork_at_ordinal bigint
+    fork_at_message_id text
 );
 
 --
@@ -657,17 +743,52 @@ CREATE TABLE public.tasks (
 
 CREATE TABLE public.threads (
     id text NOT NULL,
-    conversation_id text NOT NULL,
+    chat_id text NOT NULL,
     parent_thread_id text,
-    fork_at_ordinal bigint,
-    fork_at_context_window_id text,
     workflow_id text,
     created_at timestamp with time zone NOT NULL,
     title text,
     origin text NOT NULL,
     origin_node_id text,
     status integer DEFAULT 2 NOT NULL,
-    completed_at timestamp with time zone
+    completed_at timestamp with time zone,
+    fork_at_message_id text
+);
+
+--
+-- Name: tool_call_results; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tool_call_results (
+    tool_call_id text NOT NULL,
+    message_id text,
+    content text NOT NULL,
+    is_error boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
+);
+
+--
+-- Name: tool_calls; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.tool_calls (
+    id text NOT NULL,
+    chat_id text NOT NULL,
+    thread_id text,
+    message_id text,
+    tool_name text NOT NULL,
+    input jsonb,
+    status integer NOT NULL,
+    error_message text,
+    child_workflow_id text,
+    background_process_id text,
+    requested_at timestamp with time zone NOT NULL,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL,
+    CONSTRAINT tool_calls_completed_has_completed_at CHECK (((status <> 3) OR (completed_at IS NOT NULL)))
 );
 
 --
@@ -775,7 +896,8 @@ CREATE TABLE public.worktrees (
     is_main boolean DEFAULT false NOT NULL,
     cleanup_metadata text,
     base_branches text,
-    daemon_id text
+    daemon_id text,
+    idempotency_key text
 );
 
 --
@@ -783,6 +905,13 @@ CREATE TABLE public.worktrees (
 --
 
 ALTER TABLE ONLY public.background_process_output ALTER COLUMN id SET DEFAULT nextval('public.background_process_output_id_seq'::regclass);
+
+--
+-- Name: agent_messages agent_messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_messages
+    ADD CONSTRAINT agent_messages_pkey PRIMARY KEY (id);
 
 --
 -- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -832,6 +961,13 @@ ALTER TABLE ONLY public.background_process_output
 
 ALTER TABLE ONLY public.background_processes
     ADD CONSTRAINT background_processes_pkey PRIMARY KEY (id);
+
+--
+-- Name: chat_updates chat_updates_chat_sequence_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.chat_updates
+    ADD CONSTRAINT chat_updates_chat_sequence_key UNIQUE (chat_id, sequence_number);
 
 --
 -- Name: chat_updates chat_updates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -888,6 +1024,41 @@ ALTER TABLE ONLY public.command_favorites
 
 ALTER TABLE ONLY public.command_favorites
     ADD CONSTRAINT command_favorites_user_id_project_id_command_key_key UNIQUE (user_id, project_id, command_key);
+
+--
+-- Name: connector_audit_log connector_audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_audit_log
+    ADD CONSTRAINT connector_audit_log_pkey PRIMARY KEY (id);
+
+--
+-- Name: connector_client_bindings connector_client_bindings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_client_bindings
+    ADD CONSTRAINT connector_client_bindings_pkey PRIMARY KEY (id);
+
+--
+-- Name: connector_client_bindings connector_client_bindings_unique; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_client_bindings
+    ADD CONSTRAINT connector_client_bindings_unique UNIQUE (user_id, client_id);
+
+--
+-- Name: connector_grants connector_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_grants
+    ADD CONSTRAINT connector_grants_pkey PRIMARY KEY (id);
+
+--
+-- Name: connector_grants connector_grants_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_grants
+    ADD CONSTRAINT connector_grants_token_hash_key UNIQUE (token_hash);
 
 --
 -- Name: context_windows context_windows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -967,11 +1138,25 @@ ALTER TABLE ONLY public.message_content_blocks
     ADD CONSTRAINT message_content_blocks_pkey PRIMARY KEY (id);
 
 --
+-- Name: messages messages_chat_seq_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_chat_seq_key UNIQUE (chat_id, seq);
+
+--
 -- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.messages
     ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
+
+--
+-- Name: messages messages_thread_ordinal_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_thread_ordinal_key UNIQUE (thread_id, ordinal);
 
 --
 -- Name: plans plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1107,6 +1292,20 @@ ALTER TABLE ONLY public.threads
     ADD CONSTRAINT threads_pkey PRIMARY KEY (id);
 
 --
+-- Name: tool_call_results tool_call_results_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_call_results
+    ADD CONSTRAINT tool_call_results_pkey PRIMARY KEY (tool_call_id);
+
+--
+-- Name: tool_calls tool_calls_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_calls
+    ADD CONSTRAINT tool_calls_pkey PRIMARY KEY (id);
+
+--
 -- Name: user_updates user_updates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1184,6 +1383,18 @@ ALTER TABLE ONLY public.worktrees
     ADD CONSTRAINT worktrees_project_id_name_key UNIQUE (project_id, name);
 
 --
+-- Name: idx_agent_messages_inbox; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_agent_messages_inbox ON public.agent_messages USING btree (to_thread_id, created_at) WHERE (status = 1);
+
+--
+-- Name: idx_agent_messages_one_terminal_report_per_spawn; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_spawn ON public.agent_messages USING btree (tool_call_id) WHERE (kind = ANY (ARRAY[2, 3, 4]));
+
+--
 -- Name: idx_api_keys_provider; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1194,6 +1405,12 @@ CREATE INDEX idx_api_keys_provider ON public.api_keys USING btree (user_id, prov
 --
 
 CREATE INDEX idx_api_keys_user ON public.api_keys USING btree (user_id);
+
+--
+-- Name: idx_approvals_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_approvals_thread_id ON public.approvals USING btree (thread_id) WHERE (thread_id IS NOT NULL);
 
 --
 -- Name: idx_bg_proc_output_process_seq; Type: INDEX; Schema: public; Owner: -
@@ -1232,6 +1449,12 @@ CREATE INDEX idx_bg_processes_user ON public.background_processes USING btree (u
 CREATE INDEX idx_bg_processes_worktree ON public.background_processes USING btree (worktree_id, status);
 
 --
+-- Name: idx_chat_updates_chat_entity_seq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chat_updates_chat_entity_seq ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC);
+
+--
 -- Name: idx_chat_updates_chat_seq; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1254,6 +1477,90 @@ CREATE INDEX idx_claude_auth_tokens_user ON public.claude_auth_tokens USING btre
 --
 
 CREATE INDEX idx_codex_auth_tokens_user ON public.codex_auth_tokens USING btree (user_id);
+
+--
+-- Name: idx_connector_audit_denied; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_audit_denied ON public.connector_audit_log USING btree (user_id, created_at DESC) WHERE denied;
+
+--
+-- Name: idx_connector_audit_grant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_audit_grant ON public.connector_audit_log USING btree (grant_id, created_at DESC);
+
+--
+-- Name: idx_connector_audit_unresolved; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_audit_unresolved ON public.connector_audit_log USING btree (created_at DESC) WHERE (status = 'started'::text);
+
+--
+-- Name: idx_connector_audit_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_audit_user ON public.connector_audit_log USING btree (user_id, created_at DESC);
+
+--
+-- Name: idx_connector_client_bindings_grant; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_client_bindings_grant ON public.connector_client_bindings USING btree (grant_id);
+
+--
+-- Name: idx_connector_client_bindings_lookup; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_client_bindings_lookup ON public.connector_client_bindings USING btree (user_id, client_id);
+
+--
+-- Name: idx_connector_grants_daemon; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_grants_daemon ON public.connector_grants USING btree (daemon_id);
+
+--
+-- Name: idx_connector_grants_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_grants_token_hash ON public.connector_grants USING btree (token_hash);
+
+--
+-- Name: idx_connector_grants_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_connector_grants_user ON public.connector_grants USING btree (user_id, created_at DESC);
+
+--
+-- Name: idx_content_blocks_activity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_content_blocks_activity ON public.message_content_blocks USING btree (activity_id, workflow_run_id);
+
+--
+-- Name: idx_content_blocks_message_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_content_blocks_message_position ON public.message_content_blocks USING btree (message_id, "position");
+
+--
+-- Name: idx_content_blocks_tool_call_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_content_blocks_tool_call_id ON public.message_content_blocks USING btree (tool_call_id);
+
+--
+-- Name: idx_context_windows_parent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_context_windows_parent ON public.context_windows USING btree (parent_context_window_id) WHERE (parent_context_window_id IS NOT NULL);
+
+--
+-- Name: idx_context_windows_thread_sequence; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_context_windows_thread_sequence ON public.context_windows USING btree (thread_id, sequence);
 
 --
 -- Name: idx_copilot_auth_tokens_user; Type: INDEX; Schema: public; Owner: -
@@ -1290,6 +1597,30 @@ CREATE INDEX idx_daemon_pats_user_id ON public.daemon_pats USING btree (user_id)
 --
 
 CREATE INDEX idx_daemons_user_id ON public.daemons USING btree (user_id);
+
+--
+-- Name: idx_messages_chat_activity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_chat_activity ON public.messages USING btree (chat_id, activity_id);
+
+--
+-- Name: idx_messages_chat_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_chat_id ON public.messages USING btree (chat_id);
+
+--
+-- Name: idx_messages_context_window_ordinal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_context_window_ordinal ON public.messages USING btree (context_window_id, ordinal);
+
+--
+-- Name: idx_messages_thread_ordinal; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_thread_ordinal ON public.messages USING btree (thread_id, ordinal);
 
 --
 -- Name: idx_plans_project; Type: INDEX; Schema: public; Owner: -
@@ -1367,7 +1698,19 @@ CREATE INDEX idx_task_deps_type ON public.task_dependencies USING btree (depende
 -- Name: idx_threads_origin; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX idx_threads_origin ON public.threads USING btree (conversation_id, origin);
+CREATE INDEX idx_threads_origin ON public.threads USING btree (chat_id, origin);
+
+--
+-- Name: idx_tool_calls_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_tool_calls_chat ON public.tool_calls USING btree (chat_id);
+
+--
+-- Name: idx_tool_calls_message; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_tool_calls_message ON public.tool_calls USING btree (message_id);
 
 --
 -- Name: idx_user_updates_chat; Type: INDEX; Schema: public; Owner: -
@@ -1400,6 +1743,18 @@ CREATE INDEX idx_user_updates_project ON public.user_updates USING btree (projec
 CREATE INDEX idx_workflow_checkpoints_chat_id ON public.workflow_checkpoints USING btree (chat_id);
 
 --
+-- Name: idx_worktrees_idempotency_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_worktrees_idempotency_key ON public.worktrees USING btree (project_id, idempotency_key) WHERE (idempotency_key IS NOT NULL);
+
+--
+-- Name: messages_chat_activity_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX messages_chat_activity_key ON public.messages USING btree (chat_id, activity_id) WHERE ((activity_id IS NOT NULL) AND (activity_id <> ''::text));
+
+--
 -- Name: project_daemons_daemon_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1410,6 +1765,41 @@ CREATE INDEX project_daemons_daemon_idx ON public.project_daemons USING btree (d
 --
 
 CREATE UNIQUE INDEX projects_user_remote_url_uniq ON public.projects USING btree (user_id, remote_url) WHERE (remote_url IS NOT NULL);
+
+--
+-- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_messages
+    ADD CONSTRAINT agent_messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+--
+-- Name: agent_messages agent_messages_delivered_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_messages
+    ADD CONSTRAINT agent_messages_delivered_message_id_fkey FOREIGN KEY (delivered_message_id) REFERENCES public.messages(id) ON DELETE SET NULL;
+
+--
+-- Name: agent_messages agent_messages_from_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_messages
+    ADD CONSTRAINT agent_messages_from_thread_id_fkey FOREIGN KEY (from_thread_id) REFERENCES public.threads(id) ON DELETE CASCADE;
+
+--
+-- Name: agent_messages agent_messages_to_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_messages
+    ADD CONSTRAINT agent_messages_to_thread_id_fkey FOREIGN KEY (to_thread_id) REFERENCES public.threads(id) ON DELETE CASCADE;
+
+--
+-- Name: approvals approvals_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.approvals
+    ADD CONSTRAINT approvals_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.threads(id) ON DELETE RESTRICT;
 
 --
 -- Name: background_process_output background_process_output_process_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -1438,6 +1828,55 @@ ALTER TABLE ONLY public.background_processes
 
 ALTER TABLE ONLY public.background_processes
     ADD CONSTRAINT background_processes_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
+
+--
+-- Name: connector_client_bindings connector_client_bindings_grant_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_client_bindings
+    ADD CONSTRAINT connector_client_bindings_grant_id_fkey FOREIGN KEY (grant_id) REFERENCES public.connector_grants(id) ON DELETE CASCADE;
+
+--
+-- Name: connector_grants connector_grants_daemon_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.connector_grants
+    ADD CONSTRAINT connector_grants_daemon_id_fkey FOREIGN KEY (daemon_id) REFERENCES public.daemons(id) ON DELETE CASCADE;
+
+--
+-- Name: context_windows context_windows_fork_at_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.context_windows
+    ADD CONSTRAINT context_windows_fork_at_message_id_fkey FOREIGN KEY (fork_at_message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+--
+-- Name: context_windows context_windows_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.context_windows
+    ADD CONSTRAINT context_windows_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.threads(id) ON DELETE CASCADE;
+
+--
+-- Name: message_content_blocks message_content_blocks_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_content_blocks
+    ADD CONSTRAINT message_content_blocks_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+--
+-- Name: messages messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+--
+-- Name: messages messages_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.threads(id) ON DELETE RESTRICT;
 
 --
 -- Name: plans plans_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
@@ -1480,6 +1919,55 @@ ALTER TABLE ONLY public.task_dependencies
 
 ALTER TABLE ONLY public.task_dependencies
     ADD CONSTRAINT task_dependencies_to_task_id_fkey FOREIGN KEY (to_task_id) REFERENCES public.tasks(id) ON DELETE CASCADE;
+
+--
+-- Name: threads threads_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.threads
+    ADD CONSTRAINT threads_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+--
+-- Name: threads threads_fork_at_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.threads
+    ADD CONSTRAINT threads_fork_at_message_id_fkey FOREIGN KEY (fork_at_message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+--
+-- Name: tool_call_results tool_call_results_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_call_results
+    ADD CONSTRAINT tool_call_results_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+--
+-- Name: tool_call_results tool_call_results_tool_call_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_call_results
+    ADD CONSTRAINT tool_call_results_tool_call_id_fkey FOREIGN KEY (tool_call_id) REFERENCES public.tool_calls(id) ON DELETE CASCADE;
+
+--
+-- Name: tool_calls tool_calls_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_calls
+    ADD CONSTRAINT tool_calls_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
+
+--
+-- Name: tool_calls tool_calls_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_calls
+    ADD CONSTRAINT tool_calls_message_id_fkey FOREIGN KEY (message_id) REFERENCES public.messages(id) ON DELETE CASCADE;
+
+--
+-- Name: tool_calls tool_calls_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.tool_calls
+    ADD CONSTRAINT tool_calls_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.threads(id) ON DELETE RESTRICT;
 
 --
 -- Name: user_updates user_updates_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

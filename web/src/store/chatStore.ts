@@ -28,6 +28,7 @@ import {
   mergeActiveThreads,
   mergeMessages,
   resolveStreamingBase,
+  snapshotReplacesMessages,
 } from "../lib/chatStreamReducers";
 
 import * as Sentry from "@sentry/react";
@@ -94,16 +95,21 @@ import {
 import {
   chatKeys,
   seedChatDetail,
+  upsertChatInListCache,
   patchChatCaches,
   getChatFromCache,
 } from "../hooks/chat-queries";
 import {
   setMessagesInCache,
+  setMessagesMetaInCache,
   patchMessagesCache,
+  prependMessagesCache,
   getMessagesFromCache,
+  getMessagesMetaFromCache,
   hasMessagesCache,
   clearMessagesCache,
   clearAllMessagesCache,
+  fanOutMessagesToThreadCaches,
 } from "../hooks/message-queries";
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
@@ -591,6 +597,16 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
 // to prevent duplicate API calls when messages are reprocessed (cross-matching, streaming updates)
 const processedTaskToolCallIds = new Set<string>();
 
+// How many older messages loadOlderMessages fetches per scroll-back page.
+// Smaller than the 200-message initial snapshot bound: paging happens while the
+// user is actively scrolling, so a smaller page keeps each round-trip cheap.
+const OLDER_MESSAGES_PAGE_SIZE = 100;
+
+// Chats with an older-messages page in flight. Module-scoped (not store state)
+// for the same reason the streaming buffers are: it is transient request
+// bookkeeping that no component renders, so it must not trigger re-renders.
+const olderMessagesInFlight = new Set<string>();
+
 
 
 // Helper to check if content blocks indicate a streaming (incomplete) message
@@ -760,6 +776,10 @@ interface ChatStoreState {
     },
   ) => Promise<void>;
   loadMessages: (chatId: string) => Promise<void>;
+  // Fetch the next page of OLDER messages and PREPEND them to the cache.
+  // Resolves to true when more history may still remain, false when the top of
+  // the chat has been reached (or nothing could be loaded).
+  loadOlderMessages: (chatId: string) => Promise<boolean>;
 
   // Stream methods (chat detail events are delivered via the unified global stream)
   processChatStreamUpdates: (chatId: string, updates: ChatUpdate[], isSnapshot?: boolean) => void;
@@ -1016,9 +1036,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     const chatId = chat.id;
 
-    // Home the new chat into the React Query detail cache immediately so
-    // useChat / useActiveChat show it without waiting for a list refetch.
+    // Home the new chat into the React Query caches immediately so both
+    // useChat / useActiveChat and list readers (sidebar/search/worktree views)
+    // show it without waiting for a stream-triggered list refetch.
     seedChatDetail(chat);
+    upsertChatInListCache(projectId, chat);
+    void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
 
     // Initialize state for the new chat
     get().initChatState(chat);
@@ -1038,7 +1061,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         streamingState: StreamingState.COMPLETE,
-        ordinal: BigInt(999998), // Just before streaming message (999999)
+        seq: BigInt(999998), // Just before streaming message (999999)
         thread: "",
         sequenceNumber: BigInt(0),
         attachments:
@@ -1122,6 +1145,27 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (activeChatId === chat.id) {
       return;
     }
+
+    // Opening a different chat ABANDONS any pending new-chat compose, so its
+    // scratch params die here.
+    //
+    // tempNewChat* previously had exactly one exit — transferTempToChat() on
+    // SEND. Walking away from a half-configured compose left it populated, and
+    // ChatInput restores it verbatim for the NEXT new chat (its "New chat (no
+    // chatId)" branch). A `mode` picked once and never sent therefore became the
+    // mode of every new chat for the rest of the session, across projects, with
+    // nothing in the UI explaining why; only a reload cleared it, which is what
+    // made it look intermittent. It leaks in the dangerous direction too —
+    // `auto` (auto-approves tool calls) rides along exactly as easily as `plan`.
+    //
+    // This is the right hook precisely BECAUSE it is not a lifecycle event.
+    // NewChatView's mount/unmount cannot express "abandoned": it remounts
+    // between chat-creation attempts, so clearing there would wipe params the
+    // user is still editing (see the standing NOTE in that component). Selecting
+    // another chat is unambiguous. After a successful send this is already a
+    // no-op — NewChatView calls transferTempToChat() before selectChat(), so the
+    // temp state is drained by the time we get here.
+    useChatParamsStore.getState().clearTempNewChatParams();
 
     // Check if this is a new chat or an already-initialized one. Presence of a
     // message-list cache entry is the per-chat init marker (see initChatState).
@@ -1317,7 +1361,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // This prevents stuck state if backend crashes before creating workflow_execution
 
       // Create optimistic user message so streaming response appears in the correct layer
-      // Uses ordinal 999998 (just before streaming's 999999) and a stable temp ID
+      // Uses seq 999998 (just before streaming's 999999) and a stable temp ID
       // This will be replaced by the real message when it arrives via gRPC stream
       const optimisticAttachments = getAttachmentsFromStore(
         attachmentIds || [],
@@ -1330,7 +1374,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         streamingState: StreamingState.COMPLETE,
-        ordinal: BigInt(999998), // Just before streaming message (999999)
+        seq: BigInt(999998), // Just before streaming message (999999)
         thread: "",
         sequenceNumber: BigInt(0),
         attachments:
@@ -1437,8 +1481,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         `[ChatStore] Loading messages for chat ${chatId.slice(0, 8)}`,
       );
       const response = await api.chatsV2.listMessages(chatId);
-      // Canonical order — the server's flat list is sorted by raw ordinal,
-      // which interleaves threads incorrectly (ordinals are per-thread).
+      // Canonical order — chat-global seq, a true total order across threads.
       const messages = sortMessagesForDisplay(
         (response.messages || []).map(normalizeMessageAttachmentFields),
         chatId,
@@ -1450,7 +1493,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           ? {
               id: messages[0].id?.slice(0, 8),
               role: messages[0].role,
-              ordinal: messages[0].ordinal,
+              seq: messages[0].seq,
               thread: messages[0].thread,
             }
           : null,
@@ -1458,7 +1501,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           ? {
               id: messages[messages.length - 1].id?.slice(0, 8),
               role: messages[messages.length - 1].role,
-              ordinal: messages[messages.length - 1].ordinal,
+              seq: messages[messages.length - 1].seq,
               thread: messages[messages.length - 1].thread,
             }
           : null,
@@ -1512,7 +1555,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
       // Seed/replace the RQ message cache (the single source of truth) with the
       // loaded list; the tool-result index stays in Zustand.
-      setMessagesInCache(chatId, messages);
+      //
+      // This request is unbounded (no `recent`), so it returns the whole chat —
+      // assert that explicitly. Without it a stale hasMore from an earlier
+      // bounded snapshot would survive and offer scroll-back that can only ever
+      // come back empty. hasMore is trustworthy here specifically BECAUSE
+      // beforeSeq is 0: the server's `|| beforeSeq > 0` disjunct, which
+      // makes it useless for paged requests, does not apply.
+      setMessagesInCache(chatId, messages, {
+        total: response.total,
+        hasMore: response.hasMore,
+      });
       set({
         toolResultsByCallId: {
           ...state.toolResultsByCallId,
@@ -1526,6 +1579,139 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         tags: { component: 'chat', operation: 'load_messages' },
         extra: { error: String(error), chatId },
       });
+    }
+  },
+
+  // Scroll-back paging. The initial snapshot is bounded to the newest N
+  // messages, so this is how the rest of a long chat becomes reachable: fetch
+  // the page immediately older than what we hold and PREPEND it.
+  loadOlderMessages: async (chatId: string) => {
+    // Concurrency guard. Virtuoso can fire startReached several times in quick
+    // succession (each prepend re-renders the list near the top edge), and
+    // duplicate in-flight pages would race on oldestSeq and fetch the same
+    // window twice.
+    if (olderMessagesInFlight.has(chatId)) {
+      logger.debug("[ChatStore] Older-message page already in flight", {
+        chatId: chatId.slice(0, 8),
+      });
+      return true;
+    }
+
+    const meta = getMessagesMetaFromCache(chatId);
+    // No cache entry means nothing is rendered yet — there is no scroll-back to
+    // serve, and paging from seq 0 would be meaningless.
+    if (!meta) return false;
+    if (meta.hasMore === false) return false;
+
+    // The paging cursor. oldestSeq is maintained by the cache helpers as
+    // the MINIMUM seq we hold; the server returns messages strictly below
+    // it. 0 means "unknown" — with nothing to page from, stop rather than
+    // re-fetch the newest window forever.
+    const beforeSeq = meta.oldestSeq ?? 0;
+    if (beforeSeq <= 0) return false;
+
+    olderMessagesInFlight.add(chatId);
+    try {
+      logger.debug("[ChatStore] Loading older messages", {
+        chatId: chatId.slice(0, 8),
+        beforeSeq,
+        pageSize: OLDER_MESSAGES_PAGE_SIZE,
+      });
+
+      const response = await api.chatsV2.listMessages(chatId, {
+        recent: OLDER_MESSAGES_PAGE_SIZE,
+        beforeSeq,
+      });
+
+      const older = (response.messages || []).map(
+        normalizeMessageAttachmentFields,
+      );
+
+      // TERMINATION IS DRIVEN BY THE EMPTY PAGE, NOT BY has_more.
+      //
+      // The server computes hasMore as
+      //   len(messages) < totalCount || beforeSeq > 0
+      // (internal/grpc/services/chat_crud.go). That second disjunct makes it
+      // permanently TRUE for every paged request — we always pass a positive
+      // beforeSeq — so a loop that trusted it would never terminate and
+      // would keep re-requesting past the top of the chat. An empty page is the
+      // only trustworthy end-of-history signal from this RPC.
+      if (older.length === 0) {
+        logger.debug("[ChatStore] Reached the start of chat history", {
+          chatId: chatId.slice(0, 8),
+        });
+        setMessagesMetaInCache(chatId, { hasMore: false });
+        return false;
+      }
+
+      // A short page means the server had fewer than we asked for below the
+      // cursor, i.e. we just consumed the remainder. Serve it, then stop.
+      const reachedStart = older.length < OLDER_MESSAGES_PAGE_SIZE;
+
+      // Build this page's tool-result index and MERGE it into the chat's index
+      // (never replace — the newer messages already rendered depend on their
+      // own entries). Same shape as the loadMessages pre-pass.
+      const state = get();
+      const pageToolResults: ToolResultsByCallId = {
+        ...(state.toolResultsByCallId[chatId] || {}),
+      };
+      for (const message of older) {
+        if (message.role !== MessageRole.TOOL) continue;
+        for (const block of message.contentBlocks || []) {
+          if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
+            pageToolResults[block.toolCallId] = {
+              content: block.content || "",
+              is_error: block.isError,
+              tool_name: block.toolName,
+            };
+          }
+        }
+      }
+
+      // Warm the processMessage memo before the prepend commits, so the newly
+      // inserted rows render from cached parses instead of parsing during the
+      // scroll that requested them.
+      const approvals =
+        queryClient.getQueryData<ToolApprovalRequest[]>(
+          approvalKeys.list(chatId),
+        ) ?? [];
+      for (const message of older) {
+        getProcessedMessage(message, pageToolResults, approvals);
+      }
+
+      set({
+        toolResultsByCallId: {
+          ...state.toolResultsByCallId,
+          [chatId]: pageToolResults,
+        },
+      });
+
+      // prependMessagesCache recomputes oldestSeq from the merged list, so
+      // the next page's cursor moves strictly backward.
+      prependMessagesCache(chatId, older, {
+        total: response.total,
+        hasMore: !reachedStart,
+      });
+
+      logger.info("[ChatStore] Prepended older messages", {
+        chatId: chatId.slice(0, 8),
+        loaded: older.length,
+        reachedStart,
+      });
+
+      return !reachedStart;
+    } catch (error) {
+      logger.error("[ChatStore] Failed to load older messages:", error);
+      Sentry.captureMessage("Failed to load older chat messages", {
+        level: "warning",
+        tags: { component: "chat", operation: "load_older_messages" },
+        extra: { error: String(error), chatId },
+      });
+      // Leave hasMore alone: this is a transient failure, not end-of-history.
+      // The next startReached retries.
+      return true;
+    } finally {
+      olderMessagesInFlight.delete(chatId);
     }
   },
 
@@ -1625,13 +1811,23 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           }
         } else if (delta.delta_type === "stream_cancelled") {
           logger.debug(
-            "[Streaming] Stream cancelled, marking tools as cancelled",
+            "[Streaming] Stream cancelled, marking unfinished tools as cancelled",
           );
           streamCancelled = true;
+          // Only tools that never reached an outcome. `block.status` alone
+          // cannot answer that: nothing ever writes "completed" onto a
+          // streaming block (tool_use_stop is a no-op, and success arrives on
+          // the separate toolCallStates channel), so the old `!block.status`
+          // test was true for finished tools too and cancelled all of them.
+          const settled = useChatStore.getState().toolCallStates[chatId];
           for (const block of contentBlocks) {
-            if (block && block.type === ContentBlockType.TOOL_CALL && !(block as ContentBlock & { status?: string }).status) {
-              (block as ContentBlock & { status?: string }).status = "cancelled";
-            }
+            if (!block || block.type !== ContentBlockType.TOOL_CALL) continue;
+            if (block.status) continue;
+            const status = block.toolCallId
+              ? settled?.get(block.toolCallId)?.status
+              : undefined;
+            if (status === "completed" || status === "failed") continue;
+            block.status = "cancelled";
           }
         }
       }
@@ -1664,7 +1860,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         createdAt: currentMsg?.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
         streamingState: streamCancelled ? StreamingState.COMPLETE : StreamingState.STREAMING,
-        ordinal: currentMsg?.ordinal ?? BigInt(999999),
+        seq: currentMsg?.seq ?? BigInt(999999),
         thread: thread || "",
         sequenceNumber: BigInt(0),
         attachments: currentMsg?.attachments || [],
@@ -1864,14 +2060,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         );
 
         // Convert ToolCallUpdate to ToolExecutionStateUpdate format
-        // for internal state tracking (UI expects this format)
+        // for internal state tracking (UI expects this format).
+        //
+        // Keyed by the LLM tool-call id — the same id the cards look up by
+        // (ToolExecution/ChatMessage read toolCall.id). It is stable across the
+        // whole call lifetime; a content-block UUID is not, because the
+        // assistant message is persisted (minting fresh block UUIDs) BEFORE
+        // tools execute, so every post-persistence status would be filed under
+        // an id no reader ever asks for.
         const toolExecutionUpdates: ToolExecutionStateUpdate[] =
           toolCallUpdates.map((toolCall) => {
             const toolUpdate = {
               update_type: "tool_execution_state" as const,
-              id: toolCall.content_block_id, // Use content_block_id as the ID!
+              id: toolCall.tool_call_id,
               chat_id: chatId,
-              tool_call_id: toolCall.content_block_id, // Map to content_block_id
+              tool_call_id: toolCall.tool_call_id,
               tool_name: toolCall.tool_name,
               status: toolCall.status,
               node_id: toolCall.node_id || "",
@@ -2004,11 +2207,32 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // top of processMessage's internal one), we merge them into a per-chat
         // index and let processMessage resolve call→result at read time.
         // messageUpdates are proto Message objects (camelCase fields).
+        //
+        // tool_call_results.tool_call_id is a PRIMARY KEY at rest (migration
+        // 20260801010000), so two TOOL messages carrying the same
+        // tool_call_id are the same result re-delivered (retry / overlapping
+        // snapshot), not a genuine second result. First write wins: keep
+        // whichever copy we saw first and warn instead of silently
+        // overwriting with what should be an identical re-delivery.
         const batchToolResults: ToolResultsByCallId = {};
+        const batchToolResultSourceMsgId: Record<string, string> = {};
         messageUpdates.forEach((protoMsg) => {
           if (protoMsg.role === MessageRole.TOOL) {
             protoMsg.contentBlocks.forEach((block) => {
               if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
+                const existingMsgId = batchToolResultSourceMsgId[block.toolCallId];
+                if (existingMsgId !== undefined) {
+                  logger.warn(
+                    "[ChatStore] Duplicate tool result for tool_call_id in one batch — keeping first, dropping re-delivery",
+                    {
+                      toolCallId: block.toolCallId,
+                      firstMessageId: existingMsgId,
+                      duplicateMessageId: protoMsg.id,
+                    },
+                  );
+                  return;
+                }
+                batchToolResultSourceMsgId[block.toolCallId] = protoMsg.id;
                 batchToolResults[block.toolCallId] = {
                   content: block.content || "",
                   is_error: block.isError,
@@ -2029,7 +2253,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             attachments: normalizeMessageAttachments(protoMsg.attachments),
             contentBlocks: (protoMsg.contentBlocks || []).map((b: any) => ({
               ...b,
-              type: typeof b.type === 'string' ? b.type : b.type,
+              type: b.type,
             })),
           };
           return converted;
@@ -2078,15 +2302,26 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // messages come from the RQ cache (single source of truth); reads are
         // synchronous and setQueryData commits synchronously, so this sees the
         // latest merged array — same freshness the old get()-based read had.
+        const cachedMessages = getMessagesFromCache(chatId);
+        // A reconnect snapshot that would destroy already-loaded older pages is
+        // merged instead of replacing (see snapshotReplacesMessages). The
+        // tool-result index below must follow the SAME decision.
+        const snapshotReplaces =
+          isSnapshot && snapshotReplacesMessages(cachedMessages, messages);
         if (isSnapshot) {
-          logger.info("[ChatStore] Snapshot: replacing messages for chat", {
-            chatId: chatId.slice(0, 8),
-            snapshotCount: messages.length,
-            previousCount: getMessagesFromCache(chatId).length,
-          });
+          logger.info(
+            snapshotReplaces
+              ? "[ChatStore] Snapshot: replacing messages for chat"
+              : "[ChatStore] Snapshot: merging (preserving loaded older pages)",
+            {
+              chatId: chatId.slice(0, 8),
+              snapshotCount: messages.length,
+              previousCount: cachedMessages.length,
+            },
+          );
         }
         let updatedMessages = mergeMessages(
-          getMessagesFromCache(chatId),
+          cachedMessages,
           messages,
           isSnapshot,
         );
@@ -2097,8 +2332,34 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // index (rather than re-embedding into already-stored assistant
         // blocks) is what makes "late results" attach on the next read
         // without mutating the assistant message.
+        //
+        // Cleared only when the snapshot actually REPLACED the message list —
+        // the index is scoped to the messages it serves. Clearing it while
+        // older pages survive would strand their tool calls with no results.
+        //
+        // Same first-write-wins rule as the in-batch collision above: a
+        // tool_call_id already present from a prior batch means this batch's
+        // copy is a re-delivery (retry / reconnect snapshot overlapping a
+        // live result), not a new result — the PK at rest guarantees at most
+        // one real result per call. Keep the existing entry and warn rather
+        // than risk clobbering real output with a re-delivered error stub.
+        const existingToolResults = snapshotReplaces
+          ? {}
+          : state.toolResultsByCallId[chatId] || {};
+        for (const toolCallId of Object.keys(batchToolResults)) {
+          if (toolCallId in existingToolResults) {
+            logger.warn(
+              "[ChatStore] Tool result already recorded for tool_call_id — keeping existing, dropping re-delivery from this batch",
+              {
+                toolCallId,
+                sourceMessageId: batchToolResultSourceMsgId[toolCallId],
+              },
+            );
+            delete batchToolResults[toolCallId];
+          }
+        }
         const updatedToolResults: ToolResultsByCallId = {
-          ...(isSnapshot ? {} : state.toolResultsByCallId[chatId] || {}),
+          ...existingToolResults,
           ...batchToolResults,
         };
 
@@ -2170,11 +2431,30 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                     isProtoMessageComplete(msg) &&
                     msgThreadKey === threadKey
                   ) {
-                    const existingIds = new Set(
-                      (msg.contentBlocks || []).map((b) => b.id),
+                    // Dedup by TOOL CALL ID, not block id.
+                    //
+                    // A streaming block is created by the tool_use_start
+                    // delta with `id: ""` — it has no block id, because the
+                    // block row does not exist until the message is
+                    // persisted. So `existingIds.has(cb.id)` compared "" to
+                    // real uuids, never matched, and appended the ephemeral
+                    // card to the persisted message every time. The result was
+                    // a duplicate tool call stuck at "Preparing…" forever,
+                    // hanging below the real ones: the persisted copy carried
+                    // its input and completed, while the streaming copy had
+                    // neither and rendered as preparing.
+                    //
+                    // tool_call_id is the identifier both copies share, and it
+                    // is what every other consumer pairs calls and results on.
+                    const existingToolCallIds = new Set(
+                      (msg.contentBlocks || [])
+                        .filter((b) => b.type === ContentBlockType.TOOL_CALL)
+                        .map((b) => b.toolCallId)
+                        .filter((id): id is string => !!id),
                     );
                     const newCancelledBlocks = cancelledBlocks.filter(
-                      (cb: any) => !existingIds.has(cb.id),
+                      (cb: ContentBlock) =>
+                        !!cb.toolCallId && !existingToolCallIds.has(cb.toolCallId),
                     );
                     if (newCancelledBlocks.length > 0) {
                       return {
@@ -2223,10 +2503,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // owner of in-progress content — no double-storage, no
         // streaming-temp bookkeeping in the messages array.
 
-        // Canonical order (oldest first): per-thread ordinal, threads
-        // interleaved by clamped time — see lib/messageOrder.ts. createdAt
-        // alone is NOT trustworthy (repair/attachment messages have shipped
-        // with wrong timestamps; placeholders stamp the client clock).
+        // Canonical order (oldest first): chat-global seq — see
+        // lib/messageOrder.ts.
         updatedMessages = sortMessagesForDisplay(updatedMessages, chatId);
 
         // Note: activity updates come through the global stream and are
@@ -2396,14 +2674,16 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   : undefined,
             };
           })(),
-          // Delta identity: seed the finalized-id set. Snapshot REPLACES it
-          // (snapshot semantics — the snapshot dedups markers by entity_id, so
-          // it carries one marker per finalized message); incremental UNIONS.
+          // Delta identity: seed the finalized-id set. A REPLACING snapshot
+          // replaces it too (snapshot semantics — the snapshot dedups markers
+          // by entity_id, so it carries one marker per finalized message);
+          // incremental — and a merging reconnect snapshot, which keeps
+          // messages whose markers it does not re-carry — UNIONS.
           finalizedStreamIds: (() => {
             if (newlyFinalizedIds.size === 0 && !isSnapshot) {
               return state.finalizedStreamIds;
             }
-            const base = isSnapshot
+            const base = snapshotReplaces
               ? new Set<string>()
               : new Set(state.finalizedStreamIds[chatId] || []);
             for (const id of newlyFinalizedIds) base.add(id);
@@ -2429,6 +2709,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // optimistic-user replacement / canonical sort were all applied to
         // `updatedMessages` above.
         setMessagesInCache(chatId, updatedMessages);
+
+        // Keep any open thread-scoped reader (a spawn preview, a selected
+        // thread) current. Only this batch's messages are fanned out, not the
+        // whole merged array: the thread caches own their own history, and
+        // the stream's job is to add to it.
+        fanOutMessagesToThreadCaches(chatId, messages);
 
         // Approval updates from the stream patch the React Query cache
         // directly (setQueryData, no refetch) — approvals are server data
@@ -3078,6 +3364,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   evictChat: (chatId: string) => {
     clearStreamingBuffersForChat(chatId);
     clearMessagesCache(chatId);
+    // A page may still be in flight for the evicted chat; its finally-block
+    // delete would otherwise be the only thing clearing this, and an aborted
+    // teardown would leave a tombstone that blocks paging if the chat returns.
+    olderMessagesInFlight.delete(chatId);
     useThreadActivityStore.getState().clearThreads(chatId);
 
     const omit = <T>(record: Record<string, T>): Record<string, T> => {
@@ -3123,6 +3413,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Clear module-scoped set that tracks processed task tool calls
     processedTaskToolCallIds.clear();
+    olderMessagesInFlight.clear();
 
     // Drop the homed Chat objects from the React Query caches (the single
     // source of truth) so a logout clears chat data everywhere.

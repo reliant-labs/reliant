@@ -18,6 +18,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/pdfutil"
@@ -51,13 +52,22 @@ type fsReadFileRequest struct {
 	Opts *daemon.ReadFileOpts `json:"opts,omitempty"`
 }
 
-func handleFSReadFile(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSReadFile(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsReadFileRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	resp, err := daemon.ReadFileContent(req.Path, req.Opts)
+	// Re-resolve through the kernel immediately before use. The dispatch-time
+	// check already rejected obviously-out-of-bounds paths; this closes the
+	// window between that check and this open, during which a symlink could
+	// have been swapped in. A no-op for unconfined callers.
+	path, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	resp, err := daemon.ReadFileContent(path, req.Opts)
 	if err != nil {
 		return nil, err
 	}
@@ -173,19 +183,27 @@ type fsWriteFileRequest struct {
 	Content string `json:"content"`
 }
 
-func handleFSWriteFile(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSWriteFile(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsWriteFileRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	// Resolved with allowMissing, since a write commonly creates the file; the
+	// check then applies to the parent, which is where an escaping symlink
+	// would have to be. A no-op for unconfined callers.
+	path, err := daemonpolicy.ResolveDir(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	resp := daemon.WriteResult{}
 
 	// Read old content if file exists
-	oldBytes, err := os.ReadFile(req.Path)
+	oldBytes, err := os.ReadFile(path)
 	if err != nil {
 		if !os.IsNotExist(err) {
-			return nil, fmt.Errorf("read old content %s: %w", req.Path, err)
+			return nil, fmt.Errorf("read old content %s: %w", path, err)
 		}
 		resp.Created = true
 	} else {
@@ -193,16 +211,16 @@ func handleFSWriteFile(_ context.Context, payload []byte) ([]byte, error) {
 	}
 
 	// Ensure parent directories exist
-	if err := os.MkdirAll(filepath.Dir(req.Path), 0755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(req.Path), err)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
 	}
 
 	content := []byte(req.Content)
-	if err := os.WriteFile(req.Path, content, 0644); err != nil {
-		return nil, fmt.Errorf("write %s: %w", req.Path, err)
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return nil, fmt.Errorf("write %s: %w", path, err)
 	}
 
-	info, err := os.Stat(req.Path)
+	info, err := os.Stat(path)
 	if err == nil {
 		resp.ModTime = info.ModTime()
 	}
@@ -220,11 +238,20 @@ type fsPatchFileRequest struct {
 	Edits []daemon.PatchEdit `json:"edits"`
 }
 
-func handleFSPatchFile(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSPatchFile(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsPatchFileRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Resolved through the kernel immediately before use; a no-op for
+	// unconfined callers. req.Path is replaced so every later use in this
+	// handler operates on the verified path.
+	resolved, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	req.Path = resolved
 
 	data, err := os.ReadFile(req.Path)
 	if err != nil {
@@ -314,7 +341,7 @@ type fsListDirResponse struct {
 	Entries []daemon.DirEntry `json:"entries"`
 }
 
-func handleFSListDir(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSListDir(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsListDirRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -322,12 +349,23 @@ func handleFSListDir(_ context.Context, payload []byte) ([]byte, error) {
 
 	path := req.Path
 	if path == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get home directory: %w", err)
+		// For a confined caller an absent path means the allowed directory,
+		// NOT the daemon's home — the daemon is never chdir'd into the grant,
+		// so defaulting to $HOME would list a directory outside it.
+		if daemonpolicy.FromContext(ctx) == nil {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return nil, fmt.Errorf("failed to get home directory: %w", err)
+			}
+			path = home
 		}
-		path = home
 	}
+
+	resolved, err := daemonpolicy.ResolveDir(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	path = resolved
 
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -362,7 +400,7 @@ type fsGlobRequest struct {
 	Opts    *daemon.GlobOpts `json:"opts,omitempty"`
 }
 
-func handleFSGlob(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSGlob(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsGlobRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -379,11 +417,21 @@ func handleFSGlob(_ context.Context, payload []byte) ([]byte, error) {
 		maxResults = req.Opts.MaxResults
 	}
 	if baseDir == "" {
-		var cwdErr error
-		baseDir, cwdErr = os.Getwd()
-		if cwdErr != nil {
-			return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+		// For a confined caller an absent base directory means the allowed
+		// directory, NOT the daemon's cwd — the daemon is never chdir'd into
+		// the grant, so falling back to cwd would search outside it.
+		if daemonpolicy.FromContext(ctx) == nil {
+			var cwdErr error
+			baseDir, cwdErr = os.Getwd()
+			if cwdErr != nil {
+				return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+			}
 		}
+	}
+	if resolved, err := daemonpolicy.ResolveDir(ctx, baseDir); err != nil {
+		return nil, err
+	} else {
+		baseDir = resolved
 	}
 
 	// Use ripgrep for fast glob (same approach as glob tool)
@@ -437,7 +485,7 @@ type fsSearchRequest struct {
 	Opts    *daemon.SearchOpts `json:"opts,omitempty"`
 }
 
-func handleFSSearch(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSSearch(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsSearchRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -466,11 +514,21 @@ func handleFSSearch(_ context.Context, payload []byte) ([]byte, error) {
 		maxResults = req.Opts.MaxResults
 	}
 	if baseDir == "" {
-		var cwdErr error
-		baseDir, cwdErr = os.Getwd()
-		if cwdErr != nil {
-			return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+		// For a confined caller an absent base directory means the allowed
+		// directory, NOT the daemon's cwd — the daemon is never chdir'd into
+		// the grant, so falling back to cwd would search outside it.
+		if daemonpolicy.FromContext(ctx) == nil {
+			var cwdErr error
+			baseDir, cwdErr = os.Getwd()
+			if cwdErr != nil {
+				return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+			}
 		}
+	}
+	if resolved, err := daemonpolicy.ResolveDir(ctx, baseDir); err != nil {
+		return nil, err
+	} else {
+		baseDir = resolved
 	}
 
 	rgPath, err := cmdutil.FindRipgrep()
@@ -610,7 +668,7 @@ type fsFindReplaceRequest struct {
 	Opts        *daemon.FindReplaceOpts `json:"opts,omitempty"`
 }
 
-func handleFSFindReplace(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSFindReplace(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsFindReplaceRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -646,11 +704,21 @@ func handleFSFindReplace(_ context.Context, payload []byte) ([]byte, error) {
 		baseDir = req.Opts.BaseDir
 	}
 	if baseDir == "" {
-		var cwdErr error
-		baseDir, cwdErr = os.Getwd()
-		if cwdErr != nil {
-			return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+		// For a confined caller an absent base directory means the allowed
+		// directory, NOT the daemon's cwd — the daemon is never chdir'd into
+		// the grant, so falling back to cwd would search outside it.
+		if daemonpolicy.FromContext(ctx) == nil {
+			var cwdErr error
+			baseDir, cwdErr = os.Getwd()
+			if cwdErr != nil {
+				return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+			}
 		}
+	}
+	if resolved, err := daemonpolicy.ResolveDir(ctx, baseDir); err != nil {
+		return nil, err
+	} else {
+		baseDir = resolved
 	}
 
 	// Find matching files using glob

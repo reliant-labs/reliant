@@ -3,6 +3,7 @@ package handlers
 
 import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	activitytypes "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -76,12 +77,14 @@ const (
 )
 
 // IsValid returns true if the thinking level is a recognized value.
+//
+// This is a vocabulary check only. Whether a given model accepts the level is
+// decided by its thinking_levels in models.yaml and reconciled by
+// models.ReconcileThinkingLevel, so the list lives in one place rather than
+// being restated here — an omission here rejects the request outright, before
+// reconciliation can fall back.
 func (tl ThinkingLevel) IsValid() bool {
-	switch tl {
-	case ThinkingLevelLow, ThinkingLevelMedium, ThinkingLevelHigh, "xhigh":
-		return true
-	}
-	return false
+	return models.IsKnownThinkingLevel(string(tl))
 }
 
 // =============================================================================

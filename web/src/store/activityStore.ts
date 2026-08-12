@@ -38,7 +38,7 @@ import { ChatActivity } from "../gen/reliant/v1/chat_pb";
 export { ChatActivity } from "../gen/reliant/v1/chat_pb";
 
 // Map activity enum to dot states for the sidebar ActivityDot component
-export type DotState = "idle" | "thinking" | "awaiting_approval" | "error";
+export type DotState = "idle" | "thinking" | "awaiting_approval" | "error" | "paused";
 
 export function activityToDotState(activity: ChatActivity): DotState {
   switch (activity) {
@@ -48,6 +48,8 @@ export function activityToDotState(activity: ChatActivity): DotState {
       return "awaiting_approval";
     case ChatActivity.ERROR:
       return "error";
+    case ChatActivity.PAUSED:
+      return "paused";
     default:
       return "idle";
   }

@@ -14,7 +14,12 @@
 
 set -euo pipefail
 
-PG_IMAGE="postgres:17-alpine"
+# Must match the Postgres major the project actually runs (docker-compose.yml and
+# .github/workflows/check-migrations.yml both use 16). Dumping from a newer major
+# emits directives that major cannot parse -- pg_dump 17 writes
+# `SET transaction_timeout`, which 16 rejects outright, making schema.sql
+# unloadable everywhere it is actually consumed.
+PG_IMAGE="postgres:16-alpine"
 OUT="internal/db/postgres/schema.sql"
 MIGRATIONS="internal/db/migrations/postgres"
 CONTAINER="reliant-schema-dump-$$"

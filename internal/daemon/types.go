@@ -205,6 +205,19 @@ type FindReplaceChange struct {
 type RunCommandRequest struct {
 	// Command is the shell command to run (passed to bash -c).
 	Command string `json:"command"`
+	// Argv, when non-empty, runs the command directly with NO shell:
+	// Argv[0] is the binary and the rest are its arguments, passed as
+	// separate exec arguments rather than parsed from a string.
+	//
+	// This exists so a confined caller's command allowlist can be a real
+	// boundary. With `bash -c`, the allowlist can only inspect a string the
+	// shell will then reinterpret — quoting, expansion, and inherited
+	// environment all reopen what the check tried to close. With argv there is
+	// no interpreter between the check and execve, so the binary that runs is
+	// the binary that was approved.
+	//
+	// Command is ignored when Argv is set.
+	Argv []string `json:"argv,omitempty"`
 	// WorkingDir is the working directory for the command. Defaults to daemon cwd.
 	WorkingDir string `json:"working_dir,omitempty"`
 	// Env is additional environment variables to set for the command.
@@ -238,6 +251,13 @@ type CommandResult struct {
 	// point and ExitCode is the command's own. The explanation is appended to
 	// Stderr/Combined so all consumers surface it.
 	OutputIncomplete bool `json:"output_incomplete,omitempty"`
+	// Backgrounded is true when the user detached this command mid-run into a
+	// background process. ExitCode is 0 and Stdout describes the handoff — the
+	// command is still running and its real output is read via BashOutput.
+	Backgrounded bool `json:"backgrounded,omitempty"`
+	// ProcessID identifies the background process a detached command became,
+	// for BashOutput / BashKill and for the durable tool_calls row.
+	ProcessID string `json:"process_id,omitempty"`
 }
 
 // OutputOpts controls how background process output is retrieved.

@@ -300,150 +300,156 @@ export function ComputeStep({
     );
   }
 
+  // The card is widened for this step so the topology diagram renders at full
+  // size (see stepMaxWidth in ../stepConfig). Everything below the diagram is
+  // prose and controls, which would read badly at that measure — so the
+  // diagram spans the card and the rest stays centered at the normal width.
   return (
     <div className="space-y-6">
       {!showLocal && <DaemonConnectionDiagrams />}
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div
-          className={cn(
-            "flex min-w-0 flex-col gap-4 rounded-xl border-2 p-5 text-left transition-all",
-            plan.compute === "cloud_free_trial"
-              ? "border-primary bg-primary/10"
-              : "border-primary/25 bg-primary/5",
-            !HAS_CLOUD_DAEMONS && "border-border/50 bg-muted/30 opacity-80",
-          )}
-        >
-          <div className="flex min-w-0 items-start gap-4">
-            <div className="flex-shrink-0 rounded-lg bg-primary/15 p-2.5 text-primary">
-              {startingCloud ? (
-                <Loader2 className="h-6 w-6 animate-spin" />
-              ) : (
-                <Cloud className="h-6 w-6" />
-              )}
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">
-                  Reliant Cloud
-                </span>
-                <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
-                  Fastest
+      <div className="mx-auto w-full max-w-[840px] space-y-6">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div
+            className={cn(
+              "flex min-w-0 flex-col gap-4 rounded-xl border-2 p-5 text-left transition-all",
+              plan.compute === "cloud_free_trial"
+                ? "border-primary bg-primary/10"
+                : "border-primary/25 bg-primary/5",
+              !HAS_CLOUD_DAEMONS && "border-border/50 bg-muted/30 opacity-80",
+            )}
+          >
+            <div className="flex min-w-0 items-start gap-4">
+              <div className="flex-shrink-0 rounded-lg bg-primary/15 p-2.5 text-primary">
+                {startingCloud ? (
+                  <Loader2 className="h-6 w-6 animate-spin" />
+                ) : (
+                  <Cloud className="h-6 w-6" />
+                )}
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-semibold text-foreground">
+                    Reliant Cloud
+                  </span>
+                  <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+                    Fastest
+                  </span>
+                </div>
+                <span className="block text-xs leading-relaxed text-muted-foreground">
+                  {HAS_CLOUD_DAEMONS
+                    ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
+                    : "Cloud daemons are not enabled for this environment."}
                 </span>
               </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleCloud}
+              disabled={
+                startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
+              }
+              className={cn(
+                "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+                startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
+                  ? "cursor-not-allowed bg-muted text-muted-foreground"
+                  : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
+              )}
+            >
+              {(startingCloud || loading) && (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              {startingCloud
+                ? "Requesting daemon..."
+                : loading
+                  ? "Checking availability..."
+                  : "Start cloud daemon"}
+            </button>
+            {(!HAS_CLOUD_DAEMONS || (!eligible && reason)) && (
+              <div className="space-y-1.5">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {!HAS_CLOUD_DAEMONS
+                    ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
+                    : reason}
+                </p>
+                {HAS_CLOUD_DAEMONS && !eligible && (
+                  <a
+                    href="https://reliantlabs.io/pricing"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 text-xs font-medium text-sky-500 transition-colors hover:text-sky-400"
+                  >
+                    View plans &rarr;
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            onClick={handleLocal}
+            className={cn(
+              "flex min-w-0 items-start gap-4 rounded-xl border-2 p-5 text-left transition-all",
+              "hover:border-primary/50 hover:bg-muted/50",
+              showLocal
+                ? "border-primary bg-primary/10"
+                : "border-border/50 bg-background",
+            )}
+          >
+            <div className="flex-shrink-0 rounded-lg bg-muted p-2.5 text-muted-foreground">
+              <Monitor className="h-6 w-6" />
+            </div>
+            <div className="min-w-0 space-y-1">
+              <span className="block text-sm font-semibold text-foreground">
+                I'll connect my own
+              </span>
               <span className="block text-xs leading-relaxed text-muted-foreground">
-                {HAS_CLOUD_DAEMONS
-                  ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
-                  : "Cloud daemons are not enabled for this environment."}
+                Run the daemon on a laptop or server that can access the directory
+                you choose.
               </span>
             </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleCloud}
-            disabled={
-              startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
-            }
-            className={cn(
-              "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-              startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
-                ? "cursor-not-allowed bg-muted text-muted-foreground"
-                : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
-            )}
-          >
-            {(startingCloud || loading) && (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            {startingCloud
-              ? "Requesting daemon..."
-              : loading
-                ? "Checking availability..."
-                : "Start cloud daemon"}
           </button>
-          {(!HAS_CLOUD_DAEMONS || (!eligible && reason)) && (
-            <div className="space-y-1.5">
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {!HAS_CLOUD_DAEMONS
-                  ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
-                  : reason}
-              </p>
-              {HAS_CLOUD_DAEMONS && !eligible && (
-                <a
-                  href="https://reliantlabs.io/pricing"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-sky-500 transition-colors hover:text-sky-400"
-                >
-                  View plans &rarr;
-                </a>
-              )}
-            </div>
-          )}
         </div>
 
-        <button
-          type="button"
-          onClick={handleLocal}
-          className={cn(
-            "flex min-w-0 items-start gap-4 rounded-xl border-2 p-5 text-left transition-all",
-            "hover:border-primary/50 hover:bg-muted/50",
-            showLocal
-              ? "border-primary bg-primary/10"
-              : "border-border/50 bg-background",
-          )}
-        >
-          <div className="flex-shrink-0 rounded-lg bg-muted p-2.5 text-muted-foreground">
-            <Monitor className="h-6 w-6" />
+        {error && <p className="text-center text-xs text-destructive">{error}</p>}
+
+        {showLocal && activeDaemon && (
+          <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">
+                  Daemon already connected
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Reliant detected a running daemon. Continue to choose a
+                  directory.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLocalContinue}
+              className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              Continue
+            </button>
           </div>
-          <div className="min-w-0 space-y-1">
-            <span className="block text-sm font-semibold text-foreground">
-              I'll connect my own
-            </span>
-            <span className="block text-xs leading-relaxed text-muted-foreground">
-              Run the daemon on a laptop or server that can access the directory
-              you choose.
-            </span>
+        )}
+
+        {showLocal && !activeDaemon && (
+          <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+            {/* Self-hosted connect instructions are shared with the
+                ProjectPicker's in-place "Connect a new daemon" flow. The
+                onboarding-specific auto-advance still happens via the
+                hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
+                the download/token/start UI and the "waiting to connect" state. */}
+            <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
           </div>
-        </button>
+        )}
       </div>
-
-      {error && <p className="text-center text-xs text-destructive">{error}</p>}
-
-      {showLocal && activeDaemon && (
-        <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-          <div className="flex items-start gap-3">
-            <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
-            <div>
-              <h3 className="text-sm font-medium text-foreground">
-                Daemon already connected
-              </h3>
-              <p className="mt-0.5 text-xs text-muted-foreground">
-                Reliant detected a running daemon. Continue to choose a
-                directory.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleLocalContinue}
-            className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-          >
-            Continue
-          </button>
-        </div>
-      )}
-
-      {showLocal && !activeDaemon && (
-        <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
-          {/* Self-hosted connect instructions are shared with the
-              ProjectPicker's in-place "Connect a new daemon" flow. The
-              onboarding-specific auto-advance still happens via the
-              hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
-              the download/token/start UI and the "waiting to connect" state. */}
-          <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
-        </div>
-      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemonliveness"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -25,6 +26,7 @@ import (
 const (
 	toolRequestSubject = "tools.request" // tools.request.{userID}.{daemonID}
 	toolCancelSubject  = "tools.cancel"  // tools.cancel.{userID}.{daemonID}
+	toolBackgroundSubj = "tools.background" // tools.background.{userID}.{daemonID}
 	toolOnlineSubject  = "tools.online"  // tools.online.{userID}.{daemonID}
 
 	daemonKillSubject      = "daemon.process.kill" // daemon.process.kill.{userID}.{daemonID}
@@ -381,6 +383,32 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, 
 	return nil
 }
 
+// SendToolExecutionBackground publishes a background request for an in-flight
+// execution. Fire-and-forget like cancel: the daemon acts on it if the
+// execution is still running, and a request that arrives after the command
+// finished is simply a no-op there.
+func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, userID, requestID, toolCallID string) error {
+	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("resolving daemon for background: %w", err)
+	}
+	payload, err := json.Marshal(map[string]string{
+		"request_id":   requestID,
+		"tool_call_id": toolCallID,
+	})
+	if err != nil {
+		return err
+	}
+	subject := daemonSubject(toolBackgroundSubj, userID, daemonID)
+	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	if err := r.nc.PublishMsg(msg); err != nil {
+		observability.NATSErrorsTotal.WithLabelValues("tools.background", "publish").Inc()
+		return err
+	}
+	observability.NATSPublishTotal.WithLabelValues("tools.background").Inc()
+	return nil
+}
+
 // daemonRequestError maps a NATS request/reply error to a caller-facing error.
 // nats.ErrNoResponders is authoritative: the NATS server reports that no
 // subscription is currently live for the daemon's subject (the gateway
@@ -433,7 +461,7 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 	// Marshal + payload preflight BEFORE daemon resolution: an oversize request
 	// is client-constructed and must fail fast with an actionable error even
 	// when no daemon is available (see TestNATSDaemonRouter_OversizeRequest_FailsFast).
-	data, reqID, err := r.buildDaemonCommand(commandType, payload, timeoutMs)
+	data, reqID, err := r.buildDaemonCommand(ctx, commandType, payload, timeoutMs)
 	if err != nil {
 		return nil, err
 	}
@@ -452,7 +480,7 @@ func (r *NATSDaemonRouter) SendDaemonCommand(ctx context.Context, userID string,
 // (e.g. every worktree.create for one worktree must hit the same daemon that
 // will own it on disk) so the operation and any recorded owner id agree.
 func (r *NATSDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID string, daemonID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
-	data, reqID, err := r.buildDaemonCommand(commandType, payload, timeoutMs)
+	data, reqID, err := r.buildDaemonCommand(ctx, commandType, payload, timeoutMs)
 	if err != nil {
 		return nil, err
 	}
@@ -462,18 +490,26 @@ func (r *NATSDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID
 // buildDaemonCommand marshals a daemon command envelope and runs the oversize
 // preflight. Split out so both the default-routing and daemon-pinned entry
 // points run the client-side size check before any daemon resolution.
-func (r *NATSDaemonRouter) buildDaemonCommand(commandType string, payload []byte, timeoutMs int32) (data []byte, requestID string, err error) {
+func (r *NATSDaemonRouter) buildDaemonCommand(ctx context.Context, commandType string, payload []byte, timeoutMs int32) (data []byte, requestID string, err error) {
 	requestID = fmt.Sprintf("%d", time.Now().UnixNano())
 	req := struct {
-		RequestID   string          `json:"request_id"`
-		CommandType string          `json:"command_type"`
-		Payload     json.RawMessage `json:"payload"`
-		TimeoutMs   int32           `json:"timeout_ms"`
+		RequestID   string                   `json:"request_id"`
+		CommandType string                   `json:"command_type"`
+		Payload     json.RawMessage          `json:"payload"`
+		TimeoutMs   int32                    `json:"timeout_ms"`
+		Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
 	}{
 		RequestID:   requestID,
 		CommandType: commandType,
 		Payload:     json.RawMessage(payload),
 		TimeoutMs:   timeoutMs,
+		// Connector callers carry a confinement policy in context; first-party
+		// callers carry none and the field is omitted, leaving the daemon's
+		// behavior unchanged. Reading it from context rather than taking it as
+		// a parameter means an intermediate DaemonRouter implementation cannot
+		// silently drop it — which is exactly how the enforcement gate came to
+		// be dead code the first time this was wired.
+		Policy: daemonpolicy.ToWire(daemonpolicy.FromContext(ctx)),
 	}
 
 	data, err = json.Marshal(req)
@@ -917,15 +953,21 @@ func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, com
 	}
 
 	envelope, err := json.Marshal(struct {
-		RequestID   string          `json:"request_id"`
-		CommandType string          `json:"command_type"`
-		Payload     json.RawMessage `json:"payload"`
-		TimeoutMs   int32           `json:"timeout_ms"`
+		RequestID   string                   `json:"request_id"`
+		CommandType string                   `json:"command_type"`
+		Payload     json.RawMessage          `json:"payload"`
+		TimeoutMs   int32                    `json:"timeout_ms"`
+		Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
 	}{
 		RequestID:   fmt.Sprintf("enq-%d", time.Now().UnixNano()),
 		CommandType: commandType,
 		Payload:     json.RawMessage(payload),
 		TimeoutMs:   timeoutMs,
+		// Carried even though no connector path enqueues today: the drain side
+		// already decodes it, and an enqueued command that replayed
+		// unrestricted would be a policy bypass with a delay fuse. Cheaper to
+		// close now than to remember later.
+		Policy: daemonpolicy.ToWire(daemonpolicy.FromContext(ctx)),
 	})
 	if err != nil {
 		return 0, fmt.Errorf("marshal pending command envelope: %w", err)

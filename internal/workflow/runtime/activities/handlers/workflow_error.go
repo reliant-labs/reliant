@@ -23,6 +23,13 @@ type WorkflowErrorInput struct {
 	ErrorMessage string `json:"error_message"`
 	ErrorType    string `json:"error_type"`              // e.g., "workflow_parse_error", "template_error"
 	ErrorSummary string `json:"error_summary,omitempty"` // Clean, user-friendly summary (extracted from nested errors)
+	// Thread the error belongs to. Without it an error is chat-scoped, and the
+	// timeline has nothing to filter on — so a single "Paused: no machine is
+	// connected" from the main thread rendered inside EVERY thread of the chat,
+	// including spawned threads that started hours after the incident and
+	// recovered. An error is an event on one thread, not a property of the
+	// whole conversation.
+	Thread string `json:"thread,omitempty"`
 }
 
 // WorkflowErrorOutput is the output from WorkflowError activity
@@ -68,6 +75,14 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 		"error_message": input.ErrorMessage,
 		"timestamp":     time.Now().UTC().Format(time.RFC3339Nano),
 		"workflow_id":   input.WorkflowID,
+	}
+
+	// Thread scoping. Omitted when unknown rather than defaulted to the chat id:
+	// a reader must be able to tell "this error belongs to the main thread" from
+	// "nobody said", and silently claiming the former is how a main-thread error
+	// ends up rendered in every spawned thread.
+	if input.Thread != "" {
+		errorData["thread"] = input.Thread
 	}
 
 	// Include a clean summary if available

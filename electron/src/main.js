@@ -26,9 +26,14 @@ const log = require("./logger");
 const path = require("path");
 const fs = require("fs");
 const BackendManager = require("./backend-manager");
+const {
+  defaultAccelerators,
+  resolveMenuAccelerators,
+} = require("./menu-accelerators");
 const WindowManager = require("./window-manager");
 const BrowserManager = require("./browser-manager");
 const windowConfig = require("./window-config");
+const { shouldOpenExternally } = require("./navigation-policy");
 const authStorage = require("./auth-storage");
 const cliInstaller = require("./cli-installer");
 const {
@@ -996,7 +1001,7 @@ async function createWindow(options = {}) {
   });
 
   mainWindow.webContents.on("will-navigate", (event, url) => {
-    if (url !== mainWindow.webContents.getURL()) {
+    if (shouldOpenExternally(url, mainWindow.webContents.getURL())) {
       event.preventDefault();
       shell.openExternal(url);
     }
@@ -2128,6 +2133,22 @@ ipcMain.handle("update-privacy-settings", async (event, settings) => {
   log.info("[Privacy] Settings saved.");
 
   return { success: true, requiresRestart: false };
+});
+
+/**
+ * The renderer pushes its effective keyboard bindings whenever they change
+ * (on load, and after any remap in Settings). The menu rebuilds so its
+ * accelerators match what the user actually configured — see
+ * updateMenuAccelerators for why hardcoding them here is a bug.
+ */
+ipcMain.handle("shortcuts:update", async (_event, bindings) => {
+  try {
+    updateMenuAccelerators(bindings);
+    return { success: true };
+  } catch (error) {
+    log.error("[IPC] Failed to apply shortcut bindings to menu:", error);
+    return { success: false };
+  }
 });
 
 ipcMain.handle("get-privacy-settings", async () => {
@@ -3267,8 +3288,25 @@ exit 0
 `;
 }
 
+/**
+ * Accelerators currently applied to the application menu.
+ *
+ * Starts at the defaults and is replaced when the renderer pushes the user's
+ * effective bindings — see electron/src/menu-accelerators.js for why the menu
+ * must not hardcode these.
+ */
+let menuAccelerators = defaultAccelerators();
+
+/** Apply renderer-supplied bindings and rebuild the menu. */
+function updateMenuAccelerators(bindings) {
+  if (!bindings || typeof bindings !== "object") return;
+  menuAccelerators = resolveMenuAccelerators(bindings);
+  createApplicationMenu();
+}
+
 // Create application menu
 function createApplicationMenu() {
+  const accel = menuAccelerators;
   const template = [
     {
       label: "Reliant",
@@ -3309,7 +3347,7 @@ function createApplicationMenu() {
       submenu: [
         {
           label: "New Tab",
-          accelerator: "CmdOrCtrl+T",
+          accelerator: accel.newChat,
           click: () => {
             // Send to focused window to create new tab
             const focusedWindow = BrowserWindow.getFocusedWindow();
@@ -3329,7 +3367,7 @@ function createApplicationMenu() {
         { type: "separator" },
         {
           label: "Close Tab",
-          accelerator: "CmdOrCtrl+W",
+          accelerator: accel.closeTab,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3339,7 +3377,7 @@ function createApplicationMenu() {
         },
         {
           label: "Reopen Last Tab",
-          accelerator: "CmdOrCtrl+Shift+T",
+          accelerator: accel.reopenLastClosedFile,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3425,7 +3463,7 @@ function createApplicationMenu() {
       submenu: [
         {
           label: "New Terminal",
-          accelerator: "CmdOrCtrl+Shift+J",
+          accelerator: accel.newTerminal,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3435,7 +3473,7 @@ function createApplicationMenu() {
         },
         {
           label: "Toggle Terminal",
-          accelerator: "CmdOrCtrl+J",
+          accelerator: accel.toggleTerminal,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3446,7 +3484,12 @@ function createApplicationMenu() {
         { type: "separator" },
         {
           label: "Clear Terminal",
-          accelerator: "CmdOrCtrl+K",
+          // Deliberately NOT Cmd+K: that chord is the renderer's sequence
+          // prefix (Cmd+K T, Cmd+K G, ...). A menu accelerator is handled by
+          // the OS before the renderer sees the keydown, so claiming Cmd+K here
+          // would swallow every sequence in the app. Clearing the terminal is
+          // scoped to the terminal anyway, so it belongs to that surface.
+          accelerator: "CmdOrCtrl+Shift+L",
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3465,7 +3508,7 @@ function createApplicationMenu() {
       submenu: [
         {
           label: "Next Chat",
-          accelerator: process.platform === "darwin" ? "Meta+Control+Down" : "Control+Alt+Down",
+          accelerator: accel.nextChat,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3475,7 +3518,7 @@ function createApplicationMenu() {
         },
         {
           label: "Previous Chat",
-          accelerator: process.platform === "darwin" ? "Meta+Control+Up" : "Control+Alt+Up",
+          accelerator: accel.prevChat,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3485,7 +3528,7 @@ function createApplicationMenu() {
         },
         {
           label: "Next Sidebar Tab",
-          accelerator: process.platform === "darwin" ? "Meta+Control+Right" : "Control+Alt+Right",
+          accelerator: accel.nextRightSidebarTab,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {
@@ -3495,7 +3538,7 @@ function createApplicationMenu() {
         },
         {
           label: "Previous Sidebar Tab",
-          accelerator: process.platform === "darwin" ? "Meta+Control+Left" : "Control+Alt+Left",
+          accelerator: accel.prevRightSidebarTab,
           click: () => {
             const focusedWindow = BrowserWindow.getFocusedWindow();
             if (focusedWindow) {

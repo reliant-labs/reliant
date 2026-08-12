@@ -25,6 +25,7 @@ import {
   Maximize2,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
 import { useChat, useToolCallStates } from "../../store/chatStoreHooks";
 import {
@@ -33,40 +34,82 @@ import {
 } from "../../hooks/approval-queries";
 import type { ToolApprovalRequest } from "../../api/client";
 import { FileLink } from "./FileLink";
-import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults } from "../../lib/toolFormatters";
+import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
 import { parseFilePath } from "../../lib/filePath";
 import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
-import { shouldToolBeCollapsed } from "../Settings/ToolCallSettings";
+import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
-import { useActivityStore, ChatActivity } from "../../store/activityStore";
-import { useActiveThreads } from "../../store/threadActivityStore";
+import { ToolCallStatus, ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
-import type { WorkflowExecutionData } from "../../types/chat";
+import { findWorkflowById } from "../../lib/workflowTree";
 
 export type { ToolResultData };
 
-/** Walk the workflow execution tree to find the child spawned by a given node ID. */
-function findSpawnWorkflow(
-  wf: WorkflowExecutionData,
-  spawnNodeId: string,
-): WorkflowExecutionData | undefined {
-  if (wf.spawnedByNodeId === spawnNodeId) return wf;
-  for (const child of wf.children) {
-    const found = findSpawnWorkflow(child, spawnNodeId);
-    if (found) return found;
+/** Component status strings, as accepted by ToolExecutionProps.status. */
+type DisplayStatus = NonNullable<ToolExecutionProps["status"]>;
+
+/** Maps the durable proto status onto the component's display status vocabulary. */
+export function durableStatusToDisplayStatus(status: ToolCallStatus | undefined): DisplayStatus | undefined {
+  switch (status) {
+    case ToolCallStatus.PENDING:
+      return "pending";
+    case ToolCallStatus.EXECUTING:
+      return "executing";
+    case ToolCallStatus.COMPLETED:
+      return "completed";
+    case ToolCallStatus.FAILED:
+      return "failed";
+    case ToolCallStatus.CANCELLED:
+      return "cancelled";
+    case ToolCallStatus.BACKGROUNDED:
+      return "backgrounded";
+    default:
+      return undefined;
   }
-  return undefined;
+}
+
+/**
+ * Maps a spawned agent's workflow status onto the display status vocabulary.
+ * Async spawn returns the tool result the moment the child is dispatched, so
+ * for a spawn call the child workflow — not the tool call — is the authority
+ * on whether the agent is still running.
+ */
+export function workflowStatusToDisplayStatus(status: ChatWorkflowStatus | undefined): DisplayStatus | undefined {
+  switch (status) {
+    case ChatWorkflowStatus.COMPLETED:
+      return "completed";
+    case ChatWorkflowStatus.FAILED:
+      return "failed";
+    case ChatWorkflowStatus.CANCELLED:
+      return "cancelled";
+    case ChatWorkflowStatus.RUNNING:
+    case ChatWorkflowStatus.PENDING:
+    case ChatWorkflowStatus.PAUSED:
+    case ChatWorkflowStatus.EXPIRED:
+      return "executing";
+    default:
+      return undefined;
+  }
 }
 
 interface ToolExecutionProps {
   toolCall: {
     id: string;
     name: string;
-    input: Record<string, unknown> | string;
+    /** Undefined while the call is still streaming and its input has not arrived. */
+    input?: Record<string, unknown> | string;
     finished?: boolean;
     content_block_id?: string;
+    /** Durable status from the tool_calls table, as of the last message load. */
+    durableStatus?: ToolCallStatus;
+    /**
+     * For a spawn call, the workflow it started (tool_calls.child_workflow_id).
+     * A spawned sub-agent's thread id equals its workflow id, so this IS the
+     * thread the call owns.
+     */
+    childWorkflowId?: string;
   };
   toolResult?: ToolResultData;
   onApprove?: (id: string) => void;
@@ -114,65 +157,96 @@ function ToolExecutionComponent({
 
   // Determine initial expanded state based on user settings
   // shouldToolBeCollapsed returns true if collapsed, so we invert it for isExpanded
-  // Spawn tools always start expanded so the preview is visible
-  const isSpawnToolFlag = toolNameLower.includes('spawn');
-  const [isExpanded, setIsExpanded] = useState(() => {
-    if (isSpawnToolFlag) return true;
-    return !shouldToolBeCollapsed(toolCall.name);
-  });
+  const isSpawnToolFlag = isSpawnTool(toolNameLower);
+  // Narrow surfaces (mobile/embed) collapse every category by default — a full
+  // diff is unreadable in a phone viewport and buries the conversation.
+  const surface = useSurface();
+  const [isExpanded, setIsExpanded] = useState(() => !shouldToolBeCollapsed(toolCall.name, surface));
   
   // Track if user has manually toggled - prevents auto-expand from overriding user choice
   const [userHasToggled, setUserHasToggled] = useState(false);
+
+  // Re-apply the default when the preference changes in Settings. Rows the user
+  // has already opened or closed by hand keep their state — an explicit choice
+  // outranks the default.
+  useEffect(() => {
+    const applyNewDefault = () => {
+      if (userHasToggled) return;
+      setIsExpanded(!shouldToolBeCollapsed(toolCall.name, surface));
+    };
+    window.addEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
+    return () => window.removeEventListener(TOOL_COLLAPSE_SETTINGS_EVENT, applyNewDefault);
+  }, [toolCall.name, userHasToggled, surface]);
 
   // Auto-expand read tools when results arrive (only if user hasn't manually collapsed)
   // and only if the setting allows it (not collapsed by default)
   useEffect(() => {
     if (isReadToolFlag && toolResult?.content && !isExpanded && !userHasToggled) {
       // Only auto-expand if settings don't collapse this tool by default
-      if (!shouldToolBeCollapsed(toolCall.name)) {
+      if (!shouldToolBeCollapsed(toolCall.name, surface)) {
         setIsExpanded(true);
       }
     }
-  }, [isReadToolFlag, toolResult?.content, isExpanded, userHasToggled, toolCall.name]);
+  }, [isReadToolFlag, toolResult?.content, isExpanded, userHasToggled, toolCall.name, surface]);
 
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
-  
-  // Check if chat is no longer running - affects tool display state
-  const chatActivity = useActivityStore((s) => s.activities.get(chatId || ""));
-  const isWorkflowInactive = chatActivity === ChatActivity.IDLE;
 
-  // Subscribe to live tool call state
+  // Subscribe to live tool call state. Keyed by the LLM tool-call id, which is
+  // what the backend addresses tool status by — it is the only id that exists
+  // both while the call streams and after its message is persisted.
   const toolCallStates = useToolCallStates(chatId || "");
-  const lookupKey = toolCall.content_block_id || toolCall.id;
-  const liveToolCallState = toolCallStates.get(lookupKey) || null;
+  const liveToolCallState = toolCallStates.get(toolCall.id) || null;
 
   const approveMutation = useApproveToolRequest();
   const denyMutation = useDenyToolRequest();
+
+  // Async spawn returns the tool result the moment the child agent is
+  // dispatched, so the tool call's own status reads "completed" while the
+  // agent it started keeps running for minutes. For a spawn call, the child
+  // workflow is the authority on whether the agent is still working.
+  const spawnChildWorkflowId = isSpawnToolFlag ? toolCall.childWorkflowId : undefined;
+  const { allWorkflows } = useWorkflowExecutions(chatId || null);
+  const spawnChildWorkflow = useMemo(
+    () => (spawnChildWorkflowId ? findWorkflowById(allWorkflows, spawnChildWorkflowId) : undefined),
+    [allWorkflows, spawnChildWorkflowId],
+  );
 
   // Determine current status
   const liveStatus = liveToolCallState?.status || status;
   const isInputPreparing = toolCall.input === undefined;
   const isDenied = approval?.status === ApprovalStatus.DENIED;
 
-  // Derive display status from live state, falling back to tool call props.
-  // "cancelled" is only shown when the backend explicitly sends that status —
-  // we no longer infer it from workflow IDLE state because the IDLE activity
-  // event can arrive before tool-completion events (race between two streams).
+  // Derive display status. For a spawn call that has dispatched (has a
+  // childWorkflowId), the child workflow is the sole authority: the spawn
+  // tool call's own live/durable status reflects the DISPATCH, which
+  // completes in milliseconds under async spawn, while the agent it started
+  // keeps running for minutes. Checking that status first, before the child
+  // workflow status, would show a finished spawn next to a running agent —
+  // exactly the bug this branch exists to avoid. Before dispatch (no
+  // childWorkflowId yet), fall through to the normal live/durable/inferred
+  // flow so preparing/requested/denied states on the spawn call itself still
+  // show.
   const currentStatus = (() => {
+    if (spawnChildWorkflowId) {
+      // Default to "executing" while the child workflow row doesn't exist
+      // yet (the spawn was just dispatched) or reports an unmapped status.
+      return workflowStatusToDisplayStatus(spawnChildWorkflow?.status) ?? "executing";
+    }
+
     if (liveStatus) {
       return liveStatus;
     }
-    
-    // No live status, compute from tool state
+
+    const durable = durableStatusToDisplayStatus(toolCall.durableStatus);
+    if (durable) {
+      return durable;
+    }
+
+    // No live or durable status, compute from tool state
     if (isDenied) return "denied";
     if (toolResult) return "completed";
-    
-    // If workflow finished and tool has no result, it likely completed
-    // (the completion event just wasn't tracked). Show as completed rather
-    // than incorrectly showing cancelled.
-    if (isWorkflowInactive) return "completed";
-    
+
     if (isInputPreparing) return "preparing";
     if (!toolCall.finished) return "pending";
     return "executing";
@@ -184,8 +258,13 @@ function ToolExecutionComponent({
   const isCancelling = currentStatus === "cancelling";
   const isCancelled = currentStatus === "cancelled";
   const isBackgrounded = currentStatus === "backgrounded";
-  const isCompleted = currentStatus === "completed" || !!toolResult;
-  const hasFailed = currentStatus === "failed" || (toolResult?.is_error ?? false);
+  // For a spawn call, the tool result (the dispatch handle, under async) says
+  // nothing about whether the agent it started is done — only the child
+  // workflow's status does. Skip the toolResult fallback in that case so a
+  // still-running spawn cannot read as completed just because it has a
+  // result.
+  const isCompleted = currentStatus === "completed" || (!spawnChildWorkflowId && !!toolResult);
+  const hasFailed = currentStatus === "failed" || (!spawnChildWorkflowId && (toolResult?.is_error ?? false));
 
   // Approval logic - if backend created a pending approval, we need to show UI for it
   const needsApproval = approval?.status === ApprovalStatus.PENDING;
@@ -244,24 +323,21 @@ function ToolExecutionComponent({
     return paramDescription || paramNotes || null;
   }, [isTaskToolFlag, toolCall.input, toolNameLower, storedTask]);
 
-  // Resolve spawn thread ID for the Open button
-  const activeThreads = useActiveThreads(isSpawnToolFlag ? (chatId || "") : "");
-  const { allWorkflows } = useWorkflowExecutions(isSpawnToolFlag ? (chatId || null) : null);
-  const spawnThreadId = useMemo(() => {
-    if (!isSpawnToolFlag) return undefined;
-    const spawnNodeId = `spawn-${toolCall.id}`;
-    // Source 1: active thread updates (live streaming)
-    const spawnThread = activeThreads.find(
-      (t) => t.spawned_by_tool_call_id === toolCall.id || t.spawned_by_node_id === spawnNodeId,
-    );
-    if (spawnThread?.thread) return spawnThread.thread;
-    // Source 2: workflow execution tree (persisted/historical)
-    for (const wf of allWorkflows) {
-      const found = findSpawnWorkflow(wf, spawnNodeId);
-      if (found?.thread) return found.thread;
-    }
-    return undefined;
-  }, [isSpawnToolFlag, toolCall.id, activeThreads, allWorkflows]);
+  // The thread this spawn owns, as recorded by the code that created it:
+  // tool_calls.child_workflow_id, and a spawned sub-agent's thread id equals
+  // its workflow id.
+  //
+  // This used to search for it — first scanning live thread-activity updates,
+  // then walking the workflow tree for a workflow whose spawnedByNodeId
+  // matched `spawn-${toolCall.id}`. Both are derivations of a fact already
+  // stored on this very tool call, and both miss: measured on live data,
+  // child_workflow_id is present on 394/394 spawn calls while
+  // spawned_by_node_id is present on only 368 of them — and absent on ALL
+  // THREE currently-executing spawns. Since this value gates the "open full
+  // thread view" control, a running spawn simply had no expand button, and
+  // finished ones mostly did. That is the same failure the preview had, from
+  // the same cause.
+  const spawnThreadId = isSpawnToolFlag ? toolCall.childWorkflowId : undefined;
 
   // Handlers
   const handleApprove = useCallback(() => {
@@ -298,7 +374,7 @@ function ToolExecutionComponent({
   };
 
   // Format tool call display
-  const formatToolCallDisplay = (rawName: string, input: Record<string, unknown> | string): React.ReactNode => {
+  const formatToolCallDisplay = (rawName: string, input: Record<string, unknown> | string | undefined): React.ReactNode => {
     // Strip MCP prefix for display: mcp__reliant__spawn -> spawn
     const name = rawName.startsWith('mcp__')
       ? rawName.split('__').pop() || rawName
@@ -307,6 +383,18 @@ function ToolExecutionComponent({
     // Task tools show task title
     if (isTaskToolFlag && taskTitle) {
       return taskTitle;
+    }
+
+    // The arguments have not streamed in yet. Formatting nothing yields an
+    // empty argument list, which reads as "called with no arguments" rather
+    // than "still arriving" — so name the state instead of faking the shape.
+    if (input === undefined) {
+      return (
+        <span className="inline-flex items-center gap-1">
+          <span className="text-foreground font-medium">{name}</span>
+          <span className="text-muted-foreground italic">preparing…</span>
+        </span>
+      );
     }
 
     const formatted = formatToolParams(rawName, input as ToolInput);
@@ -419,25 +507,29 @@ function ToolExecutionComponent({
   const isExpandable = hasContent && (!isTaskToolFlag || !!taskDescription || hasResult);
   const hasFileOpenAffordance = isViewOnlyToolFlag && extractFilePaths(toolCall.input).length > 0;
 
-  // Left border color strip for status indication
+  // Left border color strip for status indication. Success is the overwhelming
+  // majority of calls, so it stays faint — a transcript of solid green bars
+  // reads as decoration and drowns out the states that actually want attention.
+  // Warnings and in-flight work keep full strength.
   const leftBorderColor = isCancelled
-    ? "border-l-2 border-l-muted-foreground"
+    ? "border-l-2 border-l-muted-foreground/40"
     : hasFailed || toolResult?.is_error
     ? "border-l-2 border-l-warning"
     : isCompleted || toolResult
-    ? "border-l-2 border-l-success"
+    ? "border-l-2 border-l-success/30"
     : isExecuting
     ? "border-l-2 border-l-primary"
     : isPreparing || isCancelling
     ? "border-l-2 border-l-warning"
     : needsApproval
     ? "border-l-2 border-l-warning"
-    : "border-l-2 border-l-border";
+    : "border-l-2 border-l-border/50";
 
   // Build render context for content area
   const renderContext: ToolRenderContext = {
     toolName: toolCall.name,
     toolCallId: toolCall.id,
+    childWorkflowId: toolCall.childWorkflowId,
     input: toolCall.input,
     result: toolResult,
     worktreeId: chatWorktreeId,
@@ -450,14 +542,19 @@ function ToolExecutionComponent({
     onSelectThread,
   };
 
+  // Expanding is an act of attention, so the open card is drawn more strongly
+  // than the collapsed rows around it: brighter border, real elevation. Idle
+  // collapsed rows recede.
   const rootClassName = cn(
-    "overflow-hidden border border-border/50 shadow-sm",
+    "overflow-hidden transition-colors",
+    isExpanded ? "border border-border shadow-md" : "border border-border/30 shadow-sm",
     density === "card" ? "rounded-xl bg-card" : density === "minimal" ? "rounded-md bg-transparent shadow-none" : "rounded-md",
     leftBorderColor
   );
   const headerClassName = cn(
-    "flex items-center justify-between bg-muted/30",
-    density === "card" ? "px-4 py-3" : density === "minimal" ? "px-2 py-1.5" : "px-3 py-2",
+    "flex items-center justify-between",
+    isExpanded ? "bg-muted/50" : "bg-muted/20",
+    density === "card" ? "px-3 py-2" : density === "minimal" ? "px-2 py-0.5" : "px-2 py-1",
     isExpandable && "cursor-pointer hover:bg-muted/50"
   );
   const contentClassName = cn(
@@ -587,7 +684,7 @@ function ToolExecutionComponent({
               toolResult?.is_error ? "bg-warning/10 text-warning"
                 : hasFailed ? "bg-warning/10 text-warning"
                 : isCancelled ? "bg-muted text-muted-foreground"
-                : isCompleted ? "bg-success/10 text-success"
+                : isCompleted ? "bg-success/5 text-success/70"
                 : needsApproval ? "bg-warning/10 text-warning"
                 : isExecuting ? "bg-primary/10 text-primary"
                 : "bg-muted text-muted-foreground"
@@ -617,7 +714,7 @@ function ToolExecutionComponent({
                 <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
             )}
-            {isExecuting && !isCancelling && onConvertToBackground && (
+            {isExecuting && !isCancelling && !isSpawnToolFlag && onConvertToBackground && (
               <button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
                 className="p-0.5 hover:bg-muted rounded transition-colors"
@@ -644,21 +741,29 @@ function ToolExecutionComponent({
           </div>
         </div>
 
-        {/* Approval UI */}
+        {/* Approval UI — this is the decision screen mobile approvals exist
+            for, so Approve/Deny get real touch targets there instead of the
+            desktop's compact row. */}
         {shouldShowApprovalUI && (
           <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
             {showRichContent && toolCall.input && <ToolContentArea ctx={renderContext} />}
             <p className="text-[11px] font-medium text-warning mb-1.5">Approval required</p>
-            <div className="flex gap-2">
+            <div className={cn("flex gap-2", surface !== "desktop" && "flex-col")}>
               <button
                 onClick={handleApprove} aria-label="Approve tool execution"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-success hover:bg-success/90 text-success-foreground rounded text-xs font-medium"
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded font-medium bg-success hover:bg-success/90 text-success-foreground",
+                  surface === "desktop" ? "px-3 py-1.5 text-xs" : "min-h-[44px] px-3 text-sm"
+                )}
               >
                 <CheckCircle className="w-3.5 h-3.5" /> Approve
               </button>
               <button
                 onClick={handleDeny} aria-label="Deny tool execution"
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive hover:bg-destructive/90 text-destructive-foreground rounded text-xs font-medium"
+                className={cn(
+                  "flex items-center justify-center gap-1.5 rounded font-medium bg-destructive hover:bg-destructive/90 text-destructive-foreground",
+                  surface === "desktop" ? "px-3 py-1.5 text-xs" : "min-h-[44px] px-3 text-sm"
+                )}
               >
                 <XCircle className="w-3.5 h-3.5" /> Deny
               </button>

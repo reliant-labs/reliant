@@ -55,6 +55,17 @@ import { useEvent } from "../../lib/event-context";
 // Storage key prefix for persisting chat IDs per workflow
 const CHAT_STORAGE_KEY_PREFIX = "workflow-builder-chat:";
 
+// Ascending capability order. Rendered by filtering against the selected
+// model's supported levels, so a new level only needs adding here.
+const THINKING_LEVEL_OPTIONS = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+  { value: "xhigh", label: "XHigh" },
+  { value: "max", label: "Max" },
+  { value: "ultra", label: "Ultra" },
+] as const;
+
 export type PanelSize = "normal" | "maximized";
 
 interface WorkflowBuilderChatProps {
@@ -326,7 +337,7 @@ export function WorkflowBuilderChat({
         // Clear using the current persistence key (which may be the workflowSessionId)
         clearPersistedChatId(projectId, persistenceKeyRef.current);
         isRestoredChatRef.current = false;
-        lastProcessedOrdinalRef.current = -1;
+        lastProcessedSeqRef.current = -1;
         setChatId(null);
         setIsValidatingChat(false);
         return;
@@ -422,8 +433,8 @@ export function WorkflowBuilderChat({
   }, [isOpen]);
 
   // Watch for workflow updates from tool results
-  // Track the highest ordinal we've processed to avoid re-processing on remount
-  const lastProcessedOrdinalRef = useRef<number>(-1);
+  // Track the highest seq we've processed to avoid re-processing on remount
+  const lastProcessedSeqRef = useRef<number>(-1);
   // Track if we've applied the initial workflow for restored chats
   const hasAppliedRestoredWorkflowRef = useRef(false);
 
@@ -436,9 +447,9 @@ export function WorkflowBuilderChat({
     if (isRestoredChatRef.current && !hasAppliedRestoredWorkflowRef.current) {
       hasAppliedRestoredWorkflowRef.current = true;
 
-      // Set lastProcessedOrdinal to skip existing messages (do this regardless of draftId)
-      const maxOrdinal = Math.max(...storeMessages.map((m) => Number(m.ordinal || 0)));
-      lastProcessedOrdinalRef.current = maxOrdinal;
+      // Set lastProcessedSeq to skip existing messages (do this regardless of draftId)
+      const maxSeq = Math.max(...storeMessages.map((m) => Number(m.seq || 0)));
+      lastProcessedSeqRef.current = maxSeq;
 
       if (!draftId) {
         return;
@@ -469,9 +480,9 @@ export function WorkflowBuilderChat({
       const msg = storeMessages[i];
       if (msg.role !== MessageRole.TOOL) continue;
 
-      // Skip if we've already processed this message (by ordinal)
-      const ordinal = Number(msg.ordinal || 0);
-      if (ordinal <= lastProcessedOrdinalRef.current) {
+      // Skip if we've already processed this message (by seq)
+      const seq = Number(msg.seq || 0);
+      if (seq <= lastProcessedSeqRef.current) {
         continue;
       }
 
@@ -493,7 +504,7 @@ export function WorkflowBuilderChat({
         }
 
         // Mark as processed BEFORE refetching to prevent loops
-        lastProcessedOrdinalRef.current = ordinal;
+        lastProcessedSeqRef.current = seq;
 
         if (draftId) {
           // Refetch by draft ID
@@ -578,7 +589,7 @@ export function WorkflowBuilderChat({
 
         const newChatId = result.chat.id;
         isRestoredChatRef.current = false; // New chat, not restored
-        lastProcessedOrdinalRef.current = -1; // Reset for new chat
+        lastProcessedSeqRef.current = -1; // Reset for new chat
         setChatId(newChatId);
 
         // Persist the chat ID to localStorage (backup for unsaved workflows)
@@ -678,7 +689,7 @@ export function WorkflowBuilderChat({
     setChatId(null);
     setSendError(null);
     isRestoredChatRef.current = false;
-    lastProcessedOrdinalRef.current = -1;
+    lastProcessedSeqRef.current = -1;
     hasAppliedRestoredWorkflowRef.current = false;
     // Notify parent to clear chat ID from workflow draft
     onChatIdChange?.("");
@@ -828,10 +839,13 @@ export function WorkflowBuilderChat({
             {thinkingSelectorDisplayState === "ready" && (
               <option value="">No thinking</option>
             )}
-            {supportedThinkingLevels.includes("low") && <option value="low">Low</option>}
-            {supportedThinkingLevels.includes("medium") && <option value="medium">Medium</option>}
-            {supportedThinkingLevels.includes("high") && <option value="high">High</option>}
-            {supportedThinkingLevels.includes("xhigh") && <option value="xhigh">XHigh</option>}
+            {THINKING_LEVEL_OPTIONS.filter(({ value }) =>
+              supportedThinkingLevels.includes(value),
+            ).map(({ value, label }) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
           </select>
           <button
             onClick={toggleSize}

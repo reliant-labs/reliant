@@ -99,7 +99,39 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		MaxConcurrentWorkflowTaskPollers: 5,
 		MaxConcurrentActivityTaskPollers: 10,
 		WorkerStopTimeout:                5 * time.Second,
-		MaxHeartbeatThrottleInterval:     500 * time.Millisecond,
+		// This is NOT just a throttle — it is also the heartbeat RPC's own
+		// deadline. The SDK sets the RPC timeout to this value, floored at
+		// minRPCTimeout=1s (internal_task_handlers.go internalHeartBeat):
+		//
+		//	recordTimeout := i.heartbeatThrottleInterval
+		//	if recordTimeout < minRPCTimeout { recordTimeout = minRPCTimeout }
+		//	ctx, cancel := context.WithTimeout(ctx, recordTimeout)
+		//
+		// At 500ms the floor applied, so every heartbeat had exactly ONE second
+		// to complete a round trip to the Temporal server. A single slow trip
+		// failed the RPC, DeadlineExceeded mapped to a retryable gRPC code, and
+		// the SDK cancelled the whole activity context — killing a healthy
+		// activity seconds into a 30-day StartToCloseTimeout.
+		//
+		// The user-visible damage was not a timeout message. Whatever operation
+		// happened to be in flight died with the context and reported ITS error
+		// instead: "streaming cancelled by user" from CallLLM (which no user
+		// cancelled), and "failed to connect to database ... operation was
+		// canceled" from SaveMessage (with Postgres up, healthy, and reachable
+		// the whole time). Observed 63+ times across two log windows, every one
+		// with cause="context deadline exceeded".
+		//
+		// 3s gives a round trip three times the budget. The cost is that a
+		// server-side cancellation now reaches a running activity in up to ~3s
+		// rather than ~500ms; per-tool and per-spawn cancellation do not depend
+		// on this path (they run over the daemon router and a workflow signal
+		// respectively), so that latency is not user-visible.
+		//
+		// spuriousHeartbeatCancel in workflow/runtime/registry.go still converts
+		// any that slip through into a retry rather than a chat-parking pause.
+		// This reduces how often that safety net is needed; it does not replace
+		// it.
+		MaxHeartbeatThrottleInterval:     3 * time.Second,
 		BuildID:                          v2workflow.WorkerBuildID,
 		DeadlockDetectionTimeout:         30 * time.Second,
 		Interceptors:                     []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},

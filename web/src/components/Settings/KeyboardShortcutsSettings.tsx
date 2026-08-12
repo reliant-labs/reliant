@@ -1,43 +1,81 @@
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
-import { useShortcutsStore, type KeyBinding } from "../../store/shortcutsStore";
+import { useShortcutsStore } from "../../store/shortcutsStore";
 import { Button } from "../ui/Button";
-import { RotateCcw, Edit3, Check, X, AlertTriangle, Keyboard } from "lucide-react";
+import { RotateCcw, Edit3, Check, X, AlertTriangle, Keyboard, Globe } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
+import {
+  chordToString,
+  isSequence,
+  parseBinding,
+  sequencePrefix,
+} from "../../lib/keyboard/chord";
+import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 
-// Helper function to format key combinations for display
-function formatKeyBinding(binding: KeyBinding): string {
-  const isMac =
-    typeof window !== "undefined" &&
-    (window.navigator.platform.toUpperCase().includes("MAC") ||
-      window.navigator.userAgent.toUpperCase().includes("MAC"));
+/** Render an authored binding ("Cmd+K C") for display. */
+function formatAuthored(authored: string): string {
+  const { isMac } = detectPlatform();
+  if (!authored) return "";
+  return formatBinding(parseBinding(authored, isMac), isMac);
+}
 
-  const parts: string[] = [];
+/**
+ * Whether an authored chord already opens a sequence somewhere in the app.
+ *
+ * Derived from the live shortcut set rather than a hardcoded "Cmd+K", so if the
+ * prefix ever changes — or a user rebinds onto a different one — capture keeps
+ * working without this needing to be updated.
+ */
+function isSequencePrefix(authoredChord: string, isMac: boolean): boolean {
+  const canonical = parseBinding(authoredChord, isMac);
+  const { shortcuts } = useShortcutsStore.getState();
+  const { isDesktop } = detectPlatform();
 
-  if (binding.ctrl && !isMac) parts.push("Ctrl");
-  if (binding.meta && isMac) parts.push("Cmd");
-  if (binding.meta && !isMac) parts.push("Win");
-  if (binding.ctrl && isMac) parts.push("Ctrl");
-  if (binding.alt) parts.push(isMac ? "Option" : "Alt");
-  if (binding.shift) parts.push("Shift");
+  return Object.values(shortcuts).some((shortcut) => {
+    const authored =
+      shortcut.currentBinding ??
+      (isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding);
+    if (!authored) return false;
 
-  // Format special keys
-  let key = binding.key;
-  if (key === "Escape") key = "Esc";
-  else if (key === "ArrowLeft") key = "←";
-  else if (key === "ArrowRight") key = "→";
-  else if (key === "ArrowUp") key = "↑";
-  else if (key === "ArrowDown") key = "↓";
-  else if (key === " ") key = "Space";
-  else if (key === "PageUp") key = "PgUp";
-  else if (key === "PageDown") key = "PgDn";
-  else if (key === "Enter") key = "↵";
-  else if (key === "Tab") key = "⇥";
-  else if (key === "Backspace") key = "⌫";
-  else if (key === "Delete") key = "⌦";
+    const binding = parseBinding(authored, isMac);
+    return isSequence(binding) && sequencePrefix(binding) === canonical;
+  });
+}
 
-  parts.push(key);
-  return parts.join(" + ");
+/**
+ * Convert a captured event into AUTHORED form ("Cmd+Shift+P").
+ *
+ * We store what the user meant, not the platform-resolved chord, so a binding
+ * set on a Mac still reads as Ctrl on Windows.
+ */
+function eventToAuthored(e: KeyboardEvent, isMac: boolean): string {
+  const canonical = chordToString({
+    key: e.key,
+    ctrl: e.ctrlKey,
+    meta: e.metaKey,
+    shift: e.shiftKey,
+    alt: e.altKey,
+  });
+
+  const parts = canonical.split("+");
+  const key = parts.pop() ?? "";
+  const out: string[] = [];
+
+  const hasCtrl = parts.includes("ctrl");
+  const hasMeta = parts.includes("meta");
+
+  // Fold the platform-primary modifier back to the portable "Cmd" spelling.
+  if (isMac ? hasMeta : hasCtrl) out.push("Cmd");
+  // A second, literal Control (Mac) or Alt-as-second (PC) becomes "Ctrl".
+  if (isMac && hasCtrl && hasMeta) out.push("Ctrl");
+  else if (!isMac && hasCtrl && parts.includes("alt")) out.push("Ctrl");
+  else if (!isMac && hasMeta) out.push("Win");
+
+  if (parts.includes("shift")) out.push("Shift");
+  if (parts.includes("alt") && !(!isMac && hasCtrl)) out.push("Alt");
+
+  out.push(key);
+  return out.join("+");
 }
 
 // Key input component for capturing key combinations
@@ -47,15 +85,21 @@ function KeyInput({
   onCancel,
   onSave,
   conflictWarning,
+  reservationWarning,
 }: {
-  value: KeyBinding;
-  onChange: (binding: KeyBinding) => void;
+  value: string;
+  onChange: (binding: string) => void;
   onCancel: () => void;
   onSave: () => void;
   conflictWarning?: string;
+  reservationWarning?: string;
 }) {
   const inputRef = useRef<HTMLDivElement>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  // Armed first chord of a two-key capture. Mirrored in a ref because the
+  // keydown listener is registered once and must read the live value.
+  const [pendingPrefix, setPendingPrefix] = useState<string | null>(null);
+  const pendingPrefixRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (inputRef.current) {
@@ -65,44 +109,70 @@ function KeyInput({
   }, []);
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isCapturing) return;
+    if (!isCapturing) return;
 
+    const { isMac } = detectPlatform();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       e.preventDefault();
       e.stopPropagation();
 
-      // Don't capture modifier-only presses
+      // Modifier-only presses are not a chord.
       if (["Control", "Meta", "Alt", "Shift"].includes(e.key)) return;
 
-      // Normalize letter keys to uppercase for consistent matching
-      let normalizedKey = e.key;
-      if (normalizedKey.length === 1 && /[a-zA-Z]/.test(normalizedKey)) {
-        normalizedKey = normalizedKey.toUpperCase();
+      // Escape cancels rather than being captured — otherwise there is no way
+      // out of the capture box with the keyboard. Mid-sequence it backs out of
+      // the half-typed binding first, so one Escape does not discard the whole
+      // edit just because the user mistyped the second key.
+      if (e.key === "Escape" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        if (pendingPrefixRef.current) {
+          pendingPrefixRef.current = null;
+          setPendingPrefix(null);
+          onChange("");
+          return;
+        }
+        onCancel();
+        return;
       }
 
-      const binding: KeyBinding = {
-        key: normalizedKey,
-        ctrl: e.ctrlKey,
-        meta: e.metaKey,
-        shift: e.shiftKey,
-        alt: e.altKey,
-      };
+      const chord = eventToAuthored(e, isMac);
 
-      onChange(binding);
+      // Sequences have to be capturable, or a user could never rebind onto one
+      // — and 24 of the shipped defaults are sequences, so "Cmd+K then T" would
+      // be a shape the app uses but the settings UI cannot express.
+      //
+      // A chord that is a known sequence PREFIX starts a two-key capture: hold
+      // it and wait for the completing key. Anything else replaces the binding
+      // outright, so a plain remap still takes one keystroke.
+      if (pendingPrefixRef.current) {
+        onChange(`${pendingPrefixRef.current} ${chord}`);
+        pendingPrefixRef.current = null;
+        setPendingPrefix(null);
+        return;
+      }
+
+      if (isSequencePrefix(chord, isMac)) {
+        pendingPrefixRef.current = chord;
+        setPendingPrefix(chord);
+        onChange(chord);
+        return;
+      }
+
+      onChange(chord);
     };
 
-    if (isCapturing) {
-      document.addEventListener("keydown", handleKeyDown, true);
-      return () => document.removeEventListener("keydown", handleKeyDown, true);
-    }
-  }, [isCapturing, onChange]);
+    document.addEventListener("keydown", handleKeyDown, true);
+    return () => document.removeEventListener("keydown", handleKeyDown, true);
+  }, [isCapturing, onChange, onCancel]);
 
   return (
     <div className="space-y-2">
       {isCapturing && (
         <div className="flex items-center gap-1 text-xs text-muted-foreground">
           <Keyboard className="w-3 h-3" />
-          Listening for key combination...
+          {pendingPrefix
+            ? "Now press the second key, or Esc to cancel"
+            : "Listening for key combination... (Esc to cancel)"}
         </div>
       )}
 
@@ -112,11 +182,16 @@ function KeyInput({
           tabIndex={0}
           className={cn(
             "flex-1 px-3 py-2 border border-border/40 rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring min-h-[38px] flex items-center justify-center",
-            conflictWarning && "border-destructive bg-destructive/5"
+            conflictWarning && "border-destructive bg-destructive/5",
+            // Mid-sequence: the value shown is not yet a complete binding.
+            pendingPrefix && "border-primary/60 bg-primary/5"
           )}
         >
           <span className="font-mono text-sm text-center">
-            {value.key ? formatKeyBinding(value) : "Press key combination..."}
+            {value ? formatAuthored(value) : "Press key combination..."}
+            {pendingPrefix && (
+              <span className="text-muted-foreground"> then…</span>
+            )}
           </span>
         </div>
 
@@ -139,7 +214,9 @@ function KeyInput({
             size="sm"
             variant="primary"
             onClick={onSave}
-            disabled={!value.key || !!conflictWarning}
+            // Saving mid-sequence would store a bare prefix, which shadows
+            // every sequence that starts with it.
+            disabled={!value || !!conflictWarning || !!pendingPrefix}
           >
             <Check className="w-4 h-4" />
           </Button>
@@ -148,6 +225,14 @@ function KeyInput({
           </Button>
         </div>
       </div>
+
+      {/* Advisory, not blocking: the user may know better than our table. */}
+      {reservationWarning && !conflictWarning && (
+        <div className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500">
+          <Globe className="w-3 h-3 mt-0.5 shrink-0" />
+          <span>{reservationWarning}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -160,51 +245,48 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
     setEditing,
     updateShortcut,
     resetShortcut,
-    isKeyComboTaken,
+    getEffectiveBinding,
+    findConflict,
+    getReservationFor,
   } = useShortcutsStore();
 
   const shortcut = shortcuts[shortcutId];
-  const [tempBinding, setTempBinding] = useState<KeyBinding>(
-    shortcut?.currentBinding || { key: '', ctrl: false, meta: false, shift: false, alt: false }
-  );
+  const [tempBinding, setTempBinding] = useState<string>("");
 
-  // Normalize tempBinding key for conflict checking
-  const normalizedTempBinding = useMemo(() => {
-    if (!tempBinding.key) return tempBinding;
-    let normalizedKey = tempBinding.key;
-    if (normalizedKey.length === 1 && /[a-zA-Z]/.test(normalizedKey)) {
-      normalizedKey = normalizedKey.toUpperCase();
-    }
-    return { ...tempBinding, key: normalizedKey };
-  }, [tempBinding]);
-
-  // Early return after all hooks
   if (!shortcut) return null;
 
+  const effective = getEffectiveBinding(shortcutId);
   const isEditingThis = isEditing === shortcutId;
-  const isDefault =
-    JSON.stringify(shortcut.currentBinding) ===
-    JSON.stringify(shortcut.defaultBinding);
+  const isDefault = shortcut.currentBinding === null;
 
-  const conflictWarning =
-    isEditingThis && tempBinding.key
-      ? isKeyComboTaken(normalizedTempBinding, shortcutId)
-        ? "This key combination is already in use"
-        : undefined
+  const conflict =
+    isEditingThis && tempBinding
+      ? findConflict(tempBinding, shortcutId)
       : undefined;
+  const conflictWarning = conflict
+    ? `Already used by "${conflict.name}"`
+    : undefined;
+
+  const reservation =
+    isEditingThis && tempBinding ? getReservationFor(tempBinding) : undefined;
+  const reservationWarning = reservation
+    ? reservation.level === "hard"
+      ? `Your browser ${reservation.reason} with this combination and will not pass it to Reliant — this shortcut would never fire. Try a Cmd+K sequence instead.`
+      : `Your browser ${reservation.reason} with this combination. Reliant will override it.`
+    : undefined;
 
   const handleEdit = () => {
-    setTempBinding(shortcut.currentBinding);
+    setTempBinding(effective);
     setEditing(shortcutId);
   };
 
   const handleCancel = () => {
-    setTempBinding(shortcut.currentBinding);
+    setTempBinding("");
     setEditing(null);
   };
 
   const handleSave = async () => {
-    if (tempBinding.key && !conflictWarning) {
+    if (tempBinding && !conflictWarning) {
       try {
         await updateShortcut(shortcutId, tempBinding);
         setEditing(null);
@@ -250,10 +332,12 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
                 onCancel={handleCancel}
                 onSave={handleSave}
                 conflictWarning={conflictWarning}
+
+                reservationWarning={reservationWarning}
               />
             ) : (
               <kbd className="px-2 py-1 bg-muted rounded border border-border/40 text-xs font-mono min-w-[120px] text-center">
-                {formatKeyBinding(shortcut.currentBinding)}
+                {formatAuthored(effective)}
               </kbd>
             )}
 
@@ -292,12 +376,14 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
                   onCancel={handleCancel}
                   onSave={handleSave}
                   conflictWarning={conflictWarning}
+
+                  reservationWarning={reservationWarning}
                 />
               </div>
             ) : (
               <>
                 <kbd className="px-2 py-1 bg-muted rounded border border-border/40 text-xs font-mono flex-1 text-center">
-                  {formatKeyBinding(shortcut.currentBinding)}
+                  {formatAuthored(effective)}
                 </kbd>
                 <div className="flex items-center gap-1">
                   <Button size="sm" variant="outline" onClick={handleEdit}>
@@ -352,7 +438,9 @@ export function KeyboardShortcutsSettings() {
           shortcut.description
             .toLowerCase()
             .includes(searchQuery.toLowerCase()) ||
-          formatKeyBinding(shortcut.currentBinding)
+          formatAuthored(
+            shortcut.currentBinding ?? shortcut.defaultBinding,
+          )
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
       );
@@ -365,9 +453,7 @@ export function KeyboardShortcutsSettings() {
   );
 
   const hasCustomizations = Object.values(shortcuts).some(
-    (shortcut) =>
-      JSON.stringify(shortcut.currentBinding) !==
-      JSON.stringify(shortcut.defaultBinding)
+    (shortcut) => shortcut.currentBinding !== null
   );
 
   return (

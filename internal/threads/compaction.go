@@ -15,7 +15,7 @@ import (
 // - Has sequence = current sequence + 1
 // - Links to the summary message via CompactionSummaryMessageID
 // - Links to the previous CW via ParentContextWindowID
-// - Has ForkAtOrdinal = nil (compaction is not a branch)
+// - Has ForkAtMessageID = nil (compaction is not a branch)
 //
 // After compaction, message resolution will stop at this CW because
 // CompactionSummaryMessageID is set - the summary already contains all prior context.
@@ -51,14 +51,14 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 
 	// Create new context window with CW chain linking:
 	// - ParentContextWindowID: Links to the previous CW (for chain traversal, though compaction stops here)
-	// - ForkAtOrdinal: nil (compaction is not a branch)
+	// - ForkAtMessageID: nil (compaction is not a branch)
 	// - CompactionSummaryMessageID: Set to mark this as a compaction boundary
 	cw := &db.ContextWindow{
-		ID:                         contextWindowID(thread.ConversationID, threadID, newSeq),
+		ID:                         contextWindowID(thread.ChatID, threadID, newSeq),
 		ThreadID:                   threadID,
 		Sequence:                   newSeq,
 		CompactionSummaryMessageID: &summaryMessageID,
-		ForkAtOrdinal:              nil, // Not a branch
+		ForkAtMessageID:            nil, // Not a branch
 		CreatedAt:                  now(),
 	}
 

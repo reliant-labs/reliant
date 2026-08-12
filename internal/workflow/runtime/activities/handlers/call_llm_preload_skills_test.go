@@ -158,7 +158,12 @@ func TestBuildSeededSkillMessages_OversizeSkillIsCappedAndMarked(t *testing.T) {
 	text := msgs[0].Content().Text
 	require.Contains(t, text, "SKILL HEAD")
 	require.NotContains(t, text, "SKILL TAIL")
-	require.Contains(t, text, "SKILL TRUNCATED", "a dropped tail must be announced in the delivered text")
+	// A dropped tail must be announced AND made recoverable. The announcement
+	// alone was not enough: it used to point at a SKILL.md the model cannot
+	// open, so the tail of a preloaded skill was unreachable in practice.
+	require.Contains(t, text, "BYTES REMAIN", "a dropped tail must be announced in the delivered text")
+	require.Contains(t, text, `skill(action="load"`,
+		"the announcement must name the call that fetches the remainder")
 
 	// The hand-load path (skill tool through its ToolWrapper) must produce the
 	// exact same bytes — that equality is the whole point of the shared cap, and
@@ -212,10 +217,18 @@ func TestInsertSeededMessagesAfterFirstUserTurn(t *testing.T) {
 }
 
 // The seed must survive ConvertMessages on the provider it is actually used
-// with. The OpenAI-compatible family (reliant/openai/openrouter) has no
-// message.System case, so a System-role seed would vanish there — the exact
-// silent no-op the requested-vs-injected logging exists to catch, except
-// invisible because the counts would still read "injected: 2".
+// with.
+//
+// This test used to also pin the inverse as a counter-example: a System-role
+// message was SILENTLY DROPPED by the OpenAI-compatible family, which had no
+// message.System case at all. That was a bug, not a contract — it also ate
+// compaction summaries, branch notes, and the agent mailbox envelope, on that
+// family only. Every converter now handles System history, so the assertion
+// below is that it ARRIVES.
+//
+// The seed itself stays a user turn regardless: a fabricated turn attributed
+// to the agent reads differently to the model than a system note, and that
+// reasoning (see preloadedSkillsPreamble) never depended on the driver bug.
 func TestSeededSkillTurnSurvivesTheOpenAICompatibleDriver(t *testing.T) {
 	cfg := &cfgpkg.Config{Skills: preloadTestCatalog()}
 	msgs, injected, _, _ := buildSeededSkillMessages(cfg, []string{"forge/db"})
@@ -225,13 +238,11 @@ func TestSeededSkillTurnSurvivesTheOpenAICompatibleDriver(t *testing.T) {
 	converted := client.ConvertMessages(nil, msgs)
 	require.Len(t, converted, 1, "the seeded turn must reach the provider, not be dropped by role")
 
-	// Same catalog, seeded as a System turn: silently dropped. This is the
-	// counter-example, and it is why the seed is a user turn.
-	dropped := client.ConvertMessages(nil, []message.Message{{
+	delivered := client.ConvertMessages(nil, []message.Message{{
 		Role:  message.System,
 		Parts: []message.ContentPart{message.TextContent{Text: "memory"}},
 	}})
-	require.Empty(t, dropped, "System-role history is dropped by the OpenAI-compatible driver family")
+	require.Len(t, delivered, 1, "System-role history must reach the OpenAI-compatible driver family")
 }
 
 // TestBuildSeededSkillMessages_ReportsUnresolvedPaths pins the difference
@@ -332,30 +343,37 @@ func TestBuildSeededSkillMessages_TellsTheModelWhatItDidNotGet(t *testing.T) {
 // which miss stops the call and which one it rides through. Both directions are
 // load-bearing and each is a different bug if wrong.
 //
-// Failing a cold catalog is the fix — the catalog fills asynchronously, so the
-// retry is warm and the node gets what it asked for. Failing a warm catalog
-// instead spends the entire retry budget re-asking a question whose answer
-// cannot change, and kills a run over a charter typo. Not failing a cold
-// catalog is the original bug: a turn silently runs on none of the guidance
-// that was declared for it.
+// Failing an UNSYNCED project is the fix — the snapshot fills asynchronously,
+// so the retry is warm and the node gets what it asked for. Failing a synced
+// one instead spends the entire retry budget re-asking a question whose answer
+// cannot change, and kills a run over a charter typo. Not failing an unsynced
+// one is the original bug: a turn silently runs on none of the guidance that
+// was declared for it.
 func TestPreloadSkillMissError_FailsOnlyTheTransientCause(t *testing.T) {
 	requested := []string{"forge/db", "forge/proto"}
 
-	// Cold catalog: transient, so error and let Temporal retry into a warm one.
-	err := preloadSkillMissError(0, requested, requested)
+	// No daemon push yet: transient, so error and let Temporal retry into a
+	// snapshot that has landed.
+	err := preloadSkillMissError(false, 0, requested, requested)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "forge/db",
 		"the error must name what was not delivered, not just count it")
-	require.Contains(t, err.Error(), "catalog is empty",
+	require.Contains(t, err.Error(), "no daemon has pushed a config snapshot",
 		"and must name the cause, so a reader knows a retry is the fix")
 
-	// Warm catalog, path not in it: permanent. Retrying cannot conjure the
+	// Synced, path not in the catalog: permanent. Retrying cannot conjure the
 	// skill, so the call proceeds and the seed carries the notice instead.
-	require.NoError(t, preloadSkillMissError(37, requested, []string{"forge/nope"}))
+	require.NoError(t, preloadSkillMissError(true, 37, requested, []string{"forge/nope"}))
+
+	// Synced and genuinely EMPTY is permanent too, and is the case emptiness
+	// alone could not tell from an unfilled snapshot. Retrying here is the
+	// unwinnable loop: the daemon re-sends only on a content-hash CHANGE, so
+	// no amount of waiting turns this catalog into a populated one.
+	require.NoError(t, preloadSkillMissError(true, 0, requested, requested))
 
 	// Everything resolved: nothing to decide, either way round.
-	require.NoError(t, preloadSkillMissError(37, requested, nil))
-	require.NoError(t, preloadSkillMissError(0, nil, nil))
+	require.NoError(t, preloadSkillMissError(true, 37, requested, nil))
+	require.NoError(t, preloadSkillMissError(false, 0, nil, nil))
 }
 
 // TestSkillSuggestionsNeverContradictThePreload pins the one place the harness

@@ -13,6 +13,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
  *
  * Assertions target STABLE structure: the PageHeader h1, the two tab buttons,
  * the empty state, and the capability-gated fallback — never marketing copy.
+ *
+ * The section also renders the shared SelfHostedDaemonConnect panel (the same
+ * download/setup instructions onboarding shows). That panel reaches for the
+ * event bus and the daemon-registry hook, both stubbed below; the assertion
+ * on it is deliberately structural (its heading), since the point of the
+ * shared component is that this page never owns the copy.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +26,21 @@ const mocks = vi.hoisted(() => ({
   listDaemons: vi.fn(async () => ({ daemons: [] })),
   getComputeSubscription: vi.fn(async () => ({})),
   listDaemonTokens: vi.fn(async () => []),
+}))
+
+vi.mock('@/lib/event-context', () => ({
+  useEventBus: () => ({ emit: vi.fn(), on: vi.fn(() => () => {}) }),
+}))
+
+// The self-hosted panel polls the daemon registry; an empty, settled list
+// keeps it on its instructions branch without any network.
+vi.mock('@/hooks/useDaemonStatus', () => ({
+  useDaemonStatus: () => ({
+    daemons: [],
+    activeDaemon: undefined,
+    loading: false,
+    refresh: vi.fn(),
+  }),
 }))
 
 vi.mock('@/services/controlPlane/capabilities', () => ({
@@ -45,6 +66,9 @@ vi.mock('@/services/controlPlane/environments', () => ({
   DaemonSize: { UNSPECIFIED: 0, SMALL: 1, MEDIUM: 2, LARGE: 3, XL: 4 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (_e: unknown, fallback = 'error') => fallback,
+  // environments.tsx calls this at module scope to build its query-key table,
+  // so it must exist on the mock or the module fails to evaluate.
+  portAccessRulesQueryKey: (daemonId: string) => ['cp', 'ports', daemonId],
   listDaemons: mocks.listDaemons,
   getComputeSubscription: mocks.getComputeSubscription,
   listDaemonTokens: mocks.listDaemonTokens,
@@ -102,6 +126,34 @@ describe('EnvironmentsSection', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('heading', { level: 3, name: /machines unavailable/i }),
+    ).toBeInTheDocument()
+  })
+
+  // The self-hosted setup instructions are the SHARED onboarding panel, and
+  // they must appear in BOTH states: with a control plane (adding another
+  // machine) and without one (self-hosting is the only path that still works).
+  it('renders the shared self-hosted setup instructions', async () => {
+    renderSection()
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /run reliant on your own machine/i,
+      }),
+    ).toBeInTheDocument()
+    // Rendered by SelfHostedDaemonConnect, not by this page.
+    expect(
+      screen.getByRole('heading', { name: /install reliant daemon/i }),
+    ).toBeInTheDocument()
+  })
+
+  it('still renders the self-hosted setup instructions without a control plane', async () => {
+    mocks.caps.cloudDaemons = false
+    renderSection()
+
+    expect(
+      await screen.findByRole('heading', {
+        name: /run reliant on your own machine/i,
+      }),
     ).toBeInTheDocument()
   })
 })

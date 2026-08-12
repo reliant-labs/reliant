@@ -1,0 +1,206 @@
+/**
+ * Background Work Pill — ambient summary of async spawns and running commands.
+ *
+ * Sits directly above the chat input, in the same "wants your attention" band
+ * as QueuedMessages and the permissions panel. Async spawns are launched from
+ * a tool call that scrolls away, so without a fixed surface there is no way to
+ * see what is still running, or to get back to it.
+ *
+ * Deliberately NOT merged into ThreadTabs: those are a navigation control with
+ * per-thread context meters, and ChatHeader already filters spawns out of them
+ * (`threads.filter(t => !t.isSpawn)`). This is a transient activity readout.
+ */
+
+import { useEffect, useMemo, useState } from "react";
+import { Bot, ChevronDown, Terminal, HelpCircle } from "lucide-react";
+import { cn } from "../../lib/utils";
+import { useBackgroundWork, type ActiveSpawn, type ActiveCommand } from "./useBackgroundWork";
+
+interface BackgroundWorkPillProps {
+  chatId?: string;
+  worktreeId?: string;
+  /** Focus a spawned agent's thread in the timeline. */
+  onSelectThread?: (threadId: string | null) => void;
+  /** Reveal a running command in the Commands tab. */
+  onSelectCommand?: (processId: string) => void;
+}
+
+/** Compact elapsed time: "8s", "4m", "1h12m". */
+function useElapsed(startedAt: number | null): string {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (startedAt === null) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+
+  if (startedAt === null) return "";
+  const seconds = Math.max(0, Math.floor((now - startedAt) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m`;
+  return `${Math.floor(minutes / 60)}h${minutes % 60}m`;
+}
+
+function Elapsed({ startedAt }: { startedAt: number | null }) {
+  const elapsed = useElapsed(startedAt);
+  if (!elapsed) return null;
+  return (
+    <span className="text-[10px] tabular-nums text-muted-foreground">{elapsed}</span>
+  );
+}
+
+function SpawnRow({
+  spawn,
+  onSelect,
+}: {
+  spawn: ActiveSpawn;
+  onSelect?: (threadId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect?.(spawn.threadId)}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+      data-testid={`background-work-spawn-${spawn.threadId}`}
+    >
+      {spawn.isBlocked ? (
+        <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+      ) : (
+        <Bot className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+      )}
+      <span className="truncate font-medium text-foreground">{spawn.title}</span>
+      <span
+        className={cn(
+          "truncate",
+          spawn.isBlocked ? "text-amber-500" : "text-muted-foreground",
+        )}
+      >
+        {spawn.isBlocked ? spawn.blockReason : spawn.activity}
+      </span>
+      <span className="ml-auto flex-shrink-0">
+        <Elapsed startedAt={spawn.startedAt} />
+      </span>
+    </button>
+  );
+}
+
+function CommandRow({
+  command,
+  onSelect,
+}: {
+  command: ActiveCommand;
+  onSelect?: (processId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect?.(command.id)}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+      data-testid={`background-work-command-${command.id}`}
+    >
+      <Terminal className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
+      <span className="truncate font-mono text-foreground">{command.command}</span>
+      <span className="ml-auto flex-shrink-0">
+        <Elapsed startedAt={command.startedAt} />
+      </span>
+    </button>
+  );
+}
+
+export function BackgroundWorkPill({
+  chatId,
+  worktreeId,
+  onSelectThread,
+  onSelectCommand,
+}: BackgroundWorkPillProps) {
+  const { spawns, commands, blockedSpawns, hasWork } = useBackgroundWork(
+    chatId,
+    worktreeId,
+  );
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  const summary = useMemo(() => {
+    const parts: string[] = [];
+    if (spawns.length > 0) {
+      parts.push(`${spawns.length} ${spawns.length === 1 ? "agent" : "agents"}`);
+    }
+    if (commands.length > 0) {
+      parts.push(
+        `${commands.length} ${commands.length === 1 ? "command" : "commands"}`,
+      );
+    }
+    return parts.join(" · ");
+  }, [spawns.length, commands.length]);
+
+  // Collapse when the work drains so the next batch starts collapsed rather
+  // than reopening onto an empty list.
+  useEffect(() => {
+    if (!hasWork) setIsExpanded(false);
+  }, [hasWork]);
+
+  if (!hasWork) return null;
+
+  const isBlocked = blockedSpawns.length > 0;
+
+  return (
+    <div className="flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center gap-2 text-xs"
+        data-testid="background-work-pill"
+      >
+        {isBlocked ? (
+          <span className="relative flex h-2 w-2 flex-shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
+          </span>
+        ) : (
+          <span className="relative flex h-2 w-2 flex-shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
+          </span>
+        )}
+
+        <span className={cn("font-medium", isBlocked ? "text-amber-500" : "text-foreground")}>
+          {isBlocked
+            ? `${blockedSpawns.length === 1 ? blockedSpawns[0].title : `${blockedSpawns.length} agents`} waiting on you`
+            : summary}
+        </span>
+
+        {isBlocked && summary && (
+          <span className="text-muted-foreground">· {summary} running</span>
+        )}
+
+        <ChevronDown
+          className={cn(
+            "ml-auto h-3.5 w-3.5 flex-shrink-0 text-muted-foreground transition-transform",
+            isExpanded && "rotate-180",
+          )}
+        />
+      </button>
+
+      {isExpanded && (
+        <div className="mt-1 flex flex-col gap-0.5">
+          {spawns.map((spawn) => (
+            <SpawnRow
+              key={spawn.threadId}
+              spawn={spawn}
+              onSelect={onSelectThread}
+            />
+          ))}
+          {commands.map((command) => (
+            <CommandRow
+              key={command.id}
+              command={command}
+              onSelect={onSelectCommand}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

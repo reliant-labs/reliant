@@ -851,9 +851,9 @@ func (s *SpawnTestSuite) TestFetchSpawnResult() {
 	s.NoError(env.GetWorkflowError())
 }
 
-// TestExecuteSpawnInline_ResumptionValidatesOwnership verifies that when isResumption=true,
+// TestPrepareSpawnInline_ResumptionValidatesOwnership verifies that when isResumption=true,
 // the thread ownership is validated and an error is returned if validation fails
-func (s *SpawnTestSuite) TestExecuteSpawnInline_ResumptionValidatesOwnership() {
+func (s *SpawnTestSuite) TestPrepareSpawnInline_ResumptionValidatesOwnership() {
 	env := s.NewTestWorkflowEnvironment()
 
 	// Register all stubs EXCEPT the validation stub - we'll add a custom one
@@ -884,7 +884,7 @@ func (s *SpawnTestSuite) TestExecuteSpawnInline_ResumptionValidatesOwnership() {
 			presetName:      "researcher",
 		}
 
-		result := executeSpawnInline(
+		prep := prepareSpawnInline(
 			ctx,
 			config,
 			"/project",
@@ -892,9 +892,13 @@ func (s *SpawnTestSuite) TestExecuteSpawnInline_ResumptionValidatesOwnership() {
 			"parent-wf-789",
 			"parent-thread", // parentThread
 			map[string]interface{}{},
-			&ChildWorkflowTracker{children: make(map[string]bool)},
 			func(string) *PauseController { return nil },
 		)
+
+		if prep.earlyResult == nil {
+			return fmt.Errorf("expected an early error result for cross-chat resumption")
+		}
+		result := prep.earlyResult
 
 		// Verify the result is an error about cross-chat resumption
 		if result.ToolCallID != "tc-resume" {
@@ -924,7 +928,7 @@ func (s *SpawnTestSuite) TestExecuteSpawnInline_ResumptionValidatesOwnership() {
 // =========================================================================
 
 func TestSpawnExecContext_HasSpawnToolParent(t *testing.T) {
-	// Verify that executeSpawnInline builds the correct ExecContext
+	// Verify that prepareSpawnInline builds the correct ExecContext
 	// with Parent.StepPath = "spawn_tool" for anti-recursion
 	parentCtx := NewExecutionContext("parent-wf-123", "chat-456", "agent", "thread-0")
 
@@ -1030,7 +1034,7 @@ func TestSpawnDepth_TopLevelIsZero(t *testing.T) {
 
 func TestSpawnDepth_IncrementedOnSpawn(t *testing.T) {
 	// Simulate the spawn chain: top-level (0) → child (1) → grandchild (2)
-	// This mirrors what executeSpawnInline does: parentSpawnDepth + 1
+	// This mirrors what prepareSpawnInline does: parentSpawnDepth + 1
 	parentInputs := map[string]interface{}{}
 
 	// Top-level spawns child: reads parent depth (0), sets child to 1

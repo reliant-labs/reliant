@@ -17,6 +17,7 @@ const (
 	ToolPowerShell = "powershell" // Windows
 	ToolBashList   = "bash_list"
 	ToolBashOutput = "bash_output"
+	ToolBashWait   = "bash_wait"
 	ToolBashKill   = "bash_kill"
 
 	// Network tools
@@ -46,6 +47,10 @@ const (
 
 	// Agent tools
 	ToolAgent = "agent"
+
+	// Spawn observability/messaging tools
+	ToolSpawnStatus = "spawn_status"
+	ToolSpawnSend   = "spawn_send"
 
 	// Worktree tools
 	ToolWorktree = "worktree"
@@ -112,7 +117,7 @@ const (
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
-	ToolBash, ToolPowerShell, ToolBashList, ToolBashOutput, ToolBashKill,
+	ToolBash, ToolPowerShell, ToolBashList, ToolBashOutput, ToolBashWait, ToolBashKill,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
 	ToolListTasks, ToolAddTask, ToolUpdateTask, ToolCreateSubtask,
@@ -120,6 +125,7 @@ var AllToolNames = []string{
 	ToolBuild,
 	ToolStateTransition,
 	ToolAgent,
+	ToolSpawnStatus, ToolSpawnSend,
 	ToolWorktree,
 	ToolSkill,
 	ToolInstallSkill,

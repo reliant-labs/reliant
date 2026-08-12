@@ -11,7 +11,7 @@ import (
 )
 
 // ForkThread creates a forked thread from a parent thread.
-// The new thread inherits the sequence from the parent's ForkAtContextWindowID.
+// The new thread inherits the sequence from the parent's fork context window.
 // Returns the created Thread and its initial ContextWindow.
 func (s *Service) ForkThread(ctx context.Context, opts ForkThreadOpts) (*db.Thread, *db.ContextWindow, error) {
 	return s.forkThreadInternal(ctx, opts, nil)
@@ -20,8 +20,8 @@ func (s *Service) ForkThread(ctx context.Context, opts ForkThreadOpts) (*db.Thre
 // forkThreadInternal is the internal implementation that accepts an optional workflowID.
 // This is used by CreateWorkflowWithThread to set the workflow_id atomically.
 func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, workflowID *string) (*db.Thread, *db.ContextWindow, error) {
-	if opts.ConversationID == "" {
-		return nil, nil, fmt.Errorf("conversation ID is required")
+	if opts.ChatID == "" {
+		return nil, nil, fmt.Errorf("chat ID is required")
 	}
 	if opts.ParentThreadID == "" {
 		return nil, nil, fmt.Errorf("parent thread ID is required")
@@ -34,8 +34,7 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 	// row — infrastructure errors (serialization conflict, aborted tx) keep
 	// their own message so retry classification upstream sees them for what
 	// they are instead of a terminal-looking not-found.
-	_, err := s.repo.GetThread(ctx, opts.ParentThreadID)
-	if err != nil {
+	if _, err := s.repo.GetThread(ctx, opts.ParentThreadID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil, fmt.Errorf("parent thread not found: %w", err)
 		}
@@ -50,18 +49,23 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 
 	threadID := generateID(opts.ID)
 
+	// Every thread this path creates is a fork; whether it is also what the UI
+	// calls a BRANCH is the separate question "did it cross into another
+	// chat", which ListBranches answers by comparing the parent's chat_id
+	// against its own. Both halves are stored, checkable facts, so neither has
+	// to be re-derived from a sentinel at read time.
+	//
 	// Create thread with fork metadata
 	thread := &db.Thread{
-		ID:                    threadID,
-		ConversationID:        opts.ConversationID,
-		ParentThreadID:        &opts.ParentThreadID,
-		ForkAtOrdinal:         &opts.ForkAtOrdinal,
-		ForkAtContextWindowID: &opts.ForkAtContextWindowID,
-		WorkflowID:            workflowID,
-		Title:                 opts.Title,
-		CreatedAt:             now(),
-		Origin:                db.ThreadOriginFork,
-		Status:                db.ThreadStatusRunning,
+		ID:              threadID,
+		ChatID:          opts.ChatID,
+		ParentThreadID:  &opts.ParentThreadID,
+		ForkAtMessageID: opts.ForkAtMessageID,
+		WorkflowID:      workflowID,
+		Title:           opts.Title,
+		CreatedAt:       now(),
+		Origin:          db.ThreadOriginFork,
+		Status:          db.ThreadStatusRunning,
 	}
 
 	createdThread, err := s.repo.CreateThread(ctx, thread)
@@ -71,14 +75,14 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 
 	// Create context window with CW chain linking:
 	// - ParentContextWindowID: Links to the source CW we're forking from
-	// - ForkAtOrdinal: The max ordinal to inherit from the parent CW
+	// - ForkAtMessageID: The last parent message this CW inherits
 	// - Sequence: Inherited from parent (forked threads share the same context sequence)
 	cw := &db.ContextWindow{
-		ID:                    contextWindowID(opts.ConversationID, threadID, parentCW.Sequence),
+		ID:                    contextWindowID(opts.ChatID, threadID, parentCW.Sequence),
 		ThreadID:              threadID,
 		Sequence:              parentCW.Sequence,
 		ParentContextWindowID: &opts.ForkAtContextWindowID,
-		ForkAtOrdinal:         &opts.ForkAtOrdinal,
+		ForkAtMessageID:       opts.ForkAtMessageID,
 		CreatedAt:             now(),
 	}
 
@@ -91,10 +95,10 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 	logging.Info("[FORK-DEBUG] forkThreadInternal created forked thread and CW",
 		"threadID", createdThread.ID,
 		"parentThreadID", opts.ParentThreadID,
-		"forkAtOrdinal", opts.ForkAtOrdinal,
+		"forkAtMessageID", opts.ForkAtMessageID,
 		"contextWindowID", createdCW.ID,
 		"parentContextWindowID", *cw.ParentContextWindowID,
-		"cwForkAtOrdinal", *cw.ForkAtOrdinal,
+		"cwForkAtMessageID", cw.ForkAtMessageID,
 		"cwSequence", cw.Sequence)
 	return createdThread, createdCW, nil
 }
@@ -197,6 +201,14 @@ func (s *Service) walkForkChain(ctx context.Context, threadID string, contextWin
 
 		// Move to parent
 		currentThreadID = *thread.ParentThreadID
-		currentCWID = thread.ForkAtContextWindowID
+		if thread.ForkAtMessageID != nil {
+			forkMsg, err := s.repo.GetMessage(ctx, *thread.ForkAtMessageID)
+			if err != nil {
+				return fmt.Errorf("failed to get fork message %s: %w", *thread.ForkAtMessageID, err)
+			}
+			currentCWID = &forkMsg.ContextWindowID
+		} else {
+			currentCWID = nil
+		}
 	}
 }

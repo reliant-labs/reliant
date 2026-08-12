@@ -293,6 +293,19 @@ func (c *ClaudeCodeClient) Name() string {
 	return "claude-code"
 }
 
+// mcpToolName returns the name a tool is presented under in the request, which
+// makes tools appear as if they come from an MCP server. Already-prefixed names
+// and the empty string pass through unchanged.
+//
+// Both convertTools and tool_choice must agree on this name, or a pin silently
+// names a tool that isn't in the tools array.
+func (c *ClaudeCodeClient) mcpToolName(name string) string {
+	if name == "" || strings.HasPrefix(name, "mcp__") {
+		return name
+	}
+	return mcpToolPrefix + name
+}
+
 // convertTools overrides the base implementation to prefix tool names with MCP prefix
 // This makes tools appear as if they come from an MCP server
 func (c *ClaudeCodeClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolUnionParam {
@@ -310,11 +323,7 @@ func (c *ClaudeCodeClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolU
 			inputSchema.Required = schema.Required
 		}
 
-		// Only prefix tool name if it's not already an MCP tool
-		toolName := tool.Name()
-		if !strings.HasPrefix(toolName, "mcp__") {
-			toolName = mcpToolPrefix + toolName
-		}
+		toolName := c.mcpToolName(tool.Name())
 
 		toolParam := anthropic.ToolParam{
 			Name:        toolName,
@@ -574,12 +583,13 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 	system = append(system, c.callerSystemBlocks(prompts)...)
 
 	params := anthropic.MessageNewParams{
-		Model:     anthropic.Model(c.options.Model.APIModel),
-		MaxTokens: c.options.MaxTokens,
-		Messages:  messages,
-		Tools:     tools,
-		Thinking:  c.getThinkingConfig(),
-		System:    system,
+		Model:      anthropic.Model(c.options.Model.APIModel),
+		MaxTokens:  c.options.MaxTokens,
+		Messages:   messages,
+		Tools:      tools,
+		ToolChoice: c.toolChoice(c.mcpToolName(c.options.ForceToolChoice)),
+		Thinking:   c.getThinkingConfig(),
+		System:     system,
 	}
 
 	// Adaptive-thinking models emit output_config:{effort:<level>}; budget models omit it.

@@ -193,6 +193,26 @@ func TrimMessagesToFitContextWithFullEstimate(messages []Message, systemPrompts 
 //
 // The function modifies messages in-place and returns whether any trimming occurred.
 // It trims from the end of the conversation, prioritizing tool results for trimming.
+//
+// TOOL-PAIR SAFETY (load-bearing for the tool_use/tool_result invariant):
+// Trimming is deliberately TOPOLOGY-PRESERVING. It only ever shortens the string
+// payload of a part that is already there; it never removes a part, never removes
+// a message, and never rewrites an identifier. That is what keeps it incapable of
+// orphaning a tool pair:
+//
+//   - A ToolCall is never trimmed at all (trimPart has no ToolCall case), so an
+//     assistant message's tool_use blocks always survive intact.
+//   - A ToolResult is rewritten in place with its ToolCallID carried over, so a
+//     TOOL message can never lose the linkage to the call it answers.
+//   - No code path here deletes from the messages slice or from Parts, so a TOOL
+//     message can never disappear out from under the assistant message before it.
+//
+// A tool_use block and its tool_result are therefore an ATOMIC UNIT with respect
+// to trimming: both survive, or neither is touched. If you ever add a cut that
+// drops whole parts or messages, it MUST cut on pair boundaries — dropping a TOOL
+// message while its assistant message survives (or vice versa) produces a history
+// the provider rejects and the conversation deadlocks on.
+// TestTrimming_IsTopologyPreserving enforces this.
 func TrimMessagesToFitContextWindow(messages []Message, systemPrompts []string, tools []ToolDefinition, contextWindow int64) bool {
 	if len(messages) == 0 {
 		return false
@@ -350,13 +370,13 @@ func trimLargeToolResults(messages []Message, charsToTrim int) bool {
 				"originalChars", loc.chars,
 				"keepRatio", keepRatio)
 
-			messages[loc.msgIdx].Parts[loc.partIdx] = ToolResult{
-				ToolCallID: tr.ToolCallID,
-				Name:       tr.Name,
-				Content:    trimWithHeadTail(tr.Content, newLen) + TrimmedContentSuffix,
-				Metadata:   tr.Metadata,
-				IsError:    tr.IsError,
-			}
+			// Copy the struct and overwrite only Content. Listing fields
+			// explicitly here silently dropped BinaryParts (images/PDFs
+			// attached to a tool result) every time a large result was
+			// trimmed, because the literal simply omitted the field.
+			trimmedResult := tr
+			trimmedResult.Content = trimWithHeadTail(tr.Content, newLen) + TrimmedContentSuffix
+			messages[loc.msgIdx].Parts[loc.partIdx] = trimmedResult
 
 			remainingToTrim -= (loc.chars - newLen)
 			trimmed = true
@@ -366,7 +386,12 @@ func trimLargeToolResults(messages []Message, charsToTrim int) bool {
 	return trimmed
 }
 
-// trimPart trims a content part to the given ratio, preserving head and tail
+// trimPart trims a content part to the given ratio, preserving head and tail.
+// Returns nil when the part must not be shortened.
+//
+// ToolCall is deliberately absent from the switch: trimming a tool call's input
+// would corrupt the arguments the model asked for, and truncating its ID would
+// orphan the matching tool_result. Tool calls pass through untouched.
 func trimPart(part ContentPart, keepRatio float64) ContentPart {
 	switch p := part.(type) {
 	case TextContent:
@@ -377,13 +402,13 @@ func trimPart(part ContentPart, keepRatio float64) ContentPart {
 	case ToolResult:
 		newLen := int(float64(len(p.Content)) * keepRatio)
 		if newLen < len(p.Content) {
-			return ToolResult{
-				ToolCallID: p.ToolCallID,
-				Name:       p.Name,
-				Content:    trimWithHeadTail(p.Content, newLen) + TrimmedContentSuffix,
-				Metadata:   p.Metadata,
-				IsError:    p.IsError,
-			}
+			// Copy-and-overwrite rather than re-listing fields: the field list
+			// omitted BinaryParts, so trimming a tool result silently discarded
+			// its attached images/PDFs. ToolCallID must survive verbatim or the
+			// result no longer answers its tool_use block.
+			trimmed := p
+			trimmed.Content = trimWithHeadTail(p.Content, newLen) + TrimmedContentSuffix
+			return trimmed
 		}
 	case ReasoningContent:
 		newLen := int(float64(len(p.Thinking)) * keepRatio)

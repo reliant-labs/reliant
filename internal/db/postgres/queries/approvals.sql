@@ -2,8 +2,8 @@
 -- Create a new approval record (idempotent via UNIQUE constraint on entity_id)
 INSERT INTO approvals (
     id, chat_id, approval_type, entity_id, status, denial_reason,
-    title, metadata, temporal_workflow_id, created_at, resolved_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    title, metadata, temporal_workflow_id, created_at, resolved_at, thread_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT(entity_id) DO NOTHING;
 
 -- name: GetApproval :one

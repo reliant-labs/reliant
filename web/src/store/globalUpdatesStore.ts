@@ -10,7 +10,7 @@
 import { create } from "zustand";
 // Phase 12: Use gRPC streaming service instead of WebSocket
 import { UserStreamingService } from "../api/streaming-grpc";
-import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo } from "../types/streaming";
+import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo, MessagePaginationInfo } from "../types/streaming";
 import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import type { Chat } from "../types/chat";
@@ -29,6 +29,7 @@ import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache } from "../hooks/chat-queries";
+import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
 import { showWorkflowCompletionNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
@@ -93,11 +94,20 @@ interface GlobalUpdatesState {
   // chat is still the subscribed one, so a late effect cleanup cannot tear
   // down a subscription that now belongs to a different chat.
   unsubscribeFromChatDetails: (chatId?: string) => void;
+  // Self-healing invariant: the RENDERED chat is the source of truth for
+  // what should be subscribed. Callers should invoke this on every render of
+  // the active chat (and whenever connection state changes), not just once
+  // at selection time — a subscription lost to another component stealing
+  // the single slot otherwise never gets reclaimed. No-op for a null id;
+  // idempotent when the rendered chat already matches the subscription
+  // (delegates to subscribeToChatDetails's own service-truth guard).
+  reconcileChatSubscription: (renderedChatId: string | null) => void;
   
   // Internal handlers
   handleUpdate: (updates: UserUpdate[]) => void;
   handleChatUpdate: (updates: ChatUpdate[]) => void;
   handleChatSnapshot: (updates: ChatUpdate[]) => void;
+  handleChatPaginationInfo: (pagination: MessagePaginationInfo) => void;
   handleChatContextUsage: (contextUsage: ContextUsageInfo) => void;
   handleStatusChange: (status: ConnectionStatus) => void;
   handleSync: (lastSequence: number) => void;
@@ -148,6 +158,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // Per-chat detail event callbacks
       onChatUpdate: (updates) => get().handleChatUpdate(updates),
       onChatSnapshot: (updates) => get().handleChatSnapshot(updates),
+      onChatPaginationInfo: (pagination) => get().handleChatPaginationInfo(pagination),
       onChatContextUsage: (contextUsage) => get().handleChatContextUsage(contextUsage),
     });
 
@@ -241,6 +252,30 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     if (state.wsService) {
       state.wsService.unsubscribeFromChatDetails();
     }
+  },
+
+  reconcileChatSubscription: (renderedChatId: string | null) => {
+    if (!renderedChatId) return;
+
+    const state = get();
+    const serviceChatId = state.wsService?.getSubscribedChatId();
+    const isReconciled =
+      state.subscribedChatId === renderedChatId &&
+      serviceChatId === renderedChatId &&
+      state.wsService?.isConnected();
+    if (isReconciled) return;
+
+    // Mismatch between what's rendered and what's subscribed — this is
+    // exactly the "stuck chat" bug: some other component (or a reconnect
+    // that forwarded a stale id) stole the single subscription slot and
+    // nothing ever re-asserted it. Logged at INFO because that mismatch is
+    // otherwise invisible until a user reports missing messages.
+    logger.info(`${LOG_PREFIX} Reconciling chat subscription`, {
+      renderedChatId: renderedChatId.slice(0, 8),
+      subscribedChatId: state.subscribedChatId?.slice(0, 8) ?? null,
+      serviceChatId: serviceChatId?.slice(0, 8) ?? null,
+    });
+    get().subscribeToChatDetails(renderedChatId);
   },
 
   handleUpdate: (updates) => {
@@ -379,6 +414,30 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
 
 
 
+  // Pagination info rides alongside the chat snapshot. The snapshot is BOUNDED
+  // to the newest N messages, so these three numbers are the only thing that
+  // tells the UI a long chat is truncated and where to resume paging from.
+  // They are stored ON the message envelope (not in Zustand) so they stay
+  // adjacent to the messages they describe and survive the stream's
+  // message-only patches — see message-queries.ts.
+  handleChatPaginationInfo: (pagination) => {
+    const chatId = get().subscribedChatId;
+    if (!chatId) return;
+
+    logger.debug(`${LOG_PREFIX} Chat pagination info`, {
+      chatId: chatId.slice(0, 8),
+      total: pagination.total,
+      hasMore: pagination.hasMore,
+      oldestSeq: pagination.oldestSeq,
+    });
+
+    setMessagesMetaInCache(chatId, {
+      total: pagination.total,
+      hasMore: pagination.hasMore,
+      oldestSeq: pagination.oldestSeq,
+    });
+  },
+
   handleChatContextUsage: (contextUsage) => {
     const chatId = get().subscribedChatId;
     if (!chatId) return;
@@ -457,10 +516,24 @@ function handleChatStateChange(update: UserUpdate) {
     applyChatPatch(projectId, chat_id, { state: nextState });
     // The archived list needs a refetch — we can't construct an ArchivedChat row.
     queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+
+    // Archiving the chat the user is currently viewing has to move them off it:
+    // it just left the sidebar, and the eviction below drops the messages the
+    // open ChatInterface is rendering. Falling back to the new-chat view (rather
+    // than the next queued chat) keeps this identical to archiving a workspace.
+    const chatStore = useChatStore.getState();
+    if (chatStore.activeChatId === chat_id) {
+      const archivedChat = getChatFromCache(chat_id);
+      chatStore.clearCurrentChat(
+        update.worktree_id ?? archivedChat?.worktreeId ?? null
+      );
+      void useChatNavigationStore.getState().removeFromQueue(chat_id);
+    }
+
     // Release the chat's retained memory (messages cache is gcTime: Infinity).
     // Safe on archive: restoring re-seeds via the useMessages queryFn plus the
     // fresh stream snapshot on re-subscribe.
-    useChatStore.getState().evictChat(chat_id);
+    chatStore.evictChat(chat_id);
     return;
   }
 

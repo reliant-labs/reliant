@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import {
   CheckCircle2,
   ExternalLink,
@@ -17,6 +18,7 @@ import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } 
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { CopilotDevicePanel } from "@/components/CopilotDevicePanel";
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
+import { useRedeemCoupon, useWalletOverview } from "@/hooks/useReliantAIQueries";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { trackEvent } from "@/lib/analytics";
@@ -127,17 +129,24 @@ function getForcedEligibility(): "eligible" | "ineligible" | null {
 }
 
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
+  const navigate = useNavigate();
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const copilotOAuth = useCopilotOAuth();
   const cloudEligibility = useCloudEligibility();
 
+  // getIsDev() is deliberately NOT an input here. It used to force
+  // isEligible=true in dev, which meant a dev build claimed "you have credit
+  // available" against an empty wallet AND hid the coupon field behind that
+  // claim — the exact state the coupon flow exists to rescue. Dev now sees
+  // what the server reports; getForcedEligibility() is the escape hatch for
+  // exercising either branch on purpose.
   const forcedEligibility = getForcedEligibility();
   const isEligible =
     forcedEligibility === "eligible" ||
-    (forcedEligibility == null && (getIsDev() || cloudEligibility.eligible));
+    (forcedEligibility == null && cloudEligibility.eligible);
   const eligibilityLoading =
-    forcedEligibility == null && !getIsDev() && cloudEligibility.isLoading;
+    forcedEligibility == null && cloudEligibility.isLoading;
 
   const [selectedProvider, setSelectedProvider] =
     useState<ProviderId>("reliant");
@@ -301,7 +310,14 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     validateKeyMutation,
   ]);
 
-  const creditsAvailable = isEligible;
+  // Funding, not entitlement, is what makes "Start with Reliant" survive the
+  // first message: the LLM proxy rejects a zero balance outright. isEligible
+  // only says the account COULD use managed Reliant.
+  const walletQ = useWalletOverview();
+  const walletLoading = walletQ.isLoading;
+  const balanceNanos = walletQ.data?.wallet?.balanceUsdNanos;
+  const hasFunds = balanceNanos != null && BigInt(balanceNanos) > 0n;
+  const creditsAvailable = isEligible && hasFunds;
 
   return (
     <div className="space-y-6">
@@ -361,28 +377,59 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               <p className="text-sm font-medium text-foreground">
                 Use Reliant&apos;s model routing
               </p>
-              {eligibilityLoading ? (
+              {eligibilityLoading || walletLoading ? (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Checking credit availability...
                 </div>
               ) : creditsAvailable ? (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  $20 free credit included &mdash; no API key needed.
+                  You have credit available &mdash; no API key needed.
                 </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  No API key needed. Reliant routes to the best available model
-                  automatically.
+                  No API key needed, but Reliant needs credit before it can
+                  answer. Redeem a code or set up billing to continue.
+                </p>
+              )}
+              {/* Always offered, never gated on the current balance: a user
+                  who already has credit may still be holding a code, and
+                  hiding the field until they run out means redeeming it
+                  requires first spending down. Credit is no longer granted
+                  automatically at signup, so for an empty wallet this is also
+                  the only path that keeps "Start with Reliant" from
+                  succeeding into a first message that fails on zero balance. */}
+              <OnboardingCouponRedeem />
+              {!eligibilityLoading && !walletLoading && !creditsAvailable && (
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  No code?{" "}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      navigate({
+                        to: "/settings/$section",
+                        params: { section: "billing" },
+                      })
+                    }
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Set up billing
+                  </button>{" "}
+                  to add credit, or pick another provider above.
                 </p>
               )}
               <button
                 type="button"
                 onClick={() => finishOnboarding("reliant_credits")}
-                disabled={saving}
+                disabled={saving || walletLoading || !creditsAvailable}
+                title={
+                  !creditsAvailable && !walletLoading
+                    ? "Redeem a coupon code or set up billing to continue with Reliant"
+                    : undefined
+                }
                 className={cn(
                   "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
-                  !saving
+                  !saving && !walletLoading && creditsAvailable
                     ? "bg-primary text-primary-foreground hover:bg-primary/90"
                     : "cursor-not-allowed bg-muted text-muted-foreground",
                 )}
@@ -489,6 +536,82 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       )}
 
       {error && <p className="text-center text-xs text-destructive">{error}</p>}
+    </div>
+  );
+}
+
+/**
+ * Inline coupon redemption on the onboarding model step.
+ *
+ * Shown only when the user has NO credit available. Since the automatic signup
+ * grant was removed, "Start with Reliant" against an empty wallet would let a
+ * user finish onboarding and then fail on their very first message — the LLM
+ * proxy blocks a zero balance. Offering the code here closes that gap at the
+ * one moment the user is choosing Reliant as their provider.
+ */
+function OnboardingCouponRedeem() {
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [redeemed, setRedeemed] = useState("");
+  const redeem = useRedeemCoupon();
+
+  const submit = () => {
+    setError("");
+    setRedeemed("");
+    const trimmed = code.trim();
+    if (!trimmed) {
+      setError("Enter a coupon code.");
+      return;
+    }
+    redeem.mutate(trimmed, {
+      onSuccess: (res) => {
+        setRedeemed(`$${(res.amountCents / 100).toFixed(2)} credit added.`);
+        setCode("");
+      },
+      onError: (err: unknown) =>
+        setError(
+          err instanceof Error && err.message
+            ? err.message.replace(/^\[[a-z_]+\]\s*/i, "")
+            : "Could not redeem that code.",
+        ),
+    });
+  };
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border/40 bg-muted/30 p-3">
+      <p className="text-xs font-medium text-foreground">Have a coupon code?</p>
+      <div className="flex gap-2">
+        <input
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          placeholder="Enter code"
+          disabled={redeem.isPending}
+          autoComplete="off"
+          aria-label="Coupon code"
+          className="flex-1 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={redeem.isPending}
+          className={cn(
+            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+            redeem.isPending
+              ? "cursor-not-allowed bg-muted text-muted-foreground"
+              : "bg-primary text-primary-foreground hover:bg-primary/90",
+          )}
+        >
+          {redeem.isPending ? "…" : "Redeem"}
+        </button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {redeemed && <p className="text-xs text-emerald-600">{redeemed}</p>}
     </div>
   );
 }

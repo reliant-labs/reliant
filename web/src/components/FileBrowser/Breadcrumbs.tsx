@@ -18,7 +18,7 @@ export function Breadcrumbs({ path, onPathChange }: BreadcrumbsProps) {
   };
 
   return (
-    <div className="flex items-center gap-1 text-sm font-mono overflow-x-auto">
+    <div className="flex items-center gap-1 text-sm overflow-x-auto">
       <button
         onClick={() => handleSegmentClick(-1)}
         className="flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"

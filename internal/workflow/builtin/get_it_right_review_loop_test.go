@@ -146,7 +146,7 @@ func TestReviewerHoldsEveryToolItsInstructionsName(t *testing.T) {
 			tools: defaultReviewTools(t),
 		},
 		{
-			name:  "forge-one-shot build_mvp reviewer",
+			name:  "forge-one-shot build_app reviewer",
 			text:  forgeOneShotReviewInstructions(t),
 			tools: forgeOneShotReviewTools(t),
 		},
@@ -237,7 +237,7 @@ func defaultReviewTools(t *testing.T) []string {
 func forgeOneShotArgs(t *testing.T) map[string]interface{} {
 	t.Helper()
 	doc := loadWorkflowYAML(t, "forge-one-shot.yaml")
-	return mapAt(t, nodeByID(t, doc, "build_mvp"), "args")
+	return mapAt(t, nodeByID(t, doc, "build_app"), "args")
 }
 
 func forgeOneShotReviewTools(t *testing.T) []string {
@@ -248,7 +248,7 @@ func forgeOneShotReviewTools(t *testing.T) []string {
 func forgeOneShotReviewInstructions(t *testing.T) string {
 	t.Helper()
 	s, ok := forgeOneShotArgs(t)["review_instructions"].(string)
-	require.True(t, ok, "build_mvp must set review_instructions")
+	require.True(t, ok, "build_app must set review_instructions")
 	return s
 }
 

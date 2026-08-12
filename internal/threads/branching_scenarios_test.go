@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,9 +63,9 @@ func (e *testEnv) createChat(title string) (chatID, threadID, cwID string) {
 	require.NoError(e.t, err)
 
 	_, err = e.repo.CreateThread(e.ctx, &db.Thread{
-		ID:             threadID,
-		ConversationID: chatID,
-		CreatedAt:      time.Now(),
+		ID:        threadID,
+		ChatID:    chatID,
+		CreatedAt: time.Now(),
 	})
 	require.NoError(e.t, err)
 
@@ -83,16 +83,19 @@ func (e *testEnv) createChat(title string) (chatID, threadID, cwID string) {
 // addMessage adds a message to a thread/CW at the given ordinal
 func (e *testEnv) addMessage(chatID, threadID, cwID string, ordinal int64, role reliantv1.MessageRole) *db.Message {
 	e.t.Helper()
+	seq, err := e.repo.GetNextSeq(e.ctx, chatID, threadID)
+	require.NoError(e.t, err)
 	msg := &db.Message{
 		ID:              uuid.New().String(),
 		ChatID:          chatID,
 		ThreadID:        threadID,
 		ContextWindowID: cwID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		Role:            role,
 		CreatedAt:       time.Now(),
 	}
-	err := e.repo.CreateMessage(e.ctx, msg)
+	err = e.repo.CreateMessage(e.ctx, msg)
 	require.NoError(e.t, err)
 
 	// Add a text block so message isn't empty
@@ -163,6 +166,24 @@ func (e *testEnv) compact(chatID, threadID string) *db.ContextWindow {
 	return cw
 }
 
+// forkMessageIDAtOrdinal resolves the message with the given ordinal in the
+// given context window. forkAtOrdinal is a position, kept as this helper's
+// parameter shape because fixtures already track ordinals for message
+// identity; the resolution mirrors
+// 20260803010000_fork_points_reference_messages.sql's backfill.
+func (e *testEnv) forkMessageIDAtOrdinal(cwID string, forkAtOrdinal int64) *string {
+	e.t.Helper()
+	msgs, err := e.repo.GetMessagesByContextWindow(e.ctx, cwID, nil)
+	require.NoError(e.t, err)
+	for _, m := range msgs {
+		if m.Ordinal == forkAtOrdinal {
+			id := m.ID
+			return &id
+		}
+	}
+	return nil
+}
+
 // branch creates a branched thread forking from parentThread at forkAtOrdinal
 func (e *testEnv) branch(parentChatID, parentThreadID, parentCWID string, forkAtOrdinal int64, branchTitle string) (childChatID, childThreadID, childCWID string) {
 	e.t.Helper()
@@ -170,6 +191,8 @@ func (e *testEnv) branch(parentChatID, parentThreadID, parentCWID string, forkAt
 	childChatID = uuid.New().String()
 	childThreadID = childChatID
 	childCWID = fmt.Sprintf("%s:%s:0", childChatID, childThreadID)
+
+	forkAtMessageID := e.forkMessageIDAtOrdinal(parentCWID, forkAtOrdinal)
 
 	// Create child chat
 	err := e.repo.CreateChat(e.ctx, &db.Chat{
@@ -185,12 +208,11 @@ func (e *testEnv) branch(parentChatID, parentThreadID, parentCWID string, forkAt
 
 	// Create child thread pointing to parent
 	_, err = e.repo.CreateThread(e.ctx, &db.Thread{
-		ID:                    childThreadID,
-		ConversationID:        childChatID,
-		ParentThreadID:        &parentThreadID,
-		ForkAtOrdinal:         &forkAtOrdinal,
-		ForkAtContextWindowID: &parentCWID,
-		CreatedAt:             time.Now(),
+		ID:              childThreadID,
+		ChatID:          childChatID,
+		ParentThreadID:  &parentThreadID,
+		ForkAtMessageID: forkAtMessageID,
+		CreatedAt:       time.Now(),
 	})
 	require.NoError(e.t, err)
 
@@ -204,7 +226,7 @@ func (e *testEnv) branch(parentChatID, parentThreadID, parentCWID string, forkAt
 		ThreadID:              childThreadID,
 		Sequence:              parentCW.Sequence, // Inherit sequence
 		ParentContextWindowID: &parentCWID,
-		ForkAtOrdinal:         &forkAtOrdinal,
+		ForkAtMessageID:       forkAtMessageID,
 		CreatedAt:             time.Now(),
 	})
 	require.NoError(e.t, err)

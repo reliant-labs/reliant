@@ -28,6 +28,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { trackEvent } from "../../lib/analytics";
+import { useSurface } from "../../lib/surfaceContext";
 
 import {
   ONBOARDING_STEPS,
@@ -305,6 +306,7 @@ const STEP_COMPONENTS: Record<OnboardingStepId, React.ComponentType<StepProps>> 
 // ─── Main Wizard Component ───────────────────────────────────────────────────
 
 export function OnboardingWizard() {
+  const surface = useSurface();
   const {
     currentStepId,
     isWizardActive,
@@ -320,6 +322,7 @@ export function OnboardingWizard() {
     isInitialized: checklistInitialized,
     loadState: loadChecklistState,
     panelState,
+    allRequiredComplete,
     detectCompletedItems,
     subscribeToStoreChanges,
   } = useOnboardingChecklistStore();
@@ -407,6 +410,14 @@ export function OnboardingWizard() {
     const unsub = subscribeToStoreChanges();
     return unsub;
   }, [checklistInitialized, detectCompletedItems, subscribeToStoreChanges]);
+
+  // The guided tour spotlights desktop chrome by DOM selector
+  // (`[data-onboarding='left-sidebar']`, `'right-sidebar'`,
+  // `'workflow-canvas'`). None of that exists on the mobile surface, so every
+  // step would fall back to its "Open <page> to continue" prompt pointing at
+  // pages mobile does not have. The tour stays a desktop feature; mobile users
+  // still get the *setup* flow at /onboarding, which is a different system.
+  if (surface !== "desktop") return null;
 
   // Not ready yet
   if (!isInitialized) return null;
@@ -498,8 +509,11 @@ export function OnboardingWizard() {
   // Phase 2: Show checklist after setup if not dismissed (only on main chat page).
   // isOnboardingRoute gate: the /onboarding route is the onboarding UX itself —
   // surfacing the post-onboarding floater on top of it is a misleading dupe.
+  // allRequiredComplete gate: a guide with nothing left to do is clutter, so it
+  // retires itself rather than sitting at full progress forever.
   if (
     panelState !== "dismissed" &&
+    !allRequiredComplete() &&
     !isWorkflowMode &&
     !isSettingsMode &&
     !isOnboardingRoute

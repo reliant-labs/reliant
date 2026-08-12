@@ -16,8 +16,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/assert"
@@ -233,7 +233,7 @@ func TestUserMessageRoundTrip_AfterCompaction(t *testing.T) {
 		CompactionSummaryMessageID: &summaryMsgID,
 	})
 	require.NoError(t, err)
-	err = repo.CreateMessage(ctx, summaryMsg)
+	err = createMessageWithSeq(ctx, t, repo, summaryMsg)
 	require.NoError(t, err)
 	summaryContent := "Summary of previous conversation"
 	err = repo.CreateContentBlock(ctx, &db.MessageContentBlock{
@@ -591,7 +591,7 @@ func TestUserMessageRoundTrip_MultipleContextWindows(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create the compaction summary message
-	err = repo.CreateMessage(ctx, &db.Message{
+	err = createMessageWithSeq(ctx, t, repo, &db.Message{
 		ID:              summaryMsgID,
 		ChatID:          chatID,
 		Ordinal:         1,

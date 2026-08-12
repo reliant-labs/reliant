@@ -19,6 +19,8 @@ import { Tooltip } from "../ui/Tooltip";
 import { useProjectStore, type Project } from "../../store/projectStore";
 import type { SettingsSection } from "../../routeSchemas";
 import { useShortcutsStore } from "../../store/shortcutsStore";
+import { parseBinding } from "../../lib/keyboard/chord";
+import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
 import { DaemonStatusDot } from "./DaemonStatusDot";
@@ -98,21 +100,11 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
       );
       if (!shortcut) return "";
 
-      const binding = shortcut.currentBinding;
-      const parts: string[] = [];
-
-      if (binding.shift) parts.push("⇧");
-      if (binding.meta) parts.push("⌘");
-      if (binding.ctrl) parts.push("Ctrl");
-      if (binding.alt) parts.push("⌥");
-
-      // Format the key
-      let key = binding.key;
-      if (key === "\\") key = "\\";
-      else key = key.toUpperCase();
-
-      parts.push(key);
-      return parts.join("");
+      const { isMac, isDesktop } = detectPlatform();
+      const authored =
+        shortcut.currentBinding ??
+        (isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding);
+      return formatBinding(parseBinding(authored, isMac), isMac);
     };
 
     // Track theme state

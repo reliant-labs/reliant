@@ -87,8 +87,12 @@ type Worktree struct {
 	// worktree-bound chat must route to this daemon; the path exists nowhere
 	// else. Nil for pre-existing rows and single-daemon setups, in which case
 	// callers fall back to default daemon resolution.
-	DaemonID        *string
-	Status          int32
+	DaemonID *string
+	Status   int32
+	// IdempotencyKey de-duplicates retried creates. Creation is asynchronous,
+	// so a client that loses the response cannot tell failure from a dropped
+	// reply; without this the natural retry produces a second workspace.
+	IdempotencyKey  *string
 	IsMain          bool
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
@@ -155,6 +159,9 @@ type WorktreeStore interface {
 	CreateWorktree(ctx context.Context, worktree *Worktree) error
 	GetWorktree(ctx context.Context, id string) (*Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error)
+	// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
+	// key, or (nil, nil) when there is none.
+	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)
 	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *Worktree) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error

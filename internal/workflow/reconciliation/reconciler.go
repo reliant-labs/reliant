@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -16,6 +17,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -129,14 +131,17 @@ type progressObservation struct {
 // reliant_reconciler_anomalies_total; keep them in sync with the metric's
 // help text in internal/observability/metrics.go.
 const (
-	anomalyStuckReset             = "stuck_reset"
-	anomalyWedgeTerminated        = "wedge_terminated"
-	anomalyLostWorkflowRepaired   = "lost_workflow_repaired"
-	anomalyProgressStallDetected  = "progress_stall_detected"
-	anomalyProgressStallConfirmed = "progress_stall_confirmed"
-	anomalyResetFailedTerminated  = "reset_failed_terminated"
-	anomalyResetAttemptsExhausted = "reset_attempts_exhausted"
-	anomalyOrphanDescendantReaped = "orphan_descendant_reaped"
+	anomalyStuckReset                      = "stuck_reset"
+	anomalyWedgeTerminated                 = "wedge_terminated"
+	anomalyLostWorkflowRepaired            = "lost_workflow_repaired"
+	anomalyProgressStallDetected           = "progress_stall_detected"
+	anomalyProgressStallConfirmed          = "progress_stall_confirmed"
+	anomalyResetFailedTerminated           = "reset_failed_terminated"
+	anomalyResetAttemptsExhausted          = "reset_attempts_exhausted"
+	anomalyOrphanDescendantReaped          = "orphan_descendant_reaped"
+	anomalyStrandedSpawnRepaired           = "stranded_spawn_repaired"
+	anomalyStrandedBackgroundSpawnRepaired = "stranded_background_spawn_repaired"
+	anomalyOrphanedAgentMessagesResolved   = "orphaned_agent_messages_resolved"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -1442,6 +1447,277 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 	return int(reaped), nil
 }
 
+// repairStrandedSpawnToolCalls closes spawn tool calls whose child workflow has
+// reached a terminal status but which never received a result, and returns how
+// many it repaired.
+//
+// executeSpawnInline writes the child's terminal workflow status and the
+// parent's tool-call result as two separate activities. A worker that dies
+// between them leaves the child correctly recorded as finished while the
+// parent's call stays at pending/executing forever, so the parent blocks on a
+// sub-agent that is already over and the sub-agent's work is silently dropped.
+//
+// Nothing else revisits these rows. Cleanup makes exactly this repair — and
+// callIsStillLive already consults exactly this evidence — but it only runs
+// when a workflow reaches an abnormal terminal path, and it is scoped to the
+// ENDING workflow's own thread. A stranded spawn call belongs to the PARENT's
+// thread, and the parent is typically still alive, so the row sits outside
+// every scope Cleanup can reach. Observed on real data: a child failed at
+// 22:16:54 (a worker restart appears in the logs at 22:08) and the parent's
+// spawn call was still "executing" 49 hours later.
+//
+// Deliberately mirrors reapOrphanedDescendants: same backstop role, same
+// durable evidence, same fail-closed direction. The query never returns a call
+// whose child is still running or paused, because fabricating a failure for a
+// live spawn writes a lie into conversation history that the model then reads
+// as fact and no later pass can distinguish from a real result. A missing
+// result is recoverable; an invented one is not.
+//
+// The synthesized result is the same InterruptedToolResultContent every other
+// repair path writes, so a spawn repaired here is indistinguishable from one
+// repaired by Cleanup — including its instruction to verify effects before
+// re-running.
+func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *passStats) (int, error) {
+	stranded, err := r.repo.ListStrandedSpawnToolCalls(ctx)
+	if err != nil {
+		logging.Error("[Reconciler] Failed to list stranded spawn tool calls", "error", err)
+		return 0, fmt.Errorf("failed to list stranded spawn tool calls: %w", err)
+	}
+	if len(stranded) == 0 {
+		return 0, nil
+	}
+
+	repaired := 0
+	for _, call := range stranded {
+		now := time.Now().UTC()
+		if err := r.repo.UpsertToolCallResult(ctx, &db.ToolCallResult{
+			ToolCallID: call.ID,
+			Content:    handlers.InterruptedToolResultContent,
+			IsError:    true,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}); err != nil {
+			logging.Error("[Reconciler] Failed to write stranded spawn result",
+				"toolCallID", call.ID, "childWorkflowID", call.ChildWorkflowID, "error", err)
+			continue
+		}
+
+		// Status after the result: a call carrying a result but still marked
+		// executing is the same stuck spinner in a different column, whereas a
+		// terminal status with no result is the state that stranded it here.
+		if err := db.UpsertToolCallStatus(ctx, r.repo, &db.ToolCall{
+			ID:          call.ID,
+			ChatID:      call.ChatID,
+			ToolName:    call.ToolName,
+			Status:      core.ToolCallStatusFailed,
+			CompletedAt: &now,
+		}); err != nil {
+			logging.Error("[Reconciler] Failed to close stranded spawn tool call",
+				"toolCallID", call.ID, "error", err)
+			continue
+		}
+
+		repaired++
+		r.recordAnomaly(stats, anomalyStrandedSpawnRepaired)
+	}
+
+	if repaired > 0 {
+		logging.Error("[Reconciler] Repaired stranded spawn tool calls — a terminal child never reported back to its parent",
+			"rows", repaired,
+		)
+	}
+	return repaired, nil
+}
+
+// mailboxKindForTerminalWorkflowStatus maps a terminal workflows.status onto
+// the mailbox's AgentMessageKind, mirroring the live path's
+// spawnResultKindForMailbox (workflow.go) for the cases a REAL detached spawn
+// goroutine can itself observe. Expired has no live-path equivalent — it is
+// a reconciler-only outcome (a workflow the progress watchdog or stuck-task
+// recovery gave up on) — so it maps to Failed, the closest honest label the
+// mailbox vocabulary has; the message body says "expired" explicitly so the
+// distinction is not lost.
+func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.AgentMessageKind {
+	switch status {
+	case core.WorkflowStatusCancelled:
+		return core.AgentMessageKindCancelled
+	case core.WorkflowStatusCompleted:
+		return core.AgentMessageKindCompletion
+	default:
+		// Failed, Expired, or any other terminal value this repair's own
+		// query would not otherwise return.
+		return core.AgentMessageKindFailed
+	}
+}
+
+// repairStrandedBackgroundSpawns is repairStrandedSpawnToolCalls's async
+// counterpart (spec: async-spawn-and-agent-messaging.md, §7.1): closes the
+// gap where a background=true spawn's child workflow reached a terminal
+// status but the detached goroutine that runs it
+// (dispatchSpawnBackground/workflow.go) never got to enqueue — or failed to
+// enqueue — the completion report into the parent's mailbox. Nothing else
+// ever revisits these: the goroutine's own enqueue is fire-and-forget by
+// design (a failed EnqueueAgentMessage activity call is logged, not
+// retried past its own backoff), and the sync repair above cannot see a
+// backgrounded call at all (see ListStrandedBackgroundSpawnToolCalls's
+// comment for why).
+//
+// Idempotent and safe under concurrency: the insert goes through
+// EnqueueAgentMessageIfAbsent, which is backed by
+// idx_agent_messages_one_terminal_report_per_spawn (a real DB constraint,
+// not a check-then-insert in this code) — see the migration and query
+// comments for the full reasoning. inserted=false here is the everyday
+// "someone already reported this" outcome, not a failure, so it is neither
+// logged as an error nor counted as an anomaly; only rows this pass itself
+// newly closed count.
+//
+// Fail-closed by construction: ListStrandedBackgroundSpawnToolCalls's own
+// WHERE clause excludes a child still running (2) or paused (6), so this
+// function is never even offered one to fabricate a result for.
+func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *passStats) (int, error) {
+	stranded, err := r.repo.ListStrandedBackgroundSpawnToolCalls(ctx)
+	if err != nil {
+		logging.Error("[Reconciler] Failed to list stranded background spawn tool calls", "error", err)
+		return 0, fmt.Errorf("failed to list stranded background spawn tool calls: %w", err)
+	}
+	if len(stranded) == 0 {
+		return 0, nil
+	}
+
+	repaired := 0
+	for _, call := range stranded {
+		if call.ParentThreadID == nil || *call.ParentThreadID == "" {
+			// tool_calls.thread_id is nilable in general (a call can be
+			// recorded before its message is finalized), but a spawn old
+			// enough to have a terminal child always has it in practice.
+			// Nothing to deliver into without a recipient thread — skip
+			// rather than guess, and let a later pass pick it up once the
+			// thread_id lands.
+			logging.Warn("[Reconciler] Stranded background spawn has no parent thread id, skipping",
+				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID)
+			continue
+		}
+
+		kind := mailboxKindForTerminalWorkflowStatus(call.WorkflowStatus)
+		body := fmt.Sprintf(
+			"Sub-agent finished while its result was lost in transit (worker interruption). "+
+				"Use spawn_status(agent_id=%q) to see what it produced.",
+			call.ChildThreadID,
+		)
+		if call.WorkflowStatus == reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED {
+			body = fmt.Sprintf(
+				"Sub-agent's run expired before it could report back. "+
+					"Use spawn_status(agent_id=%q) to see what it produced before it stopped.",
+				call.ChildThreadID,
+			)
+		}
+
+		toolCallID := call.ToolCallID
+		inserted, err := r.repo.EnqueueAgentMessageIfAbsent(ctx, &db.AgentMessage{
+			ID:           uuid.New().String(),
+			ChatID:       call.ChatID,
+			FromThreadID: call.ChildThreadID,
+			ToThreadID:   *call.ParentThreadID,
+			Kind:         kind,
+			Body:         body,
+			ToolCallID:   &toolCallID,
+			Status:       core.AgentMessageStatusQueued,
+			CreatedAt:    time.Now().UTC(),
+		})
+		if err != nil {
+			logging.Error("[Reconciler] Failed to enqueue stranded background spawn completion",
+				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
+			continue
+		}
+		if !inserted {
+			// A terminal report already exists for this call — either the
+			// detached goroutine's own enqueue landed after all, or a
+			// concurrent reconciler pass won the race. Correct, not stale.
+			continue
+		}
+
+		repaired++
+		r.recordAnomaly(stats, anomalyStrandedBackgroundSpawnRepaired)
+	}
+
+	if repaired > 0 {
+		logging.Error("[Reconciler] Repaired stranded background spawn tool calls — a terminal child never reported back to its parent's mailbox",
+			"rows", repaired,
+		)
+	}
+	return repaired, nil
+}
+
+// resolveOrphanedAgentMessages marks mailbox rows undelivered when the thread
+// they were queued for has already exited, and returns how many rows it moved.
+//
+// A message is delivered only by drainAgentMessagesAtBoundary, at an agent
+// loop-step boundary. A human (SendAgentMessage) or peer agent (spawn_send)
+// can queue into a thread that is genuinely running and whose loop then exits
+// before reaching the next boundary — an inherent race that no enqueue-time
+// liveness check can close, because the thread really was live at enqueue
+// time. The live path now resolves the mailbox as the thread goes terminal
+// (ThreadStatusActivity.resolveMailbox); this is the backstop for the rows
+// that predate it and for the case where the process dies between writing the
+// thread's terminal status and resolving its mailbox.
+//
+// Nothing else revisits these rows. The drain only runs for a thread taking a
+// step, and a terminal thread takes none — so a stranded row is not merely
+// late, it is permanently unreachable. Observed on real data: two human
+// messages queued at 00:06:31 and 00:06:51 into a thread that completed at
+// 00:06:56, still queued with delivered_at NULL, with the user told both
+// would be read at the agent's next turn.
+//
+// Deliberately mirrors repairStrandedSpawnToolCalls and
+// repairStrandedBackgroundSpawns: same backstop role, same durable evidence,
+// same fail-closed direction. ListThreadsWithOrphanedAgentMessages never
+// returns a thread that is still live, and the UPDATE itself matches only
+// status = 1, so a message the drain is about to deliver cannot be
+// relabelled undelivered by a pass that raced it. Marking a live thread's
+// queue would destroy a message that was about to arrive — strictly worse
+// and unrecoverable, where a missed orphan is simply caught next pass.
+//
+// Rows are marked, never deleted: the row is the only surviving record that
+// the user said something, and it is what lets the UI report "never
+// delivered" honestly instead of showing a promise it cannot keep.
+func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *passStats) (int, error) {
+	threadIDs, err := r.repo.ListThreadsWithOrphanedAgentMessages(ctx)
+	if err != nil {
+		logging.Error("[Reconciler] Failed to list threads with orphaned agent messages", "error", err)
+		return 0, fmt.Errorf("failed to list threads with orphaned agent messages: %w", err)
+	}
+	if len(threadIDs) == 0 {
+		return 0, nil
+	}
+
+	resolved := 0
+	for _, threadID := range threadIDs {
+		rows, err := r.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
+		if err != nil {
+			logging.Error("[Reconciler] Failed to resolve orphaned agent messages",
+				"threadID", threadID, "error", err)
+			continue
+		}
+		if rows == 0 {
+			// The live path (or a concurrent pass) got there first between
+			// the list and this update. Correct, not stale.
+			continue
+		}
+		resolved += int(rows)
+		for i := int64(0); i < rows; i++ {
+			r.recordAnomaly(stats, anomalyOrphanedAgentMessagesResolved)
+		}
+	}
+
+	if resolved > 0 {
+		logging.Error("[Reconciler] Resolved orphaned agent messages — queued for a thread whose loop had already exited",
+			"rows", resolved,
+			"threads", len(threadIDs),
+		)
+	}
+	return resolved, nil
+}
+
 // ReconcileRunningWorkflows reconciles all workflows with status running OR
 // paused. This is the main entry point for background reconciliation.
 //
@@ -1471,6 +1747,27 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	reconciled += reaped
 	if reapErr != nil {
 		errors = append(errors, reapErr)
+	}
+
+	// After the reap: reaping moves a child to a terminal status, which is
+	// precisely the condition that strands its parent's spawn call, so running
+	// this second lets both repairs land in the same pass instead of leaving
+	// the parent blocked until the next one.
+	if _, repairErr := r.repairStrandedSpawnToolCalls(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	// Same reasoning, async spawn's counterpart (spec §7.1): a reap above can
+	// just as easily strand a backgrounded spawn's mailbox report as it can
+	// strand a synchronous spawn's tool result.
+	if _, repairErr := r.repairStrandedBackgroundSpawns(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	// Last of the three, for the same reason the two above run after the
+	// reap: a cascade that moves a thread to a terminal status is exactly
+	// what strands its mailbox, so resolving here catches the rows this very
+	// pass orphaned rather than leaving them until the next one.
+	if _, repairErr := r.resolveOrphanedAgentMessages(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
 	}
 
 	allWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.WorkflowStatusRunning)

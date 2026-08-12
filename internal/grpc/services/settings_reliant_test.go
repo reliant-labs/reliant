@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
-	"github.com/reliant-labs/reliant/internal/auth"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"

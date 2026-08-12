@@ -130,7 +130,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		if effectiveThinkingLevel != "" {
 			tl := ThinkingLevel(effectiveThinkingLevel)
 			if !tl.IsValid() {
-				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: low, medium, high, xhigh)", tl)
+				return nil, fmt.Errorf("invalid thinking_level: %s (must be one of: %s)", tl, strings.Join(models.KnownThinkingLevels, ", "))
 			}
 		}
 		// Reconcile through the canonical model capability policy so stale
@@ -210,25 +210,34 @@ func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
 // prepareHistoryForLLM applies the standard provider-safety transforms every
 // outgoing request needs, in one place:
 //
-//  1. Tool-less requests: flatten tool_use/tool_result content blocks to plain
-//     text. Providers (Anthropic directly and via LiteLLM, OpenAI, ...) reject
-//     histories that carry tool-call blocks when the request has no tools
-//     param, so any request sent without tools (the compaction summarization
-//     call, a call_llm node with tools disabled) must not carry them.
-//  2. Trim history to fit the context window, accounting for system prompts
+//  1. Trim history to fit the context window, accounting for system prompts
 //     and tool definitions. The backstop threshold is derived from the model's
 //     real context window (contextWindow) so it scales per-model and sits above
 //     the compaction threshold; pass 0 when the window is unknown to fall back
 //     to the fixed legacy threshold.
+//  2. Tool-less requests: flatten tool_use/tool_result content blocks to plain
+//     text. Providers (Anthropic directly and via LiteLLM, OpenAI, ...) reject
+//     histories that carry tool-call blocks when the request has no tools
+//     param, so any request sent without tools (the compaction summarization
+//     call, a call_llm node with tools disabled) must not carry them.
 //  3. Normalize internal roles (agent -> user) to API-compatible roles.
+//
+// TRIM BEFORE FLATTEN (load-bearing ordering): the trim's only mechanism for
+// freeing real volume is trimLargeToolResults, which cuts ToolResult parts
+// larger than 10k chars. Flattening first rewrites every ToolResult into a
+// TextContent, so the trim would find nothing to cut, free nothing, and still
+// report success — shipping an oversized request the provider rejects. Trimming
+// first lets the backstop see the tool results it is designed to shrink; the
+// flatten then runs on the already-trimmed history and still guarantees no
+// tool-call blocks survive on a tool-less request.
 func prepareHistoryForLLM(chatID string, history []message.Message, systemPrompts []string, availableTools []tools.Tool, contextWindow int64) []message.Message {
-	if len(availableTools) == 0 {
-		history = flattenToolContentToText(history)
-	}
 	if message.TrimMessagesToFitContextWindow(history, systemPrompts, wrapToolsForEstimation(availableTools), contextWindow) {
 		logging.Info("[LLMRequest] Trimmed history to fit context window",
 			"chatID", chatID,
 			"contextWindow", contextWindow)
+	}
+	if len(availableTools) == 0 {
+		history = flattenToolContentToText(history)
 	}
 	return normalizeRolesForLLM(history)
 }

@@ -36,6 +36,27 @@ type PauseController struct {
 	// failures are counted across the whole run. nil when not wired
 	// (simulator, tests).
 	DaemonOffline *DaemonOfflineCircuitBreaker
+
+	// Cancelled reports whether the user asked to cancel the thread this
+	// controller belongs to. Spawned threads run INLINE inside the parent's
+	// Temporal execution (executeSpawnInline, via workflow.Go), so there is no
+	// child workflow to terminate — cancelling one means the spawn's own loop
+	// noticing at a step boundary and stopping.
+	//
+	// That distinction cost a real user-visible bug: cancelling a spawn called
+	// TerminateWorkflow(child_workflow_id), which failed with "workflow not
+	// found for ID" because that id names a THREAD, not a Temporal execution.
+	// The DB was still marked cancelled, so the UI said "cancelled" while the
+	// spawn wrote another twelve messages over the next seventeen minutes.
+	//
+	// nil when not wired (simulator, tests, non-spawn executors).
+	Cancelled func() bool
+}
+
+// IsCancelled reports whether this thread has been cancelled by the user.
+// Nil-safe on both the receiver and the function.
+func (pc *PauseController) IsCancelled() bool {
+	return pc != nil && pc.Cancelled != nil && pc.Cancelled()
 }
 
 // DoCheckPause calls CheckPause if the receiver and the function are non-nil.

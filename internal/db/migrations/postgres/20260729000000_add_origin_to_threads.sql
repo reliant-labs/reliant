@@ -55,10 +55,32 @@ WHERE t.origin IS NULL
 
 -- 2. Forks. Fork metadata on the thread is self-describing — it never needed
 --    the workflows table to begin with.
-UPDATE threads
-SET origin = 'fork'
-WHERE origin IS NULL
-  AND fork_at_ordinal IS NOT NULL;
+--
+--    Which column carries that metadata depends on migration ORDER, not just
+--    on version number: RunMigrations passes goose.WithAllowMissing(), so on a
+--    database that already applied the 20260803* set this file runs LATE, by
+--    which point fork_at_ordinal has been replaced by fork_at_message_id
+--    (20260803010000_fork_points_reference_messages.sql). On a fresh database
+--    this file runs first and only fork_at_ordinal exists. Both orders are
+--    legitimate, so detect the shape instead of assuming one.
+--
+--    EXECUTE keeps the untaken branch as an unparsed string: naming a column
+--    that does not exist yet is a plan-time error, and only the branch that
+--    runs is ever planned.
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'threads'
+          AND column_name = 'fork_at_ordinal'
+    ) THEN
+        EXECUTE 'UPDATE threads SET origin = ''fork'' WHERE origin IS NULL AND fork_at_ordinal IS NOT NULL';
+    ELSE
+        EXECUTE 'UPDATE threads SET origin = ''fork'' WHERE origin IS NULL AND fork_at_message_id IS NOT NULL';
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- 3. Node-created threads. Any remaining thread whose workflow row names a
 --    real graph node. Excludes the 'thread:'/'fork:' lifecycle records, whose
@@ -131,7 +153,23 @@ DELETE FROM workflows
 WHERE workflow_name LIKE 'thread:%'
    OR workflow_name LIKE 'fork:%';
 
-CREATE INDEX IF NOT EXISTS idx_threads_origin ON threads(conversation_id, origin);
+-- Same order-dependence as the fork backfill above: the chat FK column is
+-- conversation_id before 20260803000000 renames it to chat_id, and this file
+-- can run on either side of that rename under goose.WithAllowMissing().
+-- +goose StatementBegin
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'threads'
+          AND column_name = 'chat_id'
+    ) THEN
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_threads_origin ON threads(chat_id, origin)';
+    ELSE
+        EXECUTE 'CREATE INDEX IF NOT EXISTS idx_threads_origin ON threads(conversation_id, origin)';
+    END IF;
+END $$;
+-- +goose StatementEnd
 
 -- +goose Down
 -- Irreversible in the strict sense: the deleted lifecycle records cannot be

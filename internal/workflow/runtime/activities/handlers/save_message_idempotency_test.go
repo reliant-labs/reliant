@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -263,7 +263,7 @@ func TestSaveMessageActivity_CleansUpOnRetry(t *testing.T) {
 	// Manually create an incomplete message (simulating failed attempt 1)
 	activityID := "test-activity-123"
 	incompleteMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              incompleteMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -568,7 +568,7 @@ func TestSaveMessageActivity_OrdinalIncrement(t *testing.T) {
 	parentThread := "0"
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{
 		ID:             "0.0",
-		ConversationID: chatID,
+		ChatID: chatID,
 		ParentThreadID: &parentThread,
 	})
 	require.NoError(t, err)

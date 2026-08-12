@@ -35,6 +35,7 @@ import {
   RefreshCw,
   Server,
   Shield,
+  Laptop,
   Trash2,
   X,
 } from "lucide-react";
@@ -79,6 +80,7 @@ import {
   type Daemon,
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
+import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
 
 // ── Query keys ──────────────────────────────────────────────────────────────
 const QK = {
@@ -256,21 +258,57 @@ function ErrorNote({ message }: { message?: string }) {
   );
 }
 
+// ── Self-hosted setup instructions ──────────────────────────────────────────
+/**
+ * "Run Reliant on your own machine" — the download + install + connect steps.
+ *
+ * The body is `SelfHostedDaemonConnect`, the SAME component onboarding's
+ * ComputeStep and the ProjectPicker's connect modal render. That is
+ * deliberate: download URLs, the Homebrew cask, the token step, and the
+ * `reliant daemon start` command (which varies by deployment — see
+ * lib/cli-commands) then have exactly one source of truth. Passing
+ * mode="reference" drops the bootstrap-only flow control, since a user on
+ * this page usually already has a working machine and is adding another.
+ */
+function SelfHostedSetupCard() {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="inline-flex items-center gap-2">
+          <Laptop className="h-4 w-4 text-muted-foreground" />
+          Run Reliant on your own machine
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Install the desktop app or CLI on a laptop or server, then connect it
+          with an access token. It shows up here once it connects.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <SelfHostedDaemonConnect mode="reference" />
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Root section ────────────────────────────────────────────────────────────
 export function EnvironmentsSection() {
   const search = useSearch({ strict: false }) as { daemon?: string };
   // Deep-link: ?daemon=<id> opens the detail view directly.
   const [selectedId, setSelectedId] = useState<string | null>(search.daemon ?? null);
 
+  // Without a control plane there are no managed machines to list, but the
+  // self-hosted path is exactly the one that still works — so the setup
+  // instructions matter MORE here, not less.
   if (!capabilities.cloudDaemons) {
     return (
-      <div className="mx-auto max-w-4xl">
+      <div className="mx-auto max-w-4xl space-y-6">
         <PageHeader title="Machines" subtitle="Managed and self-hosted machines that run your projects." />
         <EmptyState
           icon={Server}
           title="Machines unavailable"
           description="Machines are managed by the Reliant control plane, which isn't configured for this build. Connect a self-hosted machine to keep working locally."
         />
+        <SelfHostedSetupCard />
       </div>
     );
   }
@@ -280,13 +318,16 @@ export function EnvironmentsSection() {
       {selectedId ? (
         <EnvironmentDetail daemonId={selectedId} onBack={() => setSelectedId(null)} />
       ) : (
-        <>
-          <PageHeader
-            title="Machines"
-            subtitle="Managed and self-hosted machines that run your projects."
-          />
-          <EnvironmentsList onOpenDetail={(id) => setSelectedId(id)} />
-        </>
+        <div className="space-y-6">
+          <div>
+            <PageHeader
+              title="Machines"
+              subtitle="Managed and self-hosted machines that run your projects."
+            />
+            <EnvironmentsList onOpenDetail={(id) => setSelectedId(id)} />
+          </div>
+          <SelfHostedSetupCard />
+        </div>
       )}
     </div>
   );

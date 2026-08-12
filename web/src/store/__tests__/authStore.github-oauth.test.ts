@@ -78,7 +78,9 @@ describe('authStore GitHub OAuth runtime split', () => {
 
     await useAuthStore.getState().signInWithGithub()
 
-    expect(startOAuthSignInMock).toHaveBeenCalledWith('github', 120)
+    // StartOAuthSignInRequest carries only the provider — the callback wait is
+    // owned by the backend, so no timeout is sent over the wire.
+    expect(startOAuthSignInMock).toHaveBeenCalledWith('github')
     expect(setSessionMock).toHaveBeenCalledWith({
       access_token: 'electron-access-token',
       refresh_token: 'electron-refresh-token',
@@ -136,7 +138,7 @@ describe('authStore Google OAuth runtime split', () => {
 
     await useAuthStore.getState().signInWithGoogle()
 
-    expect(startOAuthSignInMock).toHaveBeenCalledWith('google', 120)
+    expect(startOAuthSignInMock).toHaveBeenCalledWith('google')
     expect(setSessionMock).toHaveBeenCalledWith({
       access_token: 'google-access-token',
       refresh_token: 'google-refresh-token',
@@ -194,7 +196,7 @@ describe('authStore Apple OAuth runtime split', () => {
 
     await useAuthStore.getState().signInWithApple()
 
-    expect(startOAuthSignInMock).toHaveBeenCalledWith('apple', 120)
+    expect(startOAuthSignInMock).toHaveBeenCalledWith('apple')
     expect(setSessionMock).toHaveBeenCalledWith({
       access_token: 'apple-access-token',
       refresh_token: 'apple-refresh-token',

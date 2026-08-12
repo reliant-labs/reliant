@@ -5,15 +5,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -29,6 +30,18 @@ const (
 const (
 	heartbeatInterval = 30 * time.Second
 	batchSize         = 100
+
+	// snapshotMessageLimit bounds the initial chat snapshot to a window of
+	// recent messages rather than the chat's entire history. The client
+	// backfills older messages on scroll-back via ChatService.ListMessages
+	// (recent / before_seq), driven by the has_more + oldest_seq
+	// fields on the snapshot.
+	//
+	// Sized well above a viewport so the common case never needs a backfill
+	// round-trip, but far below the multi-thousand-message histories that made
+	// the unbounded read cost ~1.1s of server time and half a megabyte on the
+	// wire before the first message rendered.
+	snapshotMessageLimit = 200
 )
 
 // StreamingService implements the StreamingService RPC handlers
@@ -439,10 +452,11 @@ func (s *StreamingService) sendChatUpdateBatchesViaUserStream(ctx context.Contex
 func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string) (*reliantv1.ChatSyncSnapshot, int64, error) {
 	// ── Phase 1: parallel queries with no interdependencies ──
 	var (
-		latestSeq     int64
-		chat          *db.Chat
-		childMessages []*db.Message
-		otherUpdates  []*reliantv1.ChatUpdateData
+		latestSeq         int64
+		chat              *db.Chat
+		childMessages     []*db.Message
+		otherUpdates      []*reliantv1.ChatUpdateData
+		totalMessageCount int
 	)
 
 	g1, gctx := errgroup.WithContext(ctx)
@@ -461,10 +475,21 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 
 	g1.Go(func() error {
 		var err error
-		childMessages, err = s.database.ListMessages(gctx, chatID, db.MessageListOptions{
-			Limit: 10000,
-		})
+		// Bounded in SQL. ListMessages would fetch the chat's entire history
+		// and slice it in Go, so its Limit saves transfer but none of the
+		// query cost.
+		childMessages, err = s.database.ListRecentMessages(gctx, chatID, snapshotMessageLimit)
 		return err
+	})
+
+	g1.Go(func() error {
+		var err error
+		totalMessageCount, err = s.database.CountMessagesInChat(gctx, chatID)
+		if err != nil {
+			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to count messages", "error", err, "chatID", chatID[:8])
+			return nil // non-fatal; falls back to the assembled count below
+		}
+		return nil
 	})
 
 	g1.Go(func() error {
@@ -483,15 +508,12 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	}
 
 	// Determine main thread ID (the root workflow's thread ID, which equals the workflow ID)
-	var mainThread string
-	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
-		mainThread = *chat.WorkflowID
-	}
+	mainThread := chat.MainThreadID()
 
 	// ── Phase 2: queries that depend on mainThread (from GetChat) ──
 	var (
-		mainThreadMessages  []*db.Message
-		threadTokenCount    int64
+		mainThreadMessages []*db.Message
+		threadTokenCount   int64
 		// Fallback only; the real per-model DERIVED value is fetched from
 		// GetContextUsage below. Kept single-source via threads.DefaultCompactionThreshold.
 		compactionThreshold int64 = threads.DefaultCompactionThreshold
@@ -503,7 +525,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		g2.Go(func() error {
 			threadsSvc := threads.NewService(s.database)
 			var err error
-			mainThreadMessages, err = threadsSvc.LoadCurrentMessages(gctx2, mainThread)
+			mainThreadMessages, err = threadsSvc.LoadRecentDisplayMessages(gctx2, mainThread, snapshotMessageLimit)
 			if err != nil {
 				if err.Error() != "thread not found" {
 					logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
@@ -551,6 +573,27 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		messages = append(messages, msg)
 	}
 
+	// Both sources are independently bounded to snapshotMessageLimit, so the
+	// merged set can be up to twice that. Trim to a single predictable bound —
+	// but measure that bound on the MAIN THREAD, not across the whole chat.
+	//
+	// Taking the newest N by seq across every thread looks natural (seq is a
+	// chat-global total order) and is badly wrong once a chat spawns sub-agents.
+	// Spawn threads out-write the main thread by an order of magnitude and
+	// finish later, so they occupy the top of the seq range: in a real
+	// 1,470-message chat the newest 200 rows were 200 spawn messages and ZERO
+	// main-thread messages. Spawn messages render collapsed inside the tool call
+	// that created them rather than in the transcript, so that snapshot painted
+	// an empty conversation and the user could not see their own chat.
+	//
+	// Keeping the newest N main-thread messages, plus every sibling-thread
+	// message inside that seq range, gives the transcript its N messages and
+	// still carries the spawn messages the tool-call previews render from.
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].Seq < messages[j].Seq
+	})
+	messages = windowByMainThread(messages, mainThread, snapshotMessageLimit)
+
 	// Batch fetch all content blocks for all messages
 	messageIDs := make([]string, 0, len(messages))
 	for _, msg := range messages {
@@ -591,60 +634,53 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		}
 	}
 
-	// Build assembled messages
-	assembledMessages := make([]*reliantv1.Message, 0, len(messages))
+	// A message with no content blocks renders as nothing, so drop it here
+	// rather than shipping an empty card. (Kept separate from assembly: it is
+	// a snapshot-specific concern, and it logs.)
+	displayable := make([]*db.Message, 0, len(messages))
+	displayableIDs := make([]string, 0, len(messages))
 	messagesSkipped := 0
 	for _, msg := range messages {
-		blocks := messageBlocks[msg.ID]
-
-		// Skip hidden messages from UI
-		if msg.DisplayStyle != nil && *msg.DisplayStyle == reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN {
-			continue
-		}
-
-		if len(blocks) == 0 {
+		if len(messageBlocks[msg.ID]) == 0 {
 			messagesSkipped++
 			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Skipping message with no content blocks",
-				"chatID", chatID[:8], "messageID", msg.ID[:8], "role", msg.Role, "ordinal", msg.Ordinal)
+				"chatID", chatID[:8], "messageID", msg.ID[:8], "role", msg.Role, "seq", msg.Seq)
 			continue
 		}
+		displayable = append(displayable, msg)
+		displayableIDs = append(displayableIDs, msg.ID)
+	}
 
-		// Resolve attachments from content blocks
-		var msgAttachments []*db.Attachment
-		for _, block := range blocks {
-			if (block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE || block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE) && block.Content != nil {
-				attachmentID := *block.Content
-				if att, found := attachmentMap[attachmentID]; found {
-					msgAttachments = append(msgAttachments, att)
-				} else {
-					defaultMime := "application/octet-stream"
-					defaultFilename := "file"
-					if block.BlockType == reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE {
-						defaultMime = "image/jpeg"
-						defaultFilename = "image"
-					}
-					msgAttachments = append(msgAttachments, &db.Attachment{
-						ID:       attachmentID,
-						Filename: defaultFilename,
-						Size:     0,
-						MimeType: defaultMime,
-					})
-				}
-			}
+	// Assembled exactly like every other display read — including durable
+	// tool-call status and a spawn's child_workflow_id. This snapshot used to
+	// pass SequenceNumber alone, which left live spawns with no thread to
+	// preview: they showed "Starting…" until something else refetched them.
+	assembledMessages := assembleMessagesForDisplay(
+		ctx, s.database, displayable, displayableIDs, messageBlocks, attachmentMap, mainThread, latestSeq)
+
+	// Calculate pagination metadata.
+	//
+	// `messages` comes out of a map above, so it is in arbitrary order —
+	// oldest_seq must come from an explicit minimum, not messages[0] (which
+	// was the pre-existing behaviour and effectively returned a random
+	// element's seq). The client uses oldest_seq as the `before_seq` cursor
+	// for scroll-back, so a wrong value here silently skips or repeats a page
+	// of history.
+	totalMessages := totalMessageCount
+	if totalMessages < len(messages) {
+		// Count query failed, or raced ahead of the read; never report a total
+		// smaller than what we're actually sending.
+		totalMessages = len(messages)
+	}
+
+	var oldestSeq int64
+	for i, msg := range messages {
+		if i == 0 || msg.Seq < oldestSeq {
+			oldestSeq = msg.Seq
 		}
-
-		assembledMessages = append(assembledMessages, messageToProto(msg, blocks, msgAttachments, &MessageToProtoOptions{
-			SequenceNumber: latestSeq,
-		}))
 	}
 
-	// Calculate pagination metadata
-	totalMessages := len(messages)
-	hasMore := false
-	var oldestOrdinal int64 = 0
-	if len(messages) > 0 {
-		oldestOrdinal = messages[0].Ordinal
-	}
+	hasMore := totalMessages > len(messages)
 
 	if messagesSkipped > 0 {
 		logging.Info(LOG_PREFIX_STREAM_CHAT+" Snapshot built",
@@ -657,7 +693,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		LatestSequence:      latestSeq,
 		Total:               int32(totalMessages),
 		HasMore:             hasMore,
-		OldestOrdinal:       oldestOrdinal,
+		OldestSeq:           oldestSeq,
 		ThreadTokenCount:    threadTokenCount,
 		CompactionThreshold: compactionThreshold,
 	}
@@ -665,37 +701,23 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	return snapshot, latestSeq, nil
 }
 
-// getNonMessageUpdates fetches approvals, threads, and other non-message updates
+// getNonMessageUpdates fetches approvals, threads, and other non-message updates.
+//
+// The type filter and the per-entity dedup both happen in SQL. The previous
+// implementation read GetUpdatesSince(chatID, 0, 10000) — every update TYPE,
+// oldest-first — and discarded message updates in Go. On a long-lived chat the
+// 10k cap was consumed by the message rows it was about to throw away, so
+// non-message updates past the cap silently never reached the client (measured:
+// 8,465 updates dropped on a real 24k-update chat), and the snapshot's separate
+// sequence high-water mark meant gap detection never backfilled them.
 func (s *StreamingService) getNonMessageUpdates(ctx context.Context, chatID string) ([]*reliantv1.ChatUpdateData, error) {
-	updates, err := s.database.GetUpdatesSince(ctx, chatID, 0, 10000)
+	updates, err := s.database.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]*reliantv1.ChatUpdateData, 0)
-	seenEntities := make(map[string]int64)
-
+	result := make([]*reliantv1.ChatUpdateData, 0, len(updates))
 	for _, update := range updates {
-		// Skip message updates - these are handled separately via assembled messages
-		if update.UpdateType == db.UpdateTypeMessage {
-			continue
-		}
-
-		// DEBUG: Log info/warning updates
-		if update.UpdateType == db.UpdateTypeInfo || update.UpdateType == db.UpdateTypeWarning {
-			logging.Info(LOG_PREFIX_STREAM_CHAT+" Including info/warning update in snapshot",
-				"chatID", chatID[:8],
-				"updateType", update.UpdateType,
-				"entityID", update.EntityID[:8],
-				"seq", update.SequenceNumber)
-		}
-
-		// Dedupe by entity_id
-		if existingSeq, ok := seenEntities[update.EntityID]; ok && existingSeq >= update.SequenceNumber {
-			continue
-		}
-		seenEntities[update.EntityID] = update.SequenceNumber
-
 		result = append(result, &reliantv1.ChatUpdateData{
 			UpdateType:     update.UpdateType,
 			SequenceNumber: update.SequenceNumber,

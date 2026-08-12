@@ -39,8 +39,8 @@ func (s *threadStore) GetThreadByWorkflow(ctx context.Context, workflowID string
 	return threadFromPG(result), nil
 }
 
-func (s *threadStore) GetRootThread(ctx context.Context, conversationID string) (*core.Thread, error) {
-	result, err := s.q.GetRootThread(ctx, conversationID)
+func (s *threadStore) GetRootThread(ctx context.Context, chatID string) (*core.Thread, error) {
+	result, err := s.q.GetRootThread(ctx, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get root thread: %w", err)
 	}
@@ -53,20 +53,19 @@ func (s *threadStore) GetThreadWithParent(ctx context.Context, id string) (*core
 		return nil, nil, fmt.Errorf("failed to get thread with parent: %w", err)
 	}
 	thread := &core.Thread{
-		ID:                    result.ID,
-		ConversationID:        result.ConversationID,
-		ParentThreadID:        nullStringToPtr(result.ParentThreadID),
-		ForkAtOrdinal:         threadNullInt64ToPtr(result.ForkAtOrdinal),
-		ForkAtContextWindowID: nullStringToPtr(result.ForkAtContextWindowID),
-		WorkflowID:            nullStringToPtr(result.WorkflowID),
-		Title:                 nullStringToPtr(result.Title),
-		CreatedAt:             result.CreatedAt,
-		Origin:                result.Origin,
-		OriginNodeID:          nullStringToPtr(result.OriginNodeID),
-		Status:                result.Status,
-		CompletedAt:           threadNullTimeToPtr(result.CompletedAt),
+		ID:              result.ID,
+		ChatID:          result.ChatID,
+		ParentThreadID:  nullStringToPtr(result.ParentThreadID),
+		ForkAtMessageID: nullStringToPtr(result.ForkAtMessageID),
+		WorkflowID:      nullStringToPtr(result.WorkflowID),
+		Title:           nullStringToPtr(result.Title),
+		CreatedAt:       result.CreatedAt,
+		Origin:          result.Origin,
+		OriginNodeID:    nullStringToPtr(result.OriginNodeID),
+		Status:          result.Status,
+		CompletedAt:     threadNullTimeToPtr(result.CompletedAt),
 	}
-	return thread, nullStringToPtr(result.ParentConversationID), nil
+	return thread, nullStringToPtr(result.ParentChatID), nil
 }
 
 func (s *threadStore) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*core.Thread, error) {
@@ -81,10 +80,10 @@ func (s *threadStore) UpdateThreadStatus(ctx context.Context, threadID string, s
 	return threadFromPG(result), nil
 }
 
-func (s *threadStore) ListThreadsByOrigin(ctx context.Context, conversationID string, origin core.ThreadOrigin) ([]*core.Thread, error) {
+func (s *threadStore) ListThreadsByOrigin(ctx context.Context, chatID string, origin core.ThreadOrigin) ([]*core.Thread, error) {
 	results, err := s.q.ListThreadsByOrigin(ctx, pgdb.ListThreadsByOriginParams{
-		ConversationID: conversationID,
-		Origin:         origin,
+		ChatID: chatID,
+		Origin: origin,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list threads by origin: %w", err)
@@ -92,8 +91,8 @@ func (s *threadStore) ListThreadsByOrigin(ctx context.Context, conversationID st
 	return threadsFromPG(results), nil
 }
 
-func (s *threadStore) ListThreadsByConversation(ctx context.Context, conversationID string) ([]*core.Thread, error) {
-	results, err := s.q.ListThreadsByConversation(ctx, conversationID)
+func (s *threadStore) ListThreadsByConversation(ctx context.Context, chatID string) ([]*core.Thread, error) {
+	results, err := s.q.ListThreadsByConversation(ctx, chatID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list threads: %w", err)
 	}
@@ -116,11 +115,10 @@ func (s *threadStore) UpdateThreadWorkflow(ctx context.Context, threadID, workfl
 	return threadFromPG(result), nil
 }
 
-func (s *threadStore) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtOrdinal *int64, forkAtContextWindowID *string) (*core.Thread, error) {
+func (s *threadStore) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*core.Thread, error) {
 	result, err := s.q.UpdateThreadForkPoint(ctx, pgdb.UpdateThreadForkPointParams{
-		ForkAtOrdinal:         threadPtrToNullInt64(forkAtOrdinal),
-		ForkAtContextWindowID: ptrToNullString(forkAtContextWindowID),
-		ID:                    threadID,
+		ForkAtMessageID: ptrToNullString(forkAtMessageID),
+		ID:              threadID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update thread fork point: %w", err)
@@ -132,12 +130,12 @@ func (s *threadStore) DeleteThread(ctx context.Context, id string) error {
 	return s.q.DeleteThread(ctx, id)
 }
 
-func (s *threadStore) DeleteThreadsByConversation(ctx context.Context, conversationID string) error {
-	return s.q.DeleteThreadsByConversation(ctx, conversationID)
+func (s *threadStore) DeleteThreadsByConversation(ctx context.Context, chatID string) error {
+	return s.q.DeleteThreadsByConversation(ctx, chatID)
 }
 
-func (s *threadStore) CountThreadsInConversation(ctx context.Context, conversationID string) (int64, error) {
-	return s.q.CountThreadsInConversation(ctx, conversationID)
+func (s *threadStore) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
+	return s.q.CountThreadsInConversation(ctx, chatID)
 }
 
 type contextWindowStore struct{ q pgdb.Querier }
@@ -179,7 +177,7 @@ func (s *contextWindowStore) GetContextWindowBySequence(ctx context.Context, thr
 	return contextWindowFromPG(result), nil
 }
 
-func (s *contextWindowStore) GetContextWindowWithThread(ctx context.Context, id string) (*core.ContextWindow, string, *string, *int64, error) {
+func (s *contextWindowStore) GetContextWindowWithThread(ctx context.Context, id string) (*core.ContextWindow, string, *string, *string, error) {
 	result, err := s.q.GetContextWindowWithThread(ctx, id)
 	if err != nil {
 		return nil, "", nil, nil, fmt.Errorf("failed to get context window with thread: %w", err)
@@ -189,11 +187,11 @@ func (s *contextWindowStore) GetContextWindowWithThread(ctx context.Context, id 
 		ThreadID:                   result.ThreadID,
 		Sequence:                   int(result.Sequence),
 		ParentContextWindowID:      nullStringToPtr(result.ParentContextWindowID),
-		ForkAtOrdinal:              threadNullInt64ToPtr(result.ForkAtOrdinal),
+		ForkAtMessageID:            nullStringToPtr(result.ForkAtMessageID),
 		CompactionSummaryMessageID: nullStringToPtr(result.CompactionSummaryMessageID),
 		CreatedAt:                  result.CreatedAt,
 	}
-	return cw, result.ConversationID, nullStringToPtr(result.ParentThreadID), threadNullInt64ToPtr(result.ForkAtOrdinal_2), nil
+	return cw, result.ChatID, nullStringToPtr(result.ParentThreadID), nullStringToPtr(result.ForkAtMessageID_2), nil
 }
 
 func (s *contextWindowStore) ListContextWindowsByThread(ctx context.Context, threadID string) ([]*core.ContextWindow, error) {
@@ -240,18 +238,17 @@ func (s *contextWindowStore) DeleteContextWindowsByThread(ctx context.Context, t
 
 func threadFromPG(st pgdb.Thread) *core.Thread {
 	return &core.Thread{
-		ID:                    st.ID,
-		ConversationID:        st.ConversationID,
-		ParentThreadID:        nullStringToPtr(st.ParentThreadID),
-		ForkAtOrdinal:         threadNullInt64ToPtr(st.ForkAtOrdinal),
-		ForkAtContextWindowID: nullStringToPtr(st.ForkAtContextWindowID),
-		WorkflowID:            nullStringToPtr(st.WorkflowID),
-		Title:                 nullStringToPtr(st.Title),
-		CreatedAt:             st.CreatedAt,
-		Origin:                st.Origin,
-		OriginNodeID:          nullStringToPtr(st.OriginNodeID),
-		Status:                st.Status,
-		CompletedAt:           threadNullTimeToPtr(st.CompletedAt),
+		ID:              st.ID,
+		ChatID:          st.ChatID,
+		ParentThreadID:  nullStringToPtr(st.ParentThreadID),
+		ForkAtMessageID: nullStringToPtr(st.ForkAtMessageID),
+		WorkflowID:      nullStringToPtr(st.WorkflowID),
+		Title:           nullStringToPtr(st.Title),
+		CreatedAt:       st.CreatedAt,
+		Origin:          st.Origin,
+		OriginNodeID:    nullStringToPtr(st.OriginNodeID),
+		Status:          st.Status,
+		CompletedAt:     threadNullTimeToPtr(st.CompletedAt),
 	}
 }
 
@@ -293,17 +290,16 @@ func threadToCreateParams(t *core.Thread) pgdb.CreateThreadParams {
 		status = core.ThreadStatusRunning
 	}
 	return pgdb.CreateThreadParams{
-		ID:                    t.ID,
-		ConversationID:        t.ConversationID,
-		ParentThreadID:        ptrToNullString(t.ParentThreadID),
-		ForkAtOrdinal:         threadPtrToNullInt64(t.ForkAtOrdinal),
-		ForkAtContextWindowID: ptrToNullString(t.ForkAtContextWindowID),
-		WorkflowID:            ptrToNullString(t.WorkflowID),
-		Title:                 ptrToNullString(t.Title),
-		CreatedAt:             t.CreatedAt,
-		Origin:                origin,
-		OriginNodeID:          ptrToNullString(t.OriginNodeID),
-		Status:                status,
+		ID:              t.ID,
+		ChatID:          t.ChatID,
+		ParentThreadID:  ptrToNullString(t.ParentThreadID),
+		ForkAtMessageID: ptrToNullString(t.ForkAtMessageID),
+		WorkflowID:      ptrToNullString(t.WorkflowID),
+		Title:           ptrToNullString(t.Title),
+		CreatedAt:       t.CreatedAt,
+		Origin:          origin,
+		OriginNodeID:    ptrToNullString(t.OriginNodeID),
+		Status:          status,
 	}
 }
 
@@ -313,7 +309,7 @@ func contextWindowFromPG(cw pgdb.ContextWindow) *core.ContextWindow {
 		ThreadID:                   cw.ThreadID,
 		Sequence:                   int(cw.Sequence),
 		ParentContextWindowID:      nullStringToPtr(cw.ParentContextWindowID),
-		ForkAtOrdinal:              threadNullInt64ToPtr(cw.ForkAtOrdinal),
+		ForkAtMessageID:            nullStringToPtr(cw.ForkAtMessageID),
 		CompactionSummaryMessageID: nullStringToPtr(cw.CompactionSummaryMessageID),
 		CreatedAt:                  cw.CreatedAt,
 	}
@@ -333,7 +329,7 @@ func contextWindowToCreateParams(cw *core.ContextWindow) pgdb.CreateContextWindo
 		ThreadID:                   cw.ThreadID,
 		Sequence:                   int64(cw.Sequence),
 		ParentContextWindowID:      ptrToNullString(cw.ParentContextWindowID),
-		ForkAtOrdinal:              threadPtrToNullInt64(cw.ForkAtOrdinal),
+		ForkAtMessageID:            ptrToNullString(cw.ForkAtMessageID),
 		CompactionSummaryMessageID: ptrToNullString(cw.CompactionSummaryMessageID),
 		CreatedAt:                  cw.CreatedAt,
 	}
@@ -344,18 +340,4 @@ func threadStringToNullString(s string) sql.NullString {
 		return sql.NullString{String: s, Valid: true}
 	}
 	return sql.NullString{}
-}
-
-func threadPtrToNullInt64(v *int64) sql.NullInt64 {
-	if v != nil {
-		return sql.NullInt64{Int64: *v, Valid: true}
-	}
-	return sql.NullInt64{}
-}
-
-func threadNullInt64ToPtr(v sql.NullInt64) *int64 {
-	if v.Valid {
-		return &v.Int64
-	}
-	return nil
 }

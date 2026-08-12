@@ -770,6 +770,10 @@ func (r *fakeMCPDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool,
 func (r *fakeMCPDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {
 	return nil
 }
+func (r *fakeMCPDaemonRouter) SendToolExecutionBackground(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
 func (r *fakeMCPDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
 	return nil
 }

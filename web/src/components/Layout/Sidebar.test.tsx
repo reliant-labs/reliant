@@ -27,9 +27,8 @@ vi.mock("../ui/ContextMenu", () => ({
   ContextMenu: () => null,
 }));
 
-vi.mock("../ui/Dropdown", () => ({
-  Dropdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-}));
+// The real Dropdown is used here on purpose: these tests assert open/close
+// behavior (choose-an-option and Escape), which a passthrough mock would fake.
 
 vi.mock("../ui/ActivityDot", () => ({
   ActivityDot: () => <div data-testid="activity-dot" />,
@@ -53,9 +52,11 @@ const mockChatListData = [
   },
 ];
 
+const mockArchivedChatData: Array<Record<string, unknown>> = [];
+
 vi.mock("../../hooks/chat-queries", () => ({
   useChatList: () => ({ data: mockChatListData, isLoading: false }),
-  useArchivedChats: () => ({ data: [], isFetched: true }),
+  useArchivedChats: () => ({ data: mockArchivedChatData, isFetched: true }),
   useDeleteChat: () => ({ mutateAsync: vi.fn() }),
   useRenameChat: () => ({ mutateAsync: vi.fn() }),
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
@@ -73,6 +74,7 @@ describe("Sidebar selected chat scroll", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     scrollIntoViewMock.mockReset();
+    mockArchivedChatData.length = 0;
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -173,6 +175,85 @@ describe("Sidebar selected chat scroll", () => {
     });
 
     vi.useRealTimers();
+  });
+
+  it("stays on the archived tab when expanding an archived workspace group", () => {
+    mockArchivedChatData.push({
+      id: "chat-archived",
+      title: "Archived chat",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+      lastMessageAt: "2024-01-01T00:00:00.000Z",
+      unread: false,
+      state: ChatState.ARCHIVED,
+      worktreeId: "worktree-archived",
+      worktreeName: "Archived workspace",
+      projectId: "project-1",
+    });
+
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    // The active chat is a non-archived one, so the sidebar starts on "Active".
+    fireEvent.click(screen.getByLabelText("Sort chats"));
+    fireEvent.click(screen.getByText("Archived chats"));
+
+    const groupHeader = screen.getByText("Archived workspace");
+    expect(screen.queryByText("Archived chat")).not.toBeInTheDocument();
+
+    fireEvent.click(groupHeader);
+
+    // The group expands and the list must NOT snap back to the active tab.
+    expect(screen.getByText("Archived chat")).toBeInTheDocument();
+    expect(screen.queryByText("Selected chat")).not.toBeInTheDocument();
+  });
+
+  it("closes the list menu after choosing an option, and on Escape", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    // Picking an option is a complete interaction — the menu should dismiss.
+    fireEvent.click(screen.getByLabelText("Sort chats"));
+    fireEvent.click(screen.getByText("Archived chats"));
+    expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
+
+    // Sort options dismiss too.
+    fireEvent.click(screen.getByLabelText("Sort chats"));
+    fireEvent.click(screen.getByText("Newest First"));
+    expect(screen.queryByText("Newest First")).not.toBeInTheDocument();
+
+    // Escape still dismisses without choosing anything.
+    fireEvent.click(screen.getByLabelText("Sort chats"));
+    expect(screen.getByText("Archived chats")).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByText("Archived chats")).not.toBeInTheDocument();
+  });
+
+  it("closes the view menu after choosing a view mode", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>
+    );
+
+    fireEvent.click(screen.getByLabelText("View options"));
+    fireEvent.click(screen.getByText("Flat list"));
+    expect(screen.queryByText("Flat list")).not.toBeInTheDocument();
   });
 
   it("renders Codex-style navigation actions and calls their handlers", () => {

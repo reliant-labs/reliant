@@ -15,6 +15,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
+import type { GetCurrentUserComputeUsageResponse } from "@/gen/controlplane/v1/public/billing_service_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 
 function billingClient() {
@@ -54,10 +55,29 @@ export function useWalletOverview() {
   });
 }
 
+/**
+ * Compute usage, with `granted_minutes_remaining` narrowed from the wire's
+ * bigint (int64) to a plain number so it reads like the neighbouring minute
+ * fields. Hoisted to module scope so its identity is stable — an inline
+ * `select` would produce a fresh result object on every render and defeat the
+ * `useMemo` deps at the call sites.
+ */
+export type ComputeUsage = Omit<
+  GetCurrentUserComputeUsageResponse,
+  "grantedMinutesRemaining"
+> & { grantedMinutesRemaining: number };
+
+function selectComputeUsage(
+  data: GetCurrentUserComputeUsageResponse,
+): ComputeUsage {
+  return { ...data, grantedMinutesRemaining: Number(data.grantedMinutesRemaining) };
+}
+
 export function useComputeUsage(period: "current" | "previous") {
   return useQuery({
     queryKey: cloudBillingKeys.computeUsage(period),
     queryFn: () => billingClient().getCurrentUserComputeUsage({ period }),
+    select: selectComputeUsage,
     staleTime: 30_000,
   });
 }

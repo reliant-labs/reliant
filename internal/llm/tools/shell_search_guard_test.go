@@ -22,7 +22,7 @@ func TestUnscopedSearchRefusal(t *testing.T) {
 		// --- other filesystem-wide roots ---
 		{"find home via tilde", `find ~ -name "*.go"`, true},
 		{"find home via $HOME", `find $HOME -name go.mod`, true},
-		{"find literal home dir", `find /Users/seanteeling -name go.mod`, true},
+		{"find literal home dir", `find /Users/user -name go.mod`, true},
 		{"find /Users", `find /Users -name "*.proto"`, true},
 		{"find /usr", `find /usr -name "libfoo*"`, true},
 		{"grep -r at root", `grep -rn "svcerr" /`, true},
@@ -42,7 +42,7 @@ func TestUnscopedSearchRefusal(t *testing.T) {
 		// --- legitimate, must NOT be refused ---
 		{"find in cwd", `find . -name "*.go"`, false},
 		{"find in a subdir", `find internal/llm -name "*.go"`, false},
-		{"find under an absolute project path", `find /Users/seanteeling/src/reliant-labs/reliant -name go.mod`, false},
+		{"find under an absolute project path", `find /Users/user/src/reliant-labs/reliant -name go.mod`, false},
 		{"find under a home subdir", `find ~/src -name go.mod`, false},
 		{"find under $HOME subdir", `find $HOME/src -name go.mod`, false},
 		{"grep -r in cwd", `grep -rn "svcerr" .`, false},

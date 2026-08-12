@@ -76,9 +76,11 @@ func (f *fakeTokenStore) RevokeDaemonPATByUserID(_ context.Context, userID, id, 
 	return true, nil
 }
 
-func (f *fakeTokenStore) RevokeDaemonPATsByUserID(context.Context, string, bool) error   { return nil }
-func (f *fakeTokenStore) RevokeDaemonPATsByDaemonID(context.Context, string) (int, error) { return 0, nil }
-func (f *fakeTokenStore) UpdateDaemonPATLastUsed(context.Context, string) error           { return nil }
+func (f *fakeTokenStore) RevokeDaemonPATsByUserID(context.Context, string, bool) error { return nil }
+func (f *fakeTokenStore) RevokeDaemonPATsByDaemonID(context.Context, string) (int, error) {
+	return 0, nil
+}
+func (f *fakeTokenStore) UpdateDaemonPATLastUsed(context.Context, string) error { return nil }
 
 func newTokenSvc() *TokenService {
 	return NewTokenService(pat.NewService(newFakeTokenStore()))

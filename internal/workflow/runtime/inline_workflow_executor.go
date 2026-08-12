@@ -653,6 +653,18 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		// Check for pause signal at step boundary
 		e.pauseCtrl.DoCheckPause(e.ctx)
 
+		// A spawn runs inline in the parent's Temporal execution, so cancelling
+		// one is not something Temporal can do for us — it is this check.
+		// Stopping at a step boundary means no activity is in flight and the
+		// thread's history stays consistent.
+		if e.pauseCtrl.IsCancelled() {
+			e.logger.Info("[InlineWorkflow] Thread cancelled by user; stopping",
+				"nodeID", e.nodeID,
+				"subWorkflow", e.subWorkflowName,
+			)
+			return nil, ErrThreadCancelled
+		}
+
 		// Process join events first
 		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.subWorkflowName, subNodeOutputs, e.logger, nil, workflow.Now(e.ctx))
 
@@ -928,6 +940,11 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 						"error_message": errStr,
 						"error_type":    "retry_exhaustion",
 					}
+					// Scope the error to the thread that produced it; an
+					// unscoped error renders in every thread of the chat.
+					if e.execContext != nil && e.execContext.Thread != "" {
+						errorPayload["thread"] = e.execContext.Thread
+					}
 					if summary := extractLLMErrorSummary(errStr); summary != "" {
 						errorPayload["error_summary"] = summary + ". Workflow paused — send a message to retry."
 					}
@@ -1028,10 +1045,16 @@ func (e *InlineWorkflowExecutor) executeApproval(
 		},
 	})
 
+	threadID := ""
+	if e.execContext != nil {
+		threadID = e.execContext.Thread
+	}
+
 	createInput := map[string]interface{}{
 		"chat_id":              e.chatID,
 		"workflow_id":          e.workflowID,
 		"temporal_workflow_id": temporalWorkflowID,
+		"thread_id":            threadID,
 		"step_id":              node.GetId(),
 		"title":                title,
 		"timeout":              timeoutStr,
@@ -1522,7 +1545,29 @@ func (e *InlineWorkflowExecutor) emitThreadCreated() {
 
 	// A fork is self-describing through its fork metadata; anything else this
 	// executor creates was created by a graph node.
-	origin := model.ThreadOriginForMode(e.execContext.ThreadMode)
+	//
+	// EXCEPT when the thread was not created here. A spawned sub-agent's thread
+	// is created by the spawn path, which announces it with origin "spawn", and
+	// then runs its workflow through this executor -- which announced the SAME
+	// thread again ~30ms later with an origin derived from ThreadMode. The
+	// second update won, the UI saw "node", isSpawn went false, and the whole
+	// sub-agent transcript rendered inline in the parent chat. Observed on the
+	// wire: thread b823f9da got origin="spawn" at 17:35:57.837 and origin="node"
+	// at 17:35:57.867.
+	//
+	// Origin is a property of how a thread came to exist, so only the code that
+	// brought it into existence may state it. Sending it empty here leaves the
+	// field off the update entirely (workflow_status.go only sets "origin" when
+	// non-empty), so the earlier, authoritative announcement stands.
+	//
+	// A fork is the one case this executor genuinely creates, so it still says
+	// so; every other mode is either a thread it made via a graph node -- which
+	// the persisted threads.origin already records -- or someone else's thread
+	// it is merely running.
+	origin := ""
+	if e.execContext.ThreadMode == model.ThreadModeFork {
+		origin = model.ThreadOriginFork
+	}
 
 	input := map[string]interface{}{
 		"chat_id":      e.chatID,

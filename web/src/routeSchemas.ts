@@ -140,6 +140,9 @@ export const SETTINGS_SECTION_IDS = [
   "mcp",
   "about",
   "tokens",
+  // Grants for third-party MCP clients (ChatGPT, Claude, mobile) that drive a
+  // cloud workspace. Route: /settings/connectors.
+  "connectors",
   "git-connections",
   "developer",
   // Cloud settings sections — in-app control-plane (controlplane.v1) surfaces
@@ -160,6 +163,13 @@ export const settingsParamsSchema = z.object({
 // these are the fields actually load-bearing for the onboarding flow. Keeping
 // them on a dedicated schema means /onboarding can't accidentally inherit
 // stray /-route params, and the schema documents what onboarding cares about.
+// `/m/new` accepts an optional `worktreeId` so the chat-list group header's
+// "new chat in this workspace" action can target a non-main workspace —
+// without it, every mobile chat could only ever be created against main.
+export const mobileNewChatSearchSchema = z.object({
+  worktreeId: z.string().optional(),
+});
+
 export const onboardingSearchSchema = z.object({
   plan: launchPlanSchema.optional(),
   "reset-onboarding": z.boolean().optional(),

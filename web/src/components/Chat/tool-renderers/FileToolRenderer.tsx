@@ -11,6 +11,12 @@ import { getFilePreviewInfo, type FilePreviewInfo } from '../../../api/fileSyste
 import { isBinaryFile, isImageFile } from '../../../lib/fileUtils';
 import { FileViewerTab } from '../../FileBrowser/FileViewerTab';
 import type { FileNode } from '../../FileBrowser';
+import { useSurface } from '../../../lib/surfaceContext';
+
+// On a phone viewport a diff this tall pushes the Approve/Deny buttons below
+// the fold, turning "decide from your phone" into "scroll to find the
+// decision." Desktop keeps the taller default since it has room to spare.
+const MOBILE_DIFF_MAX_HEIGHT = 220;
 
 const EXTRA_PREVIEW_EXTENSIONS = /\.(svg|mp3|m4a|ogg|oga|wav|flac|aac|mp4|mov|avi|mkv|webm)$/i;
 
@@ -53,9 +59,11 @@ function PreviewAwareFileMutation({
   originalContent,
   modifiedContent,
   worktreeId,
-  maxHeight = 250,
+  maxHeight,
   disablePreview = false,
 }: PreviewAwareFileMutationProps) {
+  const surface = useSurface();
+  const effectiveMaxHeight = maxHeight ?? (surface === "desktop" ? 250 : MOBILE_DIFF_MAX_HEIGHT);
   const shouldAttemptPreview = useMemo(
     () => !disablePreview && shouldCheckNonTextPreview(filePath),
     [disablePreview, filePath]
@@ -127,7 +135,7 @@ function PreviewAwareFileMutation({
       original={originalContent}
       modified={modifiedContent}
       filename={filePath}
-      maxHeight={maxHeight}
+      maxHeight={effectiveMaxHeight}
       showLineNumbers={false}
       noBorder
     />

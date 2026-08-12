@@ -4,6 +4,7 @@ interface ChatActionButtonsProps {
   // Send/Stop
   onSend: () => void;
   onStop?: () => void;
+  onQueue?: () => void;
   canSend: boolean;
   isStreaming: boolean;
   disabled: boolean;
@@ -40,9 +41,10 @@ export function ButtonLayout({
 }: ButtonLayoutProps) {
   const { buttons } = useChatButtons(props);
 
-  // Always keep send/stop button on the right
-  const sendButtonNames = ["sendStop", "send", "stop"];
-  const sendButton = layout.find(name => sendButtonNames.includes(name));
+  // Always keep send/stop button on the right. `queueSend` is rendered just
+  // before it, so the Stop affordance never shifts position.
+  const sendButtonNames = ["sendStop", "send", "stop", "queueSend"];
+  const sendButton = layout.find(name => sendButtonNames.includes(name) && name !== "queueSend");
 
   const alwaysVisibleNames = ["attach"];
   const trailingActionNames = ["discuss"];
@@ -65,6 +67,7 @@ export function ButtonLayout({
   const alwaysVisibleElements = alwaysVisibleButtons.map((buttonName) => buttons[buttonName]).filter(Boolean);
   const inlineActionElements = sortedInlineActionButtons.map((buttonName) => buttons[buttonName]).filter(Boolean) as React.ReactElement[];
   const trailingActionElements = trailingActionNames.map((buttonName) => buttons[buttonName]).filter(Boolean);
+  const queueButtonElement = buttons["queueSend"] ?? null;
   const sendButtonElement = sendButton ? buttons[sendButton] : null;
 
   return (
@@ -72,6 +75,7 @@ export function ButtonLayout({
       {alwaysVisibleElements}
       {inlineActionElements}
       {trailingActionElements}
+      {queueButtonElement}
       {sendButtonElement}
     </div>
   );

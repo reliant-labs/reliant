@@ -70,7 +70,7 @@ Current branch: fix/vite-base-absolute-deep-routes
 
 Main branch (you will usually use this for PRs): main
 
-Git user: Sean
+Git user: user
 
 Status:
 M electron/src/backend-auth.js

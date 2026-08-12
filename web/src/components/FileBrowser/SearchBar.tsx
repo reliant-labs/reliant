@@ -19,7 +19,7 @@ export function SearchBar({ value, onChange, isSearching = false }: SearchBarPro
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search files..."
-        className="w-full pl-8 pr-8 py-1.5 text-xs font-mono bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
+        className="w-full pl-8 pr-8 py-1.5 text-xs bg-background border border-border/60 rounded focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
       />
       {value && (
         <button

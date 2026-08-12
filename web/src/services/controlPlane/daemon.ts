@@ -45,14 +45,24 @@ export interface CreateDaemonArgs {
   gitBranch?: string;
 }
 
-export async function createDaemon(args: CreateDaemonArgs): Promise<void> {
-  await getControlPlaneClient(DaemonService).createDaemon({
+/**
+ * Creates a daemon and returns its id.
+ *
+ * The id matters to callers that must then wait for the machine: it only
+ * becomes usable once it registers with reliant, and identifying it by
+ * "whichever row is new" picks up unrelated daemons that happen to appear (or
+ * pre-existing ones the caller had not seen). Returns "" when the server
+ * declines to name it, so callers must handle that rather than assume.
+ */
+export async function createDaemon(args: CreateDaemonArgs): Promise<string> {
+  const res = await getControlPlaneClient(DaemonService).createDaemon({
     name: args.name,
     daemonType: args.daemonType,
     size: args.size,
     gitRepo: args.gitRepo ?? "",
     gitBranch: args.gitBranch ?? "",
   });
+  return res.daemon?.id ?? "";
 }
 
 export async function resumeDaemon(daemonId: string): Promise<void> {

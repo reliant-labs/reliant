@@ -64,12 +64,13 @@ func NewAnthropicClientWithOptions(opts llm.DriverOptions, extra ...option.Reque
 
 func (c *AnthropicClient) preparedMessages(prompts []string, messages []anthropic.MessageParam, tools []anthropic.ToolUnionParam) anthropic.MessageNewParams {
 	return anthropic.MessageNewParams{
-		Model:     anthropic.Model(c.options.Model.APIModel),
-		MaxTokens: c.options.MaxTokens,
-		Messages:  messages,
-		Tools:     tools,
-		Thinking:  c.getThinkingConfig(),
-		System:    c.prepareSystemPrompts(prompts),
+		Model:      anthropic.Model(c.options.Model.APIModel),
+		MaxTokens:  c.options.MaxTokens,
+		Messages:   messages,
+		Tools:      tools,
+		ToolChoice: c.toolChoice(c.options.ForceToolChoice),
+		Thinking:   c.getThinkingConfig(),
+		System:     c.prepareSystemPrompts(prompts),
 	}
 }
 

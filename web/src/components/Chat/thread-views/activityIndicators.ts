@@ -61,7 +61,7 @@ const INTERNAL_ACTIVITIES = new Set([
   "V2_FailStep",         // Internal failure handling
   "V2_SaveMessage",      // Produces messages (filtered separately)
   "V2_CallLLM",          // Produces messages (filtered separately)
-  "V2_Approval",         // Approvals shown separately via PermissionPrompt
+  "V2_Approval",         // Approvals rendered inline by ToolExecution
 ]);
 
 /**

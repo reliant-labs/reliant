@@ -15,8 +15,16 @@
  *   - the target is an input/textarea/contenteditable;
  *   - any of the modal flags are open;
  *   - the URL has `?tour=…` (defer to the onboarding tour).
- * It also `stopImmediatePropagation`s so it pre-empts ModernApp's global
- * keyboard shortcuts.
+ *
+ * SCOPE. These listeners are safe to keep outside the central shortcut
+ * dispatcher because the workflow builder lives on its own route (`/workflow/*`)
+ * and ModernApp — which mounts the dispatcher — only renders on `/` and
+ * `/project/$projectId`. There is no global handler here to race, and the
+ * `stopImmediatePropagation` below is defensive rather than load-bearing.
+ *
+ * If the dispatcher is ever mounted app-wide, these must move into the
+ * `workflow-canvas` context instead: an inner-context Escape shadows the global
+ * one by precedence, which gets the same result without the race.
  */
 
 import { useEffect } from "react";

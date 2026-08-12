@@ -43,6 +43,10 @@ func (m *recordingDaemonMgr) SendToolRequest(context.Context, string, *ToolExecu
 func (m *recordingDaemonMgr) SendToolRequestSync(context.Context, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return nil, nil
 }
+func (m *recordingDaemonMgr) SendToolExecutionBackground(context.Context, string, string, string) error {
+	return nil
+}
+
 func (m *recordingDaemonMgr) SendToolExecutionCancel(context.Context, string, string, string) error {
 	return nil
 }

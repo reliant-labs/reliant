@@ -10,9 +10,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -555,6 +555,12 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 		return fmt.Errorf("failed to get next ordinal: %w", err)
 	}
 
+	// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
+	nextSeq, err := s.database.GetNextSeq(ctx, chatID, lastAssistantMsg.ThreadID)
+	if err != nil {
+		return fmt.Errorf("failed to get next seq: %w", err)
+	}
+
 	// Create the denial message and content blocks atomically
 	now := time.Now().UTC()
 	messageID := uuid.New().String()
@@ -567,6 +573,7 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 			ID:              messageID,
 			ChatID:          chatID,
 			Ordinal:         nextOrdinal,
+			Seq:             nextSeq,
 			ThreadID:        lastAssistantMsg.ThreadID,
 			ContextWindowID: lastAssistantMsg.ContextWindowID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_TOOL,
@@ -641,15 +648,18 @@ func (s *ApprovalService) createDenialMessage(ctx context.Context, chatID string
 			})
 		}
 
-		updateData := map[string]interface{}{
-			"update_type":    "message",
-			"id":             messageID,
-			"chat_id":        chatID,
-			"ordinal":        nextOrdinal,
-			"thread":         lastAssistantMsg.ThreadID,
-			"role":           "tool",
-			"content_blocks": contentBlocksData,
-			"created_at":     now.Format(time.RFC3339),
+		// seq is what the client sorts by; without it this message
+		// deserializes at seq 0 and jumps to the top of the transcript.
+		updateData := db.MessageUpdateData{
+			UpdateType:    "message",
+			ID:            messageID,
+			ChatID:        chatID,
+			Seq:           nextSeq,
+			Ordinal:       nextOrdinal,
+			Thread:        lastAssistantMsg.ThreadID,
+			Role:          "tool",
+			ContentBlocks: contentBlocksData,
+			CreatedAt:     now.Format(time.RFC3339),
 		}
 
 		updateDataJSON, err := json.Marshal(updateData)

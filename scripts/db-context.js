@@ -97,7 +97,7 @@ function getEffectiveVar(name, envPorts) {
 
 function main() {
   const projectRoot = process.cwd();
-  const envPortsPath = path.join(projectRoot, '.env.ports');
+  const envPortsPath = path.join(projectRoot, '.dev-ports.sh');
   const envPorts = parseEnvPorts(envPortsPath);
 
   const computedDbName = deriveWorktreeDbName(projectRoot);
@@ -112,7 +112,7 @@ function main() {
   console.log(`DATABASE_DRIVER:   ${driver}`);
   console.log(`PGDATABASE:        ${pgDatabase || '(unset)'}`);
   console.log(`DATABASE_URL:      ${dbUrl || '(unset)'}`);
-  console.log(`.env.ports loaded: ${fs.existsSync(envPortsPath) ? 'yes' : 'no'}`);
+  console.log(`.dev-ports.sh loaded: ${fs.existsSync(envPortsPath) ? 'yes' : 'no'}`);
 
   if (driver === 'postgres' && !dbUrl) {
     console.log('\n⚠️  Postgres mode is active but DATABASE_URL is unset.');

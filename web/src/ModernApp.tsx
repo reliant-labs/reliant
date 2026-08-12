@@ -42,6 +42,7 @@ import { RescanModal } from "./components/Projects/RescanModal";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
 import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
+import { SequenceHint } from "./components/Layout/SequenceHint";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
@@ -64,7 +65,15 @@ import { useProcessStore } from "./store/processStore";
 
 import { isGrpcReady } from "./api/grpc-client";
 import { useNotificationStore, startPermissionRefresh } from "./store/notificationStore";
-import { useWorkspaceStateStore } from "./store/workspaceStateStore";
+import { useWorkspaceStateStore, type RightSidebarTab } from "./store/workspaceStateStore";
+import {
+  clearPane,
+  focusEventName,
+  focusPane,
+  focusPrevious,
+  isFocusWithin,
+  type Pane,
+} from "./lib/keyboard/focus";
 import { useWorkspaceRestore, useAutoSaveWorkspaceState } from "./hooks/useWorkspaceRestore";
 import { focusChatInput } from "./hooks/useFocusManager";
 import { useTourStore } from "./store/tourStore";
@@ -327,7 +336,14 @@ function App() {
     gitInitProjectInfo,
     checkGitInitialization,
     handleCloseGitInitModal,
+    handleDismissGitInit,
   } = useGitInitialization();
+
+  // Mirrored into a ref so the git-init effect can check "is the dialog
+  // already open?" without taking it as a dependency (which would re-run the
+  // effect the moment the modal opens).
+  const showGitInitModalRef = useRef(showGitInitModal);
+  showGitInitModalRef.current = showGitInitModal;
 
 
 
@@ -347,6 +363,7 @@ function App() {
   const [showQuickFileOpen, setShowQuickFileOpen] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showChatSearch, setShowChatSearch] = useState(false);
+  const [showChatSwitcher, setShowChatSwitcher] = useState(false);
 
   // Git initialization modal handlers
   const handleGitInitSuccess = useCallback(async () => {
@@ -421,7 +438,44 @@ function App() {
     setShowQuickFileOpen(false);
     setShowFindReplace(false);
     setShowChatSearch(false);
+    setShowChatSwitcher(false);
   }, []);
+
+  /** Reveal the right sidebar and select a tab. */
+  const showSidebarTab = useCallback(
+    (tab: RightSidebarTab) => {
+      const projectId = currentProject?.id;
+      if (!projectId) return;
+      setShowFileBrowser(true);
+      useWorkspaceStateStore
+        .getState()
+        .setRightSidebarTab(projectId, currentWorktree?.id ?? null, tab);
+    },
+    [currentProject?.id, currentWorktree?.id, setShowFileBrowser],
+  );
+
+  /**
+   * Move to the next/previous project in the sidebar's order.
+   *
+   * Wraps around, matching how chat cycling already behaves.
+   */
+  const cycleProject = useCallback(
+    async (direction: 1 | -1) => {
+      const { projects, currentProject: active, selectProject } =
+        useProjectStore.getState();
+      if (!projects || projects.length < 2) return;
+
+      const index = projects.findIndex((p) => p.id === active?.id);
+      if (index === -1) return;
+
+      const next =
+        projects[(index + direction + projects.length) % projects.length];
+      if (next && next.id !== active?.id) {
+        await selectProject(next);
+      }
+    },
+    [],
+  );
 
   // Memoize keyboard shortcut handlers to prevent recreation on every render
   const keyboardHandlers = useMemo(
@@ -615,8 +669,7 @@ function App() {
         // Clear active viewer
         const { setActiveViewer } = useViewerStore.getState();
         setActiveViewer(null);
-        // Focus the textarea - it will focus via the custom event
-        window.dispatchEvent(new CustomEvent("focus-chat-input"));
+        focusPane("chat-input");
       },
       onFocusFileEditor: () => {
         // Focus the active file editor
@@ -626,6 +679,8 @@ function App() {
             detail: { viewerId: activeViewerId } 
           }));
         }
+        // Tracked as a pane move so `focusPrevious` can come back here.
+        focusPane("editor");
       },
       onReopenLastClosedFile: () => {
         // Reopen the last closed file
@@ -645,10 +700,26 @@ function App() {
         window.dispatchEvent(new CustomEvent('file-tree-paste'));
       },
       onToggleFileBrowser: () => {
-        setShowFileBrowser((prev) => !prev);
+        setShowFileBrowser((prev) => {
+          const next = !prev;
+          // Closing a pane the cursor is inside would strand focus on a
+          // detached element, so hand it back to where it came from.
+          if (!next && isFocusWithin("right-sidebar")) {
+            clearPane("right-sidebar");
+            focusPrevious();
+          }
+          return next;
+        });
       },
       onToggleSidebar: () => {
-        setShowChatSidebar((prev) => !prev);
+        setShowChatSidebar((prev) => {
+          const next = !prev;
+          if (!next && isFocusWithin("left-sidebar")) {
+            clearPane("left-sidebar");
+            focusPrevious();
+          }
+          return next;
+        });
       },
       onOpenWorkflows: () => {
         navigate({ to: '/workflow' });
@@ -664,6 +735,105 @@ function App() {
         if (!projectId) return;
         const worktreeId = currentWorktree?.id ?? null;
         useWorkspaceStateStore.getState().prevRightSidebarTab(projectId, worktreeId);
+      },
+
+      // --- Right sidebar: direct tab access ---
+      // Selecting a tab also reveals the sidebar; jumping to a hidden tab would
+      // otherwise look like the shortcut did nothing.
+      onSidebarFiles: () => showSidebarTab("files"),
+      onSidebarChanges: () => showSidebarTab("changes"),
+      onSidebarTasks: () => showSidebarTab("tasks"),
+      onSidebarProcesses: () => showSidebarTab("processes"),
+      onSidebarBrowser: () => showSidebarTab("browser"),
+      onToggleRightSidebar: () => {
+        setShowFileBrowser((prev) => !prev);
+      },
+      onFocusRightSidebar: () => {
+        // Reveal before focusing — focusing a hidden pane does nothing.
+        setShowFileBrowser(true);
+        // The active tab's own arrow/Enter handling takes over from there; we
+        // deliberately do not implement sidebar-level item navigation.
+        focusPane("right-sidebar");
+      },
+      onFocusLeftSidebar: () => {
+        setShowChatSidebar(true);
+        focusPane("left-sidebar");
+      },
+      onFocusTranscript: () => {
+        focusPane("transcript");
+      },
+      onFocusTerminal: () => {
+        if (!isTerminalOpen) openTerminal();
+        focusPane("terminal");
+      },
+      onFocusPrevious: () => {
+        focusPrevious();
+      },
+      onRunPackageCommand: () => {
+        showSidebarTab("processes");
+        window.dispatchEvent(new CustomEvent("focus-right-sidebar"));
+      },
+
+      // --- Chat and project switching ---
+      onSwitchChat: () => {
+        closeAllModals();
+        setShowChatSwitcher(true);
+      },
+      onSwitchProject: () => {
+        closeAllModals();
+        handleNavigateToProjectPicker();
+      },
+      onSwitchWorktree: () => {
+        if (currentProject?.id) {
+          useViewerStore.getState().openWorktreesViewer(currentProject.id);
+        }
+      },
+      onNextProject: () => {
+        void cycleProject(1);
+      },
+      onPrevProject: () => {
+        void cycleProject(-1);
+      },
+
+      // --- Search ---
+      // Cmd+F inside Monaco resolves to the editor's own find via the `monaco`
+      // context, so this only runs when the editor does not have focus.
+      onEditorFind: () => {
+        // Registered as passthrough: Monaco's own keybinding opens the widget.
+        // Nothing to do here beyond letting the event continue.
+      },
+
+      // --- Parameters ---
+      onChangeModel: () => {
+        window.dispatchEvent(new CustomEvent("open-model-selector"));
+      },
+      onChangeThinkingLevel: () => {
+        window.dispatchEvent(new CustomEvent("cycle-thinking-level"));
+      },
+      onChangeWorkflow: () => {
+        window.dispatchEvent(new CustomEvent("open-workflow-selector"));
+      },
+      onEditWorkflowParams: () => {
+        window.dispatchEvent(new CustomEvent("open-workflow-params"));
+      },
+
+
+      onSlashCommands: () => {
+        // The composer owns the menu; focus it and ask it to open. Opening this
+        // way does NOT insert a slash, so it works mid-sentence.
+        window.dispatchEvent(new CustomEvent("focus-chat-input"));
+        window.dispatchEvent(new CustomEvent("open-slash-menu"));
+      },
+      onDismissSlashMenu: () => {
+        window.dispatchEvent(new CustomEvent("dismiss-slash-menu"));
+      },
+      onComposerNewline: () => {
+        window.dispatchEvent(new CustomEvent("composer-insert-newline"));
+      },
+      onNativeSelection: () => {
+        // Registered as passthrough so the editor's own selection handling runs.
+        // The entry exists purely to claim the chord in editing contexts and
+        // stop the global chat/panel navigation from firing there.
       },
     }),
 
@@ -687,6 +857,8 @@ function App() {
       setShowFileBrowser,
       setShowChatSidebar,
       navigate,
+      showSidebarTab,
+      cycleProject,
     ]
   );
 
@@ -866,8 +1038,52 @@ function App() {
     };
   }, []);
 
-  // Use app keyboard shortcuts with memoized handlers
-  useAppKeyboardShortcuts(keyboardHandlers);
+  // Use app keyboard shortcuts with memoized handlers. `pendingSequence` drives
+  // the on-screen hint so the Cmd+K bindings are discoverable rather than
+  // something you have to already know.
+  const { pendingSequence } = useAppKeyboardShortcuts(keyboardHandlers);
+
+  // Bridge pane-focus requests onto the events each pane already listens for.
+  //
+  // The panes predate the focus helper and each has its own established focus
+  // path (xterm's hidden textarea, the composer's contenteditable, FileTree's
+  // imperative handle). Translating here keeps that working rather than
+  // rewriting five components to listen for a second event.
+  useEffect(() => {
+    const bridges: Array<[Pane, string]> = [
+      ["chat-input", "focus-chat-input"],
+      ["terminal", "focus-terminal"],
+      ["right-sidebar", "focus-right-sidebar"],
+      ["left-sidebar", "focus-left-sidebar"],
+      ["transcript", "focus-transcript"],
+    ];
+
+    const unsubscribers = bridges.map(([pane, legacyEvent]) => {
+      const relay = () => window.dispatchEvent(new CustomEvent(legacyEvent));
+      const name = focusEventName(pane);
+      window.addEventListener(name, relay);
+      return () => window.removeEventListener(name, relay);
+    });
+
+    return () => unsubscribers.forEach((off) => off());
+  }, []);
+
+  // Bridge for surfaces that invoke an action by its shortcut handler name —
+  // currently the composer's slash menu and the command palette. Routing them
+  // through the same handler map means an action has ONE implementation no
+  // matter which of the three surfaces triggered it.
+  useEffect(() => {
+    const runShortcut = (event: Event) => {
+      const handlerName = (event as CustomEvent<{ handler?: string }>).detail
+        ?.handler;
+      if (!handlerName) return;
+      const handler = keyboardHandlers[handlerName as keyof typeof keyboardHandlers];
+      if (typeof handler === "function") handler();
+    };
+
+    window.addEventListener("run-shortcut", runShortcut);
+    return () => window.removeEventListener("run-shortcut", runShortcut);
+  }, [keyboardHandlers]);
 
   // Handle all Electron IPC events (menu commands, deep links, etc.)
   useElectronIPC({
@@ -1152,6 +1368,8 @@ function App() {
           return "running";
         case ChatActivity.AWAITING_INPUT:
           return "awaiting_input";
+        case ChatActivity.PAUSED:
+          return "paused";
         default:
           return "idle";
       }
@@ -1385,6 +1603,11 @@ function App() {
   const hasCompletedOnboarding = useTourStore((state) => state.hasCompletedOnboarding);
   const tourInitialized = useTourStore((state) => state.isInitialized);
   const { activeDaemon, loading: daemonStatusLoading } = useDaemonStatus();
+  // The git-init effect only needs to know *whether* a daemon is connected.
+  // Depending on the activeDaemon object itself re-runs the effect on every
+  // 5s poll, because the daemon carries live memory/port telemetry that
+  // changes each cycle and defeats React Query's structural sharing.
+  const hasActiveDaemon = Boolean(activeDaemon);
 
   // Check git initialization when a project is selected (use stable ID to avoid re-fires)
   // Skip during onboarding welcome to avoid dual modal confusion
@@ -1405,7 +1628,7 @@ function App() {
       // Don't prompt to initialize git if there's no daemon connected — the
       // operation runs on the daemon, so it would fail. Also covers the
       // brief window during daemon status fetch where we don't yet know.
-      if (daemonStatusLoading || !activeDaemon) {
+      if (daemonStatusLoading || !hasActiveDaemon) {
         logger.info("[ModernApp] Deferring git init check while no daemon is connected");
         return;
       }
@@ -1414,6 +1637,15 @@ function App() {
       // git-init modal so we never stack two modals on top of each other.
       if (useModalStore.getState().activeModal !== null) {
         logger.info("[ModernApp] Deferring git init check while another modal is open");
+        return;
+      }
+
+      // The git-init modal is not registered with the modal store, so the
+      // guard above cannot see it. Check it explicitly — otherwise the effect
+      // re-runs while the dialog is already open and refreshes the project out
+      // from under it.
+      if (showGitInitModalRef.current) {
+        logger.info("[ModernApp] Git init modal already open, skipping check");
         return;
       }
 
@@ -1447,7 +1679,7 @@ function App() {
     isBackendReady,
     tourInitialized,
     hasCompletedOnboarding,
-    activeDaemon,
+    hasActiveDaemon,
     daemonStatusLoading,
   ]);
 
@@ -1716,7 +1948,7 @@ function App() {
       {showGitInitModal && gitInitProjectInfo && currentProject && (
         <InitializeGitModal
           isOpen={showGitInitModal}
-          onClose={handleCloseGitInitModal}
+          onClose={handleDismissGitInit}
           onSuccess={handleGitInitSuccess}
           projectId={gitInitProjectInfo.id}
           projectName={gitInitProjectInfo.name}
@@ -1760,10 +1992,23 @@ function App() {
           navigate({ to: '/settings/$section', params: { section } });
         }}
       />
+      {/* Cmd+F — find within the conversation you are looking at. */}
       <ChatSearch
         isOpen={showChatSearch}
+        initialMode="current"
         onClose={() => setShowChatSearch(false)}
       />
+
+      {/* Cmd+E — quick-switch to another chat by name. Same component, opened
+          on its history tab, so there is one search UI rather than two. */}
+      <ChatSearch
+        isOpen={showChatSwitcher}
+        initialMode="history"
+        onClose={() => setShowChatSwitcher(false)}
+      />
+
+      {/* Shows the available second keys while a Cmd+K prefix is armed. */}
+      <SequenceHint pending={pendingSequence} />
 
       {/* Global Update Handler - shows update modal when updates are available */}
       <GlobalUpdateHandler />

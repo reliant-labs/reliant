@@ -47,19 +47,20 @@ func (s *Service) GetContextUsage(ctx context.Context, threadID string) (*Contex
 // produced the thread's current token count, mirroring the fork inheritance walk
 // in GetThreadTokenCount so the indicator's denominator tracks the same model
 // the trigger evaluates. Falls back to the global default when no model-bearing
-// message is found.
-func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID string, maxOrdinal *int64) int {
+// message is found. maxSeq bounds inheritance to a fork point, the same way
+// maxOrdinal used to -- see GetThreadTokenCount.
+func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID string, maxSeq *int64) int {
 	if threadID == "" {
 		return models.GlobalDefaultCompactionThreshold
 	}
 
-	maxSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
+	currentSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
 	if err != nil {
-		maxSeq = 0
+		currentSeq = 0
 	}
 
-	msg, err := s.repo.GetLatestMessageWithTokensInThread(ctx, threadID, maxSeq)
-	if err == nil && msg != nil && msg.TokenCount != nil && (maxOrdinal == nil || msg.Ordinal <= *maxOrdinal) {
+	msg, err := s.repo.GetLatestMessageWithTokensInThread(ctx, threadID, currentSeq)
+	if err == nil && msg != nil && msg.TokenCount != nil && (maxSeq == nil || msg.Seq <= *maxSeq) {
 		if msg.Model != nil {
 			return models.CompactionThresholdForModel(*msg.Model)
 		}
@@ -68,15 +69,18 @@ func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID strin
 
 	// No local token-bearing message — follow fork inheritance like GetThreadTokenCount.
 	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
-	if err != nil || thread.ParentThreadID == nil || thread.ForkAtOrdinal == nil {
+	if err != nil || thread.ParentThreadID == nil || thread.ForkAtMessageID == nil {
 		return models.GlobalDefaultCompactionThreshold
 	}
 	parentThreadID := *thread.ParentThreadID
 	if parentThreadID == threadID {
 		return models.GlobalDefaultCompactionThreshold
 	}
-	forkAtOrdinal := *thread.ForkAtOrdinal
-	return s.resolveCompactionThreshold(ctx, parentThreadID, &forkAtOrdinal)
+	forkMsg, err := s.repo.GetMessage(ctx, *thread.ForkAtMessageID)
+	if err != nil {
+		return models.GlobalDefaultCompactionThreshold
+	}
+	return s.resolveCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq)
 }
 
 // GetThreadTokenCount returns the context size (token count) for a thread.
@@ -85,43 +89,50 @@ func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID strin
 // Token counting logic:
 // 1. Find the latest message with token data in the current context sequence
 // 2. Return its token_count (which represents the context size the LLM saw)
-// 3. If no local tokens, recursively check parent thread at fork ordinal
-func (s *Service) GetThreadTokenCount(ctx context.Context, threadID string, maxOrdinal *int64) (int64, error) {
+// 3. If no local tokens, recursively check parent thread at the fork message's seq
+//
+// maxSeq bounds a recursive call to "no later than the fork point" -- the top-level
+// call always passes nil (the thread's own current state is unbounded).
+func (s *Service) GetThreadTokenCount(ctx context.Context, threadID string, maxSeq *int64) (int64, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	// Get thread to find conversation ID and fork metadata
+	// Get thread to find chat ID and fork metadata
 	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
 	if err != nil {
 		return 0, fmt.Errorf("thread not found: %w", err)
 	}
 
 	// Get current context sequence
-	maxSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
+	currentSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
 	if err != nil {
-		maxSeq = 0
+		currentSeq = 0
 	}
 
 	// Find latest message with token data
-	msg, err := s.repo.GetLatestMessageWithTokensInThread(ctx, threadID, maxSeq)
+	msg, err := s.repo.GetLatestMessageWithTokensInThread(ctx, threadID, currentSeq)
 	if err == nil && msg != nil && msg.TokenCount != nil {
 		return int64(*msg.TokenCount), nil
 	}
 
 	// No local token data - check for fork inheritance
-	if thread.ParentThreadID == nil || thread.ForkAtOrdinal == nil {
+	if thread.ParentThreadID == nil || thread.ForkAtMessageID == nil {
 		return 0, nil
 	}
 
 	parentThreadID := *thread.ParentThreadID
-	forkAtOrdinal := *thread.ForkAtOrdinal
 
 	// Guard against self-referential forks
 	if parentThreadID == threadID {
 		return 0, nil
 	}
 
+	forkMsg, err := s.repo.GetMessage(ctx, *thread.ForkAtMessageID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get fork message %s: %w", *thread.ForkAtMessageID, err)
+	}
+
 	// Recursively get parent's token count at the fork point
-	return s.GetThreadTokenCount(ctx, parentThreadID, &forkAtOrdinal)
+	return s.GetThreadTokenCount(ctx, parentThreadID, &forkMsg.Seq)
 }

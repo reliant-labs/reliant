@@ -10,14 +10,8 @@
 import { useEffect } from "react";
 import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import { logger } from "../lib/logger";
+import { applyRootFontSize } from "../lib/rootFontSize";
 
-const FONT_SIZE_MAP: Record<string, string> = {
-  xs: "12px",
-  sm: "13px",
-  md: "14px",
-  lg: "15px",
-  xl: "16px",
-};
 
 const COLOR_SCHEME_MAP: Record<string, string> = {
   blue: "professional-blue",
@@ -90,7 +84,7 @@ export function useThemeInitialization() {
       document.documentElement.dataset.font = font;
       document.documentElement.dataset.chatFont = chatFont;
       document.documentElement.dataset.editorFont = editorFont;
-      document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize] || "14px";
+      applyRootFontSize(fontSize);
       
       logger.debug("[Theme] Applied font settings from database:", { font, chatFont, editorFont, fontSize });
       

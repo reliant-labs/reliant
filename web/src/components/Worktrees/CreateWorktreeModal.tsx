@@ -43,9 +43,30 @@ export function CreateWorktreeModal({
   const currentProject = useProjectStore((state) => state.currentProject);
   const refreshCurrentProject = useProjectStore((state) => state.refreshCurrentProject);
   const [showInitGitModal, setShowInitGitModal] = useState(false);
+
+  // Discovered nested repos. The new worktree always spans ALL of them;
+  // there's no per-repo selection. We still load the list so we can show
+  // per-repo base-branch overrides when there are 2+ repos.
+  const [repos, setRepos] = useState<Repo[]>([]);
+  const [reposLoaded, setReposLoaded] = useState(false);
+
+  const isMultiRepo = repos.length > 1;
+
+  // The project-level branch dropdown is only rendered in the single-repo
+  // case; multi-repo uses free-text per-repo inputs instead. Fetching branches
+  // without a repo id in a multi-repo project would fail with
+  // "repo_id required in multi-repo projects", so scope the request to the one
+  // repo we're actually offering a dropdown for. Wait for the repo list before
+  // asking, otherwise the first request races and fires with no repo id.
+  const branchRepoId = repos.length === 1 ? repos[0].id : undefined;
+  const shouldLoadBranches = isOpen && reposLoaded && !isMultiRepo;
+
   // Only fetch branches when the modal is actually open to avoid duplicate RPCs
   // (multiple CreateWorktreeModal instances mount on page load with isOpen=false)
-  const { branches, isLoading: isBranchesLoading, error: branchesError, refetch: refetchBranches } = useBranches(isOpen ? projectId : undefined);
+  const { branches, isLoading: isBranchesLoading, error: branchesError, refetch: refetchBranches } = useBranches(
+    shouldLoadBranches ? projectId : undefined,
+    branchRepoId,
+  );
 
   // Find the default base branch:
   // 1. If sourceWorktreeBranch is provided (branching from existing workspace), use it
@@ -77,12 +98,13 @@ export function CreateWorktreeModal({
   });
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  // Refetch branches when modal opens
+  // Refetch branches when the modal opens, once we know the repo layout.
+  // Skipped for multi-repo, which has no project-level branch dropdown.
   useEffect(() => {
-    if (isOpen) {
+    if (shouldLoadBranches) {
       refetchBranches();
     }
-  }, [isOpen, refetchBranches]);
+  }, [shouldLoadBranches, refetchBranches]);
 
   // Update base_branch when branches load or sourceWorktreeBranch is provided
   useEffect(() => {
@@ -100,32 +122,28 @@ export function CreateWorktreeModal({
   const [normalizedName, setNormalizedName] = useState<string | null>(null);
   const [normalizedBranch, setNormalizedBranch] = useState<string | null>(null);
 
-  // Discovered nested repos. The new worktree always spans ALL of them;
-  // there's no per-repo selection. We still load the list so we can show
-  // per-repo base-branch overrides when there are 2+ repos.
-  const [repos, setRepos] = useState<Repo[]>([]);
-
   useEffect(() => {
     if (!isOpen || !projectId) return;
     let cancelled = false;
+    setReposLoaded(false);
     repoGrpc
       .list(projectId)
       .then(({ repos: loaded }) => {
         if (cancelled) return;
         setRepos(loaded);
+        setReposLoaded(true);
       })
       .catch((err) => {
         // Non-fatal: fall back to single-repo path if RepoService is unavailable.
         if (cancelled) return;
         logger.warn("[CreateWorktreeModal] Failed to list repos", { err });
         setRepos([]);
+        setReposLoaded(true);
       });
     return () => {
       cancelled = true;
     };
   }, [isOpen, projectId]);
-
-  const isMultiRepo = repos.length > 1;
 
   // Helper function to normalize names (replace spaces with hyphens, trim trailing spaces)
   const normalizeName = (value: string): string => {

@@ -10,6 +10,7 @@ import type { Setting } from "../api/settings-grpc";
 import { api } from "../api/client";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
+import { applyRootFontSize } from "../lib/rootFontSize";
 
 // Setting key prefixes for organization
 export const SETTINGS_KEYS = {
@@ -363,13 +364,6 @@ export class SettingsSyncService {
       logger.warn('[SettingsSync] No appearance settings found in localStorage - using defaults. Settings may not have loaded from database.');
     }
 
-    const FONT_SIZE_MAP: Record<string, string> = {
-      xs: "12px",
-      sm: "13px",
-      md: "14px",
-      lg: "15px",
-      xl: "16px",
-    };
 
     const COLOR_SCHEME_MAP: Record<string, string> = {
       blue: "professional-blue",
@@ -404,7 +398,7 @@ export class SettingsSyncService {
     document.documentElement.setAttribute("data-color-scheme", colorSchemeAttr);
 
     // Apply font settings
-    const font = this.getSetting(SETTINGS_KEYS.FONT, "system");
+    const font = this.getSetting(SETTINGS_KEYS.FONT, "default");
     const chatFont = this.getSetting(SETTINGS_KEYS.CHAT_FONT, "default");
     const editorFont = this.getSetting(SETTINGS_KEYS.EDITOR_FONT, "default");
     const fontSize = this.getSetting(SETTINGS_KEYS.FONT_SIZE, "md");
@@ -414,7 +408,7 @@ export class SettingsSyncService {
     document.documentElement.dataset.font = font;
     document.documentElement.dataset.chatFont = chatFont;
     document.documentElement.dataset.editorFont = editorFont;
-    document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize] || "14px";
+    applyRootFontSize(fontSize);
 
     this.settingsAppliedToDOM = true;
     

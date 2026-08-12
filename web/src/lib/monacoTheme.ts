@@ -2,6 +2,19 @@ import type { Monaco } from "@monaco-editor/react";
 import { initializeLanguageFeatures } from './monacoLanguageFeatures';
 import { CEL_DARK_TOKEN_RULES, CEL_LIGHT_TOKEN_RULES } from './monaco-cel-language';
 
+/**
+ * The monospace stack every Monaco instance should use.
+ *
+ * Monaco measures character width from its own `fontFamily` option, not from
+ * whatever CSS ends up painting the glyphs. Leaving the option unset while
+ * index.css restyles `.monaco-editor` makes the cursor and selection drift
+ * away from the text, so pass this to every editor's options and let the CSS
+ * rules agree with it. Leads with the bundled JetBrains Mono
+ * (web/public/fonts) so the editor looks the same on every platform.
+ */
+export const MONACO_FONT_FAMILY =
+  "'JetBrains Mono', ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace";
+
 // Helper to get CSS variable as hex
 const getCSSVar = (varName: string): string => {
   const root = document.documentElement;

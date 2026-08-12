@@ -2,6 +2,7 @@
 
 const { spawn } = require('child_process');
 const net = require('net');
+const { forwardSignals, exitCodeFor } = require('../src/child-signals');
 
 // Check if a port is available
 function checkPort(port) {
@@ -77,18 +78,15 @@ async function main() {
 
   console.log(`[dev-multi] ✓ Processes spawned in ${Date.now() - launchStart}ms`);
 
-  // Handle signals to ensure proper propagation
-  const handleSignal = (signal) => {
-    console.log(`\nReceived ${signal}, forwarding to child processes...`);
-    child.kill(signal);
-  };
-
-  process.on('SIGINT', () => handleSignal('SIGINT'));
-  process.on('SIGTERM', () => handleSignal('SIGTERM'));
+  // Forward termination down to concurrently, which -k fans out to both lanes.
+  // Shared with wait-and-start.js so the whole chain tears down the same way.
+  forwardSignals(child, {
+    onForward: (message) => console.log(`[dev-multi] ${message}`),
+  });
 
   child.on('exit', (code, signal) => {
     console.log(`Child process exited (code: ${code}, signal: ${signal})`);
-    process.exit(code || 0);
+    process.exit(exitCodeFor(code, signal));
   });
 }
 

@@ -78,16 +78,14 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
     }
   }
 
-  // Model-authored prose describing what `command` does, from the shell tool's
-  // optional `description` param. Not rendered yet — it is read here so the
-  // value is known to reach the renderer, and so wiring up a display later is a
-  // presentation change only. Absent on older tool calls and whenever the model
-  // omits it, so any future UI must treat it as optional.
-  const commandDescription =
-    typeof input === 'object' && input !== null && typeof input.description === 'string'
-      ? input.description
-      : undefined;
-  void commandDescription;
+  // The collapsed header shows the model-authored `description` when present, so
+  // the command itself is only visible here. Absent on older tool calls and
+  // whenever the model omits it, hence the optional handling.
+  const hasDescription =
+    typeof input === 'object' &&
+    input !== null &&
+    typeof input.description === 'string' &&
+    input.description.trim() !== '';
 
   // Parse structured output (must be before any early returns to satisfy Rules of Hooks)
   const parsed = useMemo(
@@ -108,14 +106,17 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
   const isMultiLine = command.includes('\n');
   const isShortCommand = !isMultiLine && command.length < SHORT_COMMAND_THRESHOLD;
 
-  // Show command input for long/multi-line commands, or during execution
-  const showCommandInput = !isShortCommand || (ctx.isExecuting && !result);
+  // Show command input for long/multi-line commands, or during execution. When
+  // the header is showing the description, it never showed the command, so the
+  // expanded area is the only place it appears.
+  const showCommandInput = hasDescription || !isShortCommand || (ctx.isExecuting && !result);
 
   // Prepend $ to command for display
   const displayCommand = `$ ${command}`;
 
-  // If short command with no output and not executing, render nothing (header is enough)
-  if (isShortCommand && !result && !ctx.isExecuting) {
+  // If the header already conveys everything (short command, no output, idle),
+  // render nothing rather than an empty expanded panel.
+  if (!showCommandInput && isShortCommand && !result && !ctx.isExecuting) {
     return null;
   }
 

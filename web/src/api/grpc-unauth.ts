@@ -23,7 +23,7 @@ import {
   StartOAuthSignInRequestSchema,
   SystemService,
 } from "../gen/reliant/v1/system_pb";
-import { buildLocalhostUrl, useSameOriginTransport } from "../lib/protocol";
+import { buildLocalhostUrl, isSameOriginTransport } from "../lib/protocol";
 import { buildInterceptors } from "./transport";
 
 // Minimal local logger. Avoids depending on `@/lib/logger` to keep the
@@ -40,7 +40,7 @@ const getGRPCBaseURL = (): string | null => {
   // the pre-auth DevAuth/OAuth bootstrap is CORS-free too. http(s)-served
   // renderer (web-dev AND electron-dev) ⇒ document origin ⇒ Vite proxies
   // `/reliant.v1.*` to reliant-api. file:// (packaged) falls through.
-  if (useSameOriginTransport()) {
+  if (isSameOriginTransport()) {
     return window.location.origin;
   }
 

@@ -11,6 +11,7 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { api, type Message } from "../../api/client";
 import { focusChatInput } from "../../hooks/useFocusManager";
+import { requestScrollToMessage } from "../../lib/scrollToMessage";
 
 type SearchMode = "history" | "current";
 
@@ -41,9 +42,17 @@ export interface ChatSearchRef {
 interface ChatSearchProps {
   isOpen?: boolean;
   onClose?: () => void;
+  /**
+   * Which tab to show when opened via the `isOpen` prop.
+   *
+   * "history" makes this a chat switcher (find a chat by name); "current"
+   * searches inside the open conversation. The imperative `open()` handle takes
+   * the same argument.
+   */
+  initialMode?: SearchMode;
 }
 
-export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: externalIsOpen, onClose }, ref) => {
+export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: externalIsOpen, onClose, initialMode }, ref) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   
   // Use external control if provided, otherwise use internal state
@@ -121,15 +130,18 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
   // Sync with external isOpen state
   useEffect(() => {
     if (externalIsOpen) {
+      const mode = initialMode ?? "current";
       setQuery("");
       setHighlightedIndex(0);
       setChatResults([]);
       setMessageResults([]);
-      setMode("history");
-      loadRecentChats();
+      setMode(mode);
+      // Seed the list only for the chat-switcher view; "current" searches the
+      // open conversation and has nothing to show until there is a query.
+      if (mode === "history") loadRecentChats();
       setTimeout(() => inputRef.current?.focus(), 50);
     }
-  }, [externalIsOpen, loadRecentChats]);
+  }, [externalIsOpen, initialMode, loadRecentChats]);
 
   // Search chat history
   const searchChatHistory = useCallback(async (searchQuery: string) => {
@@ -343,13 +355,21 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
       }
       navigateToChat(chat.id);
       selectChat(chat);
+
+      // When the hit was a specific message, land on it rather than dumping the
+      // user at the bottom of the conversation. The timeline for the new chat
+      // has not mounted yet, so the event has to wait for it — the listener
+      // ignores ids it cannot find, which is the same no-op as before if the
+      // message falls outside the loaded page.
+      if (result.matchedMessageId) {
+        requestScrollToMessage(result.matchedMessageId);
+      }
     }
     closeAndFocus();
   };
 
   // Scroll to message in current chat
   const scrollToMessage = (result: MessageSearchResult) => {
-    // Dispatch event to scroll to message
     window.dispatchEvent(new CustomEvent("scroll-to-message", {
       detail: { messageId: result.messageId }
     }));

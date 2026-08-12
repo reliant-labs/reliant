@@ -1,4 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+// FileViewerTab shows the shared machine-wait state, which reads daemon status
+// through React Query — so it needs a provider the way the real app has one.
+import { renderWithQuery as render } from "../../test/renderWithQuery";
 import { afterAll, beforeAll } from "vitest";
 import { FileViewerTab } from "./FileViewerTab";
 import type { FileNode } from "./index";
@@ -63,6 +66,7 @@ vi.mock("../../lib/monacoTheme", () => ({
   getMonacoLanguage: () => "typescript",
   configureMonacoTheme: vi.fn(),
   getCurrentMonacoTheme: () => "vs-dark",
+  MONACO_FONT_FAMILY: "'JetBrains Mono', monospace",
 }));
 
 vi.mock("sonner", () => ({

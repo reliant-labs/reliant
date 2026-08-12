@@ -11,6 +11,7 @@ import { ToolCallSettingsCompact } from "./ToolCallSettings";
 import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type SpawnDisplayMode } from "./SpawnDisplaySettings";
 
 import "./settings-range.css";
+import { FONT_SIZE_MAP, applyRootFontSize } from "../../lib/rootFontSize";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
 type ChatTimelineVariant = "compact" | "card" | "minimal";
@@ -21,13 +22,6 @@ const CHAT_TIMELINE_VARIANTS: Array<{ id: ChatTimelineVariant; label: string; de
   { id: "minimal", label: "Minimal", description: "Reduced chrome for dense timelines" },
 ];
 
-const FONT_SIZE_MAP: Record<FontSize, string> = {
-  xs: "12px",
-  sm: "13px",
-  md: "14px",
-  lg: "15px",
-  xl: "16px",
-};
 
 const FONT_SIZE_LABELS: Record<FontSize, string> = {
   xs: "Extra Small",
@@ -130,7 +124,7 @@ export function AppearanceSettings() {
   const setShowHiddenFiles = useUIStore((state) => state.setShowHiddenFiles);
 
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
-  const [font, setFont] = useState<string>("system");
+  const [font, setFont] = useState<string>("default");
   const [chatFont, setChatFont] = useState<string>("default");
   const [editorFont, setEditorFont] = useState<string>("default");
   // Whether the user wants a distinct monospace font for code, vs. letting the
@@ -159,7 +153,7 @@ export function AppearanceSettings() {
         (document.documentElement.classList.contains('dark') ? 'dark' : 'light');
       
       setTheme(themeValue);
-      setFont(readPref(SETTINGS_KEYS.FONT, "system"));
+      setFont(readPref(SETTINGS_KEYS.FONT, "default"));
       setChatFont(readPref(SETTINGS_KEYS.CHAT_FONT, "default"));
       const savedEditorFont = readPref(SETTINGS_KEYS.EDITOR_FONT, "default");
       setEditorFont(savedEditorFont);
@@ -243,7 +237,7 @@ export function AppearanceSettings() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    document.documentElement.style.fontSize = FONT_SIZE_MAP[fontSize];
+    applyRootFontSize(fontSize);
     // Sync to database
     settingsSync.setSetting(SETTINGS_KEYS.FONT_SIZE, fontSize).catch(console.error);
     // Force re-render by dispatching a custom event
@@ -358,7 +352,7 @@ export function AppearanceSettings() {
           <h3 className="text-sm font-semibold">Font Settings</h3>
           <button
             onClick={() => {
-              setFont("system");
+              setFont("default");
               setChatFont("default");
               setEditorFont("default");
               setUseCodeFont(false);
@@ -387,8 +381,8 @@ export function AppearanceSettings() {
               onChange={(e) => setFont(e.target.value)}
               className="block w-full px-3 py-2 bg-card border border-border/40 text-foreground rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary hover:border-border/80"
             >
-              <option value="system">System Default (Default)</option>
-              <option value="inter">Inter (Modern)</option>
+              <option value="default">Inter (Default)</option>
+              <option value="system">System Default</option>
               <option value="mono">JetBrains Mono</option>
               <option value="geist">Geist</option>
               <option value="comic">Comic Sans (Fun)</option>

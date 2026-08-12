@@ -303,6 +303,10 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 			TokenCount:   int64(openRouterResp.Usage.TotalTokens),
 			InputTokens:  int64(inputTokens),
 			OutputTokens: int64(outputTokens),
+			// Already parsed above for the debug line; carry them out so the
+			// cache split survives past this function.
+			CacheReadInputTokens:     int64(cacheReadTokens),
+			CacheCreationInputTokens: int64(cacheCreationTokens),
 		},
 	}, nil
 }

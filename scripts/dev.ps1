@@ -534,7 +534,7 @@ export TEMPORAL_FRONTEND_PORT=$TEMPORAL_FRONTEND_PORT
 export TEMPORAL_UI_PORT=$TEMPORAL_UI_PORT
 export PPROF_PORT=$PPROF_PORT
 $(if ($effectiveDbDriver -eq "postgres") { "export DATABASE_DRIVER=postgres`nexport DATABASE_URL=$($env:DATABASE_URL)`nexport PGDATABASE=$($env:PGDATABASE)`nexport PGHOST=$($env:PGHOST)`nexport PGPORT=$($env:PGPORT)`nexport PGUSER=$($env:PGUSER)`nexport PGSSLMODE=$($env:PGSSLMODE)`nexport RELIANT_POSTGRES_PORT=$($env:RELIANT_POSTGRES_PORT)" })
-"@ | Out-File -FilePath ".env.ports" -Encoding UTF8
+"@ | Out-File -FilePath ".dev-ports.sh" -Encoding UTF8
 
     # Kill any old processes on these ports
     Write-Step "Killing any old processes on these ports..."

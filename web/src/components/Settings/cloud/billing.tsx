@@ -51,6 +51,7 @@ import {
   formatCentsAsDollars,
   formatCurrencyFromWalletFields,
   formatDayLabel,
+  formatMachineMinutesWithHours,
   formatOverageRate,
   formatTimestampDate,
   getWalletBalanceState,
@@ -222,6 +223,7 @@ function OverviewTab({
         usage?.estimatedOverageCostCents ?? 0,
       ),
       pct,
+      grantedMinutesRemaining: usage?.grantedMinutesRemaining ?? 0,
     };
   }, [usage]);
 
@@ -428,6 +430,20 @@ function OverviewTab({
                   style={{ width: `${usageUi.pct}%` }}
                 />
               </div>
+              {usageUi.grantedMinutesRemaining > 0 && (
+                <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                  <div>
+                    <p className="font-medium text-foreground">Coupon minutes</p>
+                    <p className="text-xs text-muted-foreground">
+                      One-time, does not renew — spent after included hours,
+                      before overage
+                    </p>
+                  </div>
+                  <span className="font-medium text-foreground">
+                    {formatMachineMinutesWithHours(usageUi.grantedMinutesRemaining)}
+                  </span>
+                </div>
+              )}
               {usageUi.overageHours > 0 && (
                 <div className="mt-4 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
                   <span className="font-medium">
@@ -817,6 +833,7 @@ function UsageTab() {
       usedHours: (data?.usedMinutes ?? 0) / 60,
       overageHours: (data?.overageMinutes ?? 0) / 60,
       overageCost: formatCentsAsDollars(data?.estimatedOverageCostCents ?? 0),
+      grantedMinutesRemaining: data?.grantedMinutesRemaining ?? 0,
     }),
     [data],
   );
@@ -879,6 +896,19 @@ function UsageTab() {
             <UsageStat label="Overage" value={`${summary.overageHours.toFixed(1)} h`} />
             <UsageStat label="Estimated overage" value={summary.overageCost} />
           </div>
+
+          {/* Coupon grant is deliberately outside the four period stats above:
+              included/used/overage all reset with the billing period, while a
+              redeemed grant is a one-time bucket that carries over. */}
+          {summary.grantedMinutesRemaining > 0 && (
+            <UsageStat
+              label="Coupon minutes remaining"
+              value={formatMachineMinutesWithHours(
+                summary.grantedMinutesRemaining,
+              )}
+              hint="One-time bonus machine time from a redeemed coupon. Does not renew each period; used after your included hours, before overage."
+            />
+          )}
 
           <Card>
             <CardHeader>
@@ -964,7 +994,15 @@ function UsageTab() {
   );
 }
 
-function UsageStat({ label, value }: { label: string; value: string }) {
+function UsageStat({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
   return (
     <Card>
       <CardContent>
@@ -972,6 +1010,7 @@ function UsageStat({ label, value }: { label: string; value: string }) {
           {label}
         </p>
         <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
+        {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
       </CardContent>
     </Card>
   );

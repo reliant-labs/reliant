@@ -17,7 +17,41 @@
 #   - "Cmd+Alt+X"      → Cmd+Alt on Mac, Ctrl+Alt on Windows
 #   - "Cmd+Ctrl+X"     → Cmd+Ctrl on Mac, Ctrl+Alt on Windows (for double-modifier)
 #   - "Escape"         → Just the key, no modifiers
-#   - "Enter"          → Just the key, no modifiers
+#   - "Cmd+K C"        → SEQUENCE: press Cmd+K, release, then press C
+#
+# SEQUENCES:
+#   A space-separated binding is a sequence. The first chord arms a prefix and
+#   the next key completes it (1.5s timeout). Sequences are how we get rich
+#   shortcuts in a browser tab: once Cmd+K is captured, the following keystroke
+#   is ours alone and no browser chord can claim it.
+#
+# WEB BINDINGS:
+#   `binding` is the desktop (Electron) chord. `web_binding` overrides it in a
+#   browser tab. Omit web_binding when the chord works in both.
+#
+#   Browsers fall into three buckets, and the bucket decides whether an override
+#   is required:
+#     HARD-RESERVED — the page never receives the event; preventDefault cannot
+#       help. Cmd+T, Cmd+N, Cmd+W, Cmd+Shift+T. An override is MANDATORY.
+#     HOSTILE — interceptable, but overriding breaks a universal expectation
+#       (Cmd+P print, Cmd+F find, Cmd+L address bar, Cmd+S save). Override
+#       unless the app meaning is clearly the one the user wants in context.
+#     SAFE — no meaningful browser claim.
+#
+#   Verify before assuming SAFE: Cmd+Shift+C (DevTools inspect), Cmd+Shift+J
+#   (downloads), Cmd+Shift+B (bookmarks bar), and Cmd+Shift+P (Firefox private
+#   window) all look free but are not.
+#
+# CONTEXT:
+#   `context` names the focus surface where a shortcut applies. Resolution runs
+#   innermost-first, so an inner context shadows the same chord in an outer one
+#   and neither needs to know about the other. Valid values, innermost first:
+#     modal, slash-menu, monaco, terminal, chat-input, file-tree,
+#     workflow-canvas, right-sidebar, global
+#   Defaults to `global`.
+#
+#   `allow_in_input: true`  — let an UNMODIFIED binding fire while typing.
+#   `passthrough: true`     — run the handler but let the event continue.
 #
 # CATEGORIES:
 #   Categories group shortcuts in the UI settings panel and documentation.
@@ -26,32 +60,38 @@
 # ==============================================================================
 
 categories:
+  - "Focus"
   - "File & Window Management"
   - "Search & Navigation"
   - "Chat Navigation"
+  - "Project Navigation"
   - "File Navigation"
   - "Panel Navigation"
   - "Interface"
   - "Terminal"
   - "Chat Control"
+  - "Parameters"
 
 shortcuts:
   # ==================================
   # File & Window Management
   # ==================================
+  # Cmd+T / Cmd+W / Cmd+Shift+T are hard-reserved by every browser — the page
+  # never sees them — so the web variants go through the Cmd+K prefix.
   - id: newChat
     name: New Chat
     description: Create a new chat tab
     category: File & Window Management
     binding: Cmd+T
+    web_binding: Cmd+K T
     handler: onNewChat
-
 
   - id: openProject
     name: Open Project
     description: Open a new project directory
     category: File & Window Management
     binding: Cmd+O
+    web_binding: Cmd+K O
     handler: onOpenProject
 
   - id: closeTab
@@ -59,6 +99,7 @@ shortcuts:
     description: Close active file viewer tab or window
     category: File & Window Management
     binding: Cmd+W
+    web_binding: Cmd+K W
     handler: onCloseTab
 
   - id: openWorkflows
@@ -76,6 +117,7 @@ shortcuts:
     description: Open file by name (fuzzy search)
     category: Search & Navigation
     binding: Cmd+P
+    web_binding: Cmd+K P
     handler: onQuickFileOpen
 
   - id: commandPalette
@@ -99,19 +141,79 @@ shortcuts:
     binding: Cmd+Shift+H
     handler: onFindReplace
 
+  # Cmd+F is the universal "find in what I'm looking at" key, so it resolves by
+  # context rather than meaning one fixed thing: the editor keeps its own find,
+  # and everywhere else it searches the conversation. Registering the Monaco
+  # entry explicitly is what lets the dispatcher stay out of Monaco's way —
+  # this replaces the old hardcoded "skip Cmd+F if Monaco is focused" branch.
   - id: chatSearch
     name: Search Chats
-    description: Search in chat history and current chat
+    description: Search the current conversation and chat history
     category: Search & Navigation
-    binding: Cmd+Shift+C
+    binding: Cmd+F
+    context: global
     handler: onChatSearch
 
+  - id: editorFind
+    name: Find in File
+    description: Open the editor's find widget
+    category: Search & Navigation
+    binding: Cmd+F
+    context: monaco
+    passthrough: true
+    handler: onEditorFind
+
+  # ==================================
+  # Focus
+  # ==================================
+  # Moving the cursor between panes, the way clicking does.
+  #
+  # These share a shape on purpose — one modifier plus a letter that names the
+  # pane — so the set is learnable as a group rather than six unrelated chords.
+  # Cmd+1..9 would have been the obvious choice, but every browser uses it to
+  # switch tabs, so the letters keep desktop and web identical instead of
+  # splitting muscle memory across platforms.
+  #
+  # Each is a toggle-ish move: focusing a hidden pane reveals it first, and
+  # `focusPrevious` sends the cursor back where it came from when a pane is
+  # closed or dismissed. See web/src/lib/keyboard/focus.ts.
   - id: focusChat
     name: Focus Chat Input
-    description: Focus the chat input field (works from terminal or anywhere)
-    category: Search & Navigation
+    description: Move the cursor to the chat composer
+    category: Focus
     binding: Cmd+L
+    web_binding: Cmd+K L
     handler: onFocusChat
+
+  - id: focusTranscript
+    name: Focus Conversation
+    description: Move the cursor to the conversation, to scroll and read by keyboard
+    category: Focus
+    binding: Cmd+K C
+    handler: onFocusTranscript
+
+  - id: focusTerminal
+    name: Focus Terminal
+    description: Move the cursor to the terminal, opening it if hidden
+    category: Focus
+    binding: Cmd+K J
+    handler: onFocusTerminal
+
+  - id: focusLeftSidebar
+    name: Focus Chat List
+    description: Move the cursor to the left chat sidebar, opening it if hidden
+    category: Focus
+    binding: Cmd+K A
+    handler: onFocusLeftSidebar
+
+  # Returns to wherever focus was before the last pane move — the way out of
+  # any pane without needing to know which one you came from.
+  - id: focusPrevious
+    name: Return Focus
+    description: Send the cursor back to the pane it came from
+    category: Focus
+    binding: Cmd+K Escape
+    handler: onFocusPrevious
 
   # ==================================
   # Chat Navigation
@@ -120,15 +222,133 @@ shortcuts:
     name: Next Chat
     description: Switch to the next chat in the list (down)
     category: Chat Navigation
-    binding: Cmd+Ctrl+Down
+    binding: Cmd+Shift+Down
     handler: onNextChat
 
   - id: prevChat
     name: Previous Chat
     description: Switch to the previous chat in the list (up)
     category: Chat Navigation
-    binding: Cmd+Ctrl+Up
+    binding: Cmd+Shift+Up
     handler: onPrevChat
+
+  # Cmd+Shift+Arrow is "extend selection" in every text surface (to line
+  # start/end, to top/bottom of document). These entries claim the chord back
+  # for the editing contexts and pass it through untouched, so selection keeps
+  # working while the same chord navigates chats and panels everywhere else.
+  # This is the context system doing the job the old dispatcher did with
+  # hardcoded "if (isMonacoEditorFocused()) return" branches.
+  - id: selectionUpMonaco
+    name: Extend Selection Up
+    description: Native text selection in the editor
+    category: Chat Navigation
+    binding: Cmd+Shift+Up
+    context: monaco
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionDownMonaco
+    name: Extend Selection Down
+    description: Native text selection in the editor
+    category: Chat Navigation
+    binding: Cmd+Shift+Down
+    context: monaco
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionLeftMonaco
+    name: Extend Selection Left
+    description: Native text selection in the editor
+    category: Panel Navigation
+    binding: Cmd+Shift+Left
+    context: monaco
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionRightMonaco
+    name: Extend Selection Right
+    description: Native text selection in the editor
+    category: Panel Navigation
+    binding: Cmd+Shift+Right
+    context: monaco
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionUpComposer
+    name: Extend Selection Up (Composer)
+    description: Native text selection in the chat composer
+    category: Chat Navigation
+    binding: Cmd+Shift+Up
+    context: chat-input
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionDownComposer
+    name: Extend Selection Down (Composer)
+    description: Native text selection in the chat composer
+    category: Chat Navigation
+    binding: Cmd+Shift+Down
+    context: chat-input
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionLeftComposer
+    name: Extend Selection Left (Composer)
+    description: Native text selection in the chat composer
+    category: Panel Navigation
+    binding: Cmd+Shift+Left
+    context: chat-input
+    passthrough: true
+    handler: onNativeSelection
+
+  - id: selectionRightComposer
+    name: Extend Selection Right (Composer)
+    description: Native text selection in the chat composer
+    category: Panel Navigation
+    binding: Cmd+Shift+Right
+    context: chat-input
+    passthrough: true
+    handler: onNativeSelection
+
+  # Quick-switcher: a searchable chat list, the way Cmd+P works for files.
+  # Cmd+E is free in every browser we care about.
+  - id: switchChat
+    name: Switch Chat
+    description: Open the chat switcher to jump to any chat by name
+    category: Chat Navigation
+    binding: Cmd+E
+    handler: onSwitchChat
+
+  - id: switchWorktree
+    name: Switch Branch Chat
+    description: Jump between branched (worktree) chats
+    category: Chat Navigation
+    binding: Cmd+K B
+    handler: onSwitchWorktree
+
+  # ==================================
+  # Project Navigation
+  # ==================================
+  - id: switchProject
+    name: Switch Project
+    description: Open the project switcher to jump to any project
+    category: Project Navigation
+    binding: Cmd+Shift+E
+    handler: onSwitchProject
+
+  - id: nextProject
+    name: Next Project
+    description: Switch to the next project
+    category: Project Navigation
+    binding: Cmd+K Right
+    handler: onNextProject
+
+  - id: prevProject
+    name: Previous Project
+    description: Switch to the previous project
+    category: Project Navigation
+    binding: Cmd+K Left
+    handler: onPrevProject
 
   # ==================================
   # File Navigation
@@ -147,11 +367,15 @@ shortcuts:
     binding: Cmd+Shift+[
     handler: onPrevFileTab
 
+  # Was Cmd+F, which shadowed every "find" the user actually meant: pressing it
+  # anywhere focused the editor instead of searching. Cmd+F now belongs to
+  # search (chatSearch globally, editorFind inside Monaco), and focusing the
+  # editor joined the Focus family above.
   - id: focusFileEditor
     name: Focus File Editor
-    description: Focus the active file editor
-    category: File Navigation
-    binding: Cmd+F
+    description: Move the cursor to the active file editor
+    category: Focus
+    binding: Cmd+K E
     handler: onFocusFileEditor
 
   - id: reopenLastClosedFile
@@ -159,13 +383,19 @@ shortcuts:
     description: Reopen the most recently closed file
     category: File Navigation
     binding: Cmd+Shift+T
+    web_binding: Cmd+K Z
     handler: onReopenLastClosedFile
 
+  # Scoped to the file tree so they never shadow real clipboard operations.
+  # Previously these were global and the dispatcher hand-checked for a text
+  # selection and a `.file-tree-container` ancestor on every Cmd+C; the context
+  # now expresses that directly.
   - id: cutFile
     name: Cut File
     description: Cut selected file for moving
     category: File Navigation
     binding: Cmd+X
+    context: file-tree
     handler: onCutFile
 
   - id: copyFile
@@ -173,6 +403,7 @@ shortcuts:
     description: Copy selected file
     category: File Navigation
     binding: Cmd+C
+    context: file-tree
     handler: onCopyFile
 
   - id: pasteFile
@@ -180,6 +411,7 @@ shortcuts:
     description: Paste file to current location
     category: File Navigation
     binding: Cmd+V
+    context: file-tree
     handler: onPasteFile
 
   # ==================================
@@ -189,15 +421,81 @@ shortcuts:
     name: Next Right Sidebar Tab
     description: Switch to the next right sidebar tab (files, changes, tasks, processes, browser)
     category: Panel Navigation
-    binding: Cmd+Ctrl+Right
+    binding: Cmd+Shift+Right
     handler: onNextRightSidebarTab
 
   - id: prevRightSidebarTab
     name: Previous Right Sidebar Tab
     description: Switch to the previous right sidebar tab
     category: Panel Navigation
-    binding: Cmd+Ctrl+Left
+    binding: Cmd+Shift+Left
     handler: onPrevRightSidebarTab
+
+  # Direct access to each sidebar tab. Cmd+1..5 is claimed by browsers for tab
+  # switching, so these use the Cmd+K prefix on both platforms — keeping one
+  # muscle memory rather than splitting it desktop/web.
+  - id: sidebarFiles
+    name: Show Files
+    description: Open the right sidebar to the files tab
+    category: Panel Navigation
+    binding: Cmd+K F
+    handler: onSidebarFiles
+
+  - id: sidebarChanges
+    name: Show Changes
+    description: Open the right sidebar to the source-control changes tab
+    category: Panel Navigation
+    binding: Cmd+K G
+    handler: onSidebarChanges
+
+  - id: sidebarTasks
+    name: Show Tasks
+    description: Open the right sidebar to the tasks tab
+    category: Panel Navigation
+    binding: Cmd+K K
+    handler: onSidebarTasks
+
+  - id: sidebarProcesses
+    name: Show Processes & Packages
+    description: Open the right sidebar to the processes and package commands tab
+    category: Panel Navigation
+    binding: Cmd+K R
+    handler: onSidebarProcesses
+
+  - id: sidebarBrowser
+    name: Show Browser
+    description: Open the right sidebar to the browser tab
+    category: Panel Navigation
+    binding: Cmd+K V
+    handler: onSidebarBrowser
+
+  # Stays on Cmd+Shift+B rather than joining the Cmd+K family: Cmd+K B is taken
+  # by "switch branch chat", and pairing with Cmd+B (toggle the same panel) is a
+  # stronger association than matching the other focus bindings.
+  - id: focusRightSidebar
+    name: Focus Right Sidebar
+    description: Move the cursor to the right sidebar, opening it if hidden
+    category: Focus
+    binding: Cmd+Shift+B
+    handler: onFocusRightSidebar
+
+  # NOTE: there are deliberately no arrow/Enter shortcuts for moving within the
+  # sidebar. The tabs already own that: FileTree handles arrows, Enter, and
+  # expand/collapse on a capture-phase listener, and RecentChanges handles
+  # arrows, Enter, and shift-range selection. A generic sidebar-level handler
+  # would race those and win, replacing navigation that is richer than anything
+  # it could offer. `focusRightSidebar` hands focus to the active tab and lets
+  # its existing keys take over.
+
+  # Jumps to the package/process tab and focuses it, so the command list is
+  # keyboard-reachable. There is no separate "runner" UI to open — the tab IS
+  # the browsable list of npm/cargo/poetry commands.
+  - id: runPackageCommand
+    name: Package Commands
+    description: Show package commands and running processes
+    category: Panel Navigation
+    binding: Cmd+K N
+    handler: onRunPackageCommand
 
   # ==================================
   # Interface
@@ -209,19 +507,28 @@ shortcuts:
     binding: Cmd+,
     handler: onToggleSettings
 
+  # Left and right sidebars are the two halves of the same idea, so they share a
+  # mnemonic: Cmd+B for the right (files/changes/tasks), Cmd+Alt+B for the left
+  # (chat list). Cmd+Shift+B is the right sidebar's focus variant.
   - id: toggleSidebar
     name: Toggle Chat Sidebar
     description: Show or hide the left chat sidebar
     category: Interface
-    binding: Cmd+Shift+B
+    binding: Cmd+Alt+B
     handler: onToggleSidebar
 
+  # Cmd+B toggles the right sidebar. `toggleRightSidebar` used to be a second
+  # binding for the identical action (both flipped showFileBrowser), which meant
+  # two shortcuts silently did the same thing; it is now the focus-or-hide
+  # variant that gives the sidebar keyboard focus instead of just revealing it.
   - id: toggleFileBrowser
-    name: Toggle File Browser
-    description: Show or hide the right file browser sidebar
+    name: Toggle Right Sidebar
+    description: Show or hide the right sidebar
     category: Interface
     binding: Cmd+B
     handler: onToggleFileBrowser
+
+
 
   # ==================================
   # Terminal
@@ -243,11 +550,15 @@ shortcuts:
   # ==================================
   # Chat Control
   # ==================================
+  # Escape must reach the composer while the user is typing — that is its whole
+  # job — so it opts in explicitly. Modals and the workflow canvas register
+  # their own Escape in an inner context, which shadows this one automatically.
   - id: stopStreaming
     name: Stop AI Response
     description: Stop the current AI response generation
     category: Chat Control
     binding: Escape
+    allow_in_input: true
     handler: onStopStreaming
 
   - id: approveToolRequests
@@ -256,3 +567,73 @@ shortcuts:
     category: Chat Control
     binding: Cmd+Enter
     handler: onApproveToolRequests
+
+  # In the composer, Cmd+Enter inserts a newline instead of approving. This used
+  # to be a window capture-phase listener in ChatTextArea that stopPropagation'd
+  # before the dispatcher ran, which meant approveToolRequests was dead whenever
+  # the composer had focus — i.e. almost always. Expressing it as a context now
+  # gives the same behavior without the race.
+  - id: composerNewline
+    name: Insert Newline
+    description: Insert a line break in the chat composer
+    category: Chat Control
+    binding: Cmd+Enter
+    context: chat-input
+    handler: onComposerNewline
+
+  - id: slashCommands
+    name: Slash Commands
+    description: Open the slash command menu in the chat composer
+    category: Chat Control
+    binding: Cmd+/
+    handler: onSlashCommands
+
+  # Escape must close the slash menu rather than stopping the AI response.
+  # Registered in the `slash-menu` context so it SHADOWS stopStreaming while the
+  # menu is open, and disappears the moment it closes. Without this entry the
+  # global Escape wins and the menu can only be dismissed by deleting the text.
+  - id: dismissSlashMenu
+    name: Dismiss Slash Menu
+    description: Close the slash command menu
+    category: Chat Control
+    binding: Escape
+    context: slash-menu
+    allow_in_input: true
+    handler: onDismissSlashMenu
+
+  # ==================================
+  # Parameters
+  # ==================================
+  # Changing what the next turn runs with, without leaving the keyboard.
+  - id: changeModel
+    name: Change Model
+    description: Open the model picker for the current chat
+    category: Parameters
+    binding: Cmd+K M
+    handler: onChangeModel
+
+  - id: changeThinkingLevel
+    name: Change Thinking Level
+    description: Cycle the reasoning effort for models that support it
+    category: Parameters
+    binding: Cmd+K H
+    handler: onChangeThinkingLevel
+
+  - id: changeWorkflow
+    name: Change Workflow
+    description: Pick the workflow the next message runs
+    category: Parameters
+    binding: Cmd+K Y
+    handler: onChangeWorkflow
+
+  - id: editWorkflowParams
+    name: Edit Workflow Parameters
+    description: Open the parameter panel for the selected workflow
+    category: Parameters
+    binding: Cmd+K I
+    handler: onEditWorkflowParams
+
+  # NOTE: an "edit the focused parameter" binding in the workflow-canvas context
+  # was removed rather than shipped dead — nothing in the workflow builder marks
+  # itself with data-context="workflow-canvas", so the shortcut could never
+  # resolve. Add the marker to the canvas first, then reintroduce the binding.

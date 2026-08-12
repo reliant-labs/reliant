@@ -183,6 +183,23 @@ type mockRepo struct {
 	reapErr   error
 	reapCalls int
 	callOrder []string
+
+	strandedSpawns    []*db.ToolCall
+	strandedSpawnsErr error
+
+	strandedBackgroundSpawns     []*db.StrandedBackgroundSpawn
+	strandedBackgroundSpawnsErr  error
+	enqueuedAgentMessages        []*db.AgentMessage
+	enqueueAgentMessageInsertsFn func(*db.AgentMessage) (bool, error)
+
+	// Orphaned-mailbox sweep: the threads the query reports as terminal-with-
+	// queued-rows, how many rows each resolve moves, and the threads actually
+	// resolved (so a test can assert a live thread's queue was never touched).
+	orphanedMailboxThreads    []string
+	orphanedMailboxErr        error
+	orphanedMailboxRows       map[string]int64
+	orphanedMailboxResolveErr error
+	resolvedMailboxThreads    []string
 }
 
 type savedMessage struct {
@@ -276,6 +293,55 @@ func (m *mockRepo) ReapOrphanedWorkflowDescendants(_ context.Context) (int64, er
 	m.reapCalls++
 	m.callOrder = append(m.callOrder, "reap")
 	return m.reapRows, m.reapErr
+}
+
+// The embedded db.Repository is a nil interface, so every method the pass calls
+// must be implemented here or it panics. The stranded-spawn repair runs on
+// every pass; the default is "nothing stranded".
+func (m *mockRepo) ListStrandedSpawnToolCalls(_ context.Context) ([]*db.ToolCall, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callOrder = append(m.callOrder, "repair_stranded_spawns")
+	return m.strandedSpawns, m.strandedSpawnsErr
+}
+
+// Same rule as ListStrandedSpawnToolCalls above: the background-spawn repair
+// also runs on every pass, so it needs an always-present mock method too.
+func (m *mockRepo) ListStrandedBackgroundSpawnToolCalls(_ context.Context) ([]*db.StrandedBackgroundSpawn, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.callOrder = append(m.callOrder, "repair_stranded_background_spawns")
+	return m.strandedBackgroundSpawns, m.strandedBackgroundSpawnsErr
+}
+
+func (m *mockRepo) EnqueueAgentMessageIfAbsent(_ context.Context, msg *db.AgentMessage) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.enqueueAgentMessageInsertsFn != nil {
+		inserted, err := m.enqueueAgentMessageInsertsFn(msg)
+		if inserted {
+			m.enqueuedAgentMessages = append(m.enqueuedAgentMessages, msg)
+		}
+		return inserted, err
+	}
+	m.enqueuedAgentMessages = append(m.enqueuedAgentMessages, msg)
+	return true, nil
+}
+
+func (m *mockRepo) ListThreadsWithOrphanedAgentMessages(_ context.Context) ([]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.orphanedMailboxThreads, m.orphanedMailboxErr
+}
+
+func (m *mockRepo) MarkQueuedAgentMessagesUndeliveredForThread(_ context.Context, toThreadID string) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.orphanedMailboxResolveErr != nil {
+		return 0, m.orphanedMailboxResolveErr
+	}
+	m.resolvedMailboxThreads = append(m.resolvedMailboxThreads, toThreadID)
+	return m.orphanedMailboxRows[toThreadID], nil
 }
 
 // --- Helper to build DescribeWorkflowExecution responses ---

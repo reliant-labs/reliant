@@ -17,13 +17,21 @@ import (
 
 // fakeDaemonRouter implements toolexec.DaemonRouter for test assertions.
 type fakeDaemonRouter struct {
-	cancelCalls []forwardCancelCall
+	cancelCalls     []forwardCancelCall
+	backgroundCalls []forwardBackgroundCall
+	backgroundErr   error
 }
 
 type forwardCancelCall struct {
 	userID    string
 	requestID string
 	reason    string
+}
+
+type forwardBackgroundCall struct {
+	userID     string
+	requestID  string
+	toolCallID string
 }
 
 func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) {
@@ -35,6 +43,10 @@ func (f *fakeDaemonRouter) SendToolRequest(ctx context.Context, userID string, r
 func (f *fakeDaemonRouter) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
 	f.cancelCalls = append(f.cancelCalls, forwardCancelCall{userID: userID, requestID: requestID, reason: reason})
 	return nil
+}
+func (f *fakeDaemonRouter) SendToolExecutionBackground(_ context.Context, userID, requestID, toolCallID string) error {
+	f.backgroundCalls = append(f.backgroundCalls, forwardBackgroundCall{userID: userID, requestID: requestID, toolCallID: toolCallID})
+	return f.backgroundErr
 }
 func (f *fakeDaemonRouter) SendKillProcess(ctx context.Context, userID, processID string) error {
 	return nil
@@ -104,7 +116,7 @@ func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
 		LastActive: now,
 	}))
 
-	_, err := repo.CreateThread(ctx, &db.Thread{ID: threadID, ConversationID: chatID, CreatedAt: now})
+	_, err := repo.CreateThread(ctx, &db.Thread{ID: threadID, ChatID: chatID, CreatedAt: now})
 	require.NoError(t, err)
 
 	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{ID: cwID, ThreadID: threadID, Sequence: 0, CreatedAt: now})
@@ -114,6 +126,7 @@ func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
 		ID:              messageID,
 		ChatID:          chatID,
 		Ordinal:         1,
+		Seq:             1,
 		ThreadID:        threadID,
 		ContextWindowID: cwID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,

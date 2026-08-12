@@ -27,6 +27,32 @@ export const STEP_LABELS: Record<OnboardingStepId, string> = {
   'project-picker': 'Project',
 };
 
+/** Max width of the onboarding card, per step.
+ *
+ *  Text-and-form steps want a readable measure, so they stay narrow. The
+ *  compute step leads with the daemon-topology diagram, which scales itself
+ *  down to fit its container (see DaemonConnectionDiagrams) — inside the
+ *  narrow card it rendered at roughly three-quarter size and the node labels
+ *  got small enough to skim past.
+ *
+ *  The wide value is derived, not eyeballed: the diagram's intrinsic 1060px
+ *  plus its own 40px of section padding plus the card's 64px of horizontal
+ *  padding. That lands it at exactly 1:1, and since the diagram caps itself
+ *  at its intrinsic width, going wider would only pad the sides.
+ *
+ *  Width is keyed on the STEP, not on what the step is currently showing, so
+ *  the card only ever resizes on a step transition.
+ */
+const STEP_MAX_WIDTH_DEFAULT = 'max-w-[840px]';
+
+export const STEP_MAX_WIDTH: Partial<Record<OnboardingStepId, string>> = {
+  'compute': 'max-w-[1164px]',
+};
+
+export function stepMaxWidth(step: OnboardingStepId): string {
+  return STEP_MAX_WIDTH[step] ?? STEP_MAX_WIDTH_DEFAULT;
+}
+
 /** All steps that *would* appear in the user's onboarding given the plan
  *  branch they're on. Used only by the progress bar; current-step
  *  selection is via `deriveStep` below.

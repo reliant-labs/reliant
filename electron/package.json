@@ -19,7 +19,7 @@
     "build:backend": "cd .. && go build -buildvcs=false -o dist/reliant.tmp ./cmd/reliant/ && mv dist/reliant.tmp dist/reliant",
     "dev:vite": "npm --prefix ../web run dev",
     "dev:electron": "node scripts/wait-and-start.js",
-    "test": "node --test test/backend-auth.test.js test/daemon-creds.test.js test/backend-manager-readiness.test.js",
+    "test": "node --test test/backend-auth.test.js test/daemon-creds.test.js test/backend-manager-readiness.test.js test/menu-accelerators.test.js test/navigation-policy.test.js test/child-signals.test.js",
     "build:web": "cd ../web && npm run build:alpha",
     "build:web:alpha": "cd ../web && npm run build:alpha",
     "build": "npm run build:web && ../scripts/build-electron.sh mac && electron-builder",

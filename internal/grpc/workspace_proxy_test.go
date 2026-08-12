@@ -38,6 +38,10 @@ func (stubDaemonRouter) SendToolRequestSync(context.Context, string, *toolexec.T
 func (stubDaemonRouter) SendToolRequestSyncWithSelector(context.Context, string, *toolexec.ToolExecutionRequest, *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
 	return nil, nil
 }
+func (stubDaemonRouter) SendToolExecutionBackground(context.Context, string, string, string) error {
+	return nil
+}
+
 func (stubDaemonRouter) SendToolExecutionCancel(context.Context, string, string, string) error {
 	return nil
 }

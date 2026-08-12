@@ -119,7 +119,11 @@ export function Modal({
 
   const modalContent = (
     <div 
-      className="fixed inset-0 z-50 isolate flex items-center justify-center p-4 sm:p-6"
+      // `h-[100dvh]` alongside `inset-0` for the same reason as the panel's
+      // max-height: a `fixed inset-0` overlay resolves against the largest
+      // viewport on mobile, so centring inside it puts the panel's midpoint
+      // below the visible centre and it drifts as browser chrome animates.
+      className="fixed inset-0 h-[100dvh] z-50 isolate flex items-center justify-center p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
@@ -135,7 +139,11 @@ export function Modal({
         ref={modalRef}
         className={cn(
           "relative border border-border/50 rounded-xl",
-          "w-full max-h-[90vh] overflow-hidden flex flex-col",
+          // `dvh`, not `vh`: on mobile browsers `vh` is locked to the viewport
+          // with the URL bar *hidden*, so a modal sized in `vh` is laid out
+          // taller than the space actually visible and then appears to jump
+          // when the bar shows or hides. `dvh` tracks the live viewport.
+          "w-full max-h-[90dvh] overflow-hidden flex flex-col",
           "elevation-5",
           "animate-in fade-in-0 zoom-in-95 duration-200",
           sizeClasses[size],

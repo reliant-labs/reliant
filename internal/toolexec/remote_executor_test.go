@@ -14,6 +14,10 @@ func (r *routerStub) IsDaemonOnline(_ context.Context, userID string) (bool, err
 func (r *routerStub) SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error {
 	return nil
 }
+func (r *routerStub) SendToolExecutionBackground(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
 func (r *routerStub) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
 	return nil
 }

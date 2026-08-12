@@ -155,7 +155,12 @@ func (t *AddDependencyTool) resolveTask(rctx *rctx.ToolContext, taskRef string) 
 		if err != nil {
 			return "", nil, err
 		}
-		task, err := t.repo.GetTaskByPosition(rctx.Context, plan.ID, position)
+		// 1-indexed, as list_tasks displays and create_plan documents;
+		// GetTaskByPosition slices 0-indexed.
+		if position < 1 {
+			return "", nil, fmt.Errorf("task position %d is out of range: task numbering starts at 1", position)
+		}
+		task, err := t.repo.GetTaskByPosition(rctx.Context, plan.ID, position-1)
 		if err != nil {
 			return "", nil, err
 		}
@@ -266,13 +271,16 @@ func (t *ListReadyTasksTool) Execute(rctx *rctx.ToolContext, params ListReadyTas
 		return NewTextErrorResponse("No thread context available"), nil
 	}
 
-	plan, err := t.repo.GetPlanByThreadID(rctx.Context, threadID)
+	// A read: walk up to the ancestor's plan so a sub-agent can see what is
+	// ready on the board it was spawned from.
+	resolved, err := resolvePlanForRead(rctx.Context, t.repo, threadID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return NewTextErrorResponse("No plan found for this thread."), nil
 		}
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find plan: %v", err)), nil
 	}
+	plan := resolved.plan
 
 	allTasks, err := t.repo.ListTasksByPlan(rctx.Context, plan.ID)
 	if err != nil {

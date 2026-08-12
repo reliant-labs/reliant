@@ -235,9 +235,18 @@ func categorizeError(err error) string {
 
 const (
 	// activityHeartbeatInterval is how often ActivityWrapper heartbeats while an
-	// activity runs. With MaxHeartbeatThrottleInterval=500ms on the worker
-	// (internal/workersetup), every tick reaches the server, so a server-side
-	// cancellation propagates within ~500ms.
+	// activity runs.
+	//
+	// The worker throttles these to MaxHeartbeatThrottleInterval (3s, see
+	// internal/workersetup) — that value is also the heartbeat RPC's deadline,
+	// which is why it is no longer 500ms. So ticks at this cadence are
+	// coalesced, and a server-side cancellation propagates within ~3s rather
+	// than ~500ms.
+	//
+	// The interval is deliberately left BELOW the throttle: it costs nothing
+	// (the SDK drops the surplus), and it means a heartbeat is always ready to
+	// go the moment the throttle window opens, rather than adding its own
+	// latency on top.
 	activityHeartbeatInterval = 500 * time.Millisecond
 
 	// activityHeartbeatTimeout is how long Temporal waits for a heartbeat before
@@ -249,10 +258,64 @@ const (
 	// It deliberately does NOT need to cover a rebuild: a restarted worker is a
 	// new worker and never reclaims the old activity task, so stretching this
 	// only lengthens the dead air before the retry can start. Sizing is against
-	// the heartbeat cadence instead — 20 consecutive missed heartbeats — which
-	// leaves ample margin for a machine pinned by `go build`.
-	activityHeartbeatTimeout = 10 * time.Second
+	// the EFFECTIVE heartbeat cadence, which is the worker's throttle interval
+	// (3s), not activityHeartbeatInterval — the SDK coalesces the surplus ticks.
+	//
+	// 30s is ten consecutive missed heartbeats at that cadence. It was 10s when
+	// the throttle was 500ms; leaving it there after raising the throttle would
+	// have meant barely three missed beats, so a machine briefly pinned by
+	// `go build` could trip a false "worker died" and have its activity
+	// re-dispatched underneath it. The two values have to move together.
+	activityHeartbeatTimeout = 30 * time.Second
 )
+
+// spuriousHeartbeatCancel reports whether ctx was cancelled by a heartbeat RPC
+// that merely failed locally, rather than by a real instruction to stop.
+//
+// The SDK cancels the activity context on ANY heartbeat error it classifies as
+// retryable (internal_task_handlers.go internalHeartBeat), on the theory that a
+// heartbeat which keeps failing means the activity is about to breach its
+// HeartbeatTimeout anyway. That theory does not hold here. The heartbeat RPC is
+// given a deadline equal to the throttle interval — floored to minRPCTimeout,
+// 1s — so ONE slow round trip to the Temporal server is enough to trip it, and
+// context.DeadlineExceeded converts to codes.Unknown, which is in the SDK's
+// retryable set. The result is an activity killed seconds into a 30-day
+// StartToCloseTimeout because a single heartbeat was slow, surfacing as
+// "context canceled" from whatever DB call happened to be in flight.
+//
+// Genuine cancellations are distinguishable: the SDK cancels with a cause, and
+// only a real server-side cancel carries a CanceledError (its own completion
+// path keys off exactly this, see activityTaskHandlerImpl.Execute). Worker
+// shutdown and activity pause/reset set their own distinct causes and are
+// handled elsewhere. So a cause that is neither a CanceledError nor one of our
+// own cancels is the SDK giving up on a healthy activity, and the work deserves
+// a clean retry instead of a cancellation the workflow would treat as a pause.
+//
+// This deliberately does not slow cancellation down: real cancels still arrive
+// on the very next heartbeat tick and are passed through untouched.
+func spuriousHeartbeatCancel(ctx context.Context, workerStopCh <-chan struct{}) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		return false
+	}
+	// Worker shutdown has its own rewrite with a more specific message.
+	if workerStopped(workerStopCh) {
+		return false
+	}
+	cause := context.Cause(ctx)
+	if cause == nil || errors.Is(cause, context.Canceled) {
+		// No distinguishing cause recorded — treat as a real cancellation so a
+		// genuine pause is never mistaken for infrastructure noise.
+		return false
+	}
+	// A real server-side cancel arrives as a CanceledError. Pause/reset are
+	// legitimate stop instructions too and must not be retried.
+	if temporal.IsCanceledError(cause) ||
+		errors.Is(cause, activity.ErrActivityPaused) ||
+		errors.Is(cause, activity.ErrActivityReset) {
+		return false
+	}
+	return true
+}
 
 // workerStopped reports whether the activity worker has begun shutting down.
 // The SDK closes this channel at the top of Worker.Stop(), so a closed channel
@@ -522,6 +585,26 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// chat until the user manually resumes. Skip the chat-visible error event
 	// and Sentry too — the user should see the step retry, not a red error for a
 	// rebuild they triggered.
+	// Same reasoning for a heartbeat that failed locally: the activity was
+	// healthy and the cancellation is an artifact of the heartbeat RPC's own
+	// deadline, so retry the step rather than letting a bogus context.Canceled
+	// reach the workflow and park the chat. See spuriousHeartbeatCancel.
+	if execErr != nil && spuriousHeartbeatCancel(ctx, workerStopCh) {
+		logging.Warn("[ActivityWrapper] Activity cancelled by a failed heartbeat RPC, returning retryable error",
+			"activityType", activityType,
+			"activityID", activityID,
+			"attemptNumber", attemptNumber,
+			"durationMs", durationMs,
+			"cause", context.Cause(ctx),
+			"error", execErr)
+		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, execErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		return zeroOutput, temporal.NewApplicationErrorWithCause(
+			fmt.Sprintf("heartbeat RPC failed while running %s; retrying", activityType),
+			"HeartbeatCancel",
+			execErr,
+		)
+	}
+
 	if execErr != nil && workerStopped(workerStopCh) {
 		logging.Info("[ActivityWrapper] Activity aborted by worker shutdown, returning retryable error",
 			"activityType", activityType,

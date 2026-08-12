@@ -189,6 +189,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener('clear-terminal', listener);
   },
 
+  // Keyboard shortcuts — push effective bindings so the native menu's
+  // accelerators track the user's remaps instead of silently overriding them.
+  updateShortcutBindings: (bindings) => ipcRenderer.invoke('shortcuts:update', bindings),
+
   // Privacy settings
   updatePrivacySettings: (settings) => ipcRenderer.invoke('update-privacy-settings', settings),
   getPrivacySettings: () => ipcRenderer.invoke('get-privacy-settings'),

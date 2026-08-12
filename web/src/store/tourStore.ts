@@ -183,17 +183,23 @@ export const useTourStore = create<TourState>((set, get) => ({
 
     // Clear checklist state without clobbering its isInitialized flag —
     // consumers like ContextualTipsLayer gate on isInitialized.
+    //
+    // The panel state goes through revive() rather than this setState: a raw
+    // in-memory write left the store saying "expanded" while the settings row
+    // still said "dismissed", so the guide reappeared now and then vanished on
+    // the next reload.
     try {
       const { useOnboardingChecklistStore } = await import("./onboardingChecklistStore");
       useOnboardingChecklistStore.setState({
         completedItems: new Set(),
         welcomeShown: false,
-        panelState: "expanded",
       });
+      await useOnboardingChecklistStore.getState().revive();
     } catch {
       /* ignore */
     }
     localStorage.removeItem("reliant.checklist.welcomeShown");
+    localStorage.removeItem("reliant.checklist.completedItems");
 
     await get().saveTourState();
     await get().detectProjectCode();

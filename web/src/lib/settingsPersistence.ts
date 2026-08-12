@@ -6,22 +6,37 @@ export interface PersistedStringSetting {
   value: string;
 }
 
+/**
+ * The outcome of a settings read. "missing" and "error" are deliberately
+ * distinct: a caller deciding whether to re-show a UI the user already
+ * dismissed must not treat a failed RPC as "no preference recorded".
+ */
+export type SettingRead =
+  | { status: "found"; value: string }
+  | { status: "missing" }
+  | { status: "error" };
+
+export async function readSetting(key: string): Promise<SettingRead> {
+  // Fast path: read from the in-memory cache populated by ListSettings.
+  if (settingsSync.isInitialized()) {
+    const cached = settingsSync.getSettingFromCache(key);
+    return cached ? { status: "found", value: cached.value } : { status: "missing" };
+  }
+
+  // Fallback: cache not ready yet, do an individual RPC.
+  try {
+    const setting = await api.settings.getSetting(key);
+    return setting ? { status: "found", value: setting.value } : { status: "missing" };
+  } catch {
+    return { status: "error" };
+  }
+}
+
 export async function safeGetSetting(
   key: string,
 ): Promise<PersistedStringSetting | null> {
-  // Fast path: read from the in-memory cache populated by ListSettings
-  if (settingsSync.isInitialized()) {
-    const cached = settingsSync.getSettingFromCache(key);
-    // Cache hit → return it (null means the key genuinely doesn't exist)
-    return cached;
-  }
-
-  // Fallback: cache not ready yet, do an individual RPC
-  try {
-    return await api.settings.getSetting(key);
-  } catch {
-    return null;
-  }
+  const read = await readSetting(key);
+  return read.status === "found" ? { value: read.value } : null;
 }
 
 export async function upsertStringSetting(

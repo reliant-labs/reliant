@@ -12,7 +12,12 @@ import { grpcClient } from "@/api/grpc-client";
 import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/daemon_token_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
-import { daemonStartCommand, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
+import {
+  daemonStartCommand,
+  daemonStartCommandNeedsEditing,
+  GATEWAY_URL_PLACEHOLDER,
+  HOMEBREW_CASK_INSTALL,
+} from "@/lib/cli-commands";
 
 const DOWNLOAD_BASE =
   import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
@@ -118,6 +123,22 @@ function getPrimaryDownload(os: DetectedOS): DownloadLink | null {
   return DOWNLOAD_LINKS.find((link) => link.os === os) ?? null;
 }
 
+/**
+ * Why the caller is showing these instructions, which decides how the panel
+ * behaves once a daemon is already connected:
+ *
+ * - "bootstrap" — the caller is blocked until SOME daemon exists (onboarding's
+ *   ComputeStep, the ProjectPicker's connect modal). A connected daemon means
+ *   the job is done, so the panel collapses to a success card and reports up
+ *   via `onConnected` so the caller can advance or dismiss.
+ * - "reference" — the caller is standing documentation for adding ANOTHER
+ *   machine (Settings → Machines). An existing connection says nothing about
+ *   whether the user still wants to set up the machine in front of them, so
+ *   the instructions stay put and the flow-control affordances (waiting
+ *   spinner, "check connection" button) are dropped.
+ */
+export type SelfHostedDaemonConnectMode = "bootstrap" | "reference";
+
 interface SelfHostedDaemonConnectProps {
   /**
    * Fired once, the first time a daemon connects (status flips to ACTIVE)
@@ -127,6 +148,8 @@ interface SelfHostedDaemonConnectProps {
    * waiting state and lets the surrounding UI react to the daemon list.
    */
   onConnected?: () => void;
+  /** See SelfHostedDaemonConnectMode. Defaults to "bootstrap". */
+  mode?: SelfHostedDaemonConnectMode;
 }
 
 /**
@@ -135,12 +158,15 @@ interface SelfHostedDaemonConnectProps {
  * user through download + install + `reliant daemon start --token`, then
  * waits for the daemon to connect.
  *
- * Extracted from the onboarding ComputeStep so the ProjectPicker's
- * "Connect a new daemon" flow can offer the exact same self-hosted path
- * in-place, without bouncing the user into the onboarding wizard.
+ * This is the single source of truth for "how do I download and set up
+ * Reliant on my own machine." Onboarding's ComputeStep, the ProjectPicker's
+ * "Connect a new daemon" modal, and Settings → Machines all render this same
+ * panel, so the download links, Homebrew cask, token step, and start command
+ * only ever have to be right in one place.
  */
 export function SelfHostedDaemonConnect({
   onConnected,
+  mode = "bootstrap",
 }: SelfHostedDaemonConnectProps) {
   const [error, setError] = useState<string | null>(null);
   const [pat, setPat] = useState<string | null>(null);
@@ -302,7 +328,7 @@ export function SelfHostedDaemonConnect({
     );
   };
 
-  if (activeDaemon) {
+  if (activeDaemon && mode === "bootstrap") {
     return (
       <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
         <div className="flex items-start gap-3">
@@ -509,6 +535,13 @@ export function SelfHostedDaemonConnect({
         <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
           {daemonStartCommand()}
         </code>
+        {daemonStartCommandNeedsEditing() && (
+          <p className="text-[11px] text-yellow-600 dark:text-yellow-400">
+            Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway address
+            before running this. It is a separate process from the API server,
+            so the daemon cannot infer it on localhost.
+          </p>
+        )}
         <p className="text-[11px] text-muted-foreground">
           The command will prompt you to paste the token.
           {isElectron && cliInstalled === false && (
@@ -523,27 +556,33 @@ export function SelfHostedDaemonConnect({
 
       {error && <p className="text-center text-xs text-destructive">{error}</p>}
 
-      <div className="space-y-2 border-t border-border/30 pt-3">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          <span>
-            Waiting for the daemon to connect. This screen will react
-            automatically.
-          </span>
+      {/* Flow control, not instruction: only a caller that is waiting on a
+          daemon wants a spinner and a "check connection" button. In reference
+          mode the user may already have a working machine and is simply
+          reading how to add another. */}
+      {mode === "bootstrap" && (
+        <div className="space-y-2 border-t border-border/30 pt-3">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            <span>
+              Waiting for the daemon to connect. This screen will react
+              automatically.
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleManualCheck}
+            className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+          >
+            I've started the daemon — check connection
+          </button>
+          {manualFeedback && (
+            <p className="text-center text-xs text-muted-foreground">
+              {manualFeedback}
+            </p>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={handleManualCheck}
-          className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-        >
-          I've started the daemon — check connection
-        </button>
-        {manualFeedback && (
-          <p className="text-center text-xs text-muted-foreground">
-            {manualFeedback}
-          </p>
-        )}
-      </div>
+      )}
     </div>
   );
 }

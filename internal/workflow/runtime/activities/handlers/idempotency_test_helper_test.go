@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
@@ -85,6 +85,20 @@ func (h *IdempotencyTestHelper) Repo() db.Repository {
 	return h.repo
 }
 
+// createMessageWithSeq persists msg with a chat-global seq allocated from the
+// database. Fixtures set Ordinal by hand (often reusing the same ordinal
+// across threads of one chat), so seq cannot simply mirror it without
+// violating UNIQUE(chat_id, seq).
+func createMessageWithSeq(ctx context.Context, t *testing.T, repo db.Repository, msg *db.Message) error {
+	t.Helper()
+	seq, err := repo.GetNextSeq(ctx, msg.ChatID, msg.ThreadID)
+	if err != nil {
+		return err
+	}
+	msg.Seq = seq
+	return repo.CreateMessage(ctx, msg)
+}
+
 // DB returns the underlying SQL database for direct queries
 func (h *IdempotencyTestHelper) DB() *sql.DB {
 	return h.sqlDB
@@ -144,7 +158,7 @@ func (h *IdempotencyTestHelper) CreateTestChat(ctx context.Context, chatID, proj
 	// Create default thread with ID = chatID (standard pattern)
 	_, err = h.repo.CreateThread(ctx, &db.Thread{
 		ID:             chatID,
-		ConversationID: chatID,
+		ChatID: chatID,
 	})
 	require.NoError(h.t, err)
 
@@ -159,7 +173,7 @@ func (h *IdempotencyTestHelper) CreateTestChat(ctx context.Context, chatID, proj
 	// Create legacy "0" thread for backward compatibility with tests using Thread: "0"
 	_, err = h.repo.CreateThread(ctx, &db.Thread{
 		ID:             "0",
-		ConversationID: chatID,
+		ChatID: chatID,
 	})
 	require.NoError(h.t, err)
 
@@ -244,7 +258,7 @@ func (h *IdempotencyTestHelper) CreateTestThreadAndContextWindow(ctx context.Con
 	// Try to create thread (may already exist from CreateTestChat)
 	thread := &db.Thread{
 		ID:             threadID,
-		ConversationID: chatID,
+		ChatID: chatID,
 	}
 	_, _ = h.repo.CreateThread(ctx, thread) // Ignore error - thread may already exist
 
@@ -285,12 +299,15 @@ func (h *IdempotencyTestHelper) CreateTestUserMessageWithText(ctx context.Contex
 	msgID := uuid.New().String()
 	ordinal, err := h.repo.GetNextOrdinal(ctx, threadID)
 	require.NoError(h.t, err)
+	seq, err := h.repo.GetNextSeq(ctx, chatID, threadID)
+	require.NoError(h.t, err)
 
 	err = h.repo.CreateMessage(ctx, &db.Message{
 		ID:              msgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		ThreadID:        threadID,
 		ContextWindowID: contextWindowID,
 		CreatedAt:       time.Now().UTC(),
@@ -315,7 +332,7 @@ func (h *IdempotencyTestHelper) CreateTestUserMessageWithText(ctx context.Contex
 func (h *IdempotencyTestHelper) CreateTestThread(ctx context.Context, chatID, threadID string) {
 	thread := &db.Thread{
 		ID:             threadID,
-		ConversationID: chatID,
+		ChatID: chatID,
 	}
 	_, err := h.repo.CreateThread(ctx, thread)
 	require.NoError(h.t, err)

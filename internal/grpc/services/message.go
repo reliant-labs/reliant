@@ -7,9 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -84,9 +84,27 @@ func (s *MessageService) GetMessage(
 		}
 	}
 
-	// Convert to proto using shared helper from chat service
+	// Build durable tool call status map so a reload/chat-switch sees real
+	// status instead of the frontend having to infer it from workflow activity.
+	toolCallStatusByCallID := make(map[string]*db.ToolCall)
+	toolCalls, err := s.database.ListToolCallsByMessageIDs(ctx, []string{msg.ID})
+	if err != nil {
+		logging.Warn("Failed to list tool calls for message", "error", err, "messageID", msg.ID)
+	} else {
+		for _, call := range toolCalls {
+			toolCallStatusByCallID[call.ID] = call
+		}
+	}
+
+	// Convert to proto using shared helper from chat service.
+	//
+	// ViewingThreadID is deliberately unset: this fetches one message by id, and
+	// the caller has not said which thread it is reading as. Statuses are
+	// reported exactly as persisted; the branch-aware reinterpretation belongs
+	// to ListMessages, which knows the thread being displayed.
 	protoMessage := messageToProto(msg, blocks, attachments, &MessageToProtoOptions{
-		ToolResultsByCallID: toolResultsByCallID,
+		ToolResultsByCallID:    toolResultsByCallID,
+		ToolCallStatusByCallID: toolCallStatusByCallID,
 	})
 
 	return connect.NewResponse(&reliantv1.GetMessageResponse{

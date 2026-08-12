@@ -193,7 +193,10 @@ $RECYCLE.BIN/
 .ports-*.json
 .instance-info
 .instance-*.info
-.env.ports
+# Sourced shell fragment written by scripts/dev.sh (was .env.ports — renamed
+# so nothing in the tree is named .env*, which is a secrets-file convention
+# this project does not use).
+.dev-ports.sh
 
 # Temporal artifacts (logs, pids, db)
 .temporal/

@@ -42,6 +42,15 @@ import (
 //     moved, an unpopulated table — each of those renders as "0 tool calls" in
 //     a naive tool, which is indistinguishable from a run that made none. Every
 //     load path here fails loudly instead. See the guards in runWorkflowForensics.
+//
+//  3. A NUMBER MUST SAY WHAT IT COULD NOT SEE. Where a section measures one of
+//     several mechanisms, its zero means "this mechanism did not fire", NOT
+//     "nothing happened" — and a reader quoting the number cannot tell the
+//     difference unless the section says so. Three places carry that caveat:
+//     SKILL LOADS (preloaded skills are never persisted — forensicsSkillDelivery),
+//     command time (untimed steps make it a lower bound), and cost (unrecorded
+//     renders "n/a", never "$0.00"). A new section that counts one path of
+//     several belongs on this list.
 // ============================================================================
 
 // Tool classification. Reads and writes are named explicitly rather than
@@ -51,6 +60,15 @@ var (
 	forensicsReadTools  = map[string]bool{"view": true}
 	forensicsWriteTools = map[string]bool{"edit": true, "write": true, "find_replace": true}
 )
+
+// forensicsPreloadBlindSpotNote is the sentence that keeps the SKILL LOADS
+// section from asserting more than it measured. It names the mechanism, so a
+// reader who wants the preloaded list knows where to go get it (the charter)
+// rather than concluding there was none. See forensicsSkillDelivery.
+const forensicsPreloadBlindSpotNote = "Charter-preloaded skills (a workflow node's `skills:` arg) are NOT visible in " +
+	"this data: they are seeded as an ephemeral message into the LLM call's history and never persisted, " +
+	"and no table records the arg. This section counts ONLY explicit `skill` tool calls. " +
+	"To see what a phase preloaded, read the node's `skills:` in its workflow YAML."
 
 func newWorkflowForensicsCmd() *cobra.Command {
 	var (
@@ -73,7 +91,10 @@ Per thread (orchestrator and each spawned unit) and in total:
                 minutes before it edits is briefed badly, not slow)
   - reads:      read/write ratio, and files viewed more than once within a
                 thread and across threads (each repeat is re-derivation)
-  - skills:     which skills loaded, at what offset from thread start
+  - skills:     which skills the agent EXPLICITLY loaded via the skill tool, at
+                what offset. Charter-preloaded skills (a node's skills: arg)
+                are seeded ephemerally and never persisted, so they cannot be
+                counted here and the section says so rather than reporting none.
   - idle:       per unit, from its own finish to the last unit's finish
   - commands:   summed step_executions duration vs wall clock, gap NAMED not
                 attributed
@@ -128,6 +149,46 @@ type forensicsSkillLoad struct {
 	At       string `json:"at"`
 	Offset   string `json:"offset"`
 	OffsetMs int64  `json:"offset_ms"`
+}
+
+// forensicsSkillDelivery is the SKILL LOADS section's statement about how much
+// of the skill picture this database can support.
+//
+// There are two delivery paths and only ONE of them leaves a row:
+//
+//   - EXPLICIT: the agent calls the `skill` tool. That is a TOOL_CALL content
+//     block, so it is counted exactly, per thread, with an offset.
+//   - PRELOAD: a workflow node declares `skills:` (CallLLMArgs.skills). The
+//     resolved bodies are seeded as ONE ephemeral user turn spliced into the
+//     in-memory history for that LLM call and NEVER written —
+//     handlers.buildSeededSkillMessages builds it, and both call_llm.go's
+//     comment ("re-seeded each turn, never persisted") and the proto field's
+//     own doc say so. No table records the arg either: `workflows` and
+//     `step_executions` have no args/inputs column.
+//
+// So a preloaded skill is INVISIBLE here, and the section must not let the
+// absence of explicit calls be read as the absence of skills. That is exactly
+// the misreading that happened: run a70a9606's scaffold phase preloaded six
+// skills via forge-one-shot.yaml and the section printed "none — no thread
+// loaded a skill", which was quoted in a report as a knowledge gap.
+//
+// Deliberately NOT derived: the count of preloaded skills. The charter names
+// them, but which node ran, whether its CEL `skills:` arg resolved to a
+// literal, and which paths actually resolved against the live catalog are all
+// facts this database does not hold — a preload can silently deliver a subset
+// (see preloadSkillMissError). A guessed number here would be quoted as
+// measured, which is worse than a named blind spot.
+type forensicsSkillDelivery struct {
+	// ExplicitCalls is the number of `skill` TOOL_CALL blocks across the run.
+	// This number is exact.
+	ExplicitCalls int `json:"explicit_calls"`
+	// PreloadObservable is whether charter-preloaded skills can be counted from
+	// this data. It is false, always, and it is a field rather than a constant
+	// so the JSON consumer sees the claim instead of inferring it from silence.
+	PreloadObservable bool `json:"preload_observable"`
+	// Note states the blind spot in the words a reader would need to not draw
+	// the wrong conclusion from ExplicitCalls == 0.
+	Note string `json:"note"`
 }
 
 type forensicsRepeatRead struct {
@@ -253,8 +314,12 @@ type forensicsReport struct {
 	Totals      forensicsTotals      `json:"totals"`
 	SpawnTree   []forensicsSpawn     `json:"spawn_tree,omitempty"`
 	CrossThread []forensicsRepeatRead `json:"cross_thread_repeated_reads,omitempty"`
-	CommandTime forensicsCommandTime `json:"command_time"`
-	Queries     []forensicsQuery     `json:"queries,omitempty"`
+	// SkillDelivery scopes the SKILL LOADS section to what the data supports.
+	// Without it, zero explicit `skill` calls renders identically to "this run
+	// had no skills", and charter preloads are the common case.
+	SkillDelivery forensicsSkillDelivery `json:"skill_delivery"`
+	CommandTime   forensicsCommandTime   `json:"command_time"`
+	Queries       []forensicsQuery       `json:"queries,omitempty"`
 }
 
 // ============================================================================
@@ -794,8 +859,11 @@ func buildForensicsReport(executionID string, rd *runData, opts forensicsOpts) f
 		rep.Totals.Reads += th.Reads
 		rep.Totals.Writes += th.Writes
 		rep.Totals.RepeatedCost += th.RepeatedCost
+		rep.SkillDelivery.ExplicitCalls += len(th.Skills)
 	}
 	rep.Totals.Histogram = sortedHistogram(totalHist)
+	rep.SkillDelivery.PreloadObservable = false
+	rep.SkillDelivery.Note = forensicsPreloadBlindSpotNote
 
 	rep.StartedAt, rep.EndedAt = wfaTime(runStart), wfaTime(runEnd)
 	wall := runEnd.Sub(runStart)
@@ -883,7 +951,12 @@ SELECT m.thread_id, b.tool_input::json ->> 'file_path' AS path, count(*) AS view
 FROM message_content_blocks b JOIN messages m ON m.id = b.message_id
 WHERE m.chat_id = $CHAT AND b.block_type = 2 AND b.tool_name = 'view'
 GROUP BY 1, 2 HAVING count(*) > 1 ORDER BY views DESC;`),
-		q("skill loads with offset from thread start", `
+		// Named for what it measures. There is no companion query for preloaded
+		// skills because there is nothing to select: the seed is never written
+		// and no column holds the node's `skills:` arg. Printing SQL that
+		// returns nothing would read as "the preloads were checked and there
+		// were none", which is the error this section exists to prevent.
+		q("EXPLICIT skill tool calls with offset from thread start (preloads are NOT in the DB — see the section note)", `
 SELECT m.thread_id, b.tool_input::json ->> 'path' AS skill, b.created_at
 FROM message_content_blocks b JOIN messages m ON m.id = b.message_id
 WHERE m.chat_id = $CHAT AND b.block_type = 2 AND b.tool_name = 'skill' ORDER BY b.created_at;`),
@@ -1027,20 +1100,29 @@ func printForensicsReport(w io.Writer, r forensicsReport, opts forensicsOpts) {
 		}
 	}
 
-	fmt.Fprintf(w, "\nSKILL LOADS\n")
-	any := false
-	for _, t := range r.Threads {
-		if len(t.Skills) == 0 {
-			continue
-		}
-		any = true
-		fmt.Fprintf(w, "  %s (%s):\n", t.Short, wfaOrDash(t.Title))
-		for _, s := range t.Skills {
-			fmt.Fprintf(w, "    +%-9s %s\n", s.Offset, s.Skill)
+	// SKILL LOADS reports ONE of the two delivery paths, and says so on every
+	// render — including the ones with results. A reader who sees three loads
+	// listed is as able to conclude "these three are all the skills this run
+	// had" as a reader who sees none, and on a charter that preloads six, both
+	// are wrong. See forensicsSkillDelivery for what the data does and does not
+	// support.
+	fmt.Fprintf(w, "\nSKILL LOADS   (explicit `skill` tool calls only)\n")
+	if r.SkillDelivery.ExplicitCalls == 0 {
+		fmt.Fprintf(w, "  explicit skill tool calls: 0 — no thread CALLED the skill tool.\n")
+	} else {
+		fmt.Fprintf(w, "  explicit skill tool calls: %d\n", r.SkillDelivery.ExplicitCalls)
+		for _, t := range r.Threads {
+			if len(t.Skills) == 0 {
+				continue
+			}
+			fmt.Fprintf(w, "  %s (%s):\n", t.Short, wfaOrDash(t.Title))
+			for _, s := range t.Skills {
+				fmt.Fprintf(w, "    +%-9s %s\n", s.Offset, s.Skill)
+			}
 		}
 	}
-	if !any {
-		fmt.Fprintf(w, "  none — no thread loaded a skill\n")
+	if !r.SkillDelivery.PreloadObservable {
+		fmt.Fprintf(w, "  NOTE: %s\n", wfaWrap(r.SkillDelivery.Note, 76, "        "))
 	}
 
 	if len(r.SpawnTree) > 0 {

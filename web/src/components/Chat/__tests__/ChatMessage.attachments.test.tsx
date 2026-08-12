@@ -77,7 +77,7 @@ function buildUserMessage(overrides: Partial<Message> = {}): Message {
   return {
     id: "msg-1",
     chatId: "chat-1",
-    ordinal: BigInt(1),
+    seq: BigInt(1),
     thread: "chat-1",
     role: MessageRole.USER,
     streamingState: StreamingState.COMPLETE,

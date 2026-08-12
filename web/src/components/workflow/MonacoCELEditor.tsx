@@ -3,7 +3,7 @@ import { useMonaco } from '../../lib/monacoManager';
 import { registerCELEditorContext } from '../../lib/monaco-cel-completions';
 import type { CELCompletionContext } from '../../lib/monaco-cel-completions';
 import { ensureCELCompletionsCached } from '../../lib/cel-completion-service';
-import { getCurrentMonacoTheme, configureMonacoTheme } from '../../lib/monacoTheme';
+import { getCurrentMonacoTheme, configureMonacoTheme, MONACO_FONT_FAMILY } from '../../lib/monacoTheme';
 import { cn } from '../../lib/utils';
 import type { Monaco } from '@monaco-editor/react';
 
@@ -99,7 +99,7 @@ export function MonacoCELEditor({
       language: 'cel',
       theme: getCurrentMonacoTheme(),
       fontSize: 13,
-      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace',
+      fontFamily: MONACO_FONT_FAMILY,
       lineNumbers: 'off',
       minimap: { enabled: false },
       scrollBeyondLastLine: false,

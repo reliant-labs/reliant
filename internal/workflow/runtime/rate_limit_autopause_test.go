@@ -38,7 +38,7 @@ func TestHandleWorkflowCompletion(t *testing.T) {
 func completionTestWorkflow(ctx workflow.Context, mode string) (result *WorkflowResult, retErr error) {
 	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	defer func() {
-		handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "")
+		handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "", nil)
 	}()
 
 	switch mode {
@@ -49,6 +49,8 @@ func completionTestWorkflow(ctx workflow.Context, mode string) (result *Workflow
 	case "cancel":
 		_ = workflow.Sleep(ctx, time.Hour)
 		return nil, ctx.Err()
+	case "continue_as_new":
+		return nil, workflow.NewContinueAsNewError(ctx, completionTestWorkflow, "success")
 	default:
 		return nil, fmt.Errorf("unknown mode: %s", mode)
 	}

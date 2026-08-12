@@ -10,8 +10,9 @@ import { useAttachmentStore } from "../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
-import { useNavigate } from "@tanstack/react-router";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
+import { useDaemonWait } from "@/hooks/useDaemonWait";
+import { DaemonWaitState } from "../DaemonWaitState";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
@@ -24,7 +25,6 @@ import {
   Check,
   Search,
   FolderPlus,
-  Activity,
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
@@ -55,7 +55,6 @@ export function NewChatView({
   >(undefined);
   const chatInputRef = useRef<HTMLDivElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
-  const navigate = useNavigate();
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const worktrees = useWorktreeStore((state) => state.worktrees);
@@ -92,8 +91,13 @@ export function NewChatView({
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
-  const { activeDaemon, loading: daemonLoading } = useDaemonStatus();
+  const { activeDaemon, loading: daemonLoading, refresh: refreshDaemons } =
+    useDaemonStatus();
   const daemonConnected = Boolean(activeDaemon);
+  const daemonWait = useDaemonWait({
+    waiting: !daemonConnected && !daemonLoading,
+    onRetry: refreshDaemons,
+  });
 
   // Find the main worktree for this project
   const mainWorktree = worktrees.find((w) => w.is_main === true);
@@ -438,43 +442,21 @@ export function NewChatView({
       <OomKillBanner />
 
       {/* Message Input - Collapsible when not focused */}
-      {!daemonConnected && !daemonLoading && (() => {
-        // In cloud mode (control-plane deployment) route to the in-app
-        // Machines settings section; otherwise fall back to the local
-        // "connect a daemon" modal.
-        const isCloud = capabilities.cloudDaemons;
-        return (
-          <div className="flex items-center justify-center gap-2 border-t border-yellow-500/20 bg-yellow-500/5 px-4 py-2.5 text-sm text-yellow-600 dark:text-yellow-400">
-            <Activity className="h-4 w-4" />
-            <span>
-              No machine connected.{" "}
-              {isCloud ? (
-                <button
-                  type="button"
-                  onClick={() =>
-                    navigate({
-                      to: "/settings/$section",
-                      params: { section: "environments" },
-                    })
-                  }
-                  className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
-                >
-                  Manage machines
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setShowConnectDaemonModal(true)}
-                  className="font-medium underline underline-offset-2 hover:text-yellow-700 dark:hover:text-yellow-300"
-                >
-                  Start a cloud machine or run one locally
-                </button>
-              )}{" "}
-              to begin chatting.
-            </span>
-          </div>
-        );
-      })()}
+      {/* A machine that is BOOTING is not the same as one that was never
+          started, but this banner used to say "No machine connected" for both
+          — telling a user to go start a machine that was 15 seconds from
+          ready. The shared wait state distinguishes them. */}
+      {!daemonConnected && !daemonLoading && daemonWait.state && (
+        <DaemonWaitState
+          state={daemonWait.state}
+          variant="inline"
+          onRetry={
+            capabilities.cloudDaemons
+              ? daemonWait.retryNow
+              : () => setShowConnectDaemonModal(true)
+          }
+        />
+      )}
       {isFocused ? (
         <div className="flex-shrink-0">
           <ChatInput

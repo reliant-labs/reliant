@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -90,6 +91,11 @@ type daemonClient struct {
 
 	cancelMu       sync.Mutex
 	cancelByReq    map[string]context.CancelFunc
+	// backgroundByReq marks in-flight executions the user asked to detach into
+	// a background process. The executing command polls this by request id (see
+	// exec.Run) — the same correlation cancel uses, and the only handle the
+	// daemon keeps for a running execution.
+	backgroundByReq map[string]string // requestID -> toolCallID
 	watchersMu     sync.Mutex
 	watchersByPr   map[string]context.CancelFunc
 	fsWatchersMu   sync.Mutex
@@ -345,6 +351,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		capabilities:      caps,
 		runtimeType:       runtimeType,
 		cancelByReq:       make(map[string]context.CancelFunc),
+		backgroundByReq:   make(map[string]string),
 		watchersByPr:      make(map[string]context.CancelFunc),
 		fsWatchersByPr:    make(map[string]context.CancelFunc),
 		terminalPumps:     newTerminalPumpTracker(),
@@ -555,8 +562,11 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			WorkingDir:   d.cwd,
 			Capabilities: d.capabilities,
 			Name:         d.daemonName,
-			DaemonType:   "local",
-			Labels:       d.registerLabels(),
+			// Dialing out no longer implies a personal machine: managed
+			// workspaces dial out too under DAEMON_DIAL_OUT. See
+			// resolveDaemonType.
+			DaemonType: resolveDaemonType("local"),
+			Labels:     d.registerLabels(),
 			// Re-assert our persisted stable identity (empty on first-ever
 			// registration). The gateway trusts it for unbound PATs so identity
 			// survives restarts and hostname changes instead of being re-derived
@@ -611,6 +621,13 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			return nil
 		}
 		d.cancelToolExecution(m.ToolCancel.RequestId)
+		return nil
+
+	case *reliantv1.ServerMessage_ToolBackground:
+		if m.ToolBackground == nil {
+			return nil
+		}
+		d.markToolExecutionBackgrounded(m.ToolBackground.RequestId, m.ToolBackground.ToolCallId)
 		return nil
 
 	case *reliantv1.ServerMessage_Heartbeat:
@@ -774,6 +791,31 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 		defer d.unregisterCancel(req.RequestId)
 	}
 
+	// Connector policy gate. Requests from third-party MCP clients carry a
+	// policy confining which commands they may run and which paths they may
+	// touch; first-party requests carry none and are unaffected.
+	//
+	// This runs here, at the single point every command passes through, rather
+	// than in the caller that built the request — so a future caller that
+	// speaks this protocol cannot skip it by construction.
+	policy := daemonpolicy.FromProto(req.GetPolicy())
+	if err := policy.Check(req.CommandType, req.Payload); err != nil {
+		logging.Warn(logPrefix+" daemon command denied by connector policy",
+			"commandType", req.CommandType, "requestID", req.RequestId,
+			"grantID", policy.GrantIDForLog(), "error", err)
+		d.sendCommandFailure(req, err)
+		return
+	}
+	ctx = daemonpolicy.NewContext(ctx, policy)
+
+	// Let a long-running exec detach itself if the user asks. Keyed by request
+	// id — the same correlation cancellation uses, and the only handle the
+	// daemon has on a running execution.
+	requestID := req.RequestId
+	ctx = WithBackgroundProbe(ctx, func() (string, bool) {
+		return d.takeBackgroundRequest(requestID)
+	})
+
 	// Watchdog: daemon commands can wedge on network calls (the 2026-07-09
 	// incident was worktree.git_changes hanging on a git remote), and the
 	// stream response is only sent on completion — without this nothing is
@@ -813,11 +855,87 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
 	}
 
+	d.announceFilesystemMutation(req.CommandType, resultPayload, err)
+
 	// NOTE: the terminal output pump is NOT started here on terminal.create.
 	// It is subscribe-driven — started only when a TerminalOutputSubscribeMessage
 	// arrives (see handleServerMessage), mirroring the process-output subscribe
 	// flow. Until then the PTY buffers its initial shell prompt, so the prompt
 	// cannot be drained before a subscriber's interest chain is established.
+}
+
+// filesystemMutatingCommands are daemon commands that create or remove a
+// project directory outright.
+//
+// The file-tree watcher (fs_watcher.go) only polls paths it already knows
+// about, so a clone into a brand-new directory produces no change signal at
+// all. That matters most for `git.clone`, which the control-plane issues on
+// this same subject and whose caller may well be gone by the time it lands:
+// the clone is a 10-60s NATS request/reply, and a client that backgrounds
+// mid-flight (a phone) never learns it succeeded even though the repo is on
+// disk. Announcing here turns the outcome into a `user_updates` row, which
+// replays on reconnect.
+var filesystemMutatingCommands = map[string]bool{
+	"git.clone":   true,
+	"git.reclone": true,
+	"git.remove":  true,
+}
+
+// announceFilesystemMutation tells the server a command changed the shape of
+// the filesystem, so it can emit a refetch for clients that were not listening.
+//
+// Best-effort and non-blocking by design: the command response has already
+// been sent, and failing to announce must never turn a successful clone into
+// a reported failure.
+func (d *daemonClient) announceFilesystemMutation(commandType string, resultPayload []byte, cmdErr error) {
+	if cmdErr != nil || !filesystemMutatingCommands[commandType] {
+		return
+	}
+
+	// The handlers report where they landed, which is the path the server
+	// needs to resolve a project. Without it there is nothing to scope the
+	// refetch to.
+	var result struct {
+		Path string `json:"path"`
+	}
+	if len(resultPayload) > 0 {
+		_ = json.Unmarshal(resultPayload, &result)
+	}
+	if result.Path == "" {
+		return
+	}
+
+	if err := d.send(&reliantv1.DaemonMessage{
+		Message: &reliantv1.DaemonMessage_FileSystemChanged{
+			FileSystemChanged: &reliantv1.FileSystemChanged{
+				ProjectPath:     result.Path,
+				TimestampUnixMs: time.Now().UTC().UnixMilli(),
+			},
+		},
+	}); err != nil {
+		logging.Warn(logPrefix+" Failed to announce filesystem mutation",
+			"commandType", commandType, "path", result.Path, "error", err)
+	}
+}
+
+// sendCommandFailure reports a command that never ran. Refusals must still
+// answer on the stream: the caller is blocked on a reply, and dropping it
+// would surface as a timeout rather than as the denial it is.
+func (d *daemonClient) sendCommandFailure(req *reliantv1.DaemonCommandRequest, cause error) {
+	resp := &reliantv1.DaemonMessage{
+		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
+			DaemonCommandResponse: &reliantv1.DaemonCommandResponse{
+				RequestId:    req.RequestId,
+				CommandType:  req.CommandType,
+				Success:      false,
+				ErrorMessage: cause.Error(),
+			},
+		},
+	}
+	if sendErr := d.send(resp); sendErr != nil {
+		logging.Warn(logPrefix+" Failed to send daemon command failure",
+			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
+	}
 }
 
 func (d *daemonClient) runHeartbeats(ctx context.Context) {
@@ -879,9 +997,29 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 	}
 
 	execCtx, cancel := context.WithCancel(context.Background())
+	// Registered under both ids. request_id is the transport's correlation key
+	// (a fresh timestamp per dispatch, known only to the server that sent it);
+	// tool_call_id is the LLM's identifier, and the only one a user cancelling
+	// a specific tool from the UI can name. Cancelling one tool must reach
+	// exactly that execution -- the alternative was cancelling the whole chat
+	// workflow, which took every sibling tool down with it.
 	d.registerCancel(req.RequestId, cancel)
 	defer d.unregisterCancel(req.RequestId)
+	if req.ToolCallId != req.RequestId {
+		d.registerCancel(req.ToolCallId, cancel)
+		defer d.unregisterCancel(req.ToolCallId)
+	}
 	defer cancel()
+
+	// Backgrounding is addressed the same way, and for the same reason: the
+	// only id a user can name from the UI is the tool call's. Probe both so a
+	// request that arrives under either id reaches this execution.
+	execCtx = WithBackgroundProbe(execCtx, func() (string, bool) {
+		if toolCallID, ok := d.takeBackgroundRequest(req.RequestId); ok {
+			return toolCallID, true
+		}
+		return d.takeBackgroundRequest(req.ToolCallId)
+	})
 
 	contextMap := map[string]interface{}{}
 	if strings.TrimSpace(req.ContextJson) != "" {
@@ -1057,6 +1195,35 @@ func (d *daemonClient) unregisterCancel(requestID string) {
 	d.cancelMu.Lock()
 	defer d.cancelMu.Unlock()
 	delete(d.cancelByReq, requestID)
+	delete(d.backgroundByReq, requestID)
+}
+
+// markToolExecutionBackgrounded records that the user asked to detach this
+// in-flight execution. The running command polls for it and adopts itself into
+// the background manager; a request for an execution that has already finished
+// is harmless — nothing reads the entry and unregisterCancel clears it.
+func (d *daemonClient) markToolExecutionBackgrounded(requestID, toolCallID string) {
+	if strings.TrimSpace(requestID) == "" {
+		return
+	}
+	d.cancelMu.Lock()
+	defer d.cancelMu.Unlock()
+	d.backgroundByReq[requestID] = toolCallID
+}
+
+// takeBackgroundRequest reports whether this execution was asked to background,
+// consuming the request so it fires exactly once.
+func (d *daemonClient) takeBackgroundRequest(requestID string) (string, bool) {
+	if strings.TrimSpace(requestID) == "" {
+		return "", false
+	}
+	d.cancelMu.Lock()
+	defer d.cancelMu.Unlock()
+	toolCallID, ok := d.backgroundByReq[requestID]
+	if ok {
+		delete(d.backgroundByReq, requestID)
+	}
+	return toolCallID, ok
 }
 
 func (d *daemonClient) cancelToolExecution(requestID string) {
@@ -1192,8 +1359,8 @@ func (d *daemonClient) stopAllStreams() {
 	d.stopAllFileTreeWatchers()
 	d.terminalPumps.stopAll()
 	d.processOutputSubs.stopAll()
-	if terminalManager != nil {
-		terminalManager.Cleanup()
+	if tm := terminalManager(); tm != nil {
+		tm.Cleanup()
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,7 +29,19 @@ type worktreeTestDaemonRouter struct{}
 
 type recordingWorktreeDaemonRouter struct {
 	worktreeTestDaemonRouter
+	// Guarded because CreateWorktree now performs its daemon work on a
+	// detached goroutine, so these are written from that goroutine while the
+	// test body reads them.
+	mu       sync.Mutex
 	timeouts map[string]int32
+}
+
+// timeoutFor reads a recorded timeout under the lock. Tests must wait for the
+// creation goroutine to settle (see awaitWorktreeStatus) before relying on it.
+func (r *recordingWorktreeDaemonRouter) timeoutFor(commandType string) int32 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.timeouts[commandType]
 }
 
 // CreateWorktree pins the whole fan-out to one daemon, so it routes through
@@ -39,10 +52,12 @@ func (r *recordingWorktreeDaemonRouter) SendDaemonCommandToDaemon(ctx context.Co
 }
 
 func (r *recordingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	r.mu.Lock()
 	if r.timeouts == nil {
 		r.timeouts = make(map[string]int32)
 	}
 	r.timeouts[commandType] = timeoutMs
+	r.mu.Unlock()
 
 	switch commandType {
 	case "worktree.generate_repo_id":
@@ -69,6 +84,10 @@ func (r *worktreeTestDaemonRouter) SendToolRequestSync(_ context.Context, _ stri
 func (r *worktreeTestDaemonRouter) SendToolRequestSyncWithSelector(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
 	return &toolexec.ToolExecutionResponse{Success: true}, nil
 }
+func (r *worktreeTestDaemonRouter) SendToolExecutionBackground(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
 func (r *worktreeTestDaemonRouter) SendToolExecutionCancel(_ context.Context, _, _, _ string) error {
 	return nil
 }
@@ -191,6 +210,26 @@ func setupTestGitRepoWithRemote(t *testing.T, defaultBranch string) (repoDir str
 	return repoDir, remoteDir
 }
 
+// awaitWorktreeStatus blocks until a worktree reaches the expected status.
+//
+// CreateWorktree returns as soon as the CREATING row is written and finishes
+// the daemon work on a detached goroutine, so every assertion about the
+// finished state has to wait for that goroutine rather than read immediately.
+func awaitWorktreeStatus(t *testing.T, repo db.Repository, worktreeID string, want reliantv1.WorktreeStatus) *db.Worktree {
+	t.Helper()
+	var last *db.Worktree
+	require.Eventually(t, func() bool {
+		wt, err := repo.GetWorktree(context.Background(), worktreeID)
+		if err != nil {
+			return false
+		}
+		last = wt
+		return wt.Status == int32(want)
+	}, 5*time.Second, 10*time.Millisecond,
+		"worktree %s never reached %s (last status %v)", worktreeID, want, last)
+	return last
+}
+
 func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	repo := db.NewTestRepo(t)
 
@@ -229,8 +268,12 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.Worktree)
 
-	assert.Equal(t, worktreeDaemonCommandTimeoutMs, router.timeouts["worktree.create"])
-	assert.Greater(t, router.timeouts["worktree.create"], int32(30_000))
+	// The daemon command runs on the detached goroutine, so wait for creation
+	// to settle before reading what timeout it used.
+	awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
+
+	assert.Equal(t, worktreeDaemonCommandTimeoutMs, router.timeoutFor("worktree.create"))
+	assert.Greater(t, router.timeoutFor("worktree.create"), int32(30_000))
 }
 
 // TestCreateWorktreePersistsOwningDaemon verifies the worktree row records the
@@ -273,9 +316,10 @@ func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.Worktree)
 
+	// Assert against the settled row rather than the CREATING one: the owning
+	// daemon must survive the async completion, not just the initial insert.
+	stored := awaitWorktreeStatus(t, repo, resp.Msg.Worktree.Id, reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	// The mock router's ResolveDaemonID returns "test-daemon-id".
-	stored, err := repo.GetWorktree(ctx, resp.Msg.Worktree.Id)
-	require.NoError(t, err)
 	require.NotNil(t, stored.DaemonID, "worktree must record its owning daemon")
 	assert.Equal(t, "test-daemon-id", *stored.DaemonID)
 }

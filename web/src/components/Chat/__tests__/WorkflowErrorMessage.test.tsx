@@ -1,7 +1,12 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { WorkflowErrorMessage } from '../WorkflowErrorMessage';
 import type { ErrorUpdate } from '../../../types/streaming';
+
+const TEMPORAL_WRAPPED_ERROR =
+  'activity error (type: CallLLM, scheduledEventID: 104, startedEventID: 105, identity: 53948@host): ' +
+  'failed to stream LLM response: upstream connection reset';
 
 function createErrorUpdate(overrides: Partial<ErrorUpdate> = {}): ErrorUpdate {
   return {
@@ -54,5 +59,50 @@ describe('WorkflowErrorMessage', () => {
     expect(screen.getByTestId('alert-triangle')).toBeInTheDocument();
     expect(screen.queryByTestId('rotate-cw')).not.toBeInTheDocument();
     expect(screen.queryByText('Retrying (Attempt 5/5)')).not.toBeInTheDocument();
+  });
+
+  it('hides Temporal event bookkeeping in the expanded detail view', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowErrorMessage
+        error={createErrorUpdate({ error_message: TEMPORAL_WRAPPED_ERROR })}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Click for details/ }));
+
+    expect(
+      screen.getByText('failed to stream LLM response: upstream connection reset')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/scheduledEventID/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/identity:/)).not.toBeInTheDocument();
+  });
+
+  it('reveals the untouched error string on demand', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowErrorMessage
+        error={createErrorUpdate({ error_message: TEMPORAL_WRAPPED_ERROR })}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Click for details/ }));
+    await user.click(screen.getByRole('button', { name: 'Show raw error' }));
+
+    expect(screen.getByText(TEMPORAL_WRAPPED_ERROR)).toBeInTheDocument();
+  });
+
+  it('omits the raw toggle when there is no scaffolding to strip', async () => {
+    const user = userEvent.setup();
+    render(
+      <WorkflowErrorMessage
+        error={createErrorUpdate({ error_message: 'plain failure with no wrapper' })}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /Click for details/ }));
+
+    expect(screen.getByText('plain failure with no wrapper')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show raw error' })).not.toBeInTheDocument();
   });
 });

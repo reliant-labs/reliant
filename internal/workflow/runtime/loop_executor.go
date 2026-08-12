@@ -85,6 +85,16 @@ type InlineLoopExecutor struct {
 	// loop at the checkpointed iteration so max-iteration guards keep counting
 	// from where they were. Ignored by parallel loops.
 	startIteration int
+
+	// continueAsNewCheck, when set, is consulted at the top of each sequential
+	// iteration (immediately after the position checkpoint, so the persisted
+	// position and the continuation's resume target are the same {loopID,
+	// iteration} pair). A non-nil return aborts the loop with that error,
+	// which the caller recognizes as a ContinueAsNew request rather than a
+	// failure. Set only by DynamicWorkflow, and only for top-level loops:
+	// continuing as new ends the whole execution, so a nested loop must never
+	// be able to trigger it.
+	continueAsNewCheck func(iteration int) error
 }
 
 // NewInlineLoopExecutor creates a new executor for inline loop execution.
@@ -190,6 +200,13 @@ func (e *InlineLoopExecutor) WithStartIteration(iteration int) *InlineLoopExecut
 	return e
 }
 
+// WithContinueAsNewCheck sets the per-iteration ContinueAsNew check.
+// Only DynamicWorkflow sets this, and only for top-level loops.
+func (e *InlineLoopExecutor) WithContinueAsNewCheck(fn func(iteration int) error) *InlineLoopExecutor {
+	e.continueAsNewCheck = fn
+	return e
+}
+
 // WithInvocationContract sets the core semantic contract for this loop invocation.
 func (e *InlineLoopExecutor) WithInvocationContract(contract core.SubWorkflowContract) *InlineLoopExecutor {
 	e.invocationContract = &contract
@@ -207,6 +224,70 @@ func (e *InlineLoopExecutor) GetThread() string {
 		return e.execContext.Thread
 	}
 	return ""
+}
+
+// awaitLiveDetachedSpawns is spec §6.1's loop-lifetime rule, implemented as a
+// direct workflow.Await rather than the spec's proposed CEL `wait` node
+// (§6.3) — see the task brief for why: Await is already this codebase's
+// proven blocking primitive (pause_coordinator.go), and a generic
+// CEL-evaluated wait condition would be the first mutable CEL context in the
+// runtime.
+//
+// Called only when the loop is ABOUT to exit for lack of tool calls (the
+// `!shouldContinue` branch) — never on every iteration, so a normal turn with
+// no background spawns costs nothing extra.
+//
+// Returns true if the loop should re-enter (at least one detached spawn for
+// THIS thread finished since the loop started waiting, so its mailbox result
+// may now be there to react to) or false if there is nothing left to wait on
+// (no live detached spawns for this thread).
+//
+// The wait is UNBOUNDED by design. It previously carried a 4-minute ceiling
+// borrowed from bash_wait, on the theory that a wedged child must not park the
+// run forever. That ceiling fired on the HEALTHY path instead: a background
+// agent doing real work routinely runs longer than four minutes, so the parent
+// gave up on live children, exited, and cascaded them all to COMPLETED — which
+// made the chat read IDLE while six agents were still working (observed on
+// chat 126ad800-036c-4a9f-983c-d75bdaf9f1d1, where the ceiling elapsed 112ms
+// before the parent's completed_at). A background agent is not a shell
+// command: its duration is unbounded in the normal case, so no fixed number is
+// both long enough to be correct and short enough to be a useful wedge alarm.
+//
+// Nothing is lost by waiting: a child that ends for ANY reason — success,
+// failure, panic (contained in dispatchSpawnBackground), cancellation — calls
+// completeDetachedSpawn and wakes this Await. Cancellation of the parent
+// resolves it through the error path below. The reconciler independently
+// repairs spawn rows that were stranded by a hard terminate.
+//
+// Deliberately blocks WITHOUT dispatching call_llm again: workflow.Await
+// parks the goroutine on Temporal's internal command loop, not on this
+// package's step machinery, so re-checking the predicate costs a timer/
+// signal wake, never a new activity. This is the "MUST NOT SPIN" requirement
+// — asserted directly in the loop-lifetime test (see spawn_test.go).
+func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
+	if e.childTracker == nil {
+		return false
+	}
+	thread := e.GetThread()
+	if thread == "" || !e.childTracker.hasLiveDetachedSpawns(thread) {
+		return false
+	}
+
+	startCompletions := e.childTracker.detachedCompletionCount(thread)
+	if err := workflow.Await(e.ctx, func() bool {
+		return e.childTracker.detachedCompletionCount(thread) > startCompletions ||
+			!e.childTracker.hasLiveDetachedSpawns(thread)
+	}); err != nil {
+		// Workflow cancellation while waiting — let the normal cancellation
+		// path (checked at the top of the next iteration, or the caller
+		// unwinding) handle it; there is nothing more to wait for here.
+		return false
+	}
+	// Distinguish "something finished" from "nothing left to wait on" (spec
+	// §6.3's `completed > 0` vs `pending == 0` split): waking only because
+	// the last live spawn was reaped with nothing new delivered must NOT
+	// re-enter the loop, or a run with zero remaining work spins forever.
+	return e.childTracker.detachedCompletionCount(thread) > startCompletions
 }
 
 func (e *InlineLoopExecutor) inputPolicy() core.InputPolicy {
@@ -447,6 +528,13 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		// Check for pause signal at iteration boundary
 		e.pauseCtrl.DoCheckPause(e.ctx)
 
+		// Deliver any queued agent mailbox messages (spec §5.3). Must run
+		// AFTER the previous iteration's execute_tools has saved its tool
+		// results (true here: we are at the TOP of the loop, before the next
+		// call_llm) so the drained message never lands between an
+		// assistant-with-tool_calls row and its tool_results row.
+		drainAgentMessagesAtBoundary(e.ctx, e.chatID, e.GetThread())
+
 		// Auto-stop when items-based sequential loop exhausts its items
 		if e.resolvedItems != nil && e.iteration >= len(e.resolvedItems) {
 			e.logger.Info("[InlineLoop] All items processed, exiting loop",
@@ -466,6 +554,27 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		// interrupted run resumes this loop at this iteration.
 		if e.iterationCheckpoint != nil {
 			e.iterationCheckpoint(e.iteration)
+		}
+
+		// ContinueAsNew boundary. This sits immediately AFTER the checkpoint
+		// write and BEFORE any work for the iteration, which is what makes
+		// the handoff exact: the position just persisted is the position the
+		// continuation resumes at, so the new run re-enters here having done
+		// nothing twice and skipped nothing.
+		//
+		// Returning the error unwinds the loop and DynamicWorkflow returns it
+		// verbatim; the SDK reads it as a CONTINUE_AS_NEW command rather than
+		// a failure. Nothing is in flight at this point — the previous
+		// iteration's activities have all settled and spawns block their turn
+		// — so there is no work to abandon.
+		if e.continueAsNewCheck != nil {
+			if err := e.continueAsNewCheck(e.iteration); err != nil {
+				e.logger.Info("[InlineLoop] Continuing as new at iteration boundary",
+					"loopID", e.loopID,
+					"iteration", e.iteration,
+				)
+				return nil, err
+			}
 		}
 
 		// Execute this iteration
@@ -502,6 +611,17 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		}
 
 		if !shouldContinue {
+			// Spec §6.1: the LLM emitting no tool calls must not abandon a
+			// background spawn still in flight — see
+			// awaitLiveDetachedSpawns for why this blocks instead of adding
+			// a third `while` disjunct.
+			if e.awaitLiveDetachedSpawns() {
+				e.logger.Info("[InlineLoop] Detached spawn(s) completed, re-entering loop",
+					"loopID", e.loopID,
+					"iteration", e.iteration-1,
+				)
+				continue
+			}
 			e.logger.Info("[InlineLoop] While condition no longer satisfied, exiting",
 				"loopID", e.loopID,
 				"iteration", e.iteration-1,
@@ -1307,6 +1427,11 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 						"workflow_name": e.workflowName,
 						"error_message": errStr,
 						"error_type":    "retry_exhaustion",
+					}
+					// Scope the error to the thread that produced it; an
+					// unscoped error renders in every thread of the chat.
+					if e.execContext != nil && e.execContext.Thread != "" {
+						errorPayload["thread"] = e.execContext.Thread
 					}
 					if summary := extractLLMErrorSummary(errStr); summary != "" {
 						errorPayload["error_summary"] = summary + ". Workflow paused — send a message to retry."

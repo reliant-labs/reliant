@@ -7,16 +7,17 @@
  * In "inline" mode: falls through to the generic renderer.
  */
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   AlertCircle,
   Check,
   Loader2,
+  Send,
 } from "lucide-react";
 import type { ToolContentProps } from "./types";
 import { GenericToolRenderer } from "./GenericToolRenderer";
-import { useActiveThreads } from "../../../store/threadActivityStore";
-import { useChatMessages, useToolResultsByCallId } from "../../../store/chatStoreHooks";
+import { useToolResultsByCallId } from "../../../store/chatStoreHooks";
+import { useThreadMessages } from "../../../hooks/message-queries";
 import { MessageRole, ContentBlockType } from "../../../types/chat";
 import type { ContentBlock, WorkflowExecutionData } from "../../../types/chat";
 
@@ -24,7 +25,10 @@ import { useWorkflowExecutions } from "../../../hooks/useWorkflowExecutions";
 import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { cn } from "../../../lib/utils";
+import { logger } from "../../../lib/logger";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
+import { chatGrpc } from "../../../api/chat-grpc";
+import { toast } from "../../../lib/toast-manager";
 
 const MAX_PREVIEW_MESSAGES = 10;
 const MAX_TEXT_LENGTH = 150;
@@ -117,68 +121,97 @@ function SpawnToolRendererComponent({ ctx }: ToolContentProps) {
   return <SpawnPreview ctx={ctx} />;
 }
 
-/** Walk the workflow execution tree to find the child spawned by a given tool call ID. */
-function findSpawnWorkflow(
-  wf: WorkflowExecutionData,
-  spawnNodeId: string,
+/** Find a workflow by id anywhere in the execution tree. */
+function findWorkflowById(
+  roots: WorkflowExecutionData[],
+  id: string,
 ): WorkflowExecutionData | undefined {
-  if (wf.spawnedByNodeId === spawnNodeId) return wf;
-  for (const child of wf.children) {
-    const found = findSpawnWorkflow(child, spawnNodeId);
+  for (const wf of roots) {
+    if (wf.id === id) return wf;
+    const found = findWorkflowById(wf.children, id);
     if (found) return found;
   }
   return undefined;
 }
 
 function SpawnPreview({ ctx }: ToolContentProps) {
-  const { chatId, toolCallId, isCompleted, hasFailed } = ctx;
+  const { chatId, childWorkflowId, isCompleted, hasFailed } = ctx;
 
-  const activeThreads = useActiveThreads(chatId || "");
-  const spawnNodeId = `spawn-${toolCallId}`;
-  const spawnThread = useMemo(
-    () => activeThreads.find(
-      (t) => t.spawned_by_tool_call_id === toolCallId || t.spawned_by_node_id === spawnNodeId,
-    ),
-    [activeThreads, toolCallId, spawnNodeId],
+  // The child workflow is the authority on whether the spawn finished. Look it
+  // up by id — the id the spawn itself recorded — rather than searching for
+  // something that looks like it.
+  const { allWorkflows } = useWorkflowExecutions(chatId || null);
+  const spawnWorkflow = useMemo(
+    () => (childWorkflowId ? findWorkflowById(allWorkflows, childWorkflowId) : undefined),
+    [allWorkflows, childWorkflowId],
   );
 
-  const { allWorkflows } = useWorkflowExecutions(chatId || null);
-  const spawnWorkflow = useMemo(() => {
-    if (!toolCallId) return undefined;
-    for (const wf of allWorkflows) {
-      const found = findSpawnWorkflow(wf, spawnNodeId);
-      if (found) return found;
-    }
-    return undefined;
-  }, [allWorkflows, toolCallId, spawnNodeId]);
+  // The thread this spawn owns, stated by the code that created it: the spawn
+  // path writes tool_calls.child_workflow_id, and a spawned sub-agent's thread
+  // id equals its workflow id.
+  //
+  // This used to be searched for instead — by scanning live streaming state,
+  // then by walking the workflow tree matching spawnedByNodeId. Both are
+  // derivations of a fact we already store, and both miss: streaming state is
+  // empty for anything not currently running, and spawnedByNodeId is empty on
+  // some spawn workflows. When both missed, the preview rendered "Starting..."
+  // over a child thread that already had hundreds of messages.
+  const spawnThreadId = childWorkflowId;
 
-  const spawnThreadId = spawnThread?.thread || spawnWorkflow?.thread;
-  const allMessages = useChatMessages(chatId);
+  // Read the child thread directly. This used to filter the chat-wide message
+  // list by thread, which silently depended on the child's messages surviving
+  // a window sized for the MAIN transcript — a spawn out-writes its parent by
+  // an order of magnitude, so they often did not, and the preview showed
+  // "Starting…" over a thread with hundreds of messages.
+  const { data: threadMessages, isPending } = useThreadMessages(
+    chatId,
+    spawnThreadId,
+  );
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
 
   const workflowCompleted = spawnWorkflow?.status === ChatWorkflowStatus.COMPLETED;
   const workflowFailed =
     spawnWorkflow?.status === ChatWorkflowStatus.FAILED ||
     spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
+  const isCancelledChild = spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
 
-  const isDone = isCompleted || workflowCompleted;
+  // Once dispatched (a child_workflow_id exists), the child workflow is the
+  // SOLE authority on whether this spawn is done — ctx.isCompleted/hasFailed
+  // already reflect that same fact via ToolExecution's own child-workflow
+  // lookup, so re-checking them here would just be a second hop onto the
+  // same data. Pre-dispatch (an early failure before any child thread was
+  // created, e.g. thread validation failed) there IS no child workflow to
+  // consult, so ctx's own verdict is what we have.
+  const isDone = spawnThreadId
+    ? workflowCompleted || workflowFailed
+    : isCompleted || hasFailed;
+
+  // The "message this agent" affordance only makes sense while the agent is
+  // actually running. A failed or cancelled spawn is just as "not done" as
+  // a running one, but offering to message a dead agent is a lie the UI
+  // shouldn't tell, even though the backend safely rejects it.
+  const spawnRunning = !!spawnThreadId && !workflowCompleted && !workflowFailed;
 
   const summaries = useMemo((): MessageSummary[] => {
-    if (!spawnThreadId) return [];
+    if (!spawnThreadId) {
+      logger.error(
+        "[SpawnPreview] No child_workflow_id on this spawn call; cannot find its thread",
+        { chatId, toolCallId: ctx.toolCallId },
+      );
+      return [];
+    }
     // Canonical per-thread order (ordinal) so the preview reads
     // top-to-bottom in conversation order.
-    const threadMsgs = allMessages
-      .filter((msg) => msg.thread === spawnThreadId && msg.role === MessageRole.ASSISTANT)
+    const threadMsgs = (threadMessages ?? [])
+      .filter((msg) => msg.role === MessageRole.ASSISTANT)
       .slice()
       .sort(compareMessagesWithinThread);
 
-    // When complete, pop the last (most recent) message - it's the result shown in tool output
-    const msgs = isDone && threadMsgs.length > 1
-      ? threadMsgs.slice(0, -1)
-      : threadMsgs;
-
+    // A spawn's completion is delivered to the PARENT thread's mailbox, never
+    // written into the child thread, so the tool result never duplicates the
+    // child's last message here — nothing to pop.
     // Keep the most recent N so the preview tracks live activity.
-    return msgs.slice(-MAX_PREVIEW_MESSAGES).map((msg) => {
+    return threadMsgs.slice(-MAX_PREVIEW_MESSAGES).map((msg) => {
       const blocks = (msg.contentBlocks || []) as ContentBlock[];
       let textSnippet = "";
       const toolCalls: ToolCallInfo[] = [];
@@ -215,12 +248,26 @@ function SpawnPreview({ ctx }: ToolContentProps) {
       }
       return { id: msg.id, textSnippet, toolCalls };
     });
-  }, [allMessages, spawnThreadId, isDone, toolResultsByCallId]);
+  }, [threadMessages, spawnThreadId, toolResultsByCallId, chatId, ctx.toolCallId]);
 
   const hasContent = summaries.some((s) => s.textSnippet || s.toolCalls.length > 0);
 
   return (
     <div className="tool-content-spawn w-full">
+      {spawnRunning && chatId && spawnThreadId && (
+        <SendToAgentForm chatId={chatId} threadId={spawnThreadId} />
+      )}
+      {workflowFailed && (
+        <div
+          className={cn(
+            "flex items-center gap-1.5 px-2 py-1 border-b border-border/10 text-[10px]",
+            isCancelledChild ? "text-muted-foreground" : "text-warning",
+          )}
+        >
+          <AlertCircle className="w-2.5 h-2.5 shrink-0" />
+          <span>{isCancelledChild ? "Agent cancelled" : "Agent failed"}</span>
+        </div>
+      )}
       {hasContent ? (
         <div
           style={{ height: FIXED_HEIGHT }}
@@ -262,12 +309,83 @@ function SpawnPreview({ ctx }: ToolContentProps) {
           ))}
         </div>
       ) : (
-        !isCompleted && !hasFailed && !workflowCompleted && !workflowFailed && (
+        // "Starting…" now means what it says: the child thread is still being
+        // fetched, or it genuinely has nothing on it yet while the spawn runs.
+        // It is no longer reachable with a loaded-but-windowed-out thread,
+        // which is what made it a lie. A background spawn's child workflow
+        // row may not exist yet the instant it's dispatched — isDone falls
+        // back to ctx.isCompleted/hasFailed in that case, so this still
+        // resolves to "Starting…" rather than getting stuck.
+        (isPending || !isDone) && (
           <div className="px-2 py-1.5 text-[10px] text-muted-foreground italic">
             Starting…
           </div>
         )
       )}
+    </div>
+  );
+}
+
+/**
+ * Minimal affordance to steer a running sub-agent without pausing the whole
+ * chat: queues into the agent's mailbox (agent_messages), delivered at its
+ * next loop step boundary -- same mechanism spawn_send uses for agent-to-
+ * agent messages.
+ */
+function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: string }) {
+  const [value, setValue] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const send = async () => {
+    const message = value.trim();
+    if (!message || sending) return;
+    setSending(true);
+    try {
+      await chatGrpc.sendAgentMessage(chatId, threadId, message);
+      setValue("");
+      // Honest receipt, matching spawn_send's contract: queued, not yet read.
+      toast.info("Queued for delivery — it will be read at the agent's next turn.");
+    } catch (error) {
+      logger.error("[SendToAgentForm] Failed to send agent message", { error, chatId, threadId });
+      toast.error(error);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-1 px-2 py-1 border-b border-border/10">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            void send();
+          }
+        }}
+        onClick={(e) => e.stopPropagation()}
+        placeholder="Message this agent…"
+        disabled={sending}
+        className="flex-1 min-w-0 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground/60 outline-none disabled:opacity-50"
+      />
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          void send();
+        }}
+        disabled={sending || !value.trim()}
+        className="shrink-0 text-foreground/50 hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed"
+        aria-label="Send message to agent"
+      >
+        {sending ? (
+          <Loader2 className="w-3 h-3 animate-spin" />
+        ) : (
+          <Send className="w-3 h-3" />
+        )}
+      </button>
     </div>
   );
 }

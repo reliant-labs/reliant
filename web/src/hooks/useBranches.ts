@@ -18,7 +18,18 @@ export interface UseBranchesReturn {
   refetch: () => Promise<void>;
 }
 
-export function useBranches(projectId: string | undefined): UseBranchesReturn {
+/**
+ * Loads git branches for a project.
+ *
+ * `repoId` selects which nested repo to read. It is required in multi-repo
+ * projects: the backend resolves the repo path from it and returns
+ * InvalidArgument ("repo_id required in multi-repo projects") when a project
+ * has 2+ repos and no repo is named. Single-repo projects may omit it.
+ */
+export function useBranches(
+  projectId: string | undefined,
+  repoId?: string,
+): UseBranchesReturn {
   const [branches, setBranches] = useState<GitBranch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +45,7 @@ export function useBranches(projectId: string | undefined): UseBranchesReturn {
     setError(null);
 
     try {
-      const response = await api.git.getBranches(projectId);
+      const response = await api.git.getBranches(projectId, repoId);
 
       if (cancelledRef.current) return;
 
@@ -58,7 +69,7 @@ export function useBranches(projectId: string | undefined): UseBranchesReturn {
         setIsLoading(false);
       }
     }
-  }, [projectId]);
+  }, [projectId, repoId]);
 
   useEffect(() => {
     cancelledRef.current = false;

@@ -5,17 +5,33 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/terminal"
 )
 
-// terminalManager is the package-level terminal manager instance.
-var terminalManager *terminal.Manager
+// terminalMgr is the package-level terminal manager instance, used by the
+// registered terminal.* command handlers (which have a static (ctx, payload)
+// signature and so cannot reach the daemonClient).
+//
+// Atomic because the write and the reads happen on different goroutines with
+// no synchronisation between them: newDaemonClient installs the manager while
+// a previous client's stopAllStreams may still be running its cleanup on the
+// session goroutine. A plain pointer raced (caught by -race in
+// TestDaemonRecordsStream*), and in production a reconnect could publish a
+// half-initialised Manager to a handler.
+var terminalMgr atomic.Pointer[terminal.Manager]
 
-// SetTerminalManager sets the terminal manager used by terminal command handlers.
+// SetTerminalManager sets the terminal manager used by terminal command
+// handlers. Safe for concurrent use.
 func SetTerminalManager(m *terminal.Manager) {
-	terminalManager = m
+	terminalMgr.Store(m)
+}
+
+// terminalManager returns the current terminal manager, or nil if unset.
+func terminalManager() *terminal.Manager {
+	return terminalMgr.Load()
 }
 
 func init() {
@@ -39,7 +55,8 @@ type terminalCreateResponse struct {
 }
 
 func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		return nil, fmt.Errorf("terminal manager not initialized")
 	}
 
@@ -52,7 +69,7 @@ func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
 	// bidi stream serves exactly one user, so the router only delivers commands
 	// to the correct daemon. We pass an empty userID here because access
 	// control is enforced at the stream/routing level, not inside the manager.
-	session, err := terminalManager.CreateSession(req.WorkingDir, "")
+	session, err := tm.CreateSession(req.WorkingDir, "")
 	if err != nil {
 		return nil, fmt.Errorf("create session: %w", err)
 	}
@@ -86,13 +103,14 @@ type terminalListResponse struct {
 }
 
 func handleTerminalList(_ context.Context, _ []byte) ([]byte, error) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		return nil, fmt.Errorf("terminal manager not initialized")
 	}
 
 	// DaemonCommand handlers are already scoped per-user via the bidi stream.
 	// Each daemon serves one user, so ListSessions() returns only that user's sessions.
-	sessions := terminalManager.ListSessions()
+	sessions := tm.ListSessions()
 	infos := make([]terminalSessionInfo, 0, len(sessions))
 
 	for _, s := range sessions {
@@ -125,7 +143,8 @@ type terminalCloseResponse struct {
 }
 
 func handleTerminalClose(_ context.Context, payload []byte) ([]byte, error) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		return nil, fmt.Errorf("terminal manager not initialized")
 	}
 
@@ -136,7 +155,7 @@ func handleTerminalClose(_ context.Context, payload []byte) ([]byte, error) {
 
 	// DaemonCommand handlers are already scoped per-user via the bidi stream.
 	// Each daemon serves one user, so CloseSession() can only reach that user's sessions.
-	if err := terminalManager.CloseSession(req.SessionID); err != nil {
+	if err := tm.CloseSession(req.SessionID); err != nil {
 		return nil, fmt.Errorf("close session: %w", err)
 	}
 
@@ -158,7 +177,8 @@ type terminalResizeResponse struct {
 }
 
 func handleTerminalResize(_ context.Context, payload []byte) ([]byte, error) {
-	if terminalManager == nil {
+	tm := terminalManager()
+	if tm == nil {
 		return nil, fmt.Errorf("terminal manager not initialized")
 	}
 
@@ -167,7 +187,7 @@ func handleTerminalResize(_ context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	if err := terminalManager.Resize(req.SessionID, req.Cols, req.Rows); err != nil {
+	if err := tm.Resize(req.SessionID, req.Cols, req.Rows); err != nil {
 		return nil, fmt.Errorf("resize session: %w", err)
 	}
 

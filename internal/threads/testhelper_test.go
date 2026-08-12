@@ -6,8 +6,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // testHelper wraps db.Repo and provides convenience methods for testing.
@@ -70,13 +70,13 @@ func (h *testHelper) createChat(id string) string {
 }
 
 // createThread creates a thread using the service.
-func (h *testHelper) createThread(id, conversationID string) (*db.Thread, *db.ContextWindow) {
+func (h *testHelper) createThread(id, chatID string) (*db.Thread, *db.ContextWindow) {
 	h.t.Helper()
 	ctx := context.Background()
 
 	thread, cw, err := h.svc.CreateThread(ctx, CreateThreadOpts{
-		ID:             id,
-		ConversationID: conversationID,
+		ID:     id,
+		ChatID: chatID,
 	})
 	if err != nil {
 		h.t.Fatalf("failed to create thread: %v", err)
@@ -84,22 +84,50 @@ func (h *testHelper) createThread(id, conversationID string) (*db.Thread, *db.Co
 	return thread, cw
 }
 
-// forkThread creates a forked thread using the service.
-func (h *testHelper) forkThread(id, conversationID, parentThreadID string, forkAtOrdinal int64, forkAtCWID string) (*db.Thread, *db.ContextWindow) {
+// forkThread creates a forked thread using the service. forkAtOrdinal is a
+// position in forkAtCWID's messages, resolved here to the message it names
+// (or nil when forkAtOrdinal < 0, matching the old "empty parent" convention)
+// -- callers pass ordinals because most fixtures already track ordinals for
+// message identity, and the resolution is exactly what
+// 20260803010000_fork_points_reference_messages.sql's backfill does.
+func (h *testHelper) forkThread(id, chatID, parentThreadID string, forkAtOrdinal int64, forkAtCWID string) (*db.Thread, *db.ContextWindow) {
 	h.t.Helper()
 	ctx := context.Background()
 
+	forkAtMessageID := h.messageIDAtOrdinal(forkAtCWID, forkAtOrdinal)
+
 	thread, cw, err := h.svc.ForkThread(ctx, ForkThreadOpts{
 		ID:                    id,
-		ConversationID:        conversationID,
+		ChatID:                chatID,
 		ParentThreadID:        parentThreadID,
-		ForkAtOrdinal:         forkAtOrdinal,
 		ForkAtContextWindowID: forkAtCWID,
+		ForkAtMessageID:       forkAtMessageID,
 	})
 	if err != nil {
 		h.t.Fatalf("failed to fork thread: %v", err)
 	}
 	return thread, cw
+}
+
+// messageIDAtOrdinal resolves the message with the given ordinal in the given
+// context window, or nil if forkAtOrdinal < 0 or no such message exists.
+func (h *testHelper) messageIDAtOrdinal(contextWindowID string, forkAtOrdinal int64) *string {
+	h.t.Helper()
+	if forkAtOrdinal < 0 {
+		return nil
+	}
+	ctx := context.Background()
+	msgs, err := h.repo.GetMessagesByContextWindow(ctx, contextWindowID, nil)
+	if err != nil {
+		h.t.Fatalf("failed to list messages for fork resolution: %v", err)
+	}
+	for _, m := range msgs {
+		if m.Ordinal == forkAtOrdinal {
+			id := m.ID
+			return &id
+		}
+	}
+	return nil
 }
 
 // compact performs compaction on a thread.
@@ -119,12 +147,18 @@ func (h *testHelper) addMessageWithID(id, chatID, threadID, contextWindowID stri
 	h.t.Helper()
 	ctx := context.Background()
 
+	seq, err := h.repo.GetNextSeq(ctx, chatID, threadID)
+	if err != nil {
+		h.t.Fatalf("failed to get next seq: %v", err)
+	}
+
 	msg := &db.Message{
 		ID:              id,
 		ChatID:          chatID,
 		ThreadID:        threadID,
 		ContextWindowID: contextWindowID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		Role:            reliantv1.MessageRole(role),
 		CreatedAt:       time.Now(),
 	}
@@ -140,6 +174,11 @@ func (h *testHelper) addMessageWithTokens(chatID, threadID, contextWindowID stri
 	h.t.Helper()
 	ctx := context.Background()
 
+	seq, err := h.repo.GetNextSeq(ctx, chatID, threadID)
+	if err != nil {
+		h.t.Fatalf("failed to get next seq: %v", err)
+	}
+
 	tc := inputTokens + outputTokens
 	msg := &db.Message{
 		ID:              uuid.New().String(),
@@ -147,6 +186,7 @@ func (h *testHelper) addMessageWithTokens(chatID, threadID, contextWindowID stri
 		ThreadID:        threadID,
 		ContextWindowID: contextWindowID,
 		Ordinal:         ordinal,
+		Seq:             seq,
 		Role:            reliantv1.MessageRole(role),
 		TokenCount:      &tc,
 		CreatedAt:       time.Now(),

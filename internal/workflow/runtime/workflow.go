@@ -136,6 +136,92 @@ func NewChatContext(chatID string) *ChatContext {
 type ChildWorkflowTracker struct {
 	children     map[string]bool                   // Map of child workflow IDs that are currently active
 	threadInputs map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
+
+	// liveDetachedSpawns is every background
+	// spawn currently in flight, keyed by its tool_call_id. This is the
+	// registry the loop-exit gate (spec §6.1) and the terminal drain
+	// (spec §6.7) both read: the former asks "does MY thread have any live
+	// entries", the latter walks every entry to cancel and status them.
+	liveDetachedSpawns map[string]*detachedSpawnRecord
+
+	// detachedCompletions counts, per parent thread, how many of that
+	// thread's background spawns have finished (successfully, cancelled, or
+	// failed) since the tracker was created. The loop-exit gate wakes as
+	// soon as its own thread's count advances past the value it last
+	// observed, reacting to the FIRST finisher rather than waiting for every
+	// one — the same "not wait for all agents" behavior the spec's rejected
+	// CEL wait node would have implemented (§6.3), done here with a plain
+	// int and workflow.AwaitWithTimeout instead.
+	detachedCompletions map[string]int
+}
+
+// detachedSpawnRecord is one live background spawn, tracked from the moment
+// its tool result settles (with a handle) until its detached goroutine
+// finishes. Everything the terminal drain (spec §6.7) needs to write a
+// cancelled tool-call status without re-deriving it from the config.
+type detachedSpawnRecord struct {
+	ToolCallID   string
+	ChatID       string
+	ParentThread string
+	ChildThread  string
+}
+
+// registerDetachedSpawn records a new in-flight background spawn against its
+// PARENT thread — the thread whose InlineLoopExecutor must not exit while
+// this thread has any live entry.
+func (t *ChildWorkflowTracker) registerDetachedSpawn(rec *detachedSpawnRecord) {
+	if t.liveDetachedSpawns == nil {
+		t.liveDetachedSpawns = make(map[string]*detachedSpawnRecord)
+	}
+	t.liveDetachedSpawns[rec.ToolCallID] = rec
+}
+
+// completeDetachedSpawn records that a background spawn has finished (any
+// terminal outcome) and removes it from the live registry. Safe to call even
+// if the entry is already gone (defensive against a double-report).
+func (t *ChildWorkflowTracker) completeDetachedSpawn(toolCallID, parentThread string) {
+	delete(t.liveDetachedSpawns, toolCallID)
+	if t.detachedCompletions == nil {
+		t.detachedCompletions = make(map[string]int)
+	}
+	t.detachedCompletions[parentThread]++
+}
+
+// hasLiveDetachedSpawns reports whether thread has any background spawns
+// still in flight.
+func (t *ChildWorkflowTracker) hasLiveDetachedSpawns(thread string) bool {
+	for _, rec := range t.liveDetachedSpawns {
+		if rec.ParentThread == thread {
+			return true
+		}
+	}
+	return false
+}
+
+// detachedCompletionCount returns how many of thread's background spawns
+// have finished so far. Monotonically increasing for the life of the
+// workflow execution — callers snapshot it before blocking and compare
+// against the live value to detect "at least one more finished."
+func (t *ChildWorkflowTracker) detachedCompletionCount(thread string) int {
+	return t.detachedCompletions[thread]
+}
+
+// listLiveDetachedSpawns returns every background spawn currently in flight,
+// across all parent threads. Used by the terminal drain (spec §6.7) to find
+// what to cancel on an abnormal termination path — there is no single
+// "current thread" at that point, so every thread's live detached work must
+// be swept.
+//
+// Sorted by tool_call_id: Go map iteration order is randomized, and this
+// drives the order of ExecuteActivity commands the drain issues, which must
+// be identical on replay.
+func (t *ChildWorkflowTracker) listLiveDetachedSpawns() []*detachedSpawnRecord {
+	records := make([]*detachedSpawnRecord, 0, len(t.liveDetachedSpawns))
+	for _, rec := range t.liveDetachedSpawns {
+		records = append(records, rec)
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].ToolCallID < records[j].ToolCallID })
+	return records
 }
 
 // RegisterThreadInputs registers a thread's input map for later query/update access.
@@ -282,14 +368,14 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// needs its own channel instead of being read off the lifecycle status.
 	runOutcome := ""
 	defer func() {
-		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome)
+		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, childTracker)
 	}()
 
 	// STEP 5: Load workflow definition (YAML and JSON)
 	loadedWf, err := loadWorkflowDefinition(ctx, input)
 	if err != nil {
 		// Notify user of the workflow parsing/loading error
-		notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "workflow_parse_error", err.Error())
+		notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "workflow_parse_error", err.Error())
 		return nil, fmt.Errorf("failed to load workflow definition: %w", err)
 	}
 
@@ -328,7 +414,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}, filteredInputs)
 		if validationResult.HasErrors() {
 			errMsg := validationResult.Error()
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "input_validation_error", errMsg)
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "input_validation_error", errMsg)
 			return nil, fmt.Errorf("workflow input validation failed: %s", errMsg)
 		}
 
@@ -398,7 +484,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if loadedWf.HasTemplates {
 		wf, err = ResolveAndParseWorkflow(loadedWf.YAML, input.Inputs)
 		if err != nil {
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "template_resolution_error", err.Error())
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "template_resolution_error", err.Error())
 			return nil, fmt.Errorf("failed to resolve workflow templates: %w", err)
 		}
 		logger.Debug("[Workflow Runtime] Resolved workflow templates",
@@ -432,7 +518,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		celCtx := buildWorkflowCELContext(workflowID, input.WorkflowName, input.Inputs, nil)
 		ds, err := ResolveCelDaemonSelector(wf.Daemon, celCtx)
 		if err != nil {
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "daemon_resolution_error", err.Error())
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_resolution_error", err.Error())
 			return nil, fmt.Errorf("failed to resolve workflow daemon selector: %w", err)
 		}
 		if ds != nil {
@@ -491,7 +577,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		})
 		var preflightResult map[string]interface{}
 		if err := workflow.ExecuteActivity(preflightCtx, "PreflightDaemonCheck", preflightInput).Get(ctx, &preflightResult); err != nil {
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, "daemon_unavailable", err.Error())
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", err.Error())
 			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
 		}
 		logger.Info("[Workflow Runtime] Preflight daemon check passed")
@@ -693,6 +779,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			"error_message": DaemonOfflinePauseMessage,
 			"error_type":    "daemon_offline_pause",
 			"error_summary": DaemonOfflinePauseMessage,
+			"thread":        thread,
 		}).Get(callerCtx, &errorResult)
 
 		// Update DB status to paused so the UI reflects it and SendMessage
@@ -717,14 +804,28 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// makeThreadPauseCtrl creates a per-thread PauseController that inherits
 	// pause/activity-context (and the shared daemon-offline breaker) from the
 	// shared one.
+	// Threads the user has cancelled. A spawn runs inline in THIS execution
+	// (dispatchSpawnBackground / runSpawnInlineChild), so cancelling one is
+	// not a Temporal operation — it is this set plus the spawn's own loop
+	// checking it at step boundaries.
+	// Keyed by both the spawn's thread and the tool call that started it,
+	// because the UI can only name the latter.
+	cancelledThreads := map[string]bool{}
+
 	makeThreadPauseCtrl := func(thread string) *PauseController {
 		return &PauseController{
 			CheckPause:    checkPause,
 			ActivityCtxFn: getActivityCtx,
 			RequestPause:  requestPause,
 			DaemonOffline: daemonOfflineBreaker,
+			Cancelled:     func() bool { return cancelledThreads[thread] },
 		}
 	}
+
+	// Receive cancel-thread signals. A spawn has no Temporal execution of its
+	// own to cancel, so the request arrives here as a signal on the PARENT and
+	// is recorded for the spawn's loop to observe.
+	setupCancelThreadHandler(ctx, cancelledThreads, workflowID)
 
 	// STEP 8.6: Create shared PauseController for all executors
 	pauseCtrl := &PauseController{
@@ -743,6 +844,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// DefaultVersion when replaying pre-change histories (checkpoints off)
 	// and 1 for new executions (checkpoints on).
 	checkpointsEnabled := workflow.GetVersion(ctx, "position-checkpoints", workflow.DefaultVersion, 1) >= 1
+
+	// STEP 8.66: Replay-versioning gate for ContinueAsNew at the agent-loop
+	// iteration boundary. Same hazard as the checkpoints above: the check adds
+	// commands (and eventually a CONTINUE_AS_NEW close command) where
+	// pre-change histories have none.
+	continueAsNewEnabled := workflow.GetVersion(ctx, continueAsNewVersionGate, workflow.DefaultVersion, 1) >= 1
 
 	// STEP 8.7: Create step executor for unified step lifecycle
 	executor := NewStepExecutor(
@@ -1020,6 +1127,20 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					})
 				}
 
+				// ContinueAsNew before the history grows past the point where
+				// Temporal terminates the run. Top-level loops only: this ends
+				// the entire execution, so a nested loop must not reach it.
+				// Version-gated for the same reason the checkpoints are —
+				// pre-change histories must replay without these commands.
+				if continueAsNewEnabled {
+					loopExecutor = loopExecutor.WithContinueAsNewCheck(func(iteration int) error {
+						if !readyToContinueAsNew(ctx, childTracker, pauser.PauseArmed()) {
+							return nil
+						}
+						return newContinueAsNewError(ctx, input, loopStepID, iteration)
+					})
+				}
+
 				// Resume mode: re-enter the resume-target loop at the recorded
 				// iteration. Applied once — subsequent triggers of the same
 				// loop (e.g. via edges) start fresh at iteration 0.
@@ -1053,11 +1174,24 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							continue retryLoop
 						}
 
+						// ContinueAsNew is a deliberate handoff, not a failure.
+						// It must be returned VERBATIM: the SDK matches it to
+						// emit a CONTINUE_AS_NEW command, and the paths below
+						// would otherwise wrap it in a "loop step failed"
+						// error and post that to the user's chat.
+						if isContinueAsNew(execErr) {
+							logger.Info("[Workflow Runtime] Loop requested continue-as-new",
+								"stepID", step.Node.GetId(),
+								"historyLength", workflow.GetInfo(ctx).GetCurrentHistoryLength(),
+							)
+							return nil, execErr
+						}
+
 						logger.Error("[Workflow Runtime] Loop step execution failed",
 							"stepID", step.Node.GetId(),
 							"error", execErr,
 						)
-						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 							"loop_execution_error",
 							fmt.Sprintf("Loop step '%s' failed: %s", step.Node.GetId(), execErr.Error()))
 						return nil, fmt.Errorf("loop step %s failed: %w", step.Node.GetId(), execErr)
@@ -1148,7 +1282,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"error", err,
 					)
 					// Notify UI of the error
-					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 						"config_evaluation_error",
 						fmt.Sprintf("Step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
 					// Fail fast - CEL evaluation errors should halt the workflow, not silently continue
@@ -1175,7 +1309,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"error", err,
 					)
 					// Notify UI of the error
-					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 						"executor_creation_error",
 						fmt.Sprintf("Failed to create executor for step '%s': %s", step.Node.GetId(), err.Error()))
 					// Fail fast - executor creation errors should halt the workflow
@@ -1348,7 +1482,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"stepID", step.Node.GetId(),
 						"error", err,
 					)
-					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 						"config_evaluation_error",
 						fmt.Sprintf("Node router step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
 					return nil, fmt.Errorf("node router step %s config evaluation failed: %w", step.Node.GetId(), err)
@@ -1426,7 +1560,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"stepID", step.Node.GetId(),
 						"error", err,
 					)
-					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+					notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 						"config_evaluation_error",
 						fmt.Sprintf("Router step '%s' config evaluation failed: %s", step.Node.GetId(), err.Error()))
 					return nil, fmt.Errorf("router step %s config evaluation failed: %w", step.Node.GetId(), err)
@@ -1607,6 +1741,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						"workflow_name": input.WorkflowName,
 						"error_message": humanizeRetryError(running.StepID, stepEvent.Error),
 						"error_type":    "retry_exhaustion",
+						"thread":        thread,
 					}
 					if summary := extractLLMErrorSummary(errStr); summary != "" {
 						errorPayload["error_summary"] = summary + ". Workflow paused — send a message to retry."
@@ -1796,7 +1931,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							"stepID", running.StepID,
 							"error", running.Error,
 						)
-						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName,
+						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
 							"inline_workflow_error",
 							fmt.Sprintf("Inline workflow '%s' failed: %s", running.StepID, running.Error.Error()))
 						return nil, fmt.Errorf("inline workflow %s failed: %w", running.StepID, running.Error)
@@ -1881,6 +2016,59 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 //     so their own setupInputUpdateHandler can apply it.
 //
 // The doneCh channel signals the handler to exit when the workflow completes.
+// CancelThreadSignalName is the signal a client sends to stop ONE spawned
+// thread without touching the rest of the run.
+const CancelThreadSignalName = "cancel_thread"
+
+// CancelThreadSignal names the spawn to stop. Either identifier may be set:
+// Thread is the spawn's own thread id, ToolCallID is the spawn tool call that
+// created it — the only id a user cancelling from the UI can name.
+type CancelThreadSignal struct {
+	Thread     string `json:"thread,omitempty"`
+	ToolCallID string `json:"tool_call_id,omitempty"`
+}
+
+// setupCancelThreadHandler records cancel-thread signals for spawned threads to
+// observe at their next step boundary.
+//
+// A spawn is NOT a child Temporal workflow — dispatchSpawnBackground runs it
+// inside this execution via workflow.Go. So there is nothing for Temporal to cancel,
+// and the previous implementation's TerminateWorkflow(child_workflow_id)
+// always failed with "workflow not found for ID": that id names a thread and a
+// DB row, not a Temporal execution. Because the failure was best-effort, the
+// tool call was still marked cancelled and the UI said "cancelled" while the
+// spawn kept running.
+//
+// Writing a plain map from this goroutine is safe: Temporal workflow
+// goroutines are cooperatively scheduled on a single thread, so there is no
+// parallel access to guard against.
+func setupCancelThreadHandler(ctx workflow.Context, cancelled map[string]bool, workflowID string) {
+	logger := workflow.GetLogger(ctx)
+	ch := workflow.GetSignalChannel(ctx, CancelThreadSignalName)
+
+	workflow.Go(ctx, func(gCtx workflow.Context) {
+		for {
+			if gCtx.Err() != nil {
+				return
+			}
+			var sig CancelThreadSignal
+			if !ch.Receive(gCtx, &sig) {
+				return
+			}
+			// Record under both ids. The UI knows the tool call; the spawn
+			// knows its thread. Marking both means either side can name it.
+			if sig.Thread != "" {
+				cancelled[sig.Thread] = true
+			}
+			if sig.ToolCallID != "" {
+				cancelled[sig.ToolCallID] = true
+			}
+			logger.Info("[Workflow Runtime] Thread cancellation requested",
+				"workflowID", workflowID, "thread", sig.Thread, "toolCallID", sig.ToolCallID)
+		}
+	})
+}
+
 func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]interface{}, childTracker *ChildWorkflowTracker, workflowID string, doneCh workflow.ReceiveChannel) {
 	logger := workflow.GetLogger(ctx)
 	updateSignal := workflow.GetSignalChannel(ctx, "update_workflow_state")
@@ -2184,9 +2372,13 @@ type spawnChildWorkflowConfig struct {
 	toolCallID      string
 	presetName      string // Preset name from spawn tool call
 	title           string // Optional human-readable title for the thread
+	// rawInput is the unwrapped spawn tool input JSON, carried so the durable
+	// tool_calls row records what the LLM actually asked for.
+	rawInput string
 }
 
-// parseSpawnToolCall parses a spawn tool call and returns the configuration for spawning a child workflow
+// parseSpawnToolCall parses a spawn tool call and returns the configuration
+// for spawning a child workflow.
 func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallMsg, parentWorkflowID string) (*spawnChildWorkflowConfig, error) {
 	logger := workflow.GetLogger(ctx)
 	toolCallID := spawnToolCall.GetId()
@@ -2230,6 +2422,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 		toolCallID: toolCallID,
 		presetName: presetName,
 		title:      titleOverride, // May be empty - will default to preset name
+		rawInput:   inputStr,
 	}
 
 	if hasAgentID && agentID != "" {
@@ -2281,6 +2474,13 @@ type spawnInlineResult struct {
 	ToolCallID string
 	Content    string
 	IsError    bool
+	// Cancelled distinguishes a user-cancelled spawn from any other
+	// non-error outcome. IsError alone cannot: a cancellation deliberately
+	// sets IsError=false (spec: cancelling is not the agent's fault), so a
+	// detached spawn reporting its outcome to the mailbox needs this to pick
+	// the right AgentMessageKind (spec §5.1: 2=completion, 3=cancelled,
+	// 4=failed).
+	Cancelled bool
 }
 
 // toToolResult converts to the map format expected by the tool result pipeline.
@@ -2292,13 +2492,30 @@ func (r *spawnInlineResult) toToolResult() map[string]interface{} {
 	}
 }
 
-// executeSpawnInline runs a spawn tool call inline using InlineWorkflowExecutor.
-// This replaces the previous child workflow approach, running the spawned workflow
-// in the same Temporal workflow context as the parent. Benefits:
-// - No orphaned child workflows on worker restart
-// - Pause/resume automatically applies to spawned workflows
-// - No per-workflow task queue issues
-func executeSpawnInline(
+// spawnPrepResult is the outcome of the pre-execution setup shared by both
+// the blocking and detached spawn paths: create the child thread/workflow
+// row, resolve its execution context, and notify the UI the spawn exists.
+// Neither path runs the child's turns yet.
+type spawnPrepResult struct {
+	// earlyResult is set when prep itself failed (thread validation, child
+	// init) and execution must not proceed at all — the caller returns this
+	// directly.
+	earlyResult *spawnInlineResult
+
+	targetWorkflow   string
+	childExecContext *ExecutionContext
+	spawnNode        *reliantv1.Node
+	evalResult       *reliantv1.Node
+	threadTitle      string
+	spawnStatusOpts  *toolCallStatusOpts
+	pauseCtrl        *PauseController
+}
+
+// prepareSpawnInline runs everything about starting a spawn that must happen
+// before its tool result can settle: validate resumption ownership, create
+// the child thread/workflow row (and inject the seed message), and notify
+// the UI the spawn now exists.
+func prepareSpawnInline(
 	ctx workflow.Context,
 	config *spawnChildWorkflowConfig,
 	projectPath string,
@@ -2306,10 +2523,20 @@ func executeSpawnInline(
 	parentWorkflowID string,
 	parentThread string,
 	workflowInputs map[string]interface{},
-	childTracker *ChildWorkflowTracker,
 	makeThreadPauseCtrl func(string) *PauseController,
-) *spawnInlineResult {
+) *spawnPrepResult {
 	pauseCtrl := makeThreadPauseCtrl(config.childThread)
+
+	// A user cancels a spawn by naming its TOOL CALL — that is the only id the
+	// UI has. Widen this thread's cancellation check to match either id.
+	if pauseCtrl != nil {
+		threadCancelled := pauseCtrl.Cancelled
+		toolCallCancelled := makeThreadPauseCtrl(config.toolCallID).Cancelled
+		pauseCtrl.Cancelled = func() bool {
+			return (threadCancelled != nil && threadCancelled()) ||
+				(toolCallCancelled != nil && toolCallCancelled())
+		}
+	}
 	logger := workflow.GetLogger(ctx)
 
 	// Validate thread ownership for resumptions - threads cannot be resumed across chat branches
@@ -2334,11 +2561,11 @@ func executeSpawnInline(
 				"toolCallID", config.toolCallID,
 				"error", err,
 			)
-			return &spawnInlineResult{
+			return &spawnPrepResult{earlyResult: &spawnInlineResult{
 				ToolCallID: config.toolCallID,
 				Content:    fmt.Sprintf("Failed to validate thread ownership: %v", err),
 				IsError:    true,
-			}
+			}}
 		}
 		valid, _ := validateResult["valid"].(bool)
 		if !valid {
@@ -2351,11 +2578,11 @@ func executeSpawnInline(
 				"childThread", config.childThread,
 				"chatID", chatID,
 			)
-			return &spawnInlineResult{
+			return &spawnPrepResult{earlyResult: &spawnInlineResult{
 				ToolCallID: config.toolCallID,
 				Content:    errorMessage,
 				IsError:    true,
-			}
+			}}
 		}
 		logger.Info("[SpawnInline] Thread ownership validated",
 			"toolCallID", config.toolCallID,
@@ -2414,11 +2641,11 @@ func executeSpawnInline(
 			"childWorkflowID", config.childWorkflowID,
 			"error", err,
 		)
-		return &spawnInlineResult{
+		return &spawnPrepResult{earlyResult: &spawnInlineResult{
 			ToolCallID: config.toolCallID,
 			Content:    fmt.Sprintf("Failed to initialize spawn: %v", err),
 			IsError:    true,
-		}
+		}}
 	}
 
 	// Calculate child spawn depth: read parent's depth from workflowInputs and increment
@@ -2498,8 +2725,45 @@ func executeSpawnInline(
 		SpawnedByToolCallID: config.toolCallID,
 	})
 
-	// Emit per-tool-call "executing" status so the UI shows this spawn as active
-	notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "executing")
+	spawnStatusOpts := &toolCallStatusOpts{
+		ChildWorkflowID: config.childWorkflowID,
+		Input:           config.rawInput,
+	}
+
+	return &spawnPrepResult{
+		targetWorkflow:   targetWorkflow,
+		childExecContext: childExecContext,
+		spawnNode:        spawnNode,
+		evalResult:       evalResult,
+		threadTitle:      threadTitle,
+		spawnStatusOpts:  spawnStatusOpts,
+		pauseCtrl:        pauseCtrl,
+	}
+}
+
+// runSpawnInlineChild runs the child's turns to completion (or terminal
+// failure/cancellation) using an already-prepared spawnPrepResult, including
+// the transient-error retry loop and the completion/failure status
+// notifications. Called from a detached workflow.Go goroutine — its return
+// value is reported via the parent's mailbox (see dispatchSpawnBackground).
+func runSpawnInlineChild(
+	ctx workflow.Context,
+	config *spawnChildWorkflowConfig,
+	chatID string,
+	parentWorkflowID string,
+	projectPath string,
+	workflowInputs map[string]interface{},
+	childTracker *ChildWorkflowTracker,
+	makeThreadPauseCtrl func(string) *PauseController,
+	prep *spawnPrepResult,
+) *spawnInlineResult {
+	logger := workflow.GetLogger(ctx)
+	targetWorkflow := prep.targetWorkflow
+	spawnNode := prep.spawnNode
+	evalResult := prep.evalResult
+	childExecContext := prep.childExecContext
+	pauseCtrl := prep.pauseCtrl
+	spawnStatusOpts := prep.spawnStatusOpts
 
 	// Retry loop for transient errors (worker restarts, heartbeat timeouts).
 	// Spawn tool calls are long-running and must survive any number of worker restarts.
@@ -2534,7 +2798,7 @@ func executeSpawnInline(
 			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
 				SpawnedByToolCallID: config.toolCallID,
 			})
-			notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "failed")
+			notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "failed", spawnStatusOpts)
 			return &spawnInlineResult{
 				ToolCallID: config.toolCallID,
 				Content:    fmt.Sprintf("Failed to create spawn executor: %v", err),
@@ -2551,6 +2815,25 @@ func executeSpawnInline(
 		_, execErr = inlineExecutor.Execute()
 		if execErr == nil {
 			break // Success
+		}
+
+		// A user cancellation is terminal and must NOT be retried — retrying
+		// would restart the very work the user asked to stop.
+		if errors.Is(execErr, ErrThreadCancelled) {
+			logger.Info("[SpawnInline] Spawn cancelled by user",
+				"toolCallID", config.toolCallID,
+				"childWorkflowID", config.childWorkflowID,
+			)
+			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "cancelled", parentWorkflowID, config.childThread, &workflowStatusOpts{
+				SpawnedByToolCallID: config.toolCallID,
+			})
+			notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "cancelled", spawnStatusOpts)
+			return &spawnInlineResult{
+				ToolCallID: config.toolCallID,
+				Content:    "Spawn cancelled by the user before it finished.",
+				IsError:    false,
+				Cancelled:  true,
+			}
 		}
 
 		// Transient errors (worker restart, heartbeat timeout) — retry with backoff.
@@ -2593,7 +2876,7 @@ func executeSpawnInline(
 		notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
 			SpawnedByToolCallID: config.toolCallID,
 		})
-		notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "failed")
+		notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "failed", spawnStatusOpts)
 		return &spawnInlineResult{
 			ToolCallID: config.toolCallID,
 			Content:    fmt.Sprintf("Spawned workflow failed: %v", execErr),
@@ -2607,7 +2890,7 @@ func executeSpawnInline(
 	})
 
 	// Emit per-tool-call "completed" status so the UI marks this spawn as done
-	notifyToolCallStatus(ctx, chatID, config.toolCallID, config.toolCallID, "spawn", "completed")
+	notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "completed", spawnStatusOpts)
 
 	// Fetch the last message from the child's thread as the spawn result
 	result := fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
@@ -2618,6 +2901,149 @@ func executeSpawnInline(
 	)
 
 	return result
+}
+
+// spawnResultKindForMailbox maps a finished detached spawn's outcome onto the
+// mailbox's AgentMessageKind (spec §5.1: 2=completion, 3=cancelled,
+// 4=failed). Kind, not a boolean, because the parent's drained envelope
+// renders each differently (drain_agent_messages.go:buildEnvelope).
+func spawnResultKindForMailbox(result *spawnInlineResult) int32 {
+	switch {
+	case result.Cancelled:
+		return 3 // core.AgentMessageKindCancelled
+	case result.IsError:
+		return 4 // core.AgentMessageKindFailed
+	default:
+		return 2 // core.AgentMessageKindCompletion
+	}
+}
+
+// dispatchSpawnBackground starts a spawn tool call in DETACHED mode: it runs
+// prep synchronously — the child thread must exist before the handle text
+// below can name its agent_id — then hands
+// the child's actual turns to a workflow.Go goroutine tracked on childTracker
+// and returns a handle immediately. The detached goroutine reports its
+// outcome into the PARENT's mailbox (spec §5) when it finishes; the parent's
+// own next drain (drainAgentMessagesAtBoundary) delivers it — this function
+// never writes into the parent thread's history directly.
+//
+// The parent thread whose InlineLoopExecutor must not exit while this spawn
+// is live is parentThread — the caller's own thread, not the child's.
+func dispatchSpawnBackground(
+	ctx workflow.Context,
+	config *spawnChildWorkflowConfig,
+	projectPath string,
+	chatID string,
+	parentWorkflowID string,
+	parentThread string,
+	workflowInputs map[string]interface{},
+	childTracker *ChildWorkflowTracker,
+	makeThreadPauseCtrl func(string) *PauseController,
+) *spawnInlineResult {
+	logger := workflow.GetLogger(ctx)
+
+	prep := prepareSpawnInline(ctx, config, projectPath, chatID, parentWorkflowID, parentThread, workflowInputs, makeThreadPauseCtrl)
+	if prep.earlyResult != nil {
+		// Prep itself failed (thread validation, child init) — nothing was
+		// detached, so this is exactly as synchronous as any other spawn
+		// parse/setup error. No registry entry to clean up.
+		return prep.earlyResult
+	}
+
+	// tool_calls.status = 6 (backgrounded): a result was returned to the LLM
+	// while the work continues (spec §7.1). Distinct from "executing", which
+	// the sync path uses and which the UI/reconciler would otherwise read as
+	// "still blocking this tool result."
+	notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "backgrounded", prep.spawnStatusOpts)
+
+	childTracker.registerDetachedSpawn(&detachedSpawnRecord{
+		ToolCallID:   config.toolCallID,
+		ChatID:       chatID,
+		ParentThread: parentThread,
+		ChildThread:  config.childThread,
+	})
+
+	workflow.Go(ctx, func(gCtx workflow.Context) {
+		// A panic inside this coroutine cannot be caught by the recover() in
+		// handleWorkflowCompletion — recover only works within the goroutine
+		// that panicked. Left unguarded, the Temporal dispatcher surfaces it
+		// as a panicError and, under the default BlockWorkflow policy, wedges
+		// the ENTIRE parent workflow task in a retry loop. One malformed child
+		// would take down a run that is otherwise healthy, which is a strictly
+		// worse outcome than losing that child's result. Contain it here: mark
+		// the spawn failed, let the parent's Await see it complete, and let the
+		// run continue.
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("[SpawnBackground] Detached spawn panicked; containing to this spawn",
+					"toolCallID", config.toolCallID,
+					"childThread", config.childThread,
+					"panic", r,
+				)
+				notifyToolCallStatus(gCtx, chatID, config.toolCallID, "spawn", "failed", prep.spawnStatusOpts)
+				childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
+			}
+		}()
+
+		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, prep)
+
+		enqueueCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    10 * time.Second,
+				MaximumAttempts:    3,
+			},
+		})
+		enqueueInput := map[string]interface{}{
+			"chat_id":        chatID,
+			"from_thread_id": config.childThread,
+			"to_thread_id":   parentThread,
+			"kind":           spawnResultKindForMailbox(result),
+			"body":           result.Content,
+			"tool_call_id":   config.toolCallID,
+		}
+		var enqueueOutput map[string]interface{}
+		if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
+			// Best-effort by the same rule as every other mailbox write: a
+			// failed enqueue here means the parent never learns this spawn
+			// finished until the stranded-spawn reconciler sweep catches it
+			// (spec §7.1) — logged, not fatal to this goroutine or the run.
+			logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
+				"toolCallID", config.toolCallID,
+				"parentThread", parentThread,
+				"childThread", config.childThread,
+				"error", err,
+			)
+		}
+
+		childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
+	})
+
+	// Determine thread title for the handle text: explicit title if
+	// provided, otherwise preset name — same rule prepareSpawnInline used to
+	// create the thread.
+	threadTitle := prep.threadTitle
+	if threadTitle == "" {
+		threadTitle = config.childThread
+	}
+
+	handleText := fmt.Sprintf(
+		"Spawned %q as agent_id: %s (status: running)\n\n"+
+			"<system>\n"+
+			"This agent is running in the background. Its result is NOT in this tool result.\n"+
+			"You will be notified when it finishes. Continue with other work, or use spawn_send\n"+
+			"to give it new instructions, or spawn_status to check its progress.\n"+
+			"</system>",
+		threadTitle, config.childThread,
+	)
+
+	return &spawnInlineResult{
+		ToolCallID: config.toolCallID,
+		Content:    handleText,
+		IsError:    false,
+	}
 }
 
 // fetchSpawnResult fetches the result from a completed spawn child workflow
@@ -2779,23 +3205,23 @@ func executeToolsWithSpawnSupport(
 			combinedResults = append(combinedResults, result.toolResults...)
 		}
 
-		// Execute spawn calls inline
-		// For multiple spawns, run in parallel using workflow.Go + channel
+		// Every spawn dispatches detached. Each call to dispatchSpawnBackground
+		// only blocks for its own prep (thread creation) before returning a
+		// handle — the child's actual turns run detached, tracked on
+		// childTracker, and report back via the mailbox. Parallel across
+		// multiple spawns so prep for one does not gate prep for another.
 		if len(spawnConfigs) == 1 {
-			// Single spawn - run directly (no goroutine overhead)
-			result := executeSpawnInline(gCtx, spawnConfigs[0], rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl)
+			result := dispatchSpawnBackground(gCtx, spawnConfigs[0], rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl)
 			combinedResults = append(combinedResults, result.toToolResult())
 		} else if len(spawnConfigs) > 1 {
-			// Multiple spawns - run in parallel using Temporal channels
 			resultCh := workflow.NewChannel(gCtx)
 			for _, cfg := range spawnConfigs {
 				cfg := cfg // Capture loop variable
 				workflow.Go(gCtx, func(spawnCtx workflow.Context) {
-					result := executeSpawnInline(spawnCtx, cfg, rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl)
+					result := dispatchSpawnBackground(spawnCtx, cfg, rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl)
 					resultCh.Send(spawnCtx, result)
 				})
 			}
-			// Collect all results
 			for range spawnConfigs {
 				var result *spawnInlineResult
 				resultCh.Receive(gCtx, &result)
@@ -3365,10 +3791,28 @@ func resolveResumeTarget(wf *reliantv1.Workflow, resume *ResumeInput, logger log
 	return nil, 0
 }
 
+// toolCallStatusOpts carries the spawn-specific fields that only the workflow
+// knows, for the durable tool_calls row the EmitToolCallStatus activity writes.
+type toolCallStatusOpts struct {
+	// ChildWorkflowID makes a spawn's completion a join from the tool call to
+	// the workflow it started, instead of reconstructing the link by matching
+	// strings later.
+	ChildWorkflowID string
+	// Input is the spawn tool's raw JSON arguments.
+	Input string
+}
+
 // notifyToolCallStatus emits a tool call status update so the UI can show
-// per-tool-call progress (e.g. spawn tool calls starting/completing independently).
+// per-tool-call progress (e.g. spawn tool calls starting/completing independently),
+// and — via the same activity — persists the durable tool_calls row.
+// Keyed by the LLM tool-call id, which is what the UI looks status up by.
+//
+// The write goes through the activity rather than the repository because this
+// is Temporal workflow code: a direct DB call here would be non-deterministic
+// and break replay. The activity is the deterministic boundary.
+//
 // Fire-and-forget: errors are logged but don't fail the workflow.
-func notifyToolCallStatus(ctx workflow.Context, chatID, contentBlockID, toolCallID, toolName, status string) {
+func notifyToolCallStatus(ctx workflow.Context, chatID, toolCallID, toolName, status string, opts *toolCallStatusOpts) {
 	logger := workflow.GetLogger(ctx)
 
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
@@ -3382,11 +3826,18 @@ func notifyToolCallStatus(ctx workflow.Context, chatID, contentBlockID, toolCall
 	})
 
 	input := map[string]interface{}{
-		"chat_id":          chatID,
-		"content_block_id": contentBlockID,
-		"tool_call_id":     toolCallID,
-		"tool_name":        toolName,
-		"status":           status,
+		"chat_id":      chatID,
+		"tool_call_id": toolCallID,
+		"tool_name":    toolName,
+		"status":       status,
+	}
+	if opts != nil {
+		if opts.ChildWorkflowID != "" {
+			input["child_workflow_id"] = opts.ChildWorkflowID
+		}
+		if opts.Input != "" {
+			input["input"] = opts.Input
+		}
 	}
 
 	var result map[string]interface{}
@@ -3399,7 +3850,13 @@ func notifyToolCallStatus(ctx workflow.Context, chatID, contentBlockID, toolCall
 
 // notifyWorkflowError writes a workflow error to chat_updates for UI display.
 // This is a fire-and-forget notification - errors are logged but don't fail the workflow.
-func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName, errorType, errorMessage string) {
+//
+// thread scopes the error to the thread that produced it. An error carrying no
+// thread is chat-scoped, and the timeline has nothing to filter on — one
+// "Paused: no machine is connected" from the main thread then rendered inside
+// EVERY thread of the chat, including spawns that started hours later and had
+// nothing to do with it.
+func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName, thread, errorType, errorMessage string) {
 	logger := workflow.GetLogger(ctx)
 
 	// Execute workflow error activity with short timeout
@@ -3420,6 +3877,9 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 		"workflow_name": workflowName,
 		"error_type":    errorType,
 		"error_message": errorMessage,
+	}
+	if thread != "" {
+		input["thread"] = thread
 	}
 
 	var result map[string]interface{}
@@ -3449,7 +3909,7 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 // run that failed every gate lane and routed to its `failed` node reported
 // COMPLETED to every supervision surface. Status stays the lifecycle; the
 // outcome rides alongside it.
-func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string) {
+func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, childTracker *ChildWorkflowTracker) {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
@@ -3463,6 +3923,10 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// emitStreamFinalized detects the cancelled ctx and switches to a
 		// disconnected context itself; ids only exist post-GetVersion-gate.
 		finalizeOutstandingStreams(ctx, streamReasonAborted)
+		// Spec §6.7: the wait node/loop-lifetime rule only handles the NORMAL
+		// exit; an abnormal termination never reaches it, so any detached
+		// spawn still in flight is drained here instead.
+		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
 		// Run cleanup activities (cancel pending approvals, etc.)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow was cancelled and update workflow record
@@ -3475,6 +3939,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		logger.Error("[Workflow Runtime] Panic recovered", "panic", r, "workflowID", workflowID)
 		// Delta identity: finalize any outstanding message ids (aborted).
 		finalizeOutstandingStreams(ctx, streamReasonAborted)
+		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
 		// Run cleanup activities
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
@@ -3482,11 +3947,28 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		panic(r) // Re-panic to maintain Temporal semantics
 	}
 
+	// ContinueAsNew is not a termination: the execution is handing off to a
+	// fresh one under the SAME workflow ID, which re-enters at the checkpoint
+	// and keeps going. Treating it like an error here would be actively
+	// destructive, not just cosmetic — it would mark the chat failed in the UI
+	// while its replacement is starting, and runCleanupActivities would cancel
+	// pending approvals and orphan tool calls that the continuation still
+	// needs. Say nothing and let the successor report its own status.
+	if isContinueAsNew(retErr) {
+		logger.Info("[Workflow Runtime] Continuing as new, handing off to successor run",
+			"workflowID", workflowID,
+			"chatID", chatID,
+			"historyLength", workflow.GetInfo(ctx).GetCurrentHistoryLength(),
+		)
+		return
+	}
+
 	// Check if the workflow returned an error
 	if retErr != nil {
 		logger.Error("[Workflow Runtime] Failed with error", "workflowID", workflowID, "error", retErr)
 		// Delta identity: finalize any outstanding message ids (aborted).
 		finalizeOutstandingStreams(ctx, streamReasonAborted)
+		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
 		// Run cleanup activities for failed workflows
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
@@ -3506,6 +3988,13 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	} else {
 		logger.Info("[Workflow Runtime] Completed successfully", "workflowID", workflowID, "outcome", runOutcome)
 	}
+	// Belt and braces (spec §6.7): a detached spawn can still be live here if
+	// awaitLiveDetachedSpawns hit its ceiling and the loop exited normally
+	// with the child still running. That is a normal, expected outcome for a
+	// wedged child (not an error), and this run is about to end regardless —
+	// so drain it the same way the abnormal paths do, rather than abandoning
+	// it silently.
+	terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
 	// Only run cleanup for root workflows (not child workflows) to avoid cleaning up parent workflows' tool calls
 	if parentWorkflowID == "" {
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
@@ -3514,6 +4003,44 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// lifecycle status is "completed" — the Temporal execution really did finish
 	// — and the verdict travels beside it so no surface has to guess.
 	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread, &workflowStatusOpts{Outcome: runOutcome})
+}
+
+// terminalDrainDetachedSpawns is spec §6.7's belt-and-braces: the loop-exit
+// gate (awaitLiveDetachedSpawns) only runs on the NORMAL loop-exit path. An
+// abnormal termination — workflow cancellation, panic, or an unrecovered
+// error — unwinds straight to handleWorkflowCompletion without ever reaching
+// it, so a detached spawn could otherwise be abandoned with its tool_calls
+// row stuck at "backgrounded" forever: not a ghost `threads.status='running'`
+// row exactly (the child thread genuinely is still running), but a parent
+// tool call that will never resolve, which is the same class of problem
+// cancelOrphanedToolCalls exists to repair for every other tool.
+//
+// This does NOT touch cancelOrphanedToolCalls' territory: that repair only
+// fires for a tool_call with no result block that ISN'T still live per
+// callIsStillLive (which already special-cases spawn's child_workflow_id).
+// A detached spawn's tool_call already carries a result (the handle,
+// written when it was dispatched) — cancelOrphanedToolCalls only orphans
+// calls with NO result at all — so the two repairs never double-fire on the
+// same row. This one instead moves the STATUS from backgrounded to
+// cancelled, and best-effort notifies the child's own thread so a reload
+// doesn't show it as silently still running.
+func terminalDrainDetachedSpawns(ctx workflow.Context, chatID string, childTracker *ChildWorkflowTracker) {
+	if childTracker == nil {
+		return
+	}
+	live := childTracker.listLiveDetachedSpawns()
+	if len(live) == 0 {
+		return
+	}
+	logger := workflow.GetLogger(ctx)
+	logger.Warn("[Workflow Runtime] Terminal drain: cancelling live detached spawns",
+		"chatID", chatID,
+		"count", len(live),
+	)
+	for _, rec := range live {
+		notifyToolCallStatus(ctx, chatID, rec.ToolCallID, "spawn", "cancelled", &toolCallStatusOpts{})
+		childTracker.completeDetachedSpawn(rec.ToolCallID, rec.ParentThread)
+	}
 }
 
 // runCleanupActivities executes cleanup tasks such as cancelling pending approvals
@@ -3593,7 +4120,9 @@ func humanizeRetryError(stepID string, err error) string {
 	case strings.Contains(lower, "unauthorized") || strings.Contains(lower, "forbidden") || strings.Contains(lower, "401") || strings.Contains(lower, "403"):
 		hint = "Authentication failed — check your API key in Settings"
 	default:
-		hint = errStr
+		// No recognized pattern, so the raw error is the best hint available —
+		// but strip Temporal's event bookkeeping before showing it to a user.
+		hint = cleanTemporalError(errStr)
 	}
 
 	return fmt.Sprintf("Step '%s' failed: %s. Workflow paused — send a message to retry.", stepID, hint)

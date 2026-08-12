@@ -43,7 +43,7 @@
 // Create a root thread:
 //
 //	thread, cw, err := svc.CreateThread(ctx, threads.CreateThreadOpts{
-//	    ConversationID: chatID,
+//	    ChatID: chatID,
 //	})
 //
 // Create a workflow with a forked thread (from a specific message):

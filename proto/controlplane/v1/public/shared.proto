@@ -30,6 +30,47 @@ enum DaemonStatus {
   DAEMON_STATUS_FAILED = 5;
 }
 
+// DaemonLifecyclePhase is the finer-grained "what is it doing right now" that
+// sits underneath DaemonStatus. Its whole purpose is to let a waiting user see
+// progress, so the values are chosen for what they let the UI SAY, not to
+// mirror any particular orchestrator's internals.
+//
+// This is deliberately NOT the raw Kubernetes phase string. Managed machines
+// happen to run as pods today, but that is an implementation detail of one
+// deployment, and leaking `"Pending"`/`"Cloning"` onto the public API would
+// make the client's copy a hostage to the operator's internal naming. The
+// control plane maps its orchestrator phases onto these; a different backend
+// maps its own.
+enum DaemonLifecyclePhase {
+  // No phase information. External/self-hosted machines have no workspace to
+  // report one, and rows predating the field carry none. Means "no extra
+  // detail available" — never an error.
+  DAEMON_LIFECYCLE_PHASE_UNSPECIFIED = 0;
+
+  // Compute is being allocated: scheduling, volume provisioning, pulling the
+  // image. Usually the longest part of a cold start, and the part most likely
+  // to stall on quota or a bad image reference.
+  DAEMON_LIFECYCLE_PHASE_PROVISIONING = 1;
+
+  // The workspace exists and the repository is being cloned. Scales with repo
+  // size, so this one legitimately runs long on a big monorepo — worth saying
+  // out loud so a slow clone doesn't read as a hang.
+  DAEMON_LIFECYCLE_PHASE_CLONING = 2;
+
+  // Running and serving. The machine is usable.
+  DAEMON_LIFECYCLE_PHASE_READY = 3;
+
+  // Being put to sleep after idling. Brief and self-resolving.
+  DAEMON_LIFECYCLE_PHASE_SUSPENDING = 4;
+
+  // Asleep. Nothing is in flight; it must be resumed before it will serve.
+  DAEMON_LIFECYCLE_PHASE_SUSPENDED = 5;
+
+  // Startup failed terminally. `last_status_message` carries the reason when
+  // the orchestrator supplied one.
+  DAEMON_LIFECYCLE_PHASE_FAILED = 6;
+}
+
 enum OwnerType {
   OWNER_TYPE_UNSPECIFIED = 0;
   OWNER_TYPE_USER = 1;
@@ -142,6 +183,20 @@ message Daemon {
   // has been observed. The UI keys "recent" off last_oom_killed_at.
   google.protobuf.Timestamp last_oom_killed_at = 28;
   int32 oom_kill_count = 29;
+
+  // What the machine is currently DOING, when it isn't ready yet.
+  //
+  // `status` answers "can I use this machine"; it deliberately collapses the
+  // whole startup sequence into PENDING. That is the right granularity for
+  // deciding whether to route work, and the wrong granularity for a user
+  // watching a spinner — "pulling the image" and "cloning your repository"
+  // have very different expected durations, and a wait that explains itself
+  // reads as progress rather than as a hang.
+  //
+  // PHASE_UNSPECIFIED means we have no phase information: an external
+  // (self-hosted) machine has no workspace to report one, and managed rows
+  // predate this field. Treat it as "no extra detail", never as an error.
+  DaemonLifecyclePhase lifecycle_phase = 31;
 
   // default_port_access is the workspace-level access policy the preview proxy
   // applies to a listening port that has NO explicit PortAccessRule. It travels

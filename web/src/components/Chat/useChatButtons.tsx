@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { ArrowUp, Paperclip, MessageCircle } from "lucide-react";
+import { ArrowUp, CornerDownLeft, Paperclip, MessageCircle } from "lucide-react";
 import { ChatButton } from "./ChatButton";
 
 interface UseChatButtonsProps {
   // Send/Stop
   onSend: () => void;
   onStop?: () => void;
+  onQueue?: () => void;
   canSend: boolean;
   isStreaming: boolean;
   disabled: boolean;
@@ -26,6 +27,7 @@ interface UseChatButtonsProps {
 export function useChatButtons({
   onSend,
   onStop,
+  onQueue,
   canSend,
   isStreaming,
   disabled,
@@ -95,6 +97,21 @@ export function useChatButtons({
     ) : null,
 
 
+
+    // Queue button - shown only while streaming with text typed, alongside Stop
+    queueSend: effectiveStreaming && canSend && !disabled && onQueue ? (
+      <ChatButton
+        key="queueSend"
+        onClick={onQueue}
+        disabled={disabled}
+        tooltip="Queue message for the agent's next turn (Enter)"
+        testId="queue-send-button"
+        compact={compact}
+        className="h-7 w-7 p-0 rounded-full border transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-[var(--chat-button-bg)] text-primary border-[var(--chat-border)] hover:bg-[var(--chat-button-hover)] hover:border-primary/30"
+      >
+        <CornerDownLeft className="h-4 w-4" />
+      </ChatButton>
+    ) : null,
 
     // Combined send/stop button that transitions smoothly
     sendStop: (() => {

@@ -4,6 +4,7 @@ const { spawn, execSync } = require('child_process');
 const net = require('net');
 const fs = require('fs');
 const path = require('path');
+const { forwardSignals, exitCodeFor } = require('../src/child-signals');
 
 // Load .env file from project root
 const envPath = path.join(__dirname, '../../.env');
@@ -88,8 +89,17 @@ async function main() {
     console.log(`[wait-and-start] ✓ Electron spawned in ${Date.now() - electronStartTime}ms`);
     console.log(`[wait-and-start] ✓✓✓ Total wait-and-start time: ${Date.now() - startTime}ms`);
 
-    electron.on('exit', (code) => {
-      process.exit(code);
+    // Without this, SIGTERM kills THIS process via Node's default action and
+    // reparents Electron to PID 1 — orphaning the one process that runs
+    // gracefulShutdown(), so the tools-daemon it spawned outlives the session
+    // and keeps its port. dev-multi.js forwards to us; we forward the rest of
+    // the way down.
+    forwardSignals(electron, {
+      onForward: (message) => console.log(`[wait-and-start] ${message}`),
+    });
+
+    electron.on('exit', (code, signal) => {
+      process.exit(exitCodeFor(code, signal));
     });
 
   } catch (error) {

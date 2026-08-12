@@ -6,6 +6,7 @@ import {
   chatKeys,
   patchChatCaches,
   removeChatFromListCache,
+  upsertChatInListCache,
 } from "../chat-queries";
 
 const now = "2026-01-01T00:00:00.000Z";
@@ -49,6 +50,52 @@ beforeEach(() => {
 
 afterEach(() => {
   queryClient.clear();
+});
+
+describe("upsertChatInListCache", () => {
+  it("creates a list envelope for the first chat when the cache is absent", () => {
+    const chat = buildChat({ id: "c1" });
+
+    upsertChatInListCache("p1", chat);
+
+    const next = queryClient.getQueryData<ChatListEnvelope>(
+      chatKeys.list("p1")
+    )!;
+    expect(next.chats).toEqual([chat]);
+    expect(next.total).toBe(1);
+    expect(next.lastUserUpdateSequence).toBe(0);
+  });
+
+  it("prepends a new chat to an existing empty list envelope", () => {
+    const chat = buildChat({ id: "c1" });
+    queryClient.setQueryData(chatKeys.list("p1"), buildEnvelope([], { total: 0 }));
+
+    upsertChatInListCache("p1", chat);
+
+    const next = queryClient.getQueryData<ChatListEnvelope>(
+      chatKeys.list("p1")
+    )!;
+    expect(next.chats).toEqual([chat]);
+    expect(next.total).toBe(1);
+    expect(next.lastUserUpdateSequence).toBe(42);
+  });
+
+  it("replaces an existing chat without duplicating it", () => {
+    const existing = buildChat({ id: "c1", title: "Old" });
+    const other = buildChat({ id: "c2", title: "Other" });
+    const envelope = buildEnvelope([existing, other], { total: 2 });
+    queryClient.setQueryData(chatKeys.list("p1"), envelope);
+
+    upsertChatInListCache("p1", buildChat({ id: "c1", title: "New" }));
+
+    const next = queryClient.getQueryData<ChatListEnvelope>(
+      chatKeys.list("p1")
+    )!;
+    expect(next.chats).toHaveLength(2);
+    expect(next.chats[0].title).toBe("New");
+    expect(next.chats[1]).toBe(other);
+    expect(next.total).toBe(2);
+  });
 });
 
 describe("patchChatCaches", () => {

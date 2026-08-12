@@ -3,12 +3,13 @@ package handlers
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -126,7 +127,7 @@ func TestCallLLMActivity_Idempotency(t *testing.T) {
 
 	// Create a user message to set up conversation history
 	userMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              userMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -282,7 +283,7 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 
 	// Create user message
 	userMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              userMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -311,7 +312,7 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 	assistantMsgID := uuid.New().String()
 	isStreaming := true
 	modelStr := "claude-3-5-sonnet-20241022"
-	err = h.Repo().CreateMessage(ctx, &db.Message{
+	err = createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              assistantMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT,
@@ -409,7 +410,7 @@ func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
 
 	// Create user message
 	userMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              userMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -506,7 +507,7 @@ func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
 
 	// Create user message
 	userMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              userMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -611,7 +612,7 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 
 		// Create user message in child thread
 		userMsgID := uuid.New().String()
-		err := h.Repo().CreateMessage(ctx, &db.Message{
+		err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 			ID:              userMsgID,
 			ChatID:          chatID,
 			Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -677,7 +678,7 @@ func TestCallLLMActivity_ThinkingLevel(t *testing.T) {
 
 	// Create user message
 	userMsgID := uuid.New().String()
-	err := h.Repo().CreateMessage(ctx, &db.Message{
+	err := createMessageWithSeq(ctx, t, h.Repo(), &db.Message{
 		ID:              userMsgID,
 		ChatID:          chatID,
 		Role:            reliantv1.MessageRole_MESSAGE_ROLE_USER,
@@ -805,6 +806,6 @@ func TestCallLLMActivity_ThinkingLevel(t *testing.T) {
 		// Should return error for invalid thinking level
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid thinking_level")
-		require.Contains(t, err.Error(), "must be one of: low, medium, high, xhigh")
+		require.Contains(t, err.Error(), "must be one of: "+strings.Join(models.KnownThinkingLevels, ", "))
 	})
 }

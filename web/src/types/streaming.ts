@@ -89,11 +89,20 @@ export interface WorkflowStatusUpdate {
   parent_workflow_id: string;
 }
 
-// ToolCallUpdate represents direct tool_call updates from the backend
+// ToolCallUpdate represents direct tool_call updates from the backend.
+//
+// tool_call_id is the LLM-issued tool-call id (e.g. "toolu_01..."), and it is
+// the ONLY key this channel is addressed by. It exists from the first
+// streaming event and survives persistence unchanged, which a content-block
+// UUID does not: blocks have no id while streaming and are re-minted when the
+// assistant message is saved — which happens BEFORE tools run.
+//
+// This is a separate identifier space from ToolApprovalUpdate.content_block_id.
+// Approvals key on block ids; tool status keys on tool-call ids. Don't mix them.
 export interface ToolCallUpdate {
   update_type: "tool_call";
   id: string;
-  content_block_id: string;
+  tool_call_id: string;
   tool_name: string;
   status: "pending" | "executing" | "completed" | "failed" | "denied";
   sequence_number: number;
@@ -117,6 +126,12 @@ export interface ErrorUpdate {
   max_attempts?: number;  // Total retry attempts configured (e.g., 5)
   is_retrying?: boolean;  // true if more retry attempts remain (transient error, not exhausted)
   workflow_id?: string;
+  /**
+   * Thread this error belongs to. Optional because errors emitted before this
+   * field existed carry no thread — those stay chat-scoped (see the timeline's
+   * error placement) rather than being guessed into one thread.
+   */
+  thread?: string;
   sequence_number: number;
 }
 
@@ -330,7 +345,7 @@ export type ConnectionStatus =
 export interface MessagePaginationInfo {
   total: number;
   hasMore: boolean;
-  oldestOrdinal: number;
+  oldestSeq: number;
 }
 
 export interface ContextUsageInfo {

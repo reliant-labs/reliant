@@ -36,11 +36,22 @@ service BillingService {
   // auto-granted at first-login provisioning.)
   rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {}
 
+  // RedeemCoupon credits the caller's org wallet from a coupon code.
+  // Idempotent per (coupon, org). Coupon MANAGEMENT (issue/list/adjust) is
+  // deliberately NOT on this public surface — it is operator-only and served
+  // by a separate internal deployment.
+  rpc RedeemCoupon(RedeemCouponRequest) returns (RedeemCouponResponse) {}
+
   // Reliant managed-LLM access (per-user).
   rpc GetCurrentUserReliantState(GetCurrentUserReliantStateRequest) returns (GetCurrentUserReliantStateResponse) {}
   rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {}
   rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {}
   rpc GetCurrentUserReliantOverview(GetCurrentUserReliantOverviewRequest) returns (GetCurrentUserReliantOverviewResponse) {}
+
+  // SetCurrentUserReliantEnabled turns managed Reliant LLM access on or off
+  // for the caller. Sole writer of reliant_enabled — the flag is a user
+  // preference, never inferred from wallet balance or provisioning state.
+  rpc SetCurrentUserReliantEnabled(SetCurrentUserReliantEnabledRequest) returns (SetCurrentUserReliantEnabledResponse) {}
 
   // Mints / fetches the caller's opaque rlnt_ Reliant API key. Idempotent: returns
   // the existing active key plaintext if one exists, otherwise creates a fresh one.
@@ -133,6 +144,42 @@ message CreateCurrentUserWalletTopupSessionResponse {
   string checkout_url = 2;
 }
 
+// Field numbers MUST match control-plane's
+// proto/services/billing/v1/billing.proto — these two files define the same
+// wire package (controlplane.v1) and are hand-mirrored, so a divergence here
+// is a silent wire break rather than a compile error.
+message RedeemCouponRequest {
+  // Case-insensitive and trimmed server-side.
+  string code = 1;
+}
+
+// RedeemedCouponKind tells the client WHAT a redemption granted, so it can say
+// "$20 added to your balance" or "600 machine minutes added" rather than
+// guessing from which field happens to be non-zero.
+enum RedeemedCouponKind {
+  REDEEMED_COUPON_KIND_UNSPECIFIED = 0;
+  // Wallet credit, which funds LLM spend.
+  REDEEMED_COUPON_KIND_WALLET_CREDIT = 1;
+  // Daemon compute minutes — the Machine product.
+  REDEEMED_COUPON_KIND_COMPUTE_MINUTES = 2;
+}
+
+message RedeemCouponResponse {
+  // WALLET_CREDIT only.
+  int64 amount_cents = 1;
+  string code = 2;
+  // WALLET_CREDIT only.
+  int64 new_balance_cents = 3;
+
+  // kind selects which fields above/below are meaningful.
+  RedeemedCouponKind kind = 4;
+  // COMPUTE_MINUTES only.
+  int64 compute_minutes = 5;
+  // Org's total unspent granted compute minutes after this redemption (grants
+  // stack). COMPUTE_MINUTES only.
+  int64 new_compute_minutes_remaining = 6;
+}
+
 message CreateCurrentUserBillingPortalSessionRequest {
   string return_url = 1;
 }
@@ -209,6 +256,14 @@ message GetCurrentUserReliantOverviewResponse {
   ReliantOverview overview = 1;
 }
 
+message SetCurrentUserReliantEnabledRequest {
+  bool enabled = 1;
+}
+
+message SetCurrentUserReliantEnabledResponse {
+  ReliantEntitlement entitlement = 1;
+}
+
 // === Current-user workspace compute plan ===
 
 message SetCurrentUserComputeOverageRequest {
@@ -245,6 +300,15 @@ message GetCurrentUserComputeUsageResponse {
   google.protobuf.Timestamp period_end = 6;
   repeated ComputeUsageByWorkspace by_workspace = 7;
   repeated ComputeUsageByDay by_day = 8;
+
+  // granted_minutes_remaining is unspent compute minutes from redeemed
+  // compute coupons.
+  //
+  // Reported alongside included_minutes rather than folded into it: included
+  // minutes refill every billing period, whereas a grant is a one-time bucket
+  // that depletes and does not renew. Spent after included minutes, before
+  // overage.
+  int64 granted_minutes_remaining = 9;
 }
 
 // === Invoice preview ===

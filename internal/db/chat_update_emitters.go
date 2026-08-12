@@ -25,7 +25,7 @@ func (r *Repo) EmitToolCallUpdate(ctx context.Context, chatID string, update Too
 	if err != nil {
 		return fmt.Errorf("failed to marshal tool call update: %w", err)
 	}
-	return r.CreateChatUpdate(ctx, chatID, UpdateTypeToolCall, EntityIDForToolCall(update.ContentBlockID), data)
+	return r.CreateChatUpdate(ctx, chatID, UpdateTypeToolCall, EntityIDForToolCall(update.ToolCallID), data)
 }
 
 // EmitToolCallCancelledUpdate emits a tool call cancelled update

@@ -23,6 +23,47 @@ function getServerURL(): string {
 }
 
 /**
+ * The daemon-gateway URL, which is a DIFFERENT process from the api-server:
+ * ToolsDaemonService (the daemon's bidi stream) is hosted only by the gateway
+ * (internal/grpc/server.go), so a daemon pointed at the api-server gets a 404
+ * on connect.
+ *
+ * Runtime wins over build time. Electron's preload publishes the gateway URL
+ * BackendManager actually spawned its daemon with, which is authoritative and
+ * tracks dynamically-allocated dev ports; VITE_GATEWAY_URL is a build-time
+ * constant that can't. In the browser only the build-time value exists.
+ */
+function getGatewayURL(): string {
+  if (typeof window !== "undefined" && window.RELIANT_CONFIG?.gatewayUrl) {
+    return window.RELIANT_CONFIG.gatewayUrl;
+  }
+  return import.meta.env.VITE_GATEWAY_URL || "";
+}
+
+/**
+ * True for hosts where the daemon CANNOT work out the gateway on its own.
+ *
+ * The daemon derives its gateway from the server URL when none is given. For a
+ * cloud host that derivation is correct (api.example.com -> gateway.example.com),
+ * but for loopback it deliberately declines to guess a port and returns the
+ * server URL unchanged (deriveGatewayURL, cmd/reliant/commands/connection.go).
+ * So on localhost an omitted gateway is not "the daemon will figure it out",
+ * it is a command that always fails.
+ */
+function needsExplicitGateway(server: string): boolean {
+  if (!server) return false;
+  try {
+    const { hostname } = new URL(server);
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
+
+/** Stand-in emitted when a gateway is required but not known at render time. */
+export const GATEWAY_URL_PLACEHOLDER = "<your-daemon-gateway-url>";
+
+/**
  * True when the daemon needs explicit env-var overrides to dial the same
  * backend the web frontend uses.
  *
@@ -57,7 +98,7 @@ function isNonProd(): boolean {
  * Mapping of daemon env vars → Vite-injected build vars:
  *
  *   RELIANT_SERVER_URL    ← VITE_API_URL || VITE_GRPC_URL  (root.go:36)
- *   RELIANT_GATEWAY_URL   ← VITE_GATEWAY_URL               (root.go:37, falls back to server URL when unset)
+ *   RELIANT_GATEWAY_URL   ← RELIANT_CONFIG.gatewayUrl || VITE_GATEWAY_URL (root.go:37)
  *   RELIANT_API_BASE_URL  ← VITE_CONTROL_PLANE_API_URL     (admin-server LLM proxy; internal/llm/drivers/reliant_base_url.go)
  *   RELIANT_AUTH_URL      ← VITE_SUPABASE_URL              (internal/auth/oauth.go:27)
  *   RELIANT_AUTH_KEY      ← VITE_SUPABASE_ANON_KEY         (oauth.go:31)
@@ -75,9 +116,14 @@ function envPrefix(): string {
     parts.push(`RELIANT_SERVER_URL=${server}`);
   }
 
-  const gateway = import.meta.env.VITE_GATEWAY_URL;
+  // Emit the gateway whenever we know it, and emit a visible placeholder when
+  // the daemon can't derive it. Silently dropping the line is the one option
+  // that produces a copy-pasteable command that cannot work.
+  const gateway = getGatewayURL();
   if (gateway) {
     parts.push(`RELIANT_GATEWAY_URL=${gateway}`);
+  } else if (needsExplicitGateway(server)) {
+    parts.push(`RELIANT_GATEWAY_URL=${GATEWAY_URL_PLACEHOLDER}`);
   }
 
   const adminURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
@@ -105,6 +151,15 @@ function envPrefix(): string {
 /** `reliant daemon start --token` with env overrides when needed. */
 export function daemonStartCommand(): string {
   return `${envPrefix()}reliant daemon start --token`;
+}
+
+/**
+ * True when the rendered command still contains a placeholder the user must
+ * replace by hand. The UI should say so rather than presenting the command as
+ * ready to paste.
+ */
+export function daemonStartCommandNeedsEditing(): boolean {
+  return daemonStartCommand().includes(GATEWAY_URL_PLACEHOLDER);
 }
 
 /** `reliant auth serve` with env overrides when needed. */

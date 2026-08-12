@@ -12,12 +12,16 @@ describe("refetchStore", () => {
   });
 
   it("passes entity scope through to subscribers", () => {
+    // triggerRefetch debounces for 300ms, so subscribers only see the event
+    // once the timer fires.
+    vi.useFakeTimers();
     const events: RefetchEvent[] = [];
     const unsubscribe = subscribeToRefetch("worktree_changes", (event) => {
       events.push(event);
     });
 
     triggerRefetch("worktree_changes", "wt-123");
+    vi.advanceTimersByTime(300);
 
     unsubscribe();
 
@@ -27,6 +31,7 @@ describe("refetchStore", () => {
         entityId: "wt-123",
       },
     ]);
+    vi.useRealTimers();
   });
 
   it("matches worktree-scoped refetches only for the active worktree", () => {

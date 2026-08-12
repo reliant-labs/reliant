@@ -5,8 +5,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/config"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -385,4 +385,98 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 	// This case declares no tools, so only the universal load_tool is handed
 	// over. The subject here is the path MCP enumeration is scoped to, above.
 	assert.Equal(t, []string{tools.ToolLoadTool}, mockDriver.capturedTools)
+}
+
+// spawn_send rides along only where there is a counterpart to message: a
+// sub-agent replying to the parent that spawned it, or an orchestrator actually
+// configured to spawn children. A plain root agent has neither, and handing it a
+// mailbox tool it can never use costs schema on every single request.
+func TestCallLLMActivity_SpawnSendOfferedOnlyWhenMailboxReachable(t *testing.T) {
+	tests := []struct {
+		name          string
+		spawnDepth    int
+		spawnEntries  []string
+		wantSpawnSend bool
+	}{
+		{
+			name:          "plain root agent has nobody to message",
+			spawnDepth:    0,
+			wantSpawnSend: false,
+		},
+		{
+			name:          "orchestrator configured to spawn can message its children",
+			spawnDepth:    0,
+			spawnEntries:  []string{"spawn:builtin://agent(general)"},
+			wantSpawnSend: true,
+		},
+		{
+			name:          "sub-agent can always talk back to its parent",
+			spawnDepth:    1,
+			wantSpawnSend: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewIdempotencyTestHelper(t)
+			defer h.Cleanup()
+
+			ctx := context.Background()
+			project := h.CreateTestProject(ctx, "project-mailbox", "user-mailbox")
+			chat := h.CreateTestChat(ctx, "chat-mailbox", project.ID, project.UserID)
+			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+			mockDriver := &toolCaptureMockDriver{}
+			driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+				return mockDriver, nil
+			}
+
+			activityInstance := NewCallLLMActivity(
+				h.Repo(),
+				nil,
+				tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
+				&staticConfigProvider{},
+				driverResolver,
+				nil,
+			)
+
+			toolsConfig := &reliantv1.ToolsConfig{
+				Filter: celStringListLiteral([]string{"view"}),
+			}
+			if len(tc.spawnEntries) > 0 {
+				toolsConfig.Spawn = celStringListLiteral(tc.spawnEntries)
+			}
+
+			input := ActivityInput{
+				Runtime: RuntimeContext{
+					ChatID:     chat.ID,
+					Thread:     chat.ID,
+					SpawnDepth: tc.spawnDepth,
+				},
+				Node: &reliantv1.Node{
+					Type: "call_llm",
+					Args: &reliantv1.Node_CallLlm{
+						CallLlm: &reliantv1.CallLLMArgs{
+							Model: &reliantv1.CelModelSelector{
+								Value: &reliantv1.CelModelSelector_Literal{
+									Literal: &reliantv1.ModelSelector{Id: "mock-model"},
+								},
+							},
+							ToolsConfig: toolsConfig,
+						},
+					},
+				},
+			}
+
+			var output CallLLMOutput
+			err := h.ExecuteActivity(activityInstance.Execute, input, &output)
+			require.NoError(t, err)
+
+			if tc.wantSpawnSend {
+				assert.Contains(t, mockDriver.capturedTools, tools.ToolSpawnSend)
+			} else {
+				assert.NotContains(t, mockDriver.capturedTools, tools.ToolSpawnSend)
+			}
+		})
+	}
 }
