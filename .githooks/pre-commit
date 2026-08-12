@@ -16,6 +16,10 @@ echo -e "${YELLOW}Running pre-commit hooks...${NC}"
 # gitignored .forbidden-strings file; no-op if that file is absent).
 "$(git rev-parse --show-toplevel)/.githooks/check-forbidden-strings.sh"
 
+# Block commits that add compiled binaries or oversized blobs. CI enforces the
+# same rule, because --no-verify skips everything here.
+"$(git rev-parse --show-toplevel)/.githooks/check-binary-files.sh"
+
 # Check if Makefile exists
 if [ ! -f Makefile ]; then
     echo -e "${RED}Error: Makefile not found${NC}"

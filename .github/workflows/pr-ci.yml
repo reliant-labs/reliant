@@ -15,6 +15,20 @@ env:
   NODE_VERSION: '24'
 
 jobs:
+  # Catches what the pre-commit hook would have, for the cases where it did not
+  # run: hooks are opt-in (make setup-hooks) and --no-verify skips them.
+  no-binaries:
+    name: No committed binaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Reject compiled binaries added by this PR
+        run: .githooks/check-binary-files-ci.sh "origin/${{ github.base_ref }}" "${{ github.sha }}"
+
   backend:
     name: Backend (Go)
     runs-on: ubuntu-latest

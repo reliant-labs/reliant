@@ -301,6 +301,21 @@ web/src/store/shortcutsData.generated.ts
 /assembler
 /nodes
 /models
+# ...and the same binaries when built in place next to their main.go. The
+# rules above are root-anchored, so they never matched tools/docgen/<x>/<x> —
+# which is how two of them ended up tracked.
+tools/docgen/*/assembler
+tools/docgen/*/celref
+tools/docgen/*/changelog
+tools/docgen/*/cli
+tools/docgen/*/models
+tools/docgen/*/nodes
+tools/docgen/*/refcheck
+tools/docgen/*/scenarios
+tools/docgen/*/schema
+tools/docgen/*/shortcuts
+tools/docgen/*/tools
+tools/docgen/*/types
 # Cloud-split service binaries (built by go build without -o dist/)
 /api-server
 /temporal-worker
