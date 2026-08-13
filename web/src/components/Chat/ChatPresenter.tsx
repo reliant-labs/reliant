@@ -302,15 +302,23 @@ export const ChatPresenter = memo(function ChatPresenter({
   // reading the chat-wide list, which is already exactly the main transcript
   // (plus the interleaved thread-start / handoff markers the timeline draws
   // around it, which only exist in the chat-wide view).
+  // The `!!` matters: `selectedThreadId && …` yields the FALSY OPERAND when
+  // selectedThreadId is null, so the ternary's condition — and therefore the
+  // whole expression — was `string | null`, while useThreadMessages takes
+  // `string | undefined`. Coercing to a boolean keeps the branch value in the
+  // `string | undefined` the hook expects.
   const selectedSideThreadId =
-    selectedThreadId &&
+    !!selectedThreadId &&
     selectedThreadId !== chatId &&
     selectedThreadId !== "0" &&
     selectedThreadId !== ""
       ? selectedThreadId
       : undefined;
+  // chatId is `string | null` on this component's props, while the hook takes
+  // `string | undefined` — both mean "no chat selected", so normalize at the
+  // boundary rather than widening the hook.
   const { data: selectedThreadMessages } = useThreadMessages(
-    chatId,
+    chatId ?? undefined,
     selectedSideThreadId,
   );
 

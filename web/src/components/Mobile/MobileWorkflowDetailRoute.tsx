@@ -19,6 +19,65 @@ import { MobileWorkflowScreen } from "./MobileWorkflowScreen";
 import { useWorkflows } from "../../store/globalDataStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
+import type { WorkflowExecutionData } from "../../types/chat";
+import type { WorkflowExecution } from "../Chat/ExecutionSidebar/types";
+
+/**
+ * Adapt a wire `WorkflowExecutionData` to the `WorkflowExecution` shape the
+ * screen renders.
+ *
+ * These are two parallel models of the same thing: the protobuf-derived one
+ * (types/chat) carries `status: string`, while the view model
+ * (ExecutionSidebar/types) narrows it to a four-value union that
+ * ExecutionStatusPill uses as a lookup key. A plain cast would let an
+ * unrecognized status through and index the table with a miss, producing an
+ * element with `className={undefined}` — a silently unstyled pill.
+ *
+ * So the status is VALIDATED rather than asserted: anything outside the union
+ * falls back to "running", which is the honest reading of "the server told us
+ * something we don't have a rendering for, and this execution exists".
+ *
+ * Converging the two workflow models is the real fix; this keeps the boundary
+ * honest until then.
+ */
+function toScreenExecution(
+  execution: WorkflowExecutionData | null | undefined,
+): WorkflowExecution | undefined {
+  if (!execution) return undefined;
+
+  const known: WorkflowExecution["status"][] = [
+    "running",
+    "completed",
+    "failed",
+    "cancelled",
+  ];
+  const rawStatus = String(execution.status);
+  const status = known.includes(rawStatus as WorkflowExecution["status"])
+    ? (rawStatus as WorkflowExecution["status"])
+    : "running";
+
+  // Timestamps cross the boundary as ISO strings on the wire and as epoch
+  // millis in the view model, so they are CONVERTED, not spread through.
+  const toMillis = (value: string | undefined): number =>
+    value ? Date.parse(value) : 0;
+
+  // Only the fields the screen reads are mapped. `children` and `steps` are
+  // deliberately empty: this screen renders a status pill, not the execution
+  // tree, and recursing two mutually-incompatible shapes to populate
+  // something nothing displays would be work in service of a type rather
+  // than a user.
+  return {
+    id: execution.id,
+    workflowName: execution.workflowName,
+    thread: execution.thread,
+    status,
+    createdAt: toMillis(execution.createdAt),
+    completedAt: execution.completedAt ? toMillis(execution.completedAt) : undefined,
+    messageCount: 0,
+    children: [],
+    steps: [],
+  };
+}
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -85,7 +144,7 @@ export function MobileChatWorkflowRoute() {
   return (
     <MobileWorkflowScreen
       workflow={workflow}
-      execution={execution}
+      execution={toScreenExecution(execution)}
       chatId={chatId}
       backTo={`/m/chats/${chatId}`}
     />

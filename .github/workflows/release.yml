@@ -1,0 +1,1194 @@
+name: Release Electron App
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (skip publish)"
+        required: false
+        default: false
+        type: boolean
+      skip_changelog_email:
+        description: "Skip sending changelog email"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: releases
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  # Optimize npm
+  npm_config_fund: false
+  npm_config_audit: false
+  # Optimize Go
+  GOFLAGS: "-trimpath"
+  CGO_ENABLED: "0"
+
+jobs:
+  # ============================================================================
+  # PREPARE: Build shared artifacts on fast Ubuntu runner
+  # ============================================================================
+  prepare:
+    name: Build Web & Generate Protobuf
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      config: ${{ steps.config.outputs.config }}
+      channel: ${{ steps.config.outputs.channel }}
+      electron_version: ${{ steps.electron-versions.outputs.electron_version }}
+      electron_builder_version: ${{ steps.electron-versions.outputs.electron_builder_version }}
+      duration_seconds: ${{ steps.prepare-metrics.outputs.duration_seconds }}
+      proto_cache_hit: ${{ steps.prepare-metrics.outputs.proto_cache_hit }}
+      is_minor_or_major: ${{ steps.release-type.outputs.is_minor_or_major }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # Full clone needed for tag-triggered workflows
+
+      - name: Record job start
+        id: timing-start
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=dev-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Detect minor/major vs patch release
+        id: release-type
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Extract patch number: v1.2.3 → 3
+          PATCH=$(echo "$VERSION" | sed 's/^v//' | cut -d. -f3 | cut -d- -f1)
+          if [[ "$PATCH" == "0" ]]; then
+            echo "is_minor_or_major=true" >> $GITHUB_OUTPUT
+            echo "Minor/major release detected: $VERSION"
+          else
+            echo "is_minor_or_major=false" >> $GITHUB_OUTPUT
+            echo "Patch release detected: $VERSION — changelog email will be skipped"
+          fi
+
+      - name: Detect release type and set config
+        id: config
+        run: |
+          TAG_NAME="${{ github.ref_name }}"
+          echo "Tag: $TAG_NAME"
+
+          if [[ $TAG_NAME =~ -rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+ ]]; then
+            echo "Detected prerelease tag - using alpha config"
+            echo "config=electron-builder.alpha.js" >> $GITHUB_OUTPUT
+            echo "channel=alpha" >> $GITHUB_OUTPUT
+          else
+            echo "Detected stable release - using production config"
+            echo "config=electron-builder.js" >> $GITHUB_OUTPUT
+            echo "channel=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: |
+            web/package-lock.json
+            electron/package-lock.json
+
+      - name: Extract Electron tool versions from package.json
+        id: electron-versions
+        run: |
+          set -euo pipefail
+
+          ELECTRON_VERSION=$(node -p "(require('./electron/package.json').devDependencies?.electron || require('./electron/package.json').dependencies?.electron || '')")
+          ELECTRON_BUILDER_VERSION=$(node -p "(require('./electron/package.json').devDependencies?.['electron-builder'] || require('./electron/package.json').dependencies?.['electron-builder'] || '')")
+
+          # Normalize common npm range prefixes for stable cache keys.
+          ELECTRON_VERSION="${ELECTRON_VERSION#^}"
+          ELECTRON_VERSION="${ELECTRON_VERSION#~}"
+          ELECTRON_BUILDER_VERSION="${ELECTRON_BUILDER_VERSION#^}"
+          ELECTRON_BUILDER_VERSION="${ELECTRON_BUILDER_VERSION#~}"
+
+          if [[ -z "$ELECTRON_VERSION" || -z "$ELECTRON_BUILDER_VERSION" ]]; then
+            echo "Failed to determine electron/electron-builder versions from electron/package.json" >&2
+            exit 1
+          fi
+
+          echo "electron_version=$ELECTRON_VERSION" >> "$GITHUB_OUTPUT"
+          echo "electron_builder_version=$ELECTRON_BUILDER_VERSION" >> "$GITHUB_OUTPUT"
+
+          echo "Using Electron cache versions: electron=$ELECTRON_VERSION, electron-builder=$ELECTRON_BUILDER_VERSION"
+
+      - name: Setup Go (for protobuf tools)
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Cache protobuf generation output
+      - name: Cache protobuf output
+        id: proto-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            web/src/gen
+            internal/gen
+          key: protobuf-${{ hashFiles('proto/**/*.proto', 'buf.yaml', 'buf.gen.yaml') }}
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci --legacy-peer-deps --prefer-offline
+
+      - name: Install buf CLI
+        if: steps.proto-cache.outputs.cache-hit != 'true'
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Install Go protobuf tools
+        if: steps.proto-cache.outputs.cache-hit != 'true'
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
+
+      - name: Generate protobuf code
+        if: steps.proto-cache.outputs.cache-hit != 'true'
+        run: |
+          echo "Generating protobuf code..."
+          export PATH="$PWD/web/node_modules/.bin:$PATH"
+          buf generate
+          echo "Protobuf code generated"
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+
+      - name: Generate docs and shortcuts
+        run: make generate
+
+      - name: Create production .env file
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
+          VITE_SENTRY_ENABLED: true
+          VITE_SENTRY_TRACES_SAMPLE_RATE: 0.1
+          VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: 0.1
+          VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE: 1.0
+          VITE_SENTRY_REPLAY_CANVAS: ${{ vars.VITE_SENTRY_REPLAY_CANVAS }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SENTRY_ENABLED: true
+          SENTRY_TRACES_SAMPLE_RATE: 0.1
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > .env <<EOF
+          VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+          VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+          VITE_API_URL=${VITE_API_URL}
+          VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
+          VITE_SENTRY_ENABLED=${VITE_SENTRY_ENABLED}
+          VITE_SENTRY_TRACES_SAMPLE_RATE=${VITE_SENTRY_TRACES_SAMPLE_RATE}
+          VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=${VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE}
+          VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=${VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE}
+          VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}
+          SENTRY_DSN=${SENTRY_DSN}
+          SENTRY_ENABLED=${SENTRY_ENABLED}
+          SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
+          STATSIG_CLIENT_KEY=${STATSIG_CLIENT_KEY}
+          SUPABASE_URL=${SUPABASE_URL}
+          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+          EOF
+
+      # `build`, not `build:alpha` — the difference is `tsc -b`.
+      #
+      # build:alpha is bare `vite build`, which type-checks NOTHING. Because
+      # the Electron path went through it (electron's build:web calls
+      # build:alpha), the desktop release never type-checked, and 20 type
+      # errors accumulated on main while builds kept "succeeding". The web
+      # deploy runs plain `npm run build` and caught them; the release did not.
+      #
+      # A release is the LAST place to skip the check, so it runs the same
+      # gate the hosted frontend does.
+      - name: Build React frontend
+        working-directory: web
+        run: npm run build
+
+      - name: Upload web build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+          retention-days: 1
+          compression-level: 6 # Faster upload with good compression
+
+      - name: Upload generated backend sources
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-backend-sources
+          path: |
+            internal/gen
+            internal/db/sqlite/generated
+            internal/db/postgres/generated
+            internal/workflow/v3/reference
+            internal/workflow/v2/schema/field_descriptions.go
+          retention-days: 1
+          compression-level: 0
+
+      - name: Prepare job timing and cache summary
+        id: prepare-metrics
+        if: always()
+        run: |
+          END_TS=$(date +%s)
+          START_TS=${{ steps.timing-start.outputs.ts }}
+          DURATION=$((END_TS - START_TS))
+          MINS=$((DURATION / 60))
+          SECS=$((DURATION % 60))
+          PROTO_CACHE_HIT_RAW="${{ steps.proto-cache.outputs.cache-hit }}"
+
+          if [[ "$PROTO_CACHE_HIT_RAW" == "true" ]]; then
+            PROTO_CACHE_HIT="hit"
+          else
+            PROTO_CACHE_HIT="miss"
+          fi
+
+          echo "duration_seconds=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "proto_cache_hit=$PROTO_CACHE_HIT" >> "$GITHUB_OUTPUT"
+
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### ⏱️ Prepare Job Metrics
+
+          - **Job:** Build Web & Generate Protobuf
+          - **Duration:** ${MINS}m ${SECS}s
+          - **Protobuf cache hit:** ${PROTO_CACHE_HIT}
+          EOF
+
+  # ============================================================================
+  # BACKEND BINARIES: Matrix build (industry-standard fan-out)
+  # ============================================================================
+  build-backend:
+    name: Build backend (${{ matrix.target_os }}-${{ matrix.target_arch }})
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - target_os: linux
+            target_arch: amd64
+            artifact_name: backend-linux-amd64
+          - target_os: linux
+            target_arch: arm64
+            artifact_name: backend-linux-arm64
+          - target_os: darwin
+            target_arch: amd64
+            artifact_name: backend-darwin-amd64
+          - target_os: darwin
+            target_arch: arm64
+            artifact_name: backend-darwin-arm64
+          - target_os: windows
+            target_arch: amd64
+            artifact_name: backend-windows-amd64
+          - target_os: windows
+            target_arch: arm64
+            artifact_name: backend-windows-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download generated backend sources
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-backend-sources
+          # upload-artifact flattens to the artifact's least common ancestor ("internal" here)
+          # so extract into ./internal to restore expected package import paths.
+          path: internal
+
+      - name: Disk usage before backend build
+        run: |
+          echo "=== Disk usage before build ==="
+          df -h
+          du -sh "$RUNNER_TEMP" "$HOME/.cache/go-build" "$HOME/go/pkg/mod" 2>/dev/null || true
+
+      - name: Build backend binaries
+        env:
+          TARGET_OS: ${{ matrix.target_os }}
+          TARGET_ARCH: ${{ matrix.target_arch }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${VERSION#v}"
+
+          if [[ "$TARGET_OS" == "windows" ]]; then
+            BACKEND_BIN_NAME="reliant-backend.exe"
+          else
+            BACKEND_BIN_NAME="reliant-backend"
+          fi
+
+          OUT_DIR="backend-build/${TARGET_OS}-${TARGET_ARCH}"
+          mkdir -p "$OUT_DIR"
+
+          echo "Building backend for ${TARGET_OS}/${TARGET_ARCH}..."
+          GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="$LDFLAGS" -o "$OUT_DIR/$BACKEND_BIN_NAME" ./cmd/reliant/
+
+          if [[ "$TARGET_OS" != "windows" ]]; then
+            chmod +x "$OUT_DIR/$BACKEND_BIN_NAME"
+          fi
+
+          ls -la "$OUT_DIR"
+
+      - name: Upload backend binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: backend-build/${{ matrix.target_os }}-${{ matrix.target_arch }}/
+          retention-days: 1
+          compression-level: 0
+
+      - name: Disk usage after backend build
+        if: always()
+        run: |
+          echo "=== Disk usage after build ==="
+          df -h
+          du -sh "$RUNNER_TEMP" "$HOME/.cache/go-build" "$HOME/go/pkg/mod" 2>/dev/null || true
+
+  # ============================================================================
+  # macOS: Build, Sign, Notarize, and Publish
+  # ============================================================================
+  release-macos:
+    name: Build macOS
+    needs: [prepare, build-backend]
+    runs-on: macos-latest
+    timeout-minutes: 35
+    outputs:
+      duration_seconds: ${{ steps.macos-metrics.outputs.duration_seconds }}
+      electron_cache_hit: ${{ steps.macos-metrics.outputs.electron_cache_hit }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Record job start
+        id: timing-start
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: electron/package-lock.json
+
+      # Platform-specific Electron cache (macOS uses ~/Library/Caches)
+      - name: Cache Electron binaries
+        id: electron-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/electron
+            ~/Library/Caches/electron-builder
+          key: ${{ runner.os }}-electron-${{ needs.prepare.outputs.electron_version || 'unknown' }}-${{ needs.prepare.outputs.electron_builder_version || 'unknown' }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Download backend (darwin-amd64)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-darwin-amd64
+          path: electron/resources/server/mac-x64
+
+      - name: Download backend (darwin-arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-darwin-arm64
+          path: electron/resources/server/mac-arm64
+
+      - name: Verify backend binaries (macOS)
+        run: |
+          for dir in electron/resources/server/mac-*; do
+            test -f "$dir/reliant-backend"
+          done
+          chmod +x electron/resources/server/mac-*/reliant-backend
+          ls -la electron/resources/server/mac-*/
+
+      - name: Install electron dependencies
+        working-directory: electron
+        run: npm ci --legacy-peer-deps --prefer-offline
+
+      - name: Generate runtime build config
+        working-directory: electron
+        env:
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > src/build-config.js <<'SCRIPT'
+          module.exports = {
+          SCRIPT
+          # Use node to safely JSON-encode values (handles special chars in secrets)
+          node -e "
+            const config = {
+              STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
+              SENTRY_DSN: process.env.SENTRY_DSN || '',
+              SENTRY_ENABLED: 'true',
+              SENTRY_TRACES_SAMPLE_RATE: '0.1',
+              SUPABASE_URL: process.env.SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+            };
+            const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
+            console.log(lines.join('\n'));
+          " >> src/build-config.js
+          echo '};' >> src/build-config.js
+
+      - name: Build and Publish macOS apps (Signed & Notarized)
+        working-directory: electron
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          CONFIG="${{ needs.prepare.outputs.config }}"
+          CHANNEL="${{ needs.prepare.outputs.channel }}"
+          PUBLISH_FLAG="${{ github.event.inputs.dry_run == 'true' && 'never' || 'always' }}"
+
+          echo "Building and publishing signed macOS apps"
+          echo "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH_FLAG"
+
+          npx electron-builder --config "$CONFIG" --mac --publish $PUBLISH_FLAG
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-builds
+          path: |
+            electron/dist/*.dmg
+            electron/dist/*.zip
+            electron/dist/*-mac.yml
+            electron/dist/*.blockmap
+          retention-days: 90
+
+      - name: macOS job timing and cache summary
+        id: macos-metrics
+        if: always()
+        run: |
+          END_TS=$(date +%s)
+          START_TS=${{ steps.timing-start.outputs.ts }}
+          DURATION=$((END_TS - START_TS))
+          MINS=$((DURATION / 60))
+          SECS=$((DURATION % 60))
+          CACHE_HIT_RAW="${{ steps.electron-cache.outputs.cache-hit }}"
+
+          if [[ "$CACHE_HIT_RAW" == "true" ]]; then
+            CACHE_HIT="exact-hit"
+          elif [[ "$CACHE_HIT_RAW" == "false" ]]; then
+            CACHE_HIT="partial-hit"
+          else
+            CACHE_HIT="miss"
+          fi
+
+          echo "duration_seconds=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "electron_cache_hit=$CACHE_HIT" >> "$GITHUB_OUTPUT"
+
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### ⏱️ macOS Job Metrics
+
+          - **Job:** Build macOS
+          - **Duration:** ${MINS}m ${SECS}s
+          - **Electron cache hit:** ${CACHE_HIT}
+          EOF
+
+  # ============================================================================
+  # Linux: Build and Publish (runs in parallel with macOS and Windows)
+  # ============================================================================
+  release-linux:
+    name: Build Linux
+    needs: [prepare, build-backend]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      duration_seconds: ${{ steps.linux-metrics.outputs.duration_seconds }}
+      electron_cache_hit: ${{ steps.linux-metrics.outputs.electron_cache_hit }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Record job start
+        id: timing-start
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: electron/package-lock.json
+
+      # Platform-specific Electron cache (Linux uses ~/.cache)
+      - name: Cache Electron binaries
+        id: electron-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/electron
+            ~/.cache/electron-builder
+          key: ${{ runner.os }}-electron-${{ needs.prepare.outputs.electron_version || 'unknown' }}-${{ needs.prepare.outputs.electron_builder_version || 'unknown' }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Download backend (linux-amd64)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-linux-amd64
+          path: electron/resources/server/linux-amd64
+
+      - name: Download backend (linux-arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-linux-arm64
+          path: electron/resources/server/linux-arm64
+
+      - name: Verify backend binaries (Linux)
+        run: |
+          for dir in electron/resources/server/linux-*; do
+            test -f "$dir/reliant-backend"
+          done
+          chmod +x electron/resources/server/linux-*/reliant-backend
+          ls -la electron/resources/server/linux-*/
+
+      - name: Install electron dependencies
+        working-directory: electron
+        run: npm ci --legacy-peer-deps --prefer-offline
+
+      - name: Generate runtime build config
+        working-directory: electron
+        env:
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > src/build-config.js <<'SCRIPT'
+          module.exports = {
+          SCRIPT
+          # Use node to safely JSON-encode values (handles special chars in secrets)
+          node -e "
+            const config = {
+              STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
+              SENTRY_DSN: process.env.SENTRY_DSN || '',
+              SENTRY_ENABLED: 'true',
+              SENTRY_TRACES_SAMPLE_RATE: '0.1',
+              SUPABASE_URL: process.env.SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+            };
+            const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
+            console.log(lines.join('\n'));
+          " >> src/build-config.js
+          echo '};' >> src/build-config.js
+
+      - name: Build and Publish Linux apps
+        working-directory: electron
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+        run: |
+          CONFIG="${{ needs.prepare.outputs.config }}"
+          CHANNEL="${{ needs.prepare.outputs.channel }}"
+          PUBLISH_FLAG="${{ github.event.inputs.dry_run == 'true' && 'never' || 'always' }}"
+
+          echo "Building and publishing Linux apps"
+          echo "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH_FLAG"
+
+          npx electron-builder --config "$CONFIG" --linux --publish $PUBLISH_FLAG
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: |
+            electron/dist/*.AppImage
+            electron/dist/*.deb
+            electron/dist/*-linux.yml
+            electron/dist/*.blockmap
+          retention-days: 90
+
+      - name: Linux job timing and cache summary
+        id: linux-metrics
+        if: always()
+        run: |
+          END_TS=$(date +%s)
+          START_TS=${{ steps.timing-start.outputs.ts }}
+          DURATION=$((END_TS - START_TS))
+          MINS=$((DURATION / 60))
+          SECS=$((DURATION % 60))
+          CACHE_HIT_RAW="${{ steps.electron-cache.outputs.cache-hit }}"
+
+          if [[ "$CACHE_HIT_RAW" == "true" ]]; then
+            CACHE_HIT="exact-hit"
+          elif [[ "$CACHE_HIT_RAW" == "false" ]]; then
+            CACHE_HIT="partial-hit"
+          else
+            CACHE_HIT="miss"
+          fi
+
+          echo "duration_seconds=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "electron_cache_hit=$CACHE_HIT" >> "$GITHUB_OUTPUT"
+
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### ⏱️ Linux Job Metrics
+
+          - **Job:** Build Linux
+          - **Duration:** ${MINS}m ${SECS}s
+          - **Electron cache hit:** ${CACHE_HIT}
+          EOF
+
+  # ============================================================================
+  # Windows: Build and Publish (runs in parallel with macOS and Linux)
+  # ============================================================================
+  release-windows:
+    name: Build Windows
+    needs: [prepare, build-backend]
+    runs-on: windows-latest
+    timeout-minutes: 45
+    outputs:
+      duration_seconds: ${{ steps.windows-metrics.outputs.duration_seconds }}
+      electron_cache_hit: ${{ steps.windows-metrics.outputs.electron_cache_hit }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Record job start
+        id: timing-start
+        shell: bash
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: electron/package-lock.json
+
+      # Platform-specific Electron cache (Windows)
+      - name: Cache Electron binaries
+        id: electron-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/electron/Cache
+            ~/AppData/Local/electron-builder/Cache
+          key: ${{ runner.os }}-electron-${{ needs.prepare.outputs.electron_version || 'unknown' }}-${{ needs.prepare.outputs.electron_builder_version || 'unknown' }}
+          restore-keys: |
+            ${{ runner.os }}-electron-
+
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-dist
+          path: web/dist
+
+      - name: Download backend (windows-amd64)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-windows-amd64
+          path: electron/resources/server/win32-amd64
+
+      - name: Download backend (windows-arm64)
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-windows-arm64
+          path: electron/resources/server/win32-arm64
+
+      - name: Verify backend binaries
+        shell: bash
+        run: |
+          test -f electron/resources/server/win32-amd64/reliant-backend.exe
+          test -f electron/resources/server/win32-arm64/reliant-backend.exe
+          ls -la electron/resources/server/win32-*/
+
+      - name: Install electron dependencies
+        working-directory: electron
+        run: npm ci --legacy-peer-deps --prefer-offline
+
+      - name: Generate runtime build config
+        working-directory: electron
+        shell: bash
+        env:
+          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          cat > src/build-config.js <<'SCRIPT'
+          module.exports = {
+          SCRIPT
+          # Use node to safely JSON-encode values (handles special chars in secrets)
+          node -e "
+            const config = {
+              STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
+              SENTRY_DSN: process.env.SENTRY_DSN || '',
+              SENTRY_ENABLED: 'true',
+              SENTRY_TRACES_SAMPLE_RATE: '0.1',
+              SUPABASE_URL: process.env.SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+            };
+            const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
+            console.log(lines.join('\n'));
+          " >> src/build-config.js
+          echo '};' >> src/build-config.js
+
+      - name: Build and Publish Windows apps
+        working-directory: electron
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: auto
+          R2_ENDPOINT: ${{ secrets.R2_ENDPOINT }}
+          # Azure Trusted Signing (Artifact Signing)
+          # NOTE: electron-builder reads these via the Invoke-TrustedSigning PowerShell module.
+          # Minimal supported auth method is service principal with secret.
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # Trusted Signing account details
+          AZURE_TRUSTED_SIGNING_PUBLISHER_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_PUBLISHER_NAME }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_NAME }}
+          AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_CERTIFICATE_PROFILE_NAME }}
+        shell: pwsh
+        run: |
+          $CONFIG = "${{ needs.prepare.outputs.config }}"
+          $CHANNEL = "${{ needs.prepare.outputs.channel }}"
+          $DRY_RUN = "${{ github.event.inputs.dry_run }}"
+
+          if ($DRY_RUN -eq "true") {
+            $PUBLISH = "never"
+          } else {
+            $PUBLISH = "always"
+          }
+
+          Write-Host "Building and publishing Windows apps"
+          Write-Host "Config: $CONFIG | Channel: $CHANNEL | Publish: $PUBLISH"
+
+          # Use direct path to electron-builder to avoid npx issues on Windows
+          & .\node_modules\.bin\electron-builder.cmd --config "$CONFIG" --win --publish $PUBLISH
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: |
+            electron/dist/*.exe
+            electron/dist/*-win.yml
+            electron/dist/*.blockmap
+          retention-days: 90
+
+      - name: Windows job timing and cache summary
+        id: windows-metrics
+        if: always()
+        shell: bash
+        run: |
+          END_TS=$(date +%s)
+          START_TS=${{ steps.timing-start.outputs.ts }}
+          DURATION=$((END_TS - START_TS))
+          MINS=$((DURATION / 60))
+          SECS=$((DURATION % 60))
+          CACHE_HIT_RAW="${{ steps.electron-cache.outputs.cache-hit }}"
+
+          if [[ "$CACHE_HIT_RAW" == "true" ]]; then
+            CACHE_HIT="exact-hit"
+          elif [[ "$CACHE_HIT_RAW" == "false" ]]; then
+            CACHE_HIT="partial-hit"
+          else
+            CACHE_HIT="miss"
+          fi
+
+          echo "duration_seconds=$DURATION" >> "$GITHUB_OUTPUT"
+          echo "electron_cache_hit=$CACHE_HIT" >> "$GITHUB_OUTPUT"
+
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### ⏱️ Windows Job Metrics
+
+          - **Job:** Build Windows
+          - **Duration:** ${MINS}m ${SECS}s
+          - **Electron cache hit:** ${CACHE_HIT}
+          EOF
+
+  # ============================================================================
+  # NOTIFY: Send changelog email via Customer.io (minor/major releases only)
+  # Runs after successful release artifact publication. Docs deployment is handled
+  # separately by Mintlify via GitHub app.
+  # ============================================================================
+  notify-changelog:
+    name: Send Changelog Email
+    needs: [prepare, release-macos, release-linux, release-windows]
+    if: >-
+      needs.prepare.outputs.channel == 'latest'
+      && needs.prepare.outputs.is_minor_or_major == 'true'
+      && github.event.inputs.dry_run != 'true'
+      && github.event.inputs.skip_changelog_email != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Install yq
+        run: |
+          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Read changelog YAML and trigger broadcast
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CUSTOMERIO_APP_API_KEY: ${{ secrets.CUSTOMERIO_APP_API_KEY }}
+          CUSTOMERIO_BROADCAST_ID: ${{ vars.CUSTOMERIO_CHANGELOG_BROADCAST_ID }}
+        run: bash ./scripts/send-changelog-email.sh
+
+  # ============================================================================
+  # FINALIZE: Generate unified summary after all platforms complete
+  # ============================================================================
+  finalize:
+    name: Finalize Release
+    needs: [prepare, release-macos, release-linux, release-windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: always() && needs.prepare.result == 'success'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Record job start
+        id: timing-start
+        run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List all built files
+        run: |
+          echo "=== Release Artifacts ==="
+          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.exe" -o -name "*.yml" \) | head -30
+          echo ""
+          echo "=== File sizes ==="
+          du -sh artifacts/*/* 2>/dev/null || true
+
+      - name: Generate Release Summary
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          MACOS_RESULT: ${{ needs.release-macos.result }}
+          LINUX_RESULT: ${{ needs.release-linux.result }}
+          WINDOWS_RESULT: ${{ needs.release-windows.result }}
+          PREPARE_DURATION_SECONDS: ${{ needs.prepare.outputs.duration_seconds }}
+          PREPARE_PROTO_CACHE_HIT: ${{ needs.prepare.outputs.proto_cache_hit }}
+          ELECTRON_VERSION: ${{ needs.prepare.outputs.electron_version }}
+          ELECTRON_BUILDER_VERSION: ${{ needs.prepare.outputs.electron_builder_version }}
+          MACOS_DURATION_SECONDS: ${{ needs.release-macos.outputs.duration_seconds }}
+          MACOS_ELECTRON_CACHE_HIT: ${{ needs.release-macos.outputs.electron_cache_hit }}
+          LINUX_DURATION_SECONDS: ${{ needs.release-linux.outputs.duration_seconds }}
+          LINUX_ELECTRON_CACHE_HIT: ${{ needs.release-linux.outputs.electron_cache_hit }}
+          WINDOWS_DURATION_SECONDS: ${{ needs.release-windows.outputs.duration_seconds }}
+          WINDOWS_ELECTRON_CACHE_HIT: ${{ needs.release-windows.outputs.electron_cache_hit }}
+        run: |
+          VERSION_NUM=${VERSION#v}
+          BASE_URL="https://downloads.reliantlabs.io"
+
+          format_duration() {
+            local s="$1"
+            if [[ -z "$s" || ! "$s" =~ ^[0-9]+$ ]]; then
+              echo "n/a"
+              return
+            fi
+            local m=$((s / 60))
+            local r=$((s % 60))
+            echo "${m}m ${r}s"
+          }
+
+          # Status emoji helper
+          status_emoji() {
+            case "$1" in
+              success) echo ":white_check_mark:" ;;
+              failure) echo ":x:" ;;
+              cancelled) echo ":no_entry:" ;;
+              skipped) echo ":next_track_button:" ;;
+              *) echo ":question:" ;;
+            esac
+          }
+
+          # Create summary header
+          cat >> $GITHUB_STEP_SUMMARY << 'SUMMARY_EOF'
+          # :rocket: Reliant Release Complete
+          SUMMARY_EOF
+
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+
+          **Version:** \`${VERSION_NUM}\` | **Channel:** \`${CHANNEL}\` | **Mode:** \`${DRY_RUN:-false}\` dry-run | **Built:** $(date -u +"%Y-%m-%d %H:%M UTC")
+
+          **Electron cache tuple:** electron=\`${ELECTRON_VERSION:-n/a}\`, electron-builder=\`${ELECTRON_BUILDER_VERSION:-n/a}\`
+
+          ### Build Status
+
+          | Platform | Status |
+          |:---------|:-------|
+          | macOS | $(status_emoji $MACOS_RESULT) ${MACOS_RESULT} |
+          | Linux | $(status_emoji $LINUX_RESULT) ${LINUX_RESULT} |
+          | Windows | $(status_emoji $WINDOWS_RESULT) ${WINDOWS_RESULT} |
+
+          ---
+
+          ### ⏱️ Build Performance (Consolidated)
+
+          | Job | Duration | Cache |
+          |:----|:---------|:------|
+          | Prepare | $(format_duration "$PREPARE_DURATION_SECONDS") | protobuf: ${PREPARE_PROTO_CACHE_HIT:-n/a} |
+          | macOS | $(format_duration "$MACOS_DURATION_SECONDS") | electron: ${MACOS_ELECTRON_CACHE_HIT:-n/a} |
+          | Linux | $(format_duration "$LINUX_DURATION_SECONDS") | electron: ${LINUX_ELECTRON_CACHE_HIT:-n/a} |
+          | Windows | $(format_duration "$WINDOWS_DURATION_SECONDS") | electron: ${WINDOWS_ELECTRON_CACHE_HIT:-n/a} |
+
+          ---
+
+          EOF
+
+          # macOS section (if succeeded)
+          if [[ "$MACOS_RESULT" == "success" ]]; then
+            cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## :apple: macOS Downloads
+
+          | Architecture | Installer | Archive |
+          |:------------|:----------|:--------|
+          | **Apple Silicon** | [:arrow_down: DMG](${BASE_URL}/Reliant-${VERSION_NUM}-mac-arm64.dmg) | [:package: ZIP](${BASE_URL}/Reliant-${VERSION_NUM}-mac-arm64.zip) |
+          | **Intel** (x64) | [:arrow_down: DMG](${BASE_URL}/Reliant-${VERSION_NUM}-mac-x64.dmg) | [:package: ZIP](${BASE_URL}/Reliant-${VERSION_NUM}-mac-x64.zip) |
+
+          EOF
+          fi
+
+          # Linux section (if succeeded)
+          if [[ "$LINUX_RESULT" == "success" ]]; then
+            cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## :penguin: Linux Downloads
+
+          | Architecture | Universal | Debian/Ubuntu |
+          |:------------|:----------|:--------------|
+          | **x64** (AMD/Intel) | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-x64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb) |
+          | **ARM64** | [:arrow_down: AppImage](${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.AppImage) | [:package: .deb](${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.deb) |
+
+          EOF
+          fi
+
+          # Windows section (if succeeded)
+          if [[ "$WINDOWS_RESULT" == "success" ]]; then
+            cat >> $GITHUB_STEP_SUMMARY << EOF
+          ## :window: Windows Downloads
+
+          | Architecture | Installer | Portable |
+          |:------------|:----------|:---------|
+          | **x64** (AMD/Intel) | [:arrow_down: Setup .exe](${BASE_URL}/Reliant-${VERSION_NUM}-win-x64.exe) | [:package: Portable](${BASE_URL}/Reliant-${VERSION_NUM}-win-x64-portable.exe) |
+          | **ARM64** | [:arrow_down: Setup .exe](${BASE_URL}/Reliant-${VERSION_NUM}-win-arm64.exe) | - |
+
+          EOF
+          fi
+
+          # Auto-update manifests section
+          cat >> $GITHUB_STEP_SUMMARY << EOF
+          ---
+
+          ## :gear: Auto-Update Manifests
+
+          | Platform | Manifest |
+          |:---------|:---------|
+          EOF
+
+          if [[ "$MACOS_RESULT" == "success" ]]; then
+            echo "| macOS | [latest-mac.yml](${BASE_URL}/latest-mac.yml) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "$LINUX_RESULT" == "success" ]]; then
+            echo "| Linux | [latest-linux.yml](${BASE_URL}/latest-linux.yml) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [[ "$WINDOWS_RESULT" == "success" ]]; then
+            echo "| Windows | [latest-win.yml](${BASE_URL}/latest-win.yml) |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Release summary generated!"
+
+      - name: Purge Cloudflare CDN cache
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          CHANNEL: ${{ needs.prepare.outputs.channel }}
+          MACOS_RESULT: ${{ needs.release-macos.result }}
+          LINUX_RESULT: ${{ needs.release-linux.result }}
+          WINDOWS_RESULT: ${{ needs.release-windows.result }}
+        run: |
+          VERSION_NUM=${VERSION#v}
+          BASE_URL="https://downloads.reliantlabs.io"
+          FILES=()
+
+          # Always purge the auto-update manifests (these are what clients poll)
+          if [[ "$CHANNEL" == "latest" ]]; then
+            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest-win.yml")
+          else
+            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha-win.yml")
+          fi
+
+          # Purge versioned download URLs per platform
+          if [[ "$MACOS_RESULT" == "success" ]]; then
+            FILES+=(
+              "${BASE_URL}/Reliant-${VERSION_NUM}-mac-arm64.dmg"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-mac-arm64.zip"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-mac-x64.dmg"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-mac-x64.zip"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-mac-arm64.dmg.blockmap"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-mac-x64.dmg.blockmap"
+            )
+          fi
+          if [[ "$LINUX_RESULT" == "success" ]]; then
+            FILES+=(
+              "${BASE_URL}/Reliant-${VERSION_NUM}-linux-x64.AppImage"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.AppImage"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.deb"
+            )
+          fi
+          if [[ "$WINDOWS_RESULT" == "success" ]]; then
+            FILES+=(
+              "${BASE_URL}/Reliant-${VERSION_NUM}-win-x64.exe"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-win-arm64.exe"
+              "${BASE_URL}/Reliant-${VERSION_NUM}-win-x64.exe.blockmap"
+            )
+          fi
+
+          echo "Purging ${#FILES[@]} URLs from Cloudflare cache..."
+
+          # Cloudflare allows up to 30 files per purge request
+          for ((i=0; i<${#FILES[@]}; i+=30)); do
+            BATCH=("${FILES[@]:i:30}")
+            JSON_ARRAY=$(printf '%s\n' "${BATCH[@]}" | jq -R . | jq -s .)
+
+            RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+              "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" \
+              --data "{\"files\":${JSON_ARRAY}}")
+
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -n -1)
+
+            if [[ "$HTTP_CODE" -ne 200 ]]; then
+              echo "::warning::Cache purge request returned HTTP ${HTTP_CODE}: ${BODY}"
+            else
+              echo "Cache purge batch successful (${#BATCH[@]} URLs)"
+            fi
+          done
+
+          echo "Cloudflare cache purge complete"
+
+      - name: Trigger Homebrew tap update
+        if: needs.release-macos.result == 'success' && github.event.inputs.dry_run != 'true'
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          VERSION_NUM=${VERSION#v}
+          echo "Triggering Homebrew tap update for version: $VERSION_NUM"
+
+          RESPONSE=$(curl -sS -w "\n%{http_code}" -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.HOMEBREW_TAP_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            https://api.github.com/repos/reliant-labs/homebrew-reliant/dispatches \
+            -d "{\"event_type\":\"release-published\",\"client_payload\":{\"version\":\"$VERSION_NUM\"}}")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+
+          echo "GitHub dispatch HTTP status: $HTTP_CODE"
+          if [[ "$HTTP_CODE" != "204" ]]; then
+            echo "::error::Homebrew dispatch failed: $BODY"
+            exit 1
+          fi
+
+          echo "Homebrew dispatch succeeded"
+
+      - name: Finalize job timing summary
+        if: always()
+        run: |
+          END_TS=$(date +%s)
+          START_TS=${{ steps.timing-start.outputs.ts }}
+          DURATION=$((END_TS - START_TS))
+          MINS=$((DURATION / 60))
+          SECS=$((DURATION % 60))
+
+          cat >> "$GITHUB_STEP_SUMMARY" << EOF
+          ### ⏱️ Finalize Job Metrics
+
+          - **Job:** Finalize Release
+          - **Duration:** ${MINS}m ${SECS}s
+          EOF

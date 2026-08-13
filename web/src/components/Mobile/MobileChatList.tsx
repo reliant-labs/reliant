@@ -41,7 +41,13 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
-import type { Chat } from "../../gen/reliant/v1/chat_pb";
+// The DOMAIN Chat (types/chat), not the raw protobuf one: it is
+// `Omit<ProtoChat, '$typeName'>` plus the client-side fields the API layer
+// flattens on (worktreeName / worktreeDeletedAt), and it is what
+// api.chatsV2.list — and therefore useChatList — actually returns. Importing
+// the pb type here made every list value fail to assign for want of a
+// `$typeName` this component never reads.
+import type { Chat } from "../../types/chat";
 import type { Worktree } from "../../store/worktreeStore";
 
 interface ChatGroup {

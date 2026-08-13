@@ -357,7 +357,11 @@ function ToolExecutionComponent({
   }, [approval, chatId, onDeny, toolCall.id, denyMutation]);
 
   // Extract file paths for view tools
-  const extractFilePaths = (input: Record<string, unknown> | string): string[] => {
+  // `input` is optional on ToolCallData: it is undefined while the call is
+  // still streaming and its arguments have not arrived. The body already
+  // returns [] for anything that is not an object, so undefined needs no new
+  // branch — only the signature has to admit it.
+  const extractFilePaths = (input: Record<string, unknown> | string | undefined): string[] => {
     if (typeof input !== "object" || input === null) return [];
     const filePaths: string[] = [];
     if (input.file_path && typeof input.file_path === "string") {
@@ -530,7 +534,10 @@ function ToolExecutionComponent({
     toolName: toolCall.name,
     toolCallId: toolCall.id,
     childWorkflowId: toolCall.childWorkflowId,
-    input: toolCall.input,
+    // Normalize the streaming-window undefined to {} HERE, once, rather than
+    // in every renderer: ToolCallData.input is absent until the call's
+    // arguments arrive, but a renderer's contract is that `input` is present.
+    input: toolCall.input ?? {},
     result: toolResult,
     worktreeId: chatWorktreeId,
     chatId,

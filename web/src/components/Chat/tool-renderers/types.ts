@@ -12,6 +12,16 @@ export interface ToolRenderContext {
    * when it creates the child.
    */
   childWorkflowId?: string;
+  /**
+   * The tool call's arguments, ALWAYS DEFINED for a renderer.
+   *
+   * ToolCallData.input is optional — it is undefined while the call is still
+   * streaming and its arguments have not arrived. That undefined is
+   * normalized to `{}` at the single point where this context is built (see
+   * ToolExecution.tsx's renderContext), so the dozen-odd renderers
+   * downstream never each have to re-handle the streaming case. Narrowing
+   * here rather than widening keeps that decision in one place.
+   */
   input: Record<string, unknown> | string;
   result?: ToolResultData;
   worktreeId?: string;

@@ -55,11 +55,31 @@ BEGIN
     -- A view that selects a column blocks ALTER COLUMN TYPE on it, so every
     -- view is captured as it currently stands, dropped, and rebuilt verbatim
     -- afterwards.
+    --
+    -- EXTENSION-OWNED OBJECTS ARE EXCLUDED (the pg_depend deptype='e' check).
+    -- `public` is not necessarily ours alone: a managed Postgres installs its
+    -- own extensions there, and Postgres REFUSES to drop an object an
+    -- extension owns —
+    --   ERROR: cannot drop view g_agg_stat_statements because extension
+    --          google_columnar_engine requires it (SQLSTATE 2BP01)
+    -- — which aborts the whole DO block and fails the migration before a
+    -- single column is converted. Observed on AlloyDB, whose
+    -- google_columnar_engine extension owns eleven `g_columnar_*` views in
+    -- public; the same applies to any managed provider that does this.
+    --
+    -- Excluding them is correct, not a workaround: those views select from
+    -- the extension's own catalogs, never from our tables, so they cannot
+    -- block a column conversion. We must not drop objects we do not own, and
+    -- we do not need to.
     FOR v IN
         SELECT c.relname AS name, pg_get_viewdef(c.oid, true) AS def
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'v'
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_depend d
+              WHERE d.objid = c.oid AND d.deptype = 'e'
+          )
         ORDER BY c.relname
     LOOP
         view_names := view_names || v.name;
@@ -67,6 +87,9 @@ BEGIN
         EXECUTE format('DROP VIEW public.%I', v.name);
     END LOOP;
 
+    -- Extension-owned TABLES are excluded for the same reason: altering a
+    -- column of a table an extension owns is not ours to do, and a managed
+    -- provider's bookkeeping tables have no bearing on our timestamp bug.
     FOR r IN
         SELECT c.table_name, c.column_name
         FROM information_schema.columns c
@@ -76,6 +99,13 @@ BEGIN
         WHERE c.table_schema = 'public'
           AND t.table_type = 'BASE TABLE'
           AND c.data_type = 'timestamp without time zone'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pg_class pc
+              JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+              JOIN pg_depend d ON d.objid = pc.oid AND d.deptype = 'e'
+              WHERE pn.nspname = c.table_schema AND pc.relname = c.table_name
+          )
         ORDER BY c.table_name, c.column_name
     LOOP
         EXECUTE format(
@@ -103,11 +133,18 @@ DECLARE
 BEGIN
     PERFORM set_config('TimeZone', 'UTC', true);
 
+    -- Extension-owned views/tables excluded — see the Up block for why
+    -- (a managed provider owns objects in `public` that Postgres refuses to
+    -- drop, which aborts the whole DO block).
     FOR v IN
         SELECT c.relname AS name, pg_get_viewdef(c.oid, true) AS def
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relkind = 'v'
+          AND NOT EXISTS (
+              SELECT 1 FROM pg_depend d
+              WHERE d.objid = c.oid AND d.deptype = 'e'
+          )
         ORDER BY c.relname
     LOOP
         view_names := view_names || v.name;
@@ -124,6 +161,13 @@ BEGIN
         WHERE c.table_schema = 'public'
           AND t.table_type = 'BASE TABLE'
           AND c.data_type = 'timestamp with time zone'
+          AND NOT EXISTS (
+              SELECT 1
+              FROM pg_class pc
+              JOIN pg_namespace pn ON pn.oid = pc.relnamespace
+              JOIN pg_depend d ON d.objid = pc.oid AND d.deptype = 'e'
+              WHERE pn.nspname = c.table_schema AND pc.relname = c.table_name
+          )
         ORDER BY c.table_name, c.column_name
     LOOP
         EXECUTE format(

@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
-import { getIsDev } from "@/lib/constants";
 import { logger } from "@/lib/logger";
 import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } from "@/hooks";
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";

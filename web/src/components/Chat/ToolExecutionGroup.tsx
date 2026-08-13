@@ -23,10 +23,14 @@ function truncate(text: string, max: number): string {
 }
 import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
 
+// Mirrors the subset of lib/messageProcessor's ToolCallData this group reads.
+// `input` is OPTIONAL there (undefined while the call is still streaming), and
+// this file already branches on `lead.call.input === undefined` below — the
+// type just disagreed with the code.
 type ToolCallData = {
   id: string;
   name: string;
-  input: Record<string, unknown> | string;
+  input?: Record<string, unknown> | string;
   finished?: boolean;
   durableStatus?: ToolCallStatus;
   /** For a spawn call, the workflow it started (tool_calls.child_workflow_id). */

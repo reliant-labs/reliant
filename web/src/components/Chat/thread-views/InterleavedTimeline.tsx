@@ -424,6 +424,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
             "[InterleavedTimeline] Thread has messages but no workflow row and no live origin; cannot classify it",
             { thread, chatId },
           );
+          // SKIP the thread rather than fabricating a display for it. The log
+          // above says the thread cannot be classified; continuing anyway
+          // built a WorkflowDisplay with `origin: undefined`, which violates
+          // the type and — worse — silently rendered an unclassifiable thread
+          // as though it were a node thread. Every field below depends on an
+          // origin we do not have.
+          continue;
         }
         display = {
           id: thread,

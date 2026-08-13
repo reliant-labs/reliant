@@ -47,6 +47,12 @@ export function MobileChatScreen() {
   const mainWorktree = worktrees.find((w) => w.is_main && !w.deleted_at);
   const effectiveWorktreeId = chat?.worktreeId ?? mainWorktree?.id;
 
+  // `useParams({ strict: false })` types every param as optional, so chatId is
+  // `string | undefined` here even though this route cannot match without one.
+  // Bail rather than casting: ChatContainer requires a real tabId, and a
+  // chat screen with no chat has nothing to render.
+  if (!chatId) return null;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Sticky header — on a phone there's no persistent sidebar to go back

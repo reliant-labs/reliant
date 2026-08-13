@@ -12,10 +12,14 @@ import { generateReadOnlyToolsSummary } from '../../lib/toolFormatters';
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from '../Settings/ToolCallSettings';
 import { useSurface } from '../../lib/surfaceContext';
 
+// Mirrors the subset of lib/messageProcessor's ToolCallData this group reads.
+// `input` is OPTIONAL there — undefined while the call is still streaming and
+// its arguments have not arrived — and this local copy has to agree, or every
+// caller passing a real ToolCallData fails to type-check.
 type ToolCallData = {
   id: string;
   name: string;
-  input: Record<string, unknown> | string;
+  input?: Record<string, unknown> | string;
   finished?: boolean;
 };
 
@@ -64,7 +68,10 @@ function ToolExecutionCollapsibleGroupComponent({
   const summaryText = generateReadOnlyToolsSummary(
     executions.map(({ call }) => ({
       name: call.name,
-      input: call.input,
+      // A still-streaming call has no input yet; the summary formatter takes
+      // a required ToolInput, and an empty object reads as "no arguments"
+      // rather than crashing the summary line.
+      input: call.input ?? {},
     }))
   );
 
