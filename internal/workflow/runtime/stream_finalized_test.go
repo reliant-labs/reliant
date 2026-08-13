@@ -19,6 +19,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // ============================================================================
@@ -51,21 +52,27 @@ type capturedFinalize struct {
 // every call to the returned slice, and installs the production data
 // converter so proto activity outputs decode into maps exactly like prod
 // (getRawOutput decodes CallLLMOutput via the flexible converter).
+//
+// The stub MUST take types.EmitStreamFinalizedInput, not the map this used to
+// accept. emitStreamFinalized now dispatches the success path as a LOCAL
+// activity, and local-activity arguments are handed to the registered function
+// by reflection instead of going through the data converter — a mismatched
+// parameter type panics with "reflect: Call using X as type Y" rather than
+// being decoded. Registering the real type keeps the stub valid for both the
+// local and the regular (terminal-path) dispatch.
 func registerFinalizeCapture(env *testsuite.TestWorkflowEnvironment) *[]capturedFinalize {
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	var captured []capturedFinalize
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
-			cf := capturedFinalize{}
-			cf.ChatID, _ = input["chat_id"].(string)
-			cf.MessageID, _ = input["message_id"].(string)
-			cf.Thread, _ = input["thread"].(string)
-			cf.Reason, _ = input["reason"].(string)
-			if v, ok := input["last_stream_seq"].(float64); ok {
-				cf.LastStreamSeq = int64(v)
-			}
-			captured = append(captured, cf)
-			return map[string]interface{}{"success": true}, nil
+		func(_ context.Context, input types.EmitStreamFinalizedInput) (types.EmitStreamFinalizedOutput, error) {
+			captured = append(captured, capturedFinalize{
+				ChatID:        input.ChatID,
+				MessageID:     input.MessageID,
+				Thread:        input.Thread,
+				Reason:        input.Reason,
+				LastStreamSeq: input.LastStreamSeq,
+			})
+			return types.EmitStreamFinalizedOutput{Success: true}, nil
 		},
 		activity.RegisterOptions{Name: "EmitStreamFinalized"},
 	)

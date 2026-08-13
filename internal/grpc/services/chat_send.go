@@ -598,29 +598,44 @@ func (s *ChatService) SendMessage(
 					targetThread = *req.Msg.TargetThread
 				}
 
-				// Atomically: absorb the mailbox, save messages, mark running.
-				// A paused run takes no loop steps, so nothing has drained the
-				// thread's mailbox — saveIncomingMessages claims it first so
-				// queued text keeps its place ahead of this new message. RunTx
-				// is re-entrant, so its transaction joins this one and the
-				// claim commits with the saves.
+				// Atomically: absorb the mailbox and save messages. A paused run
+				// takes no loop steps, so nothing has drained the thread's
+				// mailbox — saveIncomingMessages claims it first so queued text
+				// keeps its place ahead of this new message. RunTx is
+				// re-entrant, so its transaction joins this one and the claim
+				// commits with the saves.
+				//
+				// The workflow-status flip is deliberately NOT in here.
+				// Postgres and Temporal cannot commit together, so the only
+				// question is which order fails safely, and "mark running, then
+				// signal" is the unsafe one: if the DB write fails, this
+				// returned an error before ever reaching ResumeWorkflow below
+				// and the run stayed parked with nobody coming for it — visibly
+				// "active" while actually halted, and invisible to the
+				// reconciler, whose progress watchdog skips paused rows by
+				// design. That is exactly what a serialization failure did to
+				// chat 80978aca: paused 20:52, resume aborted 20:55, stuck
+				// until a later message happened to retry it at 21:29.
+				//
+				// Signalling first inverts the failure: the run really is
+				// awake, and the status is corrected by whichever of three
+				// writers gets there — the best-effort write below, the
+				// workflow's own "started"/Resumed notification when it wakes
+				// (see the retry-exhaustion paths in loop_executor.go and
+				// inline_workflow_executor.go), or the reconciler. A stale
+				// "paused" row on a running workflow is self-healing; a
+				// never-signalled workflow is not.
 				var savedMessageID string
 				err := s.database.RunTx(ctx, func(txCtx context.Context) error {
 					var saveErr error
 					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
-					if saveErr != nil {
-						return saveErr
-					}
-
-					// Update workflow status to running
-					if err := s.database.UpdateWorkflowStatus(txCtx, workflowID, db.WorkflowStatusRunning); err != nil {
-						return fmt.Errorf("failed to update workflow status: %w", err)
-					}
-
-					return nil
+					return saveErr
 				})
 				if err != nil {
-					logging.Error("Failed to resume paused workflow", "error", err, "workflowID", workflowID)
+					// The message itself failed to save — there is nothing to
+					// resume the workflow FOR, so this really is fatal.
+					logging.Error("Failed to save messages while resuming paused workflow",
+						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 					return nil, connect.NewError(connect.CodeInternal, err)
 				}
 
@@ -674,7 +689,27 @@ func (s *ChatService) SendMessage(
 						// Fall through to start a new workflow below
 						break
 					}
+					// The signal is the step that actually restarts the run.
+					// Swallowing this failure and returning
+					// workflow_status=running below is what makes a chat look
+					// active while it is halted: the message is saved, the UI
+					// shows work in progress, and nothing is executing. Report
+					// it instead — the user's message is already durable, so a
+					// retry resumes from exactly here.
 					logging.Error("Failed to resume paused workflow",
+						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
+					return nil, connect.NewError(connect.CodeInternal,
+						fmt.Errorf("failed to resume paused workflow: %w", err))
+				}
+
+				// The run is awake. Correct the DB status now that the
+				// authoritative step has succeeded. Best-effort on purpose: if
+				// this write loses a serialization race, the workflow's own
+				// "started"/Resumed notification and the reconciler both still
+				// converge it, and a stale row is not worth failing a request
+				// that already did the important part.
+				if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+					logging.Warn("Resumed workflow but failed to mark it running — status will be corrected by the workflow or the reconciler",
 						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 				}
 
@@ -1098,6 +1133,15 @@ func (s *ChatService) SendMessage(
 	if resumeMessagesSaved {
 		savedMessageID = resumePresavedMessageID
 	} else {
+		// A chat opening on a directory with no code is a greenfield request,
+		// and the stack is still undecided. Hand the model that observation
+		// plus the criteria for proposing forge, ahead of the user's first
+		// message so it is in view when the model reads the ask. No-ops on
+		// every later turn and whenever the project already holds code.
+		if guidance := s.maybeGreenfieldGuidance(ctx, userID, chat); guidance != nil {
+			systemMessages = append([]*reliantv1.InputMessage{guidance}, systemMessages...)
+		}
+
 		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
 			logging.Error("Failed to save messages for new workflow", "error", err, "chatID", req.Msg.ChatId)
@@ -1193,6 +1237,17 @@ func (s *ChatService) SendAgentMessage(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
 	}
 
+	// A terminal thread means the loop has exited. This is trustworthy in the
+	// closing direction because a thread is only revived by the run that
+	// starts on it (WorkflowStatusActivity's "started" arm calls
+	// ReviveThread), so a terminal status here is never merely a stale stamp
+	// left by an earlier turn of a reused main thread.
+	//
+	// Deliberately NOT self-healed here from "the workflow is running", even
+	// though that is the shape the revival repairs: a spawn thread that has
+	// just written its own "completed" sits in exactly that state for the
+	// moment before its workflow follows, and reviving it would queue a
+	// message into an agent that really has stopped.
 	if core.ThreadStatusIsTerminal(target.Status) {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,

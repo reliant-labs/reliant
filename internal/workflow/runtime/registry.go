@@ -702,6 +702,34 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	return result, nil
 }
 
+// activityErrorEventID is the DEDUP KEY for one activity's whole retry series.
+//
+// chat_updates are collapsed per entity_id by
+// GetLatestNonMessageUpdatesPerEntity ("last write per entity wins"), and the
+// frontend's error log dedups by id too (applyErrorUpdates replaces in place).
+// A freshly generated uuid per call — which is what this used to be — opted out
+// of both: every attempt landed under its own id, so ONE failing activity
+// rendered as three stacked rows in the transcript ("Retrying (Attempt 1/3)",
+// "Retrying (Attempt 2/3)", "Attempt 3/3") instead of a single error whose
+// badge advances.
+//
+// Keying on the activity gives retries a stable id, so they update one row.
+// activity_id is stable across attempts of the same activity (Temporal reuses
+// it — attempt_number is the part that varies) and unique per activity within a
+// run, so genuinely distinct failures still get distinct rows.
+//
+// workflowID is included because activity ids restart at 1 for each new run,
+// including a continue-as-new successor: without it, a later run's first
+// activity would overwrite the earlier run's recorded error.
+func activityErrorEventID(workflowID, activityID string) string {
+	if activityID == "" {
+		// Nothing stable to key on (Temporal always sets an activity id, but a
+		// blank one here would silently merge unrelated failures into one row).
+		return "activity-error-" + uuid.New().String()
+	}
+	return fmt.Sprintf("activity-error-%s-%s", workflowID, activityID)
+}
+
 // writeErrorEvent writes an error event to chat_updates when an activity fails.
 // This is a best-effort write - it will not fail the activity if the write fails.
 // Only writes errors if chat_id can be extracted from the input.
@@ -739,8 +767,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		"activityType", activityType,
 		"activityID", activityID)
 
-	// Generate unique error ID
-	errorID := uuid.New().String()
+	errorID := activityErrorEventID(workflowID, activityID)
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
 	// See web/src/types/streaming.ts ErrorUpdate interface

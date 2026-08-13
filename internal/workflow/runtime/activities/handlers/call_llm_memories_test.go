@@ -94,3 +94,33 @@ func TestFormatRepoMemoryMessages_SortedByName(t *testing.T) {
 		require.Equal(t, message.System, msg.Role)
 	}
 }
+
+// A thread that does not know its working directory INVENTS one. Measured
+// across two forge-one-shot runs: ten of fifteen spawned units issued reads
+// against `/path/to/project/...` — a placeholder neither reliant nor forge
+// ever emits — for eighteen File-not-found errors before recovering.
+//
+// A spawned unit starts with no history, so the system prompt is the only
+// place the path appears. It must therefore read as the ANSWER to "where do
+// I open this file", not as provenance.
+func TestGetSystemPrompts_StatesWorkingDirectoryAsTheProjectRoot(t *testing.T) {
+	activity := &CallLLMActivity{}
+
+	t.Run("project path when no worktree", func(t *testing.T) {
+		prompt := activity.getSystemPrompts(nil, "/srv/checkout/acme", "", nil, nil, nil)[0]
+
+		require.Contains(t, prompt, "/srv/checkout/acme",
+			"the absolute working directory must appear verbatim — it is the only place a spawned unit can learn it")
+		require.Contains(t, prompt, "relative path",
+			"the prompt must say what relative paths resolve against, or the model guesses a prefix")
+		require.Contains(t, prompt, "/path/to/project",
+			"naming the placeholder is what makes the instruction actionable — this is the exact string the runs produced")
+	})
+
+	t.Run("worktree path wins when the chat is bound to one", func(t *testing.T) {
+		prompt := activity.getSystemPrompts(nil, "/srv/checkout/acme", "/srv/worktrees/feature-x", nil, nil, nil)[0]
+
+		require.Contains(t, prompt, "/srv/worktrees/feature-x",
+			"a chat bound to a worktree works in the worktree, and the prompt must name that path")
+	})
+}

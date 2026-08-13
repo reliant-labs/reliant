@@ -61,6 +61,29 @@ func (a *WorkflowErrorActivity) Name() string {
 
 // Execute writes a workflow error to chat_updates table
 func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowErrorInput) (WorkflowErrorOutput, error) {
+	errorID, err := WriteWorkflowError(ctx, a.repo, input)
+	if err != nil {
+		return WorkflowErrorOutput{Success: false}, err
+	}
+	return WorkflowErrorOutput{Success: true, ErrorID: errorID}, nil
+}
+
+// WriteWorkflowError writes one workflow-level error to chat_updates and
+// returns the id it was written under.
+//
+// This is the payload shape the frontend's ErrorUpdate interface reads
+// (web/src/types/streaming.ts), and it lives here — outside the activity — so
+// that callers who are NOT running inside a workflow can emit the same error
+// the workflow would have. The reconciler is the motivating one: on a hard
+// Temporal termination the worker never receives another workflow task, so no
+// workflow code (and therefore no activity) ever runs again, and the
+// reconciler is the only component left that observes the death. It has a
+// db.Repository but no activity context, so it calls this directly.
+//
+// Duplicating the payload in that caller instead would mean the two error
+// shapes drift the first time a field is added, and the UI would silently
+// render one of them wrong.
+func WriteWorkflowError(ctx context.Context, repo db.Repository, input WorkflowErrorInput) (string, error) {
 	// Generate unique error ID
 	errorID := uuid.New().String()
 
@@ -93,13 +116,13 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 	// Marshal update data
 	errorDataJSON, err := json.Marshal(errorData)
 	if err != nil {
-		return WorkflowErrorOutput{Success: false}, fmt.Errorf("failed to marshal workflow error: %w", err)
+		return "", fmt.Errorf("failed to marshal workflow error: %w", err)
 	}
 
 	// Write to chat_updates (for per-chat websocket)
-	if err := a.repo.CreateChatUpdate(ctx, input.ChatID, db.UpdateTypeError, errorID, string(errorDataJSON)); err != nil {
-		return WorkflowErrorOutput{Success: false}, fmt.Errorf("failed to create chat_update: %w", err)
+	if err := repo.CreateChatUpdate(ctx, input.ChatID, db.UpdateTypeError, errorID, string(errorDataJSON)); err != nil {
+		return "", fmt.Errorf("failed to create chat_update: %w", err)
 	}
 
-	return WorkflowErrorOutput{Success: true, ErrorID: errorID}, nil
+	return errorID, nil
 }

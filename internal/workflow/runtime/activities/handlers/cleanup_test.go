@@ -58,7 +58,7 @@ func createTestChatWithContextWindow(t *testing.T, repo db.Repository) (string, 
 	// Create thread (root thread ID equals chat ID)
 	threadID := chatID
 	_, err = repo.CreateThread(ctx, &db.Thread{
-		ID:             threadID,
+		ID:     threadID,
 		ChatID: chatID,
 	})
 	require.NoError(t, err)

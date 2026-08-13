@@ -683,10 +683,23 @@ nodes:
             is the rule that governs**: it lets per-service units fill bodies in parallel
             without colliding on the struct, so add every field the plan calls for in this
             serial step. The constraint that goes with it is **every field you add must
-            RESOLVE, in this same pass.** forge recognises exactly two providers, one per field:
+            RESOLVE, in this same pass.** forge recognises these providers, one per field:
             1. **Another registered component**, matched by its `Service` interface type — the
                packages Step 5 birthed.
-            2. **An assignable field on the owned `*Infra` struct in
+            2. **A GENERATED STORE from `internal/db/store_gen.go`** — `db.<Entity>Store` for
+               one entity, or `db.Store` (accessor per entity) for a service that genuinely
+               spans tables. **This is how a package reaches the database, and it needs NO
+               Infra field and NO construction** — forge resolves it from the ORM client it
+               already owns. Just declare the field. **Do NOT hand-write a Store interface and
+               a passthrough adapter over the ORM**: two measured runs did, for 723 and 464
+               lines of one-line passthroughs (`return db.GetEstimateByID(ctx, s.db, id)`) and
+               ~16 minutes almost entirely in working out the ORM surface. The store holds the
+               handle, so calls take only your arguments
+               (`s.deps.Estimates.GetEstimateByID(ctx, id)`), and `WithTx(tx)` rebinds for a
+               transaction. A query the generated CRUD cannot express (a join, an aggregate,
+               raw SQL) goes in that entity's scaffold-once
+               `internal/db/<entity>_repo_ext.go` seam.
+            3. **An assignable field on the owned `*Infra` struct in
                `internal/app/providers.go`** — for anything with no component behind it (a
                client, a pool, a third-party SDK).
             Anything else HARD-FAILS generate with `<Service>.Deps.<Field> has no provider`.
@@ -817,12 +830,30 @@ nodes:
 
           **Serial setup — do this BEFORE you fan out:**
 
-          1. **Brief each unit to load its own skills.** Each spawned unit starts fresh. Brief
-             every BACKEND unit to load `service-layer`, `api`, `auth` and `testing`; brief
-             every FRONTEND unit to load `frontend-api-brief` (proto-to-client mapping — enum
-             member names, what a List request actually filters, FK ids vs display names),
-             `frontend-runtime` and `frontend/design`, and to follow the last for every visual
-             decision.
+          1. **Brief each unit to load its skills AND run the two lookup commands, in ONE
+             opening turn.** Each spawned unit starts fresh.
+             - BACKEND: load `service-layer`, `api` and `testing` (add `auth` only for a seam
+               that enforces authorization, `db` only for a seam that writes migrations —
+               they are ~17KB each and a unit that loads everything still greps).
+             - FRONTEND: load `frontend-api-brief` (proto-to-client mapping — enum member
+               names, what a List request actually filters, FK ids vs display names),
+               `frontend-runtime` and `frontend/design`, and follow the last for every visual
+               decision.
+             - EVERY unit, in that same turn:
+               `reliant forge project shapes --grep '<Entity1>|<Entity2>'` — its seam's RPCs,
+               handlers, tables and stores, and
+               `reliant forge project libraries <pkgs>` — the signatures of the forge/pkg
+               libraries its seam uses (backend: `orm crud svcerr`; add `tdd testkit` when it
+               writes tests).
+
+             **Loading more skills is NOT the fix, and briefing without the commands is the
+             failure.** Measured: backend units loaded ~84KB across seven skills and still
+             spent 35.5 minutes grepping forge's own source, 92 times, while running
+             `forge project libraries` ZERO times. `RunTransaction` was grepped SIXTEEN times
+             by units that had already loaded the skill documenting it. Skills teach a
+             pattern; these two commands answer "what is this symbol's exact signature", and
+             nothing else does — bare `go doc <pkg>` prints a struct as `struct{ ... }` with
+             no methods.
           2. **Confirm the dev database has rows — do not blind-seed.** `reliant forge run`
              migrates AND auto-seeds on FIRST boot against an empty dev database, printing
              `[up] auto-seeded <N> rows across <M> tables`. Read that line; only when it is
@@ -896,6 +927,27 @@ nodes:
             regenerated and enormous. Never edit one either.
           - **Anything your brief already gives you, do not re-derive.** Opening the source to
             confirm something you were handed is waste.
+          - **To find WHERE something is, run `reliant forge project shapes` — never `grep`.**
+            It lists every rpc, message, enum, table, handler, hook and store with `file:line`,
+            from the live sources. `--grep <Name>` gives you one entity across ALL layers in one
+            call, and `--grep 'A|B'` several entities at once (it is a regex — ask about every
+            entity you own in ONE call); `--kind rpc,handler` answers "declared vs implemented".
+            Measured: a fan-out burned 28.4 minutes across 123 `find`/`grep`/`ls` calls
+            answering exactly this — the largest recoverable cost in the run — mostly paging
+            one big proto by symbol, once per unit. Use the line numbers to read the region you
+            need directly.
+          - **To learn a `forge/pkg` LIBRARY's API, run `reliant forge project libraries <pkg>`
+            — never grep forge's source tree, and never trust bare `go doc <pkg>`.** It prints
+            full signatures, several packages at once: `reliant forge project libraries orm
+            crud svcerr`. This is the twin of the rule above — `shapes` answers "what does MY
+            generated code offer", `libraries` answers "what does the FRAMEWORK offer".
+            Measured: units grepped `~/src/reliant-labs/forge/**` **92 times for 35.5 minutes**
+            — including forge's own generator source, and a STALE copy in the module cache —
+            while running `libraries` zero times. `RunTransaction` alone was grepped SIXTEEN
+            times. Bare `go doc <pkg>` is the trap that starts it: it renders a struct as
+            `struct{ ... }` with NO methods, so the answer genuinely is not on that page.
+            (`go doc <pkg> <Type>` works if you already know the type name; `go doc
+            ./internal/db <X>Store` works for your own generated stores.)
           - **Read the source of truth FIRST, before writing code.** The `.proto` service files
             give you the entities, enums, RPCs and declared List filters in ONE place. Do NOT
             re-derive the API surface by grepping generated client code or probing the running
@@ -925,9 +977,12 @@ nodes:
             Write is REJECTED if it changed on disk since, which is what a sibling editing your
             file looks like. That means two writers own one file — report it rather than
             re-issuing the Write.
-          - **Replacing a scaffolded page WHOLESALE? Prefer delete-then-write.** `rm` the old
-            file and Write to a fresh path — nothing to clobber and nothing to diff. Reserve
-            the Read-first path for IN-PLACE edits.
+          - **Batch your WRITES the same way you batch your reads, and never `rm` a file just
+            to rewrite it.** The Write tool's own description carries the mechanics; what
+            matters here is that fan-out is where the cost lands. Measured in one wave: 96
+            write turns, every single one writing exactly ONE file — six independent dashboard
+            panels went one per turn — plus 21 turns spent deleting a file the very next turn
+            rewrote.
           - Run commands in the FOREGROUND with a generous timeout. Backgrounding ends your
             turn and strands the phase.
           === END UNIT RULES ===

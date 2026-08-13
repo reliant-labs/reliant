@@ -716,19 +716,89 @@ func (s *StreamingService) getNonMessageUpdates(ctx context.Context, chatID stri
 		return nil, err
 	}
 
+	origins := s.threadOrigins(ctx, chatID)
+
 	result := make([]*reliantv1.ChatUpdateData, 0, len(updates))
 	for _, update := range updates {
+		data := update.Data
+		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD {
+			data = withThreadOrigin(data, origins)
+		}
 		result = append(result, &reliantv1.ChatUpdateData{
 			UpdateType:     update.UpdateType,
 			SequenceNumber: update.SequenceNumber,
 			EntityId:       update.EntityID,
 			ChatId:         update.ChatID,
-			DataJson:       string(update.Data),
+			DataJson:       string(data),
 			CreatedAt:      update.CreatedAt.Format(time.RFC3339Nano),
 		})
 	}
 
 	return result, nil
+}
+
+// threadOrigins maps thread id -> threads.origin for one chat.
+//
+// Returns an empty map on error: reconciliation below is an enhancement of the
+// stored payload, so losing it degrades the snapshot to exactly what it was
+// before rather than failing the whole initial sync.
+func (s *StreamingService) threadOrigins(ctx context.Context, chatID string) map[string]string {
+	threadRows, err := s.database.ListThreadsByConversation(ctx, chatID)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list threads for origin reconciliation",
+			"error", err, "chatID", chatID[:8])
+		return map[string]string{}
+	}
+	origins := make(map[string]string, len(threadRows))
+	for _, row := range threadRows {
+		if row != nil && row.Origin != "" {
+			origins[row.ID] = row.Origin
+		}
+	}
+	return origins
+}
+
+// withThreadOrigin fills in a thread update's `origin` from the threads table
+// when the stored payload lacks it.
+//
+// The snapshot delivers ONE update per entity, onto a client with no prior
+// record, so unlike the live stream it cannot carry a missing field forward
+// from an earlier update. A thread update written without an origin therefore
+// reaches the UI as origin=undefined, isSpawnOrigin() goes false, and the
+// background-work pill drops running sub-agents entirely.
+//
+// The emitters now always write origin, but chat_updates is an append-only log:
+// rows written before that fix keep their gap forever, and they are exactly the
+// rows a reload of an existing chat reads. threads.origin is the authority for
+// this field either way, so reconciling here heals old chats and makes the
+// snapshot independent of which emitter version wrote the row.
+func withThreadOrigin(data json.RawMessage, origins map[string]string) json.RawMessage {
+	if len(origins) == 0 {
+		return data
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return data
+	}
+	if origin, ok := payload["origin"].(string); ok && origin != "" {
+		return data
+	}
+	threadID, ok := payload["thread"].(string)
+	if !ok {
+		return data
+	}
+	origin, ok := origins[threadID]
+	if !ok {
+		return data
+	}
+
+	payload["origin"] = origin
+	patched, err := json.Marshal(payload)
+	if err != nil {
+		return data
+	}
+	return patched
 }
 
 // formatChatUpdateDataJSON wraps message updates in a {message: ...} envelope

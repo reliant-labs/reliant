@@ -617,12 +617,12 @@ type analyzeOverview struct {
 }
 
 type analyzePhase struct {
-	Depth         int      `json:"depth"`
-	Label         string   `json:"label"` // spawned_by node id, or workflow name for a root
-	WorkflowName  string   `json:"workflow_name"`
-	Thread        string   `json:"thread"`
-	Iteration *int64 `json:"iteration,omitempty"`
-	Status    string `json:"status"`
+	Depth        int    `json:"depth"`
+	Label        string `json:"label"` // spawned_by node id, or workflow name for a root
+	WorkflowName string `json:"workflow_name"`
+	Thread       string `json:"thread"`
+	Iteration    *int64 `json:"iteration,omitempty"`
+	Status       string `json:"status"`
 	// Outcome is this execution's own verdict, when its workflow declares one.
 	// Child phases usually declare none; the root of a pipeline with a failure
 	// terminal does.

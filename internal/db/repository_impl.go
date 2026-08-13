@@ -3385,7 +3385,7 @@ func (r *Repo) GetContextUsage(ctx context.Context, chatID, thread string) (*Con
 // point, the same way maxOrdinal used to -- see GetThreadTokenCount.
 func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread string, maxSeq *int64) int {
 	if thread == "" {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 
 	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
@@ -3398,21 +3398,21 @@ func (r *Repo) resolveThreadCompactionThreshold(ctx context.Context, thread stri
 		if msg.Model != nil {
 			return models.CompactionThresholdForModel(*msg.Model)
 		}
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 
 	// No local token-bearing message — follow fork inheritance like GetThreadTokenCount.
 	threadRecord, _, err := r.GetThreadWithParent(ctx, thread)
 	if err != nil || threadRecord.ParentThreadID == nil || threadRecord.ForkAtMessageID == nil {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 	parentThreadID := *threadRecord.ParentThreadID
 	if parentThreadID == thread {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 	forkMsg, err := r.GetMessage(ctx, *threadRecord.ForkAtMessageID)
 	if err != nil {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 	return r.resolveThreadCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq)
 }
@@ -3738,6 +3738,37 @@ func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status i
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 	return r.threads.UpdateThreadStatus(ctx, threadID, status, completedAt)
+}
+
+// ReviveThread moves a terminal thread back to running because a new run has
+// started on it. See the Repository interface for why a reused main thread
+// needs the inverse of the terminal cascade.
+func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error) {
+	if threadID == "" {
+		return 0, fmt.Errorf("thread ID cannot be empty")
+	}
+	return r.threads.ReviveThread(ctx, threadID)
+}
+
+// CascadeTerminalStatusToThreadSubtree closes every thread owned by
+// workflowID or any of its descendants to the terminal status the workflow
+// subtree just reached. See the Repository interface for why this exists
+// alongside CascadeTerminalStatusToDescendants. Takes WorkflowStatus, not
+// int32, so callers pass the same value they pass
+// CascadeTerminalStatusToDescendants — the two calls are meant to travel
+// together at every site.
+func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status WorkflowStatus) error {
+	if workflowID == "" {
+		return fmt.Errorf("workflow ID cannot be empty")
+	}
+	return r.threads.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, int32(status))
+}
+
+// ReapOrphanedThreads ends running/paused threads whose workflow is already
+// terminal, at the workflow's own status, returning the number of rows
+// repaired. See the Repository interface for why the backstop is needed.
+func (r *Repo) ReapOrphanedThreads(ctx context.Context) (int64, error) {
+	return r.threads.ReapOrphanedThreads(ctx)
 }
 
 func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {

@@ -27,7 +27,7 @@ const InterruptedToolResultContent = "Tool execution was interrupted — outcome
 // satisfies the tool-pairing invariant. This is the primary function for loading
 // messages to send to the LLM.
 //
-// HOW THE TOOL-PAIRING INVARIANT IS ENFORCED
+// # HOW THE TOOL-PAIRING INVARIANT IS ENFORCED
 //
 // The hard requirement is that we never hand a provider an assistant turn whose
 // tool_use blocks lack matching tool_result blocks — that wedges the conversation

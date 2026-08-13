@@ -143,6 +143,15 @@ func (s *ChatService) CreateChat(
 		ThreadMode:   model.ThreadModeNew,
 	}
 
+	// A brand-new chat is a first turn by construction, so no message count is
+	// needed here. When the project directory holds no code the stack is still
+	// open, and the model gets that observation plus the criteria for
+	// proposing forge ahead of the user's first message. No-op when the
+	// project already holds code or the daemon is unreachable.
+	if guidance := s.greenfieldGuidanceForChat(ctx, userID, chat); guidance != nil {
+		systemMessages = append([]*reliantv1.InputMessage{guidance}, systemMessages...)
+	}
+
 	// Root workflow + thread, created atomically with the chat below.
 	rootWorkflow := &db.Workflow{
 		ID:           workflowID,
@@ -1074,6 +1083,13 @@ func (s *ChatService) CancelChat(
 	//    run indistinguishable from a successful one in every later count.
 	if err := s.database.CascadeTerminalStatusToDescendants(ctx, workflowID, db.WorkflowStatusCancelled); err != nil {
 		logging.Error("CancelChat: failed to cascade cancellation to child workflows",
+			"error", err, "workflowID", workflowID)
+	}
+	// Threads are not a workflows row: the same hard kill skips
+	// ThreadStatusActivity too, so the thread(s) this subtree owns need their
+	// own cascade call. See docs/incidents/2026-08-12-spawn-history-cap.md.
+	if err := s.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, db.WorkflowStatusCancelled); err != nil {
+		logging.Error("CancelChat: failed to cascade cancellation to threads",
 			"error", err, "workflowID", workflowID)
 	}
 

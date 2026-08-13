@@ -20,6 +20,7 @@ import (
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/observability"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/stretchr/testify/assert"
@@ -184,6 +185,12 @@ type mockRepo struct {
 	reapCalls int
 	callOrder []string
 
+	// Orphaned-thread reap: same shape as the workflow-descendant reap above,
+	// for ReapOrphanedThreads.
+	reapThreadsRows  int64
+	reapThreadsErr   error
+	reapThreadsCalls int
+
 	strandedSpawns    []*db.ToolCall
 	strandedSpawnsErr error
 
@@ -191,6 +198,16 @@ type mockRepo struct {
 	strandedBackgroundSpawnsErr  error
 	enqueuedAgentMessages        []*db.AgentMessage
 	enqueueAgentMessageInsertsFn func(*db.AgentMessage) (bool, error)
+
+	// Threads the repair's recipient-liveness check can see, and the
+	// tool_calls rows it writes through db.UpsertToolCallStatus. A thread
+	// absent from the map reads as "cannot be loaded", matching the real
+	// store's sql.ErrNoRows.
+	threads           map[string]*db.Thread
+	threadErr         error
+	toolCalls         map[string]*db.ToolCall
+	upsertedToolCalls []*db.ToolCall
+	upsertToolCallErr error
 
 	// Orphaned-mailbox sweep: the threads the query reports as terminal-with-
 	// queued-rows, how many rows each resolve moves, and the threads actually
@@ -216,7 +233,27 @@ func newMockRepo() *mockRepo {
 		pendingQuestions:  make(map[string]*db.Question),
 		pendingApprovals:  make(map[string][]*db.Approval),
 		workflowsByChat:   make(map[string][]*db.Workflow),
+		threads:           make(map[string]*db.Thread),
+		toolCalls:         make(map[string]*db.ToolCall),
 	}
+}
+
+// withThread registers a thread the recipient-liveness check can read.
+func (m *mockRepo) withThread(id string, status int32) *mockRepo {
+	m.threads[id] = &db.Thread{ID: id, Status: status}
+	return m
+}
+
+// withBackgroundedToolCall seeds a spawn call at status 6, the state a
+// dispatched background spawn is left in.
+func (m *mockRepo) withBackgroundedToolCall(id, chatID string) *mockRepo {
+	m.toolCalls[id] = &db.ToolCall{
+		ID:       id,
+		ChatID:   chatID,
+		ToolName: "spawn",
+		Status:   core.ToolCallStatusBackgrounded,
+	}
+	return m
 }
 
 func (m *mockRepo) ListWorkflowsByChat(_ context.Context, chatID string) ([]*db.Workflow, error) {
@@ -295,6 +332,14 @@ func (m *mockRepo) ReapOrphanedWorkflowDescendants(_ context.Context) (int64, er
 	return m.reapRows, m.reapErr
 }
 
+func (m *mockRepo) ReapOrphanedThreads(_ context.Context) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reapThreadsCalls++
+	m.callOrder = append(m.callOrder, "reap-threads")
+	return m.reapThreadsRows, m.reapThreadsErr
+}
+
 // The embedded db.Repository is a nil interface, so every method the pass calls
 // must be implemented here or it panics. The stranded-spawn repair runs on
 // every pass; the default is "nothing stranded".
@@ -332,6 +377,54 @@ func (m *mockRepo) ListThreadsWithOrphanedAgentMessages(_ context.Context) ([]st
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.orphanedMailboxThreads, m.orphanedMailboxErr
+}
+
+// GetThread backs the background-spawn repair's recipient-liveness check. A
+// thread this mock has never heard of returns an error, which is exactly what
+// the Postgres store does for a missing row (sql.ErrNoRows out of QueryRow) --
+// so the default, with no threads registered, exercises the fail-toward-live
+// branch rather than a nil-return branch the real store cannot produce.
+func (m *mockRepo) GetThread(_ context.Context, id string) (*db.Thread, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.threadErr != nil {
+		return nil, m.threadErr
+	}
+	if t, ok := m.threads[id]; ok {
+		return t, nil
+	}
+	return nil, fmt.Errorf("thread %s not found", id)
+}
+
+// GetToolCall / UpsertToolCall back db.UpsertToolCallStatus, which the repair
+// uses to move a stranded call off status 6 (backgrounded). Together they make
+// the mock's tool_calls map behave like the real upsert for the one property
+// the repair depends on: the persisted status after the write.
+func (m *mockRepo) GetToolCall(_ context.Context, id string) (*db.ToolCall, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if call, ok := m.toolCalls[id]; ok {
+		return call, nil
+	}
+	return nil, fmt.Errorf("tool call %s not found", id)
+}
+
+func (m *mockRepo) UpsertToolCall(_ context.Context, call *db.ToolCall) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.upsertToolCallErr != nil {
+		return m.upsertToolCallErr
+	}
+	m.toolCalls[call.ID] = call
+	m.upsertedToolCalls = append(m.upsertedToolCalls, call)
+	return nil
+}
+
+// GetContentBlockByToolCallID is resolveToolCallMessage's lookup. The repair
+// never supplies a message id, so this is always consulted; "no block" is the
+// honest answer for a mock with no messages and leaves message_id nil.
+func (m *mockRepo) GetContentBlockByToolCallID(_ context.Context, toolCallID string) (*db.MessageContentBlock, error) {
+	return nil, fmt.Errorf("no content block for tool call %s", toolCallID)
 }
 
 func (m *mockRepo) MarkQueuedAgentMessagesUndeliveredForThread(_ context.Context, toThreadID string) (int64, error) {

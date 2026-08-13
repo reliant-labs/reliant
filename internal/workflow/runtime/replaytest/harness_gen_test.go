@@ -306,7 +306,9 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub)
+	// No daemon router: the replay harness has no daemon, and the greenfield
+	// stack probe is skipped when it is nil.
+	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
 
 	return &Harness{

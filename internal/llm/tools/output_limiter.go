@@ -136,12 +136,30 @@ func (e *OutputLimitError) Error() string {
 	return msg.String()
 }
 
+// outputCeilingFor returns the delivered-size ceiling for one tool's result.
+//
+// Most tools share MaxOutputSize. The read tools are the deliberate exception:
+// a file read is ONE contiguous artifact the agent named, so a cut middle is
+// not a smaller answer but a wrong one — the symbol it needed is as likely to
+// be in the hole as not. Shell output (volume nobody chose) and skills (
+// authored content with a publishing budget) keep the smaller ceiling.
+//
+// Keep this in sync with MaxReadSize, which bounds how much view READS; this
+// bounds how much the wrapper DELIVERS. A larger read ceiling with the shared
+// delivery ceiling would truncate right back to 24KB and read as a no-op.
+func outputCeilingFor(toolName string) int {
+	if toolName == ViewToolName {
+		return MaxReadSize
+	}
+	return MaxOutputSize
+}
+
 // CheckOutputSize checks if the output size is within acceptable limits
 // Returns the output, a truncation indicator, and any error
 func CheckOutputSize(toolName string, output string) (string, bool, error) {
 	outputSize := len(output)
 
-	if outputSize <= MaxOutputSize {
+	if outputSize <= outputCeilingFor(toolName) {
 		return output, false, nil
 	}
 
@@ -151,7 +169,7 @@ func CheckOutputSize(toolName string, output string) (string, bool, error) {
 	return "", true, &OutputLimitError{
 		ToolName:    toolName,
 		OutputSize:  outputSize,
-		MaxSize:     MaxOutputSize,
+		MaxSize:     outputCeilingFor(toolName),
 		Suggestions: suggestions,
 	}
 }
@@ -159,7 +177,8 @@ func CheckOutputSize(toolName string, output string) (string, bool, error) {
 // TruncateOutput truncates output to fit within size limits
 // It tries to truncate intelligently based on the tool type
 func TruncateOutput(toolName string, output string, addWarning bool) string {
-	if len(output) <= MaxOutputSize {
+	ceiling := outputCeilingFor(toolName)
+	if len(output) <= ceiling {
 		return output
 	}
 
@@ -174,7 +193,7 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 	}
 
 	// Calculate how much to keep
-	keepSize := MaxOutputSize - 500 // Leave room for warning message
+	keepSize := ceiling - 500 // Leave room for warning message
 
 	var truncated string
 	switch toolName {

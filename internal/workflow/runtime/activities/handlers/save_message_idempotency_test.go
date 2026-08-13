@@ -568,7 +568,7 @@ func TestSaveMessageActivity_OrdinalIncrement(t *testing.T) {
 	parentThread := "0"
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{
 		ID:             "0.0",
-		ChatID: chatID,
+		ChatID:         chatID,
 		ParentThreadID: &parentThread,
 	})
 	require.NoError(t, err)

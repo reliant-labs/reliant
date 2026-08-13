@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	attachutil "github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )

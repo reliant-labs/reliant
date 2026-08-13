@@ -4,6 +4,8 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 )
@@ -439,5 +441,94 @@ func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
 	}
 	if activity != 1 {
 		t.Fatalf("expected activity=1 (RUNNING takes priority over a past failure), got %d", activity)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Sequence allocation (SERIALIZABLE contention)
+// ---------------------------------------------------------------------------
+
+// Sequence numbers are the cursor a reconnecting stream resumes from
+// ("WHERE sequence_number > $cursor ORDER BY sequence_number ASC"), so the one
+// property every consumer depends on is that they STRICTLY INCREASE. They do
+// not need to be contiguous, and after the move to a Postgres sequence they are
+// not: a rolled-back or retried transaction consumes its value permanently.
+//
+// This pins the property that matters and, by not asserting contiguity,
+// documents the property that deliberately does not hold.
+func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	chatID := "chat-seq-mono"
+	createActivityTestChat(t, repo, chatID)
+
+	ctx := context.Background()
+	var seqs []int64
+	for i := 0; i < 8; i++ {
+		if err := repo.emitChatActivityChanged(ctx, chatID, i%5); err != nil {
+			t.Fatalf("emitChatActivityChanged(%d): %v", i, err)
+		}
+		updates := activityUpdatesForChat(t, repo, chatID)
+		seqs = append(seqs, updates[len(updates)-1].SequenceNumber)
+	}
+
+	for i := 1; i < len(seqs); i++ {
+		if seqs[i] <= seqs[i-1] {
+			t.Fatalf("sequence numbers must strictly increase, got %v (index %d did not advance)", seqs, i)
+		}
+	}
+}
+
+// The regression: allocating a sequence with SELECT MAX(sequence_number)+1
+// under SERIALIZABLE takes a predicate lock covering rows that do not exist
+// yet, so any CONCURRENT insert for the same user forms a read/write
+// dependency and Postgres aborts one side with SQLSTATE 40001. That surfaced
+// to users as "failed to get max user sequence ... (SQLSTATE 40001)" on
+// SendMessage, after burning every retry.
+//
+// nextval() takes no predicate lock, so concurrent allocators cannot conflict.
+//
+// Scope note, so this test is not trusted for more than it proves: it drives
+// real concurrent writes through the production path and passes, but it does
+// NOT reliably reproduce the 40001 on its own — verified by reverting to the
+// MAX()+1 allocator, where it still passed. Reproducing the abort needs the
+// contention the live system had (a 218k-row user_updates table, many spawns,
+// and long-running transactions widening the conflict window), which a fixture
+// this size does not recreate. It guards the invariant (concurrent writes to
+// one user's counter must succeed) rather than the historical failure.
+func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	const writers = 8
+	chatIDs := make([]string, writers)
+	for i := range chatIDs {
+		chatIDs[i] = fmt.Sprintf("chat-seq-conc-%d", i)
+		createActivityTestChat(t, repo, chatIDs[i])
+	}
+
+	// All chats belong to the SAME user ("test-user"), which is the whole
+	// point: user_updates has one counter per user, so every chat in a
+	// multi-spawn run contends on it.
+	var wg sync.WaitGroup
+	errCh := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(chatID string) {
+			defer wg.Done()
+			for n := 0; n < 5; n++ {
+				if err := repo.emitChatActivityChanged(context.Background(), chatID, n%5); err != nil {
+					errCh <- err
+					return
+				}
+			}
+		}(chatIDs[i])
+	}
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Fatalf("concurrent user-update writes must not fail: %v", err)
 	}
 }

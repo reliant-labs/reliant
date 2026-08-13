@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/attachment"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"go.temporal.io/sdk/log"
@@ -35,8 +35,8 @@ type ChildWorkflowInitOpts struct {
 	Origin        string
 	OriginNodeID  string
 	LoopIteration *int64
-	InjectMessage    *InjectMessageConfig // nil if no inject message
-	Logger           log.Logger
+	InjectMessage *InjectMessageConfig // nil if no inject message
+	Logger        log.Logger
 }
 
 // InjectMessageConfig contains configuration for an inject message to save after creating

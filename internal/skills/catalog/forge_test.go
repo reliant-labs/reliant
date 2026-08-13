@@ -96,8 +96,8 @@ func TestDiscoverForgeSkills_NoForgeYaml(t *testing.T) {
 func TestDiscoverForgeSkills_EmitBothSurfacesAtBarePath(t *testing.T) {
 	isolateHome(t)
 	cases := []struct {
-		name       string
-		withForge  bool
+		name      string
+		withForge bool
 	}{
 		{"without forge.yaml", false},
 		{"with forge.yaml", true},

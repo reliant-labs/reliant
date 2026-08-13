@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -113,10 +114,10 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 
 	// Pre-create child thread (simulating parent's V2_CreateWorkflowWithThread)
 	_, err = h.Repo().CreateThread(ctx, &db.Thread{
-		ID:             childWorkflowID,
-		ChatID: chatID,
-		Title:          ptr.Of("Sub-Agent Task"),
-		WorkflowID:     &childWorkflowID,
+		ID:         childWorkflowID,
+		ChatID:     chatID,
+		Title:      ptr.Of("Sub-Agent Task"),
+		WorkflowID: &childWorkflowID,
 	})
 	require.NoError(t, err)
 
@@ -298,9 +299,9 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 
 	// Pre-create child thread
 	_, err = h.Repo().CreateThread(ctx, &db.Thread{
-		ID:             childWorkflowID,
-		ChatID: chatID,
-		WorkflowID:     &childWorkflowID,
+		ID:         childWorkflowID,
+		ChatID:     chatID,
+		WorkflowID: &childWorkflowID,
 	})
 	require.NoError(t, err)
 
@@ -550,4 +551,142 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 		assert.Equal(t, db.WorkflowStatusPaused, root.Status,
 			"a non-resumed started must not un-pause the root row")
 	})
+}
+
+// TestWorkflowStatus_StartedRevivesTerminalThread pins the missing half of
+// the thread lifecycle at the site that writes it.
+//
+// threads.status was only ever written in the CLOSING direction. Harmless for
+// a spawned sub-agent (fresh thread per run, ends once), but a chat's MAIN
+// thread is reused for every turn: SendMessage starts a new Temporal run
+// under the same workflow ID and the same thread ID. Turn N stamped the
+// thread terminal, and this activity's "started" arm revived only the
+// WORKFLOW row -- so from turn 2 onward every chat ran with a live workflow
+// behind a thread that still read completed.
+//
+// That is what made SendAgentMessage refuse to queue into a working agent
+// with "This agent has already finished (status: completed)". Measured on the
+// live DB at the time of the fix: 3 chats in exactly this state.
+func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewWorkflowStatusActivity(h.Repo())
+	startedInput := WorkflowStatusInput{
+		ChatID:       chatID,
+		WorkflowID:   chatID,
+		WorkflowName: "builtin://chat",
+		Status:       "started",
+		Thread:       chatID,
+	}
+
+	// Turn 1 runs and completes, stamping both halves terminal.
+	var output WorkflowStatusOutput
+	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
+	completedAt := time.Now().UTC()
+	_, err := h.Repo().UpdateThreadStatus(ctx, chatID, db.ThreadStatusCompleted, &completedAt)
+	require.NoError(t, err)
+	require.NoError(t, h.Repo().UpdateWorkflowStatus(ctx, chatID, db.WorkflowStatusCompleted))
+
+	// Turn 2 starts on the SAME thread. Both halves must come back to life.
+	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
+
+	thread, err := h.Repo().GetThread(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
+		"a thread executing a new turn must not still read as finished")
+	assert.Nil(t, thread.CompletedAt,
+		"a revived thread must not keep the completed_at of the turn that ended")
+
+	workflow, err := h.Repo().GetWorkflow(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.WorkflowStatusRunning, workflow.Status)
+}
+
+// TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning covers
+// the ordering trap. trackWorkflow returns early when the workflow row is
+// already running, so a revival written after that check would be skipped in
+// precisely the case where the run is furthest along -- a resumed or
+// re-notified run whose workflow never left RUNNING while the thread was
+// stamped terminal by a racing completion.
+func TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewWorkflowStatusActivity(h.Repo())
+	startedInput := WorkflowStatusInput{
+		ChatID:       chatID,
+		WorkflowID:   chatID,
+		WorkflowName: "builtin://chat",
+		Status:       "started",
+		Thread:       chatID,
+	}
+
+	var output WorkflowStatusOutput
+	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
+	require.NoError(t, h.Repo().UpdateWorkflowStatus(ctx, chatID, db.WorkflowStatusRunning))
+
+	// Only the THREAD is terminal; the workflow row stays running, so the
+	// early return is the path under test.
+	_, err := h.Repo().UpdateThreadStatus(ctx, chatID, db.ThreadStatusCompleted, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
+
+	thread, err := h.Repo().GetThread(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.ThreadStatusRunning, thread.Status,
+		"the revival must not sit behind trackWorkflow's already-running early return")
+}
+
+// TestWorkflowStatus_TerminalStatusDoesNotReviveThread guards the direction
+// that would be unrecoverable: only "started" means a run is beginning. A
+// completion notification must never resurrect the thread it is closing.
+func TestWorkflowStatus_TerminalStatusDoesNotReviveThread(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	activity := NewWorkflowStatusActivity(h.Repo())
+	var output WorkflowStatusOutput
+	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://chat",
+		Status: "started", Thread: chatID,
+	}, &output))
+
+	_, err := h.Repo().UpdateThreadStatus(ctx, chatID, db.ThreadStatusCompleted, nil)
+	require.NoError(t, err)
+
+	require.NoError(t, h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://chat",
+		Status: "completed", Thread: chatID,
+	}, &output))
+
+	thread, err := h.Repo().GetThread(ctx, chatID)
+	require.NoError(t, err)
+	assert.Equal(t, db.ThreadStatusCompleted, thread.Status,
+		"a terminal notification must never revive the thread it is closing")
 }

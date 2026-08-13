@@ -89,17 +89,17 @@ type daemonClient struct {
 	sendDone    chan struct{} // closed when runSender exits
 	sessionDone chan struct{} // closed when session is ending, before sendCh is closed
 
-	cancelMu       sync.Mutex
-	cancelByReq    map[string]context.CancelFunc
+	cancelMu    sync.Mutex
+	cancelByReq map[string]context.CancelFunc
 	// backgroundByReq marks in-flight executions the user asked to detach into
 	// a background process. The executing command polls this by request id (see
 	// exec.Run) — the same correlation cancel uses, and the only handle the
 	// daemon keeps for a running execution.
 	backgroundByReq map[string]string // requestID -> toolCallID
-	watchersMu     sync.Mutex
-	watchersByPr   map[string]context.CancelFunc
-	fsWatchersMu   sync.Mutex
-	fsWatchersByPr map[string]context.CancelFunc
+	watchersMu      sync.Mutex
+	watchersByPr    map[string]context.CancelFunc
+	fsWatchersMu    sync.Mutex
+	fsWatchersByPr  map[string]context.CancelFunc
 
 	terminalPumps     *terminalPumpTracker
 	processOutputSubs *processOutputSubTracker

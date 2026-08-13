@@ -225,6 +225,14 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 			"error", err,
 		)
 	}
+	// Threads are not a workflows row and need their own cascade call — see
+	// docs/incidents/2026-08-12-spawn-history-cap.md.
+	if err := ps.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, status); err != nil {
+		logging.Error("[PauseService] Failed to cascade terminal status to threads",
+			"workflowID", workflowID,
+			"error", err,
+		)
+	}
 }
 
 // SignalWithRecovery sends a signal to a workflow, recovering a dead-but-

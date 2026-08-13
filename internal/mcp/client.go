@@ -85,6 +85,11 @@ func (c *client) Initialize(ctx context.Context) error {
 		}
 
 		cmdArgs := append([]string(nil), c.cfg.Args...)
+		// The project path is substituted into args for servers that take the
+		// tree as an argument rather than reading their working directory. It is
+		// resolved by the manager into cfg before construction, so a client
+		// spawned directly (tests, one-off CLI use) simply gets no substitution.
+		cmdArgs = expandArgs(cmdArgs, normalizeProjectPath(c.cfg.Dir))
 		if c.cfg.Command == "uvx" && !hasArg(cmdArgs, "--native-tls") {
 			// Prefer uv's native-tls mode to use OS trust roots on managed/corporate machines.
 			cmdArgs = append([]string{"--native-tls"}, cmdArgs...)
@@ -112,6 +117,21 @@ func (c *client) Initialize(ctx context.Context) error {
 		// Prefer native OS trust unless caller explicitly set UV_NATIVE_TLS.
 		if c.cfg.Command == "uvx" && !hasEnvKey(env, "UV_NATIVE_TLS") {
 			env = append(env, "UV_NATIVE_TLS=1")
+		}
+
+		// Start the process in its resolved directory. Unset until now, so every
+		// stdio server inherited the DAEMON's directory — which silently gave a
+		// tree-indexing server the wrong tree (see dirscope.go).
+		if dir := normalizeProjectPath(c.cfg.Dir); dir != "" {
+			if st, err := os.Stat(dir); err == nil && st.IsDir() {
+				cmd.Dir = dir
+			} else {
+				// A missing directory must not take the server down: inheriting
+				// the daemon's cwd is the pre-existing behaviour, and a warning
+				// is recoverable where a failed handshake is not.
+				logging.Warn("MCP server dir does not exist; inheriting daemon working directory",
+					"name", c.name, "dir", dir)
+			}
 		}
 
 		cmd.Env = env

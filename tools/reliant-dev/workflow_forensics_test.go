@@ -280,7 +280,7 @@ func TestBuildForensicsReportCountsAndLinks(t *testing.T) {
 		blocksByMsg: map[string][]*db.MessageContentBlock{
 			"m1": {
 				call("view", `{"file_path":"/proj/a.go"}`, "", base, 0),
-				result("view", base, 1), // must not be counted
+				result("view", base, 1),                                            // must not be counted
 				call("view", `{"file_path":"a.go"}`, "", base.Add(time.Minute), 2), // same file, relative
 				result("view", base.Add(time.Minute), 3),
 				call("skill", `{"action":"load","path":"forge"}`, "", base.Add(2*time.Minute), 4),

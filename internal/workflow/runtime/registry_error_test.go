@@ -288,3 +288,47 @@ func TestRegularMalformedErrorsAreStillTerminal(t *testing.T) {
 		})
 	}
 }
+
+// One failing activity must produce ONE error row in the transcript, not one
+// per attempt. chat_updates dedup per entity_id and the frontend's error log
+// dedups by id, so the retry series has to share a single id for the badge to
+// advance in place ("Retrying (Attempt 1/3)" → "Attempt 3/3") instead of
+// stacking three rows for one failure.
+func TestActivityErrorEventID(t *testing.T) {
+	const workflowID = "wf-1"
+
+	t.Run("retries of one activity share an id", func(t *testing.T) {
+		// Temporal reuses activity_id across attempts; attempt_number varies.
+		first := activityErrorEventID(workflowID, "42")
+		second := activityErrorEventID(workflowID, "42")
+		third := activityErrorEventID(workflowID, "42")
+
+		if first != second || second != third {
+			t.Fatalf("all attempts of one activity must share an id, got %q, %q, %q",
+				first, second, third)
+		}
+	})
+
+	t.Run("different activities get different ids", func(t *testing.T) {
+		if a, b := activityErrorEventID(workflowID, "42"), activityErrorEventID(workflowID, "43"); a == b {
+			t.Fatalf("distinct activities must not collapse into one row, both got %q", a)
+		}
+	})
+
+	// Activity ids restart at 1 for every run, including a continue-as-new
+	// successor. Without the workflow id in the key, a new run's first failure
+	// would overwrite the previous run's recorded error.
+	t.Run("same activity id in different runs stays distinct", func(t *testing.T) {
+		if a, b := activityErrorEventID("wf-1", "1"), activityErrorEventID("wf-2", "1"); a == b {
+			t.Fatalf("activity id 1 of two different runs must not collide, both got %q", a)
+		}
+	})
+
+	// Defensive: with nothing stable to key on, fall back to a unique id so
+	// unrelated failures are never merged into a single row.
+	t.Run("missing activity id falls back to unique", func(t *testing.T) {
+		if a, b := activityErrorEventID(workflowID, ""), activityErrorEventID(workflowID, ""); a == b {
+			t.Fatalf("blank activity ids must not merge unrelated errors, both got %q", a)
+		}
+	})
+}

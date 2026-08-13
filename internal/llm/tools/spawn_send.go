@@ -153,5 +153,3 @@ func spawnSendRelationship(rctx *rctx.ToolContext, repo db.Repository, callerThr
 
 	return spawnRelationshipNone, nil
 }
-
-

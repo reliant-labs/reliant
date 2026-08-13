@@ -32,14 +32,25 @@ type ViewResponseMetadata struct {
 
 const (
 	ViewToolName = "view"
-	// MaxReadSize matches MaxOutputSize so view reads exactly as much as the
-	// wrapper will deliver. It read 16KB while MaxOutputSize was 24_000, so a
-	// third of the available budget was discarded before truncation was even
-	// considered: measured over one long run, all 114 reads that stopped at
-	// DefaultReadLimit averaged 15178 bytes — every one of them was already at
-	// the old byte ceiling, so raising the line limit alone would have changed
-	// nothing.
-	MaxReadSize       = MaxOutputSize
+	// MaxReadSize is the byte ceiling for ONE file read. It is deliberately
+	// LARGER than MaxOutputSize: a read is one contiguous artifact the agent
+	// asked for by name, where a truncated middle is not a smaller answer but
+	// a WRONG one — the symbol it needed is as likely to be in the hole as
+	// not. Shell output and skills keep the smaller shared ceiling, which is
+	// the right call for a command whose output volume nobody chose and for
+	// authored content with a publishing budget.
+	//
+	// 64KB ≈ 16K tokens. Measured: a 52KB generated proto (1,685 lines) could
+	// not arrive whole at 24KB, so eleven fan-out agents fell back to paging
+	// it by `grep`, one message definition at a time — 123 locate-calls and
+	// ~28 minutes, the single largest recoverable cost in that run. One read
+	// of the whole file costs ~13K tokens once; the grep loop cost a turn
+	// each time and still never showed any agent the whole contract.
+	//
+	// Files larger than this still truncate, and that is intended: past ~16K
+	// tokens the right move is a targeted offset read, which the truncation
+	// notice names along with the file's true line count.
+	MaxReadSize       = 64_000
 	MaxBinaryFileSize = 5 * 1024 * 1024 // 5MB max for binary files (images, PDFs)
 	// DefaultReadLimit is the line ceiling for a read that does not ask for
 	// one. Every view costs a full model round-trip while the read itself
@@ -73,7 +84,7 @@ FEATURES:
 - Suggests similar file names when the requested file isn't found
 
 LIMITATIONS:
-- Maximum output size is 24KB (~6K tokens) - larger files are truncated with head+tail
+- Maximum output size is 64KB (~16K tokens) - larger files are truncated with head+tail
 - Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
@@ -84,6 +95,15 @@ TIPS:
 - Prefer ONE whole-file read over several paged reads: each call costs a model
   round-trip, while the read itself takes milliseconds. Omit offset/limit unless
   the file is genuinely too big to arrive in one piece.
+- A file OVER ~64KB cannot arrive whole whatever limit you pass — the response is
+  capped and you get head+tail with the middle removed. Two calls settle it, and
+  neither is a search: read the head (default) to get the shape, then ONE offset
+  read for the region you need. The truncation notice tells you the total line
+  count, so you can aim the second call directly.
+- Do NOT fall back to repeated 'grep' on a large file to page through it by
+  symbol. Measured: eleven agents greping one 52KB proto one message at a time
+  was the single largest recoverable cost in a long run — each grep is a whole
+  turn and returns less context than one offset read.
 - Issue several view calls in a SINGLE message to read independent files at once
 - Use with Glob tool to first find files you want to view
 - For code exploration, first use Grep to find relevant files, then View to examine them

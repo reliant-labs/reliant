@@ -6,6 +6,7 @@ import {
 } from "../../gen/reliant/v1/chat_pb";
 import type { ChatUpdate } from "../../types/streaming";
 import { useChatStore } from "../chatStore";
+import { useActivityStore, ChatActivity } from "../activityStore";
 import {
   getMessagesFromCache,
   clearAllMessagesCache,
@@ -306,5 +307,152 @@ describe("canonical message order in the store", () => {
       "spawn-2",
       "main-3",
     ]);
+  });
+});
+// A tool call whose input never finished streaming renders as "Preparing..."
+// forever — the renderers key that state off `input === undefined`
+// (ToolExecution.tsx, messageProcessor.ts).
+//
+// Cancelling a chat at exactly the moment a tool call was streaming strands
+// one. Until this fix the ONLY thing that cleared it was the IDLE
+// activity-changed handler, a transient event: miss it once (the cancel raced
+// it, the tab was closed, it landed before the chat was open) and the
+// placeholder survived every reload, because a snapshot rebuilds the
+// transcript but never touched the streaming slice. Observed on chat
+// 995f36f5, where a dangling "bash preparing..." outlived the run that
+// spawned it.
+describe("stranded tool-call placeholders", () => {
+  // Begin a tool call whose input never arrives: content_block_start with no
+  // terminating input. This is the shape a cancel interrupts.
+  function startToolCallWithoutInput(chatId: string, messageId: string) {
+    useChatStore.getState().processChatStreamUpdates(chatId, [
+      {
+        update_type: "streaming_delta",
+        delta_type: "content_block_start",
+        block_index: 0,
+        message_id: messageId,
+        content_block_type: "tool_use",
+        tool_name: "bash",
+        stream_seq: 1,
+      } as unknown as ChatUpdate,
+    ]);
+  }
+
+  it("cancelChat drops a half-streamed tool call instead of leaving it Preparing", async () => {
+    const chatId = "chat-cancel-preparing";
+    seedChat(chatId);
+    startToolCallWithoutInput(chatId, "m-cancel");
+
+    expect(
+      useChatStore.getState().streamingMessages[chatId],
+      "precondition: the interrupted tool call is in the streaming slice",
+    ).toBeTruthy();
+
+    // The cancel path must clean up after itself rather than depending on
+    // catching the server's IDLE event.
+    useChatStore.getState().clearStreamingState(chatId);
+
+    expect(useChatStore.getState().streamingMessages[chatId]).toBeUndefined();
+  });
+
+  // The self-heal: an already-stuck chat must recover on its next load rather
+  // than needing the one event it already missed.
+  it("a snapshot for an idle chat clears a stranded placeholder", () => {
+    const chatId = "chat-snapshot-heals";
+    seedChat(chatId);
+    startToolCallWithoutInput(chatId, "m-stranded");
+    expect(useChatStore.getState().streamingMessages[chatId]).toBeTruthy();
+
+    // Chat is idle (no activity entry == idle) and a snapshot arrives: the
+    // transcript is authoritative and nothing is streaming.
+    //
+    // The snapshot deliberately carries a USER message, not a completing
+    // assistant one. An assistant message on the streaming thread would retire
+    // the placeholder through the pre-existing completedThreads path, and the
+    // test would pass with the self-heal removed — which is exactly the case
+    // that is broken in production: the run was CANCELLED, so no completing
+    // assistant message for that thread ever arrives.
+    useChatStore.getState().processChatStreamUpdates(
+      chatId,
+      [
+        {
+          update_type: "message",
+          message: {
+            id: "m-user",
+            chatId,
+            role: MessageRole.USER,
+            contentBlocks: [
+              {
+                id: "b-user",
+                type: ContentBlockType.TEXT,
+                content: "hi",
+                index: 0,
+              },
+            ],
+            streamingState: StreamingState.COMPLETE,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            sequenceNumber: 1,
+            thread: "",
+          },
+        } as unknown as ChatUpdate,
+      ],
+      true,
+    );
+
+    expect(
+      useChatStore.getState().streamingMessages[chatId],
+      "a snapshot for an idle chat must drop the stranded placeholder",
+    ).toBeUndefined();
+  });
+
+  // The guard that keeps the self-heal from eating live work: on a RUNNING
+  // chat, a snapshot carrying no finalizing message for the streaming thread
+  // (a mid-run reconnect) must leave in-flight streaming alone, or the
+  // reconnect would blank a tool call that is genuinely still streaming.
+  //
+  // Note the snapshot here carries a USER message: an assistant message that
+  // completes the thread legitimately retires the placeholder via the
+  // pre-existing completedThreads path, which is correct behavior and not
+  // what this guard is about.
+  it("a snapshot for a RUNNING chat preserves in-flight streaming", () => {
+    const chatId = "chat-snapshot-running";
+    seedChat(chatId);
+    useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
+    startToolCallWithoutInput(chatId, "m-live");
+    expect(useChatStore.getState().streamingMessages[chatId]).toBeTruthy();
+
+    useChatStore.getState().processChatStreamUpdates(
+      chatId,
+      [
+        {
+          update_type: "message",
+          message: {
+            id: "m-user",
+            chatId,
+            role: MessageRole.USER,
+            contentBlocks: [
+              {
+                id: "b-user",
+                type: ContentBlockType.TEXT,
+                content: "keep going",
+                index: 0,
+              },
+            ],
+            streamingState: StreamingState.COMPLETE,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            sequenceNumber: 1,
+            thread: "",
+          },
+        } as unknown as ChatUpdate,
+      ],
+      true,
+    );
+
+    expect(
+      useChatStore.getState().streamingMessages[chatId],
+      "a mid-run reconnect snapshot must not blank a genuinely streaming tool call",
+    ).toBeTruthy();
+
+    useActivityStore.getState().removeActivity(chatId);
   });
 });

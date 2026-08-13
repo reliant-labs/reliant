@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -783,7 +783,7 @@ func TestSaveMessageOrdinalSequencing(t *testing.T) {
 	parentThread := "0"
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{
 		ID:             "0.0",
-		ChatID: chatID,
+		ChatID:         chatID,
 		ParentThreadID: &parentThread,
 	})
 	require.NoError(t, err)

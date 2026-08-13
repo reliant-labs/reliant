@@ -131,10 +131,26 @@ type ThreadStore interface {
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
 	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	// ReviveThread moves a terminal thread back to running because a new run
+	// has started on it, clearing the previous turn's completed_at. The
+	// inverse of CascadeTerminalStatusToThreadSubtree — see
+	// queries/threads.sql for why a reused main thread needs it.
+	ReviveThread(ctx context.Context, threadID string) (int64, error)
 	ListThreadsByOrigin(ctx context.Context, chatID string, origin ThreadOrigin) ([]*Thread, error)
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
+	// CascadeTerminalStatusToThreadSubtree closes every thread owned by
+	// workflowID or any of its descendants to the terminal status the
+	// workflow subtree just reached. The thread-lifecycle counterpart of
+	// WorkflowStore's CascadeTerminalStatusToDescendants — see
+	// queries/threads.sql for why.
+	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status int32) error
+	// ReapOrphanedThreads ends every running/paused thread whose workflow is
+	// already terminal, at the workflow's own status, and reports how many
+	// rows it moved. The backstop for a write path that reached a terminal
+	// workflow status without cascading to the thread.
+	ReapOrphanedThreads(ctx context.Context) (int64, error)
 }
 
 // ContextWindowStore is the shared contract for context-window persistence across drivers.

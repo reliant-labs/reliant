@@ -365,6 +365,14 @@ func (s *ChatService) reconcileWorkflowStatus(ctx context.Context, workflowID st
 				"workflowID", workflowID,
 			)
 		}
+		// Threads are not a workflows row and need their own cascade call —
+		// see docs/incidents/2026-08-12-spawn-history-cap.md.
+		if err := s.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, temporalStatus); err != nil {
+			logging.Warn("Failed to cascade reconciled terminal status to threads",
+				"error", err,
+				"workflowID", workflowID,
+			)
+		}
 	}
 }
 

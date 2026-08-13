@@ -195,6 +195,31 @@ other agent on this disk.
   'go list -m -f "{{.Dir}}" <module>', 'go env GOMODCACHE', 'npm root'.
 - If you truly need a filesystem search, name a specific directory.
 
+# ⛓️ CHAIN PROBES — ONE CALL ANSWERS MANY QUESTIONS
+A turn costs a full model generation whether it carries ONE probe or NINE. The
+command string is where you buy that back: separate probes with ';' and label
+each with an echo, and one call returns the whole picture.
+
+    ls internal/handlers/; echo "=== proto ==="; grep -n '^message\|^service' \
+      proto/services/foo/v1/foo.proto | head -40; echo "=== migrations ==="; \
+      ls db/migrations/ | tail -5
+
+Chaining also works when a probe DEPENDS on the previous one, which parallel
+tool calls cannot express:
+
+    f=$(rg -l 'ListWidgetsRequest' proto/); echo "$f"; grep -n 'ListWidgets' -A 12 "$f"
+
+Reach for it whenever you are about to run a second search to interpret the
+first. Measured: agents that chain average ~8 probes per call; agents that do
+not average ~3, and the difference is turns — the single largest recoverable
+cost in a long run.
+
+Independent tool calls can ALSO run in parallel in one response. Chaining and
+parallel calls compose: issue every call you have already decided in the SAME
+turn, and chain the probes inside each one. Never split calls you have already
+decided across turns — that is the one pattern that costs a generation for
+nothing.
+
 # Output Processing
 - Default output limit is 16000 bytes (use max_output to customize)
 - Use tail_lines to get only the last N lines of output

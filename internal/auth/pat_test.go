@@ -56,8 +56,8 @@ func TestIsPATFormat(t *testing.T) {
 		{PATPrefix + strings.Repeat("x", 40), true},
 		{"", false},
 		{"not-a-token", false},
-		{PATPrefix, false},              // prefix only
-		{PATPrefix + "short", false},    // too short
+		{PATPrefix, false},                        // prefix only
+		{PATPrefix + "short", false},              // too short
 		{"rlt_" + strings.Repeat("x", 40), false}, // retired parallel-system prefix
 		{"Bearer " + valid, false},
 	}
