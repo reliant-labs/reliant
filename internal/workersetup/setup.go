@@ -131,10 +131,10 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		// any that slip through into a retry rather than a chat-parking pause.
 		// This reduces how often that safety net is needed; it does not replace
 		// it.
-		MaxHeartbeatThrottleInterval:     3 * time.Second,
-		BuildID:                          v2workflow.WorkerBuildID,
-		DeadlockDetectionTimeout:         30 * time.Second,
-		Interceptors:                     []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
+		MaxHeartbeatThrottleInterval: 3 * time.Second,
+		BuildID:                      v2workflow.WorkerBuildID,
+		DeadlockDetectionTimeout:     30 * time.Second,
+		Interceptors:                 []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
 	}
 
 	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOpts)

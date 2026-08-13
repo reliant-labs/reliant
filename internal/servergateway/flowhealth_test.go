@@ -90,7 +90,7 @@ func TestFlowHealthHandler_Healthy200(t *testing.T) {
 
 func TestFlowHealthHandler_Stale503(t *testing.T) {
 	now := time.Now()
-	h := flowHealthHandler(fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-10 * time.Minute))}})
+	h := flowHealthHandler(fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-10*time.Minute))}})
 	rr := httptest.NewRecorder()
 	h(rr, httptest.NewRequest(http.MethodGet, "/flow-health", nil))
 
@@ -110,7 +110,7 @@ func TestFlowHealthHandler_Stale503(t *testing.T) {
 // the real flow.
 func TestFlowHealthHandler_StaleAfterKnob(t *testing.T) {
 	now := time.Now()
-	h := flowHealthHandler(fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-1 * time.Second))}})
+	h := flowHealthHandler(fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-1*time.Second))}})
 	rr := httptest.NewRecorder()
 	h(rr, httptest.NewRequest(http.MethodGet, "/flow-health?stale-after=1ns", nil))
 

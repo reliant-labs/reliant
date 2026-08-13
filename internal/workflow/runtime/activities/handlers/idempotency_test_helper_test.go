@@ -157,7 +157,7 @@ func (h *IdempotencyTestHelper) CreateTestChat(ctx context.Context, chatID, proj
 
 	// Create default thread with ID = chatID (standard pattern)
 	_, err = h.repo.CreateThread(ctx, &db.Thread{
-		ID:             chatID,
+		ID:     chatID,
 		ChatID: chatID,
 	})
 	require.NoError(h.t, err)
@@ -172,7 +172,7 @@ func (h *IdempotencyTestHelper) CreateTestChat(ctx context.Context, chatID, proj
 
 	// Create legacy "0" thread for backward compatibility with tests using Thread: "0"
 	_, err = h.repo.CreateThread(ctx, &db.Thread{
-		ID:             "0",
+		ID:     "0",
 		ChatID: chatID,
 	})
 	require.NoError(h.t, err)
@@ -257,7 +257,7 @@ func (h *IdempotencyTestHelper) CreateTestWorkflow(ctx context.Context, workflow
 func (h *IdempotencyTestHelper) CreateTestThreadAndContextWindow(ctx context.Context, chatID, threadID string) string {
 	// Try to create thread (may already exist from CreateTestChat)
 	thread := &db.Thread{
-		ID:             threadID,
+		ID:     threadID,
 		ChatID: chatID,
 	}
 	_, _ = h.repo.CreateThread(ctx, thread) // Ignore error - thread may already exist
@@ -331,7 +331,7 @@ func (h *IdempotencyTestHelper) CreateTestUserMessageWithText(ctx context.Contex
 // Use this when SaveMessageActivity will create its own context window
 func (h *IdempotencyTestHelper) CreateTestThread(ctx context.Context, chatID, threadID string) {
 	thread := &db.Thread{
-		ID:             threadID,
+		ID:     threadID,
 		ChatID: chatID,
 	}
 	_, err := h.repo.CreateThread(ctx, thread)

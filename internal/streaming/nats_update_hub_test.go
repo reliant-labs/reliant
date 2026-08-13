@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	natstest "github.com/nats-io/nats-server/v2/test"
+	"github.com/nats-io/nats.go"
 )
 
 // startCoreNATS spins up an in-process core-NATS server (no JetStream —

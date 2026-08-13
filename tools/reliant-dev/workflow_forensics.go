@@ -138,8 +138,8 @@ type forensicsOpts struct {
 // ============================================================================
 
 type forensicsToolCount struct {
-	Tool  string `json:"tool"`  // display name, mcp__server__ prefix stripped
-	Full  string `json:"full"`  // name as recorded
+	Tool  string `json:"tool"` // display name, mcp__server__ prefix stripped
+	Full  string `json:"full"` // name as recorded
 	Count int    `json:"count"`
 }
 
@@ -263,18 +263,18 @@ type forensicsSpawn struct {
 }
 
 type forensicsCommandTime struct {
-	WallClock     string `json:"wall_clock"`
-	WallClockMs   int64  `json:"wall_clock_ms"`
-	CommandMs     int64  `json:"command_ms"`
-	CommandTime   string `json:"command_time"`
-	StepCount     int    `json:"step_count"`
-	FailedSteps   int    `json:"failed_steps"`
+	WallClock   string `json:"wall_clock"`
+	WallClockMs int64  `json:"wall_clock_ms"`
+	CommandMs   int64  `json:"command_ms"`
+	CommandTime string `json:"command_time"`
+	StepCount   int    `json:"step_count"`
+	FailedSteps int    `json:"failed_steps"`
 	// UntimedSteps is steps whose duration_ms was NULL. They contribute nothing
 	// to CommandMs, so a nonzero count means command time is a LOWER BOUND.
-	UntimedSteps  int    `json:"untimed_steps"`
-	UnmeasuredMs  int64  `json:"unmeasured_ms"`
-	Unmeasured    string `json:"unmeasured"`
-	CommandPct    float64 `json:"command_pct"`
+	UntimedSteps int     `json:"untimed_steps"`
+	UnmeasuredMs int64   `json:"unmeasured_ms"`
+	Unmeasured   string  `json:"unmeasured"`
+	CommandPct   float64 `json:"command_pct"`
 	// Note carries the caveat that makes the gap honest. step_executions is the
 	// only record of real command time; everything else in the gap is model
 	// generation, engine overhead and gate waiting, which this tool does not
@@ -304,15 +304,15 @@ type forensicsQuery struct {
 }
 
 type forensicsReport struct {
-	ExecutionID string               `json:"execution_id"`
-	Chat        analyzeChatInfo      `json:"chat"`
-	StartedAt   string               `json:"started_at"`
-	EndedAt     string               `json:"ended_at"`
-	WallClock   string               `json:"wall_clock"`
-	ProjectRoot string               `json:"project_root,omitempty"`
-	Threads     []forensicsThread    `json:"threads"`
-	Totals      forensicsTotals      `json:"totals"`
-	SpawnTree   []forensicsSpawn     `json:"spawn_tree,omitempty"`
+	ExecutionID string                `json:"execution_id"`
+	Chat        analyzeChatInfo       `json:"chat"`
+	StartedAt   string                `json:"started_at"`
+	EndedAt     string                `json:"ended_at"`
+	WallClock   string                `json:"wall_clock"`
+	ProjectRoot string                `json:"project_root,omitempty"`
+	Threads     []forensicsThread     `json:"threads"`
+	Totals      forensicsTotals       `json:"totals"`
+	SpawnTree   []forensicsSpawn      `json:"spawn_tree,omitempty"`
 	CrossThread []forensicsRepeatRead `json:"cross_thread_repeated_reads,omitempty"`
 	// SkillDelivery scopes the SKILL LOADS section to what the data supports.
 	// Without it, zero explicit `skill` calls renders identically to "this run

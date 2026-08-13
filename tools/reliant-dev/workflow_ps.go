@@ -140,14 +140,14 @@ type psRow struct {
 	Node          string `json:"node,omitempty"`
 	SpawnedByNode string `json:"spawned_by_node,omitempty"`
 	// Origin is how the thread was created: "main", "spawn", "fork", "node".
-	Origin string `json:"origin,omitempty"`
-	GateKind      string `json:"gate_kind,omitempty"`   // question | approval | pause
-	Gate          string `json:"gate,omitempty"`        // step/node that raised the wait marker
-	GatePrompt    string `json:"gate_prompt,omitempty"` // short summary of the gate
-	SinceSeconds  int64  `json:"since_seconds"`         // time in the derived state
-	Since         string `json:"since"`
-	AgeSeconds    int64  `json:"age_seconds"` // total lifetime of the thread
-	Age           string `json:"age"`
+	Origin       string `json:"origin,omitempty"`
+	GateKind     string `json:"gate_kind,omitempty"`   // question | approval | pause
+	Gate         string `json:"gate,omitempty"`        // step/node that raised the wait marker
+	GatePrompt   string `json:"gate_prompt,omitempty"` // short summary of the gate
+	SinceSeconds int64  `json:"since_seconds"`         // time in the derived state
+	Since        string `json:"since"`
+	AgeSeconds   int64  `json:"age_seconds"` // total lifetime of the thread
+	Age          string `json:"age"`
 
 	// Provider backoff detail, set whenever this thread has EVER been rate
 	// limited — not only while it is parked. A unit that spent 87% of its life in

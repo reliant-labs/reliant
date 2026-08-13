@@ -838,5 +838,3 @@ func (s *ChatService) buildWorkflowExecutionTree(
 
 	return proto
 }
-
-

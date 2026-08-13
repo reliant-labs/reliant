@@ -9,9 +9,9 @@ import (
 	"regexp"
 	"strings"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"

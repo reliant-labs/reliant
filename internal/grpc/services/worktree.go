@@ -456,7 +456,9 @@ func (s *WorktreeService) finishWorktreeCreate(
 	globalBase string,
 	sourceWorkspace string,
 ) {
-	req := struct{ Msg *reliantv1.CreateWorktreeRequest }{Msg: msg}
+	req := struct {
+		Msg *reliantv1.CreateWorktreeRequest
+	}{Msg: msg}
 
 	type repoCreateResult struct {
 		repo         *core.Repo
