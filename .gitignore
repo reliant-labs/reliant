@@ -70,7 +70,8 @@ coverage-final.json
 /tmp/
 
 # Docker
-.dockerignore
+# .dockerignore is TRACKED: it excludes the machine-local go.work from the
+# build context, and an untracked copy means CI builds without that exclusion.
 Dockerfile.local
 docker-compose.override.yml
 docker-logs.txt
