@@ -176,7 +176,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	repoService := services.NewRepoService(database, router)
 	approvalService := services.NewApprovalService(database, cfg.PauseService)
 	questionService := services.NewQuestionService(database, cfg.PauseService)
-	chatService := services.NewChatService(database, cfg.TemporalClient, cfg.PauseService, cfg.SharedTaskQueue, cfg.StreamingHub)
+	chatService := services.NewChatService(database, cfg.TemporalClient, cfg.PauseService, cfg.SharedTaskQueue, cfg.StreamingHub, router)
 	messageService := services.NewMessageService(database)
 	settingsService := services.NewSettingsService(database, router)
 	mcpService := services.NewMCPService(database, router)

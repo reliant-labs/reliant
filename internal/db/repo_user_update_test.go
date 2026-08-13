@@ -26,10 +26,17 @@ func TestCreateUserUpdate_AssignsSequenceAndID(t *testing.T) {
 		t.Fatalf("CreateUserUpdate failed: %v", err)
 	}
 
-	if update.SequenceNumber != 1 {
-		t.Fatalf("expected sequence_number=1, got %d", update.SequenceNumber)
+	// Sequence numbers come from a shared Postgres sequence, not
+	// MAX(sequence_number)+1 per user (see GetNextUserSequenceNumber for why:
+	// the MAX() read took a predicate lock under SERIALIZABLE and aborted
+	// concurrent writers with SQLSTATE 40001). So the value is NOT "1 for a
+	// user's first update" — it is whatever the sequence hands out. What the
+	// callers actually require is that it is positive, that the generated ID
+	// matches it, and that the row round-trips with the same number.
+	if update.SequenceNumber < 1 {
+		t.Fatalf("expected a positive sequence_number, got %d", update.SequenceNumber)
 	}
-	if update.ID != fmt.Sprintf("%s-%d", userID, 1) {
+	if update.ID != fmt.Sprintf("%s-%d", userID, update.SequenceNumber) {
 		t.Fatalf("unexpected generated ID: %s", update.ID)
 	}
 
@@ -40,8 +47,9 @@ func TestCreateUserUpdate_AssignsSequenceAndID(t *testing.T) {
 	if len(updates) != 1 {
 		t.Fatalf("expected 1 update, got %d", len(updates))
 	}
-	if updates[0].SequenceNumber != 1 {
-		t.Fatalf("expected persisted sequence_number=1, got %d", updates[0].SequenceNumber)
+	if updates[0].SequenceNumber != update.SequenceNumber {
+		t.Fatalf("persisted sequence_number=%d, want %d",
+			updates[0].SequenceNumber, update.SequenceNumber)
 	}
 }
 
@@ -90,19 +98,34 @@ func TestCreateUserUpdate_ConcurrentWritesProduceUniqueSequences(t *testing.T) {
 		t.Fatalf("expected %d updates, got %d", updateCount, len(updates))
 	}
 
+	// UNIQUENESS is the contract: the sequence number is the cursor a
+	// reconnecting stream resumes from, and a duplicate makes a client skip or
+	// replay updates.
+	//
+	// CONTIGUITY is deliberately NOT asserted. Allocation moved to a Postgres
+	// sequence to stop concurrent writers aborting each other with SQLSTATE
+	// 40001, and sequence values are gap-free only in the absence of rollbacks
+	// — a retried transaction consumes its value permanently. No consumer
+	// needs a dense range: readers page with `sequence_number > $cursor ORDER
+	// BY sequence_number ASC` and the client stores a monotonic high-water
+	// mark, both of which only require values to increase.
 	seen := make(map[int64]bool, updateCount)
 	for _, u := range updates {
-		if u.SequenceNumber < 1 || u.SequenceNumber > updateCount {
-			t.Fatalf("sequence out of expected range: %d", u.SequenceNumber)
+		if u.SequenceNumber < 1 {
+			t.Fatalf("expected a positive sequence number, got %d", u.SequenceNumber)
 		}
 		if seen[u.SequenceNumber] {
 			t.Fatalf("duplicate sequence number detected: %d", u.SequenceNumber)
 		}
 		seen[u.SequenceNumber] = true
 	}
-	for seq := int64(1); seq <= updateCount; seq++ {
-		if !seen[seq] {
-			t.Fatalf("missing sequence number %d", seq)
+
+	// Ordering must be strictly ascending, since that is what the resume
+	// cursor relies on.
+	for i := 1; i < len(updates); i++ {
+		if updates[i].SequenceNumber <= updates[i-1].SequenceNumber {
+			t.Fatalf("updates must be strictly ascending by sequence number, got %d after %d",
+				updates[i].SequenceNumber, updates[i-1].SequenceNumber)
 		}
 	}
 }

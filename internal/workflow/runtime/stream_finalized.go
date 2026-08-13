@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 )
@@ -31,6 +32,18 @@ import (
 // streamFinalizedVersionGate is the GetVersion changeID shared by every code
 // path that allocates ids or emits finalize markers.
 const streamFinalizedVersionGate = "preallocated-message-id"
+
+// streamFinalizedLocalGate is the GetVersion changeID that switches the
+// SUCCESS-path finalize marker from a regular activity (6 history events) to a
+// local activity (1 marker event). Separate from streamFinalizedVersionGate
+// because it is a strictly later, independent change: a history may already
+// carry version 1 of the id-preallocation protocol and must keep replaying its
+// recorded regular-activity commands, while new executions dispatch locally.
+//
+// Measured against a real 51,199-event history, EmitStreamFinalized ran 1,349
+// times for 8,094 events — one per agent turn, second only to SaveMessage and
+// the drain.
+const streamFinalizedLocalGate = "stream-finalized-local"
 
 // Terminal reasons for a message stream (mirrors db.StreamFinalizedReason;
 // string literals used to avoid importing db into workflow code).
@@ -135,35 +148,79 @@ func emitStreamFinalized(ctx workflow.Context, chatID, messageID, thread, reason
 	}
 	logger := workflow.GetLogger(ctx)
 
+	cancelled := ctx.Err() != nil
 	baseCtx := ctx
-	if ctx.Err() != nil {
+	if cancelled {
 		baseCtx, _ = workflow.NewDisconnectedContext(ctx)
 	}
 
-	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    time.Second,
-			BackoffCoefficient: 2.0,
-			MaximumInterval:    5 * time.Second,
-			MaximumAttempts:    3,
-		},
-	})
-
-	// Map input with snake_case keys (same pattern as notifyWorkflowStatus)
-	// to avoid an import cycle with the handlers package.
-	input := map[string]interface{}{
-		"chat_id":    chatID,
-		"message_id": messageID,
-		"thread":     thread,
-		"reason":     reason,
+	input := types.EmitStreamFinalizedInput{
+		ChatID:    chatID,
+		MessageID: messageID,
+		Thread:    thread,
+		Reason:    reason,
 	}
 	if lastStreamSeq > 0 {
-		input["last_stream_seq"] = lastStreamSeq
+		input.LastStreamSeq = lastStreamSeq
 	}
 
-	var result map[string]interface{}
-	if err := workflow.ExecuteActivity(activityCtx, "EmitStreamFinalized", input).Get(baseCtx, &result); err != nil {
+	// The marker is dispatched LOCALLY on the hot path and as a REGULAR
+	// activity on the terminal path, and the split is deliberate.
+	//
+	// Local is safe on the hot path for the same reason the mailbox drain is:
+	// this call is already best-effort (the error below is logged, never
+	// propagated), and the marker's only content is a single chat_updates row
+	// whose meaning is "no more deltas under this id". Losing an attempt to a
+	// worker crash costs a UI hint, not state — and the frontend does not
+	// depend on the marker alone: chatStore seeds its finalized-id set from
+	// BOTH persisted stream_finalized markers AND every complete persisted
+	// assistant message id, so a dropped marker is covered by the message
+	// itself landing. Re-execution is equally harmless; a duplicate marker for
+	// an id already in that set is a no-op.
+	//
+	// The terminal path is different in kind and stays a regular activity. A
+	// local activity runs inside the current workflow task, so it needs the
+	// workflow to get another workflow task to make progress — which is
+	// exactly what a cancelled or completing execution is running out of.
+	// finalizeOutstandingStreams calls this from handleWorkflowCompletion on
+	// the cancel / error / panic paths precisely BECAUSE nothing else will
+	// finalize those ids; that is the one case where "not durably scheduled"
+	// changes the outcome from "retried later" to "never happened", leaving a
+	// phantom streaming placeholder in the user's chat forever. A server-
+	// scheduled activity on a disconnected context survives the workflow
+	// closing. Those calls are also rare — measured at ONE WorkflowError in a
+	// 51,199-event history — so they cost nothing to leave alone.
+	useLocal := !cancelled &&
+		workflow.GetVersion(ctx, streamFinalizedLocalGate, workflow.DefaultVersion, 1) >= 1
+
+	var err error
+	if useLocal {
+		localCtx := workflow.WithLocalActivityOptions(baseCtx, workflow.LocalActivityOptions{
+			ScheduleToCloseTimeout: 10 * time.Second,
+			StartToCloseTimeout:    5 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    100 * time.Millisecond,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    time.Second,
+				MaximumAttempts:    3,
+			},
+		})
+		var result types.EmitStreamFinalizedOutput
+		err = workflow.ExecuteLocalActivity(localCtx, "EmitStreamFinalized", input).Get(baseCtx, &result)
+	} else {
+		activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
+			StartToCloseTimeout: 5 * time.Second,
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    time.Second,
+				BackoffCoefficient: 2.0,
+				MaximumInterval:    5 * time.Second,
+				MaximumAttempts:    3,
+			},
+		})
+		var result types.EmitStreamFinalizedOutput
+		err = workflow.ExecuteActivity(activityCtx, "EmitStreamFinalized", input).Get(baseCtx, &result)
+	}
+	if err != nil {
 		logger.Warn("[StreamFinalized] Failed to emit stream_finalized marker",
 			"messageID", messageID,
 			"reason", reason,

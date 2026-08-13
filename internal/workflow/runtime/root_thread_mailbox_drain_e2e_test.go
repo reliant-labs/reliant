@@ -148,14 +148,18 @@ func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns
 	)
 
 	// The activity under investigation.
+	//
+	// Takes the real input type rather than a map: the drain is dispatched as
+	// a LOCAL activity, whose arguments reach the registered function by
+	// reflection instead of through the data converter, so a mismatched
+	// parameter type panics rather than decoding.
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
-			thread, _ := input["thread"].(string)
+		func(_ context.Context, input types.DrainAgentMessagesInput) (types.DrainAgentMessagesOutput, error) {
 			e.mu.Lock()
-			e.drainThreads = append(e.drainThreads, thread)
+			e.drainThreads = append(e.drainThreads, input.Thread)
 			e.mu.Unlock()
-			e.record("drain", thread)
-			return map[string]interface{}{"count": 0, "has_messages": false}, nil
+			e.record("drain", input.Thread)
+			return types.DrainAgentMessagesOutput{}, nil
 		},
 		activity.RegisterOptions{Name: "DrainAgentMessages"},
 	)

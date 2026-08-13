@@ -98,6 +98,9 @@ type mockPauseRepo struct {
 	updatedStatuses map[string]db.WorkflowStatus
 	updateErr       error
 	cascadedStatus  db.WorkflowStatus
+	// cascadedThreadStatus is the status the thread cascade received — the
+	// thread-lifecycle half of the same terminal repair.
+	cascadedThreadStatus db.WorkflowStatus
 }
 
 func newMockPauseRepo() *mockPauseRepo {
@@ -116,6 +119,11 @@ func (m *mockPauseRepo) UpdateWorkflowStatus(_ context.Context, id string, statu
 
 func (m *mockPauseRepo) CascadeTerminalStatusToDescendants(_ context.Context, _ string, status db.WorkflowStatus) error {
 	m.cascadedStatus = status
+	return nil
+}
+
+func (m *mockPauseRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, _ string, status db.WorkflowStatus) error {
+	m.cascadedThreadStatus = status
 	return nil
 }
 
@@ -233,6 +241,13 @@ func TestPauseWorkflow_FailedWorkflow_ReconcilesCorrectStatus(t *testing.T) {
 
 	// Should reconcile to failed, not completed
 	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	// The thread cascade must travel with the workflow cascade and carry the
+	// SAME status. Threads are not a workflows row, so a terminal repair that
+	// only cascaded workflows left the thread at running forever — 288 rows
+	// measured live (docs/incidents/2026-08-12-spawn-history-cap.md).
+	assert.Equal(t, db.WorkflowStatusFailed, repo.cascadedStatus)
+	assert.Equal(t, db.WorkflowStatusFailed, repo.cascadedThreadStatus,
+		"a thread under a failed run is failed, not completed — the thread cascade must inherit the run's actual status")
 }
 
 func TestPauseWorkflow_CancelledWorkflow_ReconcilesCorrectStatus(t *testing.T) {

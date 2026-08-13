@@ -182,8 +182,9 @@ func TestViewToolTruncation(t *testing.T) {
 		t.Error("view truncation warning should mention offset parameter")
 	}
 
-	// Should be within size limit
-	if len(result) > MaxOutputSize+1000 { // Allow some overhead for warning message
+	// Should be within the ceiling that applies to THIS tool (view carries a
+	// larger one than the shared MaxOutputSize).
+	if len(result) > outputCeilingFor(ViewToolName)+1000 { // overhead for the warning
 		t.Errorf("truncated output (%d bytes) exceeds max size", len(result))
 	}
 }
@@ -287,4 +288,40 @@ func TestTruncateOutput_SkillUsesSkillCap(t *testing.T) {
 	if strings.Contains(viaTruncate, "OUTPUT TRUNCATED") {
 		t.Fatalf("skill output must not fall through to the generic truncation marker")
 	}
+}
+
+// A file read is ONE artifact the agent named, so a cut middle is a wrong
+// answer rather than a smaller one. view therefore delivers up to MaxReadSize
+// while every other tool keeps the shared MaxOutputSize ceiling.
+//
+// This pins the WRAPPER half. Raising MaxReadSize alone is a no-op: the
+// wrapper re-truncates every result at the shared ceiling, so a 52KB read
+// would still have arrived cut at 24KB — which is exactly what drove eleven
+// fan-out agents to page a generated proto by `grep`, one message at a time.
+func TestOutputCeiling_ViewReadsMoreThanOtherTools(t *testing.T) {
+	big := strings.Repeat("x", 40_000) // over MaxOutputSize, under MaxReadSize
+
+	t.Run("view delivers it whole", func(t *testing.T) {
+		if got := TruncateOutput(ViewToolName, big, true); len(got) != len(big) {
+			t.Errorf("view truncated a %d-byte read to %d; it must deliver up to MaxReadSize (%d)",
+				len(big), len(got), MaxReadSize)
+		}
+		if _, truncated, err := CheckOutputSize(ViewToolName, big); truncated || err != nil {
+			t.Errorf("CheckOutputSize rejected a %d-byte view result; ceiling is %d", len(big), MaxReadSize)
+		}
+	})
+
+	t.Run("shell still capped at the shared ceiling", func(t *testing.T) {
+		if got := TruncateOutput("bash", big, true); len(got) > MaxOutputSize {
+			t.Errorf("bash output was %d bytes; it must stay within MaxOutputSize (%d) — "+
+				"command output volume is not something the agent chose", len(got), MaxOutputSize)
+		}
+	})
+
+	t.Run("a read past MaxReadSize still truncates", func(t *testing.T) {
+		huge := strings.Repeat("y", MaxReadSize+10_000)
+		if got := TruncateOutput(ViewToolName, huge, true); len(got) > MaxReadSize {
+			t.Errorf("view delivered %d bytes, past its own %d ceiling", len(got), MaxReadSize)
+		}
+	})
 }

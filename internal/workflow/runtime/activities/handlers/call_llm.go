@@ -1326,9 +1326,26 @@ func (a *CallLLMActivity) getSystemPrompts(
 	var bb strings.Builder
 	bb.WriteString("You are Reliant, a world class Software Engineer with advanced reasoning and capabilities. Note: it is very likely you are working in parallel with other agents, potentially in the same directory, or across multiple git worktrees. Please be careful of other's work.")
 
+	// The working directory is stated as an ABSOLUTE PATH and as the literal
+	// root every relative path resolves against, because a thread that does
+	// not know it invents one. Measured across two forge-one-shot runs: ten
+	// of fifteen spawned units issued reads against `/path/to/project/...` —
+	// a placeholder the model supplied itself, never emitted by reliant or
+	// forge — producing eighteen File-not-found errors before they recovered.
+	//
+	// A spawned unit is the case that matters. It starts with no history, so
+	// this prompt is the ONLY place the path appears, and "you are working in
+	// a git worktree at X" reads as provenance rather than as the answer to
+	// "where do I open FORGE_PLAN.md".
 	if workingDir != "" {
-		bb.WriteString("\n\nIMPORTANT: You are working in a git worktree at: ")
+		bb.WriteString("\n\nIMPORTANT: Your working directory is: ")
 		bb.WriteString(workingDir)
+		bb.WriteString("\nThis is an absolute path and it is the root of the project you are working on. ")
+		bb.WriteString("Every relative path you use resolves against it, and shell commands start there. ")
+		bb.WriteString("Read a project file by joining it to this root (")
+		bb.WriteString(workingDir)
+		bb.WriteString("/README.md) or by its plain relative path (README.md). ")
+		bb.WriteString("NEVER guess a project root and never write a placeholder path such as /path/to/project — the real one is on this line.")
 	}
 
 	// Multi-repo hint. When the project has more than one repo, every fs/process

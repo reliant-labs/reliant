@@ -174,6 +174,17 @@ CREATE TABLE public.chat_updates (
 );
 
 --
+-- Name: chat_updates_sequence_number_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.chat_updates_sequence_number_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+--
 -- Name: chats; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -808,6 +819,17 @@ CREATE TABLE public.user_updates (
     data text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
+
+--
+-- Name: user_updates_sequence_number_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.user_updates_sequence_number_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
 
 --
 -- Name: visibility_overrides; Type: TABLE; Schema: public; Owner: -

@@ -1,13 +1,13 @@
 package models
 
-// GlobalDefaultCompactionThreshold is the fallback token count at which context
+// UnknownModelCompactionFloor is the fallback token count at which context
 // compaction triggers when a model's REAL context window is unknown — e.g. an
 // unregistered/empty model ID, or a driver-injected model with no definition.
 // Known models do NOT use this value; they DERIVE their threshold from the real
 // window via CompactionThresholdFraction (see DeriveCompactionThreshold). This
 // floor assumes a ~200k window and exists only so callers without a resolved
 // model keep a sane denominator.
-const GlobalDefaultCompactionThreshold = 185000
+const UnknownModelCompactionFloor = 185000
 
 // CompactionThresholdFraction is the fraction of a model's REAL context window at
 // which context compaction triggers by DEFAULT. It mirrors
@@ -21,11 +21,11 @@ const CompactionThresholdFraction = 0.85
 
 // DeriveCompactionThreshold returns the default compaction threshold for a model
 // with the given REAL context window: CompactionThresholdFraction × window. When
-// the window is unknown (<= 0) it falls back to GlobalDefaultCompactionThreshold
+// the window is unknown (<= 0) it falls back to UnknownModelCompactionFloor
 // so callers without a resolved window keep a sane floor.
 func DeriveCompactionThreshold(contextWindow int) int {
 	if contextWindow <= 0 {
-		return GlobalDefaultCompactionThreshold
+		return UnknownModelCompactionFloor
 	}
 	return int(float64(contextWindow) * CompactionThresholdFraction)
 }
@@ -73,7 +73,7 @@ func EffectiveContextWindow(def *ModelDefinition, providerDriver string) int {
 // large-window platform provider.
 func CompactionThresholdForProvider(def *ModelDefinition, providerDriver string) int {
 	if def == nil {
-		return GlobalDefaultCompactionThreshold
+		return UnknownModelCompactionFloor
 	}
 	if def.DefaultCompactionThreshold != nil && *def.DefaultCompactionThreshold > 0 {
 		return *def.DefaultCompactionThreshold
@@ -93,21 +93,21 @@ func CompactionThresholdForDefinition(def *ModelDefinition) int {
 // triggers for the given model ID. It resolves the model in the registry and
 // applies CompactionThresholdForDefinition, so read paths (e.g. the UI
 // context-usage denominator) show the same DERIVED denominator the trigger uses.
-// Unknown or empty model IDs fall back to GlobalDefaultCompactionThreshold.
+// Unknown or empty model IDs fall back to UnknownModelCompactionFloor.
 //
 // It does not account for explicit per-node compaction_threshold argument
 // overrides, which are only known at workflow runtime.
 func CompactionThresholdForModel(modelID string) int {
 	if modelID == "" {
-		return GlobalDefaultCompactionThreshold
+		return UnknownModelCompactionFloor
 	}
 	registry, err := GetRegistry()
 	if err != nil || registry == nil {
-		return GlobalDefaultCompactionThreshold
+		return UnknownModelCompactionFloor
 	}
 	def, ok := registry.GetDefinition(modelID)
 	if !ok || def == nil {
-		return GlobalDefaultCompactionThreshold
+		return UnknownModelCompactionFloor
 	}
 	return CompactionThresholdForDefinition(def)
 }

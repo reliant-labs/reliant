@@ -27,6 +27,10 @@ recommended:
         - "serena"
         - "start-mcp-server"
       type: stdio
+      # Serena indexes a code tree at symbol level, so its answers are scoped to
+      # the project it started in. Without dirScoped every project would share
+      # one index and the second project would silently read the first one's.
+      dirScoped: true
 
   - name: context7
     displayName: Context7

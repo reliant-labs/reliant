@@ -11,23 +11,22 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
 
 // DrainAgentMessagesInput is the input for the DrainAgentMessages activity.
-type DrainAgentMessagesInput struct {
-	ChatID string `json:"chat_id" reliant:"-"`
-	// Thread is the RECIPIENT thread — the one about to resume its loop and
-	// whose mailbox should be drained before its next call_llm.
-	Thread string `json:"thread"`
-}
+//
+// A type ALIAS, not a defined type: the workflow dispatches this activity
+// locally, and local-activity arguments reach the registered function by
+// reflection rather than through the data converter, so the value the workflow
+// passes must be the very same reflect.Type this function declares. See
+// types/mailbox.go.
+type DrainAgentMessagesInput = types.DrainAgentMessagesInput
 
 // DrainAgentMessagesOutput reports what was delivered.
-type DrainAgentMessagesOutput struct {
-	Count       int  `json:"count"`
-	HasMessages bool `json:"has_messages"`
-}
+type DrainAgentMessagesOutput = types.DrainAgentMessagesOutput
 
 // DrainAgentMessagesActivity folds any queued agent_messages rows for a
 // thread into a single user-role message and marks them delivered.

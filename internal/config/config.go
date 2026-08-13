@@ -27,6 +27,34 @@ type MCPServer struct {
 	URL     string            `yaml:"url" json:"url"`
 	Headers map[string]string `yaml:"headers" json:"headers"`
 	Enabled bool              `yaml:"enabled" json:"enabled"`
+
+	// Dir is the working directory the server's process is started in. Empty
+	// means the project the tool call belongs to, which is what a language
+	// server or any other tree-indexing server wants: it is the only way such a
+	// server learns WHICH tree to index. Set it explicitly only to pin a server
+	// to a fixed tree regardless of the caller's project.
+	//
+	// Supports ${VAR} / $VAR expansion, like Env.
+	Dir string `yaml:"dir,omitempty" json:"dir,omitempty"`
+
+	// DirScoped declares that this server's answers are scoped to the directory
+	// it was STARTED in, so two projects must not share one process.
+	//
+	// Most MCP servers are stateless request/response and are safely shared: the
+	// manager keeps ONE client per server name and simply associates it with
+	// every project that asks for it. A server that indexes a tree breaks that
+	// assumption — it resolves its workspace once, at launch, and then answers
+	// every later question against that tree no matter who asked. Measured: a
+	// Go language server registered globally answered from the daemon's own
+	// checkout for a chat in a different project, returning confident matches
+	// from the wrong repository rather than no matches.
+	//
+	// When true the manager keys this server's clients by project as well as by
+	// name, so each project gets its own process. Declared in CONFIG rather
+	// than matched on a server name in reliant's source: which servers are
+	// tree-scoped is a fact about the servers a user installs, and reliant
+	// cannot know the set.
+	DirScoped bool `yaml:"dirScoped,omitempty" json:"dirScoped,omitempty"`
 }
 
 // Data defines storage configuration.

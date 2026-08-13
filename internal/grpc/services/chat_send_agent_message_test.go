@@ -198,6 +198,69 @@ func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
 	}
 }
 
+// TestSendAgentMessage_AcceptsThreadRevivedByNewTurn is the end-to-end shape
+// of the "already finished" bug, exercised through the same repo call the
+// workflow runtime makes when a new run starts.
+//
+// A chat's main thread is REUSED for every turn: SendMessage starts a fresh
+// Temporal run under the same workflow ID and the same thread ID. The end of
+// turn N stamps threads.status terminal, and before the fix the start of turn
+// N+1 moved only the WORKFLOW row back to running -- nothing moved the
+// thread. Every turn from the second onward therefore ran behind a thread row
+// still reading completed, and SendAgentMessage refused to queue into a
+// visibly-working agent with "This agent has already finished".
+//
+// ReviveThread (called by WorkflowStatusActivity's "started" arm) is what
+// closes that gap, so queueing must succeed after it runs.
+func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
+
+	// Turn N ended: both halves of the lifecycle went terminal.
+	completedAt := time.Now().UTC()
+	_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, db.ThreadStatusCompleted, &completedAt)
+	require.NoError(t, err)
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.WorkflowStatusCompleted))
+
+	// Pre-fix, queueing here is refused -- correctly, since nothing is running.
+	service := &ChatService{database: repo}
+	idleResp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "between turns",
+	}))
+	require.NoError(t, err)
+	require.False(t, idleResp.Msg.Success)
+
+	// Turn N+1 starts. This is what WorkflowStatusActivity's "started" arm
+	// does: revive the thread, then move the workflow back to running.
+	revived, err := repo.ReviveThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), revived, "the terminal main thread must be the row revived")
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.WorkflowStatusRunning))
+
+	thread, err := repo.GetThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	require.Equal(t, db.ThreadStatusRunning, thread.Status,
+		"a thread executing a new turn must not still read as finished")
+	require.Nil(t, thread.CompletedAt,
+		"a revived thread must not keep the completed_at of the turn that ended")
+
+	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId:   fx.chatID,
+		ThreadId: fx.rootThreadID,
+		Message:  "steer the turn that is running right now",
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success,
+		"queueing into the running turn must be accepted, got: %s", resp.Msg.Message)
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	assert.Equal(t, "steer the turn that is running right now", queued[0].Body)
+}
+
 func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)

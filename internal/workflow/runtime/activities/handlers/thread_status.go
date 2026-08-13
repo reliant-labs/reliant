@@ -119,8 +119,17 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 		completedAt = &now
 	}
 
-	if _, err := a.repo.UpdateThreadStatus(ctx, input.ThreadID, status, completedAt); err != nil {
+	updated, err := a.repo.UpdateThreadStatus(ctx, input.ThreadID, status, completedAt)
+	if err != nil {
 		return ThreadStatusOutput{}, fmt.Errorf("failed to update thread status: %w", err)
+	}
+
+	// threads.origin is the authority, not the caller. Most callers of this
+	// activity pass no origin at all (the inline executor only sets one for a
+	// fork), and an update that omits it erases the spawn provenance for any
+	// consumer that reads this row on its own — see emitThreadUpdate.
+	if input.Origin == "" && updated != nil {
+		input.Origin = updated.Origin
 	}
 
 	if terminal {
@@ -180,6 +189,15 @@ func (a *ThreadStatusActivity) resolveMailbox(ctx context.Context, threadID stri
 
 // emitThreadUpdate mirrors the lifecycle change onto chat_updates. The shape
 // matches ActiveThreadUpdate in web/src/types/streaming.ts.
+//
+// Every field a consumer needs must be on THIS row, because it is frequently
+// read alone. The client merges successive thread updates and carries missing
+// fields forward from the previous record, which makes an omission invisible
+// on a live stream — but the reconnect snapshot
+// (GetLatestNonMessageUpdatesPerEntity) keeps only the newest row per entity,
+// and delivers it to a client with nothing to carry forward from. Omitting
+// origin here therefore erased "spawn" on every reload: isSpawnOrigin() went
+// false and the background-work pill dropped six running agents.
 func (a *ThreadStatusActivity) emitThreadUpdate(ctx context.Context, input ThreadStatusInput, completedAt *time.Time) error {
 	// The stream keys thread records by workflow ID; fall back to the thread
 	// ID so an update is never dropped for want of a key.

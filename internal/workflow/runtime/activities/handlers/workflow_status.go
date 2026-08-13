@@ -27,24 +27,24 @@ type RouterDecisionInfo struct {
 }
 
 type WorkflowStatusInput struct {
-	ChatID              string              `json:"chat_id" reliant:"-"`
-	WorkflowID          string              `json:"workflow_id"`
-	WorkflowName        string              `json:"workflow_name"`
-	Status              string              `json:"status"`                            // "started", "completed", "failed", or "cancelled"
-	ParentWorkflowID    string              `json:"parent_workflow_id,omitempty"`      // Parent workflow UUID (empty for root)
-	Thread              string              `json:"thread,omitempty"`                  // Thread path for message isolation
-	ThreadTitle         string              `json:"thread_title,omitempty"`            // Human-readable title for the thread (e.g., preset name or node ID)
-	Title               string              `json:"title,omitempty"`                   // Title/prompt (for child workflows, shown in UI swim lane header)
-	SpawnedByToolCallID string              `json:"spawned_by_tool_call_id,omitempty"` // Tool call ID that spawned this workflow
-	SpawnedByNodeID     string              `json:"spawned_by_node_id,omitempty"`      // Node ID that spawned this child workflow
+	ChatID              string `json:"chat_id" reliant:"-"`
+	WorkflowID          string `json:"workflow_id"`
+	WorkflowName        string `json:"workflow_name"`
+	Status              string `json:"status"`                            // "started", "completed", "failed", or "cancelled"
+	ParentWorkflowID    string `json:"parent_workflow_id,omitempty"`      // Parent workflow UUID (empty for root)
+	Thread              string `json:"thread,omitempty"`                  // Thread path for message isolation
+	ThreadTitle         string `json:"thread_title,omitempty"`            // Human-readable title for the thread (e.g., preset name or node ID)
+	Title               string `json:"title,omitempty"`                   // Title/prompt (for child workflows, shown in UI swim lane header)
+	SpawnedByToolCallID string `json:"spawned_by_tool_call_id,omitempty"` // Tool call ID that spawned this workflow
+	SpawnedByNodeID     string `json:"spawned_by_node_id,omitempty"`      // Node ID that spawned this child workflow
 	// Origin is how the thread came to exist ("spawn", "node", "fork", "main").
 	// Carried on the status update so a live UI classifies a thread the same
 	// way a reload does — the stream is the only source before the execution
 	// tree is refetched.
-	Origin        string `json:"origin,omitempty"`
-	LoopIteration *int64 `json:"loop_iteration,omitempty"` // Iteration index when spawned by a loop node
-	RouterDecision      *RouterDecisionInfo `json:"router_decision,omitempty"`         // Routing decision metadata (set when spawned by a router node)
-	Resumed             bool                `json:"resumed,omitempty"`                 // "started" follows a self-pause resume: un-pause the chat's workflow rows chat-wide
+	Origin         string              `json:"origin,omitempty"`
+	LoopIteration  *int64              `json:"loop_iteration,omitempty"`  // Iteration index when spawned by a loop node
+	RouterDecision *RouterDecisionInfo `json:"router_decision,omitempty"` // Routing decision metadata (set when spawned by a router node)
+	Resumed        bool                `json:"resumed,omitempty"`         // "started" follows a self-pause resume: un-pause the chat's workflow rows chat-wide
 	// Outcome is the run's VERDICT — "success" or "failure" — as declared by the
 	// terminal node the graph reached (Node.outcome). It is orthogonal to Status:
 	// a run that routes to a `failed` node has Status "completed" (the Temporal
@@ -160,6 +160,60 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 	return WorkflowStatusOutput{Success: true}, nil
 }
 
+// reviveThreadForNewRun moves this run's thread out of a terminal status,
+// because a run is starting on it and a thread backing live work must not
+// read as finished.
+//
+// threads.status was only ever written in the closing direction: every
+// terminal path stamps it (ThreadStatusActivity, the cascades, the
+// reconciler's reap) and no path ever cleared it. That is invisible for a
+// spawned sub-agent, whose thread is created fresh per run and legitimately
+// ends once — but a chat's MAIN thread is reused for every turn, under the
+// same ID as its workflow. So turn 1 ended and stamped the thread completed;
+// turn 2 revived only the workflow row and ran behind a thread that still
+// said completed, and so did every turn after it.
+//
+// The user-visible symptom was SendAgentMessage refusing to queue into a
+// visibly-working agent with "This agent has already finished (status:
+// completed)". Its terminal-thread check was right to ask; the field it asked
+// was stale. Fixing the field rather than loosening the check keeps every
+// OTHER reader of threads.status correct too — notably
+// ListThreadsWithOrphanedAgentMessages, which resolves queued mail as
+// undeliverable for any thread in a terminal status and would therefore have
+// thrown away messages queued to a live main thread.
+//
+// Best-effort, mirroring ThreadStatus.resolveMailbox: the run is starting
+// either way, and failing the activity here would retry the whole status
+// notification to repair bookkeeping. ReapOrphanedThreads is the durable
+// backstop in the closing direction; a missed revival self-corrects at the
+// next turn's "started".
+func (a *WorkflowStatusActivity) reviveThreadForNewRun(ctx context.Context, input WorkflowStatusInput) {
+	thread := input.Thread
+	if thread == "" {
+		// Same fallback trackWorkflow uses when creating the row: the thread
+		// ID is the workflow ID unless told otherwise.
+		thread = input.WorkflowID
+	}
+	if thread == "" {
+		return
+	}
+
+	revived, err := a.repo.ReviveThread(ctx, thread)
+	if err != nil {
+		logging.Warn("[WorkflowStatus] Failed to revive thread for new run",
+			"threadID", thread,
+			"workflowID", input.WorkflowID,
+			"error", err)
+		return
+	}
+	if revived > 0 {
+		logging.Info("[WorkflowStatus] Revived thread for new run — a previous turn had left it terminal",
+			"threadID", thread,
+			"workflowID", input.WorkflowID,
+			"chatID", input.ChatID)
+	}
+}
+
 // trackWorkflow creates or updates a workflow record in the database
 func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input WorkflowStatusInput) error {
 	switch input.Status {
@@ -176,6 +230,18 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 					"error", err)
 			}
 		}
+
+		// A run starting on a thread that already ended is a REVIVAL: the
+		// chat's main thread is reused for every turn, so turn N's terminal
+		// stamp is still on the row that turn N+1 is about to execute. The
+		// thread must come back to life alongside the workflow, or the two
+		// halves of the same lifecycle disagree for the rest of the chat.
+		//
+		// This runs before the workflow write, and unconditionally on the
+		// "started" arm, because the workflow row has an early return for
+		// "already running" — putting it after would skip the revival in
+		// exactly the case where the run is furthest along.
+		a.reviveThreadForNewRun(ctx, input)
 
 		// Check if workflow already exists (e.g., branched chat with pending status)
 		existingWorkflow, err := a.repo.GetWorkflow(ctx, input.WorkflowID)
@@ -326,7 +392,15 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		a.clearCheckpoint(ctx, input.WorkflowID)
 		// Cascade completion to any thread records owned by this workflow
 		// Thread records ("thread:*") are created by fork()/new() in action configs
-		return a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCompleted)
+		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
+			return err
+		}
+		// Threads are not a workflows row and need their own cascade call —
+		// see docs/incidents/2026-08-12-spawn-history-cap.md. This is
+		// defense-in-depth alongside ThreadStatusActivity's own "completed"
+		// call: a worker that dies between the two activities otherwise
+		// leaves the descendant's thread stuck at running forever.
+		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.WorkflowStatusCompleted)
 
 	case "failed":
 		// NOTE: the position checkpoint is intentionally KEPT on failure — it
@@ -334,7 +408,10 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
 			return err
 		}
-		return a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusFailed)
+		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
+			return err
+		}
+		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.WorkflowStatusFailed)
 
 	case "cancelled":
 		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
@@ -343,7 +420,10 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// User-cancelled runs start fresh on the next message — drop the
 		// checkpoint (resume-at-position applies only to failed/terminated).
 		a.clearCheckpoint(ctx, input.WorkflowID)
-		return a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCancelled)
+		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
+			return err
+		}
+		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.WorkflowStatusCancelled)
 
 	case "paused":
 		// Self-pause: workflow is pausing itself (e.g., due to rate limit
@@ -575,6 +655,17 @@ func (a *WorkflowStatusActivity) emitThreadStatusUpdate(ctx context.Context, inp
 		thread = input.WorkflowID
 	}
 
+	// Fall back to the persisted origin when the caller states none. See the
+	// note on emitThreadUpdate: this row is read in isolation by the reconnect
+	// snapshot, so a missing origin is a thread the UI can no longer classify
+	// as a spawn.
+	origin := input.Origin
+	if origin == "" {
+		if persisted, err := a.repo.GetThread(ctx, thread); err == nil && persisted != nil {
+			origin = persisted.Origin
+		}
+	}
+
 	// NOTE: planning_mode is now a workflow input param, not a chat field.
 	// The frontend gets planning_mode from the workflow state.
 	updateData := map[string]interface{}{
@@ -594,8 +685,8 @@ func (a *WorkflowStatusActivity) emitThreadStatusUpdate(ctx context.Context, inp
 	if input.SpawnedByNodeID != "" {
 		updateData["spawned_by_node_id"] = input.SpawnedByNodeID
 	}
-	if input.Origin != "" {
-		updateData["origin"] = input.Origin
+	if origin != "" {
+		updateData["origin"] = origin
 	}
 	if input.SpawnedByToolCallID != "" {
 		updateData["spawned_by_tool_call_id"] = input.SpawnedByToolCallID

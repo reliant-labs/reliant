@@ -13,8 +13,8 @@ func TestDeriveCompactionThreshold(t *testing.T) {
 		{name: "1M window derives 850k", contextWindow: 1_000_000, want: 850_000},
 		{name: "200k window derives 170k", contextWindow: 200_000, want: 170_000},
 		{name: "400k window derives 340k", contextWindow: 400_000, want: 340_000},
-		{name: "unknown window falls back to global default", contextWindow: 0, want: GlobalDefaultCompactionThreshold},
-		{name: "negative window falls back to global default", contextWindow: -1, want: GlobalDefaultCompactionThreshold},
+		{name: "unknown window falls back to global default", contextWindow: 0, want: UnknownModelCompactionFloor},
+		{name: "negative window falls back to global default", contextWindow: -1, want: UnknownModelCompactionFloor},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestCompactionThresholdForDefinition(t *testing.T) {
 		def  *ModelDefinition
 		want int
 	}{
-		{name: "nil definition falls back", def: nil, want: GlobalDefaultCompactionThreshold},
+		{name: "nil definition falls back", def: nil, want: UnknownModelCompactionFloor},
 		{
 			name: "derives from 1M window",
 			def:  &ModelDefinition{Capabilities: ModelCapabilities{MaxContextWindow: 1_000_000}},
@@ -54,7 +54,7 @@ func TestCompactionThresholdForDefinition(t *testing.T) {
 		{
 			name: "no window falls back to global default",
 			def:  &ModelDefinition{Capabilities: ModelCapabilities{MaxContextWindow: 0}},
-			want: GlobalDefaultCompactionThreshold,
+			want: UnknownModelCompactionFloor,
 		},
 	}
 	for _, tc := range tests {
@@ -158,11 +158,11 @@ func TestGPT5CodexProviderWindowRegistered(t *testing.T) {
 // magic numbers remain).
 func TestCompactionThresholdForModel(t *testing.T) {
 	// Empty and unknown models fall back to the global default.
-	if got := CompactionThresholdForModel(""); got != GlobalDefaultCompactionThreshold {
-		t.Errorf("empty model: got %d, want %d", got, GlobalDefaultCompactionThreshold)
+	if got := CompactionThresholdForModel(""); got != UnknownModelCompactionFloor {
+		t.Errorf("empty model: got %d, want %d", got, UnknownModelCompactionFloor)
 	}
-	if got := CompactionThresholdForModel("no-such-model-xyz"); got != GlobalDefaultCompactionThreshold {
-		t.Errorf("unknown model: got %d, want %d", got, GlobalDefaultCompactionThreshold)
+	if got := CompactionThresholdForModel("no-such-model-xyz"); got != UnknownModelCompactionFloor {
+		t.Errorf("unknown model: got %d, want %d", got, UnknownModelCompactionFloor)
 	}
 
 	registry, err := GetRegistry()

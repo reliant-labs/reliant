@@ -80,6 +80,21 @@ func (s *threadStore) UpdateThreadStatus(ctx context.Context, threadID string, s
 	return threadFromPG(result), nil
 }
 
+func (s *threadStore) ReviveThread(ctx context.Context, threadID string) (int64, error) {
+	return s.q.ReviveThread(ctx, threadID)
+}
+
+func (s *threadStore) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status int32) error {
+	return s.q.CascadeTerminalStatusToThreadSubtree(ctx, pgdb.CascadeTerminalStatusToThreadSubtreeParams{
+		WorkflowID: workflowID,
+		Status:     status,
+	})
+}
+
+func (s *threadStore) ReapOrphanedThreads(ctx context.Context) (int64, error) {
+	return s.q.ReapOrphanedThreads(ctx)
+}
+
 func (s *threadStore) ListThreadsByOrigin(ctx context.Context, chatID string, origin core.ThreadOrigin) ([]*core.Thread, error) {
 	results, err := s.q.ListThreadsByOrigin(ctx, pgdb.ListThreadsByOriginParams{
 		ChatID: chatID,

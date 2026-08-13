@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // ============================================================================
@@ -13,19 +14,16 @@ import (
 // ============================================================================
 
 // EmitStreamFinalizedInput is the input for the EmitStreamFinalized activity.
-// Field names mirror the map built in runtime.emitStreamFinalized.
-type EmitStreamFinalizedInput struct {
-	ChatID        string `json:"chat_id" reliant:"-"`
-	MessageID     string `json:"message_id"`
-	Thread        string `json:"thread,omitempty"`
-	Reason        string `json:"reason"` // "completed", "aborted", or "cancelled"
-	LastStreamSeq int64  `json:"last_stream_seq,omitempty"`
-}
+//
+// A type ALIAS, not a defined type: the workflow dispatches this activity
+// locally, and local-activity arguments reach the registered function by
+// reflection rather than through the data converter, so the value the workflow
+// passes must be the very same reflect.Type this function declares. See
+// types/mailbox.go.
+type EmitStreamFinalizedInput = types.EmitStreamFinalizedInput
 
 // EmitStreamFinalizedOutput is the output for the EmitStreamFinalized activity.
-type EmitStreamFinalizedOutput struct {
-	Success bool `json:"success"`
-}
+type EmitStreamFinalizedOutput = types.EmitStreamFinalizedOutput
 
 // ============================================================================
 // ACTIVITY IMPLEMENTATION

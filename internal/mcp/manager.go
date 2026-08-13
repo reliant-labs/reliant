@@ -91,6 +91,16 @@ type Manager struct {
 	// chrome-devtools, not one per thread.
 	sessionClients map[string]Client
 
+	// dirClients holds per-project private clients for dir-scoped servers (see
+	// dirscope.go), keyed by dirClientKey. Separate from clients for the same
+	// reason sessionClients is: these are the same logical server spawned again
+	// against a different tree, and the model must still see ONE server.
+	//
+	// The shared `clients` entry for such a server remains the one bound to
+	// whichever project loaded it first; every project resolves through here
+	// instead, so no caller silently reads another project's index.
+	dirClients map[string]Client
+
 	ctx    context.Context
 	cancel context.CancelFunc
 
@@ -127,6 +137,7 @@ func NewManager() *Manager {
 		projectServers:      make(map[string]map[string]bool),
 		serverConfigs:       make(map[string]config.MCPServer),
 		sessionClients:      make(map[string]Client),
+		dirClients:          make(map[string]Client),
 		clientFactory:       NewClient,
 		healthChecks:        make(map[string]*healthStatus),
 		healthCheckInterval: 30 * time.Second,
@@ -484,6 +495,72 @@ func (m *Manager) sessionClientFor(serverName, session string) (Client, bool) {
 		"session", session,
 		"reason", "server keeps per-caller state that concurrent threads must not share")
 	return lc, true
+}
+
+// dirClientFor returns the private client for (serverName, projectPath),
+// creating it on first use. ok is false when the call should route to the shared
+// client: an empty project path, an unregistered server, or a server that is not
+// dir-scoped (see dirscope.go — nearly all of them).
+//
+// Dir clients are always lazy, for the same reason session clients are: a
+// language server holds a real index, and a long-lived daemon must not carry one
+// per project it has ever served. The reap callback evicts the map entry.
+func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool) {
+	projectPath = normalizeProjectPath(projectPath)
+	if projectPath == "" {
+		return nil, false
+	}
+	key := dirClientKey(serverName, projectPath)
+
+	m.mu.RLock()
+	client, exists := m.dirClients[key]
+	cfg, registered := m.serverConfigs[serverName]
+	m.mu.RUnlock()
+
+	if exists {
+		return client, true
+	}
+	if !registered || !isDirScopedServer(cfg) {
+		return nil, false
+	}
+
+	// Bind the config to THIS project before spawning: Dir is what the process
+	// starts in, and args carry the same path for servers that take it as a
+	// flag. Both are resolved here, once, so the client itself stays generic.
+	scoped := cfg
+	scoped.Dir = resolveServerDir(cfg, projectPath)
+
+	m.mu.Lock()
+	if client, exists := m.dirClients[key]; exists {
+		m.mu.Unlock()
+		return client, true
+	}
+	// Constructed with the LOGICAL server name so logs, handshake and ServerInfo
+	// read as the server, not as the composite key.
+	lc := newLazyClientWithFactory(serverName, scoped, func() (Client, error) {
+		return m.clientFactory(serverName, scoped)
+	})
+	lc.onReap = func() { m.evictDirClient(key, lc) }
+	m.dirClients[key] = lc
+	m.mu.Unlock()
+
+	logging.Info("Created dir-scoped MCP client",
+		"server", serverName,
+		"projectPath", projectPath,
+		"dir", scoped.Dir,
+		"reason", "server answers are scoped to the tree it was started in; projects must not share one process")
+	return lc, true
+}
+
+// evictDirClient drops a dir client once its subprocess has been reaped for
+// inactivity. The pointer check keeps a late callback from a superseded client
+// from removing its replacement.
+func (m *Manager) evictDirClient(key string, client Client) {
+	m.mu.Lock()
+	if current, ok := m.dirClients[key]; ok && current == client {
+		delete(m.dirClients, key)
+	}
+	m.mu.Unlock()
 }
 
 // evictSessionClient drops a session client once its subprocess has been reaped
@@ -1020,7 +1097,21 @@ func (m *Manager) RestartProjectServer(ctx context.Context, projectPath, serverN
 }
 
 // ProjectCallTool calls a tool on a project-scoped server.
+//
+// For a DIR-SCOPED server this routes to that project's own client, because the
+// server's answers are scoped to the tree it was started in and the shared
+// client belongs to whichever project loaded it first. Every other server
+// resolves exactly as CallTool does — projectPath is then a no-op, which is what
+// it has always been.
 func (m *Manager) ProjectCallTool(session, projectPath, serverName, toolName string, arguments map[string]interface{}) (*ToolResult, error) {
+	if err := m.ensureInitialized(); err != nil {
+		return nil, fmt.Errorf("failed to initialize MCP servers: %w", err)
+	}
+	if dirClient, ok := m.dirClientFor(serverName, projectPath); ok {
+		// Private and lazily (re)spawned, so the shared server's health gate does
+		// not describe it; a failure surfaces as the call's own error.
+		return dirClient.CallTool(toolName, arguments)
+	}
 	return m.CallTool(session, serverName, toolName, arguments)
 }
 

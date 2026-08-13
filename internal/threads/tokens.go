@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultCompactionThreshold is the default token threshold for compaction.
-const DefaultCompactionThreshold = models.GlobalDefaultCompactionThreshold
+const DefaultCompactionThreshold = models.UnknownModelCompactionFloor
 
 // GetContextUsage returns context usage information for a thread.
 // This is used by the UI to show the compaction indicator.
@@ -51,7 +51,7 @@ func (s *Service) GetContextUsage(ctx context.Context, threadID string) (*Contex
 // maxOrdinal used to -- see GetThreadTokenCount.
 func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID string, maxSeq *int64) int {
 	if threadID == "" {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 
 	currentSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
@@ -64,21 +64,21 @@ func (s *Service) resolveCompactionThreshold(ctx context.Context, threadID strin
 		if msg.Model != nil {
 			return models.CompactionThresholdForModel(*msg.Model)
 		}
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 
 	// No local token-bearing message — follow fork inheritance like GetThreadTokenCount.
 	thread, _, err := s.repo.GetThreadWithParent(ctx, threadID)
 	if err != nil || thread.ParentThreadID == nil || thread.ForkAtMessageID == nil {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 	parentThreadID := *thread.ParentThreadID
 	if parentThreadID == threadID {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 	forkMsg, err := s.repo.GetMessage(ctx, *thread.ForkAtMessageID)
 	if err != nil {
-		return models.GlobalDefaultCompactionThreshold
+		return models.UnknownModelCompactionFloor
 	}
 	return s.resolveCompactionThreshold(ctx, parentThreadID, &forkMsg.Seq)
 }

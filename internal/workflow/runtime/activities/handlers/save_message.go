@@ -55,8 +55,8 @@ func parseDisplayStyle(s string) int32 {
 // compaction triggers when a per-node arg is unset and the model's real context
 // window is unknown. Known models derive their threshold from the real window
 // (models.CompactionThresholdFraction × max_context_window); this constant is the
-// single-source floor, shared with models.GlobalDefaultCompactionThreshold.
-const DefaultCompactionThreshold = models.GlobalDefaultCompactionThreshold
+// single-source floor, shared with models.UnknownModelCompactionFloor.
+const DefaultCompactionThreshold = models.UnknownModelCompactionFloor
 
 // SaveMessageActivity atomically saves user, assistant, tool, or system messages.
 // This is a thin wrapper around threads.Service.SaveMessage that handles

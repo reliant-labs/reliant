@@ -335,6 +335,57 @@ EOF
 }
 ```
 
+### Add a language server or anything else that indexes a code tree
+
+A server whose answers come from an INDEXED TREE — a language server, a semantic
+code-search server — resolves which tree it serves once, when its process starts.
+Declare `dirScoped` so each project gets its own process:
+
+```json
+{
+  "mcpServers": {
+    "gopls": {
+      "command": "gopls",
+      "args": ["mcp"],
+      "dirScoped": true
+    }
+  }
+}
+```
+
+Without it, every project shares ONE process, and the second project silently
+receives answers about the first project's code — confident matches from the
+wrong repository rather than no matches. Measured with a Go language server
+registered globally.
+
+`dirScoped` is opt-in because sharing is correct and cheaper for the stateless
+majority: `github`, `linear`, `sentry` and friends are scoped by a token and an
+API endpoint, not by a directory, so per-project processes would buy nothing.
+Dir-scoped servers are started lazily and reaped when idle, so a project you are
+not working in costs nothing.
+
+Two ways to tell a server WHICH tree, depending on how it expects to be told:
+
+```json
+{
+  "mcpServers": {
+    "reads-its-cwd":  { "command": "gopls", "args": ["mcp"], "dirScoped": true },
+    "takes-a-flag":   { "command": "some-lsp-bridge",
+                        "args": ["--workspace", "${projectPath}"],
+                        "dirScoped": true },
+    "pinned-to-one-tree": { "command": "gopls", "args": ["mcp"],
+                            "dir": "$HOME/src/monorepo" }
+  }
+}
+```
+
+- The process starts in `dir` when set, otherwise in the project the tool call
+  belongs to. `$VAR` / `${VAR}` are expanded.
+- `${projectPath}` in `args` is replaced with that same project path, for servers
+  that take the tree as an argument instead of reading their working directory.
+- An explicit `dir` PINS the server to one tree regardless of the caller, which
+  is the only reason to set it.
+
 ### Disable a server without removing it
 
 ```json

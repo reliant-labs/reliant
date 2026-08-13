@@ -76,9 +76,12 @@ func TestViewToolOutputTruncation(t *testing.T) {
 	t.Run("MaxReadSize limits bytes read from file", func(t *testing.T) {
 		// Create a very large file (~50KB, over the 16KB MaxReadSize)
 		hugeFile := filepath.Join(tempDir, "huge.txt")
+		// Must exceed view's OWN ceiling (MaxReadSize), which is larger than
+		// the shared tool-output ceiling — at 30 bytes/line a 1500-line file
+		// no longer reaches it.
 		lines := make([]string, 1500)
 		for i := 0; i < 1500; i++ {
-			lines[i] = fmt.Sprintf("Line %04d: %s", i+1, strings.Repeat("x", 30))
+			lines[i] = fmt.Sprintf("Line %04d: %s", i+1, strings.Repeat("x", 100))
 		}
 		content := strings.Join(lines, "\n")
 		require.NoError(t, os.WriteFile(hugeFile, []byte(content), 0644))
@@ -153,7 +156,7 @@ func TestTruncationMessagesContainGuidance(t *testing.T) {
 	})
 
 	t.Run("Head+tail truncation shows bytes omitted", func(t *testing.T) {
-		largeOutput := strings.Repeat("x", 30000)
+		largeOutput := strings.Repeat("x", MaxReadSize+6_000)
 		result := TruncateOutput("view", largeOutput, false)
 
 		assert.Contains(t, result, "bytes omitted",
@@ -198,9 +201,17 @@ func TestOutputLimitsConstants(t *testing.T) {
 	})
 
 	t.Run("a single read cannot exceed what a tool result can carry", func(t *testing.T) {
-		assert.LessOrEqual(t, MaxReadSize, MaxOutputSize,
-			"a read that outgrows the output ceiling is truncated twice, and the second "+
+		// The invariant is DOUBLE TRUNCATION, not one global number: a read
+		// larger than its own delivery ceiling is cut twice, and the second
+		// cut is the one nobody accounted for. view now carries a larger
+		// ceiling than the shared one (a cut middle in a named file is a
+		// wrong answer, not a smaller one), so the comparison is against the
+		// ceiling that actually applies to view.
+		assert.LessOrEqual(t, MaxReadSize, outputCeilingFor(ViewToolName),
+			"a read that outgrows its delivery ceiling is truncated twice, and the second "+
 				"cut is the one nobody accounted for")
+		assert.Equal(t, MaxOutputSize, outputCeilingFor("bash"),
+			"only the read tool gets the larger ceiling — shell output volume is not chosen by the agent")
 	})
 
 	t.Run("per-line and per-read limits stay positive", func(t *testing.T) {

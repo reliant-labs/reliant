@@ -503,10 +503,40 @@ type Repository interface {
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
 	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	// ReviveThread moves a terminal thread back to running because a new run
+	// has started on it, and clears the completed_at of the turn that ended.
+	// The inverse of CascadeTerminalStatusToThreadSubtree below, and the
+	// missing half of the thread lifecycle: a chat's main thread is reused
+	// for every turn, so the "started" write that revives the WORKFLOW row
+	// must revive the THREAD row with it. Without this, every chat from its
+	// second turn onward ran with a live workflow behind a thread still
+	// reading completed — which is what made SendAgentMessage refuse a
+	// working agent with "This agent has already finished". Returns the
+	// number of rows moved; 0 means the thread was not terminal (a no-op,
+	// not an error).
+	ReviveThread(ctx context.Context, threadID string) (int64, error)
 	ListThreadsByOrigin(ctx context.Context, chatID string, origin ThreadOrigin) ([]*Thread, error)
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
+	// CascadeTerminalStatusToThreadSubtree closes every thread owned by
+	// workflowID or any of its descendants to the terminal status the
+	// workflow subtree just reached — the thread-lifecycle counterpart of
+	// CascadeTerminalStatusToDescendants above. threads.status is otherwise
+	// written ONLY by ThreadStatusActivity on the live path, so a workflow
+	// ending abnormally (terminate, reap, any write path that forgets this
+	// call) leaves its thread at running (2) forever. Measured on the live
+	// DB: 288 threads stranded this way (see
+	// docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
+	// own orphaned mailboxes invisible to ListThreadsWithOrphanedAgentMessages
+	// (it only matches threads already in a terminal status).
+	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status WorkflowStatus) error
+	// ReapOrphanedThreads ends every running/paused thread whose workflow is
+	// already terminal, at the workflow's own status, and reports how many
+	// rows it moved. The backstop for a write path that reached a terminal
+	// workflow status without cascading to the thread — mirrors
+	// ReapOrphanedWorkflowDescendants for the same reason.
+	ReapOrphanedThreads(ctx context.Context) (int64, error)
 
 	// Context Windows - Atomic unit for what gets sent to the LLM
 	// Each thread has one or more context windows (sequence increments on compaction)

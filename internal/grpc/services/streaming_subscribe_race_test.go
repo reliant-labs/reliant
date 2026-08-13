@@ -88,6 +88,12 @@ func (r *snapshotGateRepo) GetLatestNonMessageUpdatesPerEntity(context.Context, 
 	return nil, nil
 }
 
+// The snapshot reconciles each thread update's origin against threads.origin,
+// which is the authority for that field.
+func (r *snapshotGateRepo) ListThreadsByConversation(context.Context, string) ([]*db.Thread, error) {
+	return nil, nil
+}
+
 func (r *snapshotGateRepo) ListContentBlocksForMessages(context.Context, []string) ([]*db.MessageContentBlock, error) {
 	return nil, nil
 }

@@ -139,9 +139,25 @@ const (
 	anomalyResetFailedTerminated           = "reset_failed_terminated"
 	anomalyResetAttemptsExhausted          = "reset_attempts_exhausted"
 	anomalyOrphanDescendantReaped          = "orphan_descendant_reaped"
+	anomalyOrphanThreadReaped              = "orphan_thread_reaped"
 	anomalyStrandedSpawnRepaired           = "stranded_spawn_repaired"
 	anomalyStrandedBackgroundSpawnRepaired = "stranded_background_spawn_repaired"
-	anomalyOrphanedAgentMessagesResolved   = "orphaned_agent_messages_resolved"
+	// anomalyStrandedBackgroundSpawnUndeliverable is the same repair, but
+	// for a spawn whose parent thread was ALREADY terminal when the repair
+	// ran — the common case, because the parent dying is usually what
+	// stranded the child. The report is recorded undelivered rather than
+	// queued; see repairStrandedBackgroundSpawns. Split from the class
+	// above because the two say different things operationally: one is "the
+	// parent will read this at its next step", the other is "nobody will
+	// ever read this, and the run lost a sub-agent's result."
+	anomalyStrandedBackgroundSpawnUndeliverable = "stranded_background_spawn_undeliverable"
+	anomalyOrphanedAgentMessagesResolved        = "orphaned_agent_messages_resolved"
+	// anomalySilentTerminalDrift is a run that ended terminally in Temporal
+	// without ever reporting it — the DB still said running/paused when this
+	// pass found it. A hard TERMINATE is the archetype: the worker gets no
+	// further workflow task, so no completion handler runs and the user is
+	// told nothing. See emitSilentTerminationError.
+	anomalySilentTerminalDrift = "silent_terminal_drift"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -199,6 +215,22 @@ const progressStallChatMessage = "This conversation's workflow stopped making pr
 // terminated. It is accurate because the terminated run is marked failed in
 // the DB and SendMessage starts the next run in resume-at-position mode.
 const wedgeInterruptedChatMessage = "This conversation's workflow was interrupted by an update and will resume where it left off when you send a message."
+
+// silentTerminationErrorType is the ErrorUpdate.activity_type carried by the
+// error the reconciler emits for a run that died without reporting it. It
+// names the CAUSE rather than an activity, because no activity was involved:
+// the run was killed from outside and the UI's per-activity naming has
+// nothing to work with.
+const silentTerminationErrorType = "workflow_terminated"
+
+// silentTerminationSummary is the one-line ErrorUpdate.error_summary the
+// timeline shows collapsed. Three things the user needs, in the order they
+// need them: it stopped, it was not their doing, and it continues from where
+// it stopped. Accurate because the run is marked failed with its position
+// checkpoint deliberately preserved (see the "failed" case in
+// activities/handlers/workflow_status.go), which routes the next SendMessage
+// into resume-at-position.
+const silentTerminationSummary = "This conversation was stopped by the system, not by you or the assistant. Send a message and it will pick up where it left off."
 
 // pollerRecencyWindow bounds how old a poller's LastAccessTime may be to
 // still count as "active". Temporal's DescribeTaskQueue keeps poller history
@@ -357,6 +389,13 @@ type TemporalWorkflowState struct {
 	PendingActivityCount   int   // pending activities (any state)
 	PendingChildrenCount   int   // pending Temporal child workflows
 	PendingNexusCount      int   // pending nexus operations
+
+	// WasTerminated distinguishes a hard TERMINATE from the other closed
+	// statuses that also map to Failed (FAILED, TIMED_OUT). It matters
+	// because a terminate is the one closure the workflow itself can never
+	// report: the worker receives no further workflow task, so no completion
+	// handler, no status activity and no WorkflowError activity ever runs.
+	WasTerminated bool
 }
 
 // quiescent reports whether the workflow is in the progress watchdog's
@@ -531,6 +570,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 	// Map Temporal status to our status
 	var mappedStatus db.WorkflowStatus
 	isRunning := false
+	wasTerminated := false
 	switch execStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		mappedStatus = db.WorkflowStatusRunning
@@ -542,6 +582,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 		// TERMINATED = system/operator kill → Failed (resumable at position).
 		// Only CANCELED (user cancel) maps to Cancelled.
 		mappedStatus = db.WorkflowStatusFailed
+		wasTerminated = execStatus == enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
 		mappedStatus = db.WorkflowStatusCancelled
 	case enums.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
@@ -558,10 +599,11 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 	}
 
 	state := &TemporalWorkflowState{
-		Exists:    true,
-		Status:    mappedStatus,
-		RunID:     runID,
-		IsRunning: isRunning,
+		Exists:        true,
+		Status:        mappedStatus,
+		RunID:         runID,
+		IsRunning:     isRunning,
+		WasTerminated: wasTerminated,
 	}
 
 	// Check for stuck tasks (only if workflow is running)
@@ -1038,6 +1080,21 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			return result // another reconciler already handled this
 		}
 
+		// Same silent-death class as the general mismatch repair below: the
+		// execution ended without the workflow reporting it, so nothing has
+		// told the user. A parked run dying is if anything MORE surprising —
+		// the user was waiting on a pause they expected to resume from.
+		if temporalState.Status == db.WorkflowStatusFailed {
+			logging.Error("[Reconciler] Paused workflow ended terminally without reporting it - notifying user",
+				"workflowID", wf.ID,
+				"chatID", wf.ChatID,
+				"thread", wf.Thread,
+				"terminated", temporalState.WasTerminated,
+			)
+			r.recordAnomaly(stats, anomalySilentTerminalDrift)
+			r.emitSilentTerminationError(ctx, wf, temporalState)
+		}
+
 		result.TemporalStatus = temporalState.Status
 		result.WasStale = true
 
@@ -1064,6 +1121,23 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// WorkflowStatus activity) — transition the chat to any target.
 			if temporalState.Status == db.WorkflowStatusCompleted {
 				r.transitionChatOnCompletion(ctx, wf)
+			}
+			// A run that ended badly and never said so. Reaching this branch
+			// with a non-Completed terminal status IS the proof: the DB still
+			// read running/paused, so the workflow's own completion handler
+			// never wrote its status and never emitted an error either. Tell
+			// the user, since nothing else will. Cancelled is excluded — a
+			// user cancel is the one terminal status the user already knows
+			// about, having asked for it.
+			if temporalState.Status == db.WorkflowStatusFailed {
+				logging.Error("[Reconciler] Workflow ended terminally without reporting it - notifying user",
+					"workflowID", wf.ID,
+					"chatID", wf.ChatID,
+					"thread", wf.Thread,
+					"terminated", temporalState.WasTerminated,
+				)
+				r.recordAnomaly(stats, anomalySilentTerminalDrift)
+				r.emitSilentTerminationError(ctx, wf, temporalState)
 			}
 		}
 	}
@@ -1447,6 +1521,46 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 	return int(reaped), nil
 }
 
+// reapOrphanedThreads is reapOrphanedDescendants' thread-lifecycle
+// counterpart: it ends every thread whose owning workflow is already
+// terminal, at the workflow's status, and returns how many rows it moved.
+//
+// threads.status is written only by ThreadStatusActivity on the live path,
+// and by the direct-cascade calls added alongside every
+// CascadeTerminalStatusToDescendants call site
+// (CascadeTerminalStatusToThreadSubtree, queries/threads.sql). A write path
+// that forgets that second call — or dies between the two activities on the
+// live path — strands the thread at running (2) / paused (6) forever,
+// exactly as an unforgotten workflow cascade strands a workflow descendant.
+// Measured on the live DB before this fix existed: 288 threads stranded this
+// way (see docs/incidents/2026-08-12-spawn-history-cap.md), which also made
+// their own orphaned mailboxes invisible to
+// ListThreadsWithOrphanedAgentMessages (it only matches threads already in a
+// terminal status) — so this backstop is what makes that sweep reachable at
+// all for a thread stuck this way.
+//
+// Runs in the same backstop position as reapOrphanedDescendants, immediately
+// after it: a workflow reaped there becomes exactly the condition this reaps,
+// so running this second lets both repairs land in the same pass instead of
+// leaving the thread stranded until the next one.
+func (r *Reconciler) reapOrphanedThreads(ctx context.Context, stats *passStats) (int, error) {
+	reaped, err := r.repo.ReapOrphanedThreads(ctx)
+	if err != nil {
+		logging.Error("[Reconciler] Failed to reap orphaned threads", "error", err)
+		return 0, fmt.Errorf("failed to reap orphaned threads: %w", err)
+	}
+	if reaped == 0 {
+		return 0, nil
+	}
+	for i := int64(0); i < reaped; i++ {
+		r.recordAnomaly(stats, anomalyOrphanThreadReaped)
+	}
+	logging.Error("[Reconciler] Reaped orphaned threads — a terminal workflow did not cascade to its thread",
+		"rows", reaped,
+	)
+	return int(reaped), nil
+}
+
 // repairStrandedSpawnToolCalls closes spawn tool calls whose child workflow has
 // reached a terminal status but which never received a result, and returns how
 // many it repaired.
@@ -1574,6 +1688,33 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 // Fail-closed by construction: ListStrandedBackgroundSpawnToolCalls's own
 // WHERE clause excludes a child still running (2) or paused (6), so this
 // function is never even offered one to fabricate a result for.
+//
+// The recipient's own liveness decides the row's status. Delivery happens
+// ONLY in drainAgentMessagesAtBoundary, at a live agent loop-step boundary,
+// so a row addressed to a thread that has already exited is undeliverable
+// the moment it is written — not late, unreachable. That is the COMMON case
+// here rather than an edge: a background spawn runs as a workflow.Go
+// goroutine inside the parent's own execution (dispatchSpawnBackground), so
+// the parent dying is usually the very thing that stranded the child.
+// Observed on chat 0dc5167e: two reports written by this repair, both still
+// status=1 with delivered_at NULL, both permanently unreachable, addressed
+// to a parent Temporal had terminated ninety seconds earlier.
+//
+// So when the parent is already terminal the report is written at status 3
+// (undelivered) instead of 1 (queued) — the same vocabulary
+// MarkQueuedAgentMessagesUndeliveredForThread and
+// resolveOrphanedAgentMessages already use for exactly this fact. The row
+// is still WRITTEN, never skipped, by the same house rule that query states:
+// the row is the only surviving record that a sub-agent produced something,
+// and it is what lets a reader see "this finished but nobody was left to
+// hear it" instead of nothing at all.
+//
+// This cannot double-handle with resolveOrphanedAgentMessages, which is
+// about to start seeing these rows once thread-status cascade lands. That
+// sweep only touches status = 1 (both in its list query and in its UPDATE),
+// and a row written here at status 3 was never queued — so the two paths
+// address disjoint rows regardless of which runs first, and re-running
+// either moves nothing. The ordering is not relied upon.
 func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *passStats) (int, error) {
 	stranded, err := r.repo.ListStrandedBackgroundSpawnToolCalls(ctx)
 	if err != nil {
@@ -1585,6 +1726,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 	}
 
 	repaired := 0
+	undeliverable := 0
 	for _, call := range stranded {
 		if call.ParentThreadID == nil || *call.ParentThreadID == "" {
 			// tool_calls.thread_id is nilable in general (a call can be
@@ -1599,17 +1741,12 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		}
 
 		kind := mailboxKindForTerminalWorkflowStatus(call.WorkflowStatus)
-		body := fmt.Sprintf(
-			"Sub-agent finished while its result was lost in transit (worker interruption). "+
-				"Use spawn_status(agent_id=%q) to see what it produced.",
-			call.ChildThreadID,
-		)
-		if call.WorkflowStatus == reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED {
-			body = fmt.Sprintf(
-				"Sub-agent's run expired before it could report back. "+
-					"Use spawn_status(agent_id=%q) to see what it produced before it stopped.",
-				call.ChildThreadID,
-			)
+		recipientDead := r.recipientThreadIsTerminal(ctx, *call.ParentThreadID)
+		body := strandedBackgroundSpawnBody(call, recipientDead)
+
+		status := core.AgentMessageStatusQueued
+		if recipientDead {
+			status = core.AgentMessageStatusUndelivered
 		}
 
 		toolCallID := call.ToolCallID
@@ -1621,7 +1758,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			Kind:         kind,
 			Body:         body,
 			ToolCallID:   &toolCallID,
-			Status:       core.AgentMessageStatusQueued,
+			Status:       status,
 			CreatedAt:    time.Now().UTC(),
 		})
 		if err != nil {
@@ -1629,6 +1766,17 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
 			continue
 		}
+
+		// The tool_calls row is closed whether or not THIS pass wrote the
+		// mailbox row. A call left at status 6 (backgrounded) reads as
+		// in-flight in the UI forever, and the spawn it describes is over
+		// either way — a report written by a concurrent pass does not clear
+		// the status, and skipping the close on inserted=false is how both
+		// spawns on chat 0dc5167e stayed "backgrounded" indefinitely.
+		// UpsertToolCallStatus is idempotent and refuses to walk a terminal
+		// row backwards, so repeating it costs a no-op write.
+		r.closeStrandedBackgroundSpawnCall(ctx, call)
+
 		if !inserted {
 			// A terminal report already exists for this call — either the
 			// detached goroutine's own enqueue landed after all, or a
@@ -1636,6 +1784,11 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			continue
 		}
 
+		if recipientDead {
+			undeliverable++
+			r.recordAnomaly(stats, anomalyStrandedBackgroundSpawnUndeliverable)
+			continue
+		}
 		repaired++
 		r.recordAnomaly(stats, anomalyStrandedBackgroundSpawnRepaired)
 	}
@@ -1645,7 +1798,106 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			"rows", repaired,
 		)
 	}
-	return repaired, nil
+	if undeliverable > 0 {
+		// ERROR, not Info, for the same reason ThreadStatus.resolveMailbox
+		// logs at ERROR: every row here is a sub-agent's finished work that
+		// no agent will ever read, because the parent was already gone.
+		logging.Error("[Reconciler] Recorded stranded background spawn reports as UNDELIVERED — the parent thread had already exited",
+			"rows", undeliverable,
+		)
+	}
+	return repaired + undeliverable, nil
+}
+
+// recipientThreadIsTerminal reports whether a mailbox recipient's loop has
+// already exited, deciding whether a report written for it can ever be
+// delivered.
+//
+// Errs toward "still live" when the thread cannot be read: an unreadable
+// thread row (transient DB error, or a recipient whose row is genuinely
+// missing) is not evidence the agent is dead, and labelling a live thread's
+// report undelivered would hide a message that was about to arrive. That is
+// the same fail-closed direction ListThreadsWithOrphanedAgentMessages takes,
+// and it is the recoverable mistake: a queued row that turns out to be
+// stranded is caught by resolveOrphanedAgentMessages on a later pass, where
+// a wrongly-undelivered one is never revisited.
+func (r *Reconciler) recipientThreadIsTerminal(ctx context.Context, threadID string) bool {
+	thread, err := r.repo.GetThread(ctx, threadID)
+	if err != nil || thread == nil {
+		logging.Warn("[Reconciler] Could not read stranded spawn's parent thread; treating it as live",
+			"threadID", threadID, "error", err)
+		return false
+	}
+	return core.ThreadStatusIsTerminal(thread.Status)
+}
+
+// closeStrandedBackgroundSpawnCall moves a stranded spawn's tool_calls row
+// off status 6 (backgrounded), which is not a terminal status and which the
+// UI renders as still in flight.
+//
+// Cancelled, not failed, mirroring terminalDrainDetachedSpawns
+// (runtime/workflow.go) — the live path that handles the same shape when a
+// run ends with detached spawns still registered. "Cancelled" is the honest
+// label: the call will never produce a result of its own, because the
+// goroutine that would have produced one is gone. It is deliberately NOT
+// "failed", which claims the spawn ran and errored; the child may well have
+// completed successfully, and its outcome travels in the mailbox report
+// beside this write.
+//
+// Best-effort: the mailbox report is the load-bearing half of this repair,
+// and a failed status write must not cost the caller its progress on the
+// rest of the batch.
+func (r *Reconciler) closeStrandedBackgroundSpawnCall(ctx context.Context, call *db.StrandedBackgroundSpawn) {
+	now := time.Now().UTC()
+	if err := db.UpsertToolCallStatus(ctx, r.repo, &db.ToolCall{
+		ID:          call.ToolCallID,
+		ChatID:      call.ChatID,
+		ToolName:    "spawn",
+		Status:      core.ToolCallStatusCancelled,
+		CompletedAt: &now,
+	}); err != nil {
+		logging.Error("[Reconciler] Failed to close stranded background spawn tool call",
+			"toolCallID", call.ToolCallID, "error", err)
+	}
+}
+
+// strandedBackgroundSpawnBody writes the report the parent (or, when the
+// parent is gone, whoever reads the row later) sees.
+//
+// The undeliverable variant does not tell a dead agent to go run
+// spawn_status: nothing will read it, and the instruction would be addressed
+// to no one. It states what happened instead, so the row is legible as a
+// record rather than as a pending instruction.
+func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead bool) string {
+	expired := call.WorkflowStatus == reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED
+
+	if recipientDead {
+		if expired {
+			return fmt.Sprintf(
+				"Sub-agent %q expired before it could report back, and the thread that "+
+					"spawned it had already exited — this report was never delivered.",
+				call.ChildThreadID,
+			)
+		}
+		return fmt.Sprintf(
+			"Sub-agent %q finished, but the thread that spawned it had already exited — "+
+				"this report was never delivered.",
+			call.ChildThreadID,
+		)
+	}
+
+	if expired {
+		return fmt.Sprintf(
+			"Sub-agent's run expired before it could report back. "+
+				"Use spawn_status(agent_id=%q) to see what it produced before it stopped.",
+			call.ChildThreadID,
+		)
+	}
+	return fmt.Sprintf(
+		"Sub-agent finished while its result was lost in transit (worker interruption). "+
+			"Use spawn_status(agent_id=%q) to see what it produced.",
+		call.ChildThreadID,
+	)
 }
 
 // resolveOrphanedAgentMessages marks mailbox rows undelivered when the thread
@@ -1749,7 +2001,17 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		errors = append(errors, reapErr)
 	}
 
-	// After the reap: reaping moves a child to a terminal status, which is
+	// Threads next: reapOrphanedDescendants can itself be what just made a
+	// workflow terminal, which is precisely the condition reapOrphanedThreads
+	// looks for, so running this second catches rows the reap above just
+	// orphaned instead of leaving them stranded until the next pass.
+	reapedThreads, reapThreadsErr := r.reapOrphanedThreads(ctx, stats)
+	reconciled += reapedThreads
+	if reapThreadsErr != nil {
+		errors = append(errors, reapThreadsErr)
+	}
+
+	// After the reaps: reaping moves a child to a terminal status, which is
 	// precisely the condition that strands its parent's spawn call, so running
 	// this second lets both repairs land in the same pass instead of leaving
 	// the parent blocked until the next one.
@@ -1868,6 +2130,91 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 	}
 
 	return nil
+}
+
+// emitSilentTerminationError tells the user their run died, when the run
+// itself could not.
+//
+// Every other terminal path in the system reports itself: the workflow's
+// completion handler runs, calls the WorkflowError activity, and a chat_updates
+// row reaches the UI. A hard Temporal TERMINATE has no such path. The worker
+// receives no further workflow task, so NO workflow code executes again —
+// not the completion handler, not the status activity, not the error
+// activity. Measured on the incident this was written for: the WorkflowError
+// activity fired exactly once across a 51,199-event history that ended in
+// termination, and the user watched agents that were already dead appear to
+// keep running (docs/incidents/2026-08-12-spawn-history-cap.md).
+//
+// The reconciler is the only component that ever observes the death, so it is
+// the only place the error can come from. It shares the activity's writer
+// (handlers.WriteWorkflowError) rather than reproducing the payload, so the
+// shape the frontend reads cannot drift between the two emitters.
+//
+// Scoped to wf.Thread, never to the chat: a chat-scoped error has nothing for
+// the timeline to filter on and renders inside every thread of the chat,
+// including spawns that started long after the incident (see the comment on
+// WorkflowErrorInput.Thread).
+//
+// Idempotency comes from the caller, not from here: this runs only on the
+// pass whose CompareAndSwapWorkflowStatus actually won the transition out of
+// running/paused. Every later pass reads a DB status that already matches
+// Temporal, finds no mismatch, and never reaches this function — so the ~30s
+// reconcile loop cannot repeat the error.
+func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState) {
+	message := "The workflow was stopped by the system before it could finish."
+	if reason := r.terminationReason(ctx, wf.ID, state); reason != "" {
+		// Temporal's own words. For the incident above this reads "Workflow
+		// history count exceeds limit." — which is the difference between a
+		// user filing "it just stopped" and one who can say what happened.
+		message = fmt.Sprintf("The workflow was stopped by the system before it could finish. Reason: %s", reason)
+	}
+
+	if _, err := handlers.WriteWorkflowError(ctx, r.repo, handlers.WorkflowErrorInput{
+		ChatID:       wf.ChatID,
+		WorkflowID:   wf.ID,
+		WorkflowName: wf.WorkflowName,
+		ErrorType:    silentTerminationErrorType,
+		ErrorMessage: message,
+		ErrorSummary: silentTerminationSummary,
+		Thread:       wf.Thread,
+	}); err != nil {
+		logging.Warn("[Reconciler] Failed to emit termination error to chat",
+			"error", err,
+			"workflowID", wf.ID,
+			"chatID", wf.ChatID,
+		)
+	}
+}
+
+// terminationReason returns the reason Temporal recorded on the
+// WorkflowExecutionTerminated event, or "" when there is none to be had.
+//
+// Only called for a state that Describe already reported as TERMINATED, and
+// only on the single pass that won the status swap — so this costs one extra
+// Temporal call per dead workflow, once, not once per pass. The close-event
+// filter keeps it to the last event rather than paging a history that, for
+// the motivating incident, was 51,199 events long.
+func (r *Reconciler) terminationReason(ctx context.Context, workflowID string, state *TemporalWorkflowState) string {
+	if !state.WasTerminated {
+		return ""
+	}
+
+	iter := r.tempClient.GetWorkflowHistory(ctx, workflowID, state.RunID, false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
+	for iter.HasNext() {
+		event, err := iter.Next()
+		if err != nil {
+			// Best-effort enrichment: the error is still emitted without it.
+			logging.Warn("[Reconciler] Failed to read close event for termination reason",
+				"error", err,
+				"workflowID", workflowID,
+			)
+			return ""
+		}
+		if attrs := event.GetWorkflowExecutionTerminatedEventAttributes(); attrs != nil {
+			return attrs.GetReason()
+		}
+	}
+	return ""
 }
 
 // StartBackgroundReconciliation starts the background reconciliation loop.

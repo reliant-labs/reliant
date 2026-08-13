@@ -129,11 +129,21 @@ func (t *componentLibraryTool) get(name string, forgeIntegrated bool) (ToolRespo
 		return NewTextErrorResponse(fmt.Sprintf("Failed to read component: %v", err)), nil
 	}
 
-	header := fmt.Sprintf("# %s (%s)\n# %s\n# Tags: %s\n#\n# Copy this component into your project and customize the props.\n# All coordinate math is handled internally — just pass your data.\n#\n",
+	// The preamble is kept SHORT on purpose. It is prepended to source the
+	// agent is about to write to a file, so every line of it is a line to
+	// delete first — and a long banner reads as boilerplate to skim rather
+	// than instructions to follow. Say the two things that change what the
+	// agent does (the source is already themed; adapt it in place) and stop.
+	//
+	// It previously advertised "customize the props", which pointed at the
+	// wrong work: the components shipped hardcoded palette classes, so the
+	// real cost was re-theming every className. That is fixed at the source —
+	// the library now uses the same semantic tokens the scaffold does — and
+	// the preamble should not send anyone looking for it again.
+	header := fmt.Sprintf("# %s (%s) — %s\n# Themed for this project: uses the scaffolded tokens (ink / surface / border / accent / danger / success / warning). Adapt in place; delete these comment lines.\n",
 		entry.Name,
 		entry.Category,
 		entry.Description,
-		strings.Join(entry.Tags, ", "),
 	)
 
 	if forgeIntegrated {

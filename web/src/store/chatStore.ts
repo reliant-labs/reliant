@@ -2512,7 +2512,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // when threads complete.
 
         // Process error updates
-        // Each error persists in the chat - no deduplication.
+        // Errors dedup by id (see applyErrorUpdates). One activity's retry
+        // series shares a single id, so attempts 1..N update ONE row in place
+        // and the badge advances instead of stacking three rows for one
+        // failure. Distinct failures still carry distinct ids.
         // Errors are sorted by timestamp in the timeline so they appear
         // in chronological order alongside messages.
         // On snapshot: start fresh to avoid stale/duplicate events from previous subscription
@@ -2710,6 +2713,37 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // `updatedMessages` above.
         setMessagesInCache(chatId, updatedMessages);
 
+        // Self-heal a stranded streaming placeholder.
+        //
+        // A tool call whose input never finished streaming renders as
+        // "Preparing..." forever (the renderers key that off
+        // `input === undefined`). Cancelling a chat at exactly the moment a
+        // tool call was streaming leaves one behind, and until now the ONLY
+        // thing that cleared it was the IDLE activity-changed handler — a
+        // transient event. Miss it once (cancel raced it, the tab was closed,
+        // the event landed before this chat was open) and the placeholder
+        // outlived every reload, because a snapshot rebuilds the transcript
+        // but never touched the streaming slice.
+        //
+        // A snapshot for a chat the server reports as NOT running is
+        // authoritative that nothing is streaming: the transcript just
+        // arrived in full, and anything still sitting in the streaming slice
+        // is a tail that will never be completed. Dropping it here gives
+        // every already-stuck chat a second chance on its next load, instead
+        // of requiring the one event it already missed.
+        if (isSnapshot) {
+          const activity = useActivityStore.getState().activities.get(chatId);
+          const chatIsIdle =
+            activity === undefined || activity < ChatActivity.RUNNING;
+          if (chatIsIdle && get().streamingMessages[chatId]) {
+            logger.info(
+              "[Streaming] Snapshot for an idle chat — dropping stranded streaming placeholder",
+              { chatId: chatId.slice(0, 8) },
+            );
+            get().clearStreamingState(chatId);
+          }
+        }
+
         // Keep any open thread-scoped reader (a spawn preview, a selected
         // thread) current. Only this batch's messages are fanned out, not the
         // whole merged array: the thread caches own their own history, and
@@ -2898,6 +2932,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : msg,
       ),
     );
+
+    // Drop any half-arrived streaming placeholder this cancel just orphaned.
+    // A tool call whose input never finished streaming renders as
+    // "Preparing..." forever (the renderers key that state off
+    // `input === undefined`), and nothing else reliably cleans it up:
+    // the only other caller of clearStreamingState is the IDLE
+    // activity-changed handler, which is a TRANSIENT event. Cancelling at the
+    // moment a tool call is streaming — and any later reload — leaves the
+    // placeholder with no second chance to be cleared, so it sticks to the
+    // transcript until the slice is evicted.
+    //
+    // Clearing here makes the cancel self-sufficient rather than relying on
+    // catching one event. It is also the optimistic half of the same update
+    // the IDLE handler performs, so the two agree.
+    get().clearStreamingState(chatId);
     // Set the chat IDLE in the RQ caches (list + detail).
     patchChatCaches(projectId, chatId, { state: ChatState.IDLE });
 

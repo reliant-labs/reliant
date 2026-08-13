@@ -1556,9 +1556,12 @@ func (e *InlineWorkflowExecutor) emitThreadCreated() {
 	// at 17:35:57.867.
 	//
 	// Origin is a property of how a thread came to exist, so only the code that
-	// brought it into existence may state it. Sending it empty here leaves the
-	// field off the update entirely (workflow_status.go only sets "origin" when
-	// non-empty), so the earlier, authoritative announcement stands.
+	// brought it into existence may state it. Sending it empty here means this
+	// executor asserts nothing; the ThreadStatus activity then fills the field
+	// in from threads.origin, which is what the creating code already wrote.
+	// That keeps the earlier announcement authoritative AND keeps origin
+	// present on every update -- the snapshot path reads one update in
+	// isolation, so a field left off here is a field the UI never sees.
 	//
 	// A fork is the one case this executor genuinely creates, so it still says
 	// so; every other mode is either a thread it made via a graph node -- which

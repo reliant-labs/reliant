@@ -9,12 +9,12 @@ import (
 )
 
 // simDefaultCompactionThreshold mirrors the global FALLBACK in the call_llm
-// handler (handlers.DefaultCompactionThreshold / models.GlobalDefaultCompactionThreshold).
+// handler (handlers.DefaultCompactionThreshold / models.UnknownModelCompactionFloor).
 // At runtime, when no explicit arg is set, the handler DERIVES the threshold from
 // the resolved model's real context window; the simulator works from mock outputs
 // and does not resolve per-model windows, so it applies the explicit arg when set
 // and otherwise this shared global default.
-const simDefaultCompactionThreshold = models.GlobalDefaultCompactionThreshold
+const simDefaultCompactionThreshold = models.UnknownModelCompactionFloor
 
 // applyCallLLMCompactionThreshold injects the compaction_threshold field onto a
 // call_llm node's mock output, mirroring explicitCompactionThresholdArg in the

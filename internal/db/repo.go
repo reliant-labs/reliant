@@ -598,22 +598,24 @@ func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int6
 	return sequence.Int64, nil
 }
 
-// GetNextSequenceNumber returns the next sequence number for a chat's updates
+// GetNextSequenceNumber returns the next sequence number for a chat's updates.
+//
+// Uses a Postgres sequence for the same reason as GetNextUserSequenceNumber
+// (see its doc comment): under SERIALIZABLE, the previous SELECT MAX(...)+1
+// took a predicate lock that conflicted with every concurrent insert for the
+// same chat and aborted one side with SQLSTATE 40001. Chat updates are written
+// by every parallel spawn in a chat, so this was the same failure with an even
+// hotter key.
 func (r *Repo) GetNextSequenceNumber(ctx context.Context, chatID string) (int64, error) {
-	var maxSeq sql.NullInt64
-	query := `SELECT MAX(sequence_number) FROM chat_updates WHERE chat_id = ?`
-	query = r.bindQuery(query)
+	var nextSeq int64
+	query := `SELECT nextval('chat_updates_sequence_number_seq')`
 
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(&maxSeq)
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query).Scan(&nextSeq)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get max sequence: %w", err)
+		return 0, fmt.Errorf("failed to allocate chat sequence: %w", err)
 	}
 
-	if !maxSeq.Valid {
-		return 1, nil // First update
-	}
-
-	return maxSeq.Int64 + 1, nil
+	return nextSeq, nil
 }
 
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
@@ -1102,22 +1104,32 @@ func (r *Repo) GetLatestUserUpdateSequence(ctx context.Context, userID string) (
 	return sequence.Int64, nil
 }
 
-// GetNextUserSequenceNumber returns the next sequence number for a user's updates
+// GetNextUserSequenceNumber returns the next sequence number for a user's updates.
+//
+// Allocation goes through a Postgres sequence, NOT SELECT MAX(...)+1. Every
+// transaction here runs at SERIALIZABLE, where the old MAX() query took a
+// predicate lock covering rows that did not exist yet — so any concurrent
+// insert for the same user produced a read/write dependency and one side was
+// aborted with SQLSTATE 40001. Because all of a user's chats share one counter,
+// the conflict rate scaled with spawn fan-out, and the failure surfaced to the
+// user as a failed SendMessage after burning every retry.
+//
+// nextval() is non-transactional: it takes no predicate lock and never blocks a
+// concurrent caller, so two allocations at once simply get two values. The
+// trade is that numbers are no longer gap-free — a rolled-back transaction
+// consumes its value — which is fine because every consumer uses these as an
+// ordered cursor (`sequence_number > $cursor ORDER BY sequence_number`), never
+// as a dense range. See the migration for the full rationale.
 func (r *Repo) GetNextUserSequenceNumber(ctx context.Context, userID string) (int64, error) {
-	var maxSeq sql.NullInt64
-	query := `SELECT MAX(sequence_number) FROM user_updates WHERE user_id = ?`
-	query = r.bindQuery(query)
+	var nextSeq int64
+	query := `SELECT nextval('user_updates_sequence_number_seq')`
 
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, userID).Scan(&maxSeq)
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query).Scan(&nextSeq)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get max user sequence: %w", err)
+		return 0, fmt.Errorf("failed to allocate user sequence: %w", err)
 	}
 
-	if !maxSeq.Valid {
-		return 1, nil // First update
-	}
-
-	return maxSeq.Int64 + 1, nil
+	return nextSeq, nil
 }
 
 // CreateUserUpdate creates a new user update for the global WebSocket.

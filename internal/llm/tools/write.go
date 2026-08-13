@@ -50,7 +50,25 @@ FEATURES:
 
 LIMITATIONS:
 - Cannot append (rewrites entire file)
-- Existing files must be read first (View tool) since Write replaces the entire file
+- Replaces the ENTIRE file — to change part of one, prefer Edit
+
+REPLACING AN EXISTING FILE:
+- Just write over it. Do NOT delete it first — that costs an extra turn and
+  removes the very guard that protects you.
+- Reading it first is optional, not required. An unread file is overwritten and
+  the result carries a diff of what was replaced (capped at 60 lines) so you can
+  repair a mistaken clobber with Edit.
+- Reading it first is what ARMS the safety check: once you have read a file, a
+  Write is REJECTED if it changed on disk since. That is how you find out
+  another agent owns the file too. Read first when that matters — a shared file,
+  a concurrent run — and report the rejection rather than re-issuing the Write.
+
+BATCHING — this is the main cost:
+- A turn costs a full model generation whether it carries one write or six, so
+  the TURN COUNT is the cost, not the file count. Issue every write whose
+  content you ALREADY HOLD in ONE message; they run in parallel.
+- The exception is a write whose content depends on a previous write's result.
+  That one waits for it.
 
 TIPS:
 - Use the LS tool to verify the correct location when creating new files
