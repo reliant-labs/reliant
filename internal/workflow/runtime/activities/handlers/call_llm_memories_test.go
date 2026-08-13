@@ -17,6 +17,18 @@ func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {
 	require.Contains(t, prompt, "You are Reliant")
 }
 
+// Parallel agents share a checkout, so a single `git checkout` or `git stash`
+// by one agent silently reverts every other agent's uncommitted work. Naming
+// the specific commands matters: "be careful of other's work" alone does not
+// stop a model reaching for stash to clear a dirty tree before a build.
+func TestGetSystemPrompts_WarnsAgainstDestructiveGitCommands(t *testing.T) {
+	activity := &CallLLMActivity{}
+	prompt := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil)[0]
+
+	require.Contains(t, prompt, "git checkout")
+	require.Contains(t, prompt, "git stash")
+}
+
 func TestGetSystemPrompts_DoesNotContainMemories(t *testing.T) {
 	activity := &CallLLMActivity{}
 	cfg := &config.Config{

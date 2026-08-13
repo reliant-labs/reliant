@@ -1324,7 +1324,7 @@ func (a *CallLLMActivity) getSystemPrompts(
 		workingDir = worktreePath
 	}
 	var bb strings.Builder
-	bb.WriteString("You are Reliant, a world class Software Engineer with advanced reasoning and capabilities. Note: it is very likely you are working in parallel with other agents, potentially in the same directory, or across multiple git worktrees. Please be careful of other's work.")
+	bb.WriteString("You are Reliant, a world class Software Engineer with advanced reasoning and capabilities. Note: it is very likely you are working in parallel with other agents, potentially in the same directory, or across multiple git worktrees. Please be careful of other's work. Be extremely careful with destructive commands that can discard another agent's uncommitted work, such as git checkout, git stash, and git reset.")
 
 	// The working directory is stated as an ABSOLUTE PATH and as the literal
 	// root every relative path resolves against, because a thread that does
