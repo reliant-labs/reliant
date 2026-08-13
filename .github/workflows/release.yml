@@ -242,8 +242,15 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: generated-backend-sources
+          # `gen/` is TOP-LEVEL, not internal/gen — buf.gen.yaml writes
+          # `out: gen`, and gen/controlplane/ is gitignored, so the backend
+          # jobs cannot get it from the checkout and it has to travel as an
+          # artifact. The stale `internal/gen` path (a layout this repo moved
+          # away from) uploaded nothing, and every build-backend leg failed
+          # with "no required module provides package
+          # github.com/reliant-labs/reliant/gen/controlplane/v1".
           path: |
-            internal/gen
+            gen
             internal/db/sqlite/generated
             internal/db/postgres/generated
             internal/workflow/v3/reference
@@ -327,9 +334,14 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: generated-backend-sources
-          # upload-artifact flattens to the artifact's least common ancestor ("internal" here)
-          # so extract into ./internal to restore expected package import paths.
-          path: internal
+          # `.`, not `internal`: upload-artifact roots a multi-path artifact at
+          # the least common ancestor of its paths. Now that top-level `gen/`
+          # is in that set, the ancestor is the REPO ROOT, so the archive
+          # already carries the `gen/…` and `internal/…` prefixes. Unpacking
+          # into `internal` would bury them at internal/gen and
+          # internal/internal, and the build fails on the missing
+          # gen/controlplane/v1 package.
+          path: .
 
       - name: Disk usage before backend build
         run: |
