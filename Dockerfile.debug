@@ -32,6 +32,10 @@ FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhu
 ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app
+# Workspace mode off: the sibling ../forge checkout go.work points at is absent
+# from the build context, so forge resolves at the version pinned in go.mod.
+# Requires that go.mod carry no `replace` for forge — a replace applies even
+# with GOWORK=off. See Dockerfile for the full note.
 ENV GOWORK=off
 COPY go.mod go.sum ./
 RUN go mod download

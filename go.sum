@@ -531,6 +531,10 @@ github.com/redis/go-redis/extra/redisotel/v9 v9.0.5 h1:EfpWLLCyXw8PSM2/XNJLjI3Pb
 github.com/redis/go-redis/extra/redisotel/v9 v9.0.5/go.mod h1:WZjPDy7VNzn77AAfnAfVjZNvfJTYfPetfZk5yoSTLaQ=
 github.com/redis/go-redis/v9 v9.1.0 h1:137FnGdk+EQdCbye1FW+qOEcY5S+SpY9T0NiuqvtfMY=
 github.com/redis/go-redis/v9 v9.1.0/go.mod h1:urWj3He21Dj5k4TK1y59xH8Uj6ATueP8AH1cY3lZl4c=
+github.com/reliant-labs/forge v0.0.4 h1:5S9CGmtvMue8YkRqwy1uRuBmSarl+7Xu4RfeRGt6CqQ=
+github.com/reliant-labs/forge v0.0.4/go.mod h1:fJ8wa5uI8WSUCp7BZ+KInBWd+7C/0daZ8zSuSlXaC/U=
+github.com/reliant-labs/forge/pkg v0.0.4 h1:JPsRu/8EWdDQeqX1MVktY8lKEejl/0O8u3bet161x7Y=
+github.com/reliant-labs/forge/pkg v0.0.4/go.mod h1:kbtwm4RMa5DTrbB/6TsgtKZoEsSc9Xc4+0nwXB5LTP0=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=

@@ -18,9 +18,15 @@ FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhu
 ARG TARGETARCH
 RUN apk add --no-cache git
 WORKDIR /app
-# go.work in the repo root references the sibling ../forge checkout, which is
-# absent from the Docker build context. Disable workspace mode so the build
-# resolves the pinned forge module from go.mod (matches a clean CI build).
+# go.work (gitignored, machine-local) bridges this build to the sibling
+# ../forge checkout for local development. That checkout is absent from the
+# Docker build context, so disable workspace mode: the build then resolves the
+# forge modules at the VERSION PINNED IN go.mod, from the module proxy.
+#
+# This only works because go.mod carries no `replace` for forge. A replace
+# directive applies in every mode — GOWORK=off does NOT disable it — so one
+# would make this build fail with "replacement directory ../forge/pkg does not
+# exist" no matter what this line says. Keep forge out of the replace block.
 ENV GOWORK=off
 COPY go.mod go.sum ./
 RUN go mod download
