@@ -398,6 +398,16 @@ jobs:
   release-macos:
     name: Build macOS
     needs: [prepare, build-backend]
+    # `always()` so a FAILING SIBLING PLATFORM does not skip this one.
+    # build-backend is a 6-leg matrix, and a plain `needs:` treats the whole
+    # matrix as one dependency — so the two Windows legs (which fail on
+    # forge v0.0.6's Unix-only syscalls: syscall.Flock in pkg/pgtest and
+    # syscall.Kill/Setsid in internal/hostinfra) skipped macOS and Linux even
+    # though THEIR backends built fine. The guard below still requires this
+    # platform's own inputs to have succeeded, so a genuinely broken build
+    # cannot ship — it only stops one platform's breakage from grounding the
+    # others.
+    if: always() && needs.prepare.result == 'success'
     runs-on: macos-latest
     timeout-minutes: 35
     outputs:
@@ -558,6 +568,16 @@ jobs:
   release-linux:
     name: Build Linux
     needs: [prepare, build-backend]
+    # `always()` so a FAILING SIBLING PLATFORM does not skip this one.
+    # build-backend is a 6-leg matrix, and a plain `needs:` treats the whole
+    # matrix as one dependency — so the two Windows legs (which fail on
+    # forge v0.0.6's Unix-only syscalls: syscall.Flock in pkg/pgtest and
+    # syscall.Kill/Setsid in internal/hostinfra) skipped macOS and Linux even
+    # though THEIR backends built fine. The guard below still requires this
+    # platform's own inputs to have succeeded, so a genuinely broken build
+    # cannot ship — it only stops one platform's breakage from grounding the
+    # others.
+    if: always() && needs.prepare.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
