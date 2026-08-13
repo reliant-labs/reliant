@@ -765,16 +765,20 @@ nodes:
 
           **You are the ORCHESTRATOR. Fan out everything independent AS EARLY AS POSSIBLE.**
           Measured: 6 units running concurrently turned 82.7 minutes of serial work into 18
-          minutes of wall clock — 4.6x, zero file collisions. Two mechanisms get you there:
-          - **Several `spawn` calls emitted in ONE assistant turn run concurrently**, and that
-            turn returns when the last finishes. This is the default way to run a wave.
-          - **`background: true` returns a handle immediately** instead of blocking, so you can
-            start work you need not wait on and collect it with `spawn_status`,
-            or steer a running unit with `spawn_send`.
-          Either way the failure mode is the same: one blocking spawn per turn, awaited in
-          sequence, is fully SERIAL execution — precisely what this step exists to avoid.
-          Author every brief first, then fan out. Writing ten briefs before the first unit
-          starts LOOKS like dead time and is not recoverable by dribbling the spawns out.
+          minutes of wall clock — 4.6x, zero file collisions. How to get there:
+          - **Every `spawn` returns a handle IMMEDIATELY — it never blocks.** The child runs
+            in the background and its result reaches you in a later turn, so emitting several
+            `spawn` calls in ONE turn starts that whole wave at once. This is the default way
+            to run a wave.
+          - **You stay free while they run.** Read files, write the next brief, and spawn more
+            units mid-wave — work discovered later can join an in-flight fan-out. Use
+            `spawn_status` to check progress (or `wait: true` when you genuinely cannot
+            proceed without an answer), and `spawn_send` to steer a running unit.
+          The failure mode is dribbling spawns out one per turn and waiting on each before
+          starting the next — that is fully SERIAL execution, precisely what this step exists
+          to avoid. Author every brief first, then fan out. Writing ten briefs before the
+          first unit starts LOOKS like dead time and is not recoverable by trickling the
+          spawns out afterward.
 
           **A wave costs what its SLOWEST unit costs, so the only thing that matters is that
           no unit is BIG.** Do NOT estimate seam cost and balance the wave — that is guessing

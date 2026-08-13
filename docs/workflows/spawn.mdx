@@ -3,9 +3,11 @@ title: "Spawn Tool"
 description: "Delegate tasks to sub-workflows from within an agent"
 ---
 
-The spawn tool allows an agent to delegate tasks to sub-workflows during execution. When an agent encounters a task better suited for a specialist, it can spawn a sub-workflow configured with a specific preset, wait for the result, and continue with its work.
+The spawn tool allows an agent to delegate tasks to sub-workflows during execution. When an agent encounters a task better suited for a specialist, it can spawn a sub-workflow configured with a specific preset and keep working while that specialist runs in the background.
 
-Think of spawn as "asking a specialist for help." The parent agent describes what needs to be done, the spawned workflow does the work in isolation, and the result comes back to the parent agent as a tool response.
+Think of spawn as "asking a specialist for help." The parent agent describes what needs to be done, the spawned workflow does the work in isolation, and the result comes back to the parent agent in a later turn.
+
+**Spawn is asynchronous.** The call returns a handle immediately — it does not block. The child's result is not in the spawn tool call's result; the parent is notified once the child finishes. Because the parent stays free, it can read files, edit, plan, and spawn additional agents while children are still running, and work discovered mid-run can join an in-flight fan-out rather than waiting for the next wave.
 
 ## Important Limitations
 
@@ -16,7 +18,7 @@ Before diving into configuration, understand what spawn can and cannot do:
 - **Single workflow target**: Spawn only supports `builtin://agent` as the target workflow. You cannot spawn arbitrary custom workflows.
 - **Preset selection only**: The spawned workflow must be configured via a preset. You cannot pass arbitrary parameters or override individual settings.
 - **Self-contained tasks**: The spawned workflow runs in its own thread with its own context. It cannot access the parent's conversation history or tool results directly—it only receives the prompt you provide.
-- **Sequential by default**: While spawn tool calls execute in parallel with regular tool calls, each spawn creates an independent workflow that must complete before its result returns.
+- **Results arrive later, not inline**: Because spawn is asynchronous, the parent cannot treat a spawn call as a value it can use in the same turn. It must be written to continue working and react to the result when it lands.
 
 These limitations exist by design. Spawn provides a controlled way to delegate work while maintaining isolation between parent and child workflows.
 
@@ -26,10 +28,11 @@ When an agent calls the spawn tool:
 
 1. **New thread created**: The spawned workflow gets its own conversation thread, completely separate from the parent.
 2. **Preset applied**: The selected preset configures the child agent's model, temperature, tools, and system prompt.
-3. **Task executed**: The child workflow runs until completion, following the same agent loop pattern as any other agent workflow.
-4. **Result returned**: The final response from the child workflow returns to the parent as a tool result, prefixed with the preset name for clarity.
+3. **Handle returned immediately**: The spawn call settles right away with a handle identifying the child agent. The parent's turn is not held open waiting for the child.
+4. **Task executed in the background**: The child workflow runs until completion, following the same agent loop pattern as any other agent workflow, while the parent keeps working.
+5. **Result delivered later**: When the child finishes, its final response reaches the parent as a message it reacts to on a subsequent turn, prefixed with the preset name for clarity.
 
-The parent agent can then use this result to inform its next steps.
+The parent agent can then use this result to inform its next steps. While a child is running, the parent can call `spawn_status` to check on it (passing `wait: true` to block until it finishes, when the parent truly cannot proceed without the answer) or `spawn_send` to give it new instructions mid-flight.
 
 ```mermaid
 sequenceDiagram
@@ -38,10 +41,14 @@ sequenceDiagram
     participant C as Child Workflow
     P->>S: spawn(preset, prompt)
     S->>C: Create new thread + apply preset
-    C->>C: Agent loop (LLM → tools → repeat)
-    C-->>S: Final response
-    S-->>P: [preset] Result text
-    P->>P: Continue with result
+    S-->>P: Handle (returns immediately)
+    par Child runs in background
+        C->>C: Agent loop (LLM → tools → repeat)
+    and Parent keeps working
+        P->>P: Read, edit, plan, spawn more agents
+    end
+    C-->>P: [preset] Result text (later turn)
+    P->>P: React to result
 ```
 
 ## Configuring Spawn
@@ -185,9 +192,10 @@ Agent spawns researcher:
   preset: researcher
   prompt: "Analyze the database query patterns in this codebase. Find where queries are made, identify any existing caching, and document the query hot spots that would benefit from caching."
 
-Result returns with comprehensive analysis
+Agent continues with other preparation while the researcher works
 
-Agent proceeds with implementation using the research findings
+When the analysis arrives, the agent proceeds with implementation
+using the research findings
 ```
 
 ### Specialized Code Review
@@ -201,7 +209,7 @@ Agent spawns reviewer:
   preset: reviewer
   prompt: "Review the recent changes to the auth/ directory. Focus on security implications, error handling, and whether the changes follow the existing patterns in the codebase."
 
-Result returns with structured review feedback
+Structured review feedback arrives when the reviewer finishes
 
 Agent summarizes findings for the user
 ```
@@ -218,28 +226,33 @@ Agent creates a plan, then for each major component:
 Agent spawns refactor for UserService cleanup
 Agent spawns researcher to investigate external integrations
 Agent spawns documentation to update API docs
+(all three in the same turn — they run concurrently)
 
-Each specialist completes their portion
+Each specialist completes their portion and reports back
 
 Agent synthesizes results and reports overall progress
 ```
 
 ### Parallel Independent Tasks
 
-When tasks do not depend on each other, spawn can run in parallel with other tool calls:
+Because spawn never blocks, independent work should be started together rather than one at a time:
 
 ```text
 Agent needs to:
-1. Search for related files (grep tool)
-2. Get research on a component (spawn researcher)
-3. Check test coverage (bash tool)
+1. Get research on component A (spawn researcher)
+2. Get research on component B (spawn researcher)
+3. Search for related files (shell tool)
 
-All three execute concurrently, results return together
+All three spawn calls are emitted in ONE turn. The agent keeps working —
+searching files, writing the next brief — while both researchers run.
+Each result arrives as it completes.
 ```
+
+The anti-pattern is dribbling spawns out one per turn and waiting on each before starting the next. That serializes work which had no dependency between its parts.
 
 ## What Gets Returned
 
-The spawn tool returns the final response from the child workflow, prefixed to indicate the source:
+The spawn call itself returns a handle for the new agent. The child's final response is delivered separately, once it finishes, prefixed to indicate the source:
 
 ```text
 [researcher] Based on my investigation of the authentication system...
@@ -255,11 +268,15 @@ Key files:
 - auth/models.go:10-50 - Token structures and claims
 ```
 
-If the child workflow encounters an error, the error message returns as the tool result with an `is_error` flag.
+If the child workflow encounters an error, the error message is delivered with an `is_error` flag.
 
 ## Best Practices
 
+**Start independent work together**: Spawn does not block, so batching every independent unit into one turn costs no more than spawning one. Hold a spawn back only when it genuinely consumes another agent's output.
+
 **Write detailed prompts**: The spawned workflow only knows what you tell it. Include context about what you are trying to accomplish, what you have already learned, and what specific questions need answering.
+
+**Do not idle while children run**: The parent is free during a fan-out. Use that time to prepare the next brief, read files, or start more units — not to poll.
 
 **Choose appropriate presets**: Match the task to the specialist. Use researcher for investigation, reviewer for quality feedback, refactor for systematic changes.
 

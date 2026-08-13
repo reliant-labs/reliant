@@ -1,0 +1,33 @@
+.git
+web/node_modules
+web/dist
+web/.vite
+*.md
+**/*_test.go
+tmp/
+.reliant/
+coverage.out
+.golangci.yml
+.gitattributes
+mintlify-docs/
+electron/
+data/
+node_modules/
+dist/
+tests/
+
+# Native build outputs (go build at repo root)
+/reliant
+/api-server
+/temporal-worker
+/daemon-gateway
+/tools-daemon
+goroutines.txt
+# go.work is gitignored and machine-local: it bridges this checkout to the
+# sibling ../forge modules so local edits are picked up without a release.
+# Inside the image those paths do not exist, and the build must resolve every
+# module at the version go.mod pins. Without this exclusion `COPY . .` drags it
+# in and the build dies with:
+#   go: cannot load module /forge/pkg listed in go.work file
+go.work
+go.work.sum
