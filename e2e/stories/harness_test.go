@@ -230,7 +230,10 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub)
+	// nil daemonRouter: these stories run without a daemon, and the router is
+	// only used for the greenfield code-presence probe, which skips itself when
+	// it is nil.
+	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
 
 	return &Harness{
