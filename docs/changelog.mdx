@@ -13,6 +13,17 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.4.1" description="August 13, 2026">
+### Agent messaging, thread lifecycle repair, and a hardened release pipeline
+
+- **Agent messaging and spawn lifecycle** with an agent message mailbox, queued composer input so a message typed mid-run is delivered rather than dropped, and parent threads woken when a sub-agent reports back.
+- **Thread identity recorded, not inferred** threads now store how they were created, so a spawned sub-agent is never mistaken for a graph-node thread — a class of bug that previously made spawn threads render inline.
+- **Thread lifecycle and workflow history repair** including reduced workflow history retention, a recorded verdict for each run so failures stop being reported as successes, and fixes to loop execution and transition handling.
+- **Daemon reliability and workspace management** with a daemon reliability overhaul, worktree auto-init and adopt, more models, and more reliable workspace handling.
+- **Workflow preview delivery and CEL hardening** covering preview forwarding, workflow simplification with transition_to, and hardening of CEL compilation.
+- **Release and build fixes** the web build now type-checks again after 20 accumulated errors, the desktop release builds all three platforms including Windows, and the timestamp migration no longer fails on managed Postgres that owns views in the public schema.
+</Update>
+
 <Update label="v1.4.0" description="April 9, 2026">
 ### Workflow routing, faster loads, and stronger distributed reliability
 
