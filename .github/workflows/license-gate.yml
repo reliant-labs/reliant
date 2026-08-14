@@ -1,0 +1,51 @@
+# Blocks a PR that pulls a non-permissive license into the import graph.
+#
+# The risk this closes is linking, not hosting: running unmodified copyleft
+# software as a service is permitted (AGPL-3.0 §2 affirms "unlimited permission
+# to run the unmodified Program"), but IMPORTING an AGPL/GPL library into a
+# proprietary binary reaches that binary's source. It happens silently during a
+# routine `go get` of something that pulls a transitive dep, and it typically
+# surfaces during diligence — years later, at the worst possible moment.
+#
+# The gate is an allowlist: unrecognized licenses FAIL and need an explicit,
+# reasoned entry in .license-allowlist.
+name: license-gate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: license-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  licenses:
+    name: permissive-licenses-only
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # The checker reads each dependency's LICENSE out of the module cache, so
+      # the modules must actually be downloaded first. `go mod download` is
+      # enough — no build required.
+      - name: Download modules
+        run: go mod download
+
+      - name: Check dependency licenses
+        run: ./scripts/check-licenses.sh
+
+      # On failure, print the full inventory so the PR author can see every
+      # dependency and its detected license without re-running locally.
+      - name: Full license inventory (on failure)
+        if: failure()
+        run: ./scripts/check-licenses.sh --list

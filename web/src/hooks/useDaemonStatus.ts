@@ -48,8 +48,18 @@ export function useDaemonStatus() {
     // visibilitychange listener) and resume on focus.
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
-    // Daemons rarely flap; the 5s poll is what keeps the UI fresh.
-    staleTime: 0,
+    // Daemons rarely flap; the 5s poll is what keeps the UI fresh, and it runs
+    // on its own schedule regardless of staleness. Matching staleTime to the
+    // poll interval closes the mount storm without widening that bound: the
+    // dozen consumers listed above mount at staggered moments as the user
+    // navigates, and with staleTime 0 every one of them found the cache
+    // instantly stale and issued its OWN request on mount. The data can still
+    // only ever be POLL_INTERVAL_MS old, because the poll is what bounds it.
+    //
+    // The paths that need an answer sooner than the next tick are unaffected:
+    // refetchOnWindowFocus "always" refetches irrespective of staleness, and
+    // `refresh()` below invalidates, which marks the entry stale explicitly.
+    staleTime: POLL_INTERVAL_MS,
     placeholderData: [],
   });
 

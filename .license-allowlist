@@ -1,0 +1,37 @@
+# Per-module license exceptions for scripts/check-licenses.sh.
+#
+# The gate is an ALLOWLIST: only the permissive licenses named in
+# ALLOWED_LICENSES pass, and anything unrecognized FAILS. This file records the
+# deliberate exceptions.
+#
+# Format:  <module path>   # why this is acceptable
+#
+# Rules for adding an entry:
+#   - One module per line. Never exempt a whole license family here — if a
+#     license should be broadly acceptable, add it to ALLOWED_LICENSES in the
+#     script so the decision is visible in one place.
+#   - Say WHY, not just what. "MPL-2.0" is not a reason; "file-level copyleft,
+#     we do not modify the files" is.
+#   - Re-examine an entry if the dependency's role changes (vendored and
+#     patched is a different question from imported and unmodified).
+
+# --- MPL-2.0: file-level copyleft ---
+#
+# MPL-2.0 obliges publishing the source of MPL FILES you modify. It does not
+# reach the rest of a binary that merely links them (§1.12/§3.3 — this is
+# exactly what distinguishes it from GPL/AGPL). We import these unmodified, so
+# there is no obligation. If we ever fork or patch one, the modified files must
+# be published, and this entry needs revisiting.
+github.com/hashicorp/go-version      # MPL-2.0, unmodified — version parsing
+github.com/hashicorp/go-cleanhttp    # MPL-2.0, unmodified — stdlib http client presets
+github.com/hashicorp/go-getter       # MPL-2.0, unmodified — artifact fetching
+github.com/hashicorp/aws-sdk-go-base/v2  # MPL-2.0, unmodified — transitive of go-getter
+
+# --- Custom / unrecognized license text ---
+#
+# xi2/xz is a Go port of XZ Embedded. Its LICENSE is a hand-written preamble
+# ("This Go package is a modified version of XZ Embedded...") rather than a
+# standard license text, so the classifier cannot match it. Upstream XZ
+# Embedded is public domain, and the Go port carries the same grant. Verified
+# by reading the file directly; permissive, no obligations.
+github.com/xi2/xz                    # public domain (XZ Embedded port), non-standard LICENSE text

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, Play, X } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import {
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_SUSPENDED,
   type Daemon,
 } from "@/services/controlPlane/daemon";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 
 const DISMISS_KEY = "reliant.resumeDaemonPill.dismissed";
 
@@ -44,7 +44,7 @@ function formatResumeError(error: string): string {
 }
 
 export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
-  const navigate = useNavigate();
+  const goToBilling = useGoToBilling();
   const { data: daemons = [] } = useDaemonList();
   const [dismissedSig, setDismissedSig] = useState<string>(() => readDismissed());
   const [error, setError] = useState("");
@@ -90,10 +90,10 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
   };
 
   const handleUpgrade = () => {
-    // In-app upgrade path: the billing dashboard now lives at
-    // /settings/billing, so navigate there instead of bouncing the user out
-    // to the hosted admin app or the public pricing page.
-    void navigate({ to: "/settings/$section", params: { section: "billing" } });
+    // In-app upgrade path. goToBilling routes an anonymous session through
+    // identity linking first, since a plan bought against a browser session
+    // belongs to nobody reachable.
+    goToBilling();
   };
 
   const busyId =

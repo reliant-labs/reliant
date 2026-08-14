@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 
 	"github.com/reliant-labs/reliant/internal/workflow/reconciliation"
@@ -206,6 +207,9 @@ func Run(ctx context.Context, opts Options) error {
 	mcpManager := mcp.NewManager()
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo: repo,
+		// Lets spawn_send wake a parent parked on its sub-agents instead of
+		// leaving the message queued until one of them finishes.
+		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 

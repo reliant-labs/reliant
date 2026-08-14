@@ -13,15 +13,17 @@
  * underlying gRPC client because the contract under test IS the hook return
  * shape, not the network layer.
  */
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ConnectError, Code } from "@connectrpc/connect";
 import type { ReactNode } from "react";
 
 import {
   DaemonStatus,
   type DaemonInfo,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+import { RedeemedCouponKind } from "@/services/controlPlane/reliantAI";
 import type { LaunchPlan } from "../types";
 
 // ── Mocks ────────────────────────────────────────────────────────────────
@@ -39,24 +41,115 @@ vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => mockUseDaemonStatus(),
 }));
 
+// NOTE: there is deliberately no getIsDev() mock here any more.
+//
+// ComputeStep used to short-circuit eligibility to `true` under getIsDev()
+// (true by default in vitest via import.meta.env.DEV), and this file mocked it
+// to false so the eligibility tests could exercise the real branch. That mock
+// was hiding a real bug: in an actual dev build the button was ENABLED for an
+// unfunded user and the click proceeded into provisioning, failing later at
+// the daemon service's own gate. The tests passed the whole time.
+//
+// getIsDev() is no longer an input to eligibility, so the mock is gone and
+// these tests run the same code path a real build does.
+
+type CloudEligibilityReturn = {
+  eligible: boolean;
+  reason: string | null;
+  isLoading: boolean;
+  grantedMinutesRemaining: number;
+  refetch: () => void;
+};
+
+const mockRefetchCloudEligibility = vi.fn();
+const mockUseCloudEligibility = vi.fn<() => CloudEligibilityReturn>(() => ({
+  eligible: true,
+  reason: null,
+  isLoading: false,
+  grantedMinutesRemaining: 0,
+  refetch: mockRefetchCloudEligibility,
+}));
+
 // Stub the onboarding query hooks. The loading gate sits ahead of any of
 // these in the render path, but they still mount for the non-loading
 // branches of the test, so they need stable, network-free returns.
+// mockCreateDaemon is asserted on: an ineligible user clicking "Start cloud
+// daemon" must not reach it. That is the regression guard for the dev-bypass
+// bug — provisioning used to start for users the server would refuse.
+const mockCreateDaemon = vi.fn().mockResolvedValue({});
+const mockResumeDaemon = vi.fn().mockResolvedValue({});
+
+// handleCloud dynamically imports this module to decide between
+// create / resume / reuse, so it has to be mocked for the eligible path to
+// reach the create mutation at all.
+const mockListDaemons = vi.fn().mockResolvedValue({ daemons: [] });
+
+vi.mock("@/services/controlPlane/daemon", () => ({
+  listDaemons: () => mockListDaemons(),
+  // Mirrors the real implementation (`d.status === ACTIVE`). An earlier
+  // `daemons.length > 0` stub made a SUSPENDED daemon look active, which sent
+  // the resume test down the wrong branch and made it pass for the wrong
+  // reason — the class of thing this whole file now exists to catch.
+  hasActiveDaemon: (daemons: { status?: number }[]) =>
+    daemons.some((d) => d.status === DaemonStatus.ACTIVE),
+}));
+
 vi.mock("@/hooks/useOnboardingQueries", () => ({
-  useCloudEligibility: () => ({
-    eligible: true,
-    reason: null,
-    isLoading: false,
-  }),
+  useCloudEligibility: () => mockUseCloudEligibility(),
   useCreateDaemon: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockCreateDaemon,
     isPending: false,
   }),
   useResumeDaemon: () => ({
-    mutateAsync: vi.fn(),
+    mutateAsync: mockResumeDaemon,
     isPending: false,
   }),
   isReasonedQuotaError: () => false,
+  // Must be mocked even though most tests do not exercise it: a module mock
+  // REPLACES the module, so any export ComputeStep imports and this factory
+  // omits is `undefined` at runtime. Leaving it out made the resume-denial
+  // path throw "isEntitlementDenial is not a function" as an unhandled error.
+  //
+  // Real behavior (keyed on the x-reliant-reason header the server sets on
+  // every deliberate denial) rather than a constant, so the resume-denial
+  // test exercises the same branch production does.
+  isEntitlementDenial: (err: unknown) =>
+    err instanceof ConnectError && !!err.metadata.get("x-reliant-reason"),
+}));
+
+/** Builds the shape the server really returns for an entitlement denial. */
+function deniedError(message: string, code: Code, reason: string): ConnectError {
+  const headers = new Headers();
+  headers.set("x-reliant-reason", reason);
+  return new ConnectError(message, code, headers);
+}
+
+// Redeem-coupon mutation, mocked so the coupon UI can be driven
+// deterministically without a network layer. `mutate` mimics TanStack's
+// callback contract (onSuccess/onError) the component relies on.
+type RedeemCouponResult = {
+  amountCents: number;
+  code: string;
+  newBalanceCents: number;
+  kind: RedeemedCouponKind;
+  computeMinutes: number;
+  newComputeMinutesRemaining: number;
+};
+const mockRedeemMutate = vi.fn<
+  (
+    code: string,
+    callbacks?: {
+      onSuccess?: (res: RedeemCouponResult) => void;
+      onError?: (err: unknown) => void;
+    },
+  ) => void
+>();
+
+vi.mock("@/hooks/useReliantAIQueries", () => ({
+  useRedeemCoupon: () => ({
+    mutate: mockRedeemMutate,
+    isPending: false,
+  }),
 }));
 
 // trackEvent fires on the auto-skip path; stub so the test doesn't depend
@@ -141,7 +234,21 @@ function renderComputeStep(opts: {
 }
 
 beforeEach(() => {
+  // clearAllMocks() also clears mockResolvedValue, so any mock whose RESOLVED
+  // VALUE matters has to be re-armed here — otherwise it returns undefined and
+  // the handler under test throws on the first await. (This is why these two
+  // are set here rather than only at declaration.)
   vi.clearAllMocks();
+  mockListDaemons.mockResolvedValue({ daemons: [] });
+  mockCreateDaemon.mockResolvedValue({});
+  mockResumeDaemon.mockResolvedValue({});
+  mockUseCloudEligibility.mockReturnValue({
+    eligible: true,
+    reason: null,
+    isLoading: false,
+    grantedMinutesRemaining: 0,
+    refetch: mockRefetchCloudEligibility,
+  });
 });
 
 afterEach(() => {
@@ -220,5 +327,346 @@ describe("ComputeStep loading gate", () => {
     expect(updatePlan).toHaveBeenCalledWith(
       expect.objectContaining({ compute: "local_daemon" }),
     );
+  });
+});
+
+describe("ComputeStep cloud eligibility + coupon redemption", () => {
+  it("disables Start cloud daemon and shows the new copy (not the old wallet-credit string) when ineligible", () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    expect(
+      screen.getByRole("button", { name: /Start cloud daemon/i }),
+    ).toBeDisabled();
+    expect(screen.getByText("No compute plan yet")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/No cloud credits available/i),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Have a coupon code\?/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("enables Start cloud daemon when eligible", () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    expect(
+      screen.getByRole("button", { name: /Start cloud daemon/i }),
+    ).not.toBeDisabled();
+  });
+
+  it("redeeming a compute coupon shows the granted minutes and refetches eligibility so the button enables in place", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockRedeemMutate.mockImplementation((_code, callbacks) => {
+      callbacks?.onSuccess?.({
+        amountCents: 0,
+        code: "MACHINE600",
+        newBalanceCents: 0,
+        kind: RedeemedCouponKind.COMPUTE_MINUTES,
+        computeMinutes: 600,
+        newComputeMinutesRemaining: 600,
+      });
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
+      target: { value: "MACHINE600" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText(/600 machine minutes \(10 hours\)/),
+      ).toBeInTheDocument();
+    });
+    expect(mockRefetchCloudEligibility).toHaveBeenCalled();
+  });
+
+  it("redeem failure shows the server's message and the button stays disabled", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockRedeemMutate.mockImplementation((_code, callbacks) => {
+      callbacks?.onError?.(new Error("[coupon_not_found] Unknown coupon code."));
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
+      target: { value: "BOGUS" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText("Unknown coupon code.")).toBeInTheDocument();
+    });
+    expect(mockRefetchCloudEligibility).not.toHaveBeenCalled();
+    expect(
+      screen.getByRole("button", { name: /Start cloud daemon/i }),
+    ).toBeDisabled();
+  });
+  // REGRESSION: the dev bypass (`getIsDev() ? true : cloudEligible`) enabled
+  // this button for an unfunded user, so the click ran the whole
+  // listDaemons → createDaemon sequence and failed at the server's daemon
+  // gate — after the UI had committed to provisioning. The user reported it as
+  // "start cloud daemon continued when I clicked start without a coupon code".
+  //
+  // Asserting on the mutation rather than only on `disabled` is the point:
+  // `disabled` is a rendering concern, and the bug was that the HANDLER ran.
+  it("clicking Start while ineligible never starts provisioning", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "Your free trial has ended",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    const start = screen.getByRole("button", { name: /Start cloud daemon/i });
+    expect(start).toBeDisabled();
+
+    // Fire the handler directly, bypassing the disabled attribute the way a
+    // stale render or a keyboard activation racing a refetch would.
+    fireEvent.click(start);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mockCreateDaemon).not.toHaveBeenCalled();
+    expect(mockResumeDaemon).not.toHaveBeenCalled();
+  });
+
+  // The mirror image: an eligible user must still be able to start one.
+  it("clicking Start while eligible provisions a daemon", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 600,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    const start = screen.getByRole("button", { name: /Start cloud daemon/i });
+    expect(start).toBeEnabled();
+    fireEvent.click(start);
+
+    await waitFor(() => {
+      expect(mockCreateDaemon).toHaveBeenCalled();
+    });
+  });
+  // ── The original complaint ──────────────────────────────────────────────
+  //
+  // "I can still hit Start cloud daemon which CONTINUES the onboarding."
+  //
+  // The button being disabled was never the whole story. Once the handler runs
+  // — and it can, via a stale render or any of the paths below — a server
+  // DENIAL still fell through to onNext(), so onboarding advanced as if a
+  // machine had been provisioned. The user lands in the app with no daemon.
+  //
+  // The server denies with PermissionDenied / FailedPrecondition
+  // ("no compute subscription — subscribe to a compute plan to create
+  // daemons"), NOT ResourceExhausted, so isReasonedQuotaError() does not match
+  // it and the upgrade modal never fires either.
+  it("does NOT advance onboarding when the server denies daemon creation", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true, // client thinks it is fine; the SERVER disagrees
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockCreateDaemon.mockRejectedValue(
+      // Carries x-reliant-reason exactly as daemonDenied() does server-side —
+      // that header, not the status code, is what marks a deliberate denial.
+      deniedError(
+        "no compute subscription — subscribe to a compute plan to create daemons",
+        Code.FailedPrecondition,
+        "no_compute_subscription",
+      ),
+    );
+
+    const onNext = vi.fn();
+    renderComputeStep({ daemons: [], loading: false, onNext });
+
+    fireEvent.click(screen.getByRole("button", { name: /Start cloud daemon/i }));
+
+    await waitFor(() => {
+      expect(mockCreateDaemon).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  // Same guarantee on the RESUME path. That catch block swallowed every error
+  // ("Resume failure is non-fatal"), including an entitlement denial, and then
+  // fell through to onNext() — so a user with a suspended daemon they are no
+  // longer entitled to run also sailed through onboarding.
+  it("does NOT advance onboarding when resuming an existing daemon is denied", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    // One suspended daemon → the resume branch.
+    mockListDaemons.mockResolvedValue({
+      daemons: [{ id: "d1", status: DaemonStatus.SUSPENDED }],
+    });
+    mockResumeDaemon.mockRejectedValue(
+      deniedError(
+        "your free trial has ended — subscribe to a compute plan",
+        Code.PermissionDenied,
+        "trial_expired",
+      ),
+    );
+
+    const onNext = vi.fn();
+    renderComputeStep({ daemons: [], loading: false, onNext });
+
+    fireEvent.click(screen.getByRole("button", { name: /Start cloud daemon/i }));
+
+    await waitFor(() => {
+      expect(mockResumeDaemon).toHaveBeenCalled();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  // The happy path must still advance, or the fix above is just a new bug.
+  it("DOES advance onboarding when daemon creation succeeds", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    const onNext = vi.fn();
+    renderComputeStep({ daemons: [], loading: false, onNext });
+
+    fireEvent.click(screen.getByRole("button", { name: /Start cloud daemon/i }));
+
+    await waitFor(() => {
+      expect(onNext).toHaveBeenCalled();
+    });
+  });
+  // The user's report: "why is the CreateDaemon button even clickable just to
+  // return an error to the user" — and its twin, a DISABLED button for a user
+  // whose CreateDaemon actually succeeds (their real state: an active
+  // plan_compute_small subscription, 0 minutes used, but no
+  // reliant_user_entitlements row, which the OLD gate read as "no credits").
+  //
+  // Both are the same defect: the button's enabled state must track what the
+  // server will actually do. These pin both directions.
+  it("eligible server response => button enabled (never blocks an entitled user)", () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true, // the server says this user may run a machine
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    expect(
+      screen.getByRole("button", { name: /Start cloud daemon/i }),
+    ).toBeEnabled();
+    // ...and no "you have no credits" scare copy.
+    expect(
+      screen.queryByText(/No cloud credits available/i),
+    ).not.toBeInTheDocument();
+  });
+
+  // An ineligible user must always get BOTH ways out: the billing link and the
+  // coupon field. The billing block used to be gated on `reason` being a
+  // non-empty string, so an unrecognised reason hid the only escape route.
+  it("ineligible => shows the billing link AND the coupon field, even with no reason text", () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: null, // server sent a reason this build has no copy for
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    expect(
+      screen.getByRole("button", { name: /Start cloud daemon/i }),
+    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: /View plans/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Have a coupon code\?/i }),
+    ).toBeInTheDocument();
+  });
+  // The user's report, verbatim: "I signed in with a brand new user... why
+  // doesn't it show pricing".
+  //
+  // A new user lands on the free compute trial, so the server correctly says
+  // eligible=true (verified against the live dev stack: eligible=true,
+  // hasActiveSubscription=true, planName="Compute Small"). Pricing and the
+  // coupon field used to be gated on !eligible, so this — the MOST COMMON
+  // state a real new user is in — was the one state that showed neither.
+  it("shows View plans and the coupon affordance even when the user IS eligible", () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    expect(
+      screen.getByRole("button", { name: /Start cloud daemon/i }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /View plans/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Have a coupon code\?/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -72,6 +72,12 @@ service BillingService {
   rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {}
   rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {}
 
+  // GetCurrentUserComputeEligibility answers "can this caller start a managed
+  // daemon right now, and if not, why". The authoritative gate is the daemon
+  // service's own check; this reports the same funding facts so the UI can
+  // predict it rather than gating on the unrelated LLM entitlement.
+  rpc GetCurrentUserComputeEligibility(GetCurrentUserComputeEligibilityRequest) returns (GetCurrentUserComputeEligibilityResponse) {}
+
   // Misc per-org reads that callers expect on the public surface.
   rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {}
   rpc GetComputeUsage(GetComputeUsageRequest) returns (GetComputeUsageResponse) {}
@@ -309,6 +315,33 @@ message GetCurrentUserComputeUsageResponse {
   // that depletes and does not renew. Spent after included minutes, before
   // overage.
   int64 granted_minutes_remaining = 9;
+}
+
+// === Compute eligibility ===
+
+// ComputeIneligibleReason is why a caller cannot start a managed daemon.
+// Distinct values because each has a different remedy.
+enum ComputeIneligibleReason {
+  COMPUTE_INELIGIBLE_REASON_UNSPECIFIED = 0;
+  COMPUTE_INELIGIBLE_REASON_NONE = 1;
+  COMPUTE_INELIGIBLE_REASON_TRIAL_EXPIRED = 2;
+  COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION = 3;
+  COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION = 4;
+}
+
+message GetCurrentUserComputeEligibilityRequest {}
+
+message GetCurrentUserComputeEligibilityResponse {
+  // True when the org has an active compute subscription (including the signup
+  // trial) OR unspent granted minutes from a redeemed compute coupon.
+  bool eligible = 1;
+  ComputeIneligibleReason reason = 2;
+  bool has_active_subscription = 3;
+  // Unspent compute minutes from redeemed coupons. Non-zero alone makes a
+  // caller eligible — that is what lets a coupon unblock someone with no
+  // subscription.
+  int64 granted_minutes_remaining = 4;
+  string plan_name = 5;
 }
 
 // === Invoice preview ===

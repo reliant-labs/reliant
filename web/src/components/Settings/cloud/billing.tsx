@@ -51,7 +51,6 @@ import {
   formatCentsAsDollars,
   formatCurrencyFromWalletFields,
   formatDayLabel,
-  formatMachineMinutesWithHours,
   formatOverageRate,
   formatTimestampDate,
   getWalletBalanceState,
@@ -60,6 +59,8 @@ import {
   nanosFromFields,
   normalizeInvoiceStatus,
 } from "./billingUtils";
+import { formatMachineMinutesShort } from "@/lib/formatMachineMinutes";
+import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 
 type BillingTab = "overview" | "plans" | "invoices" | "usage";
 
@@ -440,10 +441,16 @@ function OverviewTab({
                     </p>
                   </div>
                   <span className="font-medium text-foreground">
-                    {formatMachineMinutesWithHours(usageUi.grantedMinutesRemaining)}
+                    {formatMachineMinutesShort(usageUi.grantedMinutesRemaining)}
                   </span>
                 </div>
               )}
+              {/* Redeeming belongs next to the balance it changes: this panel
+                  is where a user looks when they want more machine time, and
+                  it previously showed coupon minutes with no way to add any. */}
+              <div className="mt-4">
+                <RedeemCouponForm onRedeemed={() => void usageQ.refetch()} />
+              </div>
               {usageUi.overageHours > 0 && (
                 <div className="mt-4 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
                   <span className="font-medium">
@@ -903,7 +910,7 @@ function UsageTab() {
           {summary.grantedMinutesRemaining > 0 && (
             <UsageStat
               label="Coupon minutes remaining"
-              value={formatMachineMinutesWithHours(
+              value={formatMachineMinutesShort(
                 summary.grantedMinutesRemaining,
               )}
               hint="One-time bonus machine time from a redeemed coupon. Does not renew each period; used after your included hours, before overage."

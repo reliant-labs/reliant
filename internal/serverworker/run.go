@@ -158,6 +158,10 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo: repo,
+		// The worker is where spawn_send actually executes (inside the
+		// ExecuteTools activity), so this is the wiring that matters most for
+		// agent-to-agent delivery.
+		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 

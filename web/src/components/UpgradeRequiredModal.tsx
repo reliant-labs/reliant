@@ -1,7 +1,7 @@
 import { ArrowUpRight, Zap } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
 import { Modal } from "./ui/Modal";
 import type { UpgradeRequiredData } from "../store/modalStore";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 
 export interface UpgradeRequiredModalProps {
   isOpen: boolean;
@@ -32,16 +32,16 @@ export function UpgradeRequiredModal({
   onClose,
   data,
 }: UpgradeRequiredModalProps) {
-  const navigate = useNavigate();
+  const goToBilling = useGoToBilling();
   const copy = REASON_COPY[data.reason] ?? GENERIC_COPY;
 
   const handleUpgrade = () => {
     onClose();
-    // The billing dashboard now lives in-app at /settings/billing, so route
-    // there directly. The backend-supplied `upgradeUrl` (a relative path like
-    // "/billing/plans") is retained on the payload for non-SPA surfaces, but
-    // in the app the in-app route is always available and preferred.
-    void navigate({ to: "/settings/$section", params: { section: "billing" } });
+    // The billing dashboard lives in-app at /settings/billing. goToBilling
+    // routes an ANONYMOUS session through identity linking first — this modal
+    // fires for free-tier users, who are exactly the ones on anonymous
+    // sessions, and billing is a dead end without a real identity.
+    goToBilling();
   };
 
   return (

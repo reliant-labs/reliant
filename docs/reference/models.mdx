@@ -43,11 +43,15 @@ Models are tagged to help with selection. You can also [bring your own model](/s
 
 | Model ID | Name | Tags | Context | Capabilities | Providers |
 |----------|------|------|---------|--------------|----------|
-| `claude-4.5-haiku` | Claude 4.5 Haiku | fast, cheap | 200K | 🛠️ 📎 💾 ⚡ | anthropic, openrouter, reliant |
+| `claude-4.5-haiku` | Claude 4.5 Haiku | fast, cheap | 200K | 🛠️ 📎 💾 ⚡ | anthropic, openrouter, reliant, copilot |
 | `claude-4.5-opus` | Claude 4.5 Opus | flagship, reasoning | 200K | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
 | `claude-4.5-sonnet` | Claude 4.5 Sonnet | moderate, reasoning | 200K | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
 | `claude-4.6-opus` | Claude 4.6 Opus | flagship, reasoning | 200K | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
 | `claude-4.6-sonnet` | Claude 4.6 Sonnet | moderate, reasoning | 200K | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
+| `claude-4.8-opus` | Claude 4.8 Opus | flagship, reasoning | 1M | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
+| `claude-5-fable` | Claude 5 Fable | flagship, reasoning | 1M | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
+| `claude-5-opus` | Claude 5 Opus | flagship, reasoning | 1M | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant |
+| `claude-5-sonnet` | Claude 5 Sonnet | flagship, moderate, reasoning | 1M | 🛠️ 📎 💾 ⚡ 💡 | anthropic, openrouter, reliant, copilot |
 
 **Note:** All Claude models support attachments (images, PDFs) and prompt caching.
 
@@ -57,6 +61,7 @@ Models are tagged to help with selection. You can also [bring your own model](/s
 
 | Model ID | Name | Tags | Context | Capabilities | Providers |
 |----------|------|------|---------|--------------|----------|
+| `gpt-5-mini` | GPT-5 Mini | fast, cheap | 400K | 🛠️ ⚡ 💡 | copilot |
 | `gpt-5.2` | GPT-5.2 | moderate, reasoning | 400K | 🛠️ 📎 💾 ⚡ 💡 | openai, openrouter |
 | `gpt-5.2-codex` | GPT-5.2 Codex | flagship, reasoning | 400K | 🛠️ 📎 💾 ⚡ 💡 | codex, openai, openrouter |
 | `gpt-5.2-pro` | GPT-5.2 Pro | moderate, reasoning | 400K | 🛠️ 📎 💾 ⚡ 💡 | openai, openrouter |
@@ -66,6 +71,9 @@ Models are tagged to help with selection. You can also [bring your own model](/s
 | `gpt-5.4-mini` | GPT-5.4 Mini | fast, cheap | 400K | 🛠️ 📎 💾 ⚡ 💡 | codex, openai, openrouter |
 | `gpt-5.4-pro` | GPT-5.4 Pro | flagship, reasoning | 1M | 🛠️ 📎 ⚡ 💡 | openai |
 | `gpt-5.5` | GPT-5.5 | flagship, moderate, reasoning | 1M | 🛠️ 📎 💾 ⚡ 💡 | codex, openai, openrouter |
+| `gpt-5.6-luna` | GPT-5.6 Luna | reasoning | 272K | 🛠️ 📎 💾 ⚡ 💡 | codex |
+| `gpt-5.6-sol` | GPT-5.6 Sol | flagship, reasoning | 272K | 🛠️ 📎 💾 ⚡ 💡 | codex |
+| `gpt-5.6-terra` | GPT-5.6 Terra | flagship, moderate, reasoning | 272K | 🛠️ 📎 💾 ⚡ 💡 | codex |
 
 **Note:** OpenAI's GPT models with varying context windows and capabilities.
 
@@ -98,9 +106,15 @@ _Most capable models for complex tasks_
 
 | Model | Provider | Context | Capabilities |
 |-------|----------|---------|-------------|
+| `claude-5-opus` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `claude-4.8-opus` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `claude-5-sonnet` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `claude-5-fable` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
 | `claude-4.6-opus` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ 💡 |
 | `claude-4.5-opus` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.5` | OpenAI | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5.6-sol` | OpenAI | 272K | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5.6-terra` | OpenAI | 272K | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.4` | OpenAI | 1M | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.4-pro` | OpenAI | 1M | 🛠️ 📎 ⚡ 💡 |
 | `gpt-5.3-codex` | OpenAI | 400K | 🛠️ 📎 💾 ⚡ 💡 |
@@ -114,7 +128,9 @@ _Balance of capability and cost_
 
 | Model | Provider | Context | Capabilities |
 |-------|----------|---------|-------------|
+| `claude-5-sonnet` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.5` | OpenAI | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5.6-terra` | OpenAI | 272K | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.4` | OpenAI | 1M | 🛠️ 📎 💾 ⚡ 💡 |
 | `claude-4.6-sonnet` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ 💡 |
 | `claude-4.5-sonnet` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ 💡 |
@@ -131,6 +147,7 @@ _Optimized for quick responses_
 | `gpt-5.3-codex-spark` | OpenAI | 128K | 🛠️ 💾 ⚡ 💡 |
 | `claude-4.5-haiku` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ |
 | `gpt-5.4-mini` | OpenAI | 400K | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5-mini` | OpenAI | 400K | 🛠️ ⚡ 💡 |
 | `gemini-3-flash-preview` | Google | 1M | 🛠️ 📎 ⚡ |
 | `gemini-3.1-flash-lite-preview` | Google | 1M | 🛠️ 📎 ⚡ |
 | `gemini-2.5-flash` | Google | 1M | 🛠️ 📎 ⚡ |
@@ -144,6 +161,7 @@ _Low cost per token_
 |-------|----------|---------|-------------|
 | `claude-4.5-haiku` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ |
 | `gpt-5.4-mini` | OpenAI | 400K | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5-mini` | OpenAI | 400K | 🛠️ ⚡ 💡 |
 | `gemini-3.1-flash-lite-preview` | Google | 1M | 🛠️ 📎 ⚡ |
 | `gemini-2.5-flash` | Google | 1M | 🛠️ 📎 ⚡ |
 | `gemini-2.5-flash-lite` | Google | 1M | 🛠️ 📎 ⚡ |
@@ -154,9 +172,16 @@ _Extended thinking capabilities_
 
 | Model | Provider | Context | Capabilities |
 |-------|----------|---------|-------------|
+| `claude-5-opus` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `claude-4.8-opus` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `claude-5-sonnet` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `claude-5-fable` | Anthropic | 1M | 🛠️ 📎 💾 ⚡ 💡 |
 | `claude-4.6-opus` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ 💡 |
 | `claude-4.5-opus` | Anthropic | 200K | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.5` | OpenAI | 1M | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5.6-sol` | OpenAI | 272K | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5.6-terra` | OpenAI | 272K | 🛠️ 📎 💾 ⚡ 💡 |
+| `gpt-5.6-luna` | OpenAI | 272K | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.4` | OpenAI | 1M | 🛠️ 📎 💾 ⚡ 💡 |
 | `gpt-5.4-pro` | OpenAI | 1M | 🛠️ 📎 ⚡ 💡 |
 | `gpt-5.3-codex` | OpenAI | 400K | 🛠️ 📎 💾 ⚡ 💡 |

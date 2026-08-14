@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -118,6 +120,73 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 	assert.Equal(t, core.AgentMessageKindHumanMessage, queued[0].Kind)
 	assert.Equal(t, core.AgentMessageStatusQueued, queued[0].Status)
 	assert.Equal(t, "check the logs before continuing", queued[0].Body)
+}
+
+// TestSendAgentMessage_RingsMailboxDoorbell pins the deadlock fix.
+//
+// Queuing a row is not enough on its own. Delivery happens only in
+// drainAgentMessagesAtBoundary, at the top of the agent loop body, and a
+// parent thread that has fanned work out to sub-agents is parked in
+// awaitLiveDetachedSpawns and never reaches that point. Before this signal
+// existed, such a message waited for an unrelated child to finish: on chat
+// 0f80b069-c77e-41a5-a86d-403ab3eb9410 a human "continue" queued at 01:30:45
+// was not delivered until 01:59:02, 303ms after a sub-agent completed.
+//
+// The signal must name the RECIPIENT thread and go to the CHAT's workflow: a
+// spawn has no Temporal execution of its own, so one execution drives every
+// thread in the chat and the payload is what selects the gate to wake.
+func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
+	tc := &spawnCancelTemporalClient{}
+	service := &ChatService{database: repo, tempClient: tc}
+
+	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId:   fx.chatID,
+		ThreadId: fx.childThreadID,
+		Message:  "stop and check the logs",
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success)
+
+	require.Len(t, tc.signals, 1,
+		"queuing a message must wake the workflow; without this it waits for a child to finish")
+	assert.Equal(t, v2.AgentMessageQueuedSignalName, tc.signals[0].name)
+	assert.Equal(t, fx.chatID, tc.signals[0].workflowID,
+		"a spawn has no execution of its own — the chat's workflow drives every thread")
+
+	sig, ok := tc.signals[0].arg.(v2.AgentMessageQueuedSignal)
+	require.True(t, ok, "signal payload must be an AgentMessageQueuedSignal")
+	assert.Equal(t, fx.childThreadID, sig.Thread,
+		"the payload names which thread's gate should wake")
+}
+
+// A doorbell that cannot be rung must not fail the send. The row is durably
+// queued and the drain reads it from the database, so a failed signal costs a
+// late delivery — the old behavior — not a lost message. Reporting failure
+// for a message that IS queued would be strictly worse.
+func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
+	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow not found")}
+	service := &ChatService{database: repo, tempClient: tc}
+
+	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId:   fx.chatID,
+		ThreadId: fx.childThreadID,
+		Message:  "still worth queueing",
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success)
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1, "an undeliverable doorbell must not discard the durable row")
+	assert.Equal(t, "still worth queueing", queued[0].Body)
 }
 
 // TestSendAgentMessage_RefusesIdleThread pins the core bug: a thread that is

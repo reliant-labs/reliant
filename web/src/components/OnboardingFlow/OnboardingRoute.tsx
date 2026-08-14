@@ -13,13 +13,18 @@
  * on /onboarding?" is handled here too — if the user lands at /onboarding but
  * has already completed, we just leave.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { LoadingSpinner } from "../Layout/LoadingSpinner";
 import { OnboardingPage } from "./OnboardingPage";
-import { useCurrentUser } from "@/hooks/useOnboardingQueries";
+import {
+  useCurrentUser,
+  useDaemonList,
+  useCompleteOnboarding,
+} from "@/hooks/useOnboardingQueries";
+import { hasUsableDaemonForOnboarding } from "./steps/ComputeStep";
 import { GITHUB_CREDENTIAL_QUERY_KEY } from "@/hooks/useGitHubCredential";
 
 export function OnboardingRoute() {
@@ -29,6 +34,46 @@ export function OnboardingRoute() {
   const { data: currentUser, isLoading: isUserLoading } = useCurrentUser();
 
   const isComplete = !isUserLoading && !!currentUser?.onboardingCompleted;
+
+  // ── Returning users must not be re-onboarded ────────────────────────────
+  //
+  // `onboarding_completed_at` is written ONLY by the final project step, so a
+  // user who set up a working daemon and then closed the tab is still flagged
+  // incomplete — and ModernApp bounces every landing on / back here forever.
+  //
+  // That trap was survivable while every signup was auto-granted compute (they
+  // could always click through again). Now that entitlement requires a coupon
+  // or a plan, such a user can be permanently stuck: blocked at step 1, unable
+  // to reach the step that would mark them complete, and unable to reach the
+  // app they already have a machine for.
+  //
+  // A usable daemon IS the thing onboarding exists to produce, so treat it as
+  // proof of completion and record it, which also repairs the flag for good.
+  const { data: daemons, isLoading: daemonsLoading } = useDaemonList();
+  const completeOnboarding = useCompleteOnboarding();
+  const alreadySetUp =
+    !daemonsLoading && hasUsableDaemonForOnboarding(daemons ?? []);
+  const healingRef = useRef(false);
+
+  useEffect(() => {
+    if (isUserLoading || daemonsLoading) return;
+    if (isComplete || !alreadySetUp) return;
+    if (healingRef.current) return;
+    healingRef.current = true;
+    // Best-effort: if the write fails the user still lands in the app, and
+    // the next visit retries.
+    completeOnboarding.mutate(
+      { source: "returning_user_with_daemon" },
+      { onSettled: () => navigate({ to: "/", search: {} }) },
+    );
+  }, [
+    isUserLoading,
+    daemonsLoading,
+    isComplete,
+    alreadySetUp,
+    completeOnboarding,
+    navigate,
+  ]);
   const resetOnboarding = search["reset-onboarding"];
   const { github_connected, github_error, github_error_msg } = search;
 

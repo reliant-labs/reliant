@@ -16,6 +16,11 @@ type ToolsOptions struct {
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
 	Skills []config.StoredSkill
+	// AgentMessageNotifier wakes a thread parked on its background spawns
+	// when spawn_send queues a message into its mailbox. Optional: nil means
+	// no doorbell, and delivery falls back to the recipient's next loop
+	// boundary (the daemon runtime has no Temporal connection).
+	AgentMessageNotifier AgentMessageNotifier
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -76,9 +81,10 @@ func (f *ToolsFactory) WithMCPProjectPath(projectPath string) *ToolsFactory {
 	}
 
 	return NewToolsFactory(&ToolsOptions{
-		Repo:           f.opts.Repo,
-		MCPProjectPath: projectPath,
-		Skills:         f.opts.Skills,
+		Repo:                 f.opts.Repo,
+		MCPProjectPath:       projectPath,
+		Skills:               f.opts.Skills,
+		AgentMessageNotifier: f.opts.AgentMessageNotifier,
 	})
 }
 
@@ -93,9 +99,10 @@ func (f *ToolsFactory) WithSkills(skills []config.StoredSkill) *ToolsFactory {
 		return NewToolsFactory(&ToolsOptions{Skills: skills})
 	}
 	return NewToolsFactory(&ToolsOptions{
-		Repo:           f.opts.Repo,
-		MCPProjectPath: f.opts.MCPProjectPath,
-		Skills:         skills,
+		Repo:                 f.opts.Repo,
+		MCPProjectPath:       f.opts.MCPProjectPath,
+		Skills:               skills,
+		AgentMessageNotifier: f.opts.AgentMessageNotifier,
 	})
 }
 
@@ -211,7 +218,7 @@ func (f *ToolsFactory) SpawnStatus() Tool {
 }
 
 func (f *ToolsFactory) SpawnSend() Tool {
-	return NewSpawnSendTool(f.opts.Repo)
+	return NewSpawnSendTool(f.opts.Repo, f.opts.AgentMessageNotifier)
 }
 
 // Analysis tools

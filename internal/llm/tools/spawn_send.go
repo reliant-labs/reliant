@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -35,12 +36,29 @@ If the target has already finished, this FAILS rather than silently doing
 nothing \u2014 use spawn(agent_id=...) to resume it instead.`
 )
 
-type spawnSendTool struct {
-	repo db.Repository
+// AgentMessageNotifier wakes the workflow that owns a thread after a message
+// has been queued into that thread's mailbox.
+//
+// Declared here as a one-method interface rather than taking a Temporal
+// client, because a tool has no business knowing what a workflow engine is:
+// the implementation lives next to the wiring (internal/workflow), and tests
+// substitute a recorder. A nil notifier is valid and means "no way to ring
+// the doorbell here" — the daemon runtime builds a factory with no Temporal
+// connection at all, and spawn_send must keep working there.
+type AgentMessageNotifier interface {
+	// NotifyAgentMessageQueued is best-effort by contract: the mailbox row
+	// is already durable when it is called, so an error means a late
+	// delivery, never a lost message.
+	NotifyAgentMessageQueued(ctx context.Context, chatID, toThreadID string)
 }
 
-func NewSpawnSendTool(repo db.Repository) Tool {
-	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: repo})
+type spawnSendTool struct {
+	repo     db.Repository
+	notifier AgentMessageNotifier
+}
+
+func NewSpawnSendTool(repo db.Repository, notifier AgentMessageNotifier) Tool {
+	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: repo, notifier: notifier})
 }
 
 func (s *spawnSendTool) Name() string {
@@ -112,6 +130,17 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 	}
 	if err := s.repo.EnqueueAgentMessage(rctx.Context, msg); err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to queue message: %v", err)), nil
+	}
+
+	// Wake the recipient. Without this the row waits for the target to reach
+	// an agent-loop step boundary on its own, and a parent that has fanned
+	// work out to sub-agents is parked in awaitLiveDetachedSpawns and reaches
+	// none — so a child reporting up to a waiting parent would not be read
+	// until some OTHER child happened to finish. That is the same deadlock
+	// the human send path had, and the child→parent direction is the common
+	// case for it.
+	if s.notifier != nil {
+		s.notifier.NotifyAgentMessageQueued(rctx.Context, rctx.ChatID, params.AgentID)
 	}
 
 	return NewTextResponse(fmt.Sprintf(
