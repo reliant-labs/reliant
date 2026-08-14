@@ -147,3 +147,31 @@ func TestHookTimeoutDoesNotHangFollow(t *testing.T) {
 		t.Errorf("expected timeout to be logged as failure, got: %s", stderr.String())
 	}
 }
+
+// Killing the shell does not release the output pipe: a process the hook
+// backgrounded inherits the write end and keeps Wait blocked for as long as it
+// runs, so the timeout above can be honored and the follow still stall.
+//
+// `sleep 30` alone does not prove this. Many shells exec a lone command,
+// leaving no grandchild to hold the pipe, so the case passes or hangs
+// depending on which shell ran it — which is why the plain version passed on
+// macOS and hung for the full 30s in CI. Backgrounding forces the fork
+// unconditionally.
+func TestHookTimeoutWithBackgroundedChildDoesNotHangFollow(t *testing.T) {
+	ev := sampleEvent()
+	evJSON, _ := marshalEvent(ev)
+
+	var stderr bytes.Buffer
+	runner := &HookRunner{Stderr: &stderr, Timeout: 200 * time.Millisecond}
+
+	start := time.Now()
+	runner.Run(context.Background(), []Hook{{On: "any", Cmd: "sleep 30 & wait"}}, ev, evJSON)
+	elapsed := time.Since(start)
+
+	if elapsed > 5*time.Second {
+		t.Fatalf("hook run took %v — a backgrounded child held the output pipe past the timeout", elapsed)
+	}
+	if !strings.Contains(stderr.String(), "hook failed") {
+		t.Errorf("expected timeout to be logged as failure, got: %s", stderr.String())
+	}
+}

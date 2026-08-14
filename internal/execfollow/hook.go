@@ -16,6 +16,12 @@ import (
 // never stall the follow stream.
 const DefaultHookTimeout = 60 * time.Second
 
+// hookWaitDelay bounds how long Wait may block after the timeout fires, for
+// output pipes still held open by processes the hook left behind. Generous
+// enough that a hook writing its last diagnostics is not truncated, short
+// enough that the follow stream keeps moving.
+const hookWaitDelay = 2 * time.Second
+
 // HookRunner executes hooks via `sh -c` with the event JSON on stdin and
 // RELIANT_EVENT_* environment variables. Hook failures are logged to Stderr
 // and never propagate — a broken hook must not kill the follow.
@@ -64,6 +70,13 @@ func (r *HookRunner) runOne(ctx context.Context, h Hook, ev Event, evJSON []byte
 	cmd.Stdout = r.stderr() // hook output is diagnostics; keep stdout NDJSON-clean
 	cmd.Stderr = r.stderr()
 	cmd.Env = append(os.Environ(), hookEnv(ev)...)
+	// Killing the shell on timeout is not enough to unblock Wait. Stdout and
+	// Stderr are not *os.File, so exec copies them through a pipe, and Wait
+	// blocks until every writer closes it — including a grandchild the hook
+	// backgrounded, which outlives the shell and inherits the write end. A
+	// hook ending in `&` would otherwise hold the follow stream for as long
+	// as that process lives, defeating the timeout entirely.
+	cmd.WaitDelay = hookWaitDelay
 
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(r.stderr(), "reliant: hook failed (on=%s cmd=%q): %v\n", h.On, h.Cmd, err)
