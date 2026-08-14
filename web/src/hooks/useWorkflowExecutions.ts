@@ -70,13 +70,18 @@ function acquireRefetchSubscription(
     entry = {
       readers: 0,
       unsubscribe: subscribeToRefetch("workflow_executions", () => {
-        queryClient.invalidateQueries({
-          queryKey: chatDetailKeys.workflowExecutions(chatId),
+        queryClient.invalidateQueries(
+          { queryKey: chatDetailKeys.workflowExecutions(chatId) },
+          // SECOND argument. invalidateQueries is
+          // (filters, options) — cancelRefetch is an InvalidateOptions field,
+          // not a filter, so passing it in the first object was silently
+          // dropped by the runtime and rejected by the types.
+          //
           // Join the fetch already in flight instead of aborting and
           // reissuing it. Without this, concurrent invalidations of the same
           // key each start their own request.
-          cancelRefetch: false,
-        });
+          { cancelRefetch: false },
+        );
       }),
     };
     perChat.set(chatId, entry);

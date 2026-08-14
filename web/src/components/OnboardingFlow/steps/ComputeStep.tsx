@@ -6,6 +6,9 @@ import {
   DaemonStatus,
   type DaemonInfo,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+// Aliased on purpose: this is a DIFFERENT enum from the DaemonStatus above,
+// with different numeric values. See hasUsableControlPlaneDaemonForOnboarding.
+import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useEventBus } from "@/lib/event-context";
 import {
@@ -50,6 +53,31 @@ export function hasUsableDaemonForOnboarding(daemons: DaemonInfo[]): boolean {
   return daemons.some(
     (d) =>
       d.status === DaemonStatus.ACTIVE || d.status === DaemonStatus.IDLE,
+  );
+}
+
+// The control-plane's Daemon carries a DIFFERENT DaemonStatus enum than
+// reliant's DaemonInfo, and the two are NOT interchangeable — the numbers
+// disagree:
+//
+//   controlplane: UNSPECIFIED=0 PENDING=1 ACTIVE=2  SUSPENDED=3
+//   reliant:      UNSPECIFIED=0 ACTIVE=1  IDLE=2    DISCONNECTED=3
+//
+// reliant's IDLE(2) collides with control-plane's ACTIVE(2), and reliant's
+// ACTIVE(1) collides with control-plane's PENDING(1). Casting one array to
+// the other — the obvious way to silence the type error — would make a
+// PENDING daemon read as ACTIVE and let onboarding declare itself complete
+// against a daemon that has not started.
+//
+// So the control-plane shape gets its OWN predicate, written against its own
+// enum. Same question, different vocabulary.
+export function hasUsableControlPlaneDaemonForOnboarding(
+  daemons: ReadonlyArray<{ status: ControlPlaneDaemonStatus }>,
+): boolean {
+  return daemons.some(
+    (d) =>
+      d.status === ControlPlaneDaemonStatus.ACTIVE ||
+      d.status === ControlPlaneDaemonStatus.PENDING,
   );
 }
 

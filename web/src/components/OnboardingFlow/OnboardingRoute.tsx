@@ -24,7 +24,7 @@ import {
   useDaemonList,
   useCompleteOnboarding,
 } from "@/hooks/useOnboardingQueries";
-import { hasUsableDaemonForOnboarding } from "./steps/ComputeStep";
+import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
 import { GITHUB_CREDENTIAL_QUERY_KEY } from "@/hooks/useGitHubCredential";
 
 export function OnboardingRoute() {
@@ -52,7 +52,7 @@ export function OnboardingRoute() {
   const { data: daemons, isLoading: daemonsLoading } = useDaemonList();
   const completeOnboarding = useCompleteOnboarding();
   const alreadySetUp =
-    !daemonsLoading && hasUsableDaemonForOnboarding(daemons ?? []);
+    !daemonsLoading && hasUsableControlPlaneDaemonForOnboarding(daemons ?? []);
   const healingRef = useRef(false);
 
   useEffect(() => {
