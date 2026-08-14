@@ -29,7 +29,7 @@ import {
   useCopilotOAuth,
   useOAuthAvailability,
 } from "../../hooks";
-import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
+import { useWalletOverview } from "../../hooks/useReliantAIQueries";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../CopilotDevicePanel";
@@ -439,7 +439,7 @@ export function CombinedGeneralSettings({
   const oauthAvailability = useOAuthAvailability({
     enabled: selectedOAuth === "claude" || selectedOAuth === "codex",
   });
-  const cloudEligibility = useCloudEligibility();
+  const walletQ = useWalletOverview();
   const [enablingReliant, setEnablingReliant] = useState(false);
   const navigate = useNavigate();
 
@@ -452,7 +452,15 @@ export function CombinedGeneralSettings({
       )
   );
   const reliantConfigured = configuredProviders.some((p) => p.provider === "reliant");
-  const canOfferReliant = cloudEligibility.eligible && !reliantConfigured;
+  // Gated on LLM FUNDING (wallet balance), not compute eligibility.
+  //
+  // This used to read useCloudEligibility(), which answers "may this account
+  // run a cloud daemon" — a separate product, bought separately. That hid
+  // "Enable Reliant" from users holding real LLM credit simply because they
+  // had no compute minutes, the same category error in reverse.
+  const balanceNanos = walletQ.data?.wallet?.balanceUsdNanos;
+  const hasFunds = balanceNanos != null && BigInt(balanceNanos) > 0n;
+  const canOfferReliant = hasFunds && !reliantConfigured;
 
   const handleEnableReliant = async () => {
     setEnablingReliant(true);

@@ -6,7 +6,10 @@ import {
   resumeDaemon,
   type CreateDaemonArgs,
 } from '@/services/controlPlane/daemon';
-import { getReliantState, isCloudEligible } from '@/services/controlPlane/billing';
+import {
+  getComputeEligibility,
+  ComputeIneligibleReason,
+} from '@/services/controlPlane/billing';
 import { gitService } from '@/services/controlPlane/git';
 import type { CloneRepoArgs } from '@/services/controlPlane/git/types';
 import { onboardingService } from '@/services/controlPlane/onboarding';
@@ -29,6 +32,27 @@ export function isReasonedQuotaError(err: unknown): boolean {
     err.code === Code.ResourceExhausted &&
     !!err.metadata.get('x-reliant-reason')
   );
+}
+
+/**
+ * Whether the server refused this action because the caller is not ENTITLED
+ * to it — no compute subscription, an expired trial, a daemon size their plan
+ * does not include, or a quota they have exhausted.
+ *
+ * Distinct from `isReasonedQuotaError`, which matches only ResourceExhausted.
+ * The daemon gate denies with PermissionDenied and FailedPrecondition too
+ * (`internal/svcdaemon.checkDaemonSizeAllowed`), so a check keyed on
+ * ResourceExhausted alone misses most real denials — that gap is what let a
+ * refused "Start cloud daemon" advance onboarding anyway, dropping the user
+ * into the app with no machine.
+ *
+ * Keyed on the `x-reliant-reason` header rather than the status code or the
+ * message text: the server sets that header on every deliberate denial
+ * (`daemonDenied`), so it stays accurate when codes are re-tuned, and unlike
+ * substring matching on prose it cannot be broken by rewording an error.
+ */
+export function isEntitlementDenial(err: unknown): boolean {
+  return err instanceof ConnectError && !!err.metadata.get('x-reliant-reason');
 }
 
 /**
@@ -58,26 +82,52 @@ export function useCurrentUser() {
   });
 }
 
+export const computeEligibilityQueryKey = ['onboarding', 'computeEligibility'] as const;
+
+// Every string here names what the user can DO, not just what they lack.
+// NO_SUBSCRIPTION is the common case now that the signup auto-grant is gone —
+// every new account starts here — so it leads with the coupon, which is the
+// path most people arriving with a code actually have.
+const INELIGIBLE_REASON_COPY: Partial<Record<ComputeIneligibleReason, string>> = {
+  [ComputeIneligibleReason.TRIAL_EXPIRED]:
+    'Your free trial has ended — redeem a coupon code or choose a plan to keep running machines.',
+  [ComputeIneligibleReason.NO_SUBSCRIPTION]:
+    'Redeem a coupon code or choose a plan to start a cloud machine.',
+  [ComputeIneligibleReason.NO_ORGANIZATION]: 'Finishing account setup…',
+};
+
 export function useCloudEligibility() {
   const { data: user, isLoading: userLoading } = useCurrentUser();
-  const { data: state, isLoading: stateLoading } = useQuery({
-    queryKey: ['onboarding', 'reliantState'],
-    queryFn: () => getReliantState(),
+  const {
+    data: computeEligibility,
+    isLoading: eligibilityLoading,
+    refetch,
+  } = useQuery({
+    queryKey: computeEligibilityQueryKey,
+    queryFn: () => getComputeEligibility(),
     staleTime: 30_000,
+    // A focus refetch flips isLoading back to true mid-click and re-disables
+    // the Start cloud daemon button, eating the first click — same reason
+    // useCurrentUser above disables it.
     refetchOnWindowFocus: false,
   });
 
-  const isLoading = userLoading || stateLoading;
-  const entitlement = state?.entitlement;
-  const eligible = !isLoading && isCloudEligible(entitlement);
+  const isLoading = userLoading || eligibilityLoading;
+  const eligible = !isLoading && Boolean(computeEligibility?.eligible);
 
   const reason = !user
     ? 'Sign up required'
-    : !isCloudEligible(entitlement)
-      ? 'No cloud credits available'
+    : computeEligibility && !computeEligibility.eligible
+      ? (INELIGIBLE_REASON_COPY[computeEligibility.reason] ?? 'Compute is not available yet')
       : null;
 
-  return { eligible, reason, isLoading };
+  return {
+    eligible,
+    reason,
+    isLoading,
+    grantedMinutesRemaining: computeEligibility?.grantedMinutesRemaining ?? 0,
+    refetch,
+  };
 }
 
 // `false` disables polling for this observer — the mobile daemon list passes

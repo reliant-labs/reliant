@@ -332,19 +332,24 @@ condition: "nodes.check.exit_code == 0"
 | `auditing-agent` | Agent with per-turn audit oversight. Main agent generates response, auditor (cheap model) reviews it. If denied, guidance is injected and tools are NOT executed. If approved, response is saved and tools run. Main agent response is deferred until audit approval to keep thread clean. The auditor replaces the manual approval gate — there is no separate "mode" input because every turn is automatically audited. |
 | `blog-content-pipeline` | Structured content pipeline for producing technical blog posts for Reliant Labs. |
 | `bmad-lite` | BMAD-Lite — Simplified BMAD methodology with persona-driven planning. Inspired by https://github.com/bmad-code-org/BMAD-METHOD |
+| `build-workflow` | Build Workflow — create a custom Reliant workflow from a conversation. |
 | `default-router` | Default workflow router — classifies the user's request and dispatches to the best strategy from a curated set of workflows. |
 | `discovery-relay` | Discovery Relay — iterative waves with progressive knowledge transfer. |
 | `env-setup` | Environment isolation pipeline: [setup → validate] (loop) → complete. Analyzes any codebase, sets up dynamic ports, isolated databases, worktree-named processes, language-appropriate hot-reload, consolidated logging (including browser console capture), and writes all state to .reliant/ephemeral/. Validation agent tests the full setup in a feedback loop until everything works. |
-| `forge-one-shot` | Build a production Forge app from a conversation in five phases. |
+| `forge-migrate` | Migrate an existing codebase into a Forge project. Distinct from `migrate` (which imports Claude Code/Cursor/Codex config into Reliant) and from `forge-one-shot` (which builds a greenfield app from a conversation). |
+| `forge-one-shot` | Build a production Forge app from a conversation, in ONE get-it-right loop: SCOPE → SCAFFOLD → VERIFY GREEN → FAN OUT → SYNTHESIZE → VERIFY. |
 | `get-it-right` | Get It Right — for complex brownfield codebases where LLMs paper-mache code on top. The insight: sometimes you need to try and fail to truly understand the codebase. |
 | `gsd` | GSD (Get Shit Done) — A pragmatic, no-ceremony workflow focused on rapid parallel execution. Inspired by https://github.com/gsd-build/get-shit-done. |
 | `implement-review` | Generic implement → review loop. Implements changes then reviews them in a structured cycle until the reviewer approves or max iterations are reached. |
+| `landing-page` | Build a polished landing page by chaining two get-it-right review loops and ending in a plain handoff agent that serves the page and hands the user a URL. |
+| `markdown-checklist` | Complete a markdown checklist/task file until all checklist items are done. |
 | `migrate` | Guided migration workflow for importing useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant. |
 | `one-ring` | Unified development pipeline: planning → write_tests → [get-it-right loop] → complete. |
 | `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner copies via rsync, synthesize merges best parts. |
 | `parallel-loop-sample` | Minimal sample showing a parallel loop over items with a custom key. Each item runs a builtin agent in parallel and the workflow routes based on iteration count, while scenarios assert the keyed aggregate result map. |
 | `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
 | `ralph-wiggum` | Ralph Wiggum — brute-force iteration for complex tasks. |
+| `scope-conversation` | Reusable scoping conversation sub-workflow. |
 | `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns on end_turn, this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
 
 
@@ -425,6 +430,8 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `entry` | string[] | No | - |
 | `api_version` | string | No | - |
 | `daemon` | CelDaemonSelector | No | - |
+| `resume_node` | string | No | - |
+| `transition_to` | string | No | - |
 
 ## Edge
 
@@ -484,6 +491,7 @@ SimulatedEvent represents a single mocked event in a test scenario.
 | `tool_calls` | SimToolCall[] | No | ToolCalls are tool invocations from the LLM (for type: llm_response). |
 | `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
 | `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
+| `is_error` | boolean | No | IsError marks a tool_result as failed (for type: tool_result). |
 
 ### Expectation fields
 
@@ -499,6 +507,7 @@ Expectation defines what to verify after a scenario runs.
 | `error_contains` | string | No | ErrorContains specifies a substring that should appear in the error message. |
 | `error_node` | string | No | ErrorNode specifies which node should produce the error. |
 | `node_outputs` | map[string]object | No | NodeOutputs specifies expected output values for specific nodes. |
+| `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
 
 ### Targeting Nodes
 

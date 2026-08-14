@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useAuthStore } from '@/store/authStore'
+import { useAuthStore, type LinkableProvider } from '@/store/authStore'
 import { validatePassword } from '../utils/passwordValidation'
 import { OAuthButton } from './OAuthButton'
 import { PasswordInput, ConfirmPasswordInput } from './PasswordInput'
 import { EmailVerification } from './EmailVerification'
-import { GradientBackground } from './GradientBackground'
-import { BrandMark } from './icons/BrandMark'
+import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
 import { BillingService } from '@/gen/controlplane/v1/public/billing_service_pb'
 import { getControlPlaneClient } from '../services/controlPlane/client'
 
@@ -15,15 +14,19 @@ import { getControlPlaneClient } from '../services/controlPlane/client'
  * real identity *with an email* attached to their existing account (e.g. the
  * admin billing page blocks paid actions until a billing email exists).
  *
- * A plain bounce to /auth does NOT work here: the anon user already has a
- * Supabase session, so /auth would just redirect them away. Instead this screen
- * LINKS a real identity onto the current anonymous account:
- *   - Google / Apple → supabase.auth.linkIdentity (round-trips through the
- *     provider and back to /auth/callback, which honors `returnTo`).
+ * This is NOT a sign-in screen, and the distinction is the whole point. The
+ * user already has an account with chats and workspaces in it; they are
+ * attaching an identity to THAT account, not creating a second one:
+ *   - GitHub / Google / Apple → supabase.auth.linkIdentity (round-trips through
+ *     the provider and back to /auth/callback, which honors `returnTo`).
  *   - Email + password → supabase.auth.signUp, which upgrades the anonymous
  *     user in place. With email confirmation enabled this returns no session,
  *     so we drop into the existing EmailVerification OTP screen; once verified
  *     the account carries a confirmed email.
+ *
+ * A plain bounce to /auth does NOT work here: the anon user already has a
+ * Supabase session, so /auth would just redirect them away — and signing in
+ * there would strand the work sitting in the anonymous session.
  *
  * `?returnTo=<path>` is where we send the user once they have an email. It is
  * validated to a same-origin relative path before any redirect (same predicate
@@ -53,14 +56,12 @@ export function UpgradeAccount() {
     initialized,
     loading: authLoading,
     initialize,
-    linkGoogleAccount,
-    linkAppleAccount,
+    linkOAuthIdentity,
     signUp,
     sendEmailVerificationOTP,
     verifyEmailOTP,
   } = useAuthStore()
 
-  const [showEmailForm, setShowEmailForm] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
@@ -99,22 +100,18 @@ export function UpgradeAccount() {
     }
   }, [initialized, authLoading, alreadyUpgraded, returnTo, navigate])
 
-  const handleLink = async (provider: 'google' | 'apple') => {
+  const handleLink = async (provider: LinkableProvider) => {
     setError(null)
     setSubmitting(true)
     try {
       // Thread returnTo through the OAuth state so /auth/callback lands the
       // user back at the originating surface (e.g. /admin/billing) after the
-      // provider round-trip. linkGoogleAccount/linkAppleAccount perform the
-      // redirect themselves — control does not return here on web.
+      // provider round-trip. linkOAuthIdentity performs the redirect itself —
+      // control does not return here on web.
       const state = isSafeReturnTo(returnTo)
         ? { source: 'link' as const, returnTo }
         : { source: 'link' as const }
-      if (provider === 'google') {
-        await linkGoogleAccount(state)
-      } else {
-        await linkAppleAccount(state)
-      }
+      await linkOAuthIdentity(provider, state)
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to link ${provider}`)
       setSubmitting(false)
@@ -254,12 +251,11 @@ export function UpgradeAccount() {
   // already-upgraded user, render nothing rather than flash the upgrade form.
   if (!initialized || authLoading || alreadyUpgraded) {
     return (
-      <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
-        <GradientBackground />
-        <div className="flex-1 flex items-center justify-center p-4">
+      <AuthLayout>
+        <div className="p-8 flex justify-center">
           <div className="animate-spin h-6 w-6 border-2 border-primary border-t-transparent rounded-full" />
         </div>
-      </div>
+      </AuthLayout>
     )
   }
 
@@ -272,30 +268,20 @@ export function UpgradeAccount() {
   // trustworthy. On success we honor returnTo just like the happy path.
   if (user && !user.is_anonymous && !user.email) {
     return (
-      <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
-        <GradientBackground />
-        <div className="drag-region h-12 flex-shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl p-8 space-y-6">
-            <div className="flex flex-col items-center gap-4">
-              <BrandMark className="h-8 w-8" />
-              <div className="text-center space-y-1">
-                <h2 className="text-xl font-semibold">Add a billing email</h2>
-                <p className="text-sm text-muted-foreground">
-                  {billingCodeSent
-                    ? `Enter the 6-digit code we sent to ${billingEmail}.`
-                    : "We couldn't get an email from that provider. Add one for billing — we'll verify it with a code."}
-                </p>
-              </div>
-            </div>
+      <AuthLayout>
+        <div className="p-8 space-y-6">
+          <AuthHeader
+            title="Add a billing email"
+            description={
+              billingCodeSent
+                ? `Enter the 6-digit code we sent to ${billingEmail}.`
+                : "We couldn't get an email from that provider. Add one for billing — we'll verify it with a code."
+            }
+          />
 
-            {billingError && (
-              <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4">
-                <p className="text-sm text-red-800 dark:text-red-200">{billingError}</p>
-              </div>
-            )}
+          {billingError && <AuthError message={billingError} />}
 
-            {!billingCodeSent ? (
+          {!billingCodeSent ? (
               <form className="space-y-5" onSubmit={handleBillingSendCode} autoComplete="on">
                 <div>
                   <label htmlFor="billing-email" className="block text-sm font-medium mb-1.5">
@@ -369,146 +355,99 @@ export function UpgradeAccount() {
                   </button>
                 </div>
               </form>
-            )}
-          </div>
+          )}
         </div>
-      </div>
+      </AuthLayout>
     )
   }
 
-  // Default: anonymous user → present the upgrade options that yield an email.
+  // Default: anonymous user → present every way to attach an identity that
+  // yields an email. Providers and the email form are shown together (same
+  // shape as the sign-in screen) rather than behind a toggle: there is no
+  // "Skip for now" escape here, so hiding half the options only adds a click.
   return (
-    <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
-      <GradientBackground />
-      <div className="drag-region h-12 flex-shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl">
-          <div className="p-8 space-y-6">
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-3">
-                <BrandMark className="h-8 w-8" />
-                <h1 className="text-3xl font-bold">Reliant</h1>
-              </div>
-              <div className="text-center space-y-1">
-                <h2 className="text-xl font-semibold">Upgrade your account</h2>
-                <p className="text-sm text-muted-foreground">
-                  Add an email to your account to continue. Link a provider or
-                  set an email and password — we&apos;ll bring you right back.
-                </p>
-              </div>
+    <AuthLayout>
+      <div className="p-8 space-y-6">
+        <AuthHeader
+          title="Save your account"
+          description="You're working in a temporary account. Attach an email or a provider to keep it — your chats and workspaces stay exactly as they are, and you'll be able to sign back in from anywhere."
+        />
+
+        <form className="space-y-5" onSubmit={handleEmailSubmit} autoComplete="on">
+          {error && <AuthError message={error} />}
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="upgrade-email" className="block text-sm font-medium mb-1.5">
+                Email address
+              </label>
+              <input
+                id="upgrade-email"
+                name="email"
+                type="email"
+                autoComplete="username email"
+                autoFocus
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={submitting}
+                className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
+                placeholder="you@example.com"
+              />
             </div>
 
-            {error && (
-              <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4">
-                <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-              </div>
-            )}
+            <PasswordInput
+              id="upgrade-password"
+              name="password"
+              label="Password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+              required
+              disabled={submitting}
+              showStrengthIndicator
+              showRequirements
+            />
 
-            {!showEmailForm ? (
-              <div className="space-y-3">
-                <OAuthButton
-                  provider="google"
-                  onClick={() => handleLink('google')}
-                  loading={submitting}
-                />
-
-                <div className="relative">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-sm">
-                    <span className="px-2 bg-background text-muted-foreground">
-                      Or
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={submitting}
-                  onClick={() => {
-                    setError(null)
-                    setShowEmailForm(true)
-                  }}
-                  className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  Continue with email
-                </button>
-              </div>
-            ) : (
-              <form className="space-y-5" onSubmit={handleEmailSubmit} autoComplete="on">
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="upgrade-email" className="block text-sm font-medium mb-1.5">
-                      Email address
-                    </label>
-                    <input
-                      id="upgrade-email"
-                      name="email"
-                      type="email"
-                      autoComplete="username email"
-                      autoFocus
-                      required
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
-                      placeholder="you@example.com"
-                    />
-                  </div>
-
-                  <PasswordInput
-                    id="upgrade-password"
-                    name="password"
-                    label="Password"
-                    value={password}
-                    onChange={setPassword}
-                    autoComplete="new-password"
-                    required
-                    disabled={submitting}
-                    showStrengthIndicator
-                    showRequirements
-                  />
-
-                  <ConfirmPasswordInput
-                    id="upgrade-confirm-password"
-                    name="confirmPassword"
-                    label="Confirm Password"
-                    value={confirmPassword}
-                    password={password}
-                    onChange={setConfirmPassword}
-                    autoComplete="new-password"
-                    required
-                    disabled={submitting}
-                  />
-                </div>
-
-                <div className="space-y-3 pt-1">
-                  <button
-                    type="submit"
-                    disabled={submitting}
-                    className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {submitting ? 'Processing...' : 'Upgrade account'}
-                  </button>
-                  <div className="text-center">
-                    <button
-                      type="button"
-                      disabled={submitting}
-                      onClick={() => {
-                        setError(null)
-                        setShowEmailForm(false)
-                      }}
-                      className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      Back to provider options
-                    </button>
-                  </div>
-                </div>
-              </form>
-            )}
+            <ConfirmPasswordInput
+              id="upgrade-confirm-password"
+              name="confirmPassword"
+              label="Confirm Password"
+              value={confirmPassword}
+              password={password}
+              onChange={setConfirmPassword}
+              autoComplete="new-password"
+              required
+              disabled={submitting}
+            />
           </div>
-        </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {submitting ? 'Processing...' : 'Save my account'}
+          </button>
+
+          <AuthDivider label="Or attach a provider" />
+
+          <div className="space-y-3">
+            <OAuthButton
+              provider="github"
+              onClick={() => handleLink('github')}
+              loading={submitting}
+            />
+            <OAuthButton
+              provider="google"
+              onClick={() => handleLink('google')}
+              loading={submitting}
+            />
+          </div>
+
+          <AuthLegalLinks />
+        </form>
       </div>
-    </div>
+    </AuthLayout>
   )
 }

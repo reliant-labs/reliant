@@ -152,6 +152,7 @@ content: "Custom response"
 | `tool_calls` | SimToolCall[] | No | ToolCalls are tool invocations from the LLM (for type: llm_response). |
 | `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
 | `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
+| `is_error` | boolean | No | IsError marks a tool_result as failed (for type: tool_result). |
 
 ---
 
@@ -226,6 +227,7 @@ expect:
 | `error_contains` | string | No | ErrorContains specifies a substring that should appear in the error message. |
 | `error_node` | string | No | ErrorNode specifies which node should produce the error. |
 | `node_outputs` | map[string]object | No | NodeOutputs specifies expected output values for specific nodes. |
+| `outputs` | object | No | Outputs specifies expected values for the workflow's declared outputs. |
 
 ---
 

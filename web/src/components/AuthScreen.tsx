@@ -6,8 +6,7 @@ import { ForgotPassword } from './ForgotPassword'
 import { EmailVerification } from './EmailVerification'
 import { PasswordInput, ConfirmPasswordInput } from './PasswordInput'
 import { validatePassword } from '../utils/passwordValidation'
-import { GradientBackground } from './GradientBackground'
-import { BrandMark } from './icons/BrandMark'
+import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
 
 export function AuthScreen() {
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot-password'>('login')
@@ -167,59 +166,27 @@ export function AuthScreen() {
   // Render forgot password view
   if (mode === 'forgot-password') {
     return (
-      <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
-        <GradientBackground />
-        <div className="drag-region h-12 flex-shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl">
-            <ForgotPassword
-              onBackToSignIn={() => setMode('login')}
-            />
-          </div>
-        </div>
-      </div>
+      <AuthLayout>
+        <ForgotPassword onBackToSignIn={() => setMode('login')} />
+      </AuthLayout>
     )
   }
 
   if (verificationSent) {
     return (
-      <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
-        <GradientBackground />
-        <div className="drag-region h-12 flex-shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl">
-             <EmailVerification autoSend={true} email={signupEmailForVerification} />
-          </div>
-        </div>
-      </div>
+      <AuthLayout>
+        <EmailVerification autoSend={true} email={signupEmailForVerification} />
+      </AuthLayout>
     )
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-background relative overflow-hidden">
-      <GradientBackground />
-      <div className="drag-region h-12 flex-shrink-0" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties} />
-      <div className="flex-1 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-background border border-border rounded-lg shadow-xl">
-          <div className="p-8 space-y-6">
-            <div className="flex flex-col items-center gap-4">
-              <div className="flex items-center gap-3">
-                <BrandMark className="h-8 w-8" />
-                <h1 className="text-3xl font-bold">Reliant</h1>
-              </div>
-              <div className="text-center">
-                <h2 className="text-xl font-semibold">
-                  {mode === 'login' ? 'Sign in' : 'Sign up'}
-                </h2>
-              </div>
-            </div>
+    <AuthLayout>
+      <div className="p-8 space-y-6">
+        <AuthHeader title={mode === 'login' ? 'Sign in' : 'Sign up'} />
 
         <form className="space-y-5" onSubmit={handleSubmit} autoComplete="on" id="auth-form" method="post" action="#">
-          {error && (
-            <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-4">
-              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
-            </div>
-          )}
+          {error && <AuthError message={error} />}
 
           <div className="space-y-4">
             <div>
@@ -310,16 +277,7 @@ export function AuthScreen() {
           </div>
 
           {/* OAuth Providers */}
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="px-2 bg-background text-muted-foreground">
-                Or continue with
-              </span>
-            </div>
-          </div>
+          <AuthDivider label="Or continue with" />
 
           <div className="space-y-3">
             <OAuthButton
@@ -360,31 +318,9 @@ export function AuthScreen() {
             </button>
           </div>
 
-          {/* Legal Links */}
-          <div className="text-center text-xs text-muted-foreground pt-2">
-            By continuing, you agree to our{' '}
-            <a
-              href="https://reliantlabs.io/terms"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Terms of Service
-            </a>{' '}
-            and{' '}
-            <a
-              href="https://reliantlabs.io/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline"
-            >
-              Privacy Policy
-            </a>
-          </div>
+          <AuthLegalLinks />
         </form>
-        </div>
-        </div>
       </div>
-    </div>
+    </AuthLayout>
   )
 }

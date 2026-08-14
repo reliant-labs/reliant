@@ -38,9 +38,10 @@ Tools are organized by tags for filtering:
 
 - [Planning & Task Management](#planning--task-management) (22 tools)
 - [File Operations](#file-operations) (4 tools)
+- [Information Retrieval](#information-retrieval) (1 tools)
 - [Workflow Management](#workflow-management) (16 tools)
-- [System & Execution](#system--execution) (2 tools)
-- [Other Tools](#other-tools) (3 tools)
+- [System & Execution](#system--execution) (1 tools)
+- [Other Tools](#other-tools) (5 tools)
 
 ---
 
@@ -52,19 +53,19 @@ _Tools for creating plans, managing tasks, and tracking progress._
 |------|------|-------------|
 | [`add_dependency`](#add_dependency) | planning, plan | Create a dependency between two tasks in the current plan. |
 | [`add_task`](#add_task) | planning, plan, default | Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning. |
-| [`bash_list`](#bash_list) | execution, readonly, plan, default | Lists background processes in the current workspace. |
-| [`bash_output`](#bash_output) | execution, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
+| [`bash_list`](#bash_list) | execution, shell, readonly, plan, default | Lists background processes in the current workspace. |
+| [`bash_output`](#bash_output) | execution, shell, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
+| [`bash_wait`](#bash_wait) | execution, shell, readonly, plan, default | Block until a background process exits, then return its exit code and recent output. |
 | [`component_library`](#component_library) | readonly, plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`create_plan`](#create_plan) | planning, plan, default | Create a comprehensive plan with tasks for implementing a feature or solving a problem. |
 | [`create_subtask`](#create_subtask) | planning, plan | Create a subtask under an existing task. |
 | [`fetch`](#fetch) | web, readonly, plan, default | Fetches content from a URL and returns it in the specified format. |
 | [`get_plan`](#get_plan) | planning, readonly, plan | Retrieve the current plan for this session. |
-| [`glob`](#glob) | search, readonly, plan, default | - Fast file pattern matching tool that works with any codebase size |
-| [`grep`](#grep) | search, readonly, plan, default | A powerful search tool built on ripgrep. |
 | [`list_ready_tasks`](#list_ready_tasks) | planning, readonly, plan | List tasks that are ready to work on — no unresolved blockers. |
 | [`list_tasks`](#list_tasks) | planning, readonly, plan, default | List all tasks for the current plan. |
 | [`load_tool`](#load_tool) | default, readonly, plan | Dynamically load a tool by name or search for available tools. |
 | [`project_analyzer`](#project_analyzer) | analysis, readonly, plan | Analyzes project structure, detects languages, build systems, and test frameworks |
+| [`read_attachment`](#read_attachment) | file, readonly, plan, default | Read the contents of a file the user attached to the conversation. |
 | [`remove_dependency`](#remove_dependency) | planning, plan | Remove a dependency between two tasks. |
 | [`skill`](#skill) | default, readonly, plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`sourcegraph`](#sourcegraph) | analysis, readonly, plan | Search code across public repositories using Sourcegraph's GraphQL API. |
@@ -156,7 +157,7 @@ BEST PRACTICES:
 
 ### bash_list
 
-**Tags:** `execution`, `readonly`, `plan`, `default`
+**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
 
 Lists background processes in the current workspace.
 
@@ -184,7 +185,7 @@ Examples:
 
 ### bash_output
 
-**Tags:** `execution`, `readonly`, `plan`, `default`
+**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
 
 Retrieves output from a background process with pagination and regex filtering support.
 
@@ -270,6 +271,54 @@ The response includes metadata:
 
 ---
 
+### bash_wait
+
+**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
+
+Block until a background process exits, then return its exit code and recent output.
+
+WHY THIS EXISTS:
+Waiting by running a sleep command is the wrong tool and costs far more than it
+looks. `sleep 300; tail log` occupies a whole turn doing nothing, and it
+frequently exceeds the tool timeout and dies, losing the wait entirely. Polling
+bash_output in a loop is better but spends a model round-trip on every check.
+bash_wait blocks server-side: one tool call, no round-trips, no lost work.
+
+WHEN TO USE:
+- Waiting for a long build, test suite, or install to finish
+- Any time the next thing you do depends on a background process being done
+
+WHEN NOT TO USE:
+- A long-running server you never expect to exit (use bash_output to check on it)
+- You only want progress so far, not completion (use bash_output)
+
+HOW TO USE:
+1. Start the work in the background:
+   bash(command="npm test", run_in_background=true)
+2. Do any useful work that does not depend on the result — read the next file,
+   prepare the following edit. The process runs while you do.
+3. Wait for it:
+   bash_wait(process_id="`<id>`")
+
+TIMEOUTS ARE NOT FAILURES:
+If the process is still running when the budget elapses, this returns normally
+with timed_out: true and the process untouched. Call bash_wait again to keep
+waiting. It never kills the process — use bash_kill for that.
+
+Because a single call cannot block past the tool-execution ceiling, a very long
+build may need a few consecutive bash_wait calls. That is still dramatically
+cheaper than polling, and unlike a sleep it cannot lose the wait.
+
+RETURNS:
+- Exit code and status once the process has exited
+- The last tail_lines lines of output (default 50), so a passing build or a
+  failing test usually needs no follow-up call
+- timed_out: true, with no exit code, if the budget elapsed first
+
+Use bash_output for the full log, for pagination, or for regex filtering.
+
+---
+
 ### component_library
 
 **Tags:** `readonly`, `plan`
@@ -311,10 +360,20 @@ Create a comprehensive plan with tasks for implementing a feature or solving a p
 WHEN TO USE:
 - AFTER you preform your initial research and analyze the problem.
 - Use this tool when you need to organize complex work into structured steps
-- Only available in the 'research' state
 - You typically should create plans AFTER your findings. Avoid creating tasks to research, explore, identify, or search through the codebase. You should first perform your research so you can create an informed plan.
+- ESPECIALLY when you are going to delegate. If you are about to spawn
+  sub-agents, plan first: the task graph is what tells you which of them can run
+  at the same time. An orchestrator that spawns without a plan has no record of
+  what is independent, and ends up delegating one agent at a time.
 
-IMPORTANT NOTE: Plans are only visible in your current thread. Any spawned workflows, agents, or sub threads will not see the plan or any associated tasks.
+VISIBILITY: Sub-agents you spawn CAN read this plan. A spawned thread with no
+plan of its own resolves list_tasks / get_plan / list_ready_tasks against its
+nearest ancestor's plan, so the board you build here is the board they see.
+They can update the status of a task you assigned them; only this thread can
+change the plan's shape (add tasks, edit the plan itself).
+
+So a plan is how you delegate, not just how you take notes. Tasks are the units
+of work you hand out — write them at the size of one sub-agent's job.
 
 PLAN STRUCTURE:
 - Title: Clear, concise title for the plan
@@ -331,18 +390,42 @@ INLINE DEPENDENCIES:
 You can specify dependencies between tasks at creation time using 1-indexed task positions.
 Each task can have a "dependencies" array where each entry specifies:
 - task_position: The 1-indexed position of another task in the tasks array
-- type: "blocks" (must complete first), "related" (informational), or "parallel_with" (safe to run together)
+- type: "blocks" (the other task must COMPLETE first — a real data dependency),
+  "related" (informational only), or "parallel_with" (emphasis that two tasks are
+  safe together; rarely needed, since anything without a "blocks" edge already is)
 
 The dependency means: "the task at task_position has this relationship TO the current task."
 For example, if task 3 has dependencies: `[{task_position: 1, type: "blocks"}]`, it means task 1 blocks task 3.
 
-Example with dependencies:
+INDEPENDENT IS THE DEFAULT. Tasks with no "blocks" edge between them can run at
+the same time — you do NOT need to mark that. Add "blocks" only where a real
+data dependency exists: task B consumes something task A creates. Name it in
+the task description when you do.
+
+A chain of "blocks" edges says every task must wait for the previous one, which
+serializes the whole plan. Only write one when that is true.
+
+Example — fan-out (the common shape; four independent tasks, then a join):
 ```json
 tasks: [
 {title: "Design schema"},
-{title: "Write migrations", dependencies: [{task_position: 1, type: "blocks"}]},
-{title: "Implement API", dependencies: [{task_position: 2, type: "blocks"}]},
-{title: "Write tests", dependencies: [{task_position: 3, type: "blocks"}]}
+{title: "Implement API",       dependencies: [{task_position: 1, type: "blocks"}]},
+{title: "Implement worker",    dependencies: [{task_position: 1, type: "blocks"}]},
+{title: "Implement frontend",  dependencies: [{task_position: 1, type: "blocks"}]},
+{title: "End-to-end tests",    dependencies: [
+{task_position: 2, type: "blocks"},
+{task_position: 3, type: "blocks"},
+{task_position: 4, type: "blocks"}]}
+]
+Tasks 2, 3 and 4 all wait on the schema and on nothing else, so once it lands
+all three are ready together and should be delegated in ONE turn.
+```
+
+Example — a genuine chain (each step consumes the last):
+```json
+tasks: [
+{title: "Write migration"},
+{title: "Regenerate ORM from applied schema", dependencies: [{task_position: 1, type: "blocks"}]}
 ]
 ```
 
@@ -356,8 +439,10 @@ Each task can optionally include metadata with agent hints:
 
 BEST PRACTICES:
 - Break down work into clear, actionable tasks
-- Order tasks logically
-- Use inline dependencies to define the task graph upfront
+- Cut tasks along boundaries that do not overlap (package, module, directory),
+  so independent tasks can be worked at the same time without collisions
+- Use inline dependencies to define the task graph upfront, and add "blocks"
+  ONLY where one task genuinely consumes another's output
 - Include a mini-roadmap in the description
 - Document alternative approaches for pivoting
 - Be specific about what needs to be done
@@ -458,90 +543,6 @@ RETURNS:
 
 ---
 
-### glob
-
-**Tags:** `search`, `readonly`, `plan`, `default`
-
-- Fast file pattern matching tool that works with any codebase size
-- Supports glob patterns like "**/*.js" or "src/**/*.ts"
-- Returns matching file paths sorted by modification time
-- Use this tool when you need to find files by name patterns
-- When you are doing an open ended search that may require multiple rounds of globbing and grepping, use the Agent tool instead
-- You have the capability to call multiple tools in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.
-
-IGNORED DIRECTORIES:
-By default, the following noisy directories are excluded from results:
-- Dependencies: node_modules, vendor, bower_components, jspm_packages
-- Build outputs: dist, build, target, bin, obj, out, generated
-- Cache/temp: __pycache__, coverage, tmp, temp, logs
-- Internal: .git, .reliant
-
-Hidden files/directories (starting with .) like .github, .vscode are INCLUDED by default.
-Gitignored files are INCLUDED by default (we don't respect .gitignore).
-Use include_ignored=true to also search the noisy directories listed above.
-
----
-
-### grep
-
-**Tags:** `search`, `readonly`, `plan`, `default`
-
-A powerful search tool built on ripgrep.
-
-ALWAYS use Grep for search tasks. NEVER use grep or rg via Bash.
-
-OUTPUT MODES:
-- "files_with_matches" (default): Returns file paths sorted by modification time
-- "content": Shows matching lines with line numbers
-- "count": Shows match counts per file
-
-KEY PARAMETERS:
-- pattern: Regex pattern (use fixed_strings=true for literal matching)
-- glob: Filter files (e.g., "*.js", "**/*.tsx")
-- type: File type filter (e.g., "js", "ts", "py", "go")
-- word_boundary: Match whole words only (e.g., "foo" won't match "foobar")
-- fixed_strings: Treat pattern as literal text, no regex escaping needed
-- head_limit: Limit number of results
-- -C/-A/-B: Context lines (content mode only)
-- include_ignored: Search commonly ignored directories
-
-IGNORED DIRECTORIES:
-By default, the following noisy directories are excluded from results:
-- Dependencies: node_modules, vendor, bower_components, jspm_packages
-- Build outputs: dist, build, target, bin, obj, out, generated
-- Cache/temp: __pycache__, coverage, tmp, temp, logs
-- Internal: .git, .reliant
-
-Hidden files/directories (starting with .) like .github, .vscode are INCLUDED by default.
-Use include_ignored=true to also search the noisy directories listed above.
-
-REGEX SYNTAX:
-Patterns use ripgrep regex syntax (Rust regex / ERE-style). This is NOT the same as GNU grep (BRE).
-- Alternation: | (NOT \|)
-- Grouping: () (NOT \( \))
-- Quantifiers: +, ?, `{n,m}` work without escaping
-- Character classes: [a-z], \d, \w, \s work as expected
-
-COMMON MISTAKES:
-- WRONG: pattern="foo\|bar"    — \| matches a literal backslash followed by pipe, NOT alternation
-  RIGHT: pattern="foo|bar"      — | is alternation in ripgrep
-- WRONG: pattern="\(group\)"   — \( matches a literal parenthesis
-  RIGHT: pattern="(group)"      — () is grouping in ripgrep
-- WRONG: pattern="foo\+"       — \+ matches a literal plus
-  RIGHT: pattern="foo+"         — + means one-or-more in ripgrep
-- To match literal special characters, use fixed_strings=true instead of backslash escaping
-
-EXAMPLES:
-- Find function definitions: pattern="func\s+\w+", type="go"
-- Find exact text with special chars: pattern="`interface{}`", fixed_strings=true
-- Find whole word: pattern="Error", word_boundary=true
-- Multiline patterns: pattern="struct `{[\s\S]*?}`", multiline=true
-- Search in node_modules: pattern="lodash", include_ignored=true
-- Alternation (match any of several): pattern="foo|bar|baz"
-- Grouped alternation: pattern="(get|set)Value"
-
----
-
 ### list_ready_tasks
 
 **Tags:** `planning`, `readonly`, `plan`
@@ -570,10 +571,20 @@ WHEN TO USE:
 - When you need to see all tasks in the plan
 - To check task progress and status
 - To understand what work needs to be done
+- BEFORE delegating: the ready set tells you what can be worked at once
 
 RETURNS:
 - List of all tasks with their status, title, and hierarchy
 - Tasks are ordered by position and show parent-child relationships
+- Assignee for any task that has been claimed, so you can see what other agents
+  are already working on and avoid handing out the same task twice
+- A count of tasks that are READY (pending with no incomplete blocker). Ready
+  tasks have no dependency between them, so they are meant to be delegated
+  together in one turn rather than one after another.
+
+If this thread has no plan of its own, the plan of the nearest ancestor thread
+is shown — the board you were spawned from. It is read-only here; you can still
+update the status of a task assigned to you.
 
 ---
 
@@ -596,6 +607,26 @@ Loaded tools become available immediately on the next turn.
 **Tags:** `analysis`, `readonly`, `plan`
 
 Analyzes project structure, detects languages, build systems, and test frameworks
+
+---
+
+### read_attachment
+
+**Tags:** `file`, `readonly`, `plan`, `default`
+
+Read the contents of a file the user attached to the conversation.
+
+WHEN TO USE:
+- When the conversation references an attachment (by id) whose contents you have not yet seen.
+- Specifically for PDF attachments: their pages are read on demand through this tool.
+
+HOW TO USE:
+- Provide the attachment_id from the attachment reference.
+- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
+
+NOTES:
+- PDF pages are returned as a native document block the model can read directly (text and layout).
+- Image and text attachments are already provided inline in the conversation and do not need this tool.
 
 ---
 
@@ -624,6 +655,25 @@ In multi-repo projects, skills are discovered recursively across all nested
 repos. Each skill's source repo is shown in brackets after its description
 (e.g. "[source: api]") and is reflected as a prefix on its path
 (e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.
+
+READING A LARGE SKILL (action=load):
+Every load ends with its total size and whether anything remains, so ONE call
+tells you if you have the whole skill. Do not page defensively — page only when
+a result says bytes remain, and it will name the exact call to continue with.
+
+A skill too large to deliver at once is read with these, mirroring bash_output:
+- section: fetch one markdown section by heading. Preferred — every load lists
+  the skill's sections, so this is usually one targeted call rather than
+  guessing byte ranges.
+- offset / limit: page through the current view by byte range.
+- regex (+ regex_case_insensitive, regex_context_before, regex_context_after):
+  deliver only matching lines, numbered, to locate content before fetching it.
+
+Examples:
+  skill(action="load", path="db")                      whole skill + size report
+  skill(action="load", path="db", section="Seeding")   one section
+  skill(action="load", path="db", offset=23000)        continue where a window ended
+  skill(action="load", path="db", regex="foreign key") find the relevant part first
 
 ---
 
@@ -808,6 +858,7 @@ WHEN TO USE:
 HOW TO USE:
 - Provide the file path
 - Optional: offset (starting line) and limit (number of lines)
+- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
 - Issue multiple view tools in a single request for improved performance
 
 FEATURES:
@@ -818,18 +869,30 @@ FEATURES:
 - Suggests similar file names when the requested file isn't found
 
 LIMITATIONS:
-- Maximum output size is 16KB (~4K tokens) - larger files are truncated with head+tail
-- Default reading limit is 300 lines
+- Maximum output size is 64KB (~16K tokens) - larger files are truncated with head+tail
+- Default reading limit is 1500 lines, which reads most source files whole
 - Lines longer than 500 characters are truncated
 - Cannot display binary files (executables, archives, etc.)
 - Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
-- PDFs up to 5MB are supported
+- PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
 
 TIPS:
+- Prefer ONE whole-file read over several paged reads: each call costs a model
+  round-trip, while the read itself takes milliseconds. Omit offset/limit unless
+  the file is genuinely too big to arrive in one piece.
+- A file OVER ~64KB cannot arrive whole whatever limit you pass — the response is
+  capped and you get head+tail with the middle removed. Two calls settle it, and
+  neither is a search: read the head (default) to get the shape, then ONE offset
+  read for the region you need. The truncation notice tells you the total line
+  count, so you can aim the second call directly.
+- Do NOT fall back to repeated 'grep' on a large file to page through it by
+  symbol. Measured: eleven agents greping one 52KB proto one message at a time
+  was the single largest recoverable cost in a long run — each grep is a whole
+  turn and returns less context than one offset read.
+- Issue several view calls in a SINGLE message to read independent files at once
 - Use with Glob tool to first find files you want to view
 - For code exploration, first use Grep to find relevant files, then View to examine them
-- When viewing large files, use the offset parameter to read specific sections
-- If output is truncated, use offset to read the middle section
+- If output is truncated, use offset to read the remaining section
 
 ---
 
@@ -908,7 +971,7 @@ _Tools for reading, writing, and modifying files._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`edit`](#edit) | file, default | Make precise text replacements in files or create new files. All edit operations must be provided... |
+| [`edit`](#edit) | file, default | Make a precise text replacement in a single file, or create/delete file content. One edit per call. |
 | [`find_replace`](#find_replace) | file, default | Performs find and replace operations across multiple files matching a glob pattern. |
 | [`move_code`](#move_code) | file | Move or copy a block of code from one location to another, within the same file or across files. |
 | [`write`](#write) | file, default | File writing tool that creates or updates files in the filesystem. |
@@ -917,19 +980,25 @@ _Tools for reading, writing, and modifying files._
 
 **Tags:** `file`, `default`
 
-Make precise text replacements in files or create new files. All edit operations must be provided in the edits array.
+Make a precise text replacement in a single file, or create/delete file content. One edit per call.
 
-NOTE: You can parallelize multiple edit tool calls in one message, even if they involve the same files.
+NOTE: To make several edits at once, issue multiple edit tool calls IN THE SAME MESSAGE — they run in parallel. Do NOT try to pack multiple edits into one call.
+
+Edits to DIFFERENT files in one message run at the same time. Edits to the SAME file are applied one at a time, in an unspecified order, each one seeing the result of the ones before it. So batch same-file edits freely — but only when they are independent: each old_string must still match after the others have applied. Two edits whose old_string regions overlap, or where one creates the text the other matches, must be sent in separate messages, or the second will fail to match.
 
 WHEN TO USE:
 - Precise text replacements
-- Creating new files (empty old_string)
+- Creating a new file (empty old_string)
 - Deleting specific content (empty new_string)
-- Renaming variables/functions (with replace_all)
-- Coordinated changes across multiple files
+- Renaming a variable/function (with replace_all)
+
+ALWAYS PREFER THIS TOOL OVER write. Turn latency is set by how many tokens you
+GENERATE, so rewriting an existing file costs minutes of generation for a change
+edit makes in seconds. write is for creating NEW files; for anything that already
+exists, use edit. If an old_string fails to match, re-read the exact region and
+retry the edit — falling back to a full rewrite is the most expensive move available.
 
 WHEN NOT TO USE:
-- Complete file rewrite: Use Write tool
 - Moving/renaming files: Use Bash mv command
 
 COMMON MISTAKES TO AVOID:
@@ -939,67 +1008,33 @@ COMMON MISTAKES TO AVOID:
 
 USAGE PATTERNS:
 
-## One Edit
-```json
-edits: [
-{
-file_path: "/path/to/file.go",
-old_string: "Include 3-5 lines before AND after",
-new_string: "Your replacement text",
+## Replace Text
+file_path: "/path/to/file.go"
+old_string: "Include 3-5 lines before AND after"
+new_string: "Your replacement text"
 replace_all: false
-}
-]
-```
 
 ## Multiple Edits
-```json
-edits: [
-{
-file_path: "/path/to/file1.go",
-old_string: "old text 1",
-new_string: "new text 1"
-},
-{
-file_path: "/path/to/file2.go",
-old_string: "old text 2",
-new_string: "new text 2"
-}
-]
-```
+Issue one edit call per change, all in the same message. For example, to edit two
+files at once, send two edit tool calls in parallel:
+  edit(file_path="/path/to/file1.go", old_string="old text 1", new_string="new text 1")
+  edit(file_path="/path/to/file2.go", old_string="old text 2", new_string="new text 2")
 
 ## Create New File
-```json
-edits: [
-{
-file_path: "/path/to/new/file.go",
-old_string: "",
+file_path: "/path/to/new/file.go"
+old_string: ""
 new_string: "file contents"
-}
-]
-```
 
 ## Delete Content
-```json
-edits: [
-{
-file_path: "/path/to/file.go",
-old_string: "text to remove",
+file_path: "/path/to/file.go"
+old_string: "text to remove"
 new_string: ""
-}
-]
-```
 
 ## Rename Variable
-```json
-edits: [
-{
-file_path: "/path/to/file.go",
-old_string: "oldName",
-new_string: "newName",
+file_path: "/path/to/file.go"
+old_string: "oldName"
+new_string: "newName"
 replace_all: true
-}
-]
-```
 
 #### CRITICAL REQUIREMENTS
 
@@ -1020,8 +1055,8 @@ replace_all: true
 
 #### BEST PRACTICES
 - Include ample context
-- All operations are atomic (all succeed or all fail)
 - Use replace_all for systematic renames
+- Parallelize independent edits as separate calls in one message
 - Verify edits don't break code
 
 #### WORKS WELL WITH
@@ -1029,11 +1064,10 @@ replace_all: true
 - ALTERNATIVE: Write (complete rewrite)
 
 #### PARAMETERS
-- edits: Array of edit operations (required)
-  - file_path: Absolute path (required)
-  - old_string: Text to find (exact match)
-  - new_string: Replacement text
-  - replace_all: Replace all occurrences (optional)
+- file_path: Absolute path (required)
+- old_string: Text to find (exact match)
+- new_string: Replacement text
+- replace_all: Replace all occurrences (optional)
 
 Remember: This tool requires EXACT text matching including all whitespace and indentation.
 
@@ -1216,12 +1250,128 @@ FEATURES:
 
 LIMITATIONS:
 - Cannot append (rewrites entire file)
-- Existing files must be read first (View tool) since Write replaces the entire file
+- Replaces the ENTIRE file — to change part of one, prefer Edit
+
+REPLACING AN EXISTING FILE:
+- Just write over it. Do NOT delete it first — that costs an extra turn and
+  removes the very guard that protects you.
+- Reading it first is optional, not required. An unread file is overwritten and
+  the result carries a diff of what was replaced (capped at 60 lines) so you can
+  repair a mistaken clobber with Edit.
+- Reading it first is what ARMS the safety check: once you have read a file, a
+  Write is REJECTED if it changed on disk since. That is how you find out
+  another agent owns the file too. Read first when that matters — a shared file,
+  a concurrent run — and report the rejection rather than re-issuing the Write.
+
+BATCHING — this is the main cost:
+- A turn costs a full model generation whether it carries one write or six, so
+  the TURN COUNT is the cost, not the file count. Issue every write whose
+  content you ALREADY HOLD in ONE message; they run in parallel.
+- The exception is a write whose content depends on a previous write's result.
+  That one waits for it.
 
 TIPS:
 - Use the LS tool to verify the correct location when creating new files
 - Combine with Glob and Grep tools to find and modify multiple files
 - Always include descriptive comments when making changes to existing code
+
+---
+
+## Information Retrieval
+
+_Tools for searching code, finding files, and fetching external content._
+
+| Tool | Tags | Description |
+|------|------|-------------|
+| [`bash`](#bash) | execution, shell, search, default | Execute bash commands for building, testing, and system operations in a stateless shell. |
+
+### bash
+
+**Tags:** `execution`, `shell`, `search`, `default`
+
+Execute bash commands for building, testing, and system operations in a stateless shell.
+
+Uses bash -c to execute commands on Unix/macOS/Linux.
+#### WHEN NOT TO USE THIS TOOL
+- File editing → Use Edit/Write tools
+- File reading → Use View tool
+
+#### 🔎 SEARCHING THE CODEBASE
+This tool IS the search tool — there is no separate grep/glob tool. Prefer
+ripgrep, and keep every search SCOPED YOURSELF; nothing scopes it for you:
+- Use 'rg' when available, falling back to 'grep -r' / 'find' when it is not.
+- ALWAYS search from a relative path ('rg pattern .', 'rg pattern internal/'),
+  never an absolute root.
+- Exclude vendored trees, which are large and rarely what you want:
+  rg --glob '!node_modules' --glob '!.git' --glob '!dist' --glob '!vendor'
+  ('rg' already honours .gitignore, which usually covers these.)
+- Bound the results: 'rg -l' for filenames only, 'rg -m 20', or pipe to 'head'.
+  An unbounded match dump can exhaust the output budget on a large repo.
+
+#### 🚫 NEVER SCAN THE FILESYSTEM
+Commands like 'find / -name ...', 'find ~ ...' or 'grep -r ... /usr' are REFUSED
+before they run: they read the whole machine, take minutes, and starve every
+other agent on this disk.
+- To find something in the project → search a relative path, as above.
+- To find a DEPENDENCY's source on disk → ask the package manager, do not scan:
+  'go list -m -f "{`{.Dir}`}" `<module>`', 'go env GOMODCACHE', 'npm root'.
+- If you truly need a filesystem search, name a specific directory.
+
+#### ⛓️ CHAIN PROBES — ONE CALL ANSWERS MANY QUESTIONS
+A turn costs a full model generation whether it carries ONE probe or NINE. The
+command string is where you buy that back: separate probes with ';' and label
+each with an echo, and one call returns the whole picture.
+
+    ls internal/handlers/; echo "=== proto ==="; grep -n '^message\|^service' \
+      proto/services/foo/v1/foo.proto | head -40; echo "=== migrations ==="; \
+      ls db/migrations/ | tail -5
+
+Chaining also works when a probe DEPENDS on the previous one, which parallel
+tool calls cannot express:
+
+    f=$(rg -l 'ListWidgetsRequest' proto/); echo "$f"; grep -n 'ListWidgets' -A 12 "$f"
+
+Reach for it whenever you are about to run a second search to interpret the
+first. Measured: agents that chain average ~8 probes per call; agents that do
+not average ~3, and the difference is turns — the single largest recoverable
+cost in a long run.
+
+Independent tool calls can ALSO run in parallel in one response. Chaining and
+parallel calls compose: issue every call you have already decided in the SAME
+turn, and chain the probes inside each one. Never split calls you have already
+decided across turns — that is the one pattern that costs a generation for
+nothing.
+
+#### Output Processing
+- Default output limit is 16000 bytes (use max_output to customize)
+- Use tail_lines to get only the last N lines of output
+- Output metadata includes truncation info and original size
+
+Usage notes:
+- The command argument is required.
+- You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
+- Use 'run_in_background: true' to run long-running commands in the background. You can then use BashOutput to check output, BashKill to terminate, and BashList to see all running processes.
+- Searching the codebase IS a use of this tool (prefer 'rg', scoped to a relative path — see above). For reading whole files, prefer the View tool over 'cat'/'head'/'tail'.
+- VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
+- When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
+
+STATELESS EXECUTION:
+- IMPORTANT: Each command runs in a fresh, stateless shell. Environment variables and directory changes from previous commands do NOT persist.
+- **IMPORTANT**: The current working directory is ALWAYS automatically set to the current worktree. There is NO need to cd to the worktree before running commands - just run them directly.
+- To change to a subdirectory within the worktree, use 'cd' as part of a compound command (e.g., 'cd subdir && npm test').
+- Environment variables set in prior shell sessions will NOT be included. Use the 'env' parameter to set environment variables for a specific command execution.
+- If you need to maintain state across commands (e.g., activating a virtual environment), combine commands with && or ; operators.
+- Background processes run in separate shell instances and also start fresh without inherited state.
+```bash
+pytest /foo/bar/tests
+```
+```bash
+cd /foo/bar && pytest tests
+```
+
+Important:
+- Return an empty response - the user will see the output directly
+- Never update git config
 
 ---
 
@@ -1595,58 +1745,11 @@ _Tools for executing shell commands and managing system processes._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`bash`](#bash) | execution, shell, default | Execute bash commands for building, testing, and system operations in a stateless shell. |
-| [`bash_kill`](#bash_kill) | execution, default | Terminates a background process in the current workspace. |
-
-### bash
-
-**Tags:** `execution`, `shell`, `default`
-
-Execute bash commands for building, testing, and system operations in a stateless shell.
-
-Uses bash -c to execute commands on Unix/macOS/Linux.
-#### WHEN NOT TO USE THIS TOOL
-- File editing → Use Edit/Write tools
-- File reading → Use View tool
-- Searching files → Use Grep/Glob tools
-- Directory listing → Use LS tool
-
-#### Output Processing
-- Default output limit is 16000 bytes (use max_output to customize)
-- Use tail_lines to get only the last N lines of output
-- Output metadata includes truncation info and original size
-
-Usage notes:
-- The command argument is required.
-- You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
-- Use 'run_in_background: true' to run long-running commands in the background. You can then use BashOutput to check output, BashKill to terminate, and BashList to see all running processes.
-- VERY IMPORTANT: You MUST avoid using shell in favor of other tools whenever possible, ie: commands like 'find' and 'grep'. Instead use Grep, Glob, or Agent tools to search. You MUST avoid read tools like 'cat', 'head', 'tail', and 'ls', and use FileRead and LS tools to read files.
-- VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
-- When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
-
-STATELESS EXECUTION:
-- IMPORTANT: Each command runs in a fresh, stateless shell. Environment variables and directory changes from previous commands do NOT persist.
-- **IMPORTANT**: The current working directory is ALWAYS automatically set to the current worktree. There is NO need to cd to the worktree before running commands - just run them directly.
-- To change to a subdirectory within the worktree, use 'cd' as part of a compound command (e.g., 'cd subdir && npm test').
-- Environment variables set in prior shell sessions will NOT be included. Use the 'env' parameter to set environment variables for a specific command execution.
-- If you need to maintain state across commands (e.g., activating a virtual environment), combine commands with && or ; operators.
-- Background processes run in separate shell instances and also start fresh without inherited state.
-```bash
-pytest /foo/bar/tests
-```
-```bash
-cd /foo/bar && pytest tests
-```
-
-Important:
-- Return an empty response - the user will see the output directly
-- Never update git config
-
----
+| [`bash_kill`](#bash_kill) | execution, shell, default | Terminates a background process in the current workspace. |
 
 ### bash_kill
 
-**Tags:** `execution`, `default`
+**Tags:** `execution`, `shell`, `default`
 
 Terminates a background process in the current workspace.
 
@@ -1678,6 +1781,8 @@ _Miscellaneous tools and utilities._
 |------|------|-------------|
 | [`ask_user`](#ask_user) | - | Ask the user one or more questions and wait for their responses. Use this when you need to: |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
+| [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
 
 ### ask_user
@@ -1699,6 +1804,60 @@ Usage notes:
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### spawn_send
+
+Send a message to a running sub-agent you spawned, or to your own parent agent.
+
+THE RECEIPT IS HONEST — READ IT LITERALLY:
+This QUEUES the message for delivery at the target's next turn. It does NOT
+mean the target has read it, and it does NOT mean the target has acted on it.
+Do not proceed as though your instruction has already taken effect — if you
+need to know whether it landed, check back with spawn_status or wait for a
+response.
+
+v1 is parent \u2194 child only: you may message a direct sub-agent (a spawn of
+this thread) or your own parent. Messaging a sibling or unrelated agent is
+rejected.
+
+If the target has already finished, this FAILS rather than silently doing
+nothing \u2014 use spawn(agent_id=...) to resume it instead.
+
+---
+
+### spawn_status
+
+**Tags:** `readonly`
+
+Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and optionally wait on one.
+
+WORKSPACE SCOPING:
+- Only shows/waits on agents YOU spawned (your direct children), never a
+  sibling's or another thread's sub-agents.
+
+TWO MODES:
+1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
+   title, preset, status, elapsed time, last activity time, turn count, and
+   whether it appears gated on a question or approval (best-effort — this
+   signal can be unavailable and is never a hard guarantee).
+2. SINGLE AGENT (agent_id set): returns that agent's status and its LAST
+   ASSISTANT MESSAGE — "is it done, and what did it say?" without cancelling
+   it.
+
+WAITING:
+Set wait: true with agent_id to block server-side until that agent reaches a
+terminal state (completed/failed/cancelled/expired), instead of polling this
+tool yourself. One call, no round-trips, no lost work — the same shape as
+bash_wait.
+
+TIMEOUTS ARE NOT FAILURES:
+If the agent is still running when the budget elapses, this returns normally
+with timed_out: true and the agent untouched. Call spawn_status again with
+wait: true to keep waiting.
+
+Use spawn_send to message an agent that is still running.
 
 ---
 

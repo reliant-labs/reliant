@@ -80,7 +80,7 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(repo)
+	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "status check"})
@@ -95,6 +95,97 @@ func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
 	require.Equal(t, parentID, queued[0].FromThreadID)
 }
 
+// recordingAgentMessageNotifier captures doorbell rings.
+type recordingAgentMessageNotifier struct {
+	rings []struct{ chatID, threadID string }
+}
+
+func (n *recordingAgentMessageNotifier) NotifyAgentMessageQueued(_ context.Context, chatID, toThreadID string) {
+	n.rings = append(n.rings, struct{ chatID, threadID string }{chatID, toThreadID})
+}
+
+// TestSpawnSend_ChildToParent_RingsMailboxDoorbell is the agent-to-agent half
+// of the mailbox deadlock.
+//
+// A child reporting up to its parent is the WORST case for this bug, not an
+// edge case: the parent is parked in awaitLiveDetachedSpawns precisely
+// because this child (and its siblings) are still running, and delivery only
+// happens at a loop-step boundary the parked parent never reaches. Queuing
+// without a doorbell means the message waits for a SIBLING to finish — and if
+// this child is the last one, the parent's gate wakes for the completion,
+// exits, and the message is marked undelivered having never been read.
+func TestSpawnSend_ChildToParent_RingsMailboxDoorbell(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+
+	notifier := &recordingAgentMessageNotifier{}
+	tool := NewSpawnSendTool(repo, notifier)
+	// The CHILD is the caller here, messaging its parent.
+	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
+
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: parentID, Message: "found the root cause"})
+	require.False(t, resp.IsError, "response: %+v", resp)
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, parentID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	require.Equal(t, childID, queued[0].FromThreadID)
+
+	require.Len(t, notifier.rings, 1,
+		"a message to a parent parked on its sub-agents must wake it, not wait for a sibling to finish")
+	require.Equal(t, chatID, notifier.rings[0].chatID)
+	require.Equal(t, parentID, notifier.rings[0].threadID,
+		"the doorbell must name the RECIPIENT thread so the right gate wakes")
+}
+
+// A refused send must not ring the doorbell: there is no row to drain, and
+// waking a parked parent to find an empty mailbox is a wasted turn.
+func TestSpawnSend_RefusedSend_DoesNotRingDoorbell(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
+
+	notifier := &recordingAgentMessageNotifier{}
+	tool := NewSpawnSendTool(repo, notifier)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "are you there?"})
+	require.True(t, resp.IsError)
+	require.Empty(t, notifier.rings, "nothing was queued, so there is nothing to wake for")
+}
+
+// A nil notifier must not panic. The daemon runtime builds a tools factory
+// with no Temporal connection at all, and spawn_send has to keep working
+// there — degraded to next-boundary delivery, not broken.
+func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+
+	tool := NewSpawnSendTool(repo, nil)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "still queued"})
+	require.False(t, resp.IsError, "response: %+v", resp)
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+}
+
 // TestSpawnSend_ToFinishedAgent_FailsWithGuidance is the spec §7.4
 // regression: messaging a finished agent must fail loudly with a pointer to
 // spawn(agent_id=...), never silently no-op or resurrect the thread.
@@ -107,7 +198,7 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCompleted)
 
-	tool := NewSpawnSendTool(repo)
+	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "are you still there?"})
@@ -137,7 +228,7 @@ func TestSpawnSend_ToSibling_Rejected(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tool := NewSpawnSendTool(repo)
+	tool := NewSpawnSendTool(repo, nil)
 	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
 
 	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: otherID, Message: "hello"})
@@ -156,7 +247,7 @@ func TestSpawnSend_ChildToParent_Allowed(t *testing.T) {
 
 	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
 
-	tool := NewSpawnSendTool(repo)
+	tool := NewSpawnSendTool(repo, nil)
 	// Called FROM the child thread, addressed TO the parent.
 	rc := rctx.NewToolContext(ctx, chatID, childID, nil, nil)
 

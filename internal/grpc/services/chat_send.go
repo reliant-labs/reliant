@@ -1326,12 +1326,55 @@ func (s *ChatService) SendAgentMessage(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
 	}
 
+	s.notifyAgentMessageQueued(ctx, chat, req.Msg.ThreadId)
+
 	// The receipt is deliberately as honest as spawn_send's: queued does not
 	// mean read, and does not mean acted on.
 	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 		Success: true,
 		Message: "Queued for delivery. It will be read at that agent's next turn — it has not been read yet.",
 	}), nil
+}
+
+// notifyAgentMessageQueued rings the mailbox doorbell on the workflow that
+// owns the recipient thread, so a thread parked waiting on its background
+// spawns wakes up and drains rather than sleeping until a sub-agent finishes.
+//
+// Without this the enqueue above is silent, and delivery depends entirely on
+// the recipient reaching a loop-step boundary for some other reason. When the
+// recipient is a parent blocked in awaitLiveDetachedSpawns — the ordinary
+// state of a main thread that has fanned work out to sub-agents — no such
+// boundary is scheduled, so "it will be read at that agent's next turn" was a
+// promise with no turn behind it.
+//
+// Deliberately best-effort. The row is already durably queued, and the drain
+// reads it from the database, so a signal that cannot be delivered costs a
+// late delivery (the pre-existing behavior), not a lost message. Failing the
+// RPC here would be strictly worse: it would report failure for a message
+// that IS queued and WILL be read at the next boundary.
+func (s *ChatService) notifyAgentMessageQueued(ctx context.Context, chat *db.Chat, threadID string) {
+	if s.tempClient == nil {
+		return
+	}
+	// Signal the chat's own workflow. A spawn is not a Temporal execution of
+	// its own (dispatchSpawnBackground runs it as a goroutine inside the
+	// parent), so every thread in the chat — main or spawned — is driven by
+	// this one execution, and its tracker is where the notification must
+	// land. Addressing the recipient thread inside the payload is what lets
+	// the right gate wake.
+	workflowID := chat.ID
+	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
+		workflowID = *chat.WorkflowID
+	}
+	if err := s.tempClient.SignalWorkflow(ctx, workflowID, "", v2.AgentMessageQueuedSignalName, v2.AgentMessageQueuedSignal{
+		Thread: threadID,
+	}); err != nil {
+		logging.Warn("Could not notify workflow of queued agent message; it will be delivered at the next loop boundary",
+			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID)
+		return
+	}
+	logging.Info("Notified workflow of queued agent message",
+		"chatID", chat.ID, "threadID", threadID, "workflowID", workflowID)
 }
 
 // ListQueuedAgentMessages returns the entries currently sitting in a

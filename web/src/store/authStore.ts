@@ -29,6 +29,15 @@ type OAuthRedirectState = {
   returnTo?: string
 }
 
+// Providers that can be attached to an existing account via linkIdentity.
+export type LinkableProvider = 'google' | 'github' | 'apple'
+
+const providerLabels: Record<LinkableProvider, string> = {
+  google: 'Google',
+  github: 'GitHub',
+  apple: 'Apple',
+}
+
 const withOAuthState = (baseUrl: string, state: OAuthRedirectState): string => {
   try {
     const url = new URL(baseUrl)
@@ -176,8 +185,10 @@ interface AuthState {
   signInWithGoogle: () => Promise<void>
   signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
   signInWithApple: () => Promise<void>
+  linkOAuthIdentity: (provider: LinkableProvider, state?: OAuthRedirectState) => Promise<void>
   linkGoogleAccount: (state?: OAuthRedirectState) => Promise<void>
   linkAppleAccount: (state?: OAuthRedirectState) => Promise<void>
+  linkGithubAccount: (state?: OAuthRedirectState) => Promise<void>
   unlinkIdentity: (identityId: string) => Promise<void>
   sendPasswordResetOTP: (email: string) => Promise<void>
   verifyPasswordResetOTP: (email: string, code: string) => Promise<void>
@@ -548,27 +559,32 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  linkGoogleAccount: async (state?: OAuthRedirectState) => {
+  // Attach a provider identity to the CURRENT user. This is linkIdentity, not
+  // signInWithOAuth: an anonymous user keeps their existing account (and its
+  // chats/workspaces) and simply gains a real identity on it.
+  linkOAuthIdentity: async (provider: LinkableProvider, state?: OAuthRedirectState) => {
     set({ loading: true })
     try {
       // Thread OAuth round-trip state (source/returnTo) onto the redirect URL
       // so the /auth/callback handler can land the user back where the link
       // flow was triggered (e.g. the admin billing page via /upgrade).
       const redirectTo = withOAuthState(await getOAuthRedirectUrl(), state ?? {})
-      logger.info('[AuthStore] linkGoogleAccount: Starting link flow', {
+      logger.info('[AuthStore] linkOAuthIdentity: Starting link flow', {
+        provider,
         isElectron,
         redirectTo,
       })
 
       const { data, error } = await supabase.auth.linkIdentity({
-        provider: 'google',
+        provider,
         options: {
           redirectTo,
           skipBrowserRedirect: true,
         },
       })
 
-      logger.info('[AuthStore] linkGoogleAccount: linkIdentity response', {
+      logger.info('[AuthStore] linkOAuthIdentity: linkIdentity response', {
+        provider,
         hasData: !!data,
         hasUrl: !!data?.url,
         urlPreview: data?.url?.substring(0, 100),
@@ -577,63 +593,37 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       })
 
       if (error) {
-        // Check if identity already exists on another account
+        // The identity already belongs to some other account. Say so plainly —
+        // we must NOT sign them in as that account, which would strand the work
+        // sitting in the session they are trying to upgrade.
         if (error.message?.includes('already linked') ||
             error.message?.includes('identity already exists') ||
             error.code === 'identity_already_exists') {
-          throw new Error('This Google account is already linked to an existing account. Please sign out and sign in with Google instead.')
+          throw new Error(`This ${providerLabels[provider]} account is already linked to an existing account. Please sign out and sign in with ${providerLabels[provider]} instead.`)
         }
         throw error
       }
 
       if (isElectron && data?.url && window.electronAPI) {
-        logger.info('[AuthStore] linkGoogleAccount: Opening external browser')
+        logger.info('[AuthStore] linkOAuthIdentity: Opening external browser', { provider })
         await window.electronAPI.openExternal(data.url)
-        logger.info('[AuthStore] linkGoogleAccount: External browser opened')
       } else if (data?.url) {
         window.location.href = data.url
       } else {
-        logger.error('[AuthStore] linkGoogleAccount: No link URL returned from Supabase')
+        logger.error('[AuthStore] linkOAuthIdentity: No link URL returned from Supabase', { provider })
       }
 
       set({ loading: false })
     } catch (error) {
-      logger.error('[AuthStore] linkGoogleAccount: Error:', error)
+      logger.error('[AuthStore] linkOAuthIdentity: Error:', error)
       set({ loading: false })
       throw error
     }
   },
 
-  linkAppleAccount: async (state?: OAuthRedirectState) => {
-    set({ loading: true })
-    try {
-      // See linkGoogleAccount: thread returnTo so the callback lands the user
-      // back at the originating surface after the link round-trip.
-      const redirectTo = withOAuthState(await getOAuthRedirectUrl(), state ?? {})
-      const { data, error } = await supabase.auth.linkIdentity({
-        provider: 'apple',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
-
-      if (error) throw error
-
-      if (isElectron && data?.url && window.electronAPI) {
-        await window.electronAPI.openExternal(data.url)
-      } else if (data?.url) {
-        window.location.href = data.url
-      } else {
-        logger.error('[AuthStore] linkAppleAccount: No link URL returned from Supabase')
-      }
-
-      set({ loading: false })
-    } catch (error) {
-      set({ loading: false })
-      throw error
-    }
-  },
+  linkGoogleAccount: (state?: OAuthRedirectState) => get().linkOAuthIdentity('google', state),
+  linkAppleAccount: (state?: OAuthRedirectState) => get().linkOAuthIdentity('apple', state),
+  linkGithubAccount: (state?: OAuthRedirectState) => get().linkOAuthIdentity('github', state),
 
   unlinkIdentity: async (identityId: string) => {
     set({ loading: true })

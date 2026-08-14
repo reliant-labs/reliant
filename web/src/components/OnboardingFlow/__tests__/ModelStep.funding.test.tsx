@@ -31,8 +31,17 @@ vi.mock("@/hooks/useReliantAIQueries", () => ({
   useRedeemCoupon: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+// Compute eligibility is mocked INELIGIBLE on purpose, and the module is
+// mocked at all only so that a REGRESSION would be caught rather than
+// silently passing: `useCloudEligibility` answers "may this account run a
+// cloud daemon" — a compute question — so the model step must not consult it.
+// If someone re-imports it here, these funded-wallet cases go red.
 vi.mock("@/hooks/useOnboardingQueries", () => ({
-  useCloudEligibility: () => ({ eligible: true, reason: null, isLoading: false }),
+  useCloudEligibility: () => ({
+    eligible: false,
+    reason: "Compute is not available yet",
+    isLoading: false,
+  }),
 }));
 
 vi.mock("@tanstack/react-router", () => ({
@@ -135,6 +144,27 @@ describe("ModelStep funding gate", () => {
     });
     renderStep();
     expect(startButton()).toBeEnabled();
+  });
+
+  it("allows Start with Reliant on a funded wallet with no compute entitlement", () => {
+    // The mocked useCloudEligibility above reports ineligible. Compute is a
+    // different product bought separately; a user who redeemed LLM credit but
+    // no compute minutes must still be able to spend that credit.
+    mockUseWalletOverview.mockReturnValue({
+      data: { wallet: { balanceUsdNanos: 2_000_000_000n } },
+      isLoading: false,
+    });
+    renderStep();
+    expect(startButton()).toBeEnabled();
+  });
+
+  it("does not blame compute availability when the wallet is unfunded", () => {
+    mockUseWalletOverview.mockReturnValue({
+      data: { wallet: { balanceUsdNanos: 0n } },
+      isLoading: false,
+    });
+    renderStep();
+    expect(screen.queryByText(/compute is not available/i)).toBeNull();
   });
 
   it("offers a billing route when unfunded", () => {

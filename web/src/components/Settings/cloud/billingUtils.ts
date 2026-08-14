@@ -187,14 +187,6 @@ export function formatOverageRate(centsPerMinute: number): string {
   return `$${(centsPerMinute / 100).toFixed(3)}/min`;
 }
 
-// Minutes are the unit the backend meters, but hours are how people think
-// about machine time — show both, mirroring the redeem-coupon confirmation.
-export function formatMachineMinutesWithHours(minutes: number): string {
-  const hours = minutes / 60;
-  const hoursLabel = Number.isInteger(hours) ? hours.toString() : hours.toFixed(1);
-  return `${minutes} min (${hoursLabel} h)`;
-}
-
 // ── Dates / invoices ──────────────────────────────────────────────────
 
 interface TimestampLike {

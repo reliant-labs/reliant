@@ -274,8 +274,10 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	}
 
 	startCompletions := e.childTracker.detachedCompletionCount(thread)
+	startMessageWakes := e.childTracker.agentMessageWakeCount(thread)
 	if err := workflow.Await(e.ctx, func() bool {
 		return e.childTracker.detachedCompletionCount(thread) > startCompletions ||
+			e.childTracker.agentMessageWakeCount(thread) > startMessageWakes ||
 			!e.childTracker.hasLiveDetachedSpawns(thread)
 	}); err != nil {
 		// Workflow cancellation while waiting — let the normal cancellation
@@ -287,7 +289,20 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	// §6.3's `completed > 0` vs `pending == 0` split): waking only because
 	// the last live spawn was reaped with nothing new delivered must NOT
 	// re-enter the loop, or a run with zero remaining work spins forever.
-	return e.childTracker.detachedCompletionCount(thread) > startCompletions
+	//
+	// A queued message is the other reason re-entering is right: the loop
+	// body drains the mailbox at its top, so returning true here is what
+	// turns the doorbell into an actual delivery. Without this disjunct the
+	// message stays queued until a child finishes — 28 minutes, on the chat
+	// that motivated it.
+	//
+	// This cannot spin. Both counters are monotonic and are compared against
+	// the value snapshotted before the Await, so each notification satisfies
+	// the predicate exactly once; a re-entered loop that finds an empty
+	// mailbox (the drain already ran, or the row was cancelled) takes a
+	// normal turn and comes back with a fresh snapshot.
+	return e.childTracker.detachedCompletionCount(thread) > startCompletions ||
+		e.childTracker.agentMessageWakeCount(thread) > startMessageWakes
 }
 
 func (e *InlineLoopExecutor) inputPolicy() core.InputPolicy {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, Cloud, Loader2, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getIsDev } from "@/lib/constants";
+import { getForcedEligibility } from "../forcedEligibility";
 import {
   DaemonStatus,
   type DaemonInfo,
@@ -13,7 +13,10 @@ import {
   useCreateDaemon,
   useResumeDaemon,
   isReasonedQuotaError,
+  isEntitlementDenial,
 } from "@/hooks/useOnboardingQueries";
+import { RedeemCouponForm } from "@/components/RedeemCouponForm";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 import type {
   CodeSource,
   ComputeChoice,
@@ -75,16 +78,37 @@ export function ComputeStep({
   const hasAdvanced = useRef(false);
   const hasTrackedConnectedRef = useRef(false);
 
-  // Cloud eligibility via React Query
-  const isDev = getIsDev();
+  // Cloud eligibility via React Query.
+  //
+  // getIsDev() is deliberately NOT an input here (same reasoning as ModelStep).
+  // It used to force eligible=true in dev, which ENABLED "Start cloud daemon"
+  // for a user the server considers unfunded: the click sailed past this gate
+  // and failed later at the daemon service's own check, after the UI had
+  // already committed to provisioning. It also suppressed the ineligible copy
+  // and the coupon field — the one affordance that could have fixed the
+  // problem. Dev now sees what the server reports; ?onboarding-credits= is the
+  // escape hatch for exercising either branch on purpose.
+  const goToBilling = useGoToBilling();
+  const forcedEligibility = getForcedEligibility();
   const {
     eligible: cloudEligible,
     reason: cloudReason,
     isLoading: cloudLoading,
+    refetch: refetchCloudEligibility,
   } = useCloudEligibility();
-  const eligible = isDev ? true : cloudEligible;
-  const reason = isDev ? null : cloudReason;
-  const loading = isDev ? false : cloudLoading;
+
+  const eligible =
+    forcedEligibility === "eligible" ||
+    (forcedEligibility == null && cloudEligible);
+  // Fallback matches the NO_SUBSCRIPTION copy: if the server sends a reason
+  // this build has no string for, the user still gets an actionable sentence
+  // rather than a bare statement of what they lack.
+  const reason =
+    eligible
+      ? null
+      : (cloudReason ??
+        "Redeem a coupon code or choose a plan to start a cloud machine.");
+  const loading = forcedEligibility == null && cloudLoading;
 
   // Daemon mutations via React Query. We use mutateAsync below because the
   // surrounding handler needs to sequence listDaemons → resume/create →
@@ -104,6 +128,13 @@ export function ComputeStep({
   const handleCloud = async () => {
     if (!HAS_CLOUD_DAEMONS) return;
     if (isStartingCloud) return;
+    // Belt and braces with the button's disabled state. `disabled` is a
+    // rendering concern — it can be defeated by a stale render, a keyboard
+    // activation racing a refetch, or devtools — and starting to provision a
+    // machine the server will refuse is worse than doing nothing. The daemon
+    // service remains the authority; this just stops the UI from committing to
+    // a flow it has already been told will fail.
+    if (!eligible) return;
 
     setError(null);
     setShowLocal(false);
@@ -130,12 +161,21 @@ export function ComputeStep({
         // app waits for state to settle.
         const daemonId = daemons[0]?.id ?? "";
         if (daemonId) {
+          // A resume that fails because the machine is still settling is
+          // genuinely non-fatal — the user can retry from the chat banner, and
+          // blocking onboarding on it would be worse than proceeding.
+          //
+          // An ENTITLEMENT denial is a different thing entirely, and swallowing
+          // it was the bug behind "Start cloud daemon continues the onboarding":
+          // the user was advanced into the app with no running machine and no
+          // explanation. Let those through to the outer catch, which surfaces
+          // the server's message and leaves the user on this step where the
+          // coupon field is.
           try {
             await resumeDaemonMutation.mutateAsync(daemonId);
-          } catch {
-            // Surface as a soft error via the provisioning UI rather than
-            // blocking onboarding. The hook already routes reasoned-quota
-            // errors into the upgrade modal.
+          } catch (err) {
+            if (isEntitlementDenial(err)) throw err;
+            // else: transient//settling — proceed to the provisioning UI.
           }
         }
       } else {
@@ -180,10 +220,23 @@ export function ComputeStep({
       trackEvent("onboarding_compute_selected", { compute: "cloud" });
       onNext();
     } catch (err) {
+      // Whatever happens here, we do NOT advance: onNext() is above, inside
+      // the try, so any throw leaves the user on this step — which is where
+      // the coupon field and the plans link are.
+      //
       // Reasoned-quota errors are already routed into the global
       // UpgradeRequiredModal by upgradeInterceptor — don't double-surface as
       // an inline error or toast.
       if (isReasonedQuotaError(err)) {
+        return;
+      }
+      // Other entitlement denials (PermissionDenied / FailedPrecondition) get
+      // no modal, so show the server's message inline. It is already written
+      // for a user ("no compute subscription — subscribe to a compute plan to
+      // create daemons") and names the remedy.
+      if (isEntitlementDenial(err)) {
+        setError(err instanceof Error ? err.message : "Cannot start a hosted daemon.");
+        void refetchCloudEligibility();
         return;
       }
       const msg =
@@ -366,23 +419,45 @@ export function ComputeStep({
                   ? "Checking availability..."
                   : "Start cloud daemon"}
             </button>
-            {(!HAS_CLOUD_DAEMONS || (!eligible && reason)) && (
+            {/* Gated on !eligible alone, NOT on `reason` being non-empty: an
+                ineligible user must always get the explanation AND the way out
+                (billing), even if the server sends back a reason this build
+                does not have copy for. A missing string is not a reason to
+                hide the only escape route on the screen. */}
+            {(!HAS_CLOUD_DAEMONS || !eligible) && (
               <div className="space-y-1.5">
                 <p className="text-xs leading-relaxed text-muted-foreground">
                   {!HAS_CLOUD_DAEMONS
                     ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
                     : reason}
                 </p>
-                {HAS_CLOUD_DAEMONS && !eligible && (
-                  <a
-                    href="https://reliantlabs.io/pricing"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-sky-500 transition-colors hover:text-sky-400"
-                  >
-                    View plans &rarr;
-                  </a>
-                )}
+              </div>
+            )}
+            {/* Plans and coupon redemption are shown to EVERY user, not only
+                blocked ones.
+                
+                They were previously gated on `!eligible`, on the theory that
+                someone who can already start a machine has no reason to look
+                at pricing. That is wrong: a new user lands here on the free
+                trial — eligible, so the card offered no way to see what a plan
+                costs or to enter a code they were given. "Where is the pricing
+                button" has one correct answer, which is "always visible". */}
+            {HAS_CLOUD_DAEMONS && (
+              <div className="space-y-2">
+                <RedeemCouponForm
+                  variant="collapsed"
+                  size="sm"
+                  onRedeemed={() => {
+                    void refetchCloudEligibility();
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={goToBilling}
+                  className="flex items-center gap-1 text-xs font-medium text-sky-500 transition-colors hover:text-sky-400"
+                >
+                  View plans &rarr;
+                </button>
               </div>
             )}
           </div>
@@ -453,3 +528,4 @@ export function ComputeStep({
     </div>
   );
 }
+
