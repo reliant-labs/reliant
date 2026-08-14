@@ -161,6 +161,13 @@ jobs:
         run: |
           goose -dir internal/db/migrations/postgres postgres "$DATABASE_URL" up
 
+      # internal/db imports the sqlc output under internal/db/postgres/generated,
+      # which is generated rather than committed. Without this the drift guard
+      # below fails to compile and the job reports a failure that has nothing to
+      # do with the migrations it is checking.
+      - name: Generate sqlc code
+        run: make sqlc
+
       - name: Validate schema.sql agrees with the migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
