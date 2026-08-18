@@ -243,12 +243,8 @@ browser-data/
 # Gluestack MCP server (cloned from github.com/gluestack/mcp)
 .gluestack-mcp/
 
-# Generated protobuf code
-# gen/reliant/ is committed: it is the importable public API surface
-# (reliant.v1 Connect types + clients) consumed by sibling repos.
-# gen/controlplane/ stays ignored — internal-only, regenerated from
-# proto/controlplane/v1/admin.proto via `buf generate`.
-gen/controlplane/
+# Generated protobuf code is COMMITTED — all of gen/, including
+# gen/controlplane/. See the "Generated code is committed" note below.
 nul
 dev/
 
@@ -274,24 +270,28 @@ dev/
 # Workflow Builder Skill (from generated docs + runtime reference data):
 #   -> internal/skills/catalog/builtin/workflow-builder/SKILL.md
 
-# Generated directory (intermediate build artifacts)
-generated/
-
-# Generated Go reference files (from tools/docgen)
-internal/workflow/v3/reference/
-internal/workflow/v2/schema/field_descriptions.go
-
-# Generated YAML bindings (from proto descriptors)
-internal/workflow/yaml/bindings_generated.go
-
-# Generated sqlc code
-internal/db/sqlite/generated/
-
-# Generated mocks
-internal/llm/drivers/mocks/
-
-# Generated TypeScript
-web/src/store/shortcutsData.generated.ts
+# ── Generated code is COMMITTED ──
+#
+# The docgen output under generated/, the Go reference files, the YAML
+# bindings, the sqlc output under internal/db/postgres/generated/, the
+# driver mocks and the generated TypeScript are all checked in
+# deliberately.
+#
+# They used to be ignored on the reasoning that `make generate` re-creates
+# them, so committing them was redundant. What that costs is worse than the
+# duplication: a fresh clone or `git worktree add` does not compile until
+# someone runs codegen, which means CI, a new contributor, and every
+# throwaway worktree all start from a broken tree. It also makes generator
+# upgrades invisible — a proto or sqlc change produces no diff to review,
+# so nobody sees what changed until it breaks at runtime.
+#
+# The rule now is that a checkout builds as-cloned. Regenerating must be a
+# no-op: if `make generate` produces a diff, commit it in the same change
+# that caused it.
+#
+# NOTE: the old rule here was a bare, unanchored `generated/`, which also
+# swept up internal/db/postgres/generated/ as a side effect — the sqlc
+# output the DB layer needs to compile at all.
 
 # Temp build artifacts (docgen binaries - use `go run` instead of building)
 /schema
