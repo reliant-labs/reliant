@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -32,10 +33,17 @@ func TestWebSearchTool(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, requiresPermission)
 
-	// Test actual search (this may fail if rate limited)
+	// Queries the live DuckDuckGo endpoint, so it is gated behind the same
+	// explicit opt-in as TestWebSearchDemo. A short-mode skip is not enough:
+	// CI runs the full suite, so this executed on every PR and failed on
+	// DuckDuckGo's bot challenge for reasons unrelated to the change under
+	// test. The offline coverage in websearch_mock_test.go is what actually
+	// pins parsing, formatting and count limits.
+	//
+	//	RELIANT_TEST_NETWORK=1 go test ./internal/llm/tools/ -run TestWebSearchTool
 	t.Run("ActualSearch", func(t *testing.T) {
-		if testing.Short() {
-			t.Skip("Skipping actual search in short mode")
+		if os.Getenv("RELIANT_TEST_NETWORK") == "" {
+			t.Skip("Skipping live-network test; set RELIANT_TEST_NETWORK=1 to run")
 		}
 
 		response, err := typedTool.tool.Execute(toolCtx, params)
