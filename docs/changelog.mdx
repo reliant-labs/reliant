@@ -13,6 +13,17 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.6.0" description="August 17, 2026">
+### Async spawn, workflow lifecycle, and interruptible turns
+
+- **Async spawn and the runs service** spawned work is tracked through a dedicated internal/runs service and a workflow lifecycle package, replacing the ad-hoc bookkeeping that made a spawn's state hard to reason about once it outlived the turn that started it.
+- **Interrupt and pause handling** a turn can now be interrupted or paused mid-tool and resumed, with the cancel and terminate paths split so stopping a run and tearing it down are no longer the same operation.
+- **Workflow state and stop reasons recorded** new migrations persist workflow state and why a run stopped, restore workflow checkpoints, and scope update-stream counters, with added indexes on the hot write path.
+- **Generated code is committed** a fresh clone or new worktree now compiles without running codegen first. The sqlc output, proto stubs, and docgen artifacts were previously gitignored, so every new checkout started broken and generator changes produced no reviewable diff.
+- **Temporal SDK 1.47 and forge v0.1.0** moves to Temporal SDK v1.47.0 with api v1.63.4, and forge v0.1.0 for the scaffold-stub sentinel and target-scoped env up.
+- **Dev chain teardown that works** the Electron dev chain is supervised by a real process that owns its process group, so a scripted SIGTERM tears the whole chain down instead of leaving orphaned processes holding their ports.
+</Update>
+
 <Update label="v1.4.1" description="August 13, 2026">
 ### Agent messaging, thread lifecycle repair, and a hardened release pipeline
 
