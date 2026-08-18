@@ -42,9 +42,9 @@ func seedSpawnRelationship(
 	require.NoError(t, err)
 
 	childWorkflowID := childThreadID
-	wfStatus := db.WorkflowStatusRunning
+	wfStatus := db.Active()
 	if childThreadStatus != db.ThreadStatusRunning {
-		wfStatus = db.WorkflowStatusCompleted
+		wfStatus = db.Completed()
 	}
 	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
 		ID: childWorkflowID, ChatID: chatID, WorkflowName: "builtin://agent",

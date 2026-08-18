@@ -721,9 +721,7 @@ func createScenarioWorkflowLoader(ctx *rctx.ToolContext, repo db.Repository) fun
 			return loadScenarioBuiltinWorkflow(workflowRef)
 		}
 
-		if strings.HasPrefix(workflowRef, "project://") {
-			workflowRef = strings.TrimPrefix(workflowRef, "project://")
-		}
+		workflowRef = strings.TrimPrefix(workflowRef, "project://")
 
 		if userID != "" {
 			slug := cfg.NormalizeSlug(workflowRef)

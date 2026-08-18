@@ -84,9 +84,15 @@ describe('surface capabilities', () => {
   it('defers the iteration-2 mobile feature set', () => {
     const caps = capabilitiesFor('mobile')
     expect(caps.gitManagement).toBe(false)
-    expect(caps.daemonManage).toBe(false)
     expect(caps.worktreeManage).toBe(false)
     expect(caps.chatAttachments).toBe(false)
+  })
+
+  it('lets mobile manage machines through the dedicated machine surface', () => {
+    const caps = capabilitiesFor('mobile')
+    expect(caps.daemonView).toBe(true)
+    expect(caps.daemonResume).toBe(true)
+    expect(caps.daemonManage).toBe(true)
   })
 
   it('hides host-owned concerns from the embed surface', () => {

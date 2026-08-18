@@ -1795,11 +1795,18 @@ func validateProtoNodeTemplatesWithCompilation(node *reliantv1.Node, basePath []
 	// Validate thread inject expressions (thread is on SubWorkflowArgs only)
 	if thread := model.NodeThreadConfig(node); thread != nil {
 		if inject := thread.GetInject(); inject != nil {
-			if model.CelStringIsSet(inject.GetContent()) {
-				validateCELTemplateStringWithCompilation(celString(inject.GetContent()), append(basePath, "thread", "inject", "content"), env, schemaTypeChecker, nodeIDs, typeCtx, startScope, result)
+			injectFields := []struct {
+				name  string
+				value *reliantv1.CelString
+			}{
+				{name: "role", value: inject.GetRole()},
+				{name: "content", value: inject.GetContent()},
+				{name: "display_style", value: inject.GetDisplayStyle()},
 			}
-			if model.CelStringIsSet(inject.GetLegacyAttachments()) {
-				validateCELTemplateStringWithCompilation(celString(inject.GetLegacyAttachments()), append(basePath, "thread", "inject", "attachments"), env, schemaTypeChecker, nodeIDs, typeCtx, startScope, result)
+			for _, field := range injectFields {
+				if model.CelStringIsSet(field.value) {
+					validateCELTemplateStringWithCompilation(celString(field.value), append(basePath, "thread", "inject", field.name), env, schemaTypeChecker, nodeIDs, typeCtx, startScope, result)
+				}
 			}
 		}
 	}

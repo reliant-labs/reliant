@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -422,10 +421,16 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 		}
 	}
 
-	// Calculate total result characters for filtering decisions
-	totalResultChars := 0
-	for _, r := range results {
-		totalResultChars += len(r.Content)
+	// Cap the aggregate batch before it is returned to the workflow and saved as
+	// tool_result blocks. Per-tool limits are not enough when one LLM turn asks
+	// for several large but individually-valid reads.
+	compactionThreshold := resolvedExecuteToolsCompactionThreshold(protoArgs)
+	results, totalResultChars, batchTruncated := a.capToolResultBatch(ctx, results, compactionThreshold)
+	if batchTruncated {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Tool result batch exceeded budget and was truncated",
+			"totalResultChars", totalResultChars,
+			"batchLimitBytes", toolResultBatchLimitBytes(compactionThreshold),
+			"compactionThreshold", compactionThreshold)
 	}
 
 	// Extract response data from tool results with metadata
@@ -486,6 +491,40 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	projectPath string, // Override working directory for sub-workflows
 	daemonSel *types.DaemonSelector, // Target daemon selector (optional)
 ) message.ToolResult {
+	// Idempotency: a call that already reached a terminal status in a prior
+	// dispatch of this same tool_call_id must not run again -- see
+	// checkPriorTerminalResult.
+	if result, ok := a.checkPriorTerminalResult(ctx, toolCallID, toolName); ok {
+		return result
+	}
+
+	// Idempotency, the other half: a Temporal ACTIVITY RETRY.
+	//
+	// checkPriorTerminalResult cannot cover this one. A worker that died
+	// mid-tool (crash, OOM, heartbeat timeout) never wrote a terminal row, so
+	// the call is still EXECUTING -- deliberately not terminal, because that is
+	// also what a legitimately-running call looks like. Temporal re-delivers
+	// the SAME activity task with Attempt incremented, and without this the
+	// tool runs a second time.
+	//
+	// Tools are not idempotent, so a redelivered attempt must report what
+	// happened rather than repeat it. `ExecuteRunStep` has refused retries this
+	// way for shell commands since long before this (run_step.go); this closes
+	// the same hole for every tool.
+	//
+	// Unlike run_step, this does NOT return an error. Failing here would burn
+	// the remaining attempts (MaximumAttempts: 5) and eventually kill the step,
+	// when the honest outcome is a completed activity carrying an error
+	// tool_result: the loop advances, and the model is told the tool was
+	// interrupted so it can decide whether to try again.
+	if isActivityRetry(attemptNumber) {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Activity retry detected; not re-executing the tool",
+			"tool_call_id", toolCallID,
+			"tool_name", toolName,
+			"attempt", attemptNumber)
+		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil)
+	}
+
 	// Check for cancellation before starting work
 	if ctx.Err() != nil {
 		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Cancelled: %v", ctx.Err()), "", true, nil)
@@ -532,6 +571,44 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	return a.executeToolWithStatus(ctx, tec)
 }
 
+// checkPriorTerminalResult is the fix for the interrupt livelock (chat
+// b7cd65c6, specs/interrupt-pause-spec.md #2): a re-dispatched step runs in a
+// FRESH, uncancelled context (ThreadInterrupt mints a new WithCancel per
+// epoch), so the ctx.Err() short-circuit above never fires on re-entry and a
+// tool would otherwise run again from scratch -- restarting a blocking call
+// like spawn_status(wait:true) and starving the mailbox for as long as the
+// wait takes, every time.
+//
+// Tools are not idempotent, so a call that already reached a TERMINAL status
+// (Completed/Failed/Cancelled -- see core.ToolCallStatus.IsTerminal) on a
+// prior dispatch must never execute again. It returns its recorded outcome
+// instead, exactly as if the context were still the cancelled one that
+// produced that row. Backgrounded is deliberately excluded: the process is
+// still running and owes a real outcome later, so treating it as settled here
+// would abandon it.
+//
+// A call with no row, or a non-terminal (Pending/Executing) row, executes
+// normally -- this must not break ordinary retries.
+func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, toolCallID, toolName string) (message.ToolResult, bool) {
+	call, err := a.repo.GetToolCall(ctx, toolCallID)
+	if err != nil || call == nil || !call.Status.IsTerminal() {
+		return message.ToolResult{}, false
+	}
+
+	activity.GetLogger(ctx).Info("[ExecuteTools] Tool call already terminal, returning recorded result instead of re-executing",
+		"tool_call_id", toolCallID,
+		"status", call.Status)
+
+	result, err := a.repo.GetToolCallResult(ctx, toolCallID)
+	if err != nil || result == nil {
+		// Terminal row, but no result content survived (e.g. a historical
+		// Cancelled row that predates durable status). Same stub every other
+		// dangling-tool-call repair path uses -- do NOT re-execute.
+		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil), true
+	}
+	return a.buildToolResult(toolCallID, toolName, result.Content, "", result.IsError, nil), true
+}
+
 // executeToolWithStatus handles tool execution with proper status emissions
 func (a *ExecuteToolsActivity) executeToolWithStatus(ctx context.Context, tec *toolExecutionContext) message.ToolResult {
 	toolCallID := tec.toolCallID
@@ -576,12 +653,13 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	if ctx.Err() != nil && (execResult == nil || !execResult.Success) {
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "cancelled")
 		completedAt := time.Now()
-		a.upsertToolCall(ctx, tec, core.ToolCallStatusCancelled, toolCallUpsertOpts{
+		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true, nil)
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusCancelled, toolCallUpsertOpts{
 			startedAt:    &startedAt,
 			completedAt:  &completedAt,
 			errorMessage: ctx.Err().Error(),
-		})
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true, nil)
+		}, &toolCallResultWrite{content: result.Content, isError: true})
+		return result
 	}
 
 	// Check for execution error
@@ -589,12 +667,11 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "failed")
 		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution failed: %v", execErr), "", true, nil)
 		completedAt := time.Now()
-		a.upsertToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
 			startedAt:    &startedAt,
 			completedAt:  &completedAt,
 			errorMessage: execErr.Error(),
-		})
-		a.upsertToolCallResult(ctx, toolCallID, result.Content, true)
+		}, &toolCallResultWrite{content: result.Content, isError: true})
 		return result
 	}
 
@@ -605,51 +682,106 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 		return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, false, execResult.BinaryParts)
 	}
 
-	// Check if user cancelled right before completion
-	if shell.GetCancelSignal().IsCancelled(toolCallID) {
-		logging.Info("[ExecuteTools] Tool completed but cancel signal was set - not emitting completed status",
-			"toolCallID", toolCallID,
-			"toolName", toolName)
-		shell.GetCancelSignal().ClearCancelled(toolCallID)
-		completedAt := time.Now()
-		a.upsertToolCall(ctx, tec, core.ToolCallStatusCancelled, toolCallUpsertOpts{
-			startedAt:   &startedAt,
-			completedAt: &completedAt,
-		})
-		return a.buildToolResult(toolCallID, toolName, "Tool execution cancelled by user", "", true, nil)
-	}
-
-	// Tool completed successfully
-	a.emitToolStatus(ctx, chatID, toolCallID, toolName, "completed")
-
-	// Emit refetch signal for file-mutating tools so frontend updates without polling
-	if isFileMutatingTool(toolName) {
-		a.emitWorktreeRefetch(ctx, tec)
-	}
-
-	// Return result (may still be an error from the tool itself)
+	// The tool ran. Decide the outcome BEFORE announcing it.
 	isError := !execResult.Success || execResult.IsError
 	result := a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, isError, execResult.BinaryParts)
 
-	// A "completed" chat_updates event covers both a clean run and a
-	// business-level tool error (e.g. a bad grep pattern) -- the durable
-	// status distinguishes them, since core.ToolCallStatusFailed is defined
-	// as "the tool ran and returned an error result."
 	status := core.ToolCallStatusCompleted
 	errMsg := ""
 	if isError {
 		status = core.ToolCallStatusFailed
 		errMsg = result.Content
 	}
+
+	// Announce the SAME outcome that is about to be written durably.
+	//
+	// This used to emit "completed" unconditionally, before computing status,
+	// and a tool whose result was an error then wrote Failed to the row. The
+	// two channels disagreed, and the UI reads the live one first and the
+	// durable one on reload -- so a cancelled or failed tool rendered green
+	// while the user watched and orange when they came back to the chat. The
+	// durable row was right both times; the event was lying.
+	a.emitToolStatus(ctx, chatID, toolCallID, toolName, toolStatusEvent(status))
+
+	// Emit refetch signal for file-mutating tools so frontend updates without polling
+	if isFileMutatingTool(toolName) {
+		a.emitWorktreeRefetch(ctx, tec)
+	}
 	completedAt := time.Now()
-	a.upsertToolCall(ctx, tec, status, toolCallUpsertOpts{
+	a.upsertTerminalToolCall(ctx, tec, status, toolCallUpsertOpts{
 		startedAt:    &startedAt,
 		completedAt:  &completedAt,
 		errorMessage: errMsg,
-	})
-	a.upsertToolCallResult(ctx, toolCallID, result.Content, isError)
+	}, &toolCallResultWrite{content: result.Content, isError: isError})
 
 	return result
+}
+
+// toolCallResultWrite is the result half of a terminal tool-call write.
+type toolCallResultWrite struct {
+	content string
+	isError bool
+}
+
+// upsertTerminalToolCall writes a tool call's terminal STATUS and its RESULT as
+// one transaction.
+//
+// These were two independent best-effort writes, and the gap between them is a
+// real failure mode rather than a theoretical one. The two rows answer the same
+// question — "how did this tool call end?" — and either half committing alone
+// produces a lie:
+//
+//   - status committed, result lost  -> the call reads as finished with no
+//     output, and repairMessageHistory later synthesizes "outcome unknown" for
+//     a tool that actually succeeded.
+//   - result committed, status lost  -> the call reads as still EXECUTING
+//     forever while its answer sits in the database, which is how a completed
+//     spawn_status call (status=3, result written 20:30:32.786) left its parent
+//     unable to see that its sub-agent was still running.
+//
+// RunTx is re-entrant, so this joins an ambient transaction when one exists and
+// opens its own otherwise. Still best-effort overall — a tool call must not
+// fail because its bookkeeping did — but now the bookkeeping is all-or-nothing
+// instead of half-applied.
+//
+// The detached context is preserved for exactly the reason the two writes had
+// it individually: a TERMINAL write happens on the paths where the request
+// context is most likely already dead (cancellation, termination, timeout), and
+// using a cancelled context there leaves the row stuck at EXECUTING forever.
+func (a *ExecuteToolsActivity) upsertTerminalToolCall(
+	ctx context.Context,
+	tec *toolExecutionContext,
+	status core.ToolCallStatus,
+	opts toolCallUpsertOpts,
+	res *toolCallResultWrite,
+) {
+	detached, cancel := detachedForTerminalWrite(ctx)
+	defer cancel()
+
+	if err := a.repo.RunTx(detached, func(txCtx context.Context) error {
+		if err := a.upsertToolCallTx(txCtx, tec, status, opts); err != nil {
+			return err
+		}
+		if res == nil {
+			return nil
+		}
+		now := time.Now()
+		return a.repo.UpsertToolCallResult(txCtx, &core.ToolCallResult{
+			ToolCallID: tec.toolCallID,
+			Content:    res.content,
+			IsError:    res.isError,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		})
+	}); err != nil {
+		// Best-effort: never fail the tool call over its own bookkeeping. The
+		// reconciler's stranded-spawn sweeps and the history loader's
+		// recoverPersistedToolResults both repair from whatever did land.
+		activity.GetLogger(ctx).Error("[TOOL_STATUS] Failed to persist terminal tool call status+result",
+			"error", err,
+			"tool_call_id", tec.toolCallID,
+			"status", status)
+	}
 }
 
 // buildToolResult creates a message.ToolResult without saving to database
@@ -715,6 +847,44 @@ func (a *ExecuteToolsActivity) emitToolStatus(ctx context.Context, chatID, toolC
 		activity.GetLogger(ctx).Info("[TOOL_STATUS] Emitted tool status update",
 			"tool_call_id", toolCallID,
 			"status", status)
+	}
+}
+
+// isActivityRetry reports whether this delivery of the activity task is a
+// REDELIVERY of one that already ran, rather than its first attempt.
+//
+// Temporal's Attempt is 1-indexed, so anything above 1 means a previous
+// attempt started and did not report a result — a worker crash, an OOM, or a
+// heartbeat timeout. The tool may have done all, some or none of its work, and
+// since tools are not idempotent the only safe answer is to report rather than
+// repeat.
+//
+// This is deliberately separate from a loop re-dispatch, which is NOT a retry:
+// that arrives as a brand-new activity at attempt 1, and is handled by
+// checkPriorTerminalResult keyed on the durable row.
+func isActivityRetry(attemptNumber int) bool {
+	return attemptNumber > 1
+}
+
+// toolStatusEvent maps a durable core.ToolCallStatus to the chat_updates
+// status string that names the same outcome.
+//
+// It exists so the live event and the durable row cannot drift: the caller
+// computes the status once and derives both from it, instead of writing one
+// and hand-picking a string for the other. The two vocabularies are separate
+// (see isTerminalToolStatusEvent) and this is the single point of translation.
+func toolStatusEvent(status core.ToolCallStatus) string {
+	switch status {
+	case core.ToolCallStatusCompleted:
+		return "completed"
+	case core.ToolCallStatusFailed:
+		return "failed"
+	case core.ToolCallStatusCancelled:
+		return "cancelled"
+	case core.ToolCallStatusBackgrounded:
+		return "backgrounded"
+	default:
+		return "executing"
 	}
 }
 
@@ -796,6 +966,30 @@ func (a *ExecuteToolsActivity) upsertToolCall(ctx context.Context, tec *toolExec
 			"tool_call_id", tec.toolCallID,
 			"status", status)
 	}
+}
+
+// upsertToolCallTx is upsertToolCall's write, minus the context handling and
+// error swallowing, so it can participate in a caller's transaction. The
+// caller owns the detached context and the best-effort policy; this returns the
+// error so a failure can roll the status and result back together.
+func (a *ExecuteToolsActivity) upsertToolCallTx(ctx context.Context, tec *toolExecutionContext, status core.ToolCallStatus, opts toolCallUpsertOpts) error {
+	now := time.Now()
+	call := &core.ToolCall{
+		ID:          tec.toolCallID,
+		ChatID:      tec.getChatID(),
+		ToolName:    tec.toolName,
+		Input:       toolInputToJSON(tec.toolInput),
+		Status:      status,
+		StartedAt:   opts.startedAt,
+		CompletedAt: opts.completedAt,
+		RequestedAt: now,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if opts.errorMessage != "" {
+		call.ErrorMessage = &opts.errorMessage
+	}
+	return db.UpsertToolCallStatus(ctx, a.repo, call)
 }
 
 // upsertToolCallResult persists the durable tool_call_results row. Content is

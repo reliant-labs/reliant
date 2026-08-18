@@ -24,9 +24,7 @@ func createScenarioWorkflowLoader(repo db.Repository, ctx context.Context, userI
 			return loadScenarioBuiltinWorkflow(workflowRef)
 		}
 
-		if strings.HasPrefix(workflowRef, "project://") {
-			workflowRef = strings.TrimPrefix(workflowRef, "project://")
-		}
+		workflowRef = strings.TrimPrefix(workflowRef, "project://")
 
 		if userID != "" {
 			slug := cfg.NormalizeSlug(workflowRef)

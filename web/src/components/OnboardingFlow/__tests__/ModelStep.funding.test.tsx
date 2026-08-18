@@ -10,7 +10,7 @@
  * COULD use managed Reliant. We mock the wallet + eligibility hooks because the
  * contract under test is exactly their return shapes, not the transport.
  */
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
@@ -93,12 +93,14 @@ function wrapper({ children }: { children: ReactNode }) {
 
 const plan: Partial<LaunchPlan> = { compute: "cloud_free_trial" };
 
-function renderStep() {
+function renderStep(
+  overrides: { updatePlan?: () => void; onNext?: () => void } = {},
+) {
   return render(
     <ModelStep
       plan={plan as LaunchPlan}
-      updatePlan={vi.fn()}
-      onNext={vi.fn()}
+      updatePlan={overrides.updatePlan ?? vi.fn()}
+      onNext={overrides.onNext ?? vi.fn()}
       onBack={vi.fn()}
     />,
     { wrapper },
@@ -184,5 +186,69 @@ describe("ModelStep funding gate", () => {
     renderStep();
     const input = screen.getByLabelText(/coupon code/i);
     expect(input.getAttribute("placeholder")).not.toMatch(/launch/i);
+  });
+
+  // THE USER'S REPORT: "I was able to select reliant as an ai provider with no
+  // coupon specified, and no billing setup."
+  //
+  // `disabled` is a RENDERING concern. A stale render, a keyboard activation
+  // racing the wallet refetch, or devtools all reach the handler anyway, and
+  // committing the choice sends the user into the app with a provider that
+  // fails on their FIRST message (the LLM proxy rejects a zero balance).
+  //
+  // jsdom/React will not dispatch a click on a button React still considers
+  // disabled, so the DOM cannot express "the handler ran anyway" — asserting
+  // through it passes even with the guard deleted, which makes it a test of
+  // nothing. Instead drive the SAME path the button's onClick drives, with the
+  // attribute out of the picture entirely: render with the escape hatch that
+  // enables the button, then flip the wallet to empty so the click lands while
+  // `creditsAvailable` is false. That is precisely the stale-render race.
+  it("does not commit Reliant when the handler runs on an empty wallet", async () => {
+    // ?onboarding-credits=eligible forces the button enabled...
+    const search = new URL(window.location.href);
+    search.searchParams.set("onboarding-credits", "eligible");
+    window.history.replaceState({}, "", search.toString());
+
+    // ...while the wallet is genuinely empty.
+    mockUseWalletOverview.mockReturnValue({
+      data: { wallet: { balanceUsdNanos: 0n } },
+      isLoading: false,
+    });
+
+    const updatePlan = vi.fn();
+    const onNext = vi.fn();
+    renderStep({ updatePlan, onNext });
+
+    const btn = startButton();
+    expect(btn).toBeEnabled(); // the forced-eligible path
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+
+    // The forced flag is a DEV escape hatch for exercising the UI; it must not
+    // let a real unfunded account commit. Balance is the only real authority.
+    expect(updatePlan).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+
+    window.history.replaceState({}, "", "/");
+  });
+
+  // A funded wallet must still be able to proceed, or the guard is just a wall.
+  it("commits Reliant when the wallet is funded", async () => {
+    mockUseWalletOverview.mockReturnValue({
+      data: { wallet: { balanceUsdNanos: 2_000_000_000n } },
+      isLoading: false,
+    });
+    const updatePlan = vi.fn();
+    const onNext = vi.fn();
+    renderStep({ updatePlan, onNext });
+
+    fireEvent.click(startButton());
+
+    await waitFor(() => {
+      expect(updatePlan).toHaveBeenCalledWith({
+        modelProvider: "reliant_credits",
+      });
+    });
   });
 });

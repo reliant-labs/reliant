@@ -4,7 +4,9 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
+	"unicode"
 
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -85,14 +87,20 @@ func ValidateJSONWithRepair(toolName, jsonStr string, schemaJSON []byte) (string
 		return jsonStr, nil
 	}
 
-	// Validation failed — attempt stringified-JSON repair guided by the schema.
+	// Validation failed — attempt schema-guided repair.
 	var schemaMap map[string]interface{}
 	if err := json.Unmarshal(schemaJSON, &schemaMap); err != nil {
 		return jsonStr, fmt.Errorf("validation failed: %w", valErr)
 	}
 
 	repairedData, repairedPaths := repairStringifiedJSON(inputData, schemaMap)
-	if len(repairedPaths) == 0 {
+
+	// Second repair class: the model spelled a property name differently than
+	// the schema (file vs file_path, filePath vs file_path). Under a closed
+	// schema that is a hard rejection, so the call costs a full turn to retry.
+	repairedData, renamedKeys := repairAliasedKeys(repairedData, schemaMap)
+
+	if len(repairedPaths) == 0 && len(renamedKeys) == 0 {
 		// Nothing repairable (e.g. the string isn't valid JSON of the expected
 		// type, or the schema expects a string) — fail with the original error.
 		return jsonStr, fmt.Errorf("validation failed: %w", valErr)
@@ -100,10 +108,18 @@ func ValidateJSONWithRepair(toolName, jsonStr string, schemaJSON []byte) (string
 
 	// Telemetry: log every repair, even if re-validation still fails — the
 	// signal we want is "how often do models stringify values".
-	logging.Info("Repaired stringified JSON in tool input",
-		"tool", toolName,
-		"properties", strings.Join(repairedPaths, ", "),
-	)
+	if len(repairedPaths) > 0 {
+		logging.Info("Repaired stringified JSON in tool input",
+			"tool", toolName,
+			"properties", strings.Join(repairedPaths, ", "),
+		)
+	}
+	if len(renamedKeys) > 0 {
+		logging.Info("Repaired aliased property name in tool input",
+			"tool", toolName,
+			"renames", strings.Join(renamedKeys, ", "),
+		)
+	}
 
 	if err := resolved.Validate(repairedData); err != nil {
 		// Repair fired but the input is still invalid for other reasons —
@@ -199,6 +215,226 @@ func repairValueAgainstSchema(value interface{}, schema map[string]interface{}, 
 		}
 	}
 	return value
+}
+
+// repairAliasedKeys renames a top-level property the model spelled differently
+// than the schema does — the observed case being a write tool call carrying
+// {"file": ...} instead of {"file_path": ...}, which a closed schema rejects
+// with `unexpected additional properties ["file"]`.
+//
+// The model cannot see why it was wrong from that message alone, so it burns a
+// full generation retrying. Renaming a key we can identify UNAMBIGUOUSLY costs
+// nothing and saves that turn.
+//
+// The bar for renaming is deliberately high, because a wrong rename writes the
+// caller's content somewhere they did not ask for — worse than a clean
+// rejection. All of the following must hold:
+//
+//   - The schema is CLOSED (additionalProperties: false). If unknown keys are
+//     legal the key is a real value, not a misspelling, and renaming it would
+//     destroy data.
+//   - The key is genuinely unknown (not itself a declared property).
+//   - The target property is ABSENT or empty in the input, so nothing the
+//     model actually supplied is overwritten.
+//   - Exactly ONE candidate property matches lexically. Two candidates means we
+//     would be guessing.
+//   - The supplied value FITS the target property's declared type.
+//
+// Matching is lexical only (normalize away case and separators, then require
+// one name to be a prefix/suffix-delimited component of the other). It never
+// infers meaning, so an unrelated key like "destination" is left alone for
+// validation to reject.
+//
+// Only top-level properties are considered: that is where the failure occurs,
+// and every extra layer of inference widens the blast radius.
+func repairAliasedKeys(value interface{}, schema map[string]interface{}) (interface{}, []string) {
+	obj, ok := value.(map[string]interface{})
+	if !ok || schema == nil {
+		return value, nil
+	}
+
+	// Only repair closed schemas. Under an open schema an unknown key is legal.
+	if additional, ok := schema["additionalProperties"].(bool); !ok || additional {
+		return value, nil
+	}
+
+	props, ok := schema["properties"].(map[string]interface{})
+	if !ok || len(props) == 0 {
+		return value, nil
+	}
+
+	var renamed []string
+	for key, val := range obj {
+		if _, declared := props[key]; declared {
+			continue
+		}
+
+		target, ok := uniqueAliasTarget(key, val, props, obj)
+		if !ok {
+			continue
+		}
+
+		obj[target] = val
+		delete(obj, key)
+		renamed = append(renamed, fmt.Sprintf("%s->%s", key, target))
+	}
+
+	// Deterministic order so the telemetry line is stable across map iteration.
+	sort.Strings(renamed)
+	return obj, renamed
+}
+
+// uniqueAliasTarget returns the single schema property that unknown key `key`
+// unambiguously refers to, or ok=false when there is not exactly one safe
+// candidate. See repairAliasedKeys for the full set of conditions.
+func uniqueAliasTarget(key string, val interface{}, props, obj map[string]interface{}) (string, bool) {
+	var found string
+	for candidate, rawSchema := range props {
+		// Never overwrite something the model actually supplied.
+		if existing, present := obj[candidate]; present && !isEmptyValue(existing) {
+			continue
+		}
+		if !namesAlias(key, candidate) {
+			continue
+		}
+		candidateSchema, _ := rawSchema.(map[string]interface{})
+		if !valueFitsSchemaType(val, candidateSchema) {
+			continue
+		}
+		if found != "" {
+			// Ambiguous — two properties could be meant. Refuse to guess.
+			return "", false
+		}
+		found = candidate
+	}
+	return found, found != ""
+}
+
+// namesAlias reports whether two property names are plausibly the same name
+// spelled differently. After normalizing case and separators away, one must
+// either equal the other or appear as a leading/trailing WORD component of it
+// (on the original separator/case boundaries).
+//
+// So file ~ file_path and path ~ file_path, but destination !~ file_path, and
+// "at" does not match "path" — component boundaries are respected rather than
+// matching bare substrings.
+func namesAlias(a, b string) bool {
+	na, nb := normalizeKeyName(a), normalizeKeyName(b)
+	if na == "" || nb == "" {
+		return false
+	}
+	if na == nb {
+		return true
+	}
+	return hasWordComponent(splitKeyWords(a), splitKeyWords(b))
+}
+
+// hasWordComponent reports whether the shorter word sequence appears at the
+// start or end of the longer one, e.g. ["file"] within ["file","path"].
+func hasWordComponent(a, b []string) bool {
+	short, long := a, b
+	if len(short) > len(long) {
+		short, long = long, short
+	}
+	if len(short) == 0 || len(short) >= len(long) {
+		return false
+	}
+	matchesAt := func(offset int) bool {
+		for i, w := range short {
+			if long[offset+i] != w {
+				return false
+			}
+		}
+		return true
+	}
+	return matchesAt(0) || matchesAt(len(long)-len(short))
+}
+
+// splitKeyWords splits a property name into lowercase words on underscores,
+// dashes, spaces and camelCase humps: "filePath" and "file_path" both yield
+// ["file","path"].
+func splitKeyWords(s string) []string {
+	var words []string
+	var cur strings.Builder
+	flush := func() {
+		if cur.Len() > 0 {
+			words = append(words, strings.ToLower(cur.String()))
+			cur.Reset()
+		}
+	}
+	for i, r := range s {
+		switch {
+		case r == '_' || r == '-' || r == ' ' || r == '.':
+			flush()
+		case unicode.IsUpper(r):
+			// A hump starts a new word, except across a run of capitals.
+			if i > 0 && !unicode.IsUpper(rune(s[i-1])) {
+				flush()
+			}
+			cur.WriteRune(r)
+		default:
+			cur.WriteRune(r)
+		}
+	}
+	flush()
+	return words
+}
+
+// normalizeKeyName lowercases a name and strips separators, so file_path,
+// filePath and FilePath all collapse to "filepath".
+func normalizeKeyName(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+// isEmptyValue reports whether a present value carries no information, so
+// renaming onto it cannot destroy anything the model meant to send.
+func isEmptyValue(v interface{}) bool {
+	switch t := v.(type) {
+	case nil:
+		return true
+	case string:
+		return t == ""
+	case []interface{}:
+		return len(t) == 0
+	case map[string]interface{}:
+		return len(t) == 0
+	default:
+		return false
+	}
+}
+
+// valueFitsSchemaType reports whether a decoded JSON value is acceptable for a
+// schema position. A schema with no declared type accepts anything.
+func valueFitsSchemaType(v interface{}, schema map[string]interface{}) bool {
+	if schema == nil {
+		return false
+	}
+	expected := schemaExpectedTypes(schema)
+	if len(expected) == 0 {
+		return true
+	}
+	switch v.(type) {
+	case string:
+		return expected["string"]
+	case bool:
+		return expected["boolean"]
+	case float64:
+		return expected["number"] || expected["integer"]
+	case []interface{}:
+		return expected["array"]
+	case map[string]interface{}:
+		return expected["object"]
+	case nil:
+		return expected["null"]
+	default:
+		return false
+	}
 }
 
 // schemaExpectedTypes returns the set of type names a schema position accepts.

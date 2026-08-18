@@ -1014,6 +1014,10 @@ type InjectConfig struct {
 	Role *CelString `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
 	// Content is the message text. Required. Supports CEL expressions.
 	Content *CelString `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	// DisplayStyle controls how the injected message is shown in Reliant.
+	// Defaults to "hidden" when unset so workflow prompts seed the LLM without
+	// rendering as human transcript content.
+	DisplayStyle *CelString `protobuf:"bytes,6,opt,name=display_style,json=displayStyle,proto3" json:"display_style,omitempty"`
 	// Deprecated: use repeated attachments field (5) instead.
 	//
 	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
@@ -1064,6 +1068,13 @@ func (x *InjectConfig) GetRole() *CelString {
 func (x *InjectConfig) GetContent() *CelString {
 	if x != nil {
 		return x.Content
+	}
+	return nil
+}
+
+func (x *InjectConfig) GetDisplayStyle() *CelString {
+	if x != nil {
+		return x.DisplayStyle
 	}
 	return nil
 }
@@ -2132,6 +2143,11 @@ type ExecuteToolsArgs struct {
 	ExpectedResponseTools []string `protobuf:"bytes,3,rep,name=expected_response_tools,json=expectedResponseTools,proto3" json:"expected_response_tools,omitempty"`
 	// ResponseToolSchemas maps response tool names to their JSON schemas.
 	ResponseToolSchemas map[string]*structpb.Struct `protobuf:"bytes,4,rep,name=response_tool_schemas,json=responseToolSchemas,proto3" json:"response_tool_schemas,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// CompactionThreshold is the resolved upstream call_llm compaction threshold.
+	// execute_tools uses it to keep a single batch of tool_result content from
+	// consuming too much of the next LLM turn. Wire this from
+	// nodes.<call_llm>.compaction_threshold so provider-specific windows are honored.
+	CompactionThreshold *CelInt `protobuf:"bytes,5,opt,name=compaction_threshold,json=compactionThreshold,proto3" json:"compaction_threshold,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -2190,6 +2206,13 @@ func (x *ExecuteToolsArgs) GetExpectedResponseTools() []string {
 func (x *ExecuteToolsArgs) GetResponseToolSchemas() map[string]*structpb.Struct {
 	if x != nil {
 		return x.ResponseToolSchemas
+	}
+	return nil
+}
+
+func (x *ExecuteToolsArgs) GetCompactionThreshold() *CelInt {
+	if x != nil {
+		return x.CompactionThreshold
 	}
 	return nil
 }
@@ -5004,6 +5027,20 @@ type CallLLMOutput struct {
 	// Exposed as nodes.call_llm.model so the inline save_message can persist it
 	// onto messages.model. Empty when resolution produced no definition.
 	Model string `protobuf:"bytes,11,opt,name=model,proto3" json:"model,omitempty"`
+	// PendingInbox reports that messages arrived in this thread's mailbox
+	// WHILE this call was streaming, and have therefore not been delivered yet.
+	//
+	// This exists to close the loop-exit gap. CallLLM delivers the mailbox
+	// before it reads history, so anything queued after that point is not part
+	// of this turn. If the model then returns no tool calls, an agent loop whose
+	// while-condition only tests tool_calls exits — and the queued message is
+	// stranded on a dead thread with nothing left to deliver it.
+	//
+	// Agent loops read this as `nodes.call_llm.pending_inbox` and keep looping,
+	// which sends them back through CallLLM, which delivers it. Checked AFTER
+	// streaming completes precisely so it covers the streaming window, which is
+	// where a user watching a long answer actually types.
+	PendingInbox bool `protobuf:"varint,14,opt,name=pending_inbox,json=pendingInbox,proto3" json:"pending_inbox,omitempty"`
 	// MessageID is the pre-allocated assistant message id this call streamed
 	// under (delta identity protocol). Echoed back from
 	// RuntimeContext.AssistantMessageID so the workflow can carry it into the
@@ -5122,6 +5159,13 @@ func (x *CallLLMOutput) GetModel() string {
 		return x.Model
 	}
 	return ""
+}
+
+func (x *CallLLMOutput) GetPendingInbox() bool {
+	if x != nil {
+		return x.PendingInbox
+	}
+	return false
 }
 
 func (x *CallLLMOutput) GetMessageId() string {
@@ -6470,12 +6514,14 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04memo\x18\x02 \x01(\v2\x13.reliant.v1.CelBoolB6\x82\xb5\x182\n" +
 	"0Whether to memoize thread across loop iterationsR\x04memo\x12Y\n" +
 	"\x06inject\x18\x03 \x01(\v2\x18.reliant.v1.InjectConfigB'\x82\xb5\x18#\n" +
-	"!Message injection into the threadR\x06inject\"\xff\x02\n" +
+	"!Message injection into the threadR\x06inject\"\x9a\x04\n" +
 	"\fInjectConfig\x12i\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB>\x82\xb5\x18:\n" +
 	"!Message role for injected message\x12\x15user|system|assistantR\x04role\x12P\n" +
 	"\acontent\x18\x02 \x01(\v2\x15.reliant.v1.CelStringB\x1f\x82\xb5\x18\x1b\n" +
-	"\x19Message content to injectR\acontent\x12N\n" +
+	"\x19Message content to injectR\acontent\x12\x98\x01\n" +
+	"\rdisplay_style\x18\x06 \x01(\v2\x15.reliant.v1.CelStringB\\\x82\xb5\x18X\n" +
+	"9UI display style for injected message; defaults to hidden\x12\x1binfo|warning|success|hiddenR\fdisplayStyle\x12N\n" +
 	"\x12legacy_attachments\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\b\x82\xb5\x18\x02 \x01\x18\x01R\x11legacyAttachments\x12\\\n" +
 	"\vattachments\x18\x05 \x03(\v2\x1c.reliant.v1.InjectAttachmentB\x1c\x82\xb5\x18\x18\n" +
 	"\x16Attachments to includeR\vattachmentsJ\x04\b\x04\x10\x05\"\x93\x01\n" +
@@ -6565,14 +6611,15 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"toolCallId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\acontent\x18\x03 \x01(\tR\acontent\x12\x19\n" +
-	"\bis_error\x18\x04 \x01(\bR\aisError\"\xbb\x04\n" +
+	"\bis_error\x18\x04 \x01(\bR\aisError\"\x8a\x05\n" +
 	"\x10ExecuteToolsArgs\x12d\n" +
 	"\n" +
 	"tool_calls\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
 	"(CEL expression for tool calls to executeR\ttoolCalls\x12O\n" +
 	"\x13resolved_tool_calls\x18\x02 \x03(\v2\x17.reliant.v1.ToolCallMsgB\x06\x82\xb5\x18\x02 \x01R\x11resolvedToolCalls\x12>\n" +
 	"\x17expected_response_tools\x18\x03 \x03(\tB\x06\x82\xb5\x18\x02 \x01R\x15expectedResponseTools\x12q\n" +
-	"\x15response_tool_schemas\x18\x04 \x03(\v25.reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntryB\x06\x82\xb5\x18\x02 \x01R\x13responseToolSchemas\x1a_\n" +
+	"\x15response_tool_schemas\x18\x04 \x03(\v25.reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntryB\x06\x82\xb5\x18\x02 \x01R\x13responseToolSchemas\x12M\n" +
+	"\x14compaction_threshold\x18\x05 \x01(\v2\x12.reliant.v1.CelIntB\x06\x82\xb5\x18\x02 \x01R\x13compactionThreshold\x1a_\n" +
 	"\x18ResponseToolSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
 	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01:\\\x8a\xb5\x18X\n" +
@@ -6900,7 +6947,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04text\x18\x03 \x01(\tR\x04text\"H\n" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xbe\x04\n" +
+	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xe3\x04\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -6915,7 +6962,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04cost\x18\t \x01(\x01R\x04cost\x121\n" +
 	"\x14compaction_threshold\x18\n" +
 	" \x01(\x05R\x13compactionThreshold\x12\x14\n" +
-	"\x05model\x18\v \x01(\tR\x05model\x12\x1d\n" +
+	"\x05model\x18\v \x01(\tR\x05model\x12#\n" +
+	"\rpending_inbox\x18\x0e \x01(\bR\fpendingInbox\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\f \x01(\tR\tmessageId\x12&\n" +
 	"\x0flast_stream_seq\x18\r \x01(\x03R\rlastStreamSeq\"\xa1\x02\n" +
@@ -7166,177 +7214,179 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	13,  // 12: reliant.v1.ThreadConfig.inject:type_name -> reliant.v1.InjectConfig
 	0,   // 13: reliant.v1.InjectConfig.role:type_name -> reliant.v1.CelString
 	0,   // 14: reliant.v1.InjectConfig.content:type_name -> reliant.v1.CelString
-	0,   // 15: reliant.v1.InjectConfig.legacy_attachments:type_name -> reliant.v1.CelString
-	14,  // 16: reliant.v1.InjectConfig.attachments:type_name -> reliant.v1.InjectAttachment
-	0,   // 17: reliant.v1.ProjectConfig.path:type_name -> reliant.v1.CelString
-	6,   // 18: reliant.v1.Node.condition:type_name -> reliant.v1.DirectCelBool
-	0,   // 19: reliant.v1.Node.timeout:type_name -> reliant.v1.CelString
-	11,  // 20: reliant.v1.Node.save_message:type_name -> reliant.v1.SaveMessageConfig
-	10,  // 21: reliant.v1.Node.daemon:type_name -> reliant.v1.CelDaemonSelector
-	19,  // 22: reliant.v1.Node.call_llm:type_name -> reliant.v1.CallLLMArgs
-	24,  // 23: reliant.v1.Node.execute_tools:type_name -> reliant.v1.ExecuteToolsArgs
-	25,  // 24: reliant.v1.Node.compact:type_name -> reliant.v1.CompactArgs
-	26,  // 25: reliant.v1.Node.approval:type_name -> reliant.v1.ApprovalArgs
-	27,  // 26: reliant.v1.Node.ask_question:type_name -> reliant.v1.AskQuestionArgs
-	28,  // 27: reliant.v1.Node.save_message_node:type_name -> reliant.v1.SaveMessageNodeArgs
-	30,  // 28: reliant.v1.Node.create_worktree:type_name -> reliant.v1.CreateWorktreeArgs
-	31,  // 29: reliant.v1.Node.run:type_name -> reliant.v1.RunArgs
-	32,  // 30: reliant.v1.Node.workflow:type_name -> reliant.v1.SubWorkflowArgs
-	33,  // 31: reliant.v1.Node.loop:type_name -> reliant.v1.LoopArgs
-	34,  // 32: reliant.v1.Node.join:type_name -> reliant.v1.JoinArgs
-	37,  // 33: reliant.v1.Node.router:type_name -> reliant.v1.RouterArgs
-	4,   // 34: reliant.v1.ToolsConfig.filter:type_name -> reliant.v1.CelStringList
-	4,   // 35: reliant.v1.ToolsConfig.spawn:type_name -> reliant.v1.CelStringList
-	0,   // 36: reliant.v1.ToolsConfig.permission:type_name -> reliant.v1.CelString
-	5,   // 37: reliant.v1.CallLLMArgs.model:type_name -> reliant.v1.CelModelSelector
-	2,   // 38: reliant.v1.CallLLMArgs.temperature:type_name -> reliant.v1.CelDouble
-	3,   // 39: reliant.v1.CallLLMArgs.max_tokens:type_name -> reliant.v1.CelInt
-	0,   // 40: reliant.v1.CallLLMArgs.thinking_level:type_name -> reliant.v1.CelString
-	0,   // 41: reliant.v1.CallLLMArgs.system_prompt:type_name -> reliant.v1.CelString
-	18,  // 42: reliant.v1.CallLLMArgs.tools_config:type_name -> reliant.v1.ToolsConfig
-	20,  // 43: reliant.v1.CallLLMArgs.response_tool:type_name -> reliant.v1.ResponseTool
-	21,  // 44: reliant.v1.CallLLMArgs.messages:type_name -> reliant.v1.CallLLMMessageInput
-	3,   // 45: reliant.v1.CallLLMArgs.compaction_threshold:type_name -> reliant.v1.CelInt
-	4,   // 46: reliant.v1.CallLLMArgs.skills:type_name -> reliant.v1.CelStringList
-	0,   // 47: reliant.v1.ResponseTool.name:type_name -> reliant.v1.CelString
-	0,   // 48: reliant.v1.ResponseTool.description:type_name -> reliant.v1.CelString
-	94,  // 49: reliant.v1.ResponseTool.schema:type_name -> google.protobuf.Struct
-	23,  // 50: reliant.v1.CallLLMMessageInput.tool_result:type_name -> reliant.v1.ToolResultMsg
-	22,  // 51: reliant.v1.CallLLMMessageInput.tool_calls:type_name -> reliant.v1.ToolCallMsg
-	0,   // 52: reliant.v1.ExecuteToolsArgs.tool_calls:type_name -> reliant.v1.CelString
-	22,  // 53: reliant.v1.ExecuteToolsArgs.resolved_tool_calls:type_name -> reliant.v1.ToolCallMsg
-	79,  // 54: reliant.v1.ExecuteToolsArgs.response_tool_schemas:type_name -> reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry
-	5,   // 55: reliant.v1.CompactArgs.model:type_name -> reliant.v1.CelModelSelector
-	0,   // 56: reliant.v1.ApprovalArgs.title:type_name -> reliant.v1.CelString
-	0,   // 57: reliant.v1.ApprovalArgs.timeout:type_name -> reliant.v1.CelString
-	0,   // 58: reliant.v1.AskQuestionArgs.metadata:type_name -> reliant.v1.CelString
-	0,   // 59: reliant.v1.SaveMessageNodeArgs.role:type_name -> reliant.v1.CelString
-	0,   // 60: reliant.v1.SaveMessageNodeArgs.content:type_name -> reliant.v1.CelString
-	0,   // 61: reliant.v1.SaveMessageNodeArgs.tool_calls:type_name -> reliant.v1.CelString
-	0,   // 62: reliant.v1.SaveMessageNodeArgs.tool_results:type_name -> reliant.v1.CelString
-	0,   // 63: reliant.v1.SaveMessageNodeArgs.attachments:type_name -> reliant.v1.CelString
-	0,   // 64: reliant.v1.SaveMessageNodeArgs.display_style:type_name -> reliant.v1.CelString
-	22,  // 65: reliant.v1.SaveMessageNodeArgs.resolved_tool_calls:type_name -> reliant.v1.ToolCallMsg
-	23,  // 66: reliant.v1.SaveMessageNodeArgs.resolved_tool_results:type_name -> reliant.v1.ToolResultMsg
-	58,  // 67: reliant.v1.SaveMessageNodeArgs.resolved_thinking:type_name -> reliant.v1.ThinkingOutput
-	29,  // 68: reliant.v1.SaveMessageNodeArgs.resolved_inject_files:type_name -> reliant.v1.InjectFileMsg
-	0,   // 69: reliant.v1.CreateWorktreeArgs.name:type_name -> reliant.v1.CelString
-	0,   // 70: reliant.v1.CreateWorktreeArgs.branch:type_name -> reliant.v1.CelString
-	0,   // 71: reliant.v1.CreateWorktreeArgs.base_branch:type_name -> reliant.v1.CelString
-	1,   // 72: reliant.v1.CreateWorktreeArgs.force:type_name -> reliant.v1.CelBool
-	0,   // 73: reliant.v1.RunArgs.command:type_name -> reliant.v1.CelString
-	80,  // 74: reliant.v1.RunArgs.env:type_name -> reliant.v1.RunArgs.EnvEntry
-	0,   // 75: reliant.v1.RunArgs.work_dir:type_name -> reliant.v1.CelString
-	0,   // 76: reliant.v1.RunArgs.log_file:type_name -> reliant.v1.CelString
-	0,   // 77: reliant.v1.SubWorkflowArgs.ref:type_name -> reliant.v1.CelString
-	77,  // 78: reliant.v1.SubWorkflowArgs.inline:type_name -> reliant.v1.Workflow
-	81,  // 79: reliant.v1.SubWorkflowArgs.args:type_name -> reliant.v1.SubWorkflowArgs.ArgsEntry
-	82,  // 80: reliant.v1.SubWorkflowArgs.presets:type_name -> reliant.v1.SubWorkflowArgs.PresetsEntry
-	15,  // 81: reliant.v1.SubWorkflowArgs.project:type_name -> reliant.v1.ProjectConfig
-	12,  // 82: reliant.v1.SubWorkflowArgs.thread:type_name -> reliant.v1.ThreadConfig
-	0,   // 83: reliant.v1.LoopArgs.ref:type_name -> reliant.v1.CelString
-	77,  // 84: reliant.v1.LoopArgs.inline:type_name -> reliant.v1.Workflow
-	83,  // 85: reliant.v1.LoopArgs.args:type_name -> reliant.v1.LoopArgs.ArgsEntry
-	84,  // 86: reliant.v1.LoopArgs.presets:type_name -> reliant.v1.LoopArgs.PresetsEntry
-	15,  // 87: reliant.v1.LoopArgs.project:type_name -> reliant.v1.ProjectConfig
-	6,   // 88: reliant.v1.LoopArgs.while:type_name -> reliant.v1.DirectCelBool
-	1,   // 89: reliant.v1.LoopArgs.parallel:type_name -> reliant.v1.CelBool
-	0,   // 90: reliant.v1.LoopArgs.items:type_name -> reliant.v1.CelString
-	12,  // 91: reliant.v1.LoopArgs.thread:type_name -> reliant.v1.ThreadConfig
-	35,  // 92: reliant.v1.RouterArgs.workflows:type_name -> reliant.v1.RouterWorkflowCandidate
-	0,   // 93: reliant.v1.RouterArgs.system_prompt:type_name -> reliant.v1.CelString
-	5,   // 94: reliant.v1.RouterArgs.model:type_name -> reliant.v1.CelModelSelector
-	12,  // 95: reliant.v1.RouterArgs.thread:type_name -> reliant.v1.ThreadConfig
-	15,  // 96: reliant.v1.RouterArgs.project:type_name -> reliant.v1.ProjectConfig
-	85,  // 97: reliant.v1.RouterArgs.outputs:type_name -> reliant.v1.RouterArgs.OutputsEntry
-	36,  // 98: reliant.v1.RouterArgs.nodes:type_name -> reliant.v1.NodeRouterCandidate
-	39,  // 99: reliant.v1.Edge.cases:type_name -> reliant.v1.EdgeCase
-	42,  // 100: reliant.v1.Input.string_input:type_name -> reliant.v1.StringInputConfig
-	43,  // 101: reliant.v1.Input.number_input:type_name -> reliant.v1.NumberInputConfig
-	44,  // 102: reliant.v1.Input.integer_input:type_name -> reliant.v1.IntegerInputConfig
-	45,  // 103: reliant.v1.Input.boolean_input:type_name -> reliant.v1.BooleanInputConfig
-	46,  // 104: reliant.v1.Input.enum_input:type_name -> reliant.v1.EnumInputConfig
-	47,  // 105: reliant.v1.Input.model_input:type_name -> reliant.v1.ModelInputConfig
-	48,  // 106: reliant.v1.Input.message_input:type_name -> reliant.v1.MessageInputConfig
-	49,  // 107: reliant.v1.Input.attachments_input:type_name -> reliant.v1.AttachmentsInputConfig
-	50,  // 108: reliant.v1.Input.tools_input:type_name -> reliant.v1.ToolsInputConfig
-	51,  // 109: reliant.v1.Input.array_input:type_name -> reliant.v1.ArrayInputConfig
-	52,  // 110: reliant.v1.Input.object_input:type_name -> reliant.v1.ObjectInputConfig
-	54,  // 111: reliant.v1.Input.any_input:type_name -> reliant.v1.AnyInputConfig
-	55,  // 112: reliant.v1.Input.group_input:type_name -> reliant.v1.GroupInputConfig
-	56,  // 113: reliant.v1.Input.preset_input:type_name -> reliant.v1.PresetInputConfig
-	41,  // 114: reliant.v1.StringInputConfig.base:type_name -> reliant.v1.InputBase
-	41,  // 115: reliant.v1.NumberInputConfig.base:type_name -> reliant.v1.InputBase
-	41,  // 116: reliant.v1.IntegerInputConfig.base:type_name -> reliant.v1.InputBase
-	41,  // 117: reliant.v1.BooleanInputConfig.base:type_name -> reliant.v1.InputBase
-	41,  // 118: reliant.v1.EnumInputConfig.base:type_name -> reliant.v1.InputBase
-	95,  // 119: reliant.v1.EnumInputConfig.default:type_name -> google.protobuf.Value
-	41,  // 120: reliant.v1.ModelInputConfig.base:type_name -> reliant.v1.InputBase
-	8,   // 121: reliant.v1.ModelInputConfig.default:type_name -> reliant.v1.ModelSelector
-	41,  // 122: reliant.v1.MessageInputConfig.base:type_name -> reliant.v1.InputBase
-	41,  // 123: reliant.v1.AttachmentsInputConfig.base:type_name -> reliant.v1.InputBase
-	95,  // 124: reliant.v1.AttachmentsInputConfig.default:type_name -> google.protobuf.Value
-	41,  // 125: reliant.v1.ToolsInputConfig.base:type_name -> reliant.v1.InputBase
-	95,  // 126: reliant.v1.ToolsInputConfig.default:type_name -> google.protobuf.Value
-	41,  // 127: reliant.v1.ArrayInputConfig.base:type_name -> reliant.v1.InputBase
-	95,  // 128: reliant.v1.ArrayInputConfig.default:type_name -> google.protobuf.Value
-	41,  // 129: reliant.v1.ObjectInputConfig.base:type_name -> reliant.v1.InputBase
-	86,  // 130: reliant.v1.ObjectInputConfig.properties:type_name -> reliant.v1.ObjectInputConfig.PropertiesEntry
-	95,  // 131: reliant.v1.ObjectInputConfig.default:type_name -> google.protobuf.Value
-	95,  // 132: reliant.v1.PropertySchema.enum_values:type_name -> google.protobuf.Value
-	87,  // 133: reliant.v1.PropertySchema.properties:type_name -> reliant.v1.PropertySchema.PropertiesEntry
-	53,  // 134: reliant.v1.PropertySchema.items:type_name -> reliant.v1.PropertySchema
-	41,  // 135: reliant.v1.AnyInputConfig.base:type_name -> reliant.v1.InputBase
-	95,  // 136: reliant.v1.AnyInputConfig.default:type_name -> google.protobuf.Value
-	41,  // 137: reliant.v1.GroupInputConfig.base:type_name -> reliant.v1.InputBase
-	16,  // 138: reliant.v1.GroupInputConfig.presets:type_name -> reliant.v1.PresetsConfig
-	88,  // 139: reliant.v1.GroupInputConfig.inputs:type_name -> reliant.v1.GroupInputConfig.InputsEntry
-	41,  // 140: reliant.v1.PresetInputConfig.base:type_name -> reliant.v1.InputBase
-	95,  // 141: reliant.v1.PresetInputConfig.default:type_name -> google.protobuf.Value
-	57,  // 142: reliant.v1.CallLLMOutput.message:type_name -> reliant.v1.MessageOutput
-	22,  // 143: reliant.v1.CallLLMOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
-	58,  // 144: reliant.v1.CallLLMOutput.thinking:type_name -> reliant.v1.ThinkingOutput
-	94,  // 145: reliant.v1.CallLLMOutput.response_data:type_name -> google.protobuf.Struct
-	57,  // 146: reliant.v1.ExecuteToolsOutput.message:type_name -> reliant.v1.MessageOutput
-	23,  // 147: reliant.v1.ExecuteToolsOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
-	94,  // 148: reliant.v1.ExecuteToolsOutput.response_data:type_name -> google.protobuf.Struct
-	57,  // 149: reliant.v1.CompactOutput.message:type_name -> reliant.v1.MessageOutput
-	94,  // 150: reliant.v1.ApprovalOutput.data:type_name -> google.protobuf.Struct
-	57,  // 151: reliant.v1.SaveMessageOutput.message:type_name -> reliant.v1.MessageOutput
-	22,  // 152: reliant.v1.SaveMessageOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
-	23,  // 153: reliant.v1.SaveMessageOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
-	94,  // 154: reliant.v1.WorkflowOutput.outputs:type_name -> google.protobuf.Struct
-	94,  // 155: reliant.v1.LoopOutput.outputs:type_name -> google.protobuf.Struct
-	89,  // 156: reliant.v1.LoopOutput.results:type_name -> reliant.v1.LoopOutput.ResultsEntry
-	94,  // 157: reliant.v1.JoinOutput.sources:type_name -> google.protobuf.Struct
-	94,  // 158: reliant.v1.RouterOutput.outputs:type_name -> google.protobuf.Struct
-	6,   // 159: reliant.v1.SwitchCase.condition:type_name -> reliant.v1.DirectCelBool
-	73,  // 160: reliant.v1.SwitchMetadata.position:type_name -> reliant.v1.Position
-	74,  // 161: reliant.v1.SwitchMetadata.cases:type_name -> reliant.v1.SwitchCase
-	90,  // 162: reliant.v1.WorkflowUI.positions:type_name -> reliant.v1.WorkflowUI.PositionsEntry
-	91,  // 163: reliant.v1.WorkflowUI.switches:type_name -> reliant.v1.WorkflowUI.SwitchesEntry
-	17,  // 164: reliant.v1.Workflow.nodes:type_name -> reliant.v1.Node
-	38,  // 165: reliant.v1.Workflow.edges:type_name -> reliant.v1.Edge
-	92,  // 166: reliant.v1.Workflow.inputs:type_name -> reliant.v1.Workflow.InputsEntry
-	93,  // 167: reliant.v1.Workflow.outputs:type_name -> reliant.v1.Workflow.OutputsEntry
-	76,  // 168: reliant.v1.Workflow.ui:type_name -> reliant.v1.WorkflowUI
-	16,  // 169: reliant.v1.Workflow.presets:type_name -> reliant.v1.PresetsConfig
-	10,  // 170: reliant.v1.Workflow.daemon:type_name -> reliant.v1.CelDaemonSelector
-	94,  // 171: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
-	95,  // 172: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	95,  // 173: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	53,  // 174: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	53,  // 175: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	40,  // 176: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
-	94,  // 177: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
-	73,  // 178: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
-	75,  // 179: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
-	40,  // 180: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
-	181, // [181:181] is the sub-list for method output_type
-	181, // [181:181] is the sub-list for method input_type
-	181, // [181:181] is the sub-list for extension type_name
-	181, // [181:181] is the sub-list for extension extendee
-	0,   // [0:181] is the sub-list for field type_name
+	0,   // 15: reliant.v1.InjectConfig.display_style:type_name -> reliant.v1.CelString
+	0,   // 16: reliant.v1.InjectConfig.legacy_attachments:type_name -> reliant.v1.CelString
+	14,  // 17: reliant.v1.InjectConfig.attachments:type_name -> reliant.v1.InjectAttachment
+	0,   // 18: reliant.v1.ProjectConfig.path:type_name -> reliant.v1.CelString
+	6,   // 19: reliant.v1.Node.condition:type_name -> reliant.v1.DirectCelBool
+	0,   // 20: reliant.v1.Node.timeout:type_name -> reliant.v1.CelString
+	11,  // 21: reliant.v1.Node.save_message:type_name -> reliant.v1.SaveMessageConfig
+	10,  // 22: reliant.v1.Node.daemon:type_name -> reliant.v1.CelDaemonSelector
+	19,  // 23: reliant.v1.Node.call_llm:type_name -> reliant.v1.CallLLMArgs
+	24,  // 24: reliant.v1.Node.execute_tools:type_name -> reliant.v1.ExecuteToolsArgs
+	25,  // 25: reliant.v1.Node.compact:type_name -> reliant.v1.CompactArgs
+	26,  // 26: reliant.v1.Node.approval:type_name -> reliant.v1.ApprovalArgs
+	27,  // 27: reliant.v1.Node.ask_question:type_name -> reliant.v1.AskQuestionArgs
+	28,  // 28: reliant.v1.Node.save_message_node:type_name -> reliant.v1.SaveMessageNodeArgs
+	30,  // 29: reliant.v1.Node.create_worktree:type_name -> reliant.v1.CreateWorktreeArgs
+	31,  // 30: reliant.v1.Node.run:type_name -> reliant.v1.RunArgs
+	32,  // 31: reliant.v1.Node.workflow:type_name -> reliant.v1.SubWorkflowArgs
+	33,  // 32: reliant.v1.Node.loop:type_name -> reliant.v1.LoopArgs
+	34,  // 33: reliant.v1.Node.join:type_name -> reliant.v1.JoinArgs
+	37,  // 34: reliant.v1.Node.router:type_name -> reliant.v1.RouterArgs
+	4,   // 35: reliant.v1.ToolsConfig.filter:type_name -> reliant.v1.CelStringList
+	4,   // 36: reliant.v1.ToolsConfig.spawn:type_name -> reliant.v1.CelStringList
+	0,   // 37: reliant.v1.ToolsConfig.permission:type_name -> reliant.v1.CelString
+	5,   // 38: reliant.v1.CallLLMArgs.model:type_name -> reliant.v1.CelModelSelector
+	2,   // 39: reliant.v1.CallLLMArgs.temperature:type_name -> reliant.v1.CelDouble
+	3,   // 40: reliant.v1.CallLLMArgs.max_tokens:type_name -> reliant.v1.CelInt
+	0,   // 41: reliant.v1.CallLLMArgs.thinking_level:type_name -> reliant.v1.CelString
+	0,   // 42: reliant.v1.CallLLMArgs.system_prompt:type_name -> reliant.v1.CelString
+	18,  // 43: reliant.v1.CallLLMArgs.tools_config:type_name -> reliant.v1.ToolsConfig
+	20,  // 44: reliant.v1.CallLLMArgs.response_tool:type_name -> reliant.v1.ResponseTool
+	21,  // 45: reliant.v1.CallLLMArgs.messages:type_name -> reliant.v1.CallLLMMessageInput
+	3,   // 46: reliant.v1.CallLLMArgs.compaction_threshold:type_name -> reliant.v1.CelInt
+	4,   // 47: reliant.v1.CallLLMArgs.skills:type_name -> reliant.v1.CelStringList
+	0,   // 48: reliant.v1.ResponseTool.name:type_name -> reliant.v1.CelString
+	0,   // 49: reliant.v1.ResponseTool.description:type_name -> reliant.v1.CelString
+	94,  // 50: reliant.v1.ResponseTool.schema:type_name -> google.protobuf.Struct
+	23,  // 51: reliant.v1.CallLLMMessageInput.tool_result:type_name -> reliant.v1.ToolResultMsg
+	22,  // 52: reliant.v1.CallLLMMessageInput.tool_calls:type_name -> reliant.v1.ToolCallMsg
+	0,   // 53: reliant.v1.ExecuteToolsArgs.tool_calls:type_name -> reliant.v1.CelString
+	22,  // 54: reliant.v1.ExecuteToolsArgs.resolved_tool_calls:type_name -> reliant.v1.ToolCallMsg
+	79,  // 55: reliant.v1.ExecuteToolsArgs.response_tool_schemas:type_name -> reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry
+	3,   // 56: reliant.v1.ExecuteToolsArgs.compaction_threshold:type_name -> reliant.v1.CelInt
+	5,   // 57: reliant.v1.CompactArgs.model:type_name -> reliant.v1.CelModelSelector
+	0,   // 58: reliant.v1.ApprovalArgs.title:type_name -> reliant.v1.CelString
+	0,   // 59: reliant.v1.ApprovalArgs.timeout:type_name -> reliant.v1.CelString
+	0,   // 60: reliant.v1.AskQuestionArgs.metadata:type_name -> reliant.v1.CelString
+	0,   // 61: reliant.v1.SaveMessageNodeArgs.role:type_name -> reliant.v1.CelString
+	0,   // 62: reliant.v1.SaveMessageNodeArgs.content:type_name -> reliant.v1.CelString
+	0,   // 63: reliant.v1.SaveMessageNodeArgs.tool_calls:type_name -> reliant.v1.CelString
+	0,   // 64: reliant.v1.SaveMessageNodeArgs.tool_results:type_name -> reliant.v1.CelString
+	0,   // 65: reliant.v1.SaveMessageNodeArgs.attachments:type_name -> reliant.v1.CelString
+	0,   // 66: reliant.v1.SaveMessageNodeArgs.display_style:type_name -> reliant.v1.CelString
+	22,  // 67: reliant.v1.SaveMessageNodeArgs.resolved_tool_calls:type_name -> reliant.v1.ToolCallMsg
+	23,  // 68: reliant.v1.SaveMessageNodeArgs.resolved_tool_results:type_name -> reliant.v1.ToolResultMsg
+	58,  // 69: reliant.v1.SaveMessageNodeArgs.resolved_thinking:type_name -> reliant.v1.ThinkingOutput
+	29,  // 70: reliant.v1.SaveMessageNodeArgs.resolved_inject_files:type_name -> reliant.v1.InjectFileMsg
+	0,   // 71: reliant.v1.CreateWorktreeArgs.name:type_name -> reliant.v1.CelString
+	0,   // 72: reliant.v1.CreateWorktreeArgs.branch:type_name -> reliant.v1.CelString
+	0,   // 73: reliant.v1.CreateWorktreeArgs.base_branch:type_name -> reliant.v1.CelString
+	1,   // 74: reliant.v1.CreateWorktreeArgs.force:type_name -> reliant.v1.CelBool
+	0,   // 75: reliant.v1.RunArgs.command:type_name -> reliant.v1.CelString
+	80,  // 76: reliant.v1.RunArgs.env:type_name -> reliant.v1.RunArgs.EnvEntry
+	0,   // 77: reliant.v1.RunArgs.work_dir:type_name -> reliant.v1.CelString
+	0,   // 78: reliant.v1.RunArgs.log_file:type_name -> reliant.v1.CelString
+	0,   // 79: reliant.v1.SubWorkflowArgs.ref:type_name -> reliant.v1.CelString
+	77,  // 80: reliant.v1.SubWorkflowArgs.inline:type_name -> reliant.v1.Workflow
+	81,  // 81: reliant.v1.SubWorkflowArgs.args:type_name -> reliant.v1.SubWorkflowArgs.ArgsEntry
+	82,  // 82: reliant.v1.SubWorkflowArgs.presets:type_name -> reliant.v1.SubWorkflowArgs.PresetsEntry
+	15,  // 83: reliant.v1.SubWorkflowArgs.project:type_name -> reliant.v1.ProjectConfig
+	12,  // 84: reliant.v1.SubWorkflowArgs.thread:type_name -> reliant.v1.ThreadConfig
+	0,   // 85: reliant.v1.LoopArgs.ref:type_name -> reliant.v1.CelString
+	77,  // 86: reliant.v1.LoopArgs.inline:type_name -> reliant.v1.Workflow
+	83,  // 87: reliant.v1.LoopArgs.args:type_name -> reliant.v1.LoopArgs.ArgsEntry
+	84,  // 88: reliant.v1.LoopArgs.presets:type_name -> reliant.v1.LoopArgs.PresetsEntry
+	15,  // 89: reliant.v1.LoopArgs.project:type_name -> reliant.v1.ProjectConfig
+	6,   // 90: reliant.v1.LoopArgs.while:type_name -> reliant.v1.DirectCelBool
+	1,   // 91: reliant.v1.LoopArgs.parallel:type_name -> reliant.v1.CelBool
+	0,   // 92: reliant.v1.LoopArgs.items:type_name -> reliant.v1.CelString
+	12,  // 93: reliant.v1.LoopArgs.thread:type_name -> reliant.v1.ThreadConfig
+	35,  // 94: reliant.v1.RouterArgs.workflows:type_name -> reliant.v1.RouterWorkflowCandidate
+	0,   // 95: reliant.v1.RouterArgs.system_prompt:type_name -> reliant.v1.CelString
+	5,   // 96: reliant.v1.RouterArgs.model:type_name -> reliant.v1.CelModelSelector
+	12,  // 97: reliant.v1.RouterArgs.thread:type_name -> reliant.v1.ThreadConfig
+	15,  // 98: reliant.v1.RouterArgs.project:type_name -> reliant.v1.ProjectConfig
+	85,  // 99: reliant.v1.RouterArgs.outputs:type_name -> reliant.v1.RouterArgs.OutputsEntry
+	36,  // 100: reliant.v1.RouterArgs.nodes:type_name -> reliant.v1.NodeRouterCandidate
+	39,  // 101: reliant.v1.Edge.cases:type_name -> reliant.v1.EdgeCase
+	42,  // 102: reliant.v1.Input.string_input:type_name -> reliant.v1.StringInputConfig
+	43,  // 103: reliant.v1.Input.number_input:type_name -> reliant.v1.NumberInputConfig
+	44,  // 104: reliant.v1.Input.integer_input:type_name -> reliant.v1.IntegerInputConfig
+	45,  // 105: reliant.v1.Input.boolean_input:type_name -> reliant.v1.BooleanInputConfig
+	46,  // 106: reliant.v1.Input.enum_input:type_name -> reliant.v1.EnumInputConfig
+	47,  // 107: reliant.v1.Input.model_input:type_name -> reliant.v1.ModelInputConfig
+	48,  // 108: reliant.v1.Input.message_input:type_name -> reliant.v1.MessageInputConfig
+	49,  // 109: reliant.v1.Input.attachments_input:type_name -> reliant.v1.AttachmentsInputConfig
+	50,  // 110: reliant.v1.Input.tools_input:type_name -> reliant.v1.ToolsInputConfig
+	51,  // 111: reliant.v1.Input.array_input:type_name -> reliant.v1.ArrayInputConfig
+	52,  // 112: reliant.v1.Input.object_input:type_name -> reliant.v1.ObjectInputConfig
+	54,  // 113: reliant.v1.Input.any_input:type_name -> reliant.v1.AnyInputConfig
+	55,  // 114: reliant.v1.Input.group_input:type_name -> reliant.v1.GroupInputConfig
+	56,  // 115: reliant.v1.Input.preset_input:type_name -> reliant.v1.PresetInputConfig
+	41,  // 116: reliant.v1.StringInputConfig.base:type_name -> reliant.v1.InputBase
+	41,  // 117: reliant.v1.NumberInputConfig.base:type_name -> reliant.v1.InputBase
+	41,  // 118: reliant.v1.IntegerInputConfig.base:type_name -> reliant.v1.InputBase
+	41,  // 119: reliant.v1.BooleanInputConfig.base:type_name -> reliant.v1.InputBase
+	41,  // 120: reliant.v1.EnumInputConfig.base:type_name -> reliant.v1.InputBase
+	95,  // 121: reliant.v1.EnumInputConfig.default:type_name -> google.protobuf.Value
+	41,  // 122: reliant.v1.ModelInputConfig.base:type_name -> reliant.v1.InputBase
+	8,   // 123: reliant.v1.ModelInputConfig.default:type_name -> reliant.v1.ModelSelector
+	41,  // 124: reliant.v1.MessageInputConfig.base:type_name -> reliant.v1.InputBase
+	41,  // 125: reliant.v1.AttachmentsInputConfig.base:type_name -> reliant.v1.InputBase
+	95,  // 126: reliant.v1.AttachmentsInputConfig.default:type_name -> google.protobuf.Value
+	41,  // 127: reliant.v1.ToolsInputConfig.base:type_name -> reliant.v1.InputBase
+	95,  // 128: reliant.v1.ToolsInputConfig.default:type_name -> google.protobuf.Value
+	41,  // 129: reliant.v1.ArrayInputConfig.base:type_name -> reliant.v1.InputBase
+	95,  // 130: reliant.v1.ArrayInputConfig.default:type_name -> google.protobuf.Value
+	41,  // 131: reliant.v1.ObjectInputConfig.base:type_name -> reliant.v1.InputBase
+	86,  // 132: reliant.v1.ObjectInputConfig.properties:type_name -> reliant.v1.ObjectInputConfig.PropertiesEntry
+	95,  // 133: reliant.v1.ObjectInputConfig.default:type_name -> google.protobuf.Value
+	95,  // 134: reliant.v1.PropertySchema.enum_values:type_name -> google.protobuf.Value
+	87,  // 135: reliant.v1.PropertySchema.properties:type_name -> reliant.v1.PropertySchema.PropertiesEntry
+	53,  // 136: reliant.v1.PropertySchema.items:type_name -> reliant.v1.PropertySchema
+	41,  // 137: reliant.v1.AnyInputConfig.base:type_name -> reliant.v1.InputBase
+	95,  // 138: reliant.v1.AnyInputConfig.default:type_name -> google.protobuf.Value
+	41,  // 139: reliant.v1.GroupInputConfig.base:type_name -> reliant.v1.InputBase
+	16,  // 140: reliant.v1.GroupInputConfig.presets:type_name -> reliant.v1.PresetsConfig
+	88,  // 141: reliant.v1.GroupInputConfig.inputs:type_name -> reliant.v1.GroupInputConfig.InputsEntry
+	41,  // 142: reliant.v1.PresetInputConfig.base:type_name -> reliant.v1.InputBase
+	95,  // 143: reliant.v1.PresetInputConfig.default:type_name -> google.protobuf.Value
+	57,  // 144: reliant.v1.CallLLMOutput.message:type_name -> reliant.v1.MessageOutput
+	22,  // 145: reliant.v1.CallLLMOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
+	58,  // 146: reliant.v1.CallLLMOutput.thinking:type_name -> reliant.v1.ThinkingOutput
+	94,  // 147: reliant.v1.CallLLMOutput.response_data:type_name -> google.protobuf.Struct
+	57,  // 148: reliant.v1.ExecuteToolsOutput.message:type_name -> reliant.v1.MessageOutput
+	23,  // 149: reliant.v1.ExecuteToolsOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
+	94,  // 150: reliant.v1.ExecuteToolsOutput.response_data:type_name -> google.protobuf.Struct
+	57,  // 151: reliant.v1.CompactOutput.message:type_name -> reliant.v1.MessageOutput
+	94,  // 152: reliant.v1.ApprovalOutput.data:type_name -> google.protobuf.Struct
+	57,  // 153: reliant.v1.SaveMessageOutput.message:type_name -> reliant.v1.MessageOutput
+	22,  // 154: reliant.v1.SaveMessageOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
+	23,  // 155: reliant.v1.SaveMessageOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
+	94,  // 156: reliant.v1.WorkflowOutput.outputs:type_name -> google.protobuf.Struct
+	94,  // 157: reliant.v1.LoopOutput.outputs:type_name -> google.protobuf.Struct
+	89,  // 158: reliant.v1.LoopOutput.results:type_name -> reliant.v1.LoopOutput.ResultsEntry
+	94,  // 159: reliant.v1.JoinOutput.sources:type_name -> google.protobuf.Struct
+	94,  // 160: reliant.v1.RouterOutput.outputs:type_name -> google.protobuf.Struct
+	6,   // 161: reliant.v1.SwitchCase.condition:type_name -> reliant.v1.DirectCelBool
+	73,  // 162: reliant.v1.SwitchMetadata.position:type_name -> reliant.v1.Position
+	74,  // 163: reliant.v1.SwitchMetadata.cases:type_name -> reliant.v1.SwitchCase
+	90,  // 164: reliant.v1.WorkflowUI.positions:type_name -> reliant.v1.WorkflowUI.PositionsEntry
+	91,  // 165: reliant.v1.WorkflowUI.switches:type_name -> reliant.v1.WorkflowUI.SwitchesEntry
+	17,  // 166: reliant.v1.Workflow.nodes:type_name -> reliant.v1.Node
+	38,  // 167: reliant.v1.Workflow.edges:type_name -> reliant.v1.Edge
+	92,  // 168: reliant.v1.Workflow.inputs:type_name -> reliant.v1.Workflow.InputsEntry
+	93,  // 169: reliant.v1.Workflow.outputs:type_name -> reliant.v1.Workflow.OutputsEntry
+	76,  // 170: reliant.v1.Workflow.ui:type_name -> reliant.v1.WorkflowUI
+	16,  // 171: reliant.v1.Workflow.presets:type_name -> reliant.v1.PresetsConfig
+	10,  // 172: reliant.v1.Workflow.daemon:type_name -> reliant.v1.CelDaemonSelector
+	94,  // 173: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
+	95,  // 174: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	95,  // 175: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	53,  // 176: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	53,  // 177: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	40,  // 178: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
+	94,  // 179: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
+	73,  // 180: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
+	75,  // 181: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
+	40,  // 182: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
+	183, // [183:183] is the sub-list for method output_type
+	183, // [183:183] is the sub-list for method input_type
+	183, // [183:183] is the sub-list for extension type_name
+	183, // [183:183] is the sub-list for extension extendee
+	0,   // [0:183] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_v2_proto_init() }

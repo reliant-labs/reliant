@@ -49,14 +49,15 @@ func TestChatSnapshot_ThreadUpdateCarriesOriginFromThreadsTable(t *testing.T) {
 	}))
 	_, err := repo.CreateThread(ctx, &db.Thread{ID: mainThreadID, ChatID: chatID, CreatedAt: now})
 	require.NoError(t, err)
+	spawnTitle := "Fix blank pause screen"
 	_, err = repo.CreateThread(ctx, &db.Thread{
 		ID: spawnThreadID, ChatID: chatID, ParentThreadID: &mainThreadID,
-		Origin: db.ThreadOriginSpawn, CreatedAt: now,
+		Title: &spawnTitle, Origin: db.ThreadOriginSpawn, CreatedAt: now,
 	})
 	require.NoError(t, err)
 
 	// A legacy lifecycle update: running, correct in every respect EXCEPT that
-	// it never states the origin.
+	// it never states the origin or title.
 	legacy, err := json.Marshal(map[string]any{
 		"update_type":    "thread",
 		"id":             spawnThreadID,
@@ -65,7 +66,6 @@ func TestChatSnapshot_ThreadUpdateCarriesOriginFromThreadsTable(t *testing.T) {
 		"workflow_id":    spawnThreadID,
 		"origin_node_id": "spawn-toolu_01NwJUt1E1vQs4RFmC1xUJ5V",
 		"status":         "running",
-		"thread_title":   "Fix blank pause screen",
 	})
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnThreadID, string(legacy)))
@@ -92,10 +92,77 @@ func TestChatSnapshot_ThreadUpdateCarriesOriginFromThreadsTable(t *testing.T) {
 	require.Equal(t, db.ThreadOriginSpawn, payload["origin"],
 		"a reloading client sees this row alone; without origin the background-work "+
 			"pill drops running spawns and the chat looks idle")
+	require.Equal(t, spawnTitle, payload["thread_title"],
+		"a compact/lifecycle row read alone must still carry the persisted spawn title, "+
+			"or the background-work pill falls back to generic Agent")
 }
 
 // A stored origin is authoritative — reconciliation fills gaps, it does not
 // overwrite what an emitter deliberately stated.
+func TestChatSnapshot_ThreadUpdateUsesThreadsTableLifecycle(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	now := time.Now().UTC()
+
+	chatID := uuid.New().String()
+	mainThreadID := chatID
+	spawnThreadID := uuid.New().String()
+	spawnWorkflowID := uuid.New().String()
+	threadTitle := "Durable spawn title"
+
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID: chatID, Title: "completed spawn", ProjectID: "test-project", UserID: "test-user",
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	_, err := repo.CreateThread(ctx, &db.Thread{ID: mainThreadID, ChatID: chatID, CreatedAt: now})
+	require.NoError(t, err)
+	_, err = repo.CreateThread(ctx, &db.Thread{
+		ID: spawnThreadID, ChatID: chatID, ParentThreadID: &mainThreadID,
+		WorkflowID: &spawnWorkflowID, Title: &threadTitle,
+		Origin: db.ThreadOriginSpawn, CreatedAt: now,
+	})
+	require.NoError(t, err)
+	completedAt := now.Add(time.Minute)
+	_, err = repo.UpdateThreadStatus(ctx, spawnThreadID, db.ThreadStatusCompleted, &completedAt)
+	require.NoError(t, err)
+
+	stale, err := json.Marshal(map[string]any{
+		"update_type":  "thread",
+		"id":           spawnWorkflowID,
+		"chat_id":      chatID,
+		"thread":       spawnThreadID,
+		"workflow_id":  spawnWorkflowID,
+		"origin":       db.ThreadOriginSpawn,
+		"status":       "running",
+		"thread_title": "Stale running title",
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, db.UpdateTypeThread, spawnWorkflowID, string(stale)))
+
+	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, chatID)
+	require.NoError(t, err)
+
+	var payload map[string]any
+	for _, u := range snapshot.OtherUpdates {
+		if u.UpdateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD {
+			continue
+		}
+		var candidate map[string]any
+		require.NoError(t, json.Unmarshal([]byte(u.DataJson), &candidate))
+		if candidate["thread"] == spawnThreadID {
+			payload = candidate
+		}
+	}
+	require.NotNil(t, payload, "snapshot must carry the spawn thread update")
+	require.Equal(t, "completed", payload["status"],
+		"a stale running chat_update must not resurrect a thread whose durable row is terminal")
+	require.Equal(t, threadTitle, payload["thread_title"],
+		"thread title is owned by threads.title, not the stale lifecycle update payload")
+	require.Equal(t, completedAt.Format(time.RFC3339), payload["completed_at"])
+}
+
 func TestChatSnapshot_ThreadUpdateKeepsStoredOrigin(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()

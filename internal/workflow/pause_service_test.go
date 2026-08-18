@@ -97,10 +97,10 @@ type mockPauseRepo struct {
 
 	updatedStatuses map[string]db.WorkflowStatus
 	updateErr       error
-	cascadedStatus  db.WorkflowStatus
+	cascadedReason  db.WorkflowStopReason
 	// cascadedThreadStatus is the status the thread cascade received — the
 	// thread-lifecycle half of the same terminal repair.
-	cascadedThreadStatus db.WorkflowStatus
+	cascadedThreadReason db.WorkflowStopReason
 }
 
 func newMockPauseRepo() *mockPauseRepo {
@@ -117,13 +117,13 @@ func (m *mockPauseRepo) UpdateWorkflowStatus(_ context.Context, id string, statu
 	return nil
 }
 
-func (m *mockPauseRepo) CascadeTerminalStatusToDescendants(_ context.Context, _ string, status db.WorkflowStatus) error {
-	m.cascadedStatus = status
+func (m *mockPauseRepo) CascadeTerminalStatusToDescendants(_ context.Context, _ string, reason db.WorkflowStopReason) error {
+	m.cascadedReason = reason
 	return nil
 }
 
-func (m *mockPauseRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, _ string, status db.WorkflowStatus) error {
-	m.cascadedThreadStatus = status
+func (m *mockPauseRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, _ string, reason db.WorkflowStopReason) error {
+	m.cascadedThreadReason = reason
 	return nil
 }
 
@@ -187,7 +187,7 @@ func TestPauseWorkflow_Success(t *testing.T) {
 	assert.Equal(t, SignalPause, tc.signalCalls[0].signalName)
 
 	// DB should be updated to paused
-	assert.Equal(t, db.WorkflowStatusPaused, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Paused(), repo.updatedStatuses["wf-1"])
 }
 
 func TestPauseWorkflow_AlreadyCompleted_ReconcilesAndReturnsNil(t *testing.T) {
@@ -206,7 +206,7 @@ func TestPauseWorkflow_AlreadyCompleted_ReconcilesAndReturnsNil(t *testing.T) {
 	require.NoError(t, err, "should return nil when workflow already completed")
 
 	// DB should be reconciled to completed
-	assert.Equal(t, db.WorkflowStatusCompleted, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Completed(), repo.updatedStatuses["wf-1"])
 }
 
 func TestPauseWorkflow_NotFound_ReconcilesAndReturnsNil(t *testing.T) {
@@ -221,7 +221,7 @@ func TestPauseWorkflow_NotFound_ReconcilesAndReturnsNil(t *testing.T) {
 	require.NoError(t, err, "should return nil when workflow not found")
 
 	// When describe also fails, reconcile defaults to completed
-	assert.Equal(t, db.WorkflowStatusCompleted, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Completed(), repo.updatedStatuses["wf-1"])
 }
 
 func TestPauseWorkflow_FailedWorkflow_ReconcilesCorrectStatus(t *testing.T) {
@@ -240,13 +240,13 @@ func TestPauseWorkflow_FailedWorkflow_ReconcilesCorrectStatus(t *testing.T) {
 	require.NoError(t, err)
 
 	// Should reconcile to failed, not completed
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 	// The thread cascade must travel with the workflow cascade and carry the
 	// SAME status. Threads are not a workflows row, so a terminal repair that
 	// only cascaded workflows left the thread at running forever — 288 rows
 	// measured live (docs/incidents/2026-08-12-spawn-history-cap.md).
-	assert.Equal(t, db.WorkflowStatusFailed, repo.cascadedStatus)
-	assert.Equal(t, db.WorkflowStatusFailed, repo.cascadedThreadStatus,
+	assert.Equal(t, db.StopReasonFailed, repo.cascadedReason)
+	assert.Equal(t, db.StopReasonFailed, repo.cascadedThreadReason,
 		"a thread under a failed run is failed, not completed — the thread cascade must inherit the run's actual status")
 }
 
@@ -265,7 +265,7 @@ func TestPauseWorkflow_CancelledWorkflow_ReconcilesCorrectStatus(t *testing.T) {
 	err := ps.PauseWorkflow(context.Background(), "wf-1", "chat-1", "user paused")
 	require.NoError(t, err)
 
-	assert.Equal(t, db.WorkflowStatusCancelled, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Cancelled(), repo.updatedStatuses["wf-1"])
 }
 
 func TestPauseWorkflow_GenuineError_ReturnsError(t *testing.T) {
@@ -333,7 +333,7 @@ func TestResumeInterruptedWorkflow_Failed_ResetsResumesAndMarksRunning(t *testin
 	assert.Equal(t, "new-run", tc.signalCalls[0].runID)
 	assert.Equal(t, SignalResume, tc.signalCalls[0].signalName)
 
-	assert.Equal(t, db.WorkflowStatusRunning, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Active(), repo.updatedStatuses["wf-1"])
 	assert.Equal(t, 1, ps.resetGuard.Attempts("wf-1"), "a reset attempt is recorded")
 }
 

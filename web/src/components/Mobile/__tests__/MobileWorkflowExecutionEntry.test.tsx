@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
+import { WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecutionData } from "../../../types/chat";
 
 vi.mock("@tanstack/react-router", () => ({
@@ -23,7 +23,7 @@ function workflowExecution(
     id: "wf-1",
     workflowName: "builtin://agent",
     thread: "wf-1",
-    status: ChatWorkflowStatus.RUNNING,
+    state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED,
     createdAt: "",
     messageCount: 0,
     children: [],

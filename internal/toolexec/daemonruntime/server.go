@@ -8,8 +8,6 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -139,8 +137,16 @@ func (d *daemonClient) runServerMode(ctx context.Context) error {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
 
+	// The gateway dials in over cleartext with prior-knowledge HTTP/2
+	// (http2.Transport{AllowHTTP: true}), which net/http serves natively once
+	// UnencryptedHTTP2 is in the protocol set.
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetUnencryptedHTTP2(true)
+
 	srv := &http.Server{
-		Handler:           h2c.NewHandler(mux, &http2.Server{}),
+		Handler:           mux,
+		Protocols:         protocols,
 		ReadHeaderTimeout: transport.ServerReadHeaderTimeout,
 		IdleTimeout:       transport.ServerIdleTimeout,
 	}
@@ -160,7 +166,9 @@ func (d *daemonClient) runServerMode(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		logging.Info(serverLogPrefix + " Shutting down server")
-		srv.Close()
+		// Close only reports failures of the already-doomed listener and
+		// connections; ctx.Err() is the outcome the caller acts on.
+		_ = srv.Close()
 		return ctx.Err()
 	case err := <-errCh:
 		return fmt.Errorf("server exited: %w", err)

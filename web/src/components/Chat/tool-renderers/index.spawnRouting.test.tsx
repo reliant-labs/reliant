@@ -1,13 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import { ToolContentArea } from "./index";
 import type { ToolRenderContext } from "./types";
-import { ChatWorkflowStatus } from "../../../types/chat";
+import { WorkflowState, WorkflowStopReason } from "../../../types/chat";
 
 // Regression guard for the spawn substring bug: only the literal "spawn" tool
 // should route to SpawnToolRenderer. spawn_status and spawn_send are ordinary
 // tools on an existing spawn and must fall through to GenericToolRenderer.
 
-let mockAllWorkflows: Array<{ id: string; status: ChatWorkflowStatus; children: unknown[] }> = [];
+let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
 
 vi.mock("../../../hooks/useWorkflowExecutions", () => ({
   useWorkflowExecutions: () => ({ allWorkflows: mockAllWorkflows }),
@@ -19,6 +19,8 @@ vi.mock("../../../hooks/message-queries", () => ({
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useToolResultsByCallId: () => ({}),
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
 }));
 
 function createContext(overrides: Partial<ToolRenderContext> = {}): ToolRenderContext {

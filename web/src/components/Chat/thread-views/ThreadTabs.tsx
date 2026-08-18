@@ -127,13 +127,16 @@ export const ThreadTabs = memo(function ThreadTabs({
   contextUsageByThread,
   chatId,
 }: ThreadTabsProps) {
-  // Check if any thread is active (for "All" tab indicator)
+  const visibleThreads = useMemo(
+    () => threads.filter((thread) => !thread.isSpawn),
+    [threads],
+  );
+
+  // Check if any visible thread is active (for "All" tab indicator)
   // Must be called before any early returns to satisfy hooks rules
   const isAnyActive = useMemo(() => {
-    return threads.some(t => t.isActive);
-  }, [threads]);
-  
-  const visibleThreads = threads;
+    return visibleThreads.some(t => t.isActive);
+  }, [visibleThreads]);
 
   // Don't show if only 1 visible thread
   if (visibleThreads.length <= 1) return null;

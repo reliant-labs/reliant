@@ -703,8 +703,8 @@ func marshalInput(input *reliantv1.Input) (*yaml.Node, error) {
 
 func marshalInputMap(inputs map[string]*reliantv1.Input) (*yaml.Node, error) {
 	m := &yaml.Node{Kind: yaml.MappingNode}
-	for k, v := range inputs {
-		n, err := marshalInput(v)
+	for _, k := range sortedKeys(inputs) {
+		n, err := marshalInput(inputs[k])
 		if err != nil {
 			return nil, fmt.Errorf("input %s: %w", k, err)
 		}

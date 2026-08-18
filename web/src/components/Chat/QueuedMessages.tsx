@@ -2,18 +2,19 @@
  * The pending-queue strip above the composer.
  *
  * A message queued to a running agent lands in agent_messages, not the
- * transcript — the agent reads it at its next step boundary. Until then it is
- * invisible: the send toast fires and nothing else happens, which reads as
- * "did that work?". This strip is the answer. It shows what is still waiting,
- * how long it has waited, and gives the user a way back out.
+ * transcript — the agent reads it on its next turn, when call_llm drains the
+ * mailbox before assembling history. Until then it is invisible unless this
+ * strip shows what is still waiting, how long it has waited, and gives the user
+ * two ways to act on it: drop an entry, or interrupt the agent so it reads the
+ * queue now instead of after the work in flight.
  *
  * The pending treatment (dashed border, muted surface) is deliberate: these
  * are NOT conversation entries yet, and styling them like transcript messages
  * would claim they are.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Clock, Paperclip, Send, X } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Clock, OctagonX, Paperclip, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
@@ -64,29 +65,17 @@ interface QueuedMessagesProps {
    */
   onForget?: (messageId: string) => void;
   /**
-   * The ordinary send path. "Send now" is cancel-then-send, so this is what
-   * turns a revoked queue entry back into a real user turn.
+   * Called after a successful interrupt, so the composer can refresh whatever
+   * it derives from the run's state. Optional: interrupt is complete without
+   * it. Its PRESENCE is also what enables the interrupt controls, since a
+   * caller that cannot observe the result has no business triggering one.
    */
-  onSendNow?: (body: string, attachmentIds?: string[]) => void | Promise<void>;
+  onInterrupted?: () => void | Promise<void>;
   /**
-   * Whether the agent is currently working. An idle agent will never drain its
-   * own mailbox, so queued rows under an idle agent are stranded — see the
-   * auto-flush below.
+   * Whether the agent is currently working. Interrupting only makes sense
+   * while it is: an idle agent has no work in flight to stop.
    */
   isRunning?: boolean;
-  /**
-   * Whether the chat's workflow run is still LIVE — running, pending, or
-   * paused. Distinct from isRunning, and the auto-flush keys off this one.
-   *
-   * isRunning is the composer's notion of "busy", which is deliberately false
-   * in discuss mode and while a question is pending so the input stays
-   * enabled. Both of those states sit on a PAUSED run, which resumes and
-   * drains its mailbox normally. Auto-flushing on isRunning alone would claim
-   * rows out from under a live agent that was going to read them — the exact
-   * theft the mailbox exists to prevent. Mirrors WorkflowStatusIsLive in
-   * internal/db/core/chat.go.
-   */
-  isWorkflowLive?: boolean;
 }
 
 export function QueuedMessages({
@@ -95,9 +84,8 @@ export function QueuedMessages({
   messages,
   onRefresh,
   onForget,
-  onSendNow,
+  onInterrupted,
   isRunning = false,
-  isWorkflowLive = false,
 }: QueuedMessagesProps) {
   // Only the user's own queued messages are actionable here. A peer agent's
   // spawn_send message is not the human's to revoke.
@@ -124,17 +112,16 @@ export function QueuedMessages({
   /**
    * Cancel is a race against the agent's own drain, so the backend answers
    * honestly: `success: false` means it was already delivered and the row
-   * still stands. Returning that verdict — rather than swallowing it — is what
-   * lets "send now" know whether it is allowed to send.
+   * still stands. Re-reading rather than swallowing the verdict is what keeps
+   * the strip from claiming a message is gone when the agent has it.
    */
   const cancel = useCallback(
     async (messageId: string): Promise<boolean> => {
       if (!chatId) return false;
       const response = await chatGrpc.cancelQueuedAgentMessage(chatId, messageId);
       if (!response.success) {
-        // Already delivered. Say so and re-read, rather than pretending the
-        // message is gone when the agent has it.
-        toast.info(response.message);
+        // Already delivered. Re-read rather than pretending the message is
+        // gone when the agent has it.
         await onRefresh();
         return false;
       }
@@ -179,72 +166,42 @@ export function QueuedMessages({
   );
 
   /**
-   * "Send now" and "Send all" are both a single atomic claim followed by a
-   * send of exactly what the claim returned.
+   * Interrupt the agent so it reads the queue now.
    *
-   * This used to be cancel-then-send from the client: cancel, check whether
-   * the cancel took, and only then send. That left a real window between the
-   * two calls, and a bulk version would have multiplied it by the size of the
-   * queue. The claim takes the rows and returns them in one statement, so
-   * whatever comes back is provably ours and the agent provably never got it.
+   * This does NOT pull messages back out of the mailbox. It stops the work in
+   * flight — cancelling the thread's executing tool calls — and the agent's
+   * next call_llm delivers the whole queue, oldest first, exactly as an
+   * uninterrupted turn would have.
    *
-   * Sending exactly the returned bodies — never the local `pending` view — is
-   * the load-bearing half. A message the agent drained first is absent from
-   * the result, and resending it from the stale local list is precisely the
-   * double-send this replaced.
+   * That is why there is one button rather than a per-message one. The old
+   * design claimed a row and resent it as a fresh turn, which meant "send this
+   * one now" had to answer "what about the other two?" and raced the agent's
+   * own delivery to do it. Interrupting answers both: everything queued
+   * arrives, in the order it was typed, with no row to claim and no race to
+   * lose.
    */
-  const claimAndSend = useCallback(
-    async (messageId?: string, options?: { silentWhenEmpty?: boolean }) => {
-      if (!chatId || !threadId || !onSendNow) return;
-      try {
-        const { messages: claimed } = await chatGrpc.claimQueuedAgentMessages(
-          chatId,
-          threadId,
-          messageId,
-        );
-        if (claimed.length === 0) {
-          // The drain won. Say so, and re-read so the strip stops showing
-          // something the agent already has. The auto-flush suppresses this:
-          // nobody asked it to do anything, so "too late to pull back" would
-          // be answering a question the user never posed.
-          if (!options?.silentWhenEmpty) {
-            toast.info("Already delivered to the agent — too late to pull back.");
-          }
-          await onRefresh();
-          return;
-        }
-        for (const message of claimed) {
-          onForget?.(message.id);
-        }
-        // Sequential, because these are conversation turns and their order is
-        // their meaning.
-        for (const message of claimed) {
-          await onSendNow(message.body, message.attachments);
-        }
-        await onRefresh();
-      } catch (error) {
-        logger.error("[QueuedMessages] Failed to claim and send queued messages", {
-          error,
-          chatId,
-          threadId,
-          messageId,
-        });
-        toast.error(error);
-        await onRefresh();
-      }
-    },
-    [chatId, threadId, onSendNow, onRefresh, onForget],
-  );
+  const [interrupting, setInterrupting] = useState(false);
 
-  const handleSendNow = useCallback(
-    (message: QueuedAgentMessageView) =>
-      withBusy(message.id, async () => {
-        await claimAndSend(message.id);
-      }),
-    [claimAndSend, withBusy],
-  );
+  const handleInterrupt = useCallback(async () => {
+    if (!chatId || !threadId || !onInterrupted) return;
+    setInterrupting(true);
+    try {
+      await chatGrpc.interruptThread(chatId, threadId);
 
-  const [sendingAll, setSendingAll] = useState(false);
+      await onInterrupted();
+      await onRefresh();
+    } catch (error) {
+      logger.error("[QueuedMessages] Failed to interrupt the agent", {
+        error,
+        chatId,
+        threadId,
+      });
+      toast.error(error);
+      await onRefresh();
+    } finally {
+      setInterrupting(false);
+    }
+  }, [chatId, threadId, onInterrupted, onRefresh]);
 
   // Which long bodies the user has opened. Keyed by message id so an entry
   // being claimed or cancelled simply drops out.
@@ -260,66 +217,19 @@ export function QueuedMessages({
     });
   }, []);
 
-  const handleSendAll = useCallback(async () => {
-    setSendingAll(true);
-    try {
-      await claimAndSend();
-    } finally {
-      setSendingAll(false);
-    }
-  }, [claimAndSend]);
-
-  /**
-   * Flush a stranded queue when the agent is idle.
-   *
-   * A queued message is delivered by exactly one thing: the agent's own drain
-   * at its next loop-step boundary. If the run ends before that boundary comes
-   * — and the last boundary of a run always does — the row simply stays queued
-   * and nothing on either side will ever send it. The strip shows it, the poll
-   * stops, and the user's message sits there until they type something else to
-   * shake it loose. That is the whole defect, and the fix is to do here what
-   * the user would otherwise have to do by hand: press "Send all".
-   *
-   * It is deliberately the SAME claim-then-send-what-came-back path. Sending
-   * the local view instead would resend a message the agent drained on its way
-   * out, and an idle-edge flush is precisely when that race is live.
-   */
-  const claimAndSendRef = useRef(claimAndSend);
-  claimAndSendRef.current = claimAndSend;
-
-  // Once per idle transition. A ref, not state, because two renders inside one
-  // transition must not both see "not flushed yet" — and re-arming only when
-  // the agent picks back up is what makes a transition the unit.
-  const autoFlushedRef = useRef(false);
-
-  useEffect(() => {
-    if (isRunning || isWorkflowLive) {
-      // A live run drains its own mailbox correctly, whether it is executing
-      // right now or paused mid-question waiting to resume. Stay out of its
-      // way, and arm the guard for the idle edge it will eventually reach.
-      autoFlushedRef.current = false;
-      return;
-    }
-    if (autoFlushedRef.current) return;
-    if (!hasPending || !chatId || !threadId || !onSendNow) return;
-    // The user is already flushing this queue by hand. Claiming underneath
-    // them would be a second claim against rows they are mid-send with —
-    // harmless server-side, but the effect re-runs when they finish, and by
-    // then the queue reflects what they actually did.
-    if (sendingAll || busyIds.size > 0) return;
-
-    autoFlushedRef.current = true;
-    void claimAndSendRef.current(undefined, { silentWhenEmpty: true });
-  }, [
-    isRunning,
-    isWorkflowLive,
-    hasPending,
-    chatId,
-    threadId,
-    onSendNow,
-    sendingAll,
-    busyIds,
-  ]);
+  // The client-side auto-flush that used to live here is gone.
+  //
+  // It existed because delivery happened at the agent loop's step boundary, so
+  // a run that ended before the next boundary left its queue stranded with
+  // nothing on either side to send it — and the strip papered over that by
+  // silently claiming and resending the rows when the agent went idle.
+  //
+  // Both halves are now handled where they belong. A live agent delivers in
+  // call_llm, which every LLM-calling workflow reaches regardless of graph
+  // shape. An idle one is swept by SendMessage's absorbQueuedMailbox on the
+  // user's next turn, and anything genuinely undeliverable (the thread really
+  // exited) is marked by the reconciler's resolveOrphanedAgentMessages rather
+  // than being silently resent from a stale client view.
 
   // Nothing queued means nothing to say. An empty container here would be a
   // permanent gap above the composer.
@@ -331,24 +241,30 @@ export function QueuedMessages({
       data-testid="queued-messages"
       aria-label="Messages queued for the running agent"
     >
-      {/* Only worth offering once there is more than one thing to flush —
-          with a single entry this is just a second "Send now". */}
-      {onSendNow && pending.length > 1 && (
+      {/* One control for the whole queue, and only while the agent is actually
+          working — interrupting an idle agent would stop nothing, and its
+          queue is swept on the user's next turn anyway. */}
+      {onInterrupted && isRunning && (
         <div className="flex justify-end">
-          <button
-            type="button"
-            aria-label="Send all queued messages now"
-            disabled={sendingAll}
-            onClick={() => void handleSendAll()}
-            className={cn(
-              "flex h-6 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-colors",
-              "text-muted-foreground hover:bg-accent hover:text-foreground",
-              sendingAll && "cursor-default opacity-60 hover:bg-transparent",
-            )}
+          <Tooltip
+            content="Stop what the agent is doing so it reads your queued messages now"
+            placement="top"
           >
-            <Send className="h-3 w-3" />
-            Send all {pending.length} now
-          </button>
+            <button
+              type="button"
+              aria-label="Interrupt the agent and deliver queued messages now"
+              disabled={interrupting}
+              onClick={() => void handleInterrupt()}
+              className={cn(
+                "flex h-6 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-colors",
+                "text-muted-foreground hover:bg-accent hover:text-foreground",
+                interrupting && "cursor-default opacity-60 hover:bg-transparent",
+              )}
+            >
+              <OctagonX className="h-3 w-3" />
+              {interrupting ? "Interrupting…" : "Interrupt & send now"}
+            </button>
+          </Tooltip>
         </div>
       )}
 
@@ -365,10 +281,9 @@ export function QueuedMessages({
         data-testid="queued-messages-list"
       >
         {pending.map((message) => {
-        // A send-all in flight owns every row, so the per-row controls go
-        // busy with it — otherwise a click could try to claim a message the
-        // bulk call has already taken.
-        const isBusy = busyIds.has(message.id) || sendingAll;
+        // An interrupt in flight is about to deliver every row, so the per-row
+        // cancel goes busy with it rather than racing that delivery.
+        const isBusy = busyIds.has(message.id) || interrupting;
         const isLong = message.body.length > LONG_BODY_CHARS;
         const isExpanded = expandedIds.has(message.id);
         return (
@@ -418,29 +333,12 @@ export function QueuedMessages({
               </span>
             </div>
 
+            {/* No per-message send. Delivery is per-THREAD: the agent reads
+                its whole mailbox on its next turn, in order. A button offering
+                to send just this one would have to either reorder the queue or
+                quietly send the rest too — and the version that claimed a
+                single row raced the agent's own delivery to do it. */}
             <div className="flex flex-shrink-0 items-center gap-1">
-              {onSendNow && (
-                <Tooltip
-                  content="Pull this back out of the queue and send it as a new message now"
-                  placement="top"
-                >
-                  <button
-                    type="button"
-                    aria-label="Send now"
-                    disabled={isBusy}
-                    onClick={() => void handleSendNow(message)}
-                    className={cn(
-                      "flex h-6 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-colors",
-                      "text-muted-foreground hover:bg-accent hover:text-foreground",
-                      isBusy && "cursor-default opacity-60 hover:bg-transparent",
-                    )}
-                  >
-                    <Send className="h-3 w-3" />
-                    Send now
-                  </button>
-                </Tooltip>
-              )}
-
               <Tooltip content="Remove this message from the queue" placement="top">
                 <button
                   type="button"

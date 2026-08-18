@@ -144,8 +144,8 @@ export function SettingsContent({
   // its own narrow card (see AISettings).
   if (activeSection === "general") {
     return (
-      <div className="h-full overflow-auto px-8 py-8">
-        <div className="mx-auto max-w-5xl">
+      <div className="h-full overflow-auto px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-7xl">
           <AISettings
             providers={providers}
             onProvidersUpdate={fetchProviderStatuses}
@@ -157,16 +157,17 @@ export function SettingsContent({
 
   // Cloud settings sections. Rendered inside the `.cloud-settings` scoped
   // treatment (Inter + admin-like density) with a wider container than the
-  // generic settings card so their data tables have room to breathe. The id →
-  // component map is the contract the vertical agents plug into:
+  // generic settings card so their data tables and billing plan grids have room
+  // to breathe. The id → component map is the contract the vertical agents plug
+  // into:
   //   billing        → <BillingSection/>      (./cloud/billing)
   //   environments   → <EnvironmentsSection/> (./cloud/environments)
   if (activeSection === "billing" || activeSection === "environments") {
     const CloudSection =
       activeSection === "billing" ? BillingSection : EnvironmentsSection;
     return (
-      <div className="cloud-settings h-full overflow-auto bg-background px-8 py-8">
-        <div className="mx-auto max-w-5xl">
+      <div className="cloud-settings h-full overflow-auto bg-background px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <div className="mx-auto w-full max-w-7xl">
           <Suspense
             fallback={
               <div className="flex h-full items-center justify-center">

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -14,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/cliconfig"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/execfollow"
 )
 
@@ -208,7 +208,7 @@ func (s *chatUpdateSource) Root(ctx context.Context) (execfollow.RootState, erro
 	}
 	return execfollow.RootState{
 		Found:  true,
-		Status: chatWorkflowStatusString(root.GetStatus()),
+		Status: chatWorkflowStatusString(root),
 		// The verdict rides along so a follower attaching AFTER the run ended
 		// still learns that it did not pass — the terminal event it would have
 		// carried is long gone from the tail it is watching.
@@ -259,9 +259,11 @@ func (s *chatUpdateSource) Pending(ctx context.Context) ([]execfollow.PendingGat
 	return gates, nil
 }
 
-// chatWorkflowStatusString normalizes the ChatWorkflowStatus enum to the
-// lowercase state names used on the NDJSON stream ("completed", "failed", ...).
-func chatWorkflowStatusString(s reliantv1.ChatWorkflowStatus) string {
-	name := strings.TrimPrefix(s.String(), "CHAT_WORKFLOW_STATUS_")
-	return strings.ToLower(name)
+// chatWorkflowStatusString renders a workflow's lifecycle as the lowercase
+// state names used on the NDJSON stream ("completed", "failed", ...). The
+// vocabulary is unchanged from when this derived the name from a single enum;
+// core.WorkflowStatus.Label produces the same strings, so the stream contract
+// holds. "expired" is no longer among them — nothing ever produced it.
+func chatWorkflowStatusString(wf *reliantv1.WorkflowExecution) string {
+	return core.WorkflowStatus{State: wf.GetState(), StopReason: wf.GetStopReason()}.Label()
 }

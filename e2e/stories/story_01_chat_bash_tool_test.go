@@ -56,7 +56,7 @@ func TestStory01_ChatRunsBashToolAndCompletes(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	// Conversation persisted in order on the root thread (thread == root
 	// workflow ID).

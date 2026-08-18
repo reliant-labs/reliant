@@ -58,10 +58,10 @@ const (
 	// AgentMessageStatusUndelivered means the recipient thread's loop
 	// exited before this row could be drained, so it never will be.
 	//
-	// Delivery only happens at an agent loop-step boundary
-	// (drainAgentMessagesAtBoundary). A message queued while a thread is
-	// genuinely running, whose loop then exits before reaching the next
-	// boundary, is undeliverable by construction -- an inherent race that
+	// Delivery only happens in CallLLM, which drains the thread's mailbox
+	// before it reads history. A message queued while a thread is
+	// genuinely running, whose loop then exits before reaching another
+	// CallLLM, is undeliverable by construction -- an inherent race that
 	// no enqueue-time liveness check can close, because the thread WAS
 	// live when the row was written. Observed on real data: two human
 	// messages queued at 00:06:31 and 00:06:51 into a thread that
@@ -133,8 +133,18 @@ type AgentMessageStore interface {
 	// must match send order.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error)
 	// MarkAgentMessagesDelivered marks a batch of messages delivered,
-	// recording when and into which message they landed.
-	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) error
+	// recording when and into which message they landed, and returns the ids it
+	// actually moved.
+	//
+	// Conditional on the rows still being queued, which is what makes a drain
+	// idempotent: the drain reads its rows before it writes them, so two drains
+	// racing on one thread can select the same batch. The loser moves nothing
+	// and gets back fewer ids than it asked for -- its signal to abandon its own
+	// inserts rather than write the same messages into the transcript twice.
+	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
+	// SetAgentMessagesDeliveredMessageID backfills the envelope pointer on rows
+	// the caller already claimed via MarkAgentMessagesDelivered.
+	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	// CancelQueuedAgentMessage deletes a mailbox row identified by (id,
 	// chatID) ONLY IF it is still queued -- this races against the target

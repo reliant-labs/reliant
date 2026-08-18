@@ -7,13 +7,15 @@
  * see what is still running, or to get back to it.
  *
  * Deliberately NOT merged into ThreadTabs: those are a navigation control with
- * per-thread context meters, and ChatHeader already filters spawns out of them
- * (`threads.filter(t => !t.isSpawn)`). This is a transient activity readout.
+ * per-thread context meters, and ThreadTabs filters spawn-origin threads out of
+ * its own visible set. This is a transient activity readout.
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, ChevronDown, Terminal, HelpCircle } from "lucide-react";
+import { Bot, ChevronDown, Terminal, HelpCircle, Square } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { logger } from "../../lib/logger";
+import { useChatStore } from "../../store/chatStore";
 import { useBackgroundWork, type ActiveSpawn, type ActiveCommand } from "./useBackgroundWork";
 
 interface BackgroundWorkPillProps {
@@ -52,17 +54,48 @@ function Elapsed({ startedAt }: { startedAt: number | null }) {
 }
 
 function SpawnRow({
+  chatId,
   spawn,
   onSelect,
 }: {
+  chatId?: string;
   spawn: ActiveSpawn;
   onSelect?: (threadId: string) => void;
 }) {
+  const [isCancelling, setIsCancelling] = useState(false);
+
+  const handleSelect = () => onSelect?.(spawn.threadId);
+
+  const handleCancel = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!chatId || !spawn.toolCallId || isCancelling) return;
+
+    setIsCancelling(true);
+    try {
+      await useChatStore.getState().cancelToolCall(chatId, spawn.toolCallId);
+    } catch (error) {
+      logger.error("[BackgroundWorkPill] Failed to cancel background agent", {
+        chatId,
+        toolCallId: spawn.toolCallId,
+        error,
+      });
+      setIsCancelling(false);
+    }
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => onSelect?.(spawn.threadId)}
-      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent"
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleSelect}
+      onKeyDown={(event) => {
+        if (event.currentTarget !== event.target) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleSelect();
+        }
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
       data-testid={`background-work-spawn-${spawn.threadId}`}
     >
       {spawn.isBlocked ? (
@@ -79,10 +112,22 @@ function SpawnRow({
       >
         {spawn.isBlocked ? spawn.blockReason : spawn.activity}
       </span>
-      <span className="ml-auto flex-shrink-0">
+      <span className="ml-auto flex flex-shrink-0 items-center gap-1.5">
         <Elapsed startedAt={spawn.startedAt} />
+        {spawn.toolCallId && (
+          <button
+            type="button"
+            onClick={handleCancel}
+            aria-label={`Cancel background agent ${spawn.title}`}
+            disabled={isCancelling}
+            className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
+            title="Cancel background agent"
+          >
+            <Square className={cn("h-3.5 w-3.5", isCancelling ? "animate-pulse text-warning" : "text-destructive")} />
+          </button>
+        )}
       </span>
-    </button>
+    </div>
   );
 }
 
@@ -188,6 +233,7 @@ export function BackgroundWorkPill({
           {spawns.map((spawn) => (
             <SpawnRow
               key={spawn.threadId}
+              chatId={chatId}
               spawn={spawn}
               onSelect={onSelectThread}
             />

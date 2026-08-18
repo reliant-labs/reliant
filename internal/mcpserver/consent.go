@@ -131,7 +131,7 @@ func queryEscape(s string) string {
 			r == '-', r == '_', r == '.', r == '~':
 			b.WriteRune(r)
 		default:
-			b.WriteString(fmt.Sprintf("%%%02X", r))
+			fmt.Fprintf(&b, "%%%02X", r)
 		}
 	}
 	return b.String()

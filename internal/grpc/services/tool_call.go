@@ -78,10 +78,6 @@ func (s *ToolCallService) CancelToolCall(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	// Set the in-memory signal for immediate detection by running tool
-	// This prevents the tool from emitting "completed" status after user clicked cancel
-	shell.GetCancelSignal().SetCancelled(toolCallID)
-
 	// Ask the daemon to stop this one execution.
 	//
 	// This used to cancel the chat's whole Temporal workflow. That is the
@@ -94,9 +90,8 @@ func (s *ToolCallService) CancelToolCall(
 	//
 	// The daemon registers a per-execution cancel func under the tool call id,
 	// so this reaches exactly the one running tool. Best-effort by design: if
-	// the daemon is offline or the tool runs server-side, the in-memory cancel
-	// signal above is still authoritative -- the tool runs to completion and
-	// execute_tools discards its result rather than reporting it as completed.
+	// the daemon is offline or the tool runs server-side, the tool runs to
+	// completion and reports its real outcome.
 	if s.router != nil {
 		if err := s.router.SendToolExecutionCancel(ctx, userID, toolCallID, "user cancelled tool call"); err != nil {
 			logging.Warn("[CancelToolCall] Could not deliver cancel to daemon; relying on cancel signal",
@@ -206,8 +201,8 @@ func (s *ToolCallService) cancelChildWorkflowForToolCall(ctx context.Context, to
 	// Reconcile the workflow row. CAS rather than a blind write so a child that
 	// settled terminally on its own is never clobbered; cover PAUSED too, since
 	// a user cancel overrides a pause.
-	for _, from := range []db.WorkflowStatus{db.WorkflowStatusRunning, db.WorkflowStatusPaused} {
-		swapped, err := s.database.CompareAndSwapWorkflowStatus(ctx, childWorkflowID, db.WorkflowStatusCancelled, from)
+	for _, from := range []db.WorkflowStatus{db.Active(), db.Paused()} {
+		swapped, err := s.database.CompareAndSwapWorkflowStatus(ctx, childWorkflowID, db.Cancelled(), from)
 		if err != nil {
 			logging.Warn("[CancelToolCall] Failed to reconcile spawned workflow status",
 				"childWorkflowID", childWorkflowID, "from", from, "error", err)

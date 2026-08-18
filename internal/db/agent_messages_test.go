@@ -106,7 +106,8 @@ func TestMarkAgentMessagesDelivered_RemovesFromQueueAndRecordsDelivery(t *testin
 	deliveredMessageID := seedDeliveredMessage(t, repo, ctx, chatID, childThreadID)
 	deliveredAt := time.Now().UTC().Truncate(time.Second)
 
-	require.NoError(t, repo.MarkAgentMessagesDelivered(ctx, []string{"m-1", "m-2"}, deliveredAt, deliveredMessageID))
+	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{"m-1", "m-2"}, deliveredAt, deliveredMessageID)
+	require.NoError(t, markErr)
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childThreadID)
 	require.NoError(t, err)
@@ -161,7 +162,8 @@ func TestCountQueuedAgentMessagesForThread_OnlyCountsQueued(t *testing.T) {
 	require.Equal(t, int64(2), count)
 
 	deliveredMessageID := seedDeliveredMessage(t, repo, ctx, chatID, childThreadID)
-	require.NoError(t, repo.MarkAgentMessagesDelivered(ctx, []string{"m-a"}, time.Now().UTC(), deliveredMessageID))
+	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{"m-a"}, time.Now().UTC(), deliveredMessageID)
+	require.NoError(t, markErr)
 
 	count, err = repo.CountQueuedAgentMessagesForThread(ctx, childThreadID)
 	require.NoError(t, err)

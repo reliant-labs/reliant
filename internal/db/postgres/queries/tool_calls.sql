@@ -37,6 +37,9 @@ ON CONFLICT (tool_call_id) DO UPDATE SET
 -- name: GetToolCall :one
 SELECT * FROM tool_calls WHERE id = $1;
 
+-- name: GetToolCallResult :one
+SELECT * FROM tool_call_results WHERE tool_call_id = $1;
+
 -- name: ListToolCallsByChat :many
 SELECT * FROM tool_calls
 WHERE chat_id = $1
@@ -70,15 +73,16 @@ ORDER BY message_id, created_at ASC;
 -- Anchored on the same durable evidence callIsStillLive already trusts —
 -- tool_calls.child_workflow_id joined to the child's status — so a row
 -- returned here is dead by exactly the rule cleanup applies one call at a time.
--- Fails CLOSED in the same direction: a child still running (2) or paused (6)
--- is never returned, because fabricating a failure for a live spawn writes a
--- lie into conversation history that no later pass can distinguish from a real
--- one. A missing result is recoverable; an invented one is not.
+-- Fails CLOSED in the same direction: a child that is still LIVE — active, or
+-- stopped only because it is paused — is never returned, because fabricating a
+-- failure for a live spawn writes a lie into conversation history that no
+-- later pass can distinguish from a real one. A missing result is recoverable;
+-- an invented one is not.
 SELECT tc.* FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
 WHERE tc.tool_name = 'spawn'
   AND tc.status IN (1, 2)
-  AND w.status IN (3, 4, 5, 7)
+  AND w.state = 3 AND w.stop_reason <> 3
   AND NOT EXISTS (
       SELECT 1 FROM tool_call_results r WHERE r.tool_call_id = tc.id
   )
@@ -101,21 +105,22 @@ ORDER BY tc.requested_at ASC;
 -- exists for, just with the join anchor moved from tool_call_results to
 -- agent_messages.
 --
--- Same fail-closed discipline as the sync version: a child still running (2)
--- or paused (6) is never returned, because fabricating a completion for a
--- live spawn writes a lie into the parent's mailbox that no later pass can
--- distinguish from a real one. A missing report is recoverable; an invented
--- one is not.
+-- Same fail-closed discipline as the sync version: a child that is still LIVE
+-- — active, or stopped only because it is paused — is never returned, because
+-- fabricating a completion for a live spawn writes a lie into the parent's
+-- mailbox that no later pass can distinguish from a real one. A missing
+-- report is recoverable; an invented one is not.
 SELECT tc.id AS tool_call_id,
        tc.chat_id,
        tc.thread_id AS parent_thread_id,
        w.thread AS child_thread_id,
-       w.status AS workflow_status
+       w.state AS workflow_state,
+       w.stop_reason AS workflow_stop_reason
 FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
 WHERE tc.tool_name = 'spawn'
   AND tc.status = 6
-  AND w.status IN (3, 4, 5, 7)
+  AND w.state = 3 AND w.stop_reason <> 3
   AND NOT EXISTS (
       SELECT 1 FROM agent_messages m
       WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
@@ -150,7 +155,8 @@ SELECT
     tc.requested_at,
     tc.completed_at,
     w.thread AS child_thread_id,
-    w.status AS workflow_status,
+    w.state AS workflow_state,
+    w.stop_reason AS workflow_stop_reason,
     w.completed_at AS workflow_completed_at,
     t.title AS thread_title
 FROM tool_calls tc

@@ -13,8 +13,7 @@
  *    strip is answering "who needs me", so lighting up every running child
  *    would make the signal useless.
  *  - thread records OUTLIVE the run (they carry titles for the timeline), so
- *    the strip must go away when the chat goes idle rather than claiming
- *    agents are still working.
+ *    a completed workflow row must clear stale live-looking thread rows.
  *  - non-spawn threads (forks, workflow nodes) do NOT appear. Those belong to
  *    ThreadTabs; mixing them here was explicitly not wanted.
  *  - background commands are chat-attributed when the daemon set a chat_id,
@@ -22,27 +21,37 @@
  */
 
 import { fireEvent, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import type { ActiveThreadUpdate } from "../../../types/streaming";
+import type { WorkflowExecutionData } from "../../../types/chat";
 
 const CHAT_ID = "chat-abc";
 const WORKTREE_ID = "wt-1";
 
-const { usePendingQuestionMock } = vi.hoisted(() => ({
+const { usePendingQuestionMock, useWorkflowExecutionsMock } = vi.hoisted(() => ({
   usePendingQuestionMock: vi.fn(),
+  useWorkflowExecutionsMock: vi.fn(),
 }));
 
 vi.mock("../../../hooks/approval-queries", () => ({
   usePendingQuestion: usePendingQuestionMock,
 }));
 
+vi.mock("../../../hooks/useWorkflowExecutions", () => ({
+  useWorkflowExecutions: useWorkflowExecutionsMock,
+}));
+
 import { useThreadActivityStore } from "../../../store/threadActivityStore";
 import { useProcessStore } from "../../../store/processStore";
 import { useActivityStore } from "../../../store/activityStore";
-import { ChatActivity } from "../../../gen/reliant/v1/chat_pb";
+import { useChatStore } from "../../../store/chatStore";
+import { ChatActivity, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 import { BackgroundProcessStatus } from "../../../api/background-grpc";
 import { BackgroundWorkPill } from "../BackgroundWorkPill";
+
+const originalCancelToolCall = useChatStore.getState().cancelToolCall;
 
 function thread(overrides: Partial<ActiveThreadUpdate> = {}): ActiveThreadUpdate {
   return {
@@ -59,6 +68,22 @@ function thread(overrides: Partial<ActiveThreadUpdate> = {}): ActiveThreadUpdate
     created_at: new Date().toISOString(),
     ...overrides,
   };
+}
+
+function workflow(overrides: Partial<WorkflowExecutionData> = {}): WorkflowExecutionData {
+  return {
+    id: "wf-1",
+    workflowName: "builtin://agent",
+    thread: "thread-1",
+    createdAt: new Date().toISOString(),
+    messageCount: 0,
+    children: [],
+    steps: [],
+    origin: "spawn",
+    state: WorkflowState.ACTIVE,
+    stopReason: WorkflowStopReason.UNSPECIFIED,
+    ...overrides,
+  } as WorkflowExecutionData;
 }
 
 function setChatRunning(running: boolean) {
@@ -79,8 +104,10 @@ function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPil
 
 beforeEach(() => {
   usePendingQuestionMock.mockReturnValue({ data: null });
+  useWorkflowExecutionsMock.mockReturnValue({ allWorkflows: [] });
   useThreadActivityStore.getState().clearAll();
   useProcessStore.getState().reset();
+  useChatStore.setState({ cancelToolCall: originalCancelToolCall });
   setChatRunning(true);
 });
 
@@ -104,6 +131,101 @@ describe("BackgroundWorkPill", () => {
     fireEvent.click(screen.getByTestId("background-work-spawn-thread-42"));
 
     expect(onSelectThread).toHaveBeenCalledWith("thread-42");
+  });
+
+  it("renders a cancel button for spawns tied to a tool call", () => {
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({
+        thread: "thread-42",
+        spawned_by_tool_call_id: "toolu-spawn-42",
+      }),
+    ]);
+
+    renderPill();
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+
+    expect(screen.getByLabelText("Cancel background agent researcher")).toBeTruthy();
+  });
+
+  it("cancels the originating tool call without selecting the spawn row", () => {
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({
+        thread: "thread-42",
+        spawned_by_tool_call_id: "toolu-spawn-42",
+      }),
+    ]);
+    const cancelToolCall = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ cancelToolCall });
+
+    const onSelectThread = vi.fn();
+    renderPill({ onSelectThread });
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    fireEvent.click(screen.getByLabelText("Cancel background agent researcher"));
+
+    expect(cancelToolCall).toHaveBeenCalledWith(CHAT_ID, "toolu-spawn-42");
+    expect(onSelectThread).not.toHaveBeenCalled();
+  });
+
+  it("cancels from keyboard focus without selecting the spawn row", async () => {
+    const user = userEvent.setup();
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({
+        thread: "thread-42",
+        spawned_by_tool_call_id: "toolu-spawn-42",
+      }),
+    ]);
+    const cancelToolCall = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ cancelToolCall });
+
+    const onSelectThread = vi.fn();
+    renderPill({ onSelectThread });
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    screen.getByLabelText("Cancel background agent researcher").focus();
+    await user.keyboard("{Enter}");
+
+    expect(cancelToolCall).toHaveBeenCalledWith(CHAT_ID, "toolu-spawn-42");
+    expect(onSelectThread).not.toHaveBeenCalled();
+  });
+
+  it("uses the persisted spawn thread title instead of generic agent labels", () => {
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({
+        thread: "thread-42",
+        thread_title: "Fix generic pill title",
+        title: "agent",
+        agent_name: "builtin://agent",
+      }),
+    ]);
+
+    renderPill();
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    expect(screen.getByTestId("background-work-spawn-thread-42")).toHaveTextContent("Fix generic pill title");
+    expect(screen.getByTestId("background-work-spawn-thread-42")).not.toHaveTextContent("Agent");
+  });
+
+  it("resolves a generic live spawn title from the workflow execution row", () => {
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({
+        thread: "thread-42",
+        workflow_id: "wf-42",
+        thread_title: "agent",
+        title: "agent",
+        agent_name: "builtin://agent",
+      }),
+    ]);
+    useWorkflowExecutionsMock.mockReturnValue({
+      allWorkflows: [workflow({ id: "wf-42", thread: "thread-42", threadTitle: "Investigate stream state" })],
+    });
+
+    renderPill();
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    expect(screen.getByTestId("background-work-spawn-thread-42")).toHaveTextContent("Investigate stream state");
+    expect(screen.getByTestId("background-work-spawn-thread-42")).not.toHaveTextContent("builtin://agent");
   });
 
   it("calls out the specific spawn blocked on a pending question", () => {
@@ -143,6 +265,27 @@ describe("BackgroundWorkPill", () => {
     useThreadActivityStore
       .getState()
       .setThreads(CHAT_ID, [thread({ status: "completed" })]);
+
+    renderPill();
+
+    expect(screen.queryByTestId("background-work-pill")).toBeNull();
+  });
+
+  it("drops a stale running spawn once its workflow execution reports completed", () => {
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({ thread: "thread-42", workflow_id: "wf-42", status: "running" }),
+    ]);
+    useWorkflowExecutionsMock.mockReturnValue({
+      allWorkflows: [
+        workflow({
+          id: "wf-42",
+          thread: "thread-42",
+          state: WorkflowState.STOPPED,
+          stopReason: WorkflowStopReason.COMPLETED,
+          completedAt: new Date().toISOString(),
+        }),
+      ],
+    });
 
     renderPill();
 

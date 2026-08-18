@@ -98,7 +98,7 @@ export function MessageAttachments({
           return isImage ? (
             <div
               key={attachment.id}
-              className="rounded-md overflow-hidden cursor-pointer transition-all duration-200 hover:opacity-90 hover:elevation-3"
+              className="rounded-md overflow-hidden cursor-pointer transition-opacity duration-200 hover:opacity-90 hover:elevation-3"
               style={{
                 border: '1px solid var(--chat-border)',
                 backgroundColor: 'var(--chat-input-bg)',

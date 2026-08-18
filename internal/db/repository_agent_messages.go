@@ -67,14 +67,23 @@ func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID 
 	return r.agentMessages.ListQueuedAgentMessagesForThread(ctx, toThreadID)
 }
 
-func (r *Repo) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) error {
+func (r *Repo) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	// deliveredMessageID may be empty: a drain claims its rows before the
+	// envelope exists and backfills the pointer afterwards.
+	return r.agentMessages.MarkAgentMessagesDelivered(ctx, ids, deliveredAt, deliveredMessageID)
+}
+
+func (r *Repo) SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error {
 	if len(ids) == 0 {
 		return nil
 	}
 	if deliveredMessageID == "" {
 		return fmt.Errorf("delivered message ID is required")
 	}
-	return r.agentMessages.MarkAgentMessagesDelivered(ctx, ids, deliveredAt, deliveredMessageID)
+	return r.agentMessages.SetAgentMessagesDeliveredMessageID(ctx, ids, deliveredMessageID)
 }
 
 func (r *Repo) CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error) {

@@ -19,7 +19,7 @@ func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
 	if err := repo.CreateChat(ctx, &Chat{ID: chatID, ProjectID: "test-project", Title: "t", CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}); err != nil {
 		t.Fatalf("create chat: %v", err)
 	}
-	wf := &Workflow{ID: "wf-outcome", ChatID: chatID, WorkflowName: "builtin://forge-one-shot", Thread: "t-1", Status: WorkflowStatusRunning, CreatedAt: time.Now().UTC()}
+	wf := &Workflow{ID: "wf-outcome", ChatID: chatID, WorkflowName: "builtin://forge-one-shot", Thread: "t-1", Status: Active(), CreatedAt: time.Now().UTC()}
 	if err := repo.CreateWorkflow(ctx, wf); err != nil {
 		t.Fatalf("create workflow: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
 	if err := repo.SetWorkflowOutcome(ctx, "wf-outcome", "failure"); err != nil {
 		t.Fatalf("set outcome: %v", err)
 	}
-	if err := repo.UpdateWorkflowStatus(ctx, "wf-outcome", WorkflowStatusCompleted); err != nil {
+	if err := repo.UpdateWorkflowStatus(ctx, "wf-outcome", Completed()); err != nil {
 		t.Fatalf("update status: %v", err)
 	}
 
@@ -46,7 +46,7 @@ func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
 	if got.Outcome == nil || *got.Outcome != "failure" {
 		t.Fatalf("outcome = %v, want failure", got.Outcome)
 	}
-	if got.Status != WorkflowStatusCompleted {
+	if got.Status != Completed() {
 		t.Fatalf("status = %v, want completed — the two facts must coexist", got.Status)
 	}
 }

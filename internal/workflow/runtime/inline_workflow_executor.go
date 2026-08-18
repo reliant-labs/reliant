@@ -65,6 +65,10 @@ type InlineWorkflowExecutor struct {
 	// makeThreadPauseCtrl creates per-thread PauseControllers for pause-aware execution.
 	// Propagated from the root workflow to support nested spawn tool calls.
 	makeThreadPauseCtrl func(string) *PauseController
+	// threadInterrupt observes interrupts for this inline workflow's thread.
+	threadInterrupt *ThreadInterrupt
+	// makeThreadInterrupt creates per-thread interrupt handles for spawned/nested threads.
+	makeThreadInterrupt func(string) *ThreadInterrupt
 }
 
 // NewInlineWorkflowExecutor creates a new executor for inline workflow execution.
@@ -141,6 +145,18 @@ func (e *InlineWorkflowExecutor) WithPauseController(pc *PauseController) *Inlin
 // WithMakeThreadPauseCtrl sets the per-thread PauseController factory for spawn support.
 func (e *InlineWorkflowExecutor) WithMakeThreadPauseCtrl(fn func(string) *PauseController) *InlineWorkflowExecutor {
 	e.makeThreadPauseCtrl = fn
+	return e
+}
+
+// WithThreadInterrupts sets the interrupt handle for this inline workflow's thread.
+func (e *InlineWorkflowExecutor) WithThreadInterrupts(interrupt *ThreadInterrupt) *InlineWorkflowExecutor {
+	e.threadInterrupt = interrupt
+	return e
+}
+
+// WithMakeThreadInterrupt sets the per-thread interrupt handle factory for spawn support.
+func (e *InlineWorkflowExecutor) WithMakeThreadInterrupt(fn func(string) *ThreadInterrupt) *InlineWorkflowExecutor {
+	e.makeThreadInterrupt = fn
 	return e
 }
 
@@ -239,14 +255,7 @@ func applyPresets(
 
 		resolvedPresetName, err := ResolvePresetName(rawPresetName, evalCtx)
 		if err != nil {
-			// Match existing "failed to load preset → skip" pattern.
-			logger.Warn("[InlineWorkflow] Failed to resolve preset template",
-				"nodeID", nodeID,
-				"group", groupName,
-				"template", rawPresetName,
-				"error", err,
-			)
-			continue
+			return fmt.Errorf("resolve preset template %q for group %q: %w", rawPresetName, groupName, err)
 		}
 
 		if resolvedPresetName != rawPresetName {
@@ -267,15 +276,13 @@ func applyPresets(
 			continue
 		}
 
+		// A preset that fails to load must fail the spawn. Skipping it ran the
+		// agent under the workflow's defaults while reporting success — the
+		// caller asked for a specific preset and silently got a different
+		// model, tool set and prompt.
 		params, err := loader(resolvedPresetName)
 		if err != nil {
-			logger.Warn("[InlineWorkflow] Failed to load preset",
-				"nodeID", nodeID,
-				"preset", resolvedPresetName,
-				"group", groupName,
-				"error", err,
-			)
-			continue // Skip failed presets, don't fail the whole workflow
+			return fmt.Errorf("load preset %q for group %q: %w", resolvedPresetName, groupName, err)
 		}
 
 		mergePresetParams(subInputs, groupName, params)
@@ -397,19 +404,43 @@ func (e *InlineWorkflowExecutor) compileSubWorkflowSemantics() error {
 //	at node start) are NOT retroactively updated. For those, callers should use
 //	thread-scoped param updates via the __thread signal key.
 func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{} {
+	inputs, _, err := e.buildSubWorkflowInputsWithOwnership()
+	if err != nil {
+		// Only reachable from tests and the parity simulator, which construct
+		// executors without presets. The real execution path calls
+		// buildSubWorkflowInputsWithOwnership and propagates this error.
+		panic(err)
+	}
+	return inputs
+}
+
+// buildSubWorkflowInputsWithOwnership builds the sub-workflow inputs and also
+// reports which of those keys this thread set EXPLICITLY for itself — its preset
+// params and its node args. Those keys are authoritative for the thread and are
+// protected from global param updates (see ChildWorkflowTracker.threadOwnedKeys).
+//
+// Passthrough keys are deliberately NOT owned: passthrough exists precisely to
+// track the parent's value, so a later global update should keep reaching them.
+func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[string]interface{}, map[string]bool, error) {
 	if e.inputPolicy() == core.InputPolicyInlineInheritParentInputs {
 		// Share the parent's map directly — NOT a copy.
 		// See doc comment above for the full rationale.
-		return e.workflowInputs
+		return e.workflowInputs, nil, nil
 	}
 
 	subInputs := make(map[string]interface{})
+	ownedKeys := make(map[string]bool)
+
 	if wfArgs := model.GetSubWorkflowArgs(e.node); wfArgs != nil && len(wfArgs.GetPresets()) > 0 {
+		// No fallback: a preset that names a model but fails to load would
+		// otherwise run the agent on the workflow's default model while
+		// reporting success, which is exactly the class of silent
+		// substitution this path is meant to prevent.
 		if err := e.loadAndMergePresets(subInputs); err != nil {
-			e.logger.Warn("[InlineWorkflow] Failed to load presets, continuing without them",
-				"nodeID", e.nodeID,
-				"error", err,
-			)
+			return nil, nil, fmt.Errorf("load presets for node %s: %w", e.nodeID, err)
+		}
+		for key := range subInputs {
+			ownedKeys[key] = true
 		}
 	}
 
@@ -420,12 +451,14 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{}
 		for _, name := range passthrough {
 			if val, ok := e.workflowInputs[name]; ok {
 				subInputs[name] = val
+				delete(ownedKeys, name)
 			}
 		}
 	}
 
 	for key, value := range e.subWorkflowInputs {
 		subInputs[key] = value
+		ownedKeys[key] = true
 	}
 
 	if len(e.subWorkflow.GetInputs()) > 0 {
@@ -437,7 +470,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputs() map[string]interface{}
 	// being left to each YAML's passthrough list.
 	propagateUnattended(e.workflowInputs, subInputs)
 
-	return subInputs
+	return subInputs, ownedKeys, nil
 }
 
 // Execute runs the sub-workflow inline and returns its outputs.
@@ -575,7 +608,10 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	)
 
 	// Build sub-workflow inputs from core semantic contract.
-	subInputs := e.buildSubWorkflowInputs()
+	subInputs, ownedKeys, err := e.buildSubWorkflowInputsWithOwnership()
+	if err != nil {
+		return nil, err
+	}
 	// Inherit mode from parent if not explicitly set in sub-workflow inputs
 	if _, ok := subInputs["mode"]; !ok {
 		subInputs["mode"] = getModeFromInputs(e.workflowInputs)
@@ -584,7 +620,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	// Register thread inputs for per-thread param queries and updates.
 	// This allows the root workflow's query/signal handlers to access this thread's inputs.
 	if e.childTracker != nil && subThread != "" {
-		e.childTracker.RegisterThreadInputs(subThread, subInputs)
+		e.childTracker.RegisterThreadInputs(subThread, subInputs, ownedKeys)
 		defer e.childTracker.UnregisterThreadInputs(subThread)
 	}
 
@@ -617,7 +653,9 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		WithProjectPath(e.projectPath).
 		WithWorkflow(e.subWorkflow).
 		WithPauseController(e.pauseCtrl).
-		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl)
+		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, subThread)).
+		WithMakeThreadInterrupt(e.makeThreadInterrupt)
 
 	// Initialize join state for the sub-workflow
 	joinState := NewJoinState()
@@ -730,6 +768,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				}
 				loopExecutor = loopExecutor.WithPauseController(e.pauseCtrl).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, loopExecutor.GetThread())).
+					WithMakeThreadInterrupt(e.makeThreadInterrupt).
 					WithInvocationContract(loopContract)
 
 				loopOutput, err := loopExecutor.Execute()
@@ -901,17 +941,42 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				stepEvent := executor.HandleCompletion(running)
 				runningSteps = removeRunningStep(runningSteps, running)
 
-				// Handle CanceledError - activity was cancelled by the shared activityCtx
-				// (e.g., due to pause). Propagate upward so the parent workflow can
-				// run checkPause() (which blocks until resume and refreshes activityCtx)
-				// before re-triggering the step.
+				// Handle CanceledError - the activity was cancelled by the shared
+				// activityCtx (i.e. the user paused). Block until resume HERE and
+				// re-dispatch just this step, keeping the frame on the stack.
+				//
+				// This used to return the error and let the stack unwind to the
+				// top-level retryLoop, which re-Execute()d the whole loop node.
+				// That rebuilt every frame below it, so anything a node does on
+				// ENTRY ran a second time: on chat 4d92f694 a pause during the
+				// implementer's first attempt re-forked its thread and re-injected
+				// the opening message verbatim, telling the agent to restart
+				// attempt 1 thirty minutes later.
+				//
+				// Resuming in place is also what the top-level executor has always
+				// done (workflow.go, "Activity cancelled (pause), blocking until
+				// resume then retrying"), which is why a plain agent loop paused
+				// correctly and only nested workflow nodes regressed.
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						e.logger.Info("[InlineWorkflow] Activity cancelled, propagating to parent for re-trigger",
+						e.logger.Info("[InlineWorkflow] Activity cancelled (pause), blocking until resume then retrying in place",
 							"stepID", running.StepID,
 						)
-						return nil, stepEvent.Error
+						e.pauseCtrl.DoCheckPause(e.ctx)
+						// A genuine CancelWorkflow (not a pause) must still unwind,
+						// or this would spin re-dispatching into a dead context.
+						if e.ctx.Err() != nil {
+							return nil, e.ctx.Err()
+						}
+						// Yield so replay does not trip deadlock detection.
+						_ = workflow.Sleep(e.ctx, 0)
+						newRunning := executor.Start(&core.TriggeredNode{
+							Node:  running.Node,
+							Event: running.Event,
+						})
+						runningSteps = append(runningSteps, newRunning)
+						continue
 					}
 				}
 
@@ -1302,16 +1367,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 		// Create child thread and optionally save inject message
 		// For non-inherit modes, this creates the thread with proper fork metadata
 		if model.NodeThreadMode(evalResult) != model.ThreadModeInherit {
-			var injectMsg *InjectMessageConfig
-			if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
-				attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
-				injectMsg = &InjectMessageConfig{
-					Role:        model.CelStringValue(ic.GetRole()),
-					Content:     model.CelStringValue(ic.GetContent()),
-					Attachments: attIDs,
-					Files:       attFiles,
-				}
-			}
+			injectMsg := buildInjectMessageConfig(model.NodeInjectConfig(evalResult), e.logger)
 
 			parentWorkflowID := ""
 			if e.execContext.Parent != nil {
@@ -1345,7 +1401,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 				)
 				return nil, fmt.Errorf("failed to initialize nested workflow thread for node %s: %w", nid, initErr)
 			}
-		} else if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
+		} else if flatInput := buildInjectSaveMessageInput(e.chatID, childExecCtx.Thread, e.workflowID, model.NodeInjectConfig(evalResult), e.logger); flatInput != nil {
 			// For inherit mode, just save the inject message (thread already exists)
 			activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
 				StartToCloseTimeout: 30 * time.Second,
@@ -1356,16 +1412,6 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 					MaximumAttempts:    3,
 				},
 			})
-			attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
-			flatInput := &types.SaveMessageInput{
-				ChatID:      e.chatID,
-				Thread:      childExecCtx.Thread,
-				Role:        model.CelStringValue(ic.GetRole()),
-				Content:     model.CelStringValue(ic.GetContent()),
-				Attachments: attIDs,
-				InjectFiles: injectFilesToData(attFiles),
-				WorkflowID:  e.workflowID,
-			}
 			rtx := types.RuntimeContext{
 				ChatID:     e.chatID,
 				Thread:     childExecCtx.Thread,
@@ -1385,7 +1431,9 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 		nestedExecutor = nestedExecutor.WithProjectPath(e.projectPath)
 	}
 	nestedExecutor = nestedExecutor.WithPauseController(e.pauseCtrl).
-		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl)
+		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, nestedExecutor.GetThread())).
+		WithMakeThreadInterrupt(e.makeThreadInterrupt)
 
 	// Override the sub-workflow name for the nested execution
 	nestedExecutor.subWorkflowName = nestedWorkflowName
@@ -1442,7 +1490,9 @@ func (e *InlineWorkflowExecutor) executeNestedRouter(
 	routerExec = routerExec.
 		WithThreadTracker(e.threadTracker).
 		WithPauseController(e.pauseCtrl).
-		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl)
+		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, routerExec.GetThread())).
+		WithMakeThreadInterrupt(e.makeThreadInterrupt)
 
 	return routerExec.Execute()
 }

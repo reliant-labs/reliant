@@ -6,12 +6,12 @@
  * has to read the same in detail, or tapping through looks like the state
  * changed under you. One table, two renderers.
  *
- * `resumable` is the load-bearing piece. `daemonResume` is true on mobile but
- * `daemonManage` is false, so Resume is the ONLY write this surface performs —
- * and it is only meaningful for a daemon that is stopped but recoverable.
- * Resuming an ACTIVE daemon is a no-op the control plane would reject, and
- * PENDING is already on its way up, so offering the button there invites a
- * double-start.
+ * `resumable` and `suspendable` are the load-bearing pieces. The mobile
+ * surface now supports full daemon management, but lifecycle buttons still
+ * fail closed by status: Resume is only meaningful for stopped-but-recoverable
+ * machines, and Suspend is only meaningful for an active one. PENDING is
+ * already transitioning, and FAILED needs Delete or a fresh create rather than
+ * another lifecycle transition.
  */
 
 import { DaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
@@ -62,8 +62,7 @@ const BY_STATUS: Record<number, DaemonPresentation> = {
   [DaemonStatus.FAILED]: {
     label: "Failed",
     pillClassName: "bg-destructive/10 text-destructive ring-destructive/25",
-    // A failed daemon needs the desktop's diagnostics + recreate path, which
-    // is `daemonManage` — out of scope here. Resume would just fail again.
+    // A failed daemon needs deletion or a fresh machine. Resume would just fail again.
     resumable: false,
   },
 };
@@ -72,9 +71,14 @@ export function presentDaemon(daemon: Daemon): DaemonPresentation {
   return BY_STATUS[daemon.status] ?? UNKNOWN;
 }
 
-/** Whether Resume — the mobile surface's only daemon write — applies. */
+/** Whether Resume applies without duplicating a start already in flight. */
 export function canResume(daemon: Daemon): boolean {
   return presentDaemon(daemon).resumable;
+}
+
+/** Whether Suspend applies without racing another lifecycle transition. */
+export function canSuspend(daemon: Daemon): boolean {
+  return daemon.status === DaemonStatus.ACTIVE;
 }
 
 const SIZE_LABELS: Record<number, string> = {

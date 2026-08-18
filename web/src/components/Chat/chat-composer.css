@@ -1,11 +1,11 @@
-.chat-composer[data-empty="true"]::before {
-  content: attr(data-placeholder);
-  color: var(--chat-input-placeholder);
-  pointer-events: none;
-}
-
+/* The composer is a plain <textarea>, so the placeholder is the native one —
+   no ::before hack, and no white-space rules to make a contentEditable div
+   preserve newlines. */
 .chat-composer {
   outline: none;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.chat-composer::placeholder {
+  color: var(--chat-input-placeholder);
 }

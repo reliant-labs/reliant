@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -281,10 +282,13 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		cwd = resolvedCwd
 	}
 
-	hostname, _ := os.Hostname()
-	if strings.TrimSpace(hostname) == "" {
-		hostname = "unknown-host"
-	}
+	// The real hostname, deliberately. It is sent as DaemonRegister.Hostname and
+	// stored in daemons.hostname, where the gateway's resolveUnboundDaemonID
+	// matches it to reuse an existing daemon row. Substituting a stable id here
+	// would orphan that row. Stability comes from DaemonRegister.DaemonId (the
+	// server-assigned id we re-assert), which is what makes identity survive a
+	// hostname flip; this field stays the machine's current name.
+	hostname := instanceid.Hostname()
 
 	// DAEMON_RUNTIME_TYPE is stamped by the control-plane on cloud daemon pods
 	// (e.g. "kata", "gvisor"); absent for local/self-hosted daemons.
@@ -318,9 +322,13 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// so a returning daemon re-asserts its stable identity in the registration
 	// message. On first-ever registration it's empty; the gateway assigns one
 	// via RegistrationAck and we persist it back to daemon.json.
+	// The default display name carries the stable instance id alongside the
+	// hostname, so two daemons whose hostname flipped mid-session are still
+	// recognizable as the same machine in the daemon list. This is a label
+	// only — nothing keys off it.
 	daemonName := bootCfg.Name
 	if daemonName == "" {
-		daemonName = hostname
+		daemonName = instanceid.Label()
 	}
 
 	// Seed the process-wide identity from persisted creds so exec.bg_list can

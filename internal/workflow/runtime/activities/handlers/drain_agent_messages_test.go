@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -148,6 +149,103 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 	queued, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
 	require.NoError(t, err)
 	assert.Empty(t, queued, "delivered rows must drop out of the queue")
+}
+
+// TestDrainAgentMessages_AnnouncesDrainedRowIDs pins the signal the pending-
+// queue strip needs to let go of a row at the instant it becomes a message.
+//
+// The strip is fed by a poll (ListQueuedAgentMessages). Before this
+// announcement existed, the agent taking a message off the queue produced no
+// client-visible signal at all: the transcript entry appeared immediately and
+// the strip went on showing the same message until some later poll happened to
+// answer without it. That overlap — the same words on screen in two places —
+// is the bug. Polling faster only narrows it.
+//
+// So the drain names the rows it drained, on the same ordered chat_updates
+// channel that carries the messages, written inside the same transaction. The
+// ids are the agent_messages row ids, because those are what the strip is
+// keyed by; the delivered_message_id link the mailbox already stores points at
+// the HIDDEN envelope, which the transcript never renders and which therefore
+// cannot tell a client which visible entry replaced a given row.
+func TestDrainAgentMessages_AnnouncesDrainedRowIDs(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	fromThreadID := uuid.New().String()
+	_, err := h.Repo().CreateThread(ctx, &db.Thread{ID: fromThreadID, ChatID: chatID})
+	require.NoError(t, err)
+
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	enqueueDrainTestMessage(t, h.Repo(), chatID, fromThreadID, chatID, "first message", base)
+	enqueueDrainTestMessage(t, h.Repo(), chatID, fromThreadID, chatID, "second message", base.Add(time.Minute))
+
+	// The ids the strip is currently showing — captured before the drain,
+	// because after it they are gone from the queue.
+	queuedBefore, err := h.Repo().ListQueuedAgentMessagesForThread(ctx, chatID)
+	require.NoError(t, err)
+	require.Len(t, queuedBefore, 2)
+	wantIDs := []string{queuedBefore[0].ID, queuedBefore[1].ID}
+
+	act := newDrainTestActivity(h)
+	var output DrainAgentMessagesOutput
+	require.NoError(t, h.ExecuteActivity(act.Execute,
+		DrainAgentMessagesInput{ChatID: chatID, Thread: chatID}, &output))
+	require.Equal(t, 2, output.Count)
+
+	updates, err := h.Repo().GetUpdatesSince(ctx, chatID, 0, 100)
+	require.NoError(t, err)
+
+	var announcements []db.AgentMessagesDrainedUpdate
+	for _, u := range updates {
+		if u.UpdateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED {
+			continue
+		}
+		var parsed db.AgentMessagesDrainedUpdate
+		require.NoError(t, json.Unmarshal(u.Data, &parsed))
+		announcements = append(announcements, parsed)
+	}
+
+	require.Len(t, announcements, 1, "a drain must announce itself exactly once")
+	assert.Equal(t, "agent_messages_drained", announcements[0].UpdateTypeName)
+	assert.Equal(t, chatID, announcements[0].Thread,
+		"the announcement names the mailbox it emptied, so a client can ignore other threads'")
+	assert.ElementsMatch(t, wantIDs, announcements[0].MessageIDs,
+		"every drained row must be named, or the strip keeps showing the ones that were missed")
+}
+
+// TestDrainAgentMessages_NoAnnouncementWithoutADrain pins the other half: the
+// empty-queue path is the hot path, running at every loop-step boundary, and
+// an announcement there would be a write per boundary announcing nothing.
+func TestDrainAgentMessages_NoAnnouncementWithoutADrain(t *testing.T) {
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+	ctx := context.Background()
+
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+
+	act := newDrainTestActivity(h)
+	var output DrainAgentMessagesOutput
+	require.NoError(t, h.ExecuteActivity(act.Execute,
+		DrainAgentMessagesInput{ChatID: chatID, Thread: chatID}, &output))
+	require.False(t, output.HasMessages)
+
+	updates, err := h.Repo().GetUpdatesSince(ctx, chatID, 0, 100)
+	require.NoError(t, err)
+	for _, u := range updates {
+		assert.NotEqual(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED, u.UpdateType,
+			"an empty mailbox drained nothing and must announce nothing")
+	}
 }
 
 // TestDrainAgentMessages_CompletionNoticeStillDelivers covers the batch shape

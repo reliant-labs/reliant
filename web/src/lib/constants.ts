@@ -117,16 +117,18 @@ export const MAX_PROCESSED_MESSAGES = 500;
 export const MAX_CONCURRENT_STREAMS = 5;
 
 /**
- * Delay in ms before flushing streaming buffer if no newline received.
- * Streaming deltas are batched on newlines to reduce re-renders.
- * This timeout ensures content appears even without newlines.
- * 
- * PERFORMANCE: Increased from 100ms to 250ms to reduce re-renders.
- * At typical typing speeds (40 WPM = ~3 chars/sec), 250ms batches
- * about 75 characters per update which is a good balance between
- * responsiveness and performance.
+ * Watchdog delay in ms for the streaming delta buffer.
+ *
+ * Streaming content deltas are coalesced onto an animation frame, so the
+ * normal commit cadence is ~16ms and this timer never fires. It exists for
+ * the cases where requestAnimationFrame does not: a backgrounded tab throttles
+ * frames to a crawl or suspends them entirely, and a non-browser environment
+ * has no rAF at all. Without the watchdog a stream would stall invisibly.
+ *
+ * 250ms is the old newline-buffer timeout, kept as the worst-case latency
+ * ceiling it already was.
  */
-export const STREAMING_FLUSH_TIMEOUT_MS = 250;
+export const STREAMING_FLUSH_FALLBACK_MS = 250;
 
 // ============================================================================
 // gRPC Client Constants

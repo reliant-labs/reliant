@@ -63,6 +63,8 @@ type superviseChatService struct {
 	reliantv1connect.UnimplementedChatServiceHandler
 	root     *reliantv1.WorkflowExecution
 	messages []*reliantv1.Message
+
+	terminatedChatID string
 }
 
 func (f *superviseChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
@@ -75,6 +77,11 @@ func (f *superviseChatService) ListMessages(_ context.Context, _ *connect.Reques
 		Total:    int32(len(f.messages)),
 		Count:    int32(len(f.messages)),
 	}), nil
+}
+
+func (f *superviseChatService) TerminateChat(_ context.Context, req *connect.Request[reliantv1.TerminateChatRequest]) (*connect.Response[reliantv1.TerminateChatResponse], error) {
+	f.terminatedChatID = req.Msg.GetChatId()
+	return connect.NewResponse(&reliantv1.TerminateChatResponse{Success: true, Message: "terminated"}), nil
 }
 
 // --- harness -------------------------------------------------------------
@@ -338,6 +345,38 @@ func TestQuestionsJSON(t *testing.T) {
 	}
 }
 
+// --- lifecycle mutation tests -------------------------------------------
+
+func TestWorkflowTerminateCallsTerminateRPC(t *testing.T) {
+	h := newSuperviseHarness(t)
+
+	stdout, stderr, err := h.run(t, "", "workflow", "terminate", "chat-1")
+	if err != nil {
+		t.Fatalf("terminate failed: %v (stderr %s)", err, stderr)
+	}
+	if h.chat.terminatedChatID != "chat-1" {
+		t.Fatalf("TerminateChat chat id = %q, want chat-1", h.chat.terminatedChatID)
+	}
+	if !strings.Contains(stdout, "Terminated workflow chat-1") {
+		t.Fatalf("stdout = %q", stdout)
+	}
+}
+
+func TestWorkflowCancelCommandRemoved(t *testing.T) {
+	h := newSuperviseHarness(t)
+
+	_, _, err := h.run(t, "", "workflow", "cancel", "chat-1")
+	if err == nil {
+		t.Fatal("workflow cancel unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), `unknown command "cancel" for "reliant workflow"`) {
+		t.Fatalf("workflow cancel error = %q", err.Error())
+	}
+	if h.chat.terminatedChatID != "" {
+		t.Fatalf("workflow cancel must not alias terminate; got RPC for %q", h.chat.terminatedChatID)
+	}
+}
+
 // --- status tests --------------------------------------------------------
 
 func TestStatusJSON(t *testing.T) {
@@ -345,14 +384,16 @@ func TestStatusJSON(t *testing.T) {
 	h.chat.root = &reliantv1.WorkflowExecution{
 		Id:           "chat-1",
 		WorkflowName: "builtin://forge-one-shot",
-		Status:       reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_PAUSED,
+		State:        reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+		StopReason:   reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_PAUSED,
 		CreatedAt:    "2026-07-22T19:57:02Z",
 		Children: []*reliantv1.WorkflowExecution{
 			{
 				Id:              "child-1",
 				WorkflowName:    "thread:implement",
 				SpawnedByNodeId: strptr("implement"),
-				Status:          reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_PAUSED,
+				State:           reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+				StopReason:      reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_PAUSED,
 				CreatedAt:       "2026-07-22T19:59:24Z",
 			},
 		},
@@ -413,7 +454,8 @@ func TestWatchRendersBoundariesAndQuestion(t *testing.T) {
 	// Serve a GetChatUpdates feed + root status via a dedicated chat service.
 	askMeta := `{"type":"ask_user","questions":[{"question":"Proceed?","options":[{"label":"Continue"}]}]}`
 	watchChat := &watchChatService{
-		rootStatus: reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED,
+		rootState:  reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+		rootReason: reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED,
 		updates: []*reliantv1.ChatUpdate{
 			{SequenceNumber: 1, UpdateType: "CHAT_UPDATE_TYPE_WORKFLOW_STATUS", Data: `{"update_type":"workflow_status","status":"started","workflow_id":"wf-1","workflow_name":"builtin://forge-one-shot","chat_id":"chat-1","parent_workflow_id":""}`, CreatedAt: "2026-07-22T12:00:01Z"},
 			{SequenceNumber: 2, UpdateType: "CHAT_UPDATE_TYPE_NODE_EXECUTION", Data: `{"update_type":"node_execution","event_type":1,"node_id":"ask_question","workflow_id":"wf-1"}`, CreatedAt: "2026-07-22T12:00:02Z"},
@@ -533,7 +575,8 @@ func TestWriteWaitForGateResultOutcomes(t *testing.T) {
 type watchChatService struct {
 	reliantv1connect.UnimplementedChatServiceHandler
 	updates    []*reliantv1.ChatUpdate
-	rootStatus reliantv1.ChatWorkflowStatus
+	rootState  reliantv1.WorkflowState
+	rootReason reliantv1.WorkflowStopReason
 }
 
 func (f *watchChatService) GetChatUpdates(_ context.Context, req *connect.Request[reliantv1.GetChatUpdatesRequest]) (*connect.Response[reliantv1.GetChatUpdatesResponse], error) {
@@ -552,7 +595,7 @@ func (f *watchChatService) GetChatUpdates(_ context.Context, req *connect.Reques
 
 func (f *watchChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Request[reliantv1.GetWorkflowExecutionsRequest]) (*connect.Response[reliantv1.GetWorkflowExecutionsResponse], error) {
 	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
-		RootWorkflow: &reliantv1.WorkflowExecution{Id: "wf-1", Status: f.rootStatus},
+		RootWorkflow: &reliantv1.WorkflowExecution{Id: "wf-1", State: f.rootState, StopReason: f.rootReason},
 	}), nil
 }
 
@@ -575,7 +618,7 @@ func TestBuildStatusNode_GatesAreThreadScoped(t *testing.T) {
 		return &reliantv1.WorkflowExecution{
 			WorkflowName:    "thread:" + node,
 			Thread:          thread,
-			Status:          reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_RUNNING,
+			State:           reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE,
 			SpawnedByNodeId: &node,
 			CreatedAt:       "2026-07-26T12:00:00Z",
 		}
@@ -583,7 +626,7 @@ func TestBuildStatusNode_GatesAreThreadScoped(t *testing.T) {
 	root := &reliantv1.WorkflowExecution{
 		WorkflowName: "builtin://forge-one-shot",
 		Thread:       "thread-root",
-		Status:       reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_RUNNING,
+		State:        reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE,
 		Children: []*reliantv1.WorkflowExecution{
 			child("build_mvp", "thread-gated"),
 			child("implement", "thread-busy"),

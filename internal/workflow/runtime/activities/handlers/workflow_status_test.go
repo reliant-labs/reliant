@@ -95,7 +95,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://chat",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.Repo().CreateWorkflow(ctx, parentWorkflow)
 	require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://sub-agent",
 		Thread:       childWorkflowID,
-		Status:       db.WorkflowStatusPending,
+		Status:       db.Pending(),
 	}
 	err = h.Repo().CreateWorkflow(ctx, childWorkflow)
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 		// Verify workflow status was updated to running
 		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusRunning, updatedWorkflow.Status, "Workflow should be running after started")
+		assert.Equal(t, db.Active(), updatedWorkflow.Status, "Workflow should be running after started")
 	})
 }
 
@@ -169,7 +169,7 @@ func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://chat",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.Repo().CreateWorkflow(ctx, parentWorkflow)
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
 		created, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
 		require.NoError(t, err, "child workflow row should be created on missing")
 		require.NotNil(t, created)
-		assert.Equal(t, db.WorkflowStatusRunning, created.Status)
+		assert.Equal(t, db.Active(), created.Status)
 		require.NotNil(t, created.ParentID)
 		assert.Equal(t, parentWorkflowID, *created.ParentID)
 		assert.Equal(t, childWorkflowID, created.Thread)
@@ -227,7 +227,7 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://chat",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.Repo().CreateWorkflow(ctx, workflow)
 	require.NoError(t, err)
@@ -252,7 +252,7 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 		// Verify workflow status was updated
 		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, workflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusCompleted, updatedWorkflow.Status)
+		assert.Equal(t, db.Completed(), updatedWorkflow.Status)
 	})
 }
 
@@ -280,7 +280,7 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://chat",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.Repo().CreateWorkflow(ctx, parentWorkflow)
 	require.NoError(t, err)
@@ -292,7 +292,7 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://sub-agent",
 		Thread:       childWorkflowID,
-		Status:       db.WorkflowStatusRunning, // Already running
+		Status:       db.Active(), // Already running
 	}
 	err = h.Repo().CreateWorkflow(ctx, childWorkflow)
 	require.NoError(t, err)
@@ -326,12 +326,12 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 		// Verify workflow is still running (no change)
 		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, childWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusRunning, updatedWorkflow.Status, "Workflow should still be running")
+		assert.Equal(t, db.Active(), updatedWorkflow.Status, "Workflow should still be running")
 	})
 }
 
 // TestWorkflowStatus_PausedUpdatesStatus verifies that the "paused" status
-// correctly maps to db.WorkflowStatusPaused. This is the new status used by
+// correctly maps to db.Paused(). This is the new status used by
 // the rate-limit auto-pause feature: when a retryable error exhausts Temporal's
 // retry budget, the workflow self-pauses and emits status="paused" so the UI
 // can reflect the paused state and SendMessage routes through resume.
@@ -355,7 +355,7 @@ func TestWorkflowStatus_PausedUpdatesStatus(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://chat",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.Repo().CreateWorkflow(ctx, wf)
 	require.NoError(t, err)
@@ -378,7 +378,7 @@ func TestWorkflowStatus_PausedUpdatesStatus(t *testing.T) {
 
 		updatedWorkflow, err := h.Repo().GetWorkflow(ctx, workflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusPaused, updatedWorkflow.Status,
+		assert.Equal(t, db.Paused(), updatedWorkflow.Status,
 			"Workflow should be paused after 'paused' status update")
 	})
 }
@@ -404,7 +404,7 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://chat",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.Repo().CreateWorkflow(ctx, wf)
 	require.NoError(t, err)
@@ -426,7 +426,7 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 
 		pausedWf, err := h.Repo().GetWorkflow(ctx, workflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusPaused, pausedWf.Status)
+		assert.Equal(t, db.Paused(), pausedWf.Status)
 
 		// Resume (re-emit "started")
 		err = h.ExecuteActivity(activity.Execute, WorkflowStatusInput{
@@ -441,7 +441,7 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 
 		resumedWf, err := h.Repo().GetWorkflow(ctx, workflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusRunning, resumedWf.Status,
+		assert.Equal(t, db.Active(), resumedWf.Status,
 			"Workflow should be running after re-emitting 'started' status")
 	})
 }
@@ -472,7 +472,7 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://agent",
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}))
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
 		ID:           spawnWorkflowID,
@@ -480,7 +480,7 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "builtin://agent",
 		Thread:       spawnWorkflowID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}))
 
 	activity := NewWorkflowStatusActivity(h.Repo())
@@ -497,11 +497,11 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 
 		spawn, err := h.Repo().GetWorkflow(ctx, spawnWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusPaused, spawn.Status)
+		assert.Equal(t, db.Paused(), spawn.Status)
 
 		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusPaused, root.Status,
+		assert.Equal(t, db.Paused(), root.Status,
 			"self-pause must mark the ROOT row paused: SendMessage resume routing and the stall watchdog key off it")
 	})
 
@@ -518,11 +518,11 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 
 		spawn, err := h.Repo().GetWorkflow(ctx, spawnWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusRunning, spawn.Status)
+		assert.Equal(t, db.Active(), spawn.Status)
 
 		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusRunning, root.Status,
+		assert.Equal(t, db.Active(), root.Status,
 			"post-resume started must un-park the whole chat, not just the notifying row")
 	})
 
@@ -548,7 +548,7 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 
 		root, err := h.Repo().GetWorkflow(ctx, rootWorkflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusPaused, root.Status,
+		assert.Equal(t, db.Paused(), root.Status,
 			"a non-resumed started must not un-pause the root row")
 	})
 }
@@ -594,7 +594,7 @@ func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
 	completedAt := time.Now().UTC()
 	_, err := h.Repo().UpdateThreadStatus(ctx, chatID, db.ThreadStatusCompleted, &completedAt)
 	require.NoError(t, err)
-	require.NoError(t, h.Repo().UpdateWorkflowStatus(ctx, chatID, db.WorkflowStatusCompleted))
+	require.NoError(t, h.Repo().UpdateWorkflowStatus(ctx, chatID, db.Completed()))
 
 	// Turn 2 starts on the SAME thread. Both halves must come back to life.
 	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
@@ -608,7 +608,7 @@ func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
 
 	workflow, err := h.Repo().GetWorkflow(ctx, chatID)
 	require.NoError(t, err)
-	assert.Equal(t, db.WorkflowStatusRunning, workflow.Status)
+	assert.Equal(t, db.Active(), workflow.Status)
 }
 
 // TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning covers
@@ -640,7 +640,7 @@ func TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning(t *testin
 
 	var output WorkflowStatusOutput
 	require.NoError(t, h.ExecuteActivity(activity.Execute, startedInput, &output))
-	require.NoError(t, h.Repo().UpdateWorkflowStatus(ctx, chatID, db.WorkflowStatusRunning))
+	require.NoError(t, h.Repo().UpdateWorkflowStatus(ctx, chatID, db.Active()))
 
 	// Only the THREAD is terminal; the workflow row stays running, so the
 	// early return is the path under test.

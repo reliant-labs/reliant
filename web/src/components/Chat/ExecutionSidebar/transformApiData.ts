@@ -2,7 +2,10 @@
  * Transform API workflow execution data to sidebar format
  */
 
-import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
+import {
+  WorkflowState,
+  WorkflowStopReason,
+} from "../../../gen/reliant/v1/chat_pb";
 import type {
   WorkflowExecutionData,
   StepExecutionData,
@@ -25,7 +28,7 @@ export function transformWorkflowExecution(
     id: data.id,
     workflowName: data.workflowName,
     thread: data.thread,
-    status: mapWorkflowStatus(data.status),
+    status: mapWorkflowStatus(data.state, data.stopReason),
     parentId: data.parentId,
     threadTitle: data.threadTitle,
     spawnedByNodeId: data.spawnedByNodeId,
@@ -87,19 +90,23 @@ function transformStepExecution(
 /**
  * Map API status string to WorkflowStatus
  */
-function mapWorkflowStatus(status: ChatWorkflowStatus): WorkflowStatus {
-  switch (status) {
-    case ChatWorkflowStatus.COMPLETED:
+function mapWorkflowStatus(
+  state: WorkflowState,
+  stopReason: WorkflowStopReason,
+): WorkflowStatus {
+  if (state !== WorkflowState.STOPPED) {
+    return "running";
+  }
+
+  switch (stopReason) {
+    case WorkflowStopReason.COMPLETED:
       return "completed";
-    case ChatWorkflowStatus.FAILED:
+    case WorkflowStopReason.FAILED:
       return "failed";
-    case ChatWorkflowStatus.CANCELLED:
+    case WorkflowStopReason.CANCELLED:
       return "cancelled";
-    case ChatWorkflowStatus.RUNNING:
-    case ChatWorkflowStatus.PENDING:
-    case ChatWorkflowStatus.PAUSED:
-    case ChatWorkflowStatus.EXPIRED:
-    case ChatWorkflowStatus.UNSPECIFIED:
+    case WorkflowStopReason.PAUSED:
+    case WorkflowStopReason.UNSPECIFIED:
     default:
       return "running";
   }

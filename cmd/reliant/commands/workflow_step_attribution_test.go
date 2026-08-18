@@ -25,14 +25,16 @@ func twoPhaseRun() *reliantv1.WorkflowExecution {
 	return &reliantv1.WorkflowExecution{
 		Id:           "root",
 		WorkflowName: "builtin://forge-one-shot",
-		Status:       reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED,
+		State:        reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+		StopReason:   reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED,
 		CreatedAt:    "2026-07-26T10:00:00Z",
 		Children: []*reliantv1.WorkflowExecution{
 			{
 				Id:              "wf-impl-1",
 				WorkflowName:    "builtin://get-it-right",
 				SpawnedByNodeId: strPtr("impl_1"),
-				Status:          reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED,
+				State:           reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+				StopReason:      reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED,
 				CreatedAt:       "2026-07-26T10:00:01Z",
 				Steps: []*reliantv1.StepExecution{
 					{StepId: "lint", ActivityName: "ExecuteRunStep", CreatedAt: "2026-07-26T10:00:02Z", Success: boolPtr(true), ExitCode: int32Ptr(0)},
@@ -44,7 +46,8 @@ func twoPhaseRun() *reliantv1.WorkflowExecution {
 				Id:              "wf-impl-2",
 				WorkflowName:    "builtin://get-it-right",
 				SpawnedByNodeId: strPtr("impl_2"),
-				Status:          reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED,
+				State:           reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+				StopReason:      reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED,
 				CreatedAt:       "2026-07-26T10:00:01Z",
 				Steps: []*reliantv1.StepExecution{
 					{StepId: "lint", ActivityName: "ExecuteRunStep", CreatedAt: "2026-07-26T10:00:02Z", Success: boolPtr(true), ExitCode: int32Ptr(0)},
@@ -54,7 +57,8 @@ func twoPhaseRun() *reliantv1.WorkflowExecution {
 						Id:              "wf-impl-2-review",
 						WorkflowName:    "builtin://agent",
 						SpawnedByNodeId: strPtr("review"),
-						Status:          reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED,
+						State:           reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+						StopReason:      reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED,
 						CreatedAt:       "2026-07-26T10:00:20Z",
 						CompletedAt:     strPtr("2026-07-26T10:00:50Z"),
 						Steps: []*reliantv1.StepExecution{

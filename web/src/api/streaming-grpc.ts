@@ -134,6 +134,7 @@ const CHAT_UPDATE_TYPE_MAP: Record<number, string> = {
   [ChatUpdateType.STREAMING_DELTA]: "streaming_delta",
   [ChatUpdateType.QUESTION]: "question",
   [ChatUpdateType.STREAM_FINALIZED]: "stream_finalized",
+  [ChatUpdateType.AGENT_MESSAGES_DRAINED]: "agent_messages_drained",
 };
 
 // Valid update types that we expect from the backend
@@ -155,6 +156,7 @@ const VALID_UPDATE_TYPES = new Set([
   "refetch",
   "question",
   "stream_finalized",
+  "agent_messages_drained",
 ]);
 
 /**
@@ -211,6 +213,10 @@ function isValidChatUpdate(
       // The delta identity protocol keys everything off the pre-allocated
       // message id; a marker without one is unusable.
       return typeof data.message_id === "string";
+    case "agent_messages_drained":
+      // The ids ARE the payload — an announcement without them cannot retire
+      // anything from the pending-queue strip.
+      return Array.isArray(data.message_ids);
     default:
       return true;
   }
@@ -524,12 +530,52 @@ export class UserStreamingService {
   }
 
   /**
-   * Subscribe to a chat's detail events. This disconnects the current stream
-   * and reconnects with the new chat subscription.
+   * Subscribe to a chat's detail events.
+   *
+   * Callers (`reconcileChatSubscription`'s self-healing invariant, in
+   * particular) invoke this on every render of the active chat, and cannot
+   * tell "genuinely need to (re)subscribe" from "already subscribed, just
+   * confirming" without asking this service — so this method has to make
+   * that distinction itself, explicitly, rather than always reconnecting:
+   *
+   *  - Different chatId (a real chat switch): always reconnect with a fresh
+   *    snapshot. `lastChatSequence` resets to 0 because the server has no
+   *    replay cursor for a chat we've never subscribed to in this session.
+   *  - Same chatId, already connected to it: true no-op. Nothing changed.
+   *  - Same chatId, but not yet confirmed connected (a connection attempt
+   *    for this exact chat is already in flight — e.g. triggered a moment
+   *    ago by a gap-resync): also a no-op. Firing a second reconnect here
+   *    would supersede the in-flight one before it completes (wasted round
+   *    trip, a logged stream error) AND, before this fix, would zero
+   *    `lastChatSequence` and force a full snapshot even though the
+   *    in-flight connection was about to deliver an incremental replay.
+   *  - Same chatId, genuinely disconnected (no attempt in flight): reconnect
+   *    IS needed to restore the subscription, but the cursor is preserved —
+   *    it's the same chat, so the server can still replay
+   *    (chat_since_seq, latest] instead of sending a snapshot.
    */
   subscribeToChatDetails(chatId: string): void {
+    if (this.subscribedChatId === chatId) {
+      if (this.isConnected_ || this.connectAttemptInFlight) {
+        logger.debug(
+          `${LOG_PREFIX_STREAM} Already subscribed (or subscribing) to this chat — ignoring redundant (re)assert`,
+          { chatId: chatId.slice(0, 8), connected: this.isConnected_ },
+        );
+        return;
+      }
+      // Same chat, but disconnected with nothing in flight — reconnect to
+      // restore the subscription, preserving the cursor for a replay.
+      logger.info(
+        `${LOG_PREFIX_STREAM} Reasserting chat subscription after disconnect`,
+        { chatId: chatId.slice(0, 8) },
+      );
+      this.reconnectWithNewSubscription();
+      return;
+    }
+
     logger.info(`${LOG_PREFIX_STREAM} Subscribing to chat details`, {
       chatId: chatId.slice(0, 8),
+      previousChatId: this.subscribedChatId?.slice(0, 8),
     });
 
     if (tabSwitchProfiler.isEnabled()) {
@@ -537,7 +583,7 @@ export class UserStreamingService {
     }
 
     this.subscribedChatId = chatId;
-    this.lastChatSequence = 0n; // Always request full snapshot on new subscription
+    this.lastChatSequence = 0n; // Different chat: always request a full snapshot
 
     // Reconnect with the new subscription
     this.reconnectWithNewSubscription();

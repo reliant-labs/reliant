@@ -110,11 +110,11 @@ func TestBuildPsRows_ThreadsInDifferentStates(t *testing.T) {
 	spawnNode := "implement"
 
 	workflows := []*db.Workflow{
-		{ID: "wf-root", ChatID: chatID, Thread: "thread-root", WorkflowName: "builtin://forge-one-shot", Status: db.WorkflowStatusRunning, CreatedAt: now.Add(-58*time.Hour - 41*time.Minute)},
-		{ID: "wf-gated", ChatID: chatID, Thread: "thread-gated", WorkflowName: "thread:spawn-a", Status: db.WorkflowStatusRunning, SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
-		{ID: "wf-busy", ChatID: chatID, Thread: "thread-busy", WorkflowName: "thread:spawn-b", Status: db.WorkflowStatusRunning, SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
-		{ID: "wf-stalled", ChatID: chatID, Thread: "thread-stalled", WorkflowName: "thread:spawn-c", Status: db.WorkflowStatusRunning, SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
-		{ID: "wf-paused", ChatID: chatID, Thread: "thread-paused", WorkflowName: "thread:spawn-d", Status: db.WorkflowStatusPaused, SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
+		{ID: "wf-root", ChatID: chatID, Thread: "thread-root", WorkflowName: "builtin://forge-one-shot", Status: db.Active(), CreatedAt: now.Add(-58*time.Hour - 41*time.Minute)},
+		{ID: "wf-gated", ChatID: chatID, Thread: "thread-gated", WorkflowName: "thread:spawn-a", Status: db.Active(), SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
+		{ID: "wf-busy", ChatID: chatID, Thread: "thread-busy", WorkflowName: "thread:spawn-b", Status: db.Active(), SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
+		{ID: "wf-stalled", ChatID: chatID, Thread: "thread-stalled", WorkflowName: "thread:spawn-c", Status: db.Active(), SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
+		{ID: "wf-paused", ChatID: chatID, Thread: "thread-paused", WorkflowName: "thread:spawn-d", Status: db.Paused(), SpawnedByNodeID: &spawnNode, CreatedAt: now.Add(-58 * time.Hour)},
 	}
 
 	markers := map[string]psChatMarkers{
@@ -203,8 +203,8 @@ func TestBuildPsRows_ApprovalAttributedOnlyToItsExecution(t *testing.T) {
 	now := time.Date(2026, 7, 26, 12, 0, 0, 0, time.UTC)
 	chatID := "chat-1"
 	workflows := []*db.Workflow{
-		{ID: "wf-root", ChatID: chatID, Thread: "thread-root", WorkflowName: "builtin://forge-one-shot", Status: db.WorkflowStatusRunning, CreatedAt: now.Add(-time.Hour)},
-		{ID: "wf-child", ChatID: chatID, Thread: "thread-child", WorkflowName: "thread:spawn-a", Status: db.WorkflowStatusRunning, CreatedAt: now.Add(-time.Hour)},
+		{ID: "wf-root", ChatID: chatID, Thread: "thread-root", WorkflowName: "builtin://forge-one-shot", Status: db.Active(), CreatedAt: now.Add(-time.Hour)},
+		{ID: "wf-child", ChatID: chatID, Thread: "thread-child", WorkflowName: "thread:spawn-a", Status: db.Active(), CreatedAt: now.Add(-time.Hour)},
 	}
 	markers := map[string]psChatMarkers{
 		chatID: {
@@ -384,7 +384,7 @@ func (c *psTestChat) backoff(thread string, attempt int64, since time.Time, dela
 func (c *psTestChat) add(id, thread, name, parentThread string, createdAt time.Time) *db.Workflow {
 	wf := &db.Workflow{
 		ID: id, ChatID: c.chatID, Thread: thread, WorkflowName: name,
-		Status: db.WorkflowStatusRunning, CreatedAt: createdAt,
+		Status: db.Active(), CreatedAt: createdAt,
 	}
 	if parentThread == "" {
 		c.rootWF = id

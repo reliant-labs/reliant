@@ -244,7 +244,7 @@ func (h *IdempotencyTestHelper) CreateTestWorkflow(ctx context.Context, workflow
 		ChatID:       chatID,
 		WorkflowName: "test-workflow",
 		Thread:       "/test",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	err := h.repo.CreateWorkflow(ctx, workflow)
 	require.NoError(h.t, err)

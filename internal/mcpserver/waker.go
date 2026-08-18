@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"time"
 )
 
 // Wake behaviour.
@@ -27,13 +26,8 @@ import (
 // caller retries. What makes this work rather than becoming a retry storm is
 // that the three outcomes are distinguishable — a workspace that is starting
 // says so and gives a time to come back; one that CANNOT start says that and
-// does not suggest retrying at all.
-const (
-	// wakeRetryHint is how long to tell a caller to wait before retrying. It
-	// is deliberately longer than a typical cold start, so the retry usually
-	// succeeds rather than landing mid-boot and repeating the cycle.
-	wakeRetryHint = 1 * time.Minute
-)
+// does not suggest retrying at all. The retry delay a caller is told to wait
+// is written into the message in explainUnavailable (server.go).
 
 // ErrWorkspaceStarting means a wake is underway and the caller should retry.
 var ErrWorkspaceStarting = errors.New("workspace is starting")

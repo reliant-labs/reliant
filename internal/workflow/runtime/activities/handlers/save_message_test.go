@@ -735,19 +735,30 @@ func TestSaveMessageValidation(t *testing.T) {
 		assert.Contains(t, err.Error(), "content or attachments are required for user messages")
 	})
 
-	t.Run("Assistant message without content or tool_calls is allowed", func(t *testing.T) {
+	// Previously "allowed for custom workflow use cases". That allowance is
+	// what produced blockless assistant rows in production: a message with no
+	// content, no tool calls and no thinking has ZERO content blocks, becomes
+	// the tail of the thread, and makes CallLLM's end-of-history guard reject
+	// every subsequent turn — permanently, since the retry ladder re-reads the
+	// same row. Measured: 22 such rows on the live database; the two newest
+	// wedged their chats at 24 logged failures each.
+	//
+	// A workflow that legitimately wants to write an assistant turn has
+	// something to write — text, a tool call, or thinking. One that has none of
+	// those is not a use case, it is a turn that produced nothing.
+	t.Run("Assistant message without content or tool_calls is refused", func(t *testing.T) {
 		input := SaveMessageInput{
 			ChatID:    chatID,
 			Thread:    "0",
 			Role:      "assistant",
-			Content:   "",           // Empty - allowed for custom workflow use cases
-			ToolCalls: []ToolCall{}, // Empty - allowed for custom workflow use cases
+			Content:   "",
+			ToolCalls: []ToolCall{},
 		}
 
 		var output SaveMessageOutput
 		err := h.ExecuteActivity(activity.Execute, &input, &output)
-		require.NoError(t, err)
-		assert.NotEmpty(t, output.MessageId, "Should create a message even with no content")
+		require.Error(t, err, "a blockless assistant message must be refused")
+		assert.Contains(t, err.Error(), "no content")
 	})
 
 	t.Run("Tool message without tool_results returns error", func(t *testing.T) {

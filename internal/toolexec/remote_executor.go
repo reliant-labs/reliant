@@ -9,7 +9,13 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
+
+// daemonCancelPushTimeout bounds the detached "stop that tool" push sent when a
+// call is abandoned. Short: it is one fire-and-forget message on an already-open
+// connection, and the caller is unwinding.
+const daemonCancelPushTimeout = 5 * time.Second
 
 // maxLLMToolContentBytes caps tool-result content surfaced to the LLM.
 // Per-tool truncation (tools.MaxOutputSize, enforced in the ToolWrapper —
@@ -279,6 +285,46 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		TimeoutMs:  timeoutMs,
 	}
 
+	// Tell the daemon to stop when this call is abandoned.
+	//
+	// The daemon runs each execution under context.WithCancel(context.Background())
+	// (daemonruntime/runtime.go), deliberately decoupled from the transport so a
+	// dropped connection cannot kill a healthy command. The consequence is that
+	// nothing about OUR context reaches it: when a pause or interrupt cancels the
+	// activity, the server stops waiting and marks the call cancelled while the
+	// user's `bash` keeps running to completion on their machine.
+	//
+	// The daemon already has the machinery to stop it — cancelToolExecution
+	// cancels the registered context, which propagates to exec.CommandContext and
+	// signals the process group. It just has to be told. This is the same push
+	// InterruptThread sends for a user-cancelled tool, fired here so that ANY
+	// abandonment of the call reaches the process, whatever cancelled it.
+	//
+	// Keyed on ToolCallID: the daemon registers the cancel under both that and
+	// its transport request id, and ToolCallID is the one both sides agree on.
+	// Best-effort and detached — our context is already dead, and a cancel that
+	// arrives after the command finished is a no-op there.
+	//
+	// Gated on THIS call's own outcome, not on ambient context state. Every tool
+	// in a turn runs against one shared activity context (see execute_tools.go),
+	// so `ctx.Err() != nil` is true for a tool that finished perfectly well while
+	// a SIBLING was cancelled. Pushing then would be wrong in two ways: it is a
+	// stray cancel for a tool call id a later dispatch may legitimately reuse,
+	// and for a BACKGROUNDED tool — which returns success precisely so it can
+	// outlive the turn — it would kill the process group the user asked to keep.
+	abandoned := false
+	defer func() {
+		if !abandoned || req.ToolCallID == "" {
+			return
+		}
+		cancelCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), daemonCancelPushTimeout)
+		defer cancel()
+		if err := e.router.SendToolExecutionCancel(cancelCtx, req.UserID, req.ToolCallID, "tool execution abandoned"); err != nil {
+			logging.Warn("Could not tell the daemon to stop an abandoned tool; it may run to completion",
+				"error", err, "toolCallID", req.ToolCallID, "toolName", req.ToolName)
+		}
+	}()
+
 	// Use selector-aware routing if a daemon selector is provided
 	var resp *ToolExecutionResponse
 	var err error
@@ -288,6 +334,11 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		resp, err = e.router.SendToolRequestSync(ctx, req.UserID, execReq)
 	}
 	if err != nil {
+		// This call was given up on, rather than answered. Only here is the
+		// daemon still potentially running work nobody is waiting for — a
+		// context cancellation surfaces as this error, and so does a transport
+		// failure that leaves the command orphaned.
+		abandoned = true
 		return &ToolResult{
 			Success:      false,
 			IsError:      true,

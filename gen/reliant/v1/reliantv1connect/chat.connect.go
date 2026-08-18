@@ -61,17 +61,18 @@ const (
 	// ChatServiceCancelQueuedAgentMessageProcedure is the fully-qualified name of the ChatService's
 	// CancelQueuedAgentMessage RPC.
 	ChatServiceCancelQueuedAgentMessageProcedure = "/reliant.v1.ChatService/CancelQueuedAgentMessage"
-	// ChatServiceClaimQueuedAgentMessagesProcedure is the fully-qualified name of the ChatService's
-	// ClaimQueuedAgentMessages RPC.
-	ChatServiceClaimQueuedAgentMessagesProcedure = "/reliant.v1.ChatService/ClaimQueuedAgentMessages"
+	// ChatServiceInterruptThreadProcedure is the fully-qualified name of the ChatService's
+	// InterruptThread RPC.
+	ChatServiceInterruptThreadProcedure = "/reliant.v1.ChatService/InterruptThread"
 	// ChatServiceListMessagesProcedure is the fully-qualified name of the ChatService's ListMessages
 	// RPC.
 	ChatServiceListMessagesProcedure = "/reliant.v1.ChatService/ListMessages"
 	// ChatServiceUpdateChatStateProcedure is the fully-qualified name of the ChatService's
 	// UpdateChatState RPC.
 	ChatServiceUpdateChatStateProcedure = "/reliant.v1.ChatService/UpdateChatState"
-	// ChatServiceCancelChatProcedure is the fully-qualified name of the ChatService's CancelChat RPC.
-	ChatServiceCancelChatProcedure = "/reliant.v1.ChatService/CancelChat"
+	// ChatServiceTerminateChatProcedure is the fully-qualified name of the ChatService's TerminateChat
+	// RPC.
+	ChatServiceTerminateChatProcedure = "/reliant.v1.ChatService/TerminateChat"
 	// ChatServicePauseChatProcedure is the fully-qualified name of the ChatService's PauseChat RPC.
 	ChatServicePauseChatProcedure = "/reliant.v1.ChatService/PauseChat"
 	// ChatServiceResumeChatProcedure is the fully-qualified name of the ChatService's ResumeChat RPC.
@@ -146,18 +147,31 @@ type ChatServiceClient interface {
 	// boundary -- see CancelQueuedAgentMessageResponse for the honesty
 	// contract when the message was already delivered.
 	CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error)
-	// ClaimQueuedAgentMessages takes queued messages back off a thread's
-	// mailbox and returns them, so the caller can resend them as ordinary
-	// turns. One atomic statement, so the caller either owns a message or the
-	// agent does -- never both. This is what "Send now" / "Send all" use
-	// instead of cancel-then-send.
-	ClaimQueuedAgentMessages(context.Context, *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error)
+	// InterruptThread stops what a thread is doing right now so it reads its
+	// mailbox at once, instead of at the end of the work already in flight.
+	//
+	// This is the "stop, this changes things" verb, as distinct from
+	// SendAgentMessage's "finish up, then read this". It cancels every tool
+	// call currently executing on the thread, each through the same per-tool
+	// path CancelToolCall uses -- so each cancelled call still records a
+	// durable outcome and still returns a tool_result. That matters: a tool
+	// call with no result deadlocks the provider, so an interrupt that simply
+	// killed the work would corrupt the conversation it was trying to steer.
+	//
+	// Deliberately takes no message id. Interrupt is an action on the THREAD,
+	// not a property of one queued message: it stops the work, and the next
+	// call_llm delivers whatever the mailbox holds, oldest first. That is what
+	// makes "queue a message, then decide to send it now" work without racing
+	// the delivery -- there is no row to update and no window to lose.
+	//
+	// Queue the message first (SendAgentMessage), then interrupt.
+	InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error)
 	// ListMessages lists messages for a chat with content blocks
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
-	// CancelChat cancels the running workflow for a chat
-	CancelChat(context.Context, *connect.Request[v1.CancelChatRequest]) (*connect.Response[v1.CancelChatResponse], error)
+	// TerminateChat forcefully terminates the running workflow for a chat
+	TerminateChat(context.Context, *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error)
 	// PauseChat pauses the running workflow (keeps it resumable)
 	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
 	// ResumeChat resumes a paused or expired workflow
@@ -266,10 +280,10 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("CancelQueuedAgentMessage")),
 			connect.WithClientOptions(opts...),
 		),
-		claimQueuedAgentMessages: connect.NewClient[v1.ClaimQueuedAgentMessagesRequest, v1.ClaimQueuedAgentMessagesResponse](
+		interruptThread: connect.NewClient[v1.InterruptThreadRequest, v1.InterruptThreadResponse](
 			httpClient,
-			baseURL+ChatServiceClaimQueuedAgentMessagesProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("ClaimQueuedAgentMessages")),
+			baseURL+ChatServiceInterruptThreadProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("InterruptThread")),
 			connect.WithClientOptions(opts...),
 		),
 		listMessages: connect.NewClient[v1.ListMessagesRequest, v1.ListMessagesResponse](
@@ -284,10 +298,10 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("UpdateChatState")),
 			connect.WithClientOptions(opts...),
 		),
-		cancelChat: connect.NewClient[v1.CancelChatRequest, v1.CancelChatResponse](
+		terminateChat: connect.NewClient[v1.TerminateChatRequest, v1.TerminateChatResponse](
 			httpClient,
-			baseURL+ChatServiceCancelChatProcedure,
-			connect.WithSchema(chatServiceMethods.ByName("CancelChat")),
+			baseURL+ChatServiceTerminateChatProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("TerminateChat")),
 			connect.WithClientOptions(opts...),
 		),
 		pauseChat: connect.NewClient[v1.PauseChatRequest, v1.PauseChatResponse](
@@ -384,10 +398,10 @@ type chatServiceClient struct {
 	sendAgentMessage         *connect.Client[v1.SendAgentMessageRequest, v1.SendAgentMessageResponse]
 	listQueuedAgentMessages  *connect.Client[v1.ListQueuedAgentMessagesRequest, v1.ListQueuedAgentMessagesResponse]
 	cancelQueuedAgentMessage *connect.Client[v1.CancelQueuedAgentMessageRequest, v1.CancelQueuedAgentMessageResponse]
-	claimQueuedAgentMessages *connect.Client[v1.ClaimQueuedAgentMessagesRequest, v1.ClaimQueuedAgentMessagesResponse]
+	interruptThread          *connect.Client[v1.InterruptThreadRequest, v1.InterruptThreadResponse]
 	listMessages             *connect.Client[v1.ListMessagesRequest, v1.ListMessagesResponse]
 	updateChatState          *connect.Client[v1.UpdateChatStateRequest, v1.UpdateChatStateResponse]
-	cancelChat               *connect.Client[v1.CancelChatRequest, v1.CancelChatResponse]
+	terminateChat            *connect.Client[v1.TerminateChatRequest, v1.TerminateChatResponse]
 	pauseChat                *connect.Client[v1.PauseChatRequest, v1.PauseChatResponse]
 	resumeChat               *connect.Client[v1.ResumeChatRequest, v1.ResumeChatResponse]
 	dismissChat              *connect.Client[v1.DismissChatRequest, v1.DismissChatResponse]
@@ -458,9 +472,9 @@ func (c *chatServiceClient) CancelQueuedAgentMessage(ctx context.Context, req *c
 	return c.cancelQueuedAgentMessage.CallUnary(ctx, req)
 }
 
-// ClaimQueuedAgentMessages calls reliant.v1.ChatService.ClaimQueuedAgentMessages.
-func (c *chatServiceClient) ClaimQueuedAgentMessages(ctx context.Context, req *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error) {
-	return c.claimQueuedAgentMessages.CallUnary(ctx, req)
+// InterruptThread calls reliant.v1.ChatService.InterruptThread.
+func (c *chatServiceClient) InterruptThread(ctx context.Context, req *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error) {
+	return c.interruptThread.CallUnary(ctx, req)
 }
 
 // ListMessages calls reliant.v1.ChatService.ListMessages.
@@ -473,9 +487,9 @@ func (c *chatServiceClient) UpdateChatState(ctx context.Context, req *connect.Re
 	return c.updateChatState.CallUnary(ctx, req)
 }
 
-// CancelChat calls reliant.v1.ChatService.CancelChat.
-func (c *chatServiceClient) CancelChat(ctx context.Context, req *connect.Request[v1.CancelChatRequest]) (*connect.Response[v1.CancelChatResponse], error) {
-	return c.cancelChat.CallUnary(ctx, req)
+// TerminateChat calls reliant.v1.ChatService.TerminateChat.
+func (c *chatServiceClient) TerminateChat(ctx context.Context, req *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error) {
+	return c.terminateChat.CallUnary(ctx, req)
 }
 
 // PauseChat calls reliant.v1.ChatService.PauseChat.
@@ -581,18 +595,31 @@ type ChatServiceHandler interface {
 	// boundary -- see CancelQueuedAgentMessageResponse for the honesty
 	// contract when the message was already delivered.
 	CancelQueuedAgentMessage(context.Context, *connect.Request[v1.CancelQueuedAgentMessageRequest]) (*connect.Response[v1.CancelQueuedAgentMessageResponse], error)
-	// ClaimQueuedAgentMessages takes queued messages back off a thread's
-	// mailbox and returns them, so the caller can resend them as ordinary
-	// turns. One atomic statement, so the caller either owns a message or the
-	// agent does -- never both. This is what "Send now" / "Send all" use
-	// instead of cancel-then-send.
-	ClaimQueuedAgentMessages(context.Context, *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error)
+	// InterruptThread stops what a thread is doing right now so it reads its
+	// mailbox at once, instead of at the end of the work already in flight.
+	//
+	// This is the "stop, this changes things" verb, as distinct from
+	// SendAgentMessage's "finish up, then read this". It cancels every tool
+	// call currently executing on the thread, each through the same per-tool
+	// path CancelToolCall uses -- so each cancelled call still records a
+	// durable outcome and still returns a tool_result. That matters: a tool
+	// call with no result deadlocks the provider, so an interrupt that simply
+	// killed the work would corrupt the conversation it was trying to steer.
+	//
+	// Deliberately takes no message id. Interrupt is an action on the THREAD,
+	// not a property of one queued message: it stops the work, and the next
+	// call_llm delivers whatever the mailbox holds, oldest first. That is what
+	// makes "queue a message, then decide to send it now" work without racing
+	// the delivery -- there is no row to update and no window to lose.
+	//
+	// Queue the message first (SendAgentMessage), then interrupt.
+	InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error)
 	// ListMessages lists messages for a chat with content blocks
 	ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error)
 	// UpdateChatState changes chat state (idle/archived)
 	UpdateChatState(context.Context, *connect.Request[v1.UpdateChatStateRequest]) (*connect.Response[v1.UpdateChatStateResponse], error)
-	// CancelChat cancels the running workflow for a chat
-	CancelChat(context.Context, *connect.Request[v1.CancelChatRequest]) (*connect.Response[v1.CancelChatResponse], error)
+	// TerminateChat forcefully terminates the running workflow for a chat
+	TerminateChat(context.Context, *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error)
 	// PauseChat pauses the running workflow (keeps it resumable)
 	PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error)
 	// ResumeChat resumes a paused or expired workflow
@@ -697,10 +724,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("CancelQueuedAgentMessage")),
 		connect.WithHandlerOptions(opts...),
 	)
-	chatServiceClaimQueuedAgentMessagesHandler := connect.NewUnaryHandler(
-		ChatServiceClaimQueuedAgentMessagesProcedure,
-		svc.ClaimQueuedAgentMessages,
-		connect.WithSchema(chatServiceMethods.ByName("ClaimQueuedAgentMessages")),
+	chatServiceInterruptThreadHandler := connect.NewUnaryHandler(
+		ChatServiceInterruptThreadProcedure,
+		svc.InterruptThread,
+		connect.WithSchema(chatServiceMethods.ByName("InterruptThread")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServiceListMessagesHandler := connect.NewUnaryHandler(
@@ -715,10 +742,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("UpdateChatState")),
 		connect.WithHandlerOptions(opts...),
 	)
-	chatServiceCancelChatHandler := connect.NewUnaryHandler(
-		ChatServiceCancelChatProcedure,
-		svc.CancelChat,
-		connect.WithSchema(chatServiceMethods.ByName("CancelChat")),
+	chatServiceTerminateChatHandler := connect.NewUnaryHandler(
+		ChatServiceTerminateChatProcedure,
+		svc.TerminateChat,
+		connect.WithSchema(chatServiceMethods.ByName("TerminateChat")),
 		connect.WithHandlerOptions(opts...),
 	)
 	chatServicePauseChatHandler := connect.NewUnaryHandler(
@@ -823,14 +850,14 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceListQueuedAgentMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceCancelQueuedAgentMessageProcedure:
 			chatServiceCancelQueuedAgentMessageHandler.ServeHTTP(w, r)
-		case ChatServiceClaimQueuedAgentMessagesProcedure:
-			chatServiceClaimQueuedAgentMessagesHandler.ServeHTTP(w, r)
+		case ChatServiceInterruptThreadProcedure:
+			chatServiceInterruptThreadHandler.ServeHTTP(w, r)
 		case ChatServiceListMessagesProcedure:
 			chatServiceListMessagesHandler.ServeHTTP(w, r)
 		case ChatServiceUpdateChatStateProcedure:
 			chatServiceUpdateChatStateHandler.ServeHTTP(w, r)
-		case ChatServiceCancelChatProcedure:
-			chatServiceCancelChatHandler.ServeHTTP(w, r)
+		case ChatServiceTerminateChatProcedure:
+			chatServiceTerminateChatHandler.ServeHTTP(w, r)
 		case ChatServicePauseChatProcedure:
 			chatServicePauseChatHandler.ServeHTTP(w, r)
 		case ChatServiceResumeChatProcedure:
@@ -910,8 +937,8 @@ func (UnimplementedChatServiceHandler) CancelQueuedAgentMessage(context.Context,
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.CancelQueuedAgentMessage is not implemented"))
 }
 
-func (UnimplementedChatServiceHandler) ClaimQueuedAgentMessages(context.Context, *connect.Request[v1.ClaimQueuedAgentMessagesRequest]) (*connect.Response[v1.ClaimQueuedAgentMessagesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ClaimQueuedAgentMessages is not implemented"))
+func (UnimplementedChatServiceHandler) InterruptThread(context.Context, *connect.Request[v1.InterruptThreadRequest]) (*connect.Response[v1.InterruptThreadResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.InterruptThread is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) ListMessages(context.Context, *connect.Request[v1.ListMessagesRequest]) (*connect.Response[v1.ListMessagesResponse], error) {
@@ -922,8 +949,8 @@ func (UnimplementedChatServiceHandler) UpdateChatState(context.Context, *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.UpdateChatState is not implemented"))
 }
 
-func (UnimplementedChatServiceHandler) CancelChat(context.Context, *connect.Request[v1.CancelChatRequest]) (*connect.Response[v1.CancelChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.CancelChat is not implemented"))
+func (UnimplementedChatServiceHandler) TerminateChat(context.Context, *connect.Request[v1.TerminateChatRequest]) (*connect.Response[v1.TerminateChatResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.TerminateChat is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) PauseChat(context.Context, *connect.Request[v1.PauseChatRequest]) (*connect.Response[v1.PauseChatResponse], error) {

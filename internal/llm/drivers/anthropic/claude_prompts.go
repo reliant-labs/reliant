@@ -5,10 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
 )
@@ -94,38 +90,4 @@ func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool) []anthropic.
 
 	blocks = append(blocks, agentBlock, outputBlock)
 	return blocks
-}
-
-// getEnvironmentInfo returns environment information string
-func getEnvironmentInfo(projectPath string) string {
-	isGit := isGitRepo(projectPath)
-	platform := runtime.GOOS
-	osVersion := runtime.GOARCH
-	date := time.Now().Format("2006-01-02")
-
-	return fmt.Sprintf(`Here is useful information about the environment you are running in:
-<env>
-Working directory: %s
-Is directory a git repo: %s
-Platform: %s
-OS Version: %s
-Today's date: %s
-</env>`, projectPath, boolToYesNo(isGit), platform, osVersion, date)
-}
-
-// isGitRepo checks if a directory is a git repository
-func isGitRepo(dir string) bool {
-	if dir == "" {
-		return false
-	}
-	_, err := os.Stat(filepath.Join(dir, ".git"))
-	return err == nil
-}
-
-// boolToYesNo converts a boolean to "Yes" or "No"
-func boolToYesNo(b bool) string {
-	if b {
-		return "Yes"
-	}
-	return "No"
 }

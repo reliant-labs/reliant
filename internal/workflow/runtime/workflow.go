@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/structpb"
+
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -21,7 +23,6 @@ import (
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // reliantNamespace is a UUID v5 namespace for generating deterministic UUIDs
@@ -138,6 +139,23 @@ type ChildWorkflowTracker struct {
 	children     map[string]bool                   // Map of child workflow IDs that are currently active
 	threadInputs map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
 
+	// threadOwnedKeys records, per thread, the input keys that thread set
+	// EXPLICITLY for itself — from its preset or from its node args. A global
+	// param update must not overwrite these.
+	//
+	// Without this, a global update carried every key it held into every
+	// registered child. The root chat's update always carries the root's own
+	// model, so a spawned agent running under a preset that pins a different
+	// model had that pin silently replaced the moment the user sent another
+	// message. Observed on the `implementer` preset (model tags [moderate] ->
+	// claude-5-sonnet): threads began on sonnet and flipped mid-run to
+	// claude-5-opus, the root's tags [flagship], with the opus adaptive
+	// thinking/effort payload that comes with it.
+	//
+	// A thread-scoped update (the __thread key) still targets these
+	// deliberately; only the blind global fan-out is held back.
+	threadOwnedKeys map[string]map[string]bool
+
 	// liveDetachedSpawns is every background
 	// spawn currently in flight, keyed by its tool_call_id. This is the
 	// registry the loop-exit gate (spec §6.1) and the terminal drain
@@ -162,9 +180,9 @@ type ChildWorkflowTracker struct {
 	//
 	// This exists because the loop-exit gate used to watch child completions
 	// and nothing else, which made a queued message undeliverable for as long
-	// as every child kept running. Delivery happens only in
-	// drainAgentMessagesAtBoundary, at the TOP of the loop body; a thread
-	// parked in awaitLiveDetachedSpawns never reaches that point, so a
+	// as every child kept running. Delivery happens only in CallLLM, which
+	// drains the thread's mailbox before it reads history; a thread parked
+	// in awaitLiveDetachedSpawns never reaches another CallLLM, so a
 	// message queued into a parent that is waiting on its sub-agents sat at
 	// status=queued until an unrelated child happened to finish and wake the
 	// gate for its own reasons. Observed on chat
@@ -236,10 +254,10 @@ func (t *ChildWorkflowTracker) detachedCompletionCount(thread string) int {
 // mailbox and that a parked loop for thread should wake to drain it.
 //
 // Note this is a WAKE notification, not the message itself: the row is
-// already durable in agent_messages, and the actual delivery is still done by
-// drainAgentMessagesAtBoundary reading the DB. Losing a notification
-// therefore degrades to the old behavior (delivered at the next boundary that
-// happens for another reason) rather than losing the message.
+// already durable in agent_messages, and the actual delivery is done by
+// CallLLM reading the DB before it assembles history. Losing a notification
+// therefore degrades to "delivered at the next CallLLM that happens for
+// another reason" rather than losing the message.
 func (t *ChildWorkflowTracker) notifyAgentMessageQueued(thread string) {
 	if t.agentMessageWakes == nil {
 		t.agentMessageWakes = make(map[string]int)
@@ -275,16 +293,32 @@ func (t *ChildWorkflowTracker) listLiveDetachedSpawns() []*detachedSpawnRecord {
 
 // RegisterThreadInputs registers a thread's input map for later query/update access.
 // The inputs map is the same pointer used by the inline executor, so updates are reflected live.
-func (t *ChildWorkflowTracker) RegisterThreadInputs(thread string, inputs map[string]interface{}) {
+//
+// ownedKeys names the inputs this thread set explicitly for itself (preset params
+// and node args). Those are protected from global param updates; see
+// ChildWorkflowTracker.threadOwnedKeys.
+func (t *ChildWorkflowTracker) RegisterThreadInputs(thread string, inputs map[string]interface{}, ownedKeys map[string]bool) {
 	if t.threadInputs == nil {
 		t.threadInputs = make(map[string]map[string]interface{})
 	}
 	t.threadInputs[thread] = inputs
+
+	if t.threadOwnedKeys == nil {
+		t.threadOwnedKeys = make(map[string]map[string]bool)
+	}
+	t.threadOwnedKeys[thread] = ownedKeys
 }
 
 // UnregisterThreadInputs removes a thread's input map when execution completes.
 func (t *ChildWorkflowTracker) UnregisterThreadInputs(thread string) {
 	delete(t.threadInputs, thread)
+	delete(t.threadOwnedKeys, thread)
+}
+
+// threadOwnsKey reports whether thread set key explicitly for itself, meaning a
+// global param update must leave it alone.
+func (t *ChildWorkflowTracker) threadOwnsKey(thread, key string) bool {
+	return t.threadOwnedKeys[thread][key]
 }
 
 // GetThreadInputs returns the input map for a specific thread, or nil if not found.
@@ -876,6 +910,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// is recorded for the spawn's loop to observe.
 	setupCancelThreadHandler(ctx, cancelledThreads, workflowID)
 
+	interruptCoordinator := NewThreadInterruptCoordinator(ctx, workflowID)
+	makeThreadInterrupt := func(thread string) *ThreadInterrupt {
+		return interruptCoordinator.ForThread(thread)
+	}
+
 	// Receive mailbox doorbells so a thread parked on its background spawns
 	// wakes to drain a queued message instead of waiting for a child to
 	// finish. Registered unconditionally: an execution that never receives
@@ -920,7 +959,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		WithProjectPath(projectPath).
 		WithWorkflow(wf).
 		WithPauseController(pauseCtrl).
-		WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+		WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
+		WithThreadInterrupts(makeThreadInterrupt(execCtx.Thread)).
+		WithMakeThreadInterrupt(makeThreadInterrupt)
 
 	// Create save message function for join nodes
 	joinSaveMessageFunc := func(node *reliantv1.Node, output map[string]interface{}) {
@@ -1169,6 +1210,8 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					WithProjectPath(loopProjectPath).
 					WithPauseController(makeThreadPauseCtrl(loopExecCtx.Thread)).
 					WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
+					WithThreadInterrupts(makeThreadInterrupt(loopExecCtx.Thread)).
+					WithMakeThreadInterrupt(makeThreadInterrupt).
 					WithInvocationContract(contract)
 				// Position checkpoint per loop iteration: {loopID, iteration}
 				// marks the position AND preserves iteration progress so a
@@ -1211,11 +1254,26 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					var execErr error
 					loopOutput, execErr = loopExecutor.Execute()
 					if execErr != nil {
-						// Handle CanceledError - activity inside loop was cancelled by pause.
-						// Block until resume, then retry the loop execution.
+						// A CanceledError surfaced from the loop itself, rather than
+						// from a step inside it.
+						//
+						// PAUSE no longer arrives here: both nested executors now
+						// block and re-dispatch the cancelled step in place
+						// (loop_executor.go / inline_workflow_executor.go), which is
+						// what keeps a paused run from re-entering its node and
+						// re-running on-entry side effects — see
+						// nested_pause_resume_test.go.
+						//
+						// What still reaches this branch is a genuine
+						// CancelWorkflow: the loop's own top-of-iteration guard
+						// returns e.ctx.Err(), and workflow ctx.Err() is
+						// temporal.ErrCanceled (a *CanceledError), so it matches
+						// here. checkPause returns immediately on a cancelled root
+						// and the ctx.Err() check below unwinds — which is the
+						// behavior this branch exists for now.
 						var canceledErr *temporal.CanceledError
 						if errors.As(execErr, &canceledErr) {
-							logger.Info("[Workflow Runtime] Loop cancelled (pause), blocking until resume then retrying",
+							logger.Info("[Workflow Runtime] Loop returned cancelled; unwinding unless this is a pause",
 								"stepID", step.Node.GetId(),
 							)
 							checkPause(ctx)
@@ -1379,16 +1437,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// Create child thread and optionally save inject message
 				// For non-inherit modes, this creates the thread with proper fork metadata
 				if model.NodeThreadMode(evalResult) != model.ThreadModeInherit {
-					var injectMsg *InjectMessageConfig
-					if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
-						attIDs, attFiles := resolveInjectAttachments(ic, logger)
-						injectMsg = &InjectMessageConfig{
-							Role:        model.CelStringValue(ic.GetRole()),
-							Content:     model.CelStringValue(ic.GetContent()),
-							Attachments: attIDs,
-							Files:       attFiles,
-						}
-					}
+					injectMsg := buildInjectMessageConfig(model.NodeInjectConfig(evalResult), logger)
 
 					// Determine thread title for child workflow: preset name > node ID
 					var childThreadTitle *string
@@ -1423,7 +1472,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						)
 						return nil, fmt.Errorf("failed to initialize child workflow thread for step %s: %w", step.Node.GetId(), initErr)
 					}
-				} else if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
+				} else if flatInput := buildInjectSaveMessageInput(input.ChatID, childExecCtx.Thread, workflowID, model.NodeInjectConfig(evalResult), logger); flatInput != nil {
 					// For inherit mode, just save the inject message (thread already exists)
 					activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 						StartToCloseTimeout: 30 * time.Second,
@@ -1434,16 +1483,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							MaximumAttempts:    3,
 						},
 					})
-					attIDs, attFiles := resolveInjectAttachments(ic, logger)
-					flatInput := &types.SaveMessageInput{
-						ChatID:      input.ChatID,
-						Thread:      childExecCtx.Thread,
-						Role:        model.CelStringValue(ic.GetRole()),
-						Content:     model.CelStringValue(ic.GetContent()),
-						Attachments: attIDs,
-						InjectFiles: injectFilesToData(attFiles),
-						WorkflowID:  workflowID,
-					}
 					rtx := types.RuntimeContext{
 						ChatID:     input.ChatID,
 						Thread:     childExecCtx.Thread,
@@ -1475,7 +1514,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					WithExecContext(childExecCtx).
 					WithProjectPath(childProjectPath).
 					WithPauseController(makeThreadPauseCtrl(childExecCtx.Thread)).
-					WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+					WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
+					WithThreadInterrupts(makeThreadInterrupt(childExecCtx.Thread)).
+					WithMakeThreadInterrupt(makeThreadInterrupt)
 				// Start workflow execution in parallel using workflow.Go()
 				// This enables multiple workflow/agent steps to run concurrently
 				doneCh := workflow.NewChannel(ctx)
@@ -1561,7 +1602,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				// not create child threads or use the thread tracker.
 				routerExec = routerExec.
 					WithExecContext(execCtx).
-					WithPauseController(makeThreadPauseCtrl(execCtx.Thread))
+					WithPauseController(makeThreadPauseCtrl(execCtx.Thread)).
+					WithThreadInterrupts(makeThreadInterrupt(execCtx.Thread)).
+					WithMakeThreadInterrupt(makeThreadInterrupt)
 
 				// Launch in workflow.Go for proper Temporal activity context
 				doneCh := workflow.NewChannel(ctx)
@@ -1676,7 +1719,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					WithProjectPath(childProjectPath).
 					WithThreadTracker(threadTracker).
 					WithPauseController(makeThreadPauseCtrl(childExecCtx.Thread)).
-					WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+					WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
+					WithThreadInterrupts(makeThreadInterrupt(childExecCtx.Thread)).
+					WithMakeThreadInterrupt(makeThreadInterrupt)
 
 				// Launch router execution in parallel (same pattern as workflow nodes)
 				doneCh := workflow.NewChannel(ctx)
@@ -1751,8 +1796,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						logger.Info("[Workflow Runtime] Activity cancelled (pause), blocking until resume then retrying",
+						cancelCause := "pause"
+						if executor.threadInterruptedSince(running.ThreadInterruptEpoch) {
+							cancelCause = "interrupt"
+						}
+						logger.Info("[Workflow Runtime] Activity cancelled, blocking until resume then retrying",
 							"stepID", running.StepID,
+							"cause", cancelCause,
 						)
 						checkPause(ctx)
 						// If root context is genuinely cancelled (CancelWorkflow, not just pause),
@@ -1893,7 +1943,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							)
 							routerExec = routerExec.
 								WithExecContext(execCtx).
-								WithPauseController(makeThreadPauseCtrl(execCtx.Thread))
+								WithPauseController(makeThreadPauseCtrl(execCtx.Thread)).
+								WithThreadInterrupts(makeThreadInterrupt(execCtx.Thread)).
+								WithMakeThreadInterrupt(makeThreadInterrupt)
 
 							routerCopy := routerExec
 							runningCopy := retryRunning
@@ -1922,7 +1974,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 								WithProjectPath(running.ChildExecCtx.ProjectPath).
 								WithThreadTracker(threadTracker).
 								WithPauseController(makeThreadPauseCtrl(running.ChildExecCtx.Thread)).
-								WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+								WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
+								WithThreadInterrupts(makeThreadInterrupt(running.ChildExecCtx.Thread)).
+								WithMakeThreadInterrupt(makeThreadInterrupt)
 
 							routerCopy := routerExec
 							runningCopy := retryRunning
@@ -1961,7 +2015,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 								WithExecContext(running.ChildExecCtx).
 								WithProjectPath(running.ChildExecCtx.ProjectPath).
 								WithPauseController(makeThreadPauseCtrl(running.ChildExecCtx.Thread)).
-								WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+								WithMakeThreadPauseCtrl(makeThreadPauseCtrl).
+								WithThreadInterrupts(makeThreadInterrupt(running.ChildExecCtx.Thread)).
+								WithMakeThreadInterrupt(makeThreadInterrupt)
 
 							executorCopy := retryExecutor
 							runningCopy := retryRunning
@@ -2253,6 +2309,20 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 					// children whose inputs are separate maps.
 					for threadID, threadInputs := range childTracker.GetAllThreadInputs() {
 						for key, value := range update {
+							// A key the thread set for itself (preset param or
+							// node arg) is authoritative for that thread. The
+							// root's value must not replace it — that is what
+							// silently demoted preset-pinned models to the
+							// root's own model mid-run.
+							if childTracker.threadOwnsKey(threadID, key) {
+								logger.Info("[Workflow Runtime] Global update skipped for thread-owned input",
+									"thread", threadID,
+									"key", key,
+									"kept", threadInputs[key],
+									"rejected", value,
+								)
+								continue
+							}
 							logger.Debug("[Workflow Runtime] Propagating global update to thread inputs",
 								"thread", threadID,
 								"key", key,
@@ -2721,8 +2791,9 @@ func prepareSpawnInline(
 	var injectMsg *InjectMessageConfig
 	if config.promptStr != "" {
 		injectMsg = &InjectMessageConfig{
-			Role:    "user",
-			Content: config.promptStr,
+			Role:         defaultInjectRole,
+			DisplayStyle: defaultInjectDisplayStyle,
+			Content:      config.promptStr,
 		}
 	}
 
@@ -2860,6 +2931,7 @@ func runSpawnInlineChild(
 	workflowInputs map[string]interface{},
 	childTracker *ChildWorkflowTracker,
 	makeThreadPauseCtrl func(string) *PauseController,
+	makeThreadInterrupt func(string) *ThreadInterrupt,
 	prep *spawnPrepResult,
 ) *spawnInlineResult {
 	logger := workflow.GetLogger(ctx)
@@ -2916,6 +2988,11 @@ func runSpawnInlineChild(
 			WithProjectPath(projectPath).
 			WithPauseController(pauseCtrl).
 			WithMakeThreadPauseCtrl(makeThreadPauseCtrl)
+		if makeThreadInterrupt != nil {
+			inlineExecutor = inlineExecutor.
+				WithThreadInterrupts(makeThreadInterrupt(childExecContext.Thread)).
+				WithMakeThreadInterrupt(makeThreadInterrupt)
+		}
 
 		_, execErr = inlineExecutor.Execute()
 		if execErr == nil {
@@ -3029,8 +3106,8 @@ func spawnResultKindForMailbox(result *spawnInlineResult) int32 {
 // the child's actual turns to a workflow.Go goroutine tracked on childTracker
 // and returns a handle immediately. The detached goroutine reports its
 // outcome into the PARENT's mailbox (spec §5) when it finishes; the parent's
-// own next drain (drainAgentMessagesAtBoundary) delivers it — this function
-// never writes into the parent thread's history directly.
+// next CallLLM delivers it — this function never writes into the parent
+// thread's history directly.
 //
 // The parent thread whose InlineLoopExecutor must not exit while this spawn
 // is live is parentThread — the caller's own thread, not the child's.
@@ -3044,6 +3121,7 @@ func dispatchSpawnBackground(
 	workflowInputs map[string]interface{},
 	childTracker *ChildWorkflowTracker,
 	makeThreadPauseCtrl func(string) *PauseController,
+	makeThreadInterrupt func(string) *ThreadInterrupt,
 ) *spawnInlineResult {
 	logger := workflow.GetLogger(ctx)
 
@@ -3090,7 +3168,7 @@ func dispatchSpawnBackground(
 			}
 		}()
 
-		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, prep)
+		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep)
 
 		enqueueCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
 			StartToCloseTimeout: 30 * time.Second,
@@ -3212,6 +3290,7 @@ func executeToolsWithSpawnSupport(
 	workflowInputs map[string]interface{},
 	childTracker *ChildWorkflowTracker,
 	makeThreadPauseCtrl func(string) *PauseController,
+	makeThreadInterrupt ...func(string) *ThreadInterrupt,
 ) workflow.Future {
 	logger := workflow.GetLogger(ctx)
 
@@ -3240,6 +3319,10 @@ func executeToolsWithSpawnSupport(
 
 	// Split tool calls into regular tools and spawn tools
 	split := splitProtoToolCalls(toolCalls)
+	var threadInterruptFactory func(string) *ThreadInterrupt
+	if len(makeThreadInterrupt) > 0 {
+		threadInterruptFactory = makeThreadInterrupt[0]
+	}
 
 	var regularToolsFuture workflow.Future
 
@@ -3252,6 +3335,7 @@ func executeToolsWithSpawnSupport(
 				ResolvedToolCalls:     split.regularToolCalls,
 				ExpectedResponseTools: etArgs.GetExpectedResponseTools(),
 				ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
+				CompactionThreshold:   etArgs.GetCompactionThreshold(),
 			}},
 		}
 
@@ -3316,14 +3400,14 @@ func executeToolsWithSpawnSupport(
 		// childTracker, and report back via the mailbox. Parallel across
 		// multiple spawns so prep for one does not gate prep for another.
 		if len(spawnConfigs) == 1 {
-			result := dispatchSpawnBackground(gCtx, spawnConfigs[0], rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl)
+			result := dispatchSpawnBackground(gCtx, spawnConfigs[0], rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl, threadInterruptFactory)
 			combinedResults = append(combinedResults, result.toToolResult())
 		} else if len(spawnConfigs) > 1 {
 			resultCh := workflow.NewChannel(gCtx)
 			for _, cfg := range spawnConfigs {
 				cfg := cfg // Capture loop variable
 				workflow.Go(gCtx, func(spawnCtx workflow.Context) {
-					result := dispatchSpawnBackground(spawnCtx, cfg, rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl)
+					result := dispatchSpawnBackground(spawnCtx, cfg, rtx.ProjectPath, rtx.ChatID, rtx.WorkflowID, rtx.Thread, workflowInputs, childTracker, makeThreadPauseCtrl, threadInterruptFactory)
 					resultCh.Send(spawnCtx, result)
 				})
 			}

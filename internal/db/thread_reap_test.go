@@ -29,13 +29,13 @@ func TestReapOrphanedThreads(t *testing.T) {
 	// live (174 of the 288 rows).
 	completedWf := "wf-tr-completed"
 	completedThread := "th-tr-completed"
-	insertTestWorkflowWithParent(t, repo, completedWf, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, completedWf, chatID, nil, Completed())
 	insertTestThreadForWorkflow(t, repo, completedThread, chatID, completedWf, ThreadStatusRunning)
 
 	// Cancelled workflow, thread still running (64 of the 288).
 	cancelledWf := "wf-tr-cancelled"
 	cancelledThread := "th-tr-cancelled"
-	insertTestWorkflowWithParent(t, repo, cancelledWf, chatID, nil, WorkflowStatusCancelled)
+	insertTestWorkflowWithParent(t, repo, cancelledWf, chatID, nil, Cancelled())
 	insertTestThreadForWorkflow(t, repo, cancelledThread, chatID, cancelledWf, ThreadStatusRunning)
 
 	// Failed workflow, thread still PAUSED -- the reap must catch paused
@@ -43,7 +43,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 	// stranded threads necessarily sat at "running").
 	failedWf := "wf-tr-failed"
 	failedThread := "th-tr-failed"
-	insertTestWorkflowWithParent(t, repo, failedWf, chatID, nil, WorkflowStatusFailed)
+	insertTestWorkflowWithParent(t, repo, failedWf, chatID, nil, Failed())
 	insertTestThreadForWorkflow(t, repo, failedThread, chatID, failedWf, int32(6))
 
 	// A LIVE workflow with a live thread. Reaping this would falsely close
@@ -51,21 +51,21 @@ func TestReapOrphanedThreads(t *testing.T) {
 	// being fixed.
 	liveWf := "wf-tr-live"
 	liveThread := "th-tr-live"
-	insertTestWorkflowWithParent(t, repo, liveWf, chatID, nil, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, liveWf, chatID, nil, Active())
 	insertTestThreadForWorkflow(t, repo, liveThread, chatID, liveWf, ThreadStatusRunning)
 
 	// A PAUSED workflow with a running thread: pause is resumable, not
 	// terminal, so the thread must not be touched either.
 	pausedWf := "wf-tr-paused"
 	pausedThread := "th-tr-paused"
-	insertTestWorkflowWithParent(t, repo, pausedWf, chatID, nil, WorkflowStatusPaused)
+	insertTestWorkflowWithParent(t, repo, pausedWf, chatID, nil, Paused())
 	insertTestThreadForWorkflow(t, repo, pausedThread, chatID, pausedWf, ThreadStatusRunning)
 
 	// A terminal workflow whose thread already reflects it (the live path
 	// worked correctly). Must not be counted or rewritten.
 	settledWf := "wf-tr-settled"
 	settledThread := "th-tr-settled"
-	insertTestWorkflowWithParent(t, repo, settledWf, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, settledWf, chatID, nil, Completed())
 	insertTestThreadForWorkflow(t, repo, settledThread, chatID, settledWf, ThreadStatusCompleted)
 
 	reaped, err := repo.ReapOrphanedThreads(ctx)

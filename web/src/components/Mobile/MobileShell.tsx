@@ -21,7 +21,7 @@
  *
  * So: mobile users DO get onboarding; they just don't get the tour. Skipping
  * the redirect would drop a brand-new user onto an empty chat list with no
- * daemon and no way to make one — the mobile surface can't create daemons.
+ * daemon and no project for the mobile surface to show.
  *
  * ## 2. A project must be selected
  *

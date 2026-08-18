@@ -204,7 +204,7 @@ func runWorkflowPs(cmd *cobra.Command, jsonOut bool, dbURL string) error {
 	// propagates chat-wide, so listing only RUNNING hides a paused chat
 	// completely.
 	var workflows []*db.Workflow
-	for _, status := range []db.WorkflowStatus{db.WorkflowStatusRunning, db.WorkflowStatusPaused} {
+	for _, status := range []db.WorkflowStatus{db.Active(), db.Paused()} {
 		batch, listErr := repo.ListWorkflowsByStatus(ctx, status)
 		if listErr != nil {
 			return fmt.Errorf("listing %s workflows: %w", wfaWorkflowStatus(status), listErr)
@@ -486,7 +486,7 @@ func buildPsRows(workflows []*db.Workflow, markers map[string]psChatMarkers, nod
 // sibling that is genuinely executing.
 func psWaitFor(g psThreadGroup, m psChatMarkers) *psWait {
 	for _, wf := range g.rows {
-		if wf.Status == db.WorkflowStatusPaused {
+		if wf.Status.StopReason == db.StopReasonPaused {
 			// A pause records no timestamp: workflows.paused_at was dropped
 			// (migration 20260213000000) and the pause path updates status only,
 			// so there is nothing to report as "since" here. derivePsState falls

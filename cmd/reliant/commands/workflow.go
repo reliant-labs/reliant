@@ -31,6 +31,10 @@ func newWorkflowCmd() *cobra.Command {
 		Use:   "workflow",
 		Short: "Manage and validate workflows",
 		Long:  `Commands for validating, listing, and running Reliant workflows.`,
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newWorkflowValidateCmd())
@@ -46,7 +50,7 @@ func newWorkflowCmd() *cobra.Command {
 	cmd.AddCommand(newWorkflowStatusCmd())
 	cmd.AddCommand(newWorkflowQuestionsCmd())
 	cmd.AddCommand(newWorkflowAnswerCmd())
-	cmd.AddCommand(newWorkflowCancelCmd())
+	cmd.AddCommand(newWorkflowTerminateCmd())
 	cmd.AddCommand(newWorkflowPauseCmd())
 	cmd.AddCommand(newWorkflowResumeCmd())
 
@@ -597,10 +601,7 @@ func findBuiltinDir() string {
 
 func buildCLIWorkflowLoader(dir string) runtime.WorkflowLoader {
 	return func(ref string) (*reliantv1.Workflow, error) {
-		name := ref
-		if strings.HasPrefix(name, "builtin://") {
-			name = strings.TrimPrefix(name, "builtin://")
-		}
+		name := strings.TrimPrefix(ref, "builtin://")
 
 		// Try builtin embedded FS first
 		if data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml"); err == nil {

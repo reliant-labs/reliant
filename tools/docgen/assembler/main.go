@@ -362,7 +362,7 @@ func generateCELQuickReference() string {
 			}
 			fields = strings.Join(fieldNames, ", ")
 		}
-		sb.WriteString(fmt.Sprintf("| `%s.*` | %s | %s |\n", tableCell(ns.Name), tableCell(ns.Description), tableCell(fields)))
+		fmt.Fprintf(&sb, "| `%s.*` | %s | %s |\n", tableCell(ns.Name), tableCell(ns.Description), tableCell(fields))
 	}
 	sb.WriteString("\n")
 
@@ -370,13 +370,13 @@ func generateCELQuickReference() string {
 		if len(ns.Fields) == 0 {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("#### `%s` fields\n\n", ns.Name))
+		fmt.Fprintf(&sb, "#### `%s` fields\n\n", ns.Name)
 		sb.WriteString("| Field | Type | Description |\n")
 		sb.WriteString("|-------|------|-------------|\n")
 		fields := append([]reference.CELField(nil), ns.Fields...)
 		sort.Slice(fields, func(i, j int) bool { return fields[i].Name < fields[j].Name })
 		for _, field := range fields {
-			sb.WriteString(fmt.Sprintf("| `%s.%s` | `%s` | %s |\n", tableCell(ns.Name), tableCell(field.Name), tableCell(field.Type), tableCell(field.Description)))
+			fmt.Fprintf(&sb, "| `%s.%s` | `%s` | %s |\n", tableCell(ns.Name), tableCell(field.Name), tableCell(field.Type), tableCell(field.Description))
 		}
 		sb.WriteString("\n")
 	}
@@ -392,7 +392,7 @@ func generateCELQuickReference() string {
 		if signature == "" {
 			signature = fn.Name
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | `%s` |\n", tableCell(signature), tableCell(fn.Description), tableCell(fn.Example)))
+		fmt.Fprintf(&sb, "| `%s` | %s | `%s` |\n", tableCell(signature), tableCell(fn.Description), tableCell(fn.Example))
 	}
 	sb.WriteString("\n")
 
@@ -479,7 +479,7 @@ func generateBuiltinWorkflowsList() (string, error) {
 	})
 
 	for _, wf := range workflows {
-		sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", tableCell(wf.Name), tableCell(wf.Description)))
+		fmt.Fprintf(&sb, "| `%s` | %s |\n", tableCell(wf.Name), tableCell(wf.Description))
 	}
 
 	return sb.String(), nil
@@ -512,7 +512,7 @@ func generateNodeTypesSummary() string {
 			continue
 		}
 		desc := summaryForName(info.Name, info.Summary, info.Description)
-		sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", tableCell(typeName), tableCell(desc)))
+		fmt.Fprintf(&sb, "| `%s` | %s |\n", tableCell(typeName), tableCell(desc))
 	}
 
 	return sb.String()
@@ -533,7 +533,7 @@ func generateInputTypesSummary() string {
 			continue
 		}
 		desc := summaryForName(info.Name, info.Summary, info.Description)
-		sb.WriteString(fmt.Sprintf("| `%s` | %s |\n", tableCell(typeName), tableCell(desc)))
+		fmt.Fprintf(&sb, "| `%s` | %s |\n", tableCell(typeName), tableCell(desc))
 	}
 
 	return sb.String()
@@ -596,7 +596,7 @@ func extractScenarioEssentials(scenarioPath string) (string, error) {
 		if fieldsTable == "" {
 			continue
 		}
-		sb.WriteString(fmt.Sprintf("### %s\n\n", schema.Title))
+		fmt.Fprintf(&sb, "### %s\n\n", schema.Title)
 		if summary != "" {
 			sb.WriteString(summary)
 			sb.WriteString("\n\n")

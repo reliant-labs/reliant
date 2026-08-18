@@ -79,6 +79,18 @@ func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {
 	return store.GetToolCall(ctx, id)
 }
 
+func (r *Repo) GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error) {
+	if toolCallID == "" {
+		return nil, fmt.Errorf("tool call ID cannot be empty")
+	}
+
+	store, err := r.toolCalls(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return store.GetToolCallResult(ctx, toolCallID)
+}
+
 func (r *Repo) ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")

@@ -35,3 +35,20 @@ github.com/hashicorp/aws-sdk-go-base/v2  # MPL-2.0, unmodified — transitive of
 # Embedded is public domain, and the Go port carries the same grant. Verified
 # by reading the file directly; permissive, no obligations.
 github.com/xi2/xz                    # public domain (XZ Embedded port), non-standard LICENSE text
+
+# --- License granted upstream, but after the tag we depend on ---
+#
+# nexus-proto-annotations is MIT, and the repo shows MIT on GitHub — but the
+# LICENSE file was committed on 2026-06-29 and v0.1.0 was tagged 2026-03-30,
+# so the tagged tree genuinely carries no license file. The module cache holds
+# that frozen tree, which is why the gate reports NO-LICENSE-FILE rather than
+# misreading anything: the grant is real but not in the bytes we ship.
+#
+# There is no newer tag to move to (v0.1.0 is the only one; `go list
+# -m -versions` returns just that), and it arrives transitively from
+# go.temporal.io/api via nexus-rpc/sdk-go, so we do not control the require.
+#
+# DELETE THIS ENTRY when upstream cuts any tag containing 835bd8d4 ("Add MIT
+# license") — at that point a plain bump resolves it properly and the exception
+# stops being needed.
+github.com/nexus-rpc/nexus-proto-annotations  # MIT upstream (835bd8d4), committed after the v0.1.0 tag we resolve to

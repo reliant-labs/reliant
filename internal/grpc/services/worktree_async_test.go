@@ -35,12 +35,6 @@ type blockingWorktreeDaemonRouter struct {
 	commands []string
 }
 
-func (r *blockingWorktreeDaemonRouter) recorded() []string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]string(nil), r.commands...)
-}
-
 func (r *blockingWorktreeDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
 	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }

@@ -335,12 +335,12 @@ func PollDeviceAuth(ctx context.Context, deviceCode string, interval int) (*GitH
 		}
 
 		tokens, err := PollDeviceAuthOnce(ctx, deviceCode)
-		switch {
-		case err == nil:
+		switch err {
+		case nil:
 			return tokens, nil
-		case err == ErrAuthorizationPending:
+		case ErrAuthorizationPending:
 			// keep waiting at the current interval
-		case err == ErrSlowDown:
+		case ErrSlowDown:
 			// GitHub asks us to add (at least) 5s to the interval
 			delay += 5 * time.Second
 		default:

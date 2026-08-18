@@ -186,6 +186,18 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		UpdatedAt:  now,
 		LastActive: now,
 	}), "create story project")
+	require.NoError(t, s.Repo.CreateWorktree(ctx, &db.Worktree{
+		ID:         uuid.New().String(),
+		Name:       "main",
+		Path:       projectPath,
+		Branch:     "main",
+		BaseBranch: "main",
+		ProjectID:  projectID,
+		IsMain:     true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}), "create story project's main worktree")
 
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
 
@@ -230,7 +242,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub)
+	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
 
 	return &Harness{

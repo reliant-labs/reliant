@@ -85,6 +85,7 @@ var allowedSkillFrontmatterFields = map[string]struct{}{
 // addendum). The forge integration gates them on Emit instead of
 // forge.yaml so methodology continues to apply in any project.
 var builtinSkillPaths = []string{
+	"code-search/SKILL.md",
 	"reliant-config/SKILL.md",
 	"workflow-builder/SKILL.md",
 	"workflow-builder/design-patterns/SKILL.md",
@@ -92,7 +93,7 @@ var builtinSkillPaths = []string{
 
 // BuiltinSkillsFS is exported for test use.
 //
-//go:embed builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/workflow-builder/design-patterns/SKILL.md
+//go:embed builtin/code-search/SKILL.md builtin/reliant-config/SKILL.md builtin/workflow-builder/SKILL.md builtin/workflow-builder/design-patterns/SKILL.md
 var BuiltinSkillsFS embed.FS
 
 func ParseSkillMarkdown(path string, scope skillscore.Scope, data []byte) (Definition, error) {
@@ -591,20 +592,6 @@ func sortDefinitions(defs []Definition) {
 		}
 		return defs[i].Path < defs[j].Path
 	})
-}
-
-func cloneDefinition(in Definition) Definition {
-	out := in
-	if in.Metadata != nil {
-		out.Metadata = make(map[string]string, len(in.Metadata))
-		for k, v := range in.Metadata {
-			out.Metadata[k] = v
-		}
-	}
-	if in.AllowedTools != nil {
-		out.AllowedTools = append([]string(nil), in.AllowedTools...)
-	}
-	return out
 }
 
 func shouldReplace(existing Definition, candidate Definition) bool {

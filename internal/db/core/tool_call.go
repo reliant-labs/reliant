@@ -118,6 +118,10 @@ type ToolCallStore interface {
 	// the same call. Same retry-idempotency reasoning as UpsertToolCall.
 	UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error
 	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
+	// GetToolCallResult reads the recorded result for a single call, or nil
+	// if none was ever written (e.g. a terminal call whose result write lost
+	// a race, or a historical Cancelled row that predates durable status).
+	GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// ListToolCallsByMessageIDs and ListToolCallResultsByMessageIDs are the
 	// batch reads the message read path needs: loading a page of messages

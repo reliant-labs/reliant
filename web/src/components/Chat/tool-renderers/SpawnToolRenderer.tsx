@@ -22,7 +22,11 @@ import { MessageRole, ContentBlockType } from "../../../types/chat";
 import type { ContentBlock, WorkflowExecutionData } from "../../../types/chat";
 
 import { useWorkflowExecutions } from "../../../hooks/useWorkflowExecutions";
-import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
+import { WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
+import {
+  isWorkflowLive,
+  workflowStoppedBecause,
+} from "../../../lib/workflowLifecycle";
 import { getSpawnDisplayMode } from "../../Settings/SpawnDisplaySettings";
 import { cn } from "../../../lib/utils";
 import { logger } from "../../../lib/logger";
@@ -169,11 +173,25 @@ function SpawnPreview({ ctx }: ToolContentProps) {
   );
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
 
-  const workflowCompleted = spawnWorkflow?.status === ChatWorkflowStatus.COMPLETED;
   const workflowFailed =
-    spawnWorkflow?.status === ChatWorkflowStatus.FAILED ||
-    spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
-  const isCancelledChild = spawnWorkflow?.status === ChatWorkflowStatus.CANCELLED;
+    !!spawnWorkflow &&
+    (workflowStoppedBecause(
+      spawnWorkflow.state,
+      spawnWorkflow.stopReason,
+      WorkflowStopReason.FAILED,
+    ) ||
+      workflowStoppedBecause(
+        spawnWorkflow.state,
+        spawnWorkflow.stopReason,
+        WorkflowStopReason.CANCELLED,
+      ));
+  const isCancelledChild = spawnWorkflow
+    ? workflowStoppedBecause(
+        spawnWorkflow.state,
+        spawnWorkflow.stopReason,
+        WorkflowStopReason.CANCELLED,
+      )
+    : false;
 
   // Once dispatched (a child_workflow_id exists), the child workflow is the
   // SOLE authority on whether this spawn is done — ctx.isCompleted/hasFailed
@@ -183,14 +201,17 @@ function SpawnPreview({ ctx }: ToolContentProps) {
   // created, e.g. thread validation failed) there IS no child workflow to
   // consult, so ctx's own verdict is what we have.
   const isDone = spawnThreadId
-    ? workflowCompleted || workflowFailed
+    ? spawnWorkflow?.state === WorkflowState.STOPPED
     : isCompleted || hasFailed;
 
   // The "message this agent" affordance only makes sense while the agent is
   // actually running. A failed or cancelled spawn is just as "not done" as
   // a running one, but offering to message a dead agent is a lie the UI
   // shouldn't tell, even though the backend safely rejects it.
-  const spawnRunning = !!spawnThreadId && !workflowCompleted && !workflowFailed;
+  const spawnRunning =
+    !!spawnThreadId &&
+    (!spawnWorkflow ||
+      isWorkflowLive(spawnWorkflow.state, spawnWorkflow.stopReason));
 
   const summaries = useMemo((): MessageSummary[] => {
     if (!spawnThreadId) {
@@ -343,8 +364,6 @@ function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: strin
     try {
       await chatGrpc.sendAgentMessage(chatId, threadId, message);
       setValue("");
-      // Honest receipt, matching spawn_send's contract: queued, not yet read.
-      toast.info("Queued for delivery — it will be read at the agent's next turn.");
     } catch (error) {
       logger.error("[SendToAgentForm] Failed to send agent message", { error, chatId, threadId });
       toast.error(error);

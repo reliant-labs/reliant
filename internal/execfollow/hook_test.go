@@ -130,20 +130,57 @@ func TestHookFailureIsLoggedAndSwallowed(t *testing.T) {
 }
 
 func TestHookTimeoutDoesNotHangFollow(t *testing.T) {
+	// Each hook sleeps 30s in some form, so a runner that fails to bound the
+	// wait blows the 5s ceiling by an order of magnitude rather than
+	// marginally. "&" cases leave a grandchild holding the output pipe after
+	// the shell dies, which killing the shell alone does not close.
+	tests := []struct {
+		name string
+		cmd  string
+	}{
+		{"slow hook is killed at the timeout", "sleep 30"},
+		{"grandchild outliving a killed hook does not hold the follow", "sleep 30 & sleep 30"},
+		{"grandchild outliving a finished hook does not hold the follow", "sleep 30 &"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := sampleEvent()
+			evJSON, _ := marshalEvent(ev)
+
+			var stderr bytes.Buffer
+			runner := &HookRunner{
+				Stderr:    &stderr,
+				Timeout:   200 * time.Millisecond,
+				WaitDelay: 200 * time.Millisecond,
+			}
+
+			start := time.Now()
+			runner.Run(context.Background(), []Hook{{On: "any", Cmd: tc.cmd}}, ev, evJSON)
+			elapsed := time.Since(start)
+
+			if elapsed > 5*time.Second {
+				t.Fatalf("hook run took %v — follow stalled past the timeout", elapsed)
+			}
+			// Either diagnostic is correct: a killed hook reports a failure, a
+			// hook that finished while its grandchild lingers reports the
+			// truncated drain. Silence is not — the stall must be explained.
+			if got := stderr.String(); !strings.Contains(got, "hook failed") && !strings.Contains(got, "hook output truncated") {
+				t.Errorf("expected the bounded hook to be logged, got: %q", got)
+			}
+		})
+	}
+}
+
+func TestHookSucceedingHookIsNotLogged(t *testing.T) {
 	ev := sampleEvent()
 	evJSON, _ := marshalEvent(ev)
 
 	var stderr bytes.Buffer
-	runner := &HookRunner{Stderr: &stderr, Timeout: 200 * time.Millisecond}
+	runner := &HookRunner{Stderr: &stderr, Timeout: 10 * time.Second}
+	runner.Run(context.Background(), []Hook{{On: "any", Cmd: "true"}}, ev, evJSON)
 
-	start := time.Now()
-	runner.Run(context.Background(), []Hook{{On: "any", Cmd: "sleep 30"}}, ev, evJSON)
-	elapsed := time.Since(start)
-
-	if elapsed > 5*time.Second {
-		t.Fatalf("hook run took %v — timeout not applied", elapsed)
-	}
-	if !strings.Contains(stderr.String(), "hook failed") {
-		t.Errorf("expected timeout to be logged as failure, got: %s", stderr.String())
+	if got := stderr.String(); got != "" {
+		t.Errorf("a hook that succeeded logged %q, want no diagnostics", got)
 	}
 }

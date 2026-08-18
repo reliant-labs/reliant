@@ -91,32 +91,34 @@ export function BillingSection() {
   const [tab, setTab] = useState<BillingTab>("overview");
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-w-0 flex-col gap-6">
       <PageHeader
         title="Billing"
         subtitle="Manage wallet credits, your compute plan, usage, and invoices."
       />
 
-      <div className="flex flex-wrap gap-1 border-b border-border">
-        {TABS.map(({ id, label, icon: Icon }) => {
-          const active = tab === id;
-          return (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={[
-                "inline-flex items-center gap-2 border-b-2 px-4 py-2 text-sm font-medium transition-colors",
-                active
-                  ? "border-primary text-foreground"
-                  : "border-transparent text-muted-foreground hover:text-foreground",
-              ].join(" ")}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </button>
-          );
-        })}
+      <div className="overflow-x-auto border-b border-border">
+        <div className="flex w-max min-w-full gap-1">
+          {TABS.map(({ id, label, icon: Icon }) => {
+            const active = tab === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setTab(id)}
+                className={[
+                  "inline-flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium transition-colors sm:px-4",
+                  active
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+                ].join(" ")}
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {tab === "overview" && (
@@ -329,12 +331,17 @@ function OverviewTab({
 
             {/* Compute plan */}
             <Card>
-              <CardHeader className="flex-row items-center justify-between">
+              <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Cpu className="h-4 w-4 text-muted-foreground" />
                   Compute plan
                 </CardTitle>
-                <Button size="sm" variant="outline" onClick={onGoToPlans}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={onGoToPlans}
+                >
                   Change plan
                 </Button>
               </CardHeader>
@@ -405,18 +412,18 @@ function OverviewTab({
 
           {/* Usage this period */}
           <Card>
-            <CardHeader className="flex-row items-center justify-between">
+            <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle>Usage this period</CardTitle>
               <button
                 type="button"
                 onClick={onGoToUsage}
-                className="text-sm font-medium text-primary hover:underline"
+                className="text-left text-sm font-medium text-primary hover:underline sm:text-right"
               >
                 See detail →
               </button>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center justify-between text-sm">
+              <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <span className="font-medium text-foreground">Hours used</span>
                 <span className="text-muted-foreground">
                   {usageUi.usedHours.toFixed(1)} h /{" "}
@@ -432,7 +439,7 @@ function OverviewTab({
                 />
               </div>
               {usageUi.grantedMinutesRemaining > 0 && (
-                <div className="mt-4 flex items-center justify-between rounded-md border border-border bg-muted/40 px-4 py-3 text-sm">
+                <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="font-medium text-foreground">Coupon minutes</p>
                     <p className="text-xs text-muted-foreground">
@@ -452,7 +459,7 @@ function OverviewTab({
                 <RedeemCouponForm onRedeemed={() => void usageQ.refetch()} />
               </div>
               {usageUi.overageHours > 0 && (
-                <div className="mt-4 flex items-center justify-between rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 dark:text-amber-400">
+                <div className="mt-4 flex flex-col gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 sm:flex-row sm:items-center sm:justify-between dark:text-amber-400">
                   <span className="font-medium">
                     Overage: {usageUi.overageHours.toFixed(1)} h
                   </span>
@@ -545,7 +552,7 @@ function BillingEmailRow() {
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-sm font-medium text-foreground">Billing email</p>
             <p className="text-xs text-muted-foreground">
@@ -665,7 +672,7 @@ function PlansTab() {
           description="Compute plans are not configured for this environment yet."
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {computePlans.map((plan) => {
             const d = derivePlanDisplay(plan);
             if (d.monthlyPriceCents === null) return null;
@@ -778,50 +785,48 @@ function InvoicesTab() {
           description="Invoices appear here once your first billing period closes."
         />
       ) : (
-        <Card className="overflow-hidden">
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Date</Th>
-                <Th>Amount</Th>
-                <Th>Status</Th>
-                <Th className="text-right">PDF</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {invoices.map((invoice) => {
-                const status = normalizeInvoiceStatus(invoice.status);
-                return (
-                  <Tr key={invoice.id}>
-                    <Td>{formatTimestampDate(invoice.periodStart ?? invoice.createdAt)}</Td>
-                    <Td>{formatCentsAsDollars(invoice.amountDue)}</Td>
-                    <Td>
-                      <Badge
-                        variant={INVOICE_STATUS_VARIANT[status]}
-                        label={status}
-                      />
-                    </Td>
-                    <Td className="text-right">
-                      {invoice.pdfUrl ? (
-                        <a
-                          href={invoice.pdfUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download
-                        </a>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">—</span>
-                      )}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
-        </Card>
+        <Table>
+          <Thead>
+            <Tr>
+              <Th>Date</Th>
+              <Th>Amount</Th>
+              <Th>Status</Th>
+              <Th className="text-right">PDF</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {invoices.map((invoice) => {
+              const status = normalizeInvoiceStatus(invoice.status);
+              return (
+                <Tr key={invoice.id}>
+                  <Td>{formatTimestampDate(invoice.periodStart ?? invoice.createdAt)}</Td>
+                  <Td>{formatCentsAsDollars(invoice.amountDue)}</Td>
+                  <Td>
+                    <Badge
+                      variant={INVOICE_STATUS_VARIANT[status]}
+                      label={status}
+                    />
+                  </Td>
+                  <Td className="text-right">
+                    {invoice.pdfUrl ? (
+                      <a
+                        href={invoice.pdfUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                      >
+                        <Download className="h-4 w-4" />
+                        Download
+                      </a>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </Td>
+                </Tr>
+              );
+            })}
+          </Tbody>
+        </Table>
       )}
     </div>
   );
@@ -859,11 +864,11 @@ function UsageTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h3 className="text-base font-semibold text-foreground">
           Compute usage
         </h3>
-        <div className="inline-flex rounded-md border border-border p-1">
+        <div className="inline-flex w-full rounded-md border border-border p-1 sm:w-auto">
           {(["current", "previous"] as const).map((p) => (
             <button
               key={p}
@@ -897,7 +902,7 @@ function UsageTab() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             <UsageStat label="Included" value={`${summary.includedHours.toFixed(0)} h`} />
             <UsageStat label="Used" value={`${summary.usedHours.toFixed(1)} h`} />
             <UsageStat label="Overage" value={`${summary.overageHours.toFixed(1)} h`} />
@@ -965,34 +970,32 @@ function UsageTab() {
                 description="No machine usage in this period."
               />
             ) : (
-              <Card className="overflow-hidden">
-                <Table>
-                  <Thead>
-                    <Tr>
-                      <Th>Machine</Th>
-                      <Th>Size</Th>
-                      <Th className="text-right">Minutes</Th>
-                      <Th className="text-right">Overage min</Th>
+              <Table>
+                <Thead>
+                  <Tr>
+                    <Th>Machine</Th>
+                    <Th>Size</Th>
+                    <Th className="text-right">Minutes</Th>
+                    <Th className="text-right">Overage min</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {sortedWorkspaces.map((w) => (
+                    <Tr key={w.workspaceId}>
+                      <Td className="font-medium text-foreground">
+                        {w.workspaceName || w.workspaceId.slice(0, 8)}
+                      </Td>
+                      <Td className="capitalize text-muted-foreground">
+                        {w.size || "—"}
+                      </Td>
+                      <Td className="text-right">{(w.minutes ?? 0).toFixed(1)}</Td>
+                      <Td className="text-right">
+                        {(w.overageMinutes ?? 0).toFixed(1)}
+                      </Td>
                     </Tr>
-                  </Thead>
-                  <Tbody>
-                    {sortedWorkspaces.map((w) => (
-                      <Tr key={w.workspaceId}>
-                        <Td className="font-medium text-foreground">
-                          {w.workspaceName || w.workspaceId.slice(0, 8)}
-                        </Td>
-                        <Td className="capitalize text-muted-foreground">
-                          {w.size || "—"}
-                        </Td>
-                        <Td className="text-right">{(w.minutes ?? 0).toFixed(1)}</Td>
-                        <Td className="text-right">
-                          {(w.overageMinutes ?? 0).toFixed(1)}
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Card>
+                  ))}
+                </Tbody>
+              </Table>
             )}
           </div>
         </>

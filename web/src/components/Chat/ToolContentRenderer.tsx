@@ -46,7 +46,7 @@ const CollapsibleDiffViewer = memo(function CollapsibleDiffViewer({
       <div
         ref={contentRef}
         className={cn(
-          "overflow-hidden transition-all duration-300",
+          "overflow-hidden",
           isExpanded ? "" : "max-h-[80px]"
         )}
       >

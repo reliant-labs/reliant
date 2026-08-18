@@ -8,7 +8,7 @@ params:
   - researcher
   tools:
   - view          # Quick file checks when needed
-  - tag:shell     # search the codebase via the shell tool (rg/grep/find)
+  - tag:shell     # search the codebase via the shell tool (rg, and a language server for callers/implementations)
   - create_plan   # Document the final plan
   model:
     tags: [flagship]

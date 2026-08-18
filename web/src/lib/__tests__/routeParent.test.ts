@@ -21,9 +21,20 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
-  it("returns /settings as parent of /settings/$section", () => {
+  // /settings and /settings/$section render the same SettingsPage, so there is
+  // no intermediate view to step back to — closing any section must leave
+  // settings entirely rather than bounce through the default (account) tab.
+  it("returns / as parent of /settings/$section", () => {
+    expect(getParentRouteNavigateOptions("/settings/mcp")).toEqual({
+      to: "/",
+      search: {},
+    });
+  });
+
+  it("returns / as parent of the default section, not /settings", () => {
     expect(getParentRouteNavigateOptions("/settings/account")).toEqual({
-      to: "/settings",
+      to: "/",
+      search: {},
     });
   });
 

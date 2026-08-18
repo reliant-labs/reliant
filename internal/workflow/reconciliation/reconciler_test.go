@@ -318,7 +318,7 @@ func (m *mockRepo) SaveMessageToThread(_ context.Context, chatID, thread string,
 
 func (m *mockRepo) ListWorkflowsByStatus(_ context.Context, status db.WorkflowStatus) ([]*db.Workflow, error) {
 	m.mu.Lock()
-	m.callOrder = append(m.callOrder, "list-"+status.String())
+	m.callOrder = append(m.callOrder, "list-"+status.Label())
 	out := m.workflowsByStatus[status]
 	m.mu.Unlock()
 	return out, nil
@@ -543,7 +543,7 @@ func runningWorkflow() *db.Workflow {
 		ID:           "wf-1",
 		ChatID:       "chat-1",
 		Thread:       "main",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 }
@@ -562,7 +562,7 @@ func TestReconciler_PausedWorkflow_TemporalDead_Repaired(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusPaused,
+		Status:       db.Paused(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -570,8 +570,8 @@ func TestReconciler_PausedWorkflow_TemporalDead_Repaired(t *testing.T) {
 
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale, "paused+missing should be detected")
-	assert.Equal(t, db.WorkflowStatusCompleted, result.TemporalStatus)
-	assert.Equal(t, db.WorkflowStatusCompleted, repo.updatedStatuses["wf-1"], "should repair DB status")
+	assert.Equal(t, db.Completed(), result.TemporalStatus)
+	assert.Equal(t, db.Completed(), repo.updatedStatuses["wf-1"], "should repair DB status")
 }
 
 func TestReconciler_PausedWorkflow_TemporalAlive_StaysPaused(t *testing.T) {
@@ -589,7 +589,7 @@ func TestReconciler_PausedWorkflow_TemporalAlive_StaysPaused(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusPaused,
+		Status:       db.Paused(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -617,7 +617,7 @@ func TestReconciler_PausedWorkflow_TemporalTimedOut_Repaired(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusPaused,
+		Status:       db.Paused(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -625,8 +625,8 @@ func TestReconciler_PausedWorkflow_TemporalTimedOut_Repaired(t *testing.T) {
 
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale, "paused+terminal should be detected")
-	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"], "should repair DB status to match Temporal")
+	assert.Equal(t, db.Failed(), result.TemporalStatus)
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"], "should repair DB status to match Temporal")
 }
 
 func TestReconciler_PausedWorkflow_TemporalCompleted_Repaired(t *testing.T) {
@@ -645,7 +645,7 @@ func TestReconciler_PausedWorkflow_TemporalCompleted_Repaired(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusPaused,
+		Status:       db.Paused(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -653,8 +653,8 @@ func TestReconciler_PausedWorkflow_TemporalCompleted_Repaired(t *testing.T) {
 
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale, "paused+terminal should be detected")
-	assert.Equal(t, db.WorkflowStatusCompleted, result.TemporalStatus)
-	assert.Equal(t, db.WorkflowStatusCompleted, repo.updatedStatuses["wf-1"], "should repair DB status to match Temporal")
+	assert.Equal(t, db.Completed(), result.TemporalStatus)
+	assert.Equal(t, db.Completed(), repo.updatedStatuses["wf-1"], "should repair DB status to match Temporal")
 }
 
 func TestReconciler_RunningWorkflow_TemporalDead_Repaired(t *testing.T) {
@@ -676,7 +676,7 @@ func TestReconciler_RunningWorkflow_TemporalDead_Repaired(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -685,8 +685,8 @@ func TestReconciler_RunningWorkflow_TemporalDead_Repaired(t *testing.T) {
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale)
 	assert.True(t, result.NeedsRecovery)
-	assert.Equal(t, db.WorkflowStatusCompleted, result.TemporalStatus)
-	assert.Equal(t, db.WorkflowStatusCompleted, repo.updatedStatuses["wf-1"], "should repair DB status to completed")
+	assert.Equal(t, db.Completed(), result.TemporalStatus)
+	assert.Equal(t, db.Completed(), repo.updatedStatuses["wf-1"], "should repair DB status to completed")
 }
 
 func TestReconciler_RunningWorkflow_TemporalFailed_Repaired(t *testing.T) {
@@ -710,7 +710,7 @@ func TestReconciler_RunningWorkflow_TemporalFailed_Repaired(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -718,8 +718,8 @@ func TestReconciler_RunningWorkflow_TemporalFailed_Repaired(t *testing.T) {
 
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale)
-	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"], "should repair DB status to match Temporal")
+	assert.Equal(t, db.Failed(), result.TemporalStatus)
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"], "should repair DB status to match Temporal")
 }
 
 func TestReconciler_ChildWorkflow_Skipped(t *testing.T) {
@@ -735,7 +735,7 @@ func TestReconciler_ChildWorkflow_Skipped(t *testing.T) {
 		ID:           "child-wf",
 		ParentID:     &parentID,
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -757,7 +757,7 @@ func TestReconciler_CompletedWorkflow_Skipped(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusCompleted,
+		Status:       db.Completed(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -782,7 +782,7 @@ func TestReconciler_TemporalError_PropagatedAsError(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -808,7 +808,7 @@ func TestReconciler_RunningWorkflow_TemporalRunning_NoChange(t *testing.T) {
 	wf := &db.Workflow{
 		ID:           "wf-1",
 		ChatID:       "chat-1",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -1023,12 +1023,12 @@ func TestReconciler_StuckActivity_TerminateFallbackOnResetError(t *testing.T) {
 	require.NoError(t, result.Error)
 	assert.False(t, result.RecoveredByReset)
 	assert.True(t, result.WasStale)
-	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+	assert.Equal(t, db.Failed(), result.TemporalStatus)
 
 	require.Len(t, tempClient.resetCalls, 1, "reset must be attempted BEFORE terminate")
 	require.Len(t, tempClient.terminateCalls, 1, "terminate is the fallback after reset failure")
 	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 	require.Len(t, repo.savedMessages, 1)
 	assert.Contains(t, repo.savedMessages[0].content, "automatic recovery was attempted")
 }
@@ -1081,7 +1081,7 @@ func TestReconciler_StuckActivity_ResetGuardBoundsRepeatedResets(t *testing.T) {
 	assert.False(t, result.RecoveredByReset)
 	assert.Len(t, tempClient.resetCalls, 2, "no 3rd reset once the guard gives up")
 	require.Len(t, tempClient.terminateCalls, 1, "bounded workflow is terminated")
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 	assert.Equal(t, exhaustedBefore+1, anomalyCount(anomalyResetAttemptsExhausted),
 		"the reset_attempts_exhausted anomaly is recorded")
 }
@@ -1154,9 +1154,9 @@ func TestReconciler_StuckActivity_ActivityIDChangeResetsDebounce(t *testing.T) {
 
 func TestReconciler_PollerCheckCachedPerPass(t *testing.T) {
 	repo := newMockRepo()
-	wf1 := &db.Workflow{ID: "wf-1", ChatID: "chat-1", Status: db.WorkflowStatusRunning, WorkflowName: "builtin://agent"}
-	wf2 := &db.Workflow{ID: "wf-2", ChatID: "chat-2", Status: db.WorkflowStatusRunning, WorkflowName: "builtin://agent"}
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{wf1, wf2}
+	wf1 := &db.Workflow{ID: "wf-1", ChatID: "chat-1", Status: db.Active(), WorkflowName: "builtin://agent"}
+	wf2 := &db.Workflow{ID: "wf-2", ChatID: "chat-2", Status: db.Active(), WorkflowName: "builtin://agent"}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{wf1, wf2}
 
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -1180,7 +1180,7 @@ func TestReconciler_PollerCheckCachedPerPass(t *testing.T) {
 func TestReconciler_StuckObservationsPrunedWhenWorkflowGone(t *testing.T) {
 	repo := newMockRepo()
 	wf := runningWorkflow()
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{wf}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{wf}
 
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -1201,7 +1201,7 @@ func TestReconciler_StuckObservationsPrunedWhenWorkflowGone(t *testing.T) {
 	assert.Equal(t, 1, tracked, "stuck observation recorded")
 
 	// Workflow no longer running -> its debounce entry is pruned.
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
+	repo.workflowsByStatus[db.Active()] = nil
 	_, errs = reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
@@ -1252,7 +1252,7 @@ func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
 	result = reconciler.ReconcileWorkflow(context.Background(), wf)
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale)
-	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+	assert.Equal(t, db.Failed(), result.TemporalStatus)
 
 	// Reset is USELESS for the wedge class (replay re-diverges) — recovery
 	// must terminate directly, never attempt a reset.
@@ -1261,7 +1261,7 @@ func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
 	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
 
 	// DB marked failed so the next SendMessage resumes at position.
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 
 	// User told what happened and how to continue.
 	require.Len(t, repo.savedMessages, 1)
@@ -1284,7 +1284,7 @@ func TestReconciler_WedgedWorkflowTask_PausedWorkflow_TerminatedAndMarkedFailed(
 
 	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
 	wf := runningWorkflow()
-	wf.Status = db.WorkflowStatusPaused
+	wf.Status = db.Paused()
 
 	// First pass observes; second confirms (the paused status must not clear
 	// the wedge debounce streak between passes).
@@ -1296,11 +1296,11 @@ func TestReconciler_WedgedWorkflowTask_PausedWorkflow_TerminatedAndMarkedFailed(
 	result = reconciler.ReconcileWorkflow(context.Background(), wf)
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale)
-	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+	assert.Equal(t, db.Failed(), result.TemporalStatus)
 
 	assert.Empty(t, tempClient.resetCalls, "wedge recovery must NOT attempt a reset")
 	require.Len(t, tempClient.terminateCalls, 1)
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 	require.Len(t, repo.savedMessages, 1)
 }
 
@@ -1408,7 +1408,7 @@ func TestReconciler_WedgedWorkflowTask_PrecedenceOverStuckReset(t *testing.T) {
 	assert.True(t, result.WasStale)
 	assert.Empty(t, tempClient.resetCalls, "wedge must take precedence over stuck-in-Scheduled reset recovery")
 	assert.Len(t, tempClient.terminateCalls, 1)
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 }
 
 func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
@@ -1535,7 +1535,7 @@ func TestReconciler_ProgressWatchdog_DetectThenConfirm(t *testing.T) {
 	require.NoError(t, result.Error)
 	assert.True(t, result.WasStale)
 	assert.True(t, result.ProgressStalled)
-	assert.Equal(t, db.WorkflowStatusFailed, result.TemporalStatus)
+	assert.Equal(t, db.Failed(), result.TemporalStatus)
 
 	// Unknown cause: never attempt a reset, terminate directly.
 	assert.Empty(t, tempClient.resetCalls, "stall recovery must NOT attempt a reset")
@@ -1543,7 +1543,7 @@ func TestReconciler_ProgressWatchdog_DetectThenConfirm(t *testing.T) {
 	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
 
 	// DB marked failed so the next SendMessage resumes at position.
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 
 	// User told what happened and how to continue.
 	require.Len(t, repo.savedMessages, 1)
@@ -1664,8 +1664,8 @@ func TestReconciler_ProgressWatchdog_PausedDescendantExcluded(t *testing.T) {
 	repo := newMockRepo()
 	parentID := "wf-1"
 	repo.workflowsByChat["chat-1"] = []*db.Workflow{
-		{ID: "wf-1", ChatID: "chat-1", Status: db.WorkflowStatusRunning},
-		{ID: "wf-spawn", ChatID: "chat-1", ParentID: &parentID, Status: db.WorkflowStatusPaused},
+		{ID: "wf-1", ChatID: "chat-1", Status: db.Active()},
+		{ID: "wf-spawn", ChatID: "chat-1", ParentID: &parentID, Status: db.Paused()},
 	}
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -1763,7 +1763,7 @@ func TestReconciler_ProgressWatchdog_PausedWorkflowNeverEnters(t *testing.T) {
 		ID:           "wf-1",
 		ChatID:       "chat-1",
 		Thread:       "main",
-		Status:       db.WorkflowStatusPaused,
+		Status:       db.Paused(),
 		WorkflowName: "builtin://agent",
 	}
 
@@ -1838,13 +1838,13 @@ func TestReconciler_ProgressWatchdog_ConfirmActionGatedOnPollers(t *testing.T) {
 	require.NoError(t, result.Error)
 	assert.True(t, result.ProgressStalled)
 	require.Len(t, tempClient.terminateCalls, 1)
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 }
 
 func TestReconciler_ProgressObservationsPrunedWhenWorkflowGone(t *testing.T) {
 	repo := newMockRepo()
 	wf := runningWorkflow()
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{wf}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{wf}
 
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -1861,7 +1861,7 @@ func TestReconciler_ProgressObservationsPrunedWhenWorkflowGone(t *testing.T) {
 	assert.Equal(t, 1, reconciler.progressObservationCount(), "streak recorded")
 
 	// Workflow no longer running -> its streak entry is pruned.
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
+	repo.workflowsByStatus[db.Active()] = nil
 	_, errs = reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 	assert.Equal(t, 0, reconciler.progressObservationCount(),
@@ -1953,8 +1953,8 @@ func TestReconcileRunningWorkflows_IncludesPausedWedgedZombie(t *testing.T) {
 	// a wedged workflow task at attempt 450+ for days while paused.
 	repo := newMockRepo()
 	zombie := runningWorkflow()
-	zombie.Status = db.WorkflowStatusPaused
-	repo.workflowsByStatus[db.WorkflowStatusPaused] = []*db.Workflow{zombie}
+	zombie.Status = db.Paused()
+	repo.workflowsByStatus[db.Paused()] = []*db.Workflow{zombie}
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
@@ -1975,5 +1975,5 @@ func TestReconcileRunningWorkflows_IncludesPausedWedgedZombie(t *testing.T) {
 
 	require.Len(t, tempClient.terminateCalls, 1, "paused wedged zombie must be terminated by the background pass")
 	assert.Equal(t, "wf-1", tempClient.terminateCalls[0])
-	assert.Equal(t, db.WorkflowStatusFailed, repo.updatedStatuses["wf-1"])
+	assert.Equal(t, db.Failed(), repo.updatedStatuses["wf-1"])
 }

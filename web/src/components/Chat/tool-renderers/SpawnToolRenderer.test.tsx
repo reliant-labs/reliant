@@ -1,16 +1,30 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { SpawnToolRenderer } from "./SpawnToolRenderer";
 import type { ToolRenderContext } from "./types";
-import { ChatWorkflowStatus, MessageRole, ContentBlockType } from "../../../types/chat";
+import { WorkflowState, WorkflowStopReason, MessageRole, ContentBlockType } from "../../../types/chat";
 
 // Regression guard for spawn: the tool call's own result arrives the moment
 // the child is dispatched — a handle, not the agent's output — while the
 // agent it started keeps running for minutes. The child workflow, not
 // ctx.isCompleted/hasFailed, must be the authority on what the preview shows.
 
-let mockAllWorkflows: Array<{ id: string; status: ChatWorkflowStatus; children: unknown[] }> = [];
+let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
 let mockThreadMessages: unknown[] = [];
 let mockIsPending = false;
+
+const { sendAgentMessageMock, toastInfoMock, toastErrorMock } = vi.hoisted(() => ({
+  sendAgentMessageMock: vi.fn(),
+  toastInfoMock: vi.fn(),
+  toastErrorMock: vi.fn(),
+}));
+
+vi.mock("../../../api/chat-grpc", () => ({
+  chatGrpc: { sendAgentMessage: sendAgentMessageMock },
+}));
+
+vi.mock("../../../lib/toast-manager", () => ({
+  toast: { info: toastInfoMock, error: toastErrorMock },
+}));
 
 vi.mock("../../../hooks/useWorkflowExecutions", () => ({
   useWorkflowExecutions: () => ({ allWorkflows: mockAllWorkflows }),
@@ -22,6 +36,8 @@ vi.mock("../../../hooks/message-queries", () => ({
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useToolResultsByCallId: () => ({}),
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
 }));
 
 function assistantMessage(id: string, text: string) {
@@ -57,10 +73,12 @@ describe("SpawnToolRenderer", () => {
     mockAllWorkflows = [];
     mockThreadMessages = [];
     mockIsPending = false;
+    vi.clearAllMocks();
+    sendAgentMessageMock.mockResolvedValue(undefined);
   });
 
   it("child RUNNING: shows live content, offers the message form, does not pop the last message", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.RUNNING, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
     mockThreadMessages = [
       assistantMessage("m1", "First update from the agent"),
       assistantMessage("m2", "Second update from the agent"),
@@ -73,8 +91,30 @@ describe("SpawnToolRenderer", () => {
     expect(screen.getByPlaceholderText("Message this agent…")).toBeInTheDocument();
   });
 
+  it("send-to-agent form queues without a success toast", async () => {
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
+    mockThreadMessages = [assistantMessage("m1", "Working")];
+
+    render(<SpawnToolRenderer ctx={createContext()} />);
+
+    const input = screen.getByPlaceholderText("Message this agent…");
+    fireEvent.change(input, { target: { value: "please check logs" } });
+    fireEvent.click(screen.getByLabelText("Send message to agent"));
+
+    await waitFor(() => {
+      expect(sendAgentMessageMock).toHaveBeenCalledWith(
+        "chat-1",
+        "wf-child-1",
+        "please check logs",
+      );
+    });
+    expect(input).toHaveValue("");
+    expect(toastInfoMock).not.toHaveBeenCalled();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
   it("child COMPLETED: does not offer the message form", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.COMPLETED, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED, children: [] }];
     mockThreadMessages = [
       assistantMessage("m1", "Working on it"),
       assistantMessage("m2", "Final result"),
@@ -86,7 +126,7 @@ describe("SpawnToolRenderer", () => {
   });
 
   it("child FAILED: does not offer the message form, shows a terminal failed state", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.FAILED, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.FAILED, children: [] }];
     mockThreadMessages = [assistantMessage("m1", "Ran into trouble")];
 
     render(<SpawnToolRenderer ctx={createContext({ isCompleted: false, hasFailed: true })} />);
@@ -96,7 +136,7 @@ describe("SpawnToolRenderer", () => {
   });
 
   it("child CANCELLED: does not offer the message form, shows a terminal cancelled state", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.CANCELLED, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.CANCELLED, children: [] }];
     mockThreadMessages = [assistantMessage("m1", "Stopped partway")];
 
     render(<SpawnToolRenderer ctx={createContext({ isCompleted: false, hasFailed: true })} />);
@@ -106,7 +146,7 @@ describe("SpawnToolRenderer", () => {
   });
 
   it("spawn dispatched, child still RUNNING: does not render as done, does not pop the last message", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.RUNNING, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
     mockThreadMessages = [
       assistantMessage("m1", "Doing background work"),
       assistantMessage("m2", "More background work"),
@@ -132,7 +172,7 @@ describe("SpawnToolRenderer", () => {
   });
 
   it("spawn dispatched, child COMPLETED: does not pop the last message (result lives in the parent's mailbox, not the tool output)", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.COMPLETED, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED, children: [] }];
     mockThreadMessages = [
       assistantMessage("m1", "Doing background work"),
       assistantMessage("m2", "Background result"),

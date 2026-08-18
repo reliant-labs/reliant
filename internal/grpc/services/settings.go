@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -58,27 +57,6 @@ func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRout
 func (s *SettingsService) WithControlPlaneClient(client controlplane.Client) *SettingsService {
 	s.controlPlaneClient = client
 	return s
-}
-
-// sendDaemonCommand sends a command to the user's daemon and unmarshals the response.
-func (s *SettingsService) sendDaemonCommand(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}) error {
-	if s.daemonRouter == nil {
-		return fmt.Errorf("daemon router not available")
-	}
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, 30_000)
-	if err != nil {
-		return fmt.Errorf("daemon command %s: %w", commandType, err)
-	}
-	if resp != nil {
-		if err := json.Unmarshal(respBytes, resp); err != nil {
-			return fmt.Errorf("unmarshal response for %s: %w", commandType, err)
-		}
-	}
-	return nil
 }
 
 // ============================================================================
@@ -183,38 +161,6 @@ func (s *SettingsService) validateAPIKey(ctx context.Context, provider models.Fa
 	}
 
 	return true, "API key is valid"
-}
-
-func parsePageSize(value int32, fallback, max int) int {
-	if value <= 0 {
-		return fallback
-	}
-	if int(value) > max {
-		return max
-	}
-	return int(value)
-}
-
-func parsePageOffset(token string, total int) (int, error) {
-	trimmed := strings.TrimSpace(token)
-	if trimmed == "" {
-		return 0, nil
-	}
-	offset, err := strconv.Atoi(trimmed)
-	if err != nil {
-		return 0, fmt.Errorf("invalid page_token")
-	}
-	if offset < 0 || offset > total {
-		return 0, fmt.Errorf("invalid page_token")
-	}
-	return offset, nil
-}
-
-func buildNextPageToken(nextOffset, total int) string {
-	if nextOffset >= total {
-		return ""
-	}
-	return strconv.Itoa(nextOffset)
 }
 
 // ============================================================================

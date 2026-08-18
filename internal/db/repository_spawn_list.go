@@ -22,7 +22,7 @@ type SpawnChild struct {
 	RequestedAt       time.Time
 	CompletedAt       *time.Time
 	ChildThreadID     *string
-	WorkflowStatus    *int32
+	WorkflowStatus    *WorkflowStatus
 	WorkflowCompleted *time.Time
 	ThreadTitle       *string
 }
@@ -62,9 +62,14 @@ func (r *Repo) ListSpawnChildren(ctx context.Context, threadID string) ([]*Spawn
 			s := row.ChildThreadID.String
 			child.ChildThreadID = &s
 		}
-		if row.WorkflowStatus.Valid {
-			s := row.WorkflowStatus.Int32
-			child.WorkflowStatus = &s
+		// state and stop_reason arrive from the same LEFT JOIN, so either both
+		// are present or the child's workflow row has not landed yet.
+		if row.WorkflowState.Valid {
+			status := WorkflowStatus{
+				State:      WorkflowState(row.WorkflowState.Int32),
+				StopReason: WorkflowStopReason(row.WorkflowStopReason.Int32),
+			}
+			child.WorkflowStatus = &status
 		}
 		if row.WorkflowCompletedAt.Valid {
 			t := row.WorkflowCompletedAt.Time

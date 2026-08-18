@@ -200,12 +200,6 @@ func validateSkillWindowParams(p SkillParams) error {
 	return nil
 }
 
-// hasWindowParams reports whether the caller asked for anything other than a
-// plain whole-skill load.
-func hasWindowParams(p SkillParams) bool {
-	return p.Offset > 0 || p.Limit > 0 || p.Section != "" || p.Regex != ""
-}
-
 // selectSkillWindow applies the caller's selector and pagination to the fully
 // rendered skill content.
 func selectSkillWindow(content string, p SkillParams) (skillWindow, error) {

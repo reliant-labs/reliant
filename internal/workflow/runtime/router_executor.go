@@ -60,6 +60,8 @@ type RouterExecutor struct {
 	// Thread tracker
 	threadTracker       *ThreadTracker
 	makeThreadPauseCtrl func(string) *PauseController
+	threadInterrupt     *ThreadInterrupt
+	makeThreadInterrupt func(string) *ThreadInterrupt
 }
 
 // NewRouterExecutor creates a new router executor.
@@ -116,6 +118,26 @@ func (r *RouterExecutor) WithThreadTracker(tracker *ThreadTracker) *RouterExecut
 func (r *RouterExecutor) WithMakeThreadPauseCtrl(fn func(string) *PauseController) *RouterExecutor {
 	r.makeThreadPauseCtrl = fn
 	return r
+}
+
+// WithThreadInterrupts sets the interrupt handle for this router's thread.
+func (r *RouterExecutor) WithThreadInterrupts(interrupt *ThreadInterrupt) *RouterExecutor {
+	r.threadInterrupt = interrupt
+	return r
+}
+
+// WithMakeThreadInterrupt sets the per-thread interrupt handle factory.
+func (r *RouterExecutor) WithMakeThreadInterrupt(fn func(string) *ThreadInterrupt) *RouterExecutor {
+	r.makeThreadInterrupt = fn
+	return r
+}
+
+// GetThread returns the current thread from execContext.
+func (r *RouterExecutor) GetThread() string {
+	if r.execContext != nil {
+		return r.execContext.Thread
+	}
+	return ""
 }
 
 // WithWorkflowContext overrides the workflow context (needed for workflow.Go() goroutines).
@@ -407,7 +429,7 @@ func (r *RouterExecutor) loadCandidates(args *reliantv1.RouterArgs) error {
 		return fmt.Errorf("router node %s has no candidate workflows", r.node.GetId())
 	}
 
-	// Use pause-aware activity context so activities get cancelled on pause signal
+	// Use pause-aware activity context so activities get cancelled on pause signal.
 	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
 	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
@@ -638,8 +660,9 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 		syntheticThread = &reliantv1.ThreadConfig{
 			Mode: syntheticThread.GetMode(),
 			Inject: &reliantv1.InjectConfig{
-				Role:    &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "user"}},
-				Content: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: prompt}},
+				Role:         &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: defaultInjectRole}},
+				Content:      &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: prompt}},
+				DisplayStyle: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: defaultInjectDisplayStyle}},
 			},
 		}
 
@@ -657,11 +680,12 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 				},
 			})
 			flatInput := &types.SaveMessageInput{
-				ChatID:     r.chatID,
-				Thread:     r.execContext.Thread,
-				Role:       "user",
-				Content:    prompt,
-				WorkflowID: r.workflowID,
+				ChatID:       r.chatID,
+				Thread:       r.execContext.Thread,
+				Role:         defaultInjectRole,
+				DisplayStyle: defaultInjectDisplayStyle,
+				Content:      prompt,
+				WorkflowID:   r.workflowID,
 			}
 			rtx := types.RuntimeContext{
 				ChatID:     r.chatID,
@@ -747,6 +771,11 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 	}
 	if r.makeThreadPauseCtrl != nil {
 		inlineExecutor = inlineExecutor.WithMakeThreadPauseCtrl(r.makeThreadPauseCtrl)
+	}
+	if r.makeThreadInterrupt != nil {
+		inlineExecutor = inlineExecutor.
+			WithThreadInterrupts(resolveThreadInterrupt(r.makeThreadInterrupt, r.threadInterrupt, inlineExecutor.GetThread())).
+			WithMakeThreadInterrupt(r.makeThreadInterrupt)
 	}
 
 	// Execute the workflow

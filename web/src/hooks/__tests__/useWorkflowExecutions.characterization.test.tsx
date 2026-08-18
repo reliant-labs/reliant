@@ -42,7 +42,7 @@ vi.mock("../../api/chat-grpc", () => ({
 }));
 
 import { useWorkflowExecutions } from "../useWorkflowExecutions";
-import { ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
+import { WorkflowState, WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import { triggerRefetch } from "../../store/refetchStore";
 import type { WorkflowExecutionData } from "../../api/chat-grpc";
 
@@ -53,7 +53,7 @@ function wf(
 ): WorkflowExecutionData {
   return {
     id: "wf-1",
-    status: ChatWorkflowStatus.COMPLETED,
+    state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED,
     children: [],
     steps: [],
     ...overrides,
@@ -118,7 +118,7 @@ describe("useWorkflowExecutions (characterization)", () => {
 
   it("derives hasRunningWorkflow=true when any workflow is RUNNING", async () => {
     const chatId = nextChatId();
-    const running = wf({ id: "r", status: ChatWorkflowStatus.RUNNING });
+    const running = wf({ id: "r", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED });
     getWorkflowExecutionsMock.mockResolvedValue({
       latest: running,
       all: [wf({ id: "done" }), running],
@@ -137,8 +137,8 @@ describe("useWorkflowExecutions (characterization)", () => {
   it("derives hasRunningWorkflow=false when no workflow is RUNNING", async () => {
     const chatId = nextChatId();
     getWorkflowExecutionsMock.mockResolvedValue({
-      latest: wf({ id: "done", status: ChatWorkflowStatus.COMPLETED }),
-      all: [wf({ id: "done", status: ChatWorkflowStatus.COMPLETED })],
+      latest: wf({ id: "done", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED }),
+      all: [wf({ id: "done", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED })],
     });
 
     const { Wrapper } = makeWrapper();

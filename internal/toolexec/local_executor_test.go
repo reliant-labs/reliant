@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -57,18 +56,6 @@ func (b stubMCPBinder) Bind(toolCtx *rctx.ToolContext) *rctx.ToolContext {
 		return nil
 	}
 	return toolCtx.WithMCP(b.runtime)
-}
-
-type impossibleTool struct{}
-
-func (impossibleTool) Name() string                    { return "test_impossible" }
-func (impossibleTool) Description() string             { return "should not run" }
-func (impossibleTool) ParamSchema() *jsonschema.Schema { return &jsonschema.Schema{Type: "object"} }
-func (impossibleTool) RequiresPermission(*rctx.ToolContext, tools.ToolCall) (bool, error) {
-	return false, nil
-}
-func (impossibleTool) Run(*rctx.ToolContext, tools.ToolCall) (tools.ToolResponse, error) {
-	return tools.NewTextErrorResponse("unexpected execution"), nil
 }
 
 func TestLocalToolExecutor_EnsuresProjectMCPServersLoadedBeforeLookup(t *testing.T) {

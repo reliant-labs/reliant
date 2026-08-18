@@ -38,9 +38,15 @@ export const useThreadActivityStore = create<ThreadActivityState>((set) => ({
   threads: {},
 
   setThreads: (chatId, threads) =>
-    set((state) => ({
-      threads: { ...state.threads, [chatId]: threads },
-    })),
+    set((state) => {
+      // mergeActiveThreads returns the caller's existing reference when a
+      // merge is a no-op, so a reference-equal incoming array means nothing
+      // changed. Return the same state object — a zustand `set` that
+      // produces a new object still notifies subscribers even when its
+      // values are unchanged, so this is what actually stops the re-render.
+      if (state.threads[chatId] === threads) return state;
+      return { threads: { ...state.threads, [chatId]: threads } };
+    }),
 
   clearThreads: (chatId) =>
     set((state) => {

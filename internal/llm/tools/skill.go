@@ -266,7 +266,7 @@ func (t *skillTool) listSkills(filterPath string) (ToolResponse, error) {
 		// Echo the canonical namespace the members are actually keyed under, so
 		// a caller who reached the group by an unprefixed name learns the
 		// prefixed spelling the entries carry.
-		sb.WriteString(fmt.Sprintf("Sub-skills of %s:\n\n", canonicalNamespaceOf(matches, normalizedFilter)))
+		fmt.Fprintf(&sb, "Sub-skills of %s:\n\n", canonicalNamespaceOf(matches, normalizedFilter))
 	}
 
 	for _, def := range matches {
@@ -274,15 +274,15 @@ func (t *skillTool) listSkills(filterPath string) (ToolResponse, error) {
 		if len(desc) > 120 {
 			desc = desc[:117] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("- %s: %s", def.SkillPath, desc))
+		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, desc)
 		if hasChildren(t.skills, def.SkillPath) {
 			sb.WriteString(" (has sub-skills)")
 		}
 		if def.Scope != "" {
-			sb.WriteString(fmt.Sprintf(" [%s]", def.Scope))
+			fmt.Fprintf(&sb, " [%s]", def.Scope)
 		}
 		if def.Source != "" {
-			sb.WriteString(fmt.Sprintf(" [source: %s]", def.Source))
+			fmt.Fprintf(&sb, " [source: %s]", def.Source)
 		}
 		sb.WriteString("\n")
 	}
@@ -367,7 +367,7 @@ func (t *skillTool) loadSkill(path string) (ToolResponse, error) {
 		})
 		sb.WriteString("\n\n---\nSub-skills available (use skill tool with action=list or action=load):\n")
 		for _, child := range children {
-			sb.WriteString(fmt.Sprintf("- %s: %s", child.SkillPath, truncateDescription(child.Description, 80)))
+			fmt.Fprintf(&sb, "- %s: %s", child.SkillPath, truncateDescription(child.Description, 80))
 			if hasChildren(t.skills, child.SkillPath) {
 				sb.WriteString(" (has sub-skills)")
 			}
@@ -380,7 +380,7 @@ func (t *skillTool) loadSkill(path string) (ToolResponse, error) {
 	if len(siblings) > 0 {
 		sb.WriteString("\n---\nRelated skills available (use skill tool to load):\n")
 		for _, s := range siblings {
-			sb.WriteString(fmt.Sprintf("- %s: %s\n", s.SkillPath, truncateDescription(s.Description, 80)))
+			fmt.Fprintf(&sb, "- %s: %s\n", s.SkillPath, truncateDescription(s.Description, 80))
 		}
 	}
 
@@ -474,14 +474,14 @@ func (t *skillTool) searchSkills(query string) (ToolResponse, error) {
 	})
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Skills matching \"%s\":\n\n", query))
+	fmt.Fprintf(&sb, "Skills matching \"%s\":\n\n", query)
 
 	for _, r := range results {
 		desc := r.def.Description
 		if len(desc) > 120 {
 			desc = desc[:117] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("- %s: %s\n", r.def.SkillPath, desc))
+		fmt.Fprintf(&sb, "- %s: %s\n", r.def.SkillPath, desc)
 	}
 
 	sb.WriteString("\nUse skill tool with action='load' and path='<skill-path>' to load a skill's instructions.")
@@ -554,7 +554,7 @@ func SkillsAnnouncement(skills []config.StoredSkill) string {
 		if len(desc) > 80 {
 			desc = desc[:77] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("- %s: %s", def.SkillPath, desc))
+		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, desc)
 		if hasChildren(skills, def.SkillPath) {
 			sb.WriteString(" (has sub-skills)")
 		}

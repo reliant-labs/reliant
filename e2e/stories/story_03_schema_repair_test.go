@@ -57,7 +57,7 @@ func TestStory03_StringifiedArrayArgIsRepaired(t *testing.T) {
 	// The workflow must complete: repaired input validates, response_data is
 	// populated, completed=true, loop exits.
 	outputs := h.WorkflowResult(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	require.Equal(t, true, outputs["completed"], "response tool must count as completed; outputs: %v", outputs)
 

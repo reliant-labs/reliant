@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/runs"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,12 +74,12 @@ func setupSendAgentMessageFixture(t *testing.T, repo *db.Repo, userID string) (c
 	// SendAgentMessage. Both start RUNNING, matching a live agent.
 	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
 		ID: rootThreadID, ChatID: chatID, WorkflowName: "builtin://agent",
-		Thread: rootThreadID, Status: db.WorkflowStatusRunning, CreatedAt: now,
+		Thread: rootThreadID, Status: db.Active(), CreatedAt: now,
 	}))
 	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
 		ID: childThreadID, ChatID: chatID, WorkflowName: "builtin://agent",
 		Thread: childThreadID, ParentID: &rootThreadID,
-		Status: db.WorkflowStatusRunning, CreatedAt: now,
+		Status: db.Active(), CreatedAt: now,
 	}))
 
 	return ctx, sendAgentMessageFixture{chatID: chatID, rootThreadID: rootThreadID, childThreadID: childThreadID}
@@ -124,8 +125,8 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 
 // TestSendAgentMessage_RingsMailboxDoorbell pins the deadlock fix.
 //
-// Queuing a row is not enough on its own. Delivery happens only in
-// drainAgentMessagesAtBoundary, at the top of the agent loop body, and a
+// Queuing a row is not enough on its own. Delivery happens only in CallLLM,
+// which drains the thread's mailbox before reading history, and a
 // parent thread that has fanned work out to sub-agents is parked in
 // awaitLiveDetachedSpawns and never reaches that point. Before this signal
 // existed, such a message waited for an unrelated child to finish: on chat
@@ -141,7 +142,7 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	tc := &spawnCancelTemporalClient{}
-	service := &ChatService{database: repo, tempClient: tc}
+	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -173,7 +174,7 @@ func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow not found")}
-	service := &ChatService{database: repo, tempClient: tc}
+	service := &ChatService{database: repo, tempClient: tc, runs: runs.NewService(repo, tc, nil)}
 
 	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId:   fx.chatID,
@@ -204,7 +205,7 @@ func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
 
 	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
 	// The run finished; the thread row is deliberately left at RUNNING.
-	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.childThreadID, db.WorkflowStatusCompleted))
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.childThreadID, db.Completed()))
 	thread, err := repo.GetThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, db.ThreadStatusRunning, thread.Status,
@@ -241,8 +242,8 @@ func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
 		name   string
 		status db.WorkflowStatus
 	}{
-		{"pending run has its first loop step ahead of it", db.WorkflowStatusPending},
-		{"paused run resumes and drains", db.WorkflowStatusPaused},
+		{"pending run has its first loop step ahead of it", db.Pending()},
+		{"paused run resumes and drains", db.Paused()},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			repo, cleanup := db.SetupTestDB(t)
@@ -291,7 +292,7 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 	completedAt := time.Now().UTC()
 	_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, db.ThreadStatusCompleted, &completedAt)
 	require.NoError(t, err)
-	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.WorkflowStatusCompleted))
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
 
 	// Pre-fix, queueing here is refused -- correctly, since nothing is running.
 	service := &ChatService{database: repo}
@@ -306,7 +307,7 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 	revived, err := repo.ReviveThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), revived, "the terminal main thread must be the row revived")
-	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.WorkflowStatusRunning))
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Active()))
 
 	thread, err := repo.GetThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
@@ -423,7 +424,8 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 	require.Len(t, all, 3)
 	savedMsg, err := repo.SaveMessageToThread(ctx, fx.chatID, fx.childThreadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "delivered before list", nil, nil, nil)
 	require.NoError(t, err)
-	require.NoError(t, repo.MarkAgentMessagesDelivered(ctx, []string{all[2].ID}, time.Now(), savedMsg.ID))
+	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{all[2].ID}, time.Now(), savedMsg.ID)
+	require.NoError(t, markErr)
 
 	resp, err := service.ListQueuedAgentMessages(ctx, connect.NewRequest(&reliantv1.ListQueuedAgentMessagesRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID,
@@ -517,7 +519,8 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 	// Simulate the agent's drain winning the race before cancel arrives.
 	savedMsg, err := repo.SaveMessageToThread(ctx, fx.chatID, fx.childThreadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "already delivered", nil, nil, nil)
 	require.NoError(t, err)
-	require.NoError(t, repo.MarkAgentMessagesDelivered(ctx, []string{msgID}, time.Now(), savedMsg.ID))
+	_, markErr := repo.MarkAgentMessagesDelivered(ctx, []string{msgID}, time.Now(), savedMsg.ID)
+	require.NoError(t, markErr)
 
 	resp, err := service.CancelQueuedAgentMessage(ctx, connect.NewRequest(&reliantv1.CancelQueuedAgentMessageRequest{
 		ChatId: fx.chatID, MessageId: msgID,

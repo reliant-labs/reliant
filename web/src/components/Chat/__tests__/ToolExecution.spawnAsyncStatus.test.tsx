@@ -1,17 +1,19 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToolExecution } from "../ToolExecution";
-import { ToolCallStatus, ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
+import { ToolCallStatus, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 
 // Regression guard for async spawn: the spawn tool call receives its result
 // (the dispatch handle) in milliseconds, while the agent it started keeps
 // running for minutes. The child workflow, not the tool call, must be the
 // authority on the displayed status.
 
-let mockAllWorkflows: Array<{ id: string; status: ChatWorkflowStatus; children: unknown[] }> = [];
+let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useChat: () => undefined,
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
   useToolCallStates: () => new Map(),
 }));
 vi.mock("../../../hooks/approval-queries", () => ({
@@ -30,7 +32,7 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
 
 describe("ToolExecution spawn status under async spawn", () => {
   it("does not render completed for a spawn whose child workflow is still running, even though the tool call already has a result", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.RUNNING, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
 
     render(
       <ToolExecution
@@ -52,7 +54,7 @@ describe("ToolExecution spawn status under async spawn", () => {
   });
 
   it("renders completed for a spawn whose child workflow has completed", () => {
-    mockAllWorkflows = [{ id: "wf-child-2", status: ChatWorkflowStatus.COMPLETED, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-2", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED, children: [] }];
 
     render(
       <ToolExecution

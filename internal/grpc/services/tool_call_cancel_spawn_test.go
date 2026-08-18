@@ -115,7 +115,7 @@ func TestCancelToolCall_SignalsParentToCancelSpawn(t *testing.T) {
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
-	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.WorkflowStatusRunning)
+	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	tc := &spawnCancelTemporalClient{}
 	svc := NewToolCallService(repo, tc, &fakeDaemonRouter{})
@@ -143,7 +143,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
-	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.WorkflowStatusRunning)
+	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	tc := &spawnCancelTemporalClient{signalErr: errors.New("workflow not found")}
 	svc := NewToolCallService(repo, tc, &fakeDaemonRouter{})
@@ -156,7 +156,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 
 	wf, wfErr := repo.GetWorkflow(ctx, childThreadID)
 	require.NoError(t, wfErr)
-	require.Equal(t, core.WorkflowStatusRunning, wf.Status,
+	require.Equal(t, core.Active(), wf.Status,
 		"a spawn that is still running must not be recorded as cancelled")
 }
 
@@ -167,7 +167,7 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 	defer cleanup()
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
-	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.WorkflowStatusRunning)
+	toolCallID, childThreadID := seedCancellableSpawn(t, repo, ctx, core.Active())
 
 	svc := NewToolCallService(repo, &spawnCancelTemporalClient{}, &fakeDaemonRouter{})
 	_, err := svc.CancelToolCall(ctx, connect.NewRequest(&reliantv1.CancelToolCallRequest{
@@ -177,7 +177,7 @@ func TestCancelToolCall_ReconcilesSpawnWorkflowRow(t *testing.T) {
 
 	wf, err := repo.GetWorkflow(ctx, childThreadID)
 	require.NoError(t, err)
-	require.Equal(t, core.WorkflowStatusCancelled, wf.Status)
+	require.Equal(t, core.Cancelled(), wf.Status)
 }
 
 // A non-spawn tool call has no child workflow, and cancelling it must not
@@ -226,7 +226,7 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 	// The chat's own workflow, which a tool cancel must never touch.
 	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
 		ID: chatWorkflowID, ChatID: chatID, WorkflowName: "builtin://agent",
-		Thread: threadID, Status: core.WorkflowStatusRunning, CreatedAt: now,
+		Thread: threadID, Status: core.Active(), CreatedAt: now,
 	}))
 
 	svc := NewToolCallService(repo, nil, &fakeDaemonRouter{})
@@ -237,6 +237,6 @@ func TestCancelToolCall_RegularToolTouchesNoWorkflow(t *testing.T) {
 
 	wf, err := repo.GetWorkflow(ctx, chatWorkflowID)
 	require.NoError(t, err)
-	require.Equal(t, core.WorkflowStatusRunning, wf.Status,
+	require.Equal(t, core.Active(), wf.Status,
 		"cancelling one tool must not stop the chat, nor its siblings")
 }

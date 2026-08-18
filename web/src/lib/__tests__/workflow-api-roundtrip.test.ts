@@ -404,6 +404,7 @@ describe("Workflow API Round-Trip", () => {
             inject: {
               role: "user",
               content: "Injected message",
+              displayStyle: "info",
               attachments: "{{inputs.file_ids}}",
             },
           },
@@ -431,6 +432,7 @@ describe("Workflow API Round-Trip", () => {
     expect(node1.thread.inject).toBeDefined();
     expect(node1.thread.inject.role).toBe("user");
     expect(node1.thread.inject.content).toBe("Injected message");
+    expect(node1.thread.inject.displayStyle).toBe("info");
     expect(node1.thread.inject.attachments).toBe("{{inputs.file_ids}}");
     
     // Verify node-level thread inherit

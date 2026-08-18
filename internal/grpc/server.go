@@ -18,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -402,26 +401,26 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	addr := fmt.Sprintf("%s:%d", bindAddr, cfg.Port)
 
-	// IMPORTANT: CORS and security-headers middleware must wrap the mux
-	// *inside* h2c.NewHandler so they apply to HTTP/2 frames on hijacked
-	// connections. h2c.NewHandler's prior-knowledge path hijacks the TCP
-	// connection and calls ServeConn with its inner handler, completely
-	// bypassing any middleware that wraps h2c from the outside.
-	var handler http.Handler
-	innerHandler := corsHandler(securityHeaders(mux))
+	handler := corsHandler(securityHeaders(mux))
+
+	// protocols stays nil under TLS so Start's http2.ConfigureServer owns the
+	// HTTP/2 setup (h2 over ALPN, MaxConcurrentStreams). On a cleartext
+	// listener we ask net/http to accept prior-knowledge HTTP/2 alongside
+	// HTTP/1.1; it sniffs the client preface itself and dispatches through
+	// srv.Handler, so the CORS and security-headers middleware above applies
+	// to HTTP/2 requests exactly as it does to HTTP/1.1 ones.
+	var protocols *http.Protocols
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
-		// TLS mode: HTTP/2 is automatic with TLS
-		handler = innerHandler
 		logging.Info("gRPC server configured for HTTPS/HTTP2", "cert", cfg.TLSCertFile)
 	} else {
-		// No TLS: use h2c for HTTP/2 over cleartext
-		handler = h2c.NewHandler(innerHandler, &http2.Server{})
+		protocols = cleartextHTTP2Protocols()
 		logging.Info("gRPC server configured for h2c (HTTP/2 cleartext)")
 	}
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:      addr,
+		Handler:   handler,
+		Protocols: protocols,
 
 		// Keep ReadTimeout=0 / WriteTimeout=0 for any streaming RPCs the
 		// api-server still hosts (e.g. UserUpdate / ChatUpdate). The bidi
@@ -732,6 +731,23 @@ func controlPlaneBaseURL() string {
 		}
 	}
 	return ""
+}
+
+// cleartextHTTP2Protocols is the protocol set for a listener with no TLS:
+// HTTP/1.1 plus prior-knowledge HTTP/2 on the same port. net/http detects
+// HTTP/2 by peeking for the client preface, so it only serves clients that
+// speak HTTP/2 directly — the RFC 7540 "Upgrade: h2c" handshake is not
+// supported and no Reliant client uses it (every HTTP/2 client here is an
+// http2.Transport with AllowHTTP, which is prior-knowledge only).
+//
+// Server.IdleTimeout now reaches these connections, which it did not when they
+// were served by h2c.NewHandler. It only counts time with zero open streams, so
+// a long-lived bidi stream still holds the connection open indefinitely.
+func cleartextHTTP2Protocols() *http.Protocols {
+	p := new(http.Protocols)
+	p.SetHTTP1(true)
+	p.SetUnencryptedHTTP2(true)
+	return p
 }
 
 // securityHeaders adds security-related HTTP headers to responses

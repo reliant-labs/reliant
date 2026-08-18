@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ToolExecution } from "../ToolExecution";
-import { ToolCallStatus, ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
+import { ToolCallStatus, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 
 // Regression guard: "push to background" reaches a shell process running in
 // the daemon via ConvertToBackground. A spawn is a Temporal child workflow,
@@ -9,10 +9,12 @@ import { ToolCallStatus, ChatWorkflowStatus } from "../../../gen/reliant/v1/chat
 // also redundant — spawn is unconditionally non-blocking already. It must
 // stay available for tools it actually works for, like an executing shell.
 
-let mockAllWorkflows: Array<{ id: string; status: ChatWorkflowStatus; children: unknown[] }> = [];
+let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useChat: () => undefined,
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
   useToolCallStates: () => new Map(),
 }));
 vi.mock("../../../hooks/approval-queries", () => ({
@@ -31,7 +33,7 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
 
 describe("ToolExecution push-to-background button", () => {
   it("does not render for an executing spawn", () => {
-    mockAllWorkflows = [{ id: "wf-child-1", status: ChatWorkflowStatus.RUNNING, children: [] }];
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
 
     render(
       <ToolExecution

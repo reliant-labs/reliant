@@ -83,6 +83,21 @@ const INJECT_FIELD_SCHEMAS: ProtoFieldSchema[] = [
     omitIfEmpty: true,
     helpText: 'Message content. Use {{expression}} for dynamic values like {{output.text}}',
   },
+  {
+    key: 'inject.displayStyle',
+    label: 'Display Style',
+    widget: 'select',
+    valueKind: 'string',
+    options: [
+      { value: 'hidden', label: 'Hidden — sent to LLM only' },
+      { value: 'info', label: 'Info' },
+      { value: 'warning', label: 'Warning' },
+      { value: 'success', label: 'Success' },
+    ],
+    defaultValue: 'hidden',
+    omitIfDefault: true,
+    helpText: 'Controls how the injected message appears in the transcript. Hidden keeps prompt context out of the UI.',
+  },
 ]
 
 function getNestedConfigValue(config: NodeThreadConfig | undefined, path: string): unknown {

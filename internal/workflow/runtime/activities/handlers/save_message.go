@@ -105,11 +105,23 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 
 	info := activity.GetInfo(ctx)
 
-	// Build scoped activity ID for idempotency.
-	activityID := info.ActivityID
-	if rtx.WorkflowID != "" {
-		runID := info.WorkflowExecution.RunID
-		activityID = rtx.WorkflowID + "-" + runID + "-" + activityID
+	// Build the idempotency key this message dedupes on.
+	//
+	// The caller may supply one, and when it does it wins outright: that is a
+	// message whose identity is its position in the workflow graph, and the
+	// caller has already derived a key that survives a resume (the inject
+	// seed — see runtime.injectIdempotencyKey).
+	//
+	// Otherwise the key is scoped to the RunID, which is right for every other
+	// message: an assistant reply or tool result belongs to the run that
+	// produced it, and a resumed run genuinely should write its own.
+	activityID := rtx.MessageIdempotencyKey
+	if activityID == "" {
+		activityID = info.ActivityID
+		if rtx.WorkflowID != "" {
+			runID := info.WorkflowExecution.RunID
+			activityID = rtx.WorkflowID + "-" + runID + "-" + activityID
+		}
 	}
 
 	// Convert proto types to Go types

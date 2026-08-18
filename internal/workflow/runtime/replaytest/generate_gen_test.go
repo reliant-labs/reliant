@@ -47,7 +47,7 @@ func TestGenerateFixture_AgentToolLoop(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted(), "agent loop must not over-consume the script")
 
 	h.ExportHistory(workflowID, "agent_tool_loop")
@@ -80,7 +80,7 @@ func TestGenerateFixture_StructuredAgentLoop(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted())
 
 	h.ExportHistory(workflowID, "structured_agent_loop")
@@ -128,7 +128,7 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted(), "spawn must not over-consume the script")
 
 	h.ExportHistory(workflowID, "spawn")
@@ -238,7 +238,7 @@ func TestGenerateFixture_RouterDispatch(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted())
 
 	h.ExportHistory(workflowID, "router_dispatch")
@@ -287,7 +287,7 @@ func TestGenerateFixture_PauseResume(t *testing.T) {
 	h.ResolveQuestion(q2.ID, []string{"Continue"}, "")
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted())
 
 	h.ExportHistory(workflowID, "pause_resume")
@@ -320,7 +320,7 @@ func TestGenerateFixture_Compaction(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted())
 
 	h.ExportHistory(workflowID, "compaction")

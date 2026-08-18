@@ -26,15 +26,10 @@ func TestCreateUserUpdate_AssignsSequenceAndID(t *testing.T) {
 		t.Fatalf("CreateUserUpdate failed: %v", err)
 	}
 
-	// Sequence numbers come from a shared Postgres sequence, not
-	// MAX(sequence_number)+1 per user (see GetNextUserSequenceNumber for why:
-	// the MAX() read took a predicate lock under SERIALIZABLE and aborted
-	// concurrent writers with SQLSTATE 40001). So the value is NOT "1 for a
-	// user's first update" — it is whatever the sequence hands out. What the
-	// callers actually require is that it is positive, that the generated ID
-	// matches it, and that the row round-trips with the same number.
-	if update.SequenceNumber < 1 {
-		t.Fatalf("expected a positive sequence_number, got %d", update.SequenceNumber)
+	// A new logical user stream starts at one. Other users consume independent
+	// counters, so their traffic cannot create gaps in this cursor.
+	if update.SequenceNumber != 1 {
+		t.Fatalf("expected first user sequence_number=1, got %d", update.SequenceNumber)
 	}
 	if update.ID != fmt.Sprintf("%s-%d", userID, update.SequenceNumber) {
 		t.Fatalf("unexpected generated ID: %s", update.ID)
@@ -98,34 +93,13 @@ func TestCreateUserUpdate_ConcurrentWritesProduceUniqueSequences(t *testing.T) {
 		t.Fatalf("expected %d updates, got %d", updateCount, len(updates))
 	}
 
-	// UNIQUENESS is the contract: the sequence number is the cursor a
-	// reconnecting stream resumes from, and a duplicate makes a client skip or
-	// replay updates.
-	//
-	// CONTIGUITY is deliberately NOT asserted. Allocation moved to a Postgres
-	// sequence to stop concurrent writers aborting each other with SQLSTATE
-	// 40001, and sequence values are gap-free only in the absence of rollbacks
-	// — a retried transaction consumes its value permanently. No consumer
-	// needs a dense range: readers page with `sequence_number > $cursor ORDER
-	// BY sequence_number ASC` and the client stores a monotonic high-water
-	// mark, both of which only require values to increase.
-	seen := make(map[int64]bool, updateCount)
-	for _, u := range updates {
-		if u.SequenceNumber < 1 {
-			t.Fatalf("expected a positive sequence number, got %d", u.SequenceNumber)
-		}
-		if seen[u.SequenceNumber] {
-			t.Fatalf("duplicate sequence number detected: %d", u.SequenceNumber)
-		}
-		seen[u.SequenceNumber] = true
-	}
-
-	// Ordering must be strictly ascending, since that is what the resume
-	// cursor relies on.
-	for i := 1; i < len(updates); i++ {
-		if updates[i].SequenceNumber <= updates[i-1].SequenceNumber {
-			t.Fatalf("updates must be strictly ascending by sequence number, got %d after %d",
-				updates[i].SequenceNumber, updates[i-1].SequenceNumber)
+	// The scoped counter and ledger insert share a transaction, so even under
+	// concurrent writes the committed stream is dense as well as unique.
+	for i, update := range updates {
+		want := int64(i + 1)
+		if update.SequenceNumber != want {
+			t.Fatalf("update %d sequence_number=%d, want %d; stream must be contiguous",
+				i, update.SequenceNumber, want)
 		}
 	}
 }

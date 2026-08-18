@@ -40,14 +40,14 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 	greatGrandchildID := "wf-great-grandchild"
 	siblingChatWorkflowID := "wf-unrelated"
 
-	insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, WorkflowStatusRunning)
-	insertTestWorkflowWithParent(t, repo, childID, chatID, &rootID, WorkflowStatusRunning)
-	insertTestWorkflowWithParent(t, repo, grandchildID, chatID, &childID, WorkflowStatusPaused)
-	insertTestWorkflowWithParent(t, repo, greatGrandchildID, chatID, &grandchildID, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, Active())
+	insertTestWorkflowWithParent(t, repo, childID, chatID, &rootID, Active())
+	insertTestWorkflowWithParent(t, repo, grandchildID, chatID, &childID, Paused())
+	insertTestWorkflowWithParent(t, repo, greatGrandchildID, chatID, &grandchildID, Active())
 	// Unrelated root in the same chat must be untouched.
-	insertTestWorkflowWithParent(t, repo, siblingChatWorkflowID, chatID, nil, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, siblingChatWorkflowID, chatID, nil, Active())
 
-	if err := repo.CascadeTerminalStatusToDescendants(context.Background(), rootID, WorkflowStatusCompleted); err != nil {
+	if err := repo.CascadeTerminalStatusToDescendants(context.Background(), rootID, StopReasonCompleted); err != nil {
 		t.Fatalf("CascadeTerminalStatusToDescendants: %v", err)
 	}
 
@@ -56,7 +56,7 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetWorkflow(%s): %v", id, err)
 		}
-		if wf.Status != WorkflowStatusCompleted {
+		if wf.Status != Completed() {
 			t.Errorf("%s: expected completed (3), got %d", id, wf.Status)
 		}
 		if wf.CompletedAt == nil {
@@ -71,7 +71,7 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetWorkflow(%s): %v", id, err)
 		}
-		if wf.Status != WorkflowStatusRunning {
+		if wf.Status != Active() {
 			t.Errorf("%s: expected running (2) untouched, got %d", id, wf.Status)
 		}
 	}
@@ -95,21 +95,21 @@ func TestCascadeTerminalStatusToDescendants_TerminationIsNotCompletion(t *testin
 
 	for _, tc := range []struct {
 		name   string
-		status WorkflowStatus
+		reason WorkflowStopReason
 	}{
-		{"cancelled", WorkflowStatusCancelled},
-		{"failed", WorkflowStatusFailed},
-		{"completed", WorkflowStatusCompleted},
+		{"cancelled", StopReasonCancelled},
+		{"failed", StopReasonFailed},
+		{"completed", StopReasonCompleted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rootID := "wf-" + tc.name + "-root"
 			childID := "wf-" + tc.name + "-child"
 			grandchildID := "wf-" + tc.name + "-grandchild"
-			insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, tc.status)
-			insertTestWorkflowWithParent(t, repo, childID, chatID, &rootID, WorkflowStatusRunning)
-			insertTestWorkflowWithParent(t, repo, grandchildID, chatID, &childID, WorkflowStatusPaused)
+			insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, Stopped(tc.reason))
+			insertTestWorkflowWithParent(t, repo, childID, chatID, &rootID, Active())
+			insertTestWorkflowWithParent(t, repo, grandchildID, chatID, &childID, Paused())
 
-			if err := repo.CascadeTerminalStatusToDescendants(ctx, rootID, tc.status); err != nil {
+			if err := repo.CascadeTerminalStatusToDescendants(ctx, rootID, tc.reason); err != nil {
 				t.Fatalf("CascadeTerminalStatusToDescendants: %v", err)
 			}
 
@@ -118,9 +118,9 @@ func TestCascadeTerminalStatusToDescendants_TerminationIsNotCompletion(t *testin
 				if err != nil {
 					t.Fatalf("GetWorkflow(%s): %v", id, err)
 				}
-				if wf.Status != tc.status {
-					t.Errorf("%s: status %d, want %d — a descendant of a %s run must record what actually happened to it",
-						id, wf.Status, tc.status, tc.name)
+				if wf.Status != Stopped(tc.reason) {
+					t.Errorf("%s: status %s, want %s — a descendant of a %s run must record what actually happened to it",
+						id, wf.Status.Label(), Stopped(tc.reason).Label(), tc.name)
 				}
 				if wf.CompletedAt == nil {
 					t.Errorf("%s: expected completed_at to be set", id)

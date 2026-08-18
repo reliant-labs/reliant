@@ -40,8 +40,8 @@ interface ChatHeaderProps {
   selectedThreadId?: string | null;
   /** Callback when thread selection changes */
   onSelectThread?: (threadId: string | null) => void;
-  /** Workflow execution for thread metadata */
-  workflowExecution?: WorkflowExecution;
+  /** Workflow execution tree(s) for thread metadata */
+  workflowExecution?: WorkflowExecution | WorkflowExecution[];
   /**
    * Opens/closes the workflow viewer. The always-visible workflow chip was
    * removed from the header for compactness; this moved into the overflow menu
@@ -74,12 +74,12 @@ export function ChatHeader({
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
   const getWorktreeSessions = useTerminalStore((state) => state.getWorktreeSessions);
 
-  // Get threads from messages with workflow metadata for better names.
-  // Spawn-tool threads are short-lived sub-agents owned by a single tool call;
-  // they're surfaced inline via the spawn preview, not in the header.
+  // Get threads from messages with workflow metadata for better names. ThreadTabs
+  // filters spawn-origin threads at the render boundary; keep the full list here
+  // so selected spawned threads can still resolve parent/back navigation.
   const allThreads = useThreads(messages, chatId || "", workflowExecution);
-  const threads = useMemo(() => allThreads.filter((t) => !t.isSpawn), [allThreads]);
-  const hasMultipleThreads = threads.length > 1;
+  const threads = allThreads;
+  const hasMultipleThreads = threads.some((thread) => !thread.isSpawn && !thread.isMain);
 
   // Currently viewed thread (may be a spawn thread, which is excluded from tabs)
   const selectedThread = useMemo(

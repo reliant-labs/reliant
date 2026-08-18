@@ -32,7 +32,7 @@ func TestListStrandedSpawnToolCalls_MissesTerminalBackgroundedSpawn(t *testing.T
 
 	// The child finished (terminal workflow status)...
 	childWorkflowID := "wf-background-child-terminal"
-	insertTestWorkflowWithParent(t, repo, childWorkflowID, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, childWorkflowID, chatID, nil, Completed())
 
 	// ...but the parent's spawn call was already marked Backgrounded and
 	// handed its dispatch-time handle result when the spawn started, exactly

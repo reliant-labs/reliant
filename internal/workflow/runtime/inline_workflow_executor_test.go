@@ -93,7 +93,10 @@ func TestApplyPresets(t *testing.T) {
 			"expected 'Resolved preset template' info log")
 	})
 
-	t.Run("non-existent resolved preset logs warning and does not crash", func(t *testing.T) {
+	// A preset the caller named must load. Skipping it silently ran the agent
+	// under the workflow's defaults — a different model, tool set and prompt
+	// than was asked for — while reporting success.
+	t.Run("non-existent resolved preset is a hard error", func(t *testing.T) {
 		logger := &presetTestLogger{}
 		subInputs := map[string]interface{}{"existing": "value"}
 		presets := map[string]string{DefaultPresetGroup: "missing-preset"}
@@ -104,10 +107,8 @@ func TestApplyPresets(t *testing.T) {
 		}
 
 		err := applyPresets(presets, subInputs, evalCtx, loader, logger, "node-1")
-		require.NoError(t, err, "applyPresets must not return error for missing preset")
-		assert.Equal(t, "value", subInputs["existing"], "existing inputs preserved")
-		assert.True(t, hasPresetLogMessage(logger.warns, "Failed to load preset"),
-			"expected 'Failed to load preset' warning")
+		require.Error(t, err, "a preset that cannot be loaded must fail the call")
+		assert.Contains(t, err.Error(), "missing-preset")
 	})
 
 	t.Run("empty string after template eval is skipped", func(t *testing.T) {
@@ -132,7 +133,7 @@ func TestApplyPresets(t *testing.T) {
 			"expected skip-log for empty resolved preset")
 	})
 
-	t.Run("template eval failure logs warning and skips", func(t *testing.T) {
+	t.Run("template eval failure is a hard error", func(t *testing.T) {
 		logger := &presetTestLogger{}
 		subInputs := map[string]interface{}{}
 		// Reference an input that doesn't exist → CEL eval error.
@@ -146,10 +147,8 @@ func TestApplyPresets(t *testing.T) {
 		}
 
 		err := applyPresets(presets, subInputs, evalCtx, loader, logger, "node-1")
-		require.NoError(t, err, "template eval failure should not crash workflow")
+		require.Error(t, err, "an unresolvable preset template must fail the call")
 		assert.Equal(t, 0, loaderCalls, "loader must not be called when resolution fails")
-		assert.True(t, hasPresetLogMessage(logger.warns, "Failed to resolve preset template"),
-			"expected resolution-failure warning")
 	})
 
 	t.Run("named group nests params under groupName", func(t *testing.T) {

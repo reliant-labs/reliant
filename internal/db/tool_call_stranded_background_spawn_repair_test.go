@@ -55,7 +55,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *te
 
 	// The bug this repairs, exactly: terminal child, backgrounded call,
 	// nothing in the mailbox.
-	insertTestWorkflowWithParent(t, repo, childThreadID, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, childThreadID, chatID, nil, Completed())
 	seedBackgroundSpawnToolCall(t, repo, ctx, "tc-bg-stranded", chatID, parentThreadID, childThreadID)
 
 	stranded, err := repo.ListStrandedBackgroundSpawnToolCalls(ctx)
@@ -72,7 +72,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *te
 	require.NotNil(t, found.ParentThreadID)
 	require.Equal(t, parentThreadID, *found.ParentThreadID)
 	require.Equal(t, childThreadID, found.ChildThreadID)
-	require.Equal(t, WorkflowStatusCompleted, found.WorkflowStatus)
+	require.Equal(t, Completed(), found.WorkflowStatus)
 }
 
 // TestListStrandedBackgroundSpawnToolCalls_FailClosed pins spec §11 item 5:
@@ -89,13 +89,13 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 	runningChild := uuid.New().String()
 	_, err := repo.CreateThread(ctx, &Thread{ID: runningChild, ChatID: chatID, ParentThreadID: &parentThreadID, CreatedAt: time.Now().UTC()})
 	require.NoError(t, err)
-	insertTestWorkflowWithParent(t, repo, runningChild, chatID, nil, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, runningChild, chatID, nil, Active())
 	seedBackgroundSpawnToolCall(t, repo, ctx, "tc-bg-running", chatID, parentThreadID, runningChild)
 
 	pausedChild := uuid.New().String()
 	_, err = repo.CreateThread(ctx, &Thread{ID: pausedChild, ChatID: chatID, ParentThreadID: &parentThreadID, CreatedAt: time.Now().UTC()})
 	require.NoError(t, err)
-	insertTestWorkflowWithParent(t, repo, pausedChild, chatID, nil, WorkflowStatusPaused)
+	insertTestWorkflowWithParent(t, repo, pausedChild, chatID, nil, Paused())
 	seedBackgroundSpawnToolCall(t, repo, ctx, "tc-bg-paused", chatID, parentThreadID, pausedChild)
 
 	// A terminal child that WAS already reported -- a kind=2 completion row
@@ -103,7 +103,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 	reportedChild := uuid.New().String()
 	_, err = repo.CreateThread(ctx, &Thread{ID: reportedChild, ChatID: chatID, ParentThreadID: &parentThreadID, CreatedAt: time.Now().UTC()})
 	require.NoError(t, err)
-	insertTestWorkflowWithParent(t, repo, reportedChild, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, reportedChild, chatID, nil, Completed())
 	seedBackgroundSpawnToolCall(t, repo, ctx, "tc-bg-reported", chatID, parentThreadID, reportedChild)
 	toolCallID := "tc-bg-reported"
 	require.NoError(t, repo.EnqueueAgentMessage(ctx, &AgentMessage{

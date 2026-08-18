@@ -3523,19 +3523,19 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 	if err != nil || wf == nil {
 		return // Workflow not tracked yet (WorkflowStatus "started" hasn't fired)
 	}
-	if wf.Status == WorkflowStatusRunning {
-		return // Fast path — already running, nothing to do
+	if wf.Status.State == WorkflowStateActive {
+		return // Fast path — already active, nothing to do
 	}
-	if wf.Status == WorkflowStatusPaused {
+	if wf.Status.StopReason == StopReasonPaused {
 		return // Paused is a deliberate user action — don't override it
 	}
 
-	logging.Info("[EnsureWorkflowRunning] Workflow not marked running, correcting",
+	logging.Info("[EnsureWorkflowRunning] Workflow not marked active, correcting",
 		"workflowID", workflowID,
 		"chatID", chatID,
-		"currentStatus", wf.Status,
+		"currentStatus", wf.Status.Label(),
 	)
-	if err := r.UpdateWorkflowStatus(ctx, workflowID, WorkflowStatusRunning); err != nil {
+	if err := r.UpdateWorkflowStatus(ctx, workflowID, Active()); err != nil {
 		logging.Warn("[EnsureWorkflowRunning] Failed to update workflow status",
 			"workflowID", workflowID,
 			"error", err,
@@ -3553,8 +3553,8 @@ func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName s
 // owned by a parent to the terminal status the parent itself reached. Called
 // when a workflow ends, to drain the children (spawn children, thread records,
 // etc.) that are still running or paused.
-func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status WorkflowStatus) error {
-	return r.workflows.CascadeTerminalStatusToDescendants(ctx, parentWorkflowID, status)
+func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error {
+	return r.workflows.CascadeTerminalStatusToDescendants(ctx, parentWorkflowID, reason)
 }
 
 // ReapOrphanedWorkflowDescendants ends running/paused workflows whose parent is
@@ -3753,15 +3753,21 @@ func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error)
 // CascadeTerminalStatusToThreadSubtree closes every thread owned by
 // workflowID or any of its descendants to the terminal status the workflow
 // subtree just reached. See the Repository interface for why this exists
-// alongside CascadeTerminalStatusToDescendants. Takes WorkflowStatus, not
-// int32, so callers pass the same value they pass
-// CascadeTerminalStatusToDescendants — the two calls are meant to travel
-// together at every site.
-func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status WorkflowStatus) error {
+// alongside CascadeTerminalStatusToDescendants. Takes the same stop reason
+// those callers pass to CascadeTerminalStatusToDescendants — the two calls are
+// meant to travel together at every site.
+//
+// A non-terminal reason (PAUSED) is a no-op: a parked run's threads must keep
+// reading as live, or message delivery into them starts being refused.
+func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error {
 	if workflowID == "" {
 		return fmt.Errorf("workflow ID cannot be empty")
 	}
-	return r.threads.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, int32(status))
+	threadStatus, terminal := core.ThreadStatusForStopReason(reason)
+	if !terminal {
+		return nil
+	}
+	return r.threads.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, threadStatus)
 }
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already

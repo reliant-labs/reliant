@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/skills/suggest"
 
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -185,6 +186,22 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		auth.SetUserJWT(chat.UserID, rtx.UserJWT)
 	}
 
+	// Deliver anything queued in this thread's mailbox BEFORE reading history,
+	// so a message the user sent while the agent was working is part of the
+	// turn it is about to take rather than the one after.
+	//
+	// This is the only delivery point (agent_mailbox.go version 3). Doing it
+	// here rather than at the loop boundary is what makes the tool-pairing
+	// invariant structural: the history read immediately below is going to a
+	// provider, so it must already be consistent, and there is no window in
+	// which a delivered message can land between an assistant's tool_calls and
+	// its tool_results.
+	//
+	// Best-effort, exactly as the boundary drain was: a mailbox hiccup must not
+	// fail the turn. The rows stay queued (status=1) and the next call picks
+	// them up.
+	a.drainAgentMailbox(ctx, rtx.ChatID, thread)
+
 	// Load conversation history
 	history, err := a.loadConversationHistory(ctx, rtx.ChatID, thread, rtx.ContextSequence)
 	if err != nil {
@@ -216,14 +233,120 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 		return nil, fmt.Errorf("failed to stream LLM response: %w", err)
 	}
 
+	// Did anything arrive in the mailbox WHILE we were streaming?
+	//
+	// The drain above ran before the history read, so a message queued during
+	// the response is not part of this turn. That is fine as long as another
+	// turn follows — but if the model returned no tool calls, the agent loop is
+	// about to exit on a thread that still has an undelivered message, and
+	// nothing would ever deliver it. Reporting it here lets the loop's
+	// while-condition keep going, which routes back through CallLLM, which
+	// delivers it.
+	//
+	// Cheap: one indexed SELECT against the partial index on queued rows, once
+	// per LLM call — negligible next to the call itself.
+	output.PendingInbox = output.GetPendingInbox() || a.hasQueuedAgentMessages(ctx, thread)
+
 	logger.Info("[CallLLM] Completed",
 		"chatID", rtx.ChatID,
 		"toolCalls", len(output.ToolCalls),
 		"tokenCount", output.TokenCount,
+		"pendingInbox", output.PendingInbox,
 		"x_oai_request_id", strings.TrimSpace(output.GetUpstreamRequestId()),
 		"x_proxyman_id", strings.TrimSpace(output.GetUpstreamProxymanId()))
 
+	// An interrupted turn persists its own partial before unwinding.
+	//
+	// There is no way to hand it back through Temporal: the workflow no longer
+	// waits for a cancelled activity (see activityOptions), and the SDK discards
+	// a cancelled activity's late return regardless. Writing the row here is what
+	// makes the turn survive, and the step's position-derived idempotency key is
+	// what stops the re-dispatch that follows from adding a second one.
+	if ctx.Err() != nil {
+		a.persistInterruptedTurn(ctx, rtx, thread, output)
+	}
 	return output, nil
+}
+
+// persistInterruptedTurn saves the partial assistant message of a turn whose
+// context was cancelled mid-stream, on a context detached from that
+// cancellation.
+//
+// Best-effort by construction: the turn is already over, and a failure here
+// costs a partial message, whereas returning an error would cost the whole
+// cancellation path. Both outcomes are logged rather than surfaced.
+func (a *CallLLMActivity) persistInterruptedTurn(
+	ctx context.Context,
+	rtx RuntimeContext,
+	thread string,
+	output *reliantv1.CallLLMOutput,
+) {
+	if output == nil || thread == "" {
+		return
+	}
+	// Nothing streamed and no tools requested: an empty assistant row would be
+	// noise in the transcript and in the provider history.
+	if strings.TrimSpace(output.GetResponseText()) == "" && len(output.GetToolCalls()) == 0 {
+		return
+	}
+
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), interruptedTurnWriteTimeout)
+	defer cancel()
+
+	var workflowID *string
+	if rtx.WorkflowID != "" {
+		workflowID = &rtx.WorkflowID
+	}
+	var thinking *threads.ThinkingContent
+	if t := output.GetThinking(); t != nil && (t.GetContent() != "" || t.GetSignature() != "") {
+		thinking = &threads.ThinkingContent{Content: t.GetContent(), Signature: t.GetSignature()}
+	}
+	activityID := rtx.MessageIdempotencyKey
+
+	if _, err := threads.NewService(a.repo).SaveMessage(writeCtx, threads.SaveMessageOpts{
+		ChatID:       rtx.ChatID,
+		Thread:       thread,
+		Role:         int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
+		Content:      output.GetResponseText(),
+		ToolCalls:    convertToolCalls(protoToolCallsToMessage(output.GetToolCalls())),
+		Thinking:     thinking,
+		TokenCount:   int(output.GetTokenCount()),
+		Cost:         output.GetCost(),
+		Model:        output.GetModel(),
+		WorkflowID:   workflowID,
+		StepID:       rtx.StepID,
+		ActivityID:   &activityID,
+		MessageID:    output.GetMessageId(),
+		DisplayStyle: int32(reliantv1.DisplayStyle_DISPLAY_STYLE_UNSPECIFIED),
+	}); err != nil {
+		logging.Warn("[CallLLM] Could not persist the partial turn of an interrupted call",
+			"chatID", rtx.ChatID, "thread", thread, "error", err)
+	}
+}
+
+// interruptedTurnWriteTimeout bounds the detached write of an interrupted
+// turn's partial. Short: one insert on a live pool, with the caller unwinding.
+const interruptedTurnWriteTimeout = 5 * time.Second
+
+// hasQueuedAgentMessages reports whether thread's mailbox holds undelivered
+// messages right now.
+//
+// Errors resolve to false rather than being surfaced: this only decides
+// whether to take one more loop iteration, and failing the whole turn over a
+// mailbox probe would be a far worse outcome than the message waiting for the
+// user's next send (which absorbs the mailbox anyway).
+func (a *CallLLMActivity) hasQueuedAgentMessages(ctx context.Context, thread string) bool {
+	if thread == "" {
+		return false
+	}
+	queued, err := a.repo.ListQueuedAgentMessagesForThread(ctx, thread)
+	if err != nil {
+		logging.Warn("[CallLLM] Could not check the mailbox for late arrivals; "+
+			"a message queued during this turn may wait for the next send",
+			"thread", thread, "error", err)
+		return false
+	}
+	return len(queued) > 0
 }
 
 // loadConversationHistory loads all messages for the conversation.
@@ -236,6 +359,37 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 //   - In-memory orphan repair (Layer 3)
 func (a *CallLLMActivity) loadConversationHistory(ctx context.Context, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
 	return LoadMessagesForLLM(ctx, a.repo, chatID, thread, explicitContextSeq)
+}
+
+// drainAgentMailbox folds any queued agent_messages for thread into its
+// history. Called immediately before the history read in executeCore.
+//
+// Reuses DrainAgentMessagesActivity's logic rather than reimplementing it: the
+// delivery rules (a hidden envelope for LLM-only framing, visible bodies for
+// human messages, hidden bodies plus a system notification for spawn results,
+// all in one transaction with the mark-delivered bookkeeping) are subtle and
+// must not fork.
+//
+// Errors are logged, never returned. A turn that cannot deliver its mailbox is
+// still a turn worth taking, and the undelivered rows remain queued for the
+// next call. Returning an error here would fail the activity and, through the
+// step executor, skip the save_message that persists this turn's output.
+func (a *CallLLMActivity) drainAgentMailbox(ctx context.Context, chatID, thread string) {
+	if thread == "" {
+		return
+	}
+
+	drain := NewDrainAgentMessagesActivity(a.repo, threads.NewService(a.repo))
+	out, err := drain.Execute(ctx, DrainAgentMessagesInput{ChatID: chatID, Thread: thread})
+	if err != nil {
+		logging.Warn("[CallLLM] Failed to deliver queued agent messages; they stay queued for the next turn",
+			"chatID", chatID, "thread", thread, "error", err)
+		return
+	}
+	if out.HasMessages {
+		logging.Info("[CallLLM] Delivered queued agent messages into history",
+			"chatID", chatID, "thread", thread, "count", out.Count)
+	}
 }
 
 func (a *CallLLMActivity) getProjectConfig(ctx context.Context, project *db.Project) (*cfgpkg.Config, error) {
@@ -781,9 +935,28 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	llmCallStart := time.Now()
 	eventChan := driver.StreamResponse(streamCtx, systemPrompts, history, availableTools)
 	var streamErr error
+	streamInterrupted := false
 
 streamLoop:
 	for {
+		// Events the provider has already handed us are part of this turn, even
+		// though it is ending. Go's select picks at random among ready cases, so
+		// without this the cancel branch can win while text is still buffered and
+		// the partial is silently dropped — the interrupted turn then settles
+		// with an empty response_text and the user loses output they watched
+		// stream in.
+		select {
+		case event, ok := <-eventChan:
+			if ok {
+				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
+					streamErr = err
+					break streamLoop
+				}
+				continue
+			}
+		default:
+		}
+
 		select {
 		case <-streamCtx.Done():
 			// Context cancelled (either Temporal or application-level)
@@ -799,10 +972,22 @@ streamLoop:
 			}, streamState)
 
 			streamErr = errors.New("streaming cancelled by user")
+			streamInterrupted = true
 			break streamLoop
 
 		case event, ok := <-eventChan:
 			if !ok {
+				if streamCtx.Err() != nil {
+					activity.GetLogger(ctx).Info("[CallLLM] Streaming cancelled as channel closed",
+						"chatID", chat.ID,
+						"reason", streamCtx.Err())
+					a.writeStreamingDelta(ctx, chat.ID, "stream_cancelled", map[string]interface{}{
+						"reason": "user_cancelled",
+						"thread": thread,
+					}, streamState)
+					streamErr = errors.New("streaming cancelled by user")
+					streamInterrupted = true
+				}
 				// Channel closed, stream complete
 				break streamLoop
 			}
@@ -822,6 +1007,7 @@ streamLoop:
 					"thread": thread,
 				}, streamState)
 				streamErr = errors.New("streaming cancelled by user")
+				streamInterrupted = true
 				break streamLoop
 			default:
 				// Not cancelled, continue processing
@@ -851,7 +1037,11 @@ streamLoop:
 
 	// Track LLM call completion for analytics.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
-	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, streamErr)
+	analyticsErr := streamErr
+	if streamInterrupted {
+		analyticsErr = nil
+	}
+	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, analyticsErr)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -861,8 +1051,11 @@ streamLoop:
 			"x_proxyman_id", streamState.upstreamProxymanID)
 	}
 
-	// Handle stream error
-	if streamErr != nil {
+	// Handle stream error. A user/thread interrupt is not a failed LLM turn: it
+	// deliberately stops the stream at the partial output already shown to the
+	// user, then lets the workflow persist that partial assistant message and run
+	// one more mailbox-draining turn. Provider errors still fail normally.
+	if streamErr != nil && !streamInterrupted {
 		return nil, streamErr
 	}
 
@@ -915,6 +1108,7 @@ streamLoop:
 			Role: "assistant",
 			Text: responseText,
 		},
+		PendingInbox:        streamInterrupted,
 		CompactionThreshold: effectiveCompactionThreshold,
 		Model:               resolvedModelID,
 		MessageId:           streamState.messageID,
@@ -1156,9 +1350,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		}
 	}
 	if !loadToolPresent {
-		if lt := projectScopedToolsFactory.LoadTool(); lt != nil {
-			toolsList = append(toolsList, lt)
-		}
+		toolsList = append(toolsList, projectScopedToolsFactory.LoadTool())
 	}
 
 	// spawn_send must reach a depth-1 sub-agent talking back to its parent
@@ -1180,9 +1372,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 			}
 		}
 		if !spawnSendPresent {
-			if st := projectScopedToolsFactory.SpawnSend(); st != nil {
-				toolsList = append(toolsList, st)
-			}
+			toolsList = append(toolsList, projectScopedToolsFactory.SpawnSend())
 		}
 	}
 
@@ -1974,7 +2164,7 @@ func buildSkillSuggestionReminder(suggestions []suggest.Suggested) string {
 		if len(desc) > 80 {
 			desc = desc[:77] + "..."
 		}
-		sb.WriteString(fmt.Sprintf("- %s: %s\n", s.Skill.Name, desc))
+		fmt.Fprintf(&sb, "- %s: %s\n", s.Skill.Name, desc)
 	}
 	sb.WriteString("</system-reminder>")
 	return sb.String()

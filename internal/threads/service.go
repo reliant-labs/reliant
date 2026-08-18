@@ -16,6 +16,9 @@ import (
 // Repository defines the subset of db.Repository needed by the threads service.
 // This allows for easier testing and decouples threads from the full repository.
 type Repository interface {
+	// Chat operations.
+	GetChatWithUserCheck(ctx context.Context, id string, userID string) (*db.Chat, error)
+
 	// Thread operations
 	CreateThread(ctx context.Context, thread *db.Thread) (*db.Thread, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)
@@ -71,7 +74,12 @@ type Repository interface {
 	// Tool call operations. A live message update carries each tool-call
 	// block's durable status and, for a spawn, the thread it started — see
 	// db.ContentBlockPayloads.
+	ListToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
+	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome
+	// durably at the moment the user asks for it -- see cancelToolCalls.
+	UpsertToolCall(ctx context.Context, call *db.ToolCall) error
+	UpsertToolCallResult(ctx context.Context, result *db.ToolCallResult) error
 
 	// Attachment operations
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
@@ -85,14 +93,20 @@ type Repository interface {
 }
 
 // Service provides centralized thread and context window management.
-// All thread creation, forking, and compaction should go through this service.
+// All thread creation, forking, compaction, and interruption should go through this service.
 type Service struct {
-	repo Repository
+	repo             Repository
+	temporalSignaler TemporalSignaler
+	toolCanceler     ToolCanceler
 }
 
 // NewService creates a new threads.Service with the given repository.
-func NewService(repo Repository) *Service {
-	return &Service{repo: repo}
+func NewService(repo Repository, opts ...ServiceOption) *Service {
+	svc := &Service{repo: repo}
+	for _, opt := range opts {
+		opt(svc)
+	}
+	return svc
 }
 
 // CreateThreadOpts contains options for creating a new root thread.

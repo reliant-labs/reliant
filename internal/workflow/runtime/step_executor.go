@@ -53,6 +53,10 @@ type StepExecutor struct {
 	// makeThreadPauseCtrl creates per-thread PauseControllers for pause-aware execution.
 	// Used by spawn support to create pause-aware controllers for child threads.
 	makeThreadPauseCtrl func(string) *PauseController
+	// threadInterrupt observes interrupts for the thread this executor is running.
+	threadInterrupt *ThreadInterrupt
+	// makeThreadInterrupt creates per-thread interrupt handles for spawned/nested threads.
+	makeThreadInterrupt func(string) *ThreadInterrupt
 }
 
 // NewStepExecutor creates a new StepExecutor with all required context.
@@ -122,10 +126,27 @@ func (e *StepExecutor) WithMakeThreadPauseCtrl(fn func(string) *PauseController)
 	return e
 }
 
+// WithThreadInterrupts sets the interrupt handle for this executor's thread.
+func (e *StepExecutor) WithThreadInterrupts(interrupt *ThreadInterrupt) *StepExecutor {
+	e.threadInterrupt = interrupt
+	return e
+}
+
+// WithMakeThreadInterrupt sets the per-thread interrupt handle factory for spawn support.
+func (e *StepExecutor) WithMakeThreadInterrupt(fn func(string) *ThreadInterrupt) *StepExecutor {
+	e.makeThreadInterrupt = fn
+	return e
+}
+
 // getActivityCtx returns the context to use when dispatching activities.
-// Delegates to PauseController.GetActivityCtx with e.ctx as fallback.
+// It composes pause/resume cancellation with same-thread interrupts so a thread
+// can abandon the work in front of its mailbox without cancelling sibling
+// threads that share the same Temporal workflow.
 func (e *StepExecutor) getActivityCtx() workflow.Context {
-	return e.pauseCtrl.GetActivityCtx(e.ctx)
+	base := e.pauseCtrl.GetActivityCtx(e.ctx)
+	thread := e.GetThread()
+	interrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, thread)
+	return interrupt.ActivityContext(base)
 }
 
 // GetThread returns the current thread from execContext.
@@ -167,6 +188,9 @@ type RunningStep struct {
 	// call_llm dispatch (delta identity protocol); "" for other step types
 	// and for pre-gate histories.
 	PreallocatedMessageID string
+	// ThreadInterruptEpoch is the same-thread interrupt epoch observed before
+	// dispatch. Cancellation details settle only when this epoch advances.
+	ThreadInterruptEpoch int64
 }
 
 // removeRunningStep removes a step from the slice using pointer comparison.
@@ -272,6 +296,10 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		}
 		preallocatedMessageID = preallocateAssistantMessageID(e.ctx, e.chatID, thread)
 	}
+	threadInterruptEpoch := int64(0)
+	if interrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, e.GetThread()); interrupt != nil {
+		threadInterruptEpoch = interrupt.Epoch()
+	}
 
 	switch stepType {
 	case model.NodeTypeWorkflow:
@@ -321,6 +349,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		Future:                future,
 		EvalResult:            evalResult, // Store for save_message thread resolution
 		PreallocatedMessageID: preallocatedMessageID,
+		ThreadInterruptEpoch:  threadInterruptEpoch,
 	}
 }
 
@@ -471,6 +500,14 @@ func (e *StepExecutor) getRawOutput(running *RunningStep) (map[string]interface{
 	// via JSON fallback.
 	var rawOutput map[string]interface{}
 	if err := running.Future.Get(e.ctx, &rawOutput); err != nil {
+		// A heartbeat timeout never let the activity return at all, so its last
+		// heartbeat is the only record of how far it reached.
+		var timeoutErr *temporal.TimeoutError
+		if errors.As(err, &timeoutErr) && timeoutErr.HasLastHeartbeatDetails() {
+			if detailErr := timeoutErr.LastHeartbeatDetails(&rawOutput); detailErr == nil && rawOutput != nil {
+				return rawOutput, nil
+			}
+		}
 		return nil, err
 	}
 	return rawOutput, nil
@@ -667,6 +704,7 @@ func (e *StepExecutor) startAction(
 			e.workflowInputs,
 			e.childTracker,
 			e.makeThreadPauseCtrl,
+			e.makeThreadInterrupt,
 		)
 		return future, activityName
 	}
@@ -790,6 +828,26 @@ func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
 
 	// HeartbeatTimeout controls how quickly Temporal detects a worker that died
 	// without releasing its activities; see activityHeartbeatTimeout (registry.go).
+	//
+	// WaitForCancellation is deliberately unset, so a cancelled step's future
+	// resolves at cancel-request time (~10ms) instead of waiting for the
+	// activity's own return — which only reaches the worker on a heartbeat,
+	// throttled to 3s. Setting it cost the user 1-3s on every pause and every
+	// interrupt (measured live: 1.05s, 1.97s, 2.81s).
+	//
+	// Nothing is lost by not waiting, because no step depends on the workflow
+	// receiving anything from a cancelled activity any more:
+	//   - execute_tools writes each tool's outcome durably as it goes, through a
+	//     context detached from cancellation (detachedForTerminalWrite), and a
+	//     re-dispatch returns the recorded outcome rather than re-running
+	//     (checkPriorTerminalResult).
+	//   - call_llm persists its own partial turn the same way
+	//     (persistInterruptedTurn), keyed on its position in the graph
+	//     (callLLMIdempotencyKey) so the re-dispatch converges on one row.
+	// The SDK discards a cancelled activity's late return in any case — it marks
+	// the future handled the moment cancellation is requested — so harvesting
+	// output from one was never something a waiting workflow could rely on.
+	//
 	// Let Temporal auto-generate ActivityID for deterministic replay.
 	return workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
 		StartToCloseTimeout: timeout,
@@ -801,6 +859,39 @@ func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
 			MaximumAttempts:    5,
 		},
 	})
+}
+
+// threadInterruptedSince reports whether this executor's thread was interrupted
+// since the given epoch. Used to tell a per-thread interrupt apart from a
+// chat-wide pause when reporting why a step was cancelled — the two arrive as
+// the same CanceledError, and a log that guessed "pause" for both sent an
+// investigation down the wrong path for hours.
+func (e *StepExecutor) threadInterruptedSince(epoch int64) bool {
+	interrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, e.GetThread())
+	return interrupt != nil && interrupt.InterruptedSince(epoch)
+}
+
+// callLLMIdempotencyKey identifies a call_llm turn by its position in the graph
+// — the same turn re-dispatched after an interrupt produces the same key, while
+// a different node or a later loop iteration produces a different one.
+//
+// Length-prefixed per component (as injectIdempotencyKey does) so that no two
+// different component triples can render to the same string.
+func callLLMIdempotencyKey(workflowID, stepID, loopNodeID string, loopIteration int) string {
+	// "noloop" rather than iter:0 when the step is not inside a loop, matching
+	// injectIdempotencyKey. Outside a loop the iteration counter is not
+	// meaningful, and spelling that distinction out keeps a top-level node from
+	// sharing a key shape with the first iteration of a loop that reuses its id.
+	loop := "noloop"
+	if loopNodeID != "" {
+		loop = fmt.Sprintf("iter:%d", loopIteration)
+	}
+	var b strings.Builder
+	b.WriteString(model.NodeTypeCallLLM)
+	for _, part := range []string{workflowID, stepID, loopNodeID, loop} {
+		fmt.Fprintf(&b, "|%d:%s", len(part), part)
+	}
+	return b.String()
 }
 
 // executeFailActivity returns a future that will fail with the given message.
@@ -850,6 +941,27 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	if e.loopNodeID != "" {
 		rtx.LoopNodeID = e.loopNodeID
 		rtx.LoopIteration = e.loopIteration
+	}
+
+	// A call_llm turn is identified by its POSITION in the graph, not by the
+	// attempt that happened to run it.
+	//
+	// SaveMessage's default idempotency key is scoped to the Temporal ActivityID,
+	// which is minted fresh on every dispatch. That is right for most steps, but
+	// it means a call_llm re-dispatched after an interrupt writes a SECOND
+	// assistant message for the same turn instead of recognising its own earlier
+	// partial. Keying on (workflow, step, iteration) — all stable across a
+	// re-dispatch — makes the save converge on one row, which is what lets the
+	// activity persist its partial durably rather than handing it back through
+	// Temporal's cancellation payload.
+	//
+	// Gated on the same version as the pre-allocated message id: histories
+	// recorded before that gate replay with the old RunID-scoped key and are
+	// unaffected. Format mirrors injectIdempotencyKey — length-prefixed, so no
+	// combination of components can collide by concatenation.
+	if model.NodeType(node) == model.NodeTypeCallLLM &&
+		workflow.GetVersion(e.ctx, streamFinalizedVersionGate, workflow.DefaultVersion, 1) >= 1 {
+		rtx.MessageIdempotencyKey = callLLMIdempotencyKey(rtx.WorkflowID, rtx.StepID, e.loopNodeID, e.loopIteration)
 	}
 
 	// SpawnedBy from parent context

@@ -343,17 +343,10 @@ func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolN
 
 // workflowStatusIsTerminal reports whether a workflow has reached a state it
 // will not leave on its own. PAUSED is deliberately NOT terminal: a paused
-// workflow resumes and finishes its work, so its tool calls are still live.
+// workflow resumes and finishes its work, so its tool calls are still live —
+// which is exactly the complement of Live().
 func workflowStatusIsTerminal(status core.WorkflowStatus) bool {
-	switch status {
-	case core.WorkflowStatusCompleted,
-		core.WorkflowStatusFailed,
-		core.WorkflowStatusCancelled,
-		reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED:
-		return true
-	default:
-		return false
-	}
+	return !status.Live()
 }
 
 // createRepairToolMessage creates a tool role message with synthetic tool_result blocks

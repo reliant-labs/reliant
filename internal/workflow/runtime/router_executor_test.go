@@ -527,6 +527,7 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 				Ref:     "builtin://agent",
 				Presets: []*preset.Preset{{Name: "general"}},
 			}}
+			executor = executor.WithProjectPath("/tmp/router-test-project")
 			executor = executor.WithExecContext(&ExecutionContext{
 				WorkflowID:   "wf-123",
 				ChatID:       "chat-456",
@@ -630,6 +631,7 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 				Ref:     "builtin://agent",
 				Presets: []*preset.Preset{{Name: "general"}},
 			}}
+			executor = executor.WithProjectPath("/tmp/router-test-project")
 			executor = executor.WithExecContext(&ExecutionContext{
 				WorkflowID:   "wf-123",
 				ChatID:       "chat-456",

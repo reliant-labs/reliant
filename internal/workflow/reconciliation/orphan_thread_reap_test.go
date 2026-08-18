@@ -40,8 +40,8 @@ func TestReconciler_ReapsOrphanedThreadsEveryPass(t *testing.T) {
 	// the root is terminal and nothing is listed as running. A pass that
 	// returns early here is exactly the state that let the 288 rows survive
 	// every poll forever.
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
-	repo.workflowsByStatus[db.WorkflowStatusPaused] = nil
+	repo.workflowsByStatus[db.Active()] = nil
+	repo.workflowsByStatus[db.Paused()] = nil
 
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, nil)
 
@@ -58,7 +58,7 @@ func TestReconciler_ReapThreadsRunsAfterWorkflowReapSameBefore(t *testing.T) {
 	repo := newMockRepo()
 	repo.reapRows = 1
 	repo.reapThreadsRows = 1
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{runningWorkflow()}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
@@ -79,7 +79,7 @@ func TestReconciler_ReapThreadsRunsAfterWorkflowReapSameBefore(t *testing.T) {
 func TestReconciler_ReapThreadsFailureIsReportedAndDoesNotAbortThePass(t *testing.T) {
 	repo := newMockRepo()
 	repo.reapThreadsErr = errors.New("db unavailable")
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{runningWorkflow()}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
@@ -92,6 +92,6 @@ func TestReconciler_ReapThreadsFailureIsReportedAndDoesNotAbortThePass(t *testin
 	assert.Equal(t, 1, repo.reapThreadsCalls)
 	// The rest of the pass still ran: the reap is a backstop, not a gate on
 	// the detectors that repair live workflows.
-	assert.Contains(t, repo.callOrder, "list-"+db.WorkflowStatusRunning.String(),
+	assert.Contains(t, repo.callOrder, "list-"+db.Active().Label(),
 		"the pass must continue past a failed thread reap")
 }

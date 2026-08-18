@@ -53,7 +53,7 @@ func TestStory02_AskQuestionPauseResumeCompletes(t *testing.T) {
 
 	wf, err := h.Stack.Repo.GetWorkflow(h.Ctx, workflowID)
 	require.NoError(t, err)
-	require.Equal(t, db.WorkflowStatusRunning, wf.Status,
+	require.Equal(t, db.Active(), wf.Status,
 		"ask_question blocks inside a running workflow (signal-based, not a terminal pause)")
 
 	// 2. Resolve WITH feedback → has_feedback=true → the loop re-enters and
@@ -69,7 +69,7 @@ func TestStory02_AskQuestionPauseResumeCompletes(t *testing.T) {
 	h.ResolveQuestion(q2.ID, []string{"Continue"}, "")
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	// 5. Persistence: both assistant turns and the user's feedback reply are
 	// in the thread, in order.

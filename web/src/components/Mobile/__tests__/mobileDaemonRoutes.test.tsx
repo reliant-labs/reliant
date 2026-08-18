@@ -4,10 +4,9 @@
  *
  * Same miniature-route-tree approach as `mobileRoutes.test.tsx`: real paths,
  * stub components, so tanstack-router's matching is exercised without the
- * app's dependency graph. What's protected is that both screens nest under the
- * shell (they'd silently get DESKTOP capabilities otherwise — which for
- * `/m/daemons` means the suppressed create/suspend/delete affordances become
- * legal) and that `/m/new` did not capture `/m/chats/$chatId`.
+ * app's dependency graph. What's protected is that these screens nest under
+ * the shell (they'd silently get DESKTOP capabilities otherwise) and that
+ * `/m/new` did not capture `/m/chats/$chatId`.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -46,6 +45,9 @@ function StubMobileDaemonList() {
 function StubMobileDaemonScreen() {
   const { daemonId } = useParams({ strict: false })
   return <div>mobile-daemon:{daemonId}</div>
+}
+function StubMobileGitHubScreen() {
+  return <div>mobile-github</div>
 }
 
 function buildRouteTree() {
@@ -96,6 +98,12 @@ function buildRouteTree() {
     component: StubMobileDaemonScreen,
   })
 
+  const mobileGitHubRoute = createRoute({
+    getParentRoute: () => mobileLayoutRoute,
+    path: '/m/github',
+    component: StubMobileGitHubScreen,
+  })
+
   return rootRoute.addChildren([
     mobileIndexRoute,
     mobileLayoutRoute.addChildren([
@@ -104,6 +112,7 @@ function buildRouteTree() {
       mobileNewChatRoute,
       mobileDaemonsRoute,
       mobileDaemonRoute,
+      mobileGitHubRoute,
     ]),
   ])
 }
@@ -156,6 +165,18 @@ describe('mobile daemon routes', () => {
 
   it('renders the daemon detail screen inside the mobile shell too', async () => {
     renderAt('/m/daemons/dm-42')
+    expect(await screen.findByTestId('mobile-shell')).toBeInTheDocument()
+  })
+})
+
+describe('mobile github route', () => {
+  it('renders GitHub management at /m/github', async () => {
+    renderAt('/m/github')
+    expect(await screen.findByText('mobile-github')).toBeInTheDocument()
+  })
+
+  it('renders GitHub management inside the mobile shell', async () => {
+    renderAt('/m/github')
     expect(await screen.findByTestId('mobile-shell')).toBeInTheDocument()
   })
 })

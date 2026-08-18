@@ -83,7 +83,7 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	assert.Equal(t, "builtin://agent", workflow.WorkflowName)
 	assert.Equal(t, chatID, workflow.ChatID)
 	assert.Equal(t, threadID, workflow.Thread)
-	assert.Equal(t, db.WorkflowStatusRunning, workflow.Status)
+	assert.Equal(t, db.Active(), workflow.Status)
 
 	// Verify thread was created in DB
 	thread, err := repo.GetThread(ctx, threadID)
@@ -216,7 +216,7 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 			ChatID:       chatID,
 			WorkflowName: "builtin://agent",
 			Thread:       parentThreadID,
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		},
 		ThreadID: parentThreadID,

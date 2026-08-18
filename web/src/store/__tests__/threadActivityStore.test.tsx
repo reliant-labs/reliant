@@ -166,6 +166,39 @@ describe("useChatCurrentActivity", () => {
   });
 });
 
+describe("setThreads identity gating", () => {
+  it("does not notify subscribers when called twice with reference-equal data", () => {
+    const threads = [buildThread({})];
+    let notifications = 0;
+    const unsubscribe = useThreadActivityStore.subscribe(() => {
+      notifications += 1;
+    });
+
+    useThreadActivityStore.getState().setThreads(CHAT, threads);
+    expect(notifications).toBe(1);
+
+    useThreadActivityStore.getState().setThreads(CHAT, threads);
+    expect(notifications).toBe(1);
+
+    unsubscribe();
+  });
+
+  it("does notify subscribers when called with a new array reference", () => {
+    let notifications = 0;
+    const unsubscribe = useThreadActivityStore.subscribe(() => {
+      notifications += 1;
+    });
+
+    useThreadActivityStore.getState().setThreads(CHAT, [buildThread({})]);
+    expect(notifications).toBe(1);
+
+    useThreadActivityStore.getState().setThreads(CHAT, [buildThread({})]);
+    expect(notifications).toBe(2);
+
+    unsubscribe();
+  });
+});
+
 describe("getActivityDisplayText (characterization)", () => {
   it("maps known activity names", () => {
     expect(getActivityDisplayText("Compact")).toBe("Summarizing conversation");

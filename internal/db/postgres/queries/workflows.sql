@@ -1,9 +1,9 @@
 -- name: CreateWorkflow :one
 INSERT INTO workflows (
-    id, parent_id, chat_id, workflow_name, thread, status,
+    id, parent_id, chat_id, workflow_name, thread, state, stop_reason,
     spawned_by_node_id, loop_iteration,
     created_at, completed_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 ON CONFLICT (id) DO NOTHING
 RETURNING *;
 
@@ -30,30 +30,38 @@ WHERE chat_id = $1 AND parent_id IS NULL
 ORDER BY created_at DESC;
 
 -- name: UpdateWorkflowStatus :one
--- Update workflow status with conditional timestamp handling:
--- - Terminal states (completed/failed/cancelled): set completed_at
--- - Running/Pending: clear completed_at
+-- Update workflow lifecycle with conditional timestamp handling:
+-- - Stopped for good (completed/failed/cancelled): set completed_at
+-- - Active/Pending: clear completed_at
+-- - Stopped-but-paused: leave completed_at alone; the run has not ended.
 UPDATE workflows SET
-    status = $1,
+    state = $1,
+    stop_reason = $2,
     completed_at = CASE
-        WHEN $1 IN (3, 4, 5) THEN NOW()
-        WHEN $1 IN (2, 1) THEN NULL
+        WHEN $1 = 3 AND $2 <> 3 THEN NOW()
+        WHEN $1 IN (1, 2) THEN NULL
         ELSE completed_at
     END
-WHERE id = $2
+WHERE id = $3
 RETURNING *;
 
 -- name: CompareAndSwapWorkflowStatus :one
--- Atomically update workflow status only if current status matches expected.
--- Returns the updated row if swapped, sql.ErrNoRows if status didn't match.
+-- Atomically update workflow lifecycle only if the current one matches
+-- expected. Returns the updated row if swapped, sql.ErrNoRows if it did not
+-- match.
+--
+-- The comparison is over the PAIR: two rows that are both STOPPED but stopped
+-- for different reasons are different statuses, and a swap expecting one must
+-- not win against the other.
 UPDATE workflows SET
-    status = $1,
+    state = $1,
+    stop_reason = $2,
     completed_at = CASE
-        WHEN $1 IN (3, 4, 5) THEN NOW()
-        WHEN $1 IN (2, 1) THEN NULL
+        WHEN $1 = 3 AND $2 <> 3 THEN NOW()
+        WHEN $1 IN (1, 2) THEN NULL
         ELSE completed_at
     END
-WHERE id = $2 AND status = $3
+WHERE id = $3 AND state = $4 AND stop_reason = $5
 RETURNING *;
 
 -- name: SetWorkflowOutcome :one
@@ -67,10 +75,10 @@ WHERE id = $2
 RETURNING *;
 
 -- name: UpdateWorkflowName :one
--- Update workflow name (only allowed when status is pending)
+-- Update workflow name (only allowed while the run is still PENDING)
 UPDATE workflows SET
     workflow_name = $1
-WHERE id = $2 AND status = 1
+WHERE id = $2 AND state = 1
 RETURNING *;
 
 -- name: DeleteWorkflow :exec
@@ -80,10 +88,10 @@ DELETE FROM workflows WHERE id = $1;
 DELETE FROM workflows WHERE chat_id = $1;
 
 -- name: GetRootWorkflowStatusForChat :one
--- Get effective workflow status for a single chat.
--- Returns 'running' if ANY real workflow (root or child) is running.
--- Returns 'paused' if ANY real workflow is paused (and none running).
--- Otherwise returns the most recent root workflow's status.
+-- Get effective workflow lifecycle for a single chat.
+-- Returns ACTIVE if ANY real workflow (root or child) is active.
+-- Returns STOPPED/PAUSED if ANY real workflow is paused (and none active).
+-- Otherwise returns the most recent root workflow's own lifecycle.
 -- Every row in workflows is now a real workflow execution: thread lifecycle
 -- lives on threads.status, so the "thread:*"/"fork:*" name filters this query
 -- used to carry are gone along with the records they excluded.
@@ -93,15 +101,28 @@ SELECT
         WHEN EXISTS (
             SELECT 1 FROM workflows w3
             WHERE w3.chat_id = w.chat_id
-              AND w3.status = 2
+              AND w3.state = 2
         ) THEN 2
         WHEN EXISTS (
             SELECT 1 FROM workflows w4
             WHERE w4.chat_id = w.chat_id
-              AND w4.status = 6
-        ) THEN 6
-        ELSE w.status
-    END AS status
+              AND w4.state = 3 AND w4.stop_reason = 3
+        ) THEN 3
+        ELSE w.state
+    END AS state,
+    CASE
+        WHEN EXISTS (
+            SELECT 1 FROM workflows w3
+            WHERE w3.chat_id = w.chat_id
+              AND w3.state = 2
+        ) THEN 0
+        WHEN EXISTS (
+            SELECT 1 FROM workflows w4
+            WHERE w4.chat_id = w.chat_id
+              AND w4.state = 3 AND w4.stop_reason = 3
+        ) THEN 3
+        ELSE w.stop_reason
+    END AS stop_reason
 FROM workflows w
 WHERE w.parent_id IS NULL
   AND w.chat_id = $1
@@ -113,20 +134,19 @@ LIMIT 1;
 -- status the parent itself reached. Called when a workflow ends, to drain the
 -- children (spawn children, thread records, etc.) that are not yet terminal.
 --
--- The status is the caller's, not a constant. Writing a fixed "completed" here
--- laundered every terminated run into a finished one: a cancel terminated 23
--- descendants mid-flight and recorded all 23 as COMPLETED, so any later count
--- of completed units over-counted by the whole subtree. A descendant of a
--- cancelled run was cancelled; a descendant of a failed run did not complete
--- either. CHAT_WORKFLOW_STATUS already distinguishes them (3=completed,
--- 4=failed, 5=cancelled, 7=expired) — nothing new needs inventing, the write
--- just has to stop discarding what it knows.
+-- The stop reason is the caller's, not a constant. Writing a fixed "completed"
+-- here laundered every terminated run into a finished one: a cancel terminated
+-- 23 descendants mid-flight and recorded all 23 as COMPLETED, so any later
+-- count of completed units over-counted by the whole subtree. A descendant of
+-- a cancelled run was cancelled; a descendant of a failed run did not complete
+-- either. The stop reason already distinguishes them — nothing new needs
+-- inventing, the write just has to stop discarding what it knows.
 --
 -- Recursive: a spawn's own spawns (grandchildren and deeper) must end too — a
--- one-level cascade leaves them running/paused forever, which keeps the chat
+-- one-level cascade leaves them active/paused forever, which keeps the chat
 -- permanently "active" in chats_with_activity and (for paused rows) permanently
 -- exempt from the progress watchdog.
--- Matches running (2) and paused (6) descendants.
+-- Matches every LIVE descendant: active (state 2) and paused (3/3).
 WITH RECURSIVE descendants AS (
     SELECT c.id FROM workflows c WHERE c.parent_id = $1
     UNION ALL
@@ -134,10 +154,10 @@ WITH RECURSIVE descendants AS (
     JOIN descendants d ON g.parent_id = d.id
 )
 UPDATE workflows AS t
-SET status = $2, completed_at = NOW()
+SET state = 3, stop_reason = $2, completed_at = NOW()
 FROM descendants
 WHERE t.id = descendants.id
-  AND t.status IN (2, 6);
+  AND (t.state = 2 OR (t.state = 3 AND t.stop_reason = 3));
 
 -- name: ReapOrphanedWorkflowDescendants :execrows
 -- Enforce the invariant CascadeTerminalStatusToDescendants asserts from the
@@ -158,36 +178,39 @@ WHERE t.id = descendants.id
 -- keeps one forgotten call site from stranding rows permanently.
 --
 -- Anchored on ANY terminal parent, not just roots, so a terminal mid-tree
--- spawn drains its own subtree. Inherits the terminal ANCESTOR's status, which
--- is what the direct cascade writes, so a row reaped here stays
+-- spawn drains its own subtree. Inherits the terminal ANCESTOR's stop reason,
+-- which is what the direct cascade writes, so a row reaped here stays
 -- indistinguishable from one cascaded there — including the distinction
 -- between a run that finished and one that was terminated.
+--
+-- "Terminal parent" is STOPPED for a reason other than PAUSED: a paused parent
+-- has not ended, and reaping its children would kill a run that is coming back.
 WITH RECURSIVE descendants AS (
-    SELECT c.id, p.status AS terminal_status FROM workflows c
+    SELECT c.id, p.stop_reason AS terminal_reason FROM workflows c
     JOIN workflows p ON c.parent_id = p.id
-    WHERE p.status IN (3, 4, 5, 7)
+    WHERE p.state = 3 AND p.stop_reason <> 3
     UNION ALL
-    SELECT g.id, d.terminal_status FROM workflows g
+    SELECT g.id, d.terminal_reason FROM workflows g
     JOIN descendants d ON g.parent_id = d.id
 )
 UPDATE workflows AS t
-SET status = descendants.terminal_status, completed_at = NOW()
+SET state = 3, stop_reason = descendants.terminal_reason, completed_at = NOW()
 FROM descendants
 WHERE t.id = descendants.id
-  AND t.status IN (2, 6);
+  AND (t.state = 2 OR (t.state = 3 AND t.stop_reason = 3));
 
 -- name: ListWorkflowsByStatus :many
--- List all workflows with a specific status (e.g., 2=running, 6=paused).
+-- List all workflows at a specific lifecycle (e.g. ACTIVE, or STOPPED/PAUSED).
 -- Used for startup recovery to restart workers for active workflows.
 SELECT * FROM workflows
-WHERE status = $1
+WHERE state = $1 AND stop_reason = $2
 ORDER BY created_at ASC;
 
 -- name: ListRootWorkflowsByStatus :many
--- List root workflows (parent_id IS NULL) with a specific status.
+-- List root workflows (parent_id IS NULL) at a specific lifecycle.
 -- Root workflows are the entry points that need dedicated workers.
 SELECT * FROM workflows
-WHERE parent_id IS NULL AND status = $1
+WHERE parent_id IS NULL AND state = $1 AND stop_reason = $2
 ORDER BY created_at ASC;
 
 -- name: UpdateWorkflowWorkerStarted :exec
@@ -207,17 +230,17 @@ UPDATE workflows SET
 WHERE id = $1;
 
 -- name: PauseRunningWorkflowsByChat :exec
--- Pause all running workflows for a chat.
+-- Pause all active workflows for a chat.
 -- Used when pausing a chat to ensure child workflows (e.g., agent threads) are also paused,
 -- so the chats_with_activity view correctly reports the chat as paused.
-UPDATE workflows SET status = 6
-WHERE chat_id = $1 AND status = 2;
+UPDATE workflows SET state = 3, stop_reason = 3
+WHERE chat_id = $1 AND state = 2;
 
 -- name: ResumeWorkflowsByChat :exec
 -- Resume all paused workflows for a chat.
 -- Used when resuming a chat to ensure child workflows are also resumed.
-UPDATE workflows SET status = 2
-WHERE chat_id = $1 AND status = 6;
+UPDATE workflows SET state = 2, stop_reason = 0
+WHERE chat_id = $1 AND state = 3 AND stop_reason = 3;
 
 -- NOTE: Recursive ancestor/descendant queries can be implemented in Go code
 -- using ListChildWorkflows and GetWorkflow iteratively, or via raw SQL if needed.

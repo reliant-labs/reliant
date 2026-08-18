@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,11 +11,18 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
+
+// errDrainBatchTaken signals that another writer claimed part of this drain's
+// batch. It exists to force RunTx to ROLL BACK the partial claim -- returning
+// nil would commit rows as delivered with no message behind them, and every
+// read path filters on status = 1, so those messages could never be recovered.
+var errDrainBatchTaken = errors.New("agent message batch already claimed")
 
 // DrainAgentMessagesInput is the input for the DrainAgentMessages activity.
 //
@@ -89,6 +97,46 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 	// not a state any reader has to cope with.
 	var envelopeMessageID string
 	err = a.repo.RunTx(ctx, func(txCtx context.Context) error {
+		// Claim the rows BEFORE writing anything they would produce.
+		//
+		// The list above is a plain read outside this transaction, so two drains
+		// racing on one thread can select the same queued rows. The claim is the
+		// conditional UPDATE (status = 1 only) and it returns the ids it actually
+		// moved, so exactly one drain can win a given row. The loser writes
+		// nothing at all — which is the whole point of doing this first. Doing it
+		// last, as this used to, meant both drains had already inserted their
+		// envelope and bodies by the time either discovered it had lost, and the
+		// user saw the same queued message twice.
+		//
+		// delivered_message_id is backfilled once the envelope exists; the claim
+		// only needs to establish ownership.
+		claimed, err := a.repo.MarkAgentMessagesDelivered(txCtx, ids, time.Now().UTC(), "")
+		if err != nil {
+			return fmt.Errorf("failed to claim agent messages for delivery: %w", err)
+		}
+		if len(claimed) != len(ids) {
+			// Someone else took part of this batch. Abandon the whole delivery
+			// rather than deliver the remainder: whoever took those rows is
+			// writing them, and a partial second delivery duplicates exactly the
+			// messages they already wrote.
+			//
+			// Returning an ERROR, not nil, is load-bearing. RunTx commits on a nil
+			// return, and the claim above is part of this transaction — so
+			// abandoning with nil would leave the rows we DID claim marked
+			// delivered with no message written and no way back: every read path
+			// filters on status = 1, so nothing would ever find them again and the
+			// user's message would be silently, permanently gone. The error rolls
+			// the claim back so the rows stay queued and the next drain re-reads
+			// them. The caller recognises this sentinel and reports "nothing
+			// delivered" rather than a failure.
+			//
+			// A partial claim is not only a competing drain: "Send now"
+			// (ClaimQueuedAgentMessagesForThread) and cancel both DELETE queued
+			// rows, and either can land between the unguarded list above and this
+			// claim.
+			return errDrainBatchTaken
+		}
+
 		// The envelope is LLM-only framing, so it is written as its own
 		// message marked HIDDEN: it reaches the model through the ordinary
 		// history load, and the two transcript filters
@@ -175,11 +223,44 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 		// guaranteed to exist for any drain (a batch may be all completion
 		// notices, which carry no body message of their own), and it is the
 		// row whose ordinal marks where this delivery landed in the thread.
-		if err := a.repo.MarkAgentMessagesDelivered(txCtx, ids, time.Now().UTC(), envelopeMessageID); err != nil {
-			return fmt.Errorf("failed to mark agent messages delivered: %w", err)
+		//
+		// The rows were already claimed at the top of this transaction, so this
+		// only backfills that pointer. It deliberately does not re-check the
+		// claim: these ids are ours, and re-running the guarded update would
+		// match nothing now that their status is 2.
+		if err := a.repo.SetAgentMessagesDeliveredMessageID(txCtx, ids, envelopeMessageID); err != nil {
+			return fmt.Errorf("failed to record delivery message id: %w", err)
+		}
+
+		// Tell the client which mailbox rows these messages came from, in
+		// this same transaction. The pending-queue strip polls
+		// ListQueuedAgentMessages, so without this a drained message sits in
+		// the strip until the next poll happens to omit it -- visible in the
+		// transcript and in the strip at once, which is what the user sees as
+		// the same message twice.
+		//
+		// Inside the transaction, and returning the error rather than logging
+		// it, on purpose: the announcement and the messages it announces must
+		// become visible together. Emitting after the commit would leave a
+		// window where a failure loses the announcement and strands the rows
+		// in the strip; emitting before would clear the strip against a
+		// transcript that has not shown them yet. Rolling back is safe --
+		// the rows stay queued and the next boundary re-drains them.
+		if err := a.repo.EmitAgentMessagesDrainedUpdate(txCtx, input.ChatID, db.AgentMessagesDrainedUpdate{
+			Thread:     input.Thread,
+			MessageIDs: ids,
+		}); err != nil {
+			return fmt.Errorf("failed to announce drained agent messages: %w", err)
 		}
 		return nil
 	})
+	if errors.Is(err, errDrainBatchTaken) {
+		// Rolled back cleanly: the rows are queued again and whoever took them is
+		// delivering them. "Nothing delivered" is the honest answer for THIS call.
+		logging.Info("[DrainAgentMessages] Batch was claimed by another writer; rolled back and left it to them",
+			"chatID", input.ChatID, "thread", input.Thread, "count", len(queued))
+		return DrainAgentMessagesOutput{}, nil
+	}
 	if err != nil {
 		return DrainAgentMessagesOutput{}, err
 	}

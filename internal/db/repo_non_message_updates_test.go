@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -120,6 +121,43 @@ func TestGetLatestNonMessageUpdatesPerEntity_CollapsesToolCallToLatestStatus(t *
 	require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL, updates[0].UpdateType)
 	require.Contains(t, string(updates[0].Data), string(ToolCallStatusCompleted),
 		"the surviving row should be the newest status, not the first")
+}
+
+func TestGetLatestNonMessageUpdatesPerEntity_DedupsToolCallsByJSONToolCallID(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+
+	// EntityIDForToolCall includes the tool-call id, but the id itself can
+	// contain hyphens. Splitting entity_id on '-' collapses these two distinct
+	// calls to the same key ("toolu_same") and drops one from the snapshot.
+	firstToolCallID := "toolu_same-prefix-one"
+	secondToolCallID := "toolu_same-prefix-two"
+	for _, update := range []ToolCallUpdate{
+		{ToolCallID: firstToolCallID, ToolName: "bash", Status: ToolCallStatusExecuting},
+		{ToolCallID: secondToolCallID, ToolName: "bash", Status: ToolCallStatusCompleted},
+	} {
+		require.NoError(t, repo.EmitToolCallUpdate(ctx, chatID, update))
+		time.Sleep(time.Millisecond)
+	}
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+
+	statusesByToolCallID := make(map[string]string, len(updates))
+	for _, update := range updates {
+		require.Equal(t, reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL, update.UpdateType)
+		var payload ToolCallUpdate
+		require.NoError(t, json.Unmarshal(update.Data, &payload))
+		statusesByToolCallID[payload.ToolCallID] = string(payload.Status)
+	}
+
+	require.Equal(t, map[string]string{
+		firstToolCallID:  string(ToolCallStatusExecuting),
+		secondToolCallID: string(ToolCallStatusCompleted),
+	}, statusesByToolCallID)
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_ExcludesStreamFinalized(t *testing.T) {

@@ -4,8 +4,9 @@ tag: agent
 params:
   skills:
     - research-methodology
+    - code-search
   tools:
-  - tag:shell    # search the codebase via the shell tool (rg/grep/find)
+  - tag:shell    # search the codebase via the shell tool (rg, and a language server for callers/implementations)
   - tag:web      # fetch for documentation research
   - view         # Read files
   model:

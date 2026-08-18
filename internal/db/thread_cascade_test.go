@@ -43,10 +43,10 @@ func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) 
 	grandchildID := "wf-tc-grandchild"
 	unrelatedID := "wf-tc-unrelated"
 
-	insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, WorkflowStatusRunning)
-	insertTestWorkflowWithParent(t, repo, childID, chatID, &rootID, WorkflowStatusRunning)
-	insertTestWorkflowWithParent(t, repo, grandchildID, chatID, &childID, WorkflowStatusPaused)
-	insertTestWorkflowWithParent(t, repo, unrelatedID, chatID, nil, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, Active())
+	insertTestWorkflowWithParent(t, repo, childID, chatID, &rootID, Active())
+	insertTestWorkflowWithParent(t, repo, grandchildID, chatID, &childID, Paused())
+	insertTestWorkflowWithParent(t, repo, unrelatedID, chatID, nil, Active())
 
 	// One thread per workflow, each still running/paused -- the shape a
 	// worker death between UpdateWorkflowStatus and ThreadStatusActivity's
@@ -56,7 +56,7 @@ func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) 
 	insertTestThreadForWorkflow(t, repo, "th-tc-grandchild", chatID, grandchildID, ThreadStatusRunning)
 	insertTestThreadForWorkflow(t, repo, "th-tc-unrelated", chatID, unrelatedID, ThreadStatusRunning)
 
-	if err := repo.CascadeTerminalStatusToThreadSubtree(ctx, rootID, WorkflowStatusCompleted); err != nil {
+	if err := repo.CascadeTerminalStatusToThreadSubtree(ctx, rootID, StopReasonCompleted); err != nil {
 		t.Fatalf("CascadeTerminalStatusToThreadSubtree: %v", err)
 	}
 
@@ -99,19 +99,19 @@ func TestCascadeTerminalStatusToThreadSubtree_TerminationIsNotCompletion(t *test
 
 	for _, tc := range []struct {
 		name   string
-		status WorkflowStatus
+		reason WorkflowStopReason
 	}{
-		{"cancelled", WorkflowStatusCancelled},
-		{"failed", WorkflowStatusFailed},
-		{"completed", WorkflowStatusCompleted},
+		{"cancelled", StopReasonCancelled},
+		{"failed", StopReasonFailed},
+		{"completed", StopReasonCompleted},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rootID := "wf-tct-" + tc.name
 			threadID := "th-tct-" + tc.name
-			insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, WorkflowStatusRunning)
+			insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, Active())
 			insertTestThreadForWorkflow(t, repo, threadID, chatID, rootID, ThreadStatusRunning)
 
-			if err := repo.CascadeTerminalStatusToThreadSubtree(ctx, rootID, tc.status); err != nil {
+			if err := repo.CascadeTerminalStatusToThreadSubtree(ctx, rootID, tc.reason); err != nil {
 				t.Fatalf("CascadeTerminalStatusToThreadSubtree: %v", err)
 			}
 
@@ -119,7 +119,7 @@ func TestCascadeTerminalStatusToThreadSubtree_TerminationIsNotCompletion(t *test
 			if err != nil {
 				t.Fatalf("GetThread(%s): %v", threadID, err)
 			}
-			wantStatus := int32(tc.status)
+			wantStatus, _ := ThreadStatusForStopReason(tc.reason)
 			if th.Status != wantStatus {
 				t.Errorf("%s: status %d, want %d — a thread under a %s run must record what actually happened", threadID, th.Status, wantStatus, tc.name)
 			}
@@ -143,7 +143,7 @@ func TestCascadeTerminalStatusToThreadSubtree_FailClosed(t *testing.T) {
 	createActivityTestChat(t, repo, chatID)
 
 	rootID := "wf-fc-root"
-	insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, rootID, chatID, nil, Active())
 
 	alreadyDoneID := "th-fc-already-done"
 	completedAt := time.Now()
@@ -154,7 +154,7 @@ func TestCascadeTerminalStatusToThreadSubtree_FailClosed(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	if err := repo.CascadeTerminalStatusToThreadSubtree(ctx, rootID, WorkflowStatusCompleted); err != nil {
+	if err := repo.CascadeTerminalStatusToThreadSubtree(ctx, rootID, StopReasonCompleted); err != nil {
 		t.Fatalf("CascadeTerminalStatusToThreadSubtree: %v", err)
 	}
 

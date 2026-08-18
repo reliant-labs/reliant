@@ -4,6 +4,7 @@ package execfollow
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,12 +17,39 @@ import (
 // never stall the follow stream.
 const DefaultHookTimeout = 60 * time.Second
 
+// DefaultHookWaitDelay bounds how long the runner may block AFTER the hook's
+// own shell has exited or been killed, waiting for its output pipes to close.
+//
+// Timeout alone does not bound the hook. Stdout and Stderr are plain
+// io.Writers rather than *os.Files, so os/exec creates OS pipes and copies
+// from them in goroutines, and cmd.Run does not return until those copies see
+// EOF. EOF arrives only when every process holding the write end has exited —
+// not just the shell we spawned. Any grandchild that outlives it holds the
+// pipe open: a backgrounded `&` job, a daemonized notifier. Killing the shell
+// on timeout does not close a pipe someone else still holds, so without this
+// bound a hook of the form `notify &` stalls the follow stream for as long as
+// the grandchild lives, which is exactly what Timeout exists to prevent.
+//
+// What it costs when it fires: hook output not yet written at that moment is
+// lost. The lingering process is deliberately left running — a hook that
+// daemonizes something on purpose should keep it, and the stalled follow is
+// the defect, not the process lifetime.
+//
+// Five seconds because the legitimate post-exit drain is a memory copy of at
+// most one pipe buffer and reaping a killed process is a scheduler round, both
+// milliseconds; this is three orders of magnitude of headroom while still
+// small against the 60s default timeout it protects.
+const DefaultHookWaitDelay = 5 * time.Second
+
 // HookRunner executes hooks via `sh -c` with the event JSON on stdin and
 // RELIANT_EVENT_* environment variables. Hook failures are logged to Stderr
 // and never propagate — a broken hook must not kill the follow.
 type HookRunner struct {
 	// Timeout per hook execution; DefaultHookTimeout when zero.
 	Timeout time.Duration
+	// WaitDelay bounds the post-exit output drain; DefaultHookWaitDelay when
+	// zero. See DefaultHookWaitDelay for why Timeout alone is not a bound.
+	WaitDelay time.Duration
 	// Stderr receives hook diagnostics (defaults to os.Stderr).
 	Stderr io.Writer
 	// Shell overrides the shell binary (defaults to "sh"); tests only.
@@ -59,13 +87,26 @@ func (r *HookRunner) runOne(ctx context.Context, h Hook, ev Event, evJSON []byte
 		shell = "sh"
 	}
 
+	waitDelay := r.WaitDelay
+	if waitDelay <= 0 {
+		waitDelay = DefaultHookWaitDelay
+	}
+
 	cmd := exec.CommandContext(hctx, shell, "-c", h.Cmd)
 	cmd.Stdin = bytes.NewReader(evJSON)
 	cmd.Stdout = r.stderr() // hook output is diagnostics; keep stdout NDJSON-clean
 	cmd.Stderr = r.stderr()
 	cmd.Env = append(os.Environ(), hookEnv(ev)...)
+	cmd.WaitDelay = waitDelay
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	switch {
+	case err == nil:
+	case errors.Is(err, exec.ErrWaitDelay):
+		// The hook itself succeeded; only the output drain was cut short
+		// because something it started outlived it and held the pipe.
+		fmt.Fprintf(r.stderr(), "reliant: hook output truncated (on=%s cmd=%q): a process it started outlived it and held the output pipe open; it was left running\n", h.On, h.Cmd)
+	default:
 		fmt.Fprintf(r.stderr(), "reliant: hook failed (on=%s cmd=%q): %v\n", h.On, h.Cmd, err)
 	}
 }

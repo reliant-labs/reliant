@@ -142,18 +142,21 @@ func TestReplayFixtures(t *testing.T) {
 			if err := replayer.ReplayWorkflowHistoryFromJSONFile(replayLogger(), fixture); err != nil {
 				t.Fatalf(`replay of fixture %s FAILED: the current workflow code is not replay-compatible with this recorded history.
 
-If this change deploys, in-flight workflow runs with this shape will wedge
-forever with WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR (TMPRL1100).
+Your change altered the workflow command sequence (activities, timers, side
+effects, signals, workflow.Go). Regenerate the fixtures and commit them with
+your change:
 
-Your options (see internal/workflow/runtime/replaytest/fixtures/README.md):
-  (a) Make the change replay-compatible — e.g. gate added/removed/reordered
-      workflow.* calls (activities, timers, side effects, signals, workflow.Go)
-      behind workflow.GetVersion so old histories take the old path.
-  (b) Consciously accept the break and regenerate the fixtures:
-        make replay-fixtures
-      Accepting the break means in-flight runs WILL wedge on deploy and must
-      be recovered by the reconciler + resume path. That is a decision, not a
-      side effect — read the README before choosing it.
+    make replay-fixtures
+
+Do NOT reach for workflow.GetVersion to keep old histories on the old path.
+We cut to the new code and delete the old one; a version gate is a permanent
+fork that can never be removed. See
+internal/workflow/runtime/replaytest/fixtures/README.md.
+
+Know what this means on deploy: in-flight runs with this shape wedge with
+TMPRL1100 and are recovered by the reconciler + resume path, losing the old
+run's in-memory node outputs. That is the accepted cost of cutting cleanly —
+this test exists so it is never a surprise.
 
 Replay error: %v`, name, err)
 			}

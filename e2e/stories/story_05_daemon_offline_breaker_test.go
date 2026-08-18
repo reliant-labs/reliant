@@ -81,7 +81,7 @@ func TestStory05_DaemonOfflineCircuitBreakerPausesAndResumes(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	// 1. Breaker trips after 3 strikes: workflow self-pauses.
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusPaused)
+	h.WaitWorkflowStatus(workflowID, db.Paused())
 
 	// The user-facing pause message is delivered as an error chat_update
 	// (WorkflowError activity → chat_updates → per-chat websocket). Read it
@@ -108,7 +108,7 @@ func TestStory05_DaemonOfflineCircuitBreakerPausesAndResumes(t *testing.T) {
 	h.SendMessage(chatID, "My machine is back, please continue")
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	// The post-resume turn ran and the chat is healthy.
 	require.Len(t, h.LLM.StreamCalls(), 4, "exactly one more LLM turn after resume")

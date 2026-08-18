@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+
 	_ "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 

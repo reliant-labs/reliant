@@ -349,6 +349,7 @@ describe("Workflow Serializer Round-Trip", () => {
                 inject: {
                   role: celLiteral("user"),
                   content: celLiteral("Hello world"),
+                  displayStyle: celLiteral("info"),
                 },
               },
             },
@@ -362,6 +363,7 @@ describe("Workflow Serializer Round-Trip", () => {
     expect(yaml).toContain("thread:");
     expect(yaml).toContain("mode: inherit");
     expect(yaml).toContain("inject:");
+    expect(yaml).toContain("display_style: info");
 
     const deserialized = deserializeWorkflowFromYAML(yaml);
     expect(getStepThread(deserialized.nodes[0])).toMatchObject({
@@ -369,6 +371,7 @@ describe("Workflow Serializer Round-Trip", () => {
       inject: {
         role: celLiteral("user"),
         content: celLiteral("Hello world"),
+        displayStyle: celLiteral("info"),
       },
     });
   });

@@ -13,11 +13,37 @@ SELECT * FROM agent_messages
 WHERE to_thread_id = $1 AND status = 1
 ORDER BY created_at ASC;
 
--- name: MarkAgentMessagesDelivered :exec
+-- name: MarkAgentMessagesDelivered :many
+-- Conditional on status = 1, and returns the ids it actually moved.
+--
+-- Both halves matter, for the same reason every other statement in this file
+-- is guarded. The drain reads its rows before it writes them, so two drains
+-- racing on one thread can select the same queued rows; the guard is what makes
+-- the second one's UPDATE match nothing instead of silently re-delivering rows
+-- that are already delivered and repointing delivered_message_id at a duplicate
+-- envelope. RETURNING is what lets the caller SEE that it lost, so it can
+-- abandon its own inserts rather than writing the same messages into the
+-- transcript a second time.
+--
+-- Without this the drain was idempotent only by luck of timing. See
+-- specs/interrupt-pause-spec.md.
 UPDATE agent_messages SET
     status = 2,
     delivered_at = $1,
     delivered_message_id = $2
+WHERE id IN (sqlc.slice('ids')) AND status = 1
+RETURNING id;
+
+-- name: SetAgentMessagesDeliveredMessageID :exec
+-- Backfills the envelope pointer on rows this drain already claimed.
+--
+-- Separate from the claim because the claim has to happen BEFORE the envelope
+-- exists (it is what decides whether to write one at all), and the envelope's
+-- id is only known after. Unguarded on status by design: these ids are already
+-- status = 2 from our own claim, and re-applying the status = 1 guard here
+-- would match nothing.
+UPDATE agent_messages SET
+    delivered_message_id = $1
 WHERE id IN (sqlc.slice('ids'));
 
 -- name: CountQueuedAgentMessagesForThread :one

@@ -30,34 +30,34 @@ func TestReapOrphanedWorkflowDescendants(t *testing.T) {
 	cancelledRoot := "wf-cancelled-root"
 	cancelledChild := "wf-cancelled-child"
 	cancelledGrandchild := "wf-cancelled-grandchild"
-	insertTestWorkflowWithParent(t, repo, cancelledRoot, chatID, nil, WorkflowStatusCancelled)
-	insertTestWorkflowWithParent(t, repo, cancelledChild, chatID, &cancelledRoot, WorkflowStatusRunning)
-	insertTestWorkflowWithParent(t, repo, cancelledGrandchild, chatID, &cancelledChild, WorkflowStatusPaused)
+	insertTestWorkflowWithParent(t, repo, cancelledRoot, chatID, nil, Cancelled())
+	insertTestWorkflowWithParent(t, repo, cancelledChild, chatID, &cancelledRoot, Active())
+	insertTestWorkflowWithParent(t, repo, cancelledGrandchild, chatID, &cancelledChild, Paused())
 
 	// Failed root — the reconciler's own terminate paths leave the identical
 	// shape, so the repair must not be cancel-specific.
 	failedRoot := "wf-failed-root"
 	failedChild := "wf-failed-child"
-	insertTestWorkflowWithParent(t, repo, failedRoot, chatID, nil, WorkflowStatusFailed)
-	insertTestWorkflowWithParent(t, repo, failedChild, chatID, &failedRoot, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, failedRoot, chatID, nil, Failed())
+	insertTestWorkflowWithParent(t, repo, failedChild, chatID, &failedRoot, Active())
 
 	// A LIVE root and its live child. Reaping these would kill running work,
 	// which is a far worse failure than the one being fixed.
 	liveRoot := "wf-live-root"
 	liveChild := "wf-live-child"
-	insertTestWorkflowWithParent(t, repo, liveRoot, chatID, nil, WorkflowStatusRunning)
-	insertTestWorkflowWithParent(t, repo, liveChild, chatID, &liveRoot, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, liveRoot, chatID, nil, Active())
+	insertTestWorkflowWithParent(t, repo, liveChild, chatID, &liveRoot, Active())
 
 	// A paused root and its paused child: a pause is resumable, not terminal.
 	pausedRoot := "wf-paused-root"
 	pausedChild := "wf-paused-child"
-	insertTestWorkflowWithParent(t, repo, pausedRoot, chatID, nil, WorkflowStatusPaused)
-	insertTestWorkflowWithParent(t, repo, pausedChild, chatID, &pausedRoot, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, pausedRoot, chatID, nil, Paused())
+	insertTestWorkflowWithParent(t, repo, pausedChild, chatID, &pausedRoot, Active())
 
 	// An already-completed descendant of a terminal root must not be counted
 	// or rewritten — the count is what the reconciler reports as anomalies.
 	settledChild := "wf-settled-child"
-	insertTestWorkflowWithParent(t, repo, settledChild, chatID, &cancelledRoot, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, settledChild, chatID, &cancelledRoot, Completed())
 
 	reaped, err := repo.ReapOrphanedWorkflowDescendants(ctx)
 	if err != nil {
@@ -83,20 +83,20 @@ func TestReapOrphanedWorkflowDescendants(t *testing.T) {
 	// including the distinction between a run that finished and one that was
 	// terminated. A reap that wrote COMPLETED here would re-introduce, one poll
 	// later, exactly the laundering the cascade was fixed to stop.
-	assertStatus(cancelledChild, WorkflowStatusCancelled, "a child of a cancelled root was cancelled, not completed")
-	assertStatus(cancelledGrandchild, WorkflowStatusCancelled, "the reap is recursive: a grandchild is stranded exactly as hard as a child, and inherits the same terminal status")
-	assertStatus(failedChild, WorkflowStatusFailed, "the leak is not cancel-specific — every terminate path has it, and each keeps its own status")
+	assertStatus(cancelledChild, Cancelled(), "a child of a cancelled root was cancelled, not completed")
+	assertStatus(cancelledGrandchild, Cancelled(), "the reap is recursive: a grandchild is stranded exactly as hard as a child, and inherits the same terminal status")
+	assertStatus(failedChild, Failed(), "the leak is not cancel-specific — every terminate path has it, and each keeps its own status")
 
 	// Terminal parents themselves are never rewritten: this repairs
 	// descendants only, and a cancelled run must stay distinguishable from a
 	// completed one (it is what routes the next message to a fresh start).
-	assertStatus(cancelledRoot, WorkflowStatusCancelled, "the reap must not rewrite the parent it read")
-	assertStatus(failedRoot, WorkflowStatusFailed, "the reap must not rewrite the parent it read")
+	assertStatus(cancelledRoot, Cancelled(), "the reap must not rewrite the parent it read")
+	assertStatus(failedRoot, Failed(), "the reap must not rewrite the parent it read")
 
-	assertStatus(liveRoot, WorkflowStatusRunning, "a root is never reaped by this repair")
-	assertStatus(liveChild, WorkflowStatusRunning, "a live parent's child is live work — reaping it would kill a running run")
-	assertStatus(pausedRoot, WorkflowStatusPaused, "paused is resumable, not terminal")
-	assertStatus(pausedChild, WorkflowStatusRunning, "a paused parent has not ended, so its child has not either")
+	assertStatus(liveRoot, Active(), "a root is never reaped by this repair")
+	assertStatus(liveChild, Active(), "a live parent's child is live work — reaping it would kill a running run")
+	assertStatus(pausedRoot, Paused(), "paused is resumable, not terminal")
+	assertStatus(pausedChild, Active(), "a paused parent has not ended, so its child has not either")
 
 	// Idempotent: a second pass over a repaired tree finds nothing, so the
 	// reconciler does not report the same anomaly on every 30s poll.

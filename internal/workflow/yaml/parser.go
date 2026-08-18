@@ -200,21 +200,6 @@ func unmarshalOutputMap(node *yaml.Node) (map[string]string, error) {
 	return result, nil
 }
 
-func unmarshalNodeList(node *yaml.Node) ([]*reliantv1.Node, error) {
-	if node.Kind != yaml.SequenceNode {
-		return nil, fmt.Errorf("expected sequence for nodes")
-	}
-	var nodes []*reliantv1.Node
-	for i, item := range node.Content {
-		n, err := unmarshalNode(item)
-		if err != nil {
-			return nil, fmt.Errorf("node[%d]: %w", i, err)
-		}
-		nodes = append(nodes, n)
-	}
-	return nodes, nil
-}
-
 func unmarshalEdgeList(node *yaml.Node) ([]*reliantv1.Edge, error) {
 	if node.Kind != yaml.SequenceNode {
 		return nil, fmt.Errorf("expected sequence for edges")
@@ -423,8 +408,8 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	// outputs
 	if len(wf.Outputs) > 0 {
 		outputsNode := &yaml.Node{Kind: yaml.MappingNode}
-		for k, v := range wf.Outputs {
-			outputsNode.Content = append(outputsNode.Content, scalarNode(k, ""), scalarNode(v, ""))
+		for _, k := range sortedKeys(wf.Outputs) {
+			outputsNode.Content = append(outputsNode.Content, scalarNode(k, ""), scalarNode(wf.Outputs[k], ""))
 		}
 		m.Content = append(m.Content, scalarNode("outputs", ""), outputsNode)
 	}
@@ -505,7 +490,8 @@ func marshalWorkflowUI(ui *reliantv1.WorkflowUI) (*yaml.Node, error) {
 	m := &yaml.Node{Kind: yaml.MappingNode}
 	if len(ui.Positions) > 0 {
 		posNode := &yaml.Node{Kind: yaml.MappingNode}
-		for k, v := range ui.Positions {
+		for _, k := range sortedKeys(ui.Positions) {
+			v := ui.Positions[k]
 			pn := &yaml.Node{Kind: yaml.MappingNode}
 			pn.Content = append(pn.Content,
 				scalarNode("x", ""), &yaml.Node{Kind: yaml.ScalarNode, Value: strconv.FormatFloat(v.X, 'f', -1, 64), Tag: "!!float"},
@@ -517,8 +503,8 @@ func marshalWorkflowUI(ui *reliantv1.WorkflowUI) (*yaml.Node, error) {
 	}
 	if len(ui.Switches) > 0 {
 		swNode := &yaml.Node{Kind: yaml.MappingNode}
-		for k, v := range ui.Switches {
-			smNode, err := marshalSwitchMetadata(v)
+		for _, k := range sortedKeys(ui.Switches) {
+			smNode, err := marshalSwitchMetadata(ui.Switches[k])
 			if err != nil {
 				return nil, err
 			}

@@ -54,31 +54,31 @@ func TestListStrandedSpawnToolCalls(t *testing.T) {
 
 	// The bug, exactly: a failed child whose parent's call never closed.
 	failedChild := "wf-stranded-failed"
-	insertTestWorkflowWithParent(t, repo, failedChild, chatID, nil, WorkflowStatusFailed)
+	insertTestWorkflowWithParent(t, repo, failedChild, chatID, nil, Failed())
 	insertTestSpawnToolCall(t, repo, "tc-stranded-failed", chatID, chatID, &failedChild, core.ToolCallStatusExecuting)
 
 	// A child that COMPLETED and still never wrote its result is stranded just
 	// as hard — the two writes are separate on the success path too.
 	completedChild := "wf-stranded-completed"
-	insertTestWorkflowWithParent(t, repo, completedChild, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, completedChild, chatID, nil, Completed())
 	insertTestSpawnToolCall(t, repo, "tc-stranded-completed", chatID, chatID, &completedChild, core.ToolCallStatusPending)
 
 	// A LIVE child. Repairing this would fabricate a failure for a sub-agent
 	// that is still working — a lie in conversation history that no later pass
 	// can distinguish from a real result. This is the fail-closed direction.
 	runningChild := "wf-live-child"
-	insertTestWorkflowWithParent(t, repo, runningChild, chatID, nil, WorkflowStatusRunning)
+	insertTestWorkflowWithParent(t, repo, runningChild, chatID, nil, Active())
 	insertTestSpawnToolCall(t, repo, "tc-live", chatID, chatID, &runningChild, core.ToolCallStatusExecuting)
 
 	// Paused is resumable, not terminal: the spawn will finish and report.
 	pausedChild := "wf-paused-child"
-	insertTestWorkflowWithParent(t, repo, pausedChild, chatID, nil, WorkflowStatusPaused)
+	insertTestWorkflowWithParent(t, repo, pausedChild, chatID, nil, Paused())
 	insertTestSpawnToolCall(t, repo, "tc-paused", chatID, chatID, &pausedChild, core.ToolCallStatusExecuting)
 
 	// A terminal child whose parent's call ALREADY has a result: the normal
 	// path. Returning it would rewrite a real result with a synthetic one.
 	settledChild := "wf-settled-child"
-	insertTestWorkflowWithParent(t, repo, settledChild, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, settledChild, chatID, nil, Completed())
 	insertTestSpawnToolCall(t, repo, "tc-settled", chatID, chatID, &settledChild, core.ToolCallStatusCompleted)
 	now := time.Now().UTC()
 	if err := repo.UpsertToolCallResult(ctx, &ToolCallResult{

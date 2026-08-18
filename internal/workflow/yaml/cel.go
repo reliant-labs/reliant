@@ -414,8 +414,8 @@ func marshalDaemonSelector(ds *reliantv1.DaemonSelectorProto) (*yaml.Node, error
 	}
 	if len(ds.Labels) > 0 {
 		labelsNode := &yaml.Node{Kind: yaml.MappingNode}
-		for k, v := range ds.Labels {
-			labelsNode.Content = append(labelsNode.Content, scalarNode(k, ""), scalarNode(v, ""))
+		for _, k := range sortedKeys(ds.Labels) {
+			labelsNode.Content = append(labelsNode.Content, scalarNode(k, ""), scalarNode(ds.Labels[k], ""))
 		}
 		m.Content = append(m.Content, scalarNode("labels", ""), labelsNode)
 	}

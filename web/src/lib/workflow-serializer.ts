@@ -105,10 +105,12 @@ function cleanStepForYaml(step: Step): Record<string, unknown> {
       const injectRole = normalizeCelString(stepThread.inject.role)
       const injectContent = normalizeCelString(stepThread.inject.content)
       const injectAttachments = normalizeCelString(stepThread.inject.attachments)
+      const injectDisplayStyle = normalizeCelString(stepThread.inject.displayStyle)
       thread.inject = {
         ...(injectRole && { role: injectRole }),
         ...(injectContent && { content: injectContent }),
         ...(injectAttachments && { attachments: injectAttachments }),
+        ...(injectDisplayStyle && { display_style: injectDisplayStyle }),
       }
     }
     if (Object.keys(thread).length > 0) result.thread = thread
@@ -572,6 +574,8 @@ function parseRawStep(raw: Record<string, unknown>): Step {
       if (content !== undefined) inject.content = celString(content)
       const attachments = parseOptionalString(raw.thread.inject.attachments)
       if (attachments !== undefined) inject.attachments = celString(attachments)
+      const displayStyle = parseOptionalString(raw.thread.inject.display_style)
+      if (displayStyle !== undefined) inject.displayStyle = celString(displayStyle)
 
       if (Object.keys(inject).length > 0) {
         thread.inject = inject

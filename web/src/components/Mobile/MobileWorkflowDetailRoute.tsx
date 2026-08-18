@@ -21,40 +21,38 @@ import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import type { WorkflowExecutionData } from "../../types/chat";
 import type { WorkflowExecution } from "../Chat/ExecutionSidebar/types";
+import {
+  WorkflowState,
+  WorkflowStopReason,
+} from "../../gen/reliant/v1/chat_pb";
 
 /**
  * Adapt a wire `WorkflowExecutionData` to the `WorkflowExecution` shape the
  * screen renders.
  *
- * These are two parallel models of the same thing: the protobuf-derived one
- * (types/chat) carries `status: string`, while the view model
- * (ExecutionSidebar/types) narrows it to a four-value union that
- * ExecutionStatusPill uses as a lookup key. A plain cast would let an
- * unrecognized status through and index the table with a miss, producing an
- * element with `className={undefined}` — a silently unstyled pill.
- *
- * So the status is VALIDATED rather than asserted: anything outside the union
- * falls back to "running", which is the honest reading of "the server told us
- * something we don't have a rendering for, and this execution exists".
- *
- * Converging the two workflow models is the real fix; this keeps the boundary
- * honest until then.
+ * The wire model preserves workflow state and stop reason separately. The
+ * workflow viewer has a smaller display-only status vocabulary, so collapse
+ * the pair only at this rendering boundary.
  */
 function toScreenExecution(
   execution: WorkflowExecutionData | null | undefined,
 ): WorkflowExecution | undefined {
   if (!execution) return undefined;
 
-  const known: WorkflowExecution["status"][] = [
-    "running",
-    "completed",
-    "failed",
-    "cancelled",
-  ];
-  const rawStatus = String(execution.status);
-  const status = known.includes(rawStatus as WorkflowExecution["status"])
-    ? (rawStatus as WorkflowExecution["status"])
-    : "running";
+  let status: WorkflowExecution["status"] = "running";
+  if (execution.state === WorkflowState.STOPPED) {
+    switch (execution.stopReason) {
+      case WorkflowStopReason.COMPLETED:
+        status = "completed";
+        break;
+      case WorkflowStopReason.FAILED:
+        status = "failed";
+        break;
+      case WorkflowStopReason.CANCELLED:
+        status = "cancelled";
+        break;
+    }
+  }
 
   // Timestamps cross the boundary as ISO strings on the wire and as epoch
   // millis in the view model, so they are CONVERTED, not spread through.

@@ -41,8 +41,31 @@ const (
 	ThreadStatusCompleted int32 = 3
 	ThreadStatusFailed    int32 = 4
 	ThreadStatusCancelled int32 = 5
-	ThreadStatusExpired   int32 = 7
+	// Value 7 (expired) is retired: nothing ever wrote it. Temporal's
+	// TIMED_OUT is deliberately recorded as a failure.
 )
+
+// ThreadStatusForStopReason maps a workflow's reason for stopping onto the
+// thread status its owned threads should take. Threads keep their own flat
+// status column — they have no PENDING/ACTIVE distinction to make — so this is
+// the one place the two vocabularies meet.
+//
+// A run that stopped only because it is PAUSED has not ended, and its threads
+// stay running: closing them would make a resumable run's threads read as
+// finished, which is what ThreadStatusIsTerminal's callers use to refuse
+// message delivery.
+func ThreadStatusForStopReason(reason WorkflowStopReason) (status int32, terminal bool) {
+	switch reason {
+	case StopReasonCompleted:
+		return ThreadStatusCompleted, true
+	case StopReasonFailed:
+		return ThreadStatusFailed, true
+	case StopReasonCancelled:
+		return ThreadStatusCancelled, true
+	default:
+		return ThreadStatusRunning, false
+	}
+}
 
 // ThreadStatusIsTerminal reports whether a thread's loop has exited and
 // there is nothing left to deliver a message into. Shared by every path that
@@ -51,7 +74,7 @@ const (
 // way everywhere.
 func ThreadStatusIsTerminal(status int32) bool {
 	switch status {
-	case ThreadStatusCompleted, ThreadStatusFailed, ThreadStatusCancelled, ThreadStatusExpired:
+	case ThreadStatusCompleted, ThreadStatusFailed, ThreadStatusCancelled:
 		return true
 	default:
 		return false
@@ -69,8 +92,6 @@ func ThreadStatusLabel(status int32) string {
 		return "failed"
 	case ThreadStatusCancelled:
 		return "cancelled"
-	case ThreadStatusExpired:
-		return "expired"
 	default:
 		return "unknown"
 	}

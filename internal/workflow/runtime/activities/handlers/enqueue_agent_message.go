@@ -36,8 +36,8 @@ type EnqueueAgentMessageOutput struct {
 //
 // Used by a detached (background=true) spawn to notify its parent's mailbox
 // of completion/cancellation/failure once the child's own execution ends —
-// the parent is drained at its own next step boundary
-// (drainAgentMessagesAtBoundary), never written into directly.
+// the parent's mailbox is drained by its own next CallLLM, never written into
+// directly.
 type EnqueueAgentMessageActivity struct {
 	repo db.Repository
 }

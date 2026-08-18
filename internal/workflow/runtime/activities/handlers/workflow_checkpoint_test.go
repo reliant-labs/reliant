@@ -21,7 +21,7 @@ func createTestWorkflowRow(t *testing.T, repo db.Repository, chatID string) stri
 		ChatID:       chatID,
 		WorkflowName: "builtin://agent",
 		Thread:       workflowID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		CreatedAt:    time.Now().UTC(),
 	}))
 	return workflowID

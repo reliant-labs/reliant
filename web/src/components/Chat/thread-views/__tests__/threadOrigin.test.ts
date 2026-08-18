@@ -4,6 +4,7 @@ import { renderHook } from "@testing-library/react";
 import { useThreads } from "../useThreads";
 import { isSpawnOrigin } from "../threadUtils";
 import type { WorkflowExecution } from "../../ExecutionSidebar/types";
+import type { ActiveThreadUpdate } from "../../../../types/streaming";
 import { useActivityStore } from "../../../../store/activityStore";
 import { useThreadActivityStore } from "../../../../store/threadActivityStore";
 
@@ -104,5 +105,98 @@ describe("useThreads spawn classification", () => {
     const node = result.current.find((t) => t.id === "thread-node");
     expect(node).toBeDefined();
     expect(node!.isSpawn).toBe(false);
+  });
+
+  it("keeps running spawn threads classified from active-thread updates when a node thread exists", () => {
+    useThreadActivityStore.getState().setThreads(CHAT, [
+      {
+        update_type: "thread",
+        id: SPAWN_THREAD,
+        chat_id: CHAT,
+        thread: SPAWN_THREAD,
+        origin: "spawn",
+        status: "running",
+        is_planning_mode: false,
+        thread_title: "Researcher",
+        created_at: "2026-01-01T00:00:00.000Z",
+      } as ActiveThreadUpdate,
+      {
+        update_type: "thread",
+        id: "thread-node",
+        chat_id: CHAT,
+        thread: "thread-node",
+        origin: "node",
+        origin_node_id: "review_step",
+        status: "running",
+        is_planning_mode: false,
+        thread_title: "Review Step",
+        created_at: "2026-01-01T00:00:01.000Z",
+      } as ActiveThreadUpdate,
+    ]);
+
+    const execution = wf({
+      thread: CHAT,
+      children: [
+        wf({
+          id: "wf-node",
+          thread: "thread-node",
+          origin: "node",
+          originNodeId: "review_step",
+          parentThread: CHAT,
+        }),
+      ],
+    });
+
+    const { result } = renderHook(() => useThreads([], CHAT, execution));
+
+    const spawn = result.current.find((t) => t.id === SPAWN_THREAD);
+    const node = result.current.find((t) => t.id === "thread-node");
+
+    expect(spawn).toBeDefined();
+    expect(spawn!.isSpawn).toBe(true);
+    expect(node).toBeDefined();
+    expect(node!.isSpawn).toBe(false);
+  });
+
+  it("still visits spawn children when multiple root workflows share the main thread", () => {
+    const execution = wf({
+      id: "wf-latest-root",
+      thread: CHAT,
+      origin: "main",
+      children: [
+        wf({
+          id: "wf-node",
+          thread: "thread-node",
+          origin: "node",
+          originNodeId: "review_step",
+          parentThread: CHAT,
+        }),
+      ],
+    });
+
+    const olderRoot = wf({
+      id: "wf-older-root",
+      thread: CHAT,
+      origin: "main",
+      children: [
+        wf({
+          id: "wf-spawn-older",
+          thread: SPAWN_THREAD,
+          origin: "spawn",
+          parentThread: CHAT,
+          threadTitle: "Researcher",
+        }),
+      ],
+    });
+
+    const { result } = renderHook(() => useThreads([], CHAT, [execution, olderRoot]));
+
+    const spawn = result.current.find((t) => t.id === SPAWN_THREAD);
+    const node = result.current.find((t) => t.id === "thread-node");
+
+    expect(node).toBeDefined();
+    expect(node!.isSpawn).toBe(false);
+    expect(spawn).toBeDefined();
+    expect(spawn!.isSpawn).toBe(true);
   });
 });

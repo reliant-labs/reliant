@@ -589,20 +589,6 @@ func msgNullInt64ToInt(ni sql.NullInt64) int {
 	return 0
 }
 
-func msgInt64PtrToNullInt64(i *int64) sql.NullInt64 {
-	if i != nil {
-		return sql.NullInt64{Int64: *i, Valid: true}
-	}
-	return sql.NullInt64{Valid: false}
-}
-
-func msgNullInt64ToPtr(ni sql.NullInt64) *int64 {
-	if ni.Valid {
-		return &ni.Int64
-	}
-	return nil
-}
-
 func msgFloat64PtrToNullFloat64(f *float64) sql.NullFloat64 {
 	if f != nil {
 		return sql.NullFloat64{Float64: *f, Valid: true}

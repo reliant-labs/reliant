@@ -33,6 +33,8 @@ import (
 // defaultDevDatabaseURL is the local dev-stack Postgres DSN (the reliant app DB
 // hosted by control-plane-postgres). Used only when neither --db-url nor
 // DATABASE_URL is set — these are supervision tools run against a dev stack.
+//
+//nolint:gosec // G101: the well-known local dev-stack DSN, not a real secret
 const defaultDevDatabaseURL = "postgres://postgres:postgres@localhost:5434/reliant?sslmode=disable"
 
 func resolveAnalyzeDBURL(flag string) string {
@@ -1272,22 +1274,10 @@ func wfaRoleString(r reliantv1.MessageRole) string {
 }
 
 func wfaWorkflowStatus(s db.WorkflowStatus) string {
-	switch s {
-	case db.WorkflowStatusPending:
-		return "pending"
-	case db.WorkflowStatusRunning:
-		return "running"
-	case db.WorkflowStatusCompleted:
-		return "completed"
-	case db.WorkflowStatusFailed:
-		return "failed"
-	case db.WorkflowStatusCancelled:
-		return "cancelled"
-	case db.WorkflowStatusPaused:
-		return "paused"
-	default:
-		return "unspecified"
+	if s.State == db.WorkflowStatePending || s.State == db.WorkflowStateActive || s.IsStopped() {
+		return s.Label()
 	}
+	return "unspecified"
 }
 
 // wfaPhaseStatus renders a phase's cell. An execution that ran to a

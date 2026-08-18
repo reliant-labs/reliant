@@ -49,6 +49,11 @@ const (
 	// stream reaches a terminal state (completed / aborted / cancelled), so
 	// consumers can retire streaming placeholders (delta identity protocol).
 	ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED ChatUpdateType = 19
+	// Announces the agent_messages ids that just left a thread's mailbox and
+	// became transcript messages. Written in the SAME transaction as those
+	// messages, so the pending-queue strip and the transcript can never both
+	// be showing the same message.
+	ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED ChatUpdateType = 20
 )
 
 // Enum value maps for ChatUpdateType.
@@ -73,27 +78,29 @@ var (
 		17: "CHAT_UPDATE_TYPE_SKILL_INVOCATION",
 		18: "CHAT_UPDATE_TYPE_QUESTION",
 		19: "CHAT_UPDATE_TYPE_STREAM_FINALIZED",
+		20: "CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED",
 	}
 	ChatUpdateType_value = map[string]int32{
-		"CHAT_UPDATE_TYPE_UNSPECIFIED":        0,
-		"CHAT_UPDATE_TYPE_MESSAGE":            1,
-		"CHAT_UPDATE_TYPE_APPROVAL":           2,
-		"CHAT_UPDATE_TYPE_THREAD":             3,
-		"CHAT_UPDATE_TYPE_TOOL_CALL":          4,
-		"CHAT_UPDATE_TYPE_WORKFLOW_STATUS":    5,
-		"CHAT_UPDATE_TYPE_ERROR":              6,
-		"CHAT_UPDATE_TYPE_CHAT":               7,
-		"CHAT_UPDATE_TYPE_RUN_OUTPUT":         8,
-		"CHAT_UPDATE_TYPE_NODE_EXECUTION":     9,
-		"CHAT_UPDATE_TYPE_EXECUTION_LOG":      10,
-		"CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION": 11,
-		"CHAT_UPDATE_TYPE_INFO":               13,
-		"CHAT_UPDATE_TYPE_WARNING":            14,
-		"CHAT_UPDATE_TYPE_REFETCH":            15,
-		"CHAT_UPDATE_TYPE_STREAMING_DELTA":    16,
-		"CHAT_UPDATE_TYPE_SKILL_INVOCATION":   17,
-		"CHAT_UPDATE_TYPE_QUESTION":           18,
-		"CHAT_UPDATE_TYPE_STREAM_FINALIZED":   19,
+		"CHAT_UPDATE_TYPE_UNSPECIFIED":            0,
+		"CHAT_UPDATE_TYPE_MESSAGE":                1,
+		"CHAT_UPDATE_TYPE_APPROVAL":               2,
+		"CHAT_UPDATE_TYPE_THREAD":                 3,
+		"CHAT_UPDATE_TYPE_TOOL_CALL":              4,
+		"CHAT_UPDATE_TYPE_WORKFLOW_STATUS":        5,
+		"CHAT_UPDATE_TYPE_ERROR":                  6,
+		"CHAT_UPDATE_TYPE_CHAT":                   7,
+		"CHAT_UPDATE_TYPE_RUN_OUTPUT":             8,
+		"CHAT_UPDATE_TYPE_NODE_EXECUTION":         9,
+		"CHAT_UPDATE_TYPE_EXECUTION_LOG":          10,
+		"CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION":     11,
+		"CHAT_UPDATE_TYPE_INFO":                   13,
+		"CHAT_UPDATE_TYPE_WARNING":                14,
+		"CHAT_UPDATE_TYPE_REFETCH":                15,
+		"CHAT_UPDATE_TYPE_STREAMING_DELTA":        16,
+		"CHAT_UPDATE_TYPE_SKILL_INVOCATION":       17,
+		"CHAT_UPDATE_TYPE_QUESTION":               18,
+		"CHAT_UPDATE_TYPE_STREAM_FINALIZED":       19,
+		"CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED": 20,
 	}
 )
 
@@ -2010,7 +2017,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x16WorkflowExecutionEvent\x12E\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2&.reliant.v1.WorkflowExecutionEventTypeR\teventType\x12>\n" +
-	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\x8c\x05\n" +
+	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xb9\x05\n" +
 	"\x0eChatUpdateType\x12 \n" +
 	"\x1cCHAT_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_MESSAGE\x10\x01\x12\x1d\n" +
@@ -2031,7 +2038,8 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	" CHAT_UPDATE_TYPE_STREAMING_DELTA\x10\x10\x12%\n" +
 	"!CHAT_UPDATE_TYPE_SKILL_INVOCATION\x10\x11\x12\x1d\n" +
 	"\x19CHAT_UPDATE_TYPE_QUESTION\x10\x12\x12%\n" +
-	"!CHAT_UPDATE_TYPE_STREAM_FINALIZED\x10\x13\"\x04\b\f\x10\f*\xc1\x06\n" +
+	"!CHAT_UPDATE_TYPE_STREAM_FINALIZED\x10\x13\x12+\n" +
+	"'CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED\x10\x14\"\x04\b\f\x10\f*\xc1\x06\n" +
 	"\x0eUserUpdateType\x12 \n" +
 	"\x1cUSER_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"USER_UPDATE_TYPE_CHAT_STATE_CHANGE\x10\x01\x12(\n" +

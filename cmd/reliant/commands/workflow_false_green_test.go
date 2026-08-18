@@ -81,7 +81,8 @@ func TestStatusJSONCarriesOutcome(t *testing.T) {
 	h.chat.root = &reliantv1.WorkflowExecution{
 		Id:           "chat-1",
 		WorkflowName: "builtin://forge-one-shot",
-		Status:       reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED,
+		State:        reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED,
+		StopReason:   reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED,
 		CreatedAt:    "2026-07-22T19:57:02Z",
 		Outcome:      strPtr(execfollow.OutcomeSuccess),
 	}

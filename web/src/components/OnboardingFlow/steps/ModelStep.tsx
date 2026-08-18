@@ -166,10 +166,48 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const saving = saveKeyMutation.isPending;
   const validating = validateKeyMutation.isPending;
 
+  // Wallet balance is the WHOLE gate for managed Reliant, because it is the
+  // only thing the LLM proxy actually enforces: AuthorizeUsage reserves
+  // against the org wallet and rejects a zero balance outright, so a user who
+  // gets past this step unfunded strands at their FIRST message.
+  //
+  // Compute eligibility (useCloudEligibility) is deliberately NOT consulted.
+  // It answers "may this account run a cloud daemon" — a different product,
+  // bought separately. Gating model access on it denied LLM credit to anyone
+  // without compute minutes, which is the same category error as granting
+  // compute because someone had LLM credit.
+  const walletQ = useWalletOverview();
+  const walletLoading = forcedEligibility == null && walletQ.isLoading;
+  const balanceNanos = walletQ.data?.wallet?.balanceUsdNanos;
+  const hasFunds = balanceNanos != null && BigInt(balanceNanos) > 0n;
+  const creditsAvailable =
+    forcedEligibility === "eligible" ||
+    (forcedEligibility == null && hasFunds);
+
   const finishOnboarding = useCallback(
     async (modelProvider: ModelProvider) => {
       if (!plan.compute) {
         setError("Choose where Reliant should run before finishing setup.");
+        return;
+      }
+
+      // Managed Reliant needs a funded wallet. The button that calls this is
+      // already `disabled` without one, but `disabled` is a rendering concern —
+      // a stale render, a keyboard activation racing the wallet refetch, or
+      // devtools all reach the handler anyway. Committing the choice here would
+      // send the user into the app with a provider that fails on their very
+      // first message (the LLM proxy rejects a zero balance outright).
+      //
+      // Bring-your-own-key providers are unaffected: they carry their own
+      // credentials and never touch the wallet.
+      // Keyed on hasFunds, NOT creditsAvailable: `?onboarding-credits=eligible`
+      // is a dev escape hatch for exercising the enabled-looking UI, and it
+      // must not authorize a real unfunded account to commit. The wallet
+      // balance is the only authority the LLM proxy respects.
+      if (modelProvider === "reliant_credits" && !hasFunds) {
+        setError(
+          "Redeem a coupon code or set up billing before continuing with Reliant.",
+        );
         return;
       }
 
@@ -178,7 +216,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       await updatePlan({ modelProvider });
       onNext();
     },
-    [onNext, plan, updatePlan],
+    [hasFunds, onNext, plan, updatePlan],
   );
 
   const handleConnectOAuth = useCallback(async () => {
@@ -293,23 +331,6 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     validateKeyMutation,
   ]);
 
-  // Wallet balance is the WHOLE gate for managed Reliant, because it is the
-  // only thing the LLM proxy actually enforces: AuthorizeUsage reserves
-  // against the org wallet and rejects a zero balance outright, so a user who
-  // gets past this step unfunded strands at their FIRST message.
-  //
-  // Compute eligibility (useCloudEligibility) is deliberately NOT consulted.
-  // It answers "may this account run a cloud daemon" — a different product,
-  // bought separately. Gating model access on it denied LLM credit to anyone
-  // without compute minutes, which is the same category error as granting
-  // compute because someone had LLM credit.
-  const walletQ = useWalletOverview();
-  const walletLoading = forcedEligibility == null && walletQ.isLoading;
-  const balanceNanos = walletQ.data?.wallet?.balanceUsdNanos;
-  const hasFunds = balanceNanos != null && BigInt(balanceNanos) > 0n;
-  const creditsAvailable =
-    forcedEligibility === "eligible" ||
-    (forcedEligibility == null && hasFunds);
 
   return (
     <div className="space-y-6">

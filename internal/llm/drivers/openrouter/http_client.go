@@ -9,10 +9,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -91,17 +90,22 @@ type OpenRouterResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// getMachineIdentifier returns a consistent machine identifier for OpenRouter user tracking
+// getMachineIdentifier returns a consistent machine identifier for OpenRouter
+// user tracking (the X-User header), hashed so the raw value never leaves the
+// machine.
+//
+// It hashes the persisted instance id rather than the hostname. The header's
+// only purpose is to let OpenRouter attribute requests to a stable caller, and
+// a hostname does not do that: the same machine hashes to two different values
+// when macOS flips between its mDNS (*.local) and DHCP (*.lan) names, silently
+// splitting one caller in two. The previous fallback was worse still — when
+// os.Hostname() failed it returned a fresh uuid.New() on EVERY call, so each
+// request presented a different identity.
+//
+// Hashing is retained: the id is an internal identifier and there is no reason
+// to hand its raw value to a third party.
 func getMachineIdentifier() string {
-	// Try to get hostname first
-	hostname, err := os.Hostname()
-	if err != nil {
-		// Fallback to UUID if hostname fails
-		return uuid.New().String()
-	}
-
-	// Create a hash of the hostname for privacy
-	hash := sha256.Sum256([]byte(hostname))
+	hash := sha256.Sum256([]byte(instanceid.ID()))
 	return hex.EncodeToString(hash[:])[:16] // Use first 16 chars
 }
 

@@ -19,13 +19,12 @@ func TestEnrichMessageUpdate_CarriesSeq(t *testing.T) {
 	chatID := "chat-seq-payload"
 	createActivityTestChat(t, repo, chatID)
 
-	msg, err := repo.SaveMessageToThread(ctx, chatID, chatID, 1, "hello", nil, nil, nil)
-	if err != nil {
+	if _, err := repo.SaveMessageToThread(ctx, chatID, chatID, 1, "hello", nil, nil, nil); err != nil {
 		t.Fatalf("save: %v", err)
 	}
 	// Save a second message so seq is non-zero and thus distinguishable from
 	// an absent field defaulting to 0.
-	msg, err = repo.SaveMessageToThread(ctx, chatID, chatID, 1, "second", nil, nil, nil)
+	msg, err := repo.SaveMessageToThread(ctx, chatID, chatID, 1, "second", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("save 2: %v", err)
 	}

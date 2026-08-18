@@ -110,7 +110,7 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		ChatID:          input.ChatID,
 		WorkflowName:    input.WorkflowName,
 		Thread:          threadID,
-		Status:          db.WorkflowStatusRunning,
+		Status:          db.Active(),
 		SpawnedByNodeID: input.SpawnedByNodeID,
 		LoopIteration:   input.LoopIteration,
 		CreatedAt:       time.Now().UTC(),

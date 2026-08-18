@@ -70,7 +70,7 @@ type WorkflowStore interface {
 	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
-	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status WorkflowStatus) error
+	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error
 	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error

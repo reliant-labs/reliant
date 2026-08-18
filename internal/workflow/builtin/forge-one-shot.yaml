@@ -21,6 +21,30 @@ description: |
   The app is LAUNCHED and its preview URL posted last, so the run ends on a link that
   serves the build which actually shipped.
 
+  ## VERY IMPORTANT
+  Please it's very important you follow these instructinos, and relay them to any sub agents you spawn:
+
+  When searching the go codebase or ts codebase, use call heirarchy and implementations from our LSP's. 
+  This cuts down rg time by a factor of 10:
+
+  ### Go — 'gopls' (for Go packages)
+      gopls call_hierarchy path/to/file.go:LINE:COL   # callers AND callees
+      gopls implementation path/to/file.go:LINE:COL   # interface -> concrete types
+      gopls references     path/to/file.go:LINE:COL   # only when rg is ambiguous
+    Get LINE:COL from an rg hit first ('rg -n' gives the line; the column is the
+    1-based offset of the identifier on it). You can CHAIN the lookup and the query
+    in ONE command rather than spending a turn on each:
+        f=internal/svc/x.go; l=$(rg -n 'func .*executeApproval' $f | cut -d: -f1); \
+          gopls call_hierarchy $f:$l:34; gopls implementation $f:$l:34
+    Do not use it for plain name lookup — that is a grep, which is faster than gopls.
+
+  ### TypeScript / JavaScript — 'tsgo --lsp --stdio' (LSP over stdio)
+    Call hierarchy is a 2-step LSP exchange: 'textDocument/prepareCallHierarchy',
+    then 'callHierarchy/incomingCalls' (callers) or 'outgoingCalls' (callees).
+    'textDocument/implementation' resolves interface -> implementing classes.
+    Also uniquely useful here: 'textDocument/hover' returns an INFERRED type
+    ('const x = useFoo()' with no annotation) — rg cannot compute that at all.
+
 # When this one-shot pipeline completes, the chat permanently transitions to the
 # interactive agent so the user can keep talking to their finished project.
 transition_to: builtin://agent

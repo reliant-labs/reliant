@@ -12,8 +12,11 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -77,6 +80,47 @@ func toolBearingConversation() []message.Message {
 			message.ToolResult{ToolCallID: "t1", Name: "read_file", Content: "package main"},
 		}},
 	}
+}
+
+func TestCompactThreadUpdate_CarriesPersistedThreadMetadata(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+	chatID := uuid.New().String()
+	mainThreadID := chatID
+	threadID := uuid.New().String()
+	workflowID := uuid.New().String()
+	threadTitle := "Fix generic pill title"
+	originNodeID := "spawn-toolu_123"
+
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID: chatID, Title: "compact spawn", ProjectID: "test-project", UserID: "test-user",
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	_, err := repo.CreateThread(ctx, &db.Thread{ID: mainThreadID, ChatID: chatID, CreatedAt: now})
+	require.NoError(t, err)
+	_, err = repo.CreateThread(ctx, &db.Thread{
+		ID: threadID, ChatID: chatID, ParentThreadID: &mainThreadID,
+		WorkflowID: &workflowID, Title: &threadTitle, Origin: db.ThreadOriginSpawn,
+		OriginNodeID: &originNodeID, CreatedAt: now,
+	})
+	require.NoError(t, err)
+
+	NewCompactActivity(repo, nil).emitThreadUpdate(ctx, chatID, threadID, "active", "Compact")
+
+	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 100)
+	require.NoError(t, err)
+	require.Len(t, updates, 1)
+
+	var payload map[string]any
+	require.NoError(t, json.Unmarshal([]byte(updates[0].Data), &payload))
+	assert.Equal(t, threadID, payload["thread"])
+	assert.Equal(t, workflowID, payload["workflow_id"])
+	assert.Equal(t, threadTitle, payload["thread_title"])
+	assert.Equal(t, db.ThreadOriginSpawn, payload["origin"])
+	assert.Equal(t, originNodeID, payload["origin_node_id"])
 }
 
 func TestGenerateCompactionSummary_UsesStandardRequestEnvelope(t *testing.T) {

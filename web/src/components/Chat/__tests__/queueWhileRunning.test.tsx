@@ -32,10 +32,9 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
-const { sendAgentMessageMock, toastErrorMock, toastInfoMock } = vi.hoisted(() => ({
+const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
   sendAgentMessageMock: vi.fn(),
   toastErrorMock: vi.fn(),
-  toastInfoMock: vi.fn(),
 }));
 
 vi.mock("../../../api/chat-grpc", () => ({
@@ -45,7 +44,7 @@ vi.mock("../../../api/chat-grpc", () => ({
 vi.mock("../../../lib/toast-manager", () => ({
   toast: {
     error: toastErrorMock,
-    info: toastInfoMock,
+    info: vi.fn(),
     success: vi.fn(),
     warning: vi.fn(),
   },

@@ -68,7 +68,7 @@ func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 	// Scope to the paused-chat resume branch so unrelated status writes
 	// elsewhere in the file cannot satisfy or break this.
 	body := string(src)
-	start := strings.Index(body, "case db.WorkflowStatusPaused:")
+	start := strings.Index(body, "case db.Paused():")
 	require.Positive(t, start, "paused-resume branch not found")
 	end := strings.Index(body[start:], "\n\t\t\tcase ")
 	if end == -1 {
@@ -76,10 +76,10 @@ func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 	}
 	branch := body[start : start+end]
 
-	signalAt := strings.Index(branch, "s.pauseService.ResumeWorkflow(")
-	require.Positive(t, signalAt, "the paused branch must resume via PauseService")
+	signalAt := strings.Index(branch, "s.runs.Resume(")
+	require.Positive(t, signalAt, "the paused branch must resume via the run-lifecycle service")
 
-	markRunningAt := strings.Index(branch, "db.WorkflowStatusRunning)")
+	markRunningAt := strings.Index(branch, "db.Active())")
 	require.Positive(t, markRunningAt, "the paused branch must mark the workflow running")
 
 	assert.Less(t, signalAt, markRunningAt,
@@ -109,7 +109,7 @@ func TestFailedResumeIsReportedNotSwallowed(t *testing.T) {
 	require.NoError(t, err)
 
 	body := string(src)
-	at := strings.Index(body, "s.pauseService.ResumeWorkflow(")
+	at := strings.Index(body, "s.runs.Resume(")
 	require.Positive(t, at, "resume call not found")
 
 	// Look at the error handling immediately following the resume call.

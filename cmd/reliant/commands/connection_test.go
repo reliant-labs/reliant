@@ -23,11 +23,22 @@ import (
 // writeContexts installs a CLI config in an isolated HOME and returns the
 // config path it wrote. Every test that resolves a connection must go through
 // this so it can never read (or write) the developer's real config.
+//
+// It also clears the RELIANT_* variables the resolver consults. A developer
+// shell that has sourced .dev-ports.sh exports RELIANT_SERVER_URL and
+// RELIANT_GATEWAY_URL, and those outrank the compiled defaults these tests
+// assert on. An empty value reads as unset everywhere (builddefaults.Value and
+// cliconfig.Resolve both test for ""), and t.Setenv restores the real value
+// when the test ends. A subtest that wants one of these set calls t.Setenv
+// again after this helper.
 func writeContexts(t *testing.T, cfg *cliconfig.Config) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	t.Setenv(envServerURL, "")
+	t.Setenv(envGatewayURL, "")
+	t.Setenv(cliconfig.EnvContext, "")
 
 	path, err := cliconfig.DefaultPath()
 	if err != nil {

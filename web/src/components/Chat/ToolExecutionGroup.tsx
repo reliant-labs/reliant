@@ -1,7 +1,7 @@
 import { useMemo, useState, memo, useEffect, useCallback } from "react";
 import { ChevronDown, ChevronRight, ListTree, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { ToolExecution, durableStatusToDisplayStatus, workflowStatusToDisplayStatus, type ToolResultData } from "./ToolExecution";
+import { ToolExecution, durableStatusToDisplayStatus, workflowLifecycleToDisplayStatus, type ToolResultData } from "./ToolExecution";
 import type { ToolApprovalRequest } from "../../api/client";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { useSurface } from "../../lib/surfaceContext";
@@ -116,7 +116,13 @@ function ToolExecutionGroupComponent({
       const isSpawn = isSpawnTool(call.name);
       const effectiveStatus =
         isSpawn && call.childWorkflowId
-          ? workflowStatusToDisplayStatus(findWorkflowById(allWorkflows, call.childWorkflowId)?.status) ?? "executing"
+          ? (() => {
+              const workflow = findWorkflowById(allWorkflows, call.childWorkflowId);
+              return workflowLifecycleToDisplayStatus(
+                workflow?.state,
+                workflow?.stopReason,
+              ) ?? "executing";
+            })()
           : status || durableStatusToDisplayStatus(call.durableStatus);
 
       if (effectiveStatus === "failed" || (!isSpawn && result?.is_error)) {

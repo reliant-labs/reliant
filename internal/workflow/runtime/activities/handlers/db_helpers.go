@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -136,7 +137,56 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 			"messageCount", len(msgs))
 	}
 
+	// Recover REAL tool results before repair invents placeholder ones.
+	//
+	// A tool result lives in two places: the durable `tool_call_results` row
+	// (written by ExecuteTools) and a tool_result content block on a TOOL-role
+	// message (written by SaveMessage). History is assembled ONLY from content
+	// blocks, so when the row commits and the message does not, the result is
+	// durably recorded and completely invisible to the model.
+	//
+	// repairMessageHistory would then synthesize InterruptedToolResultContent —
+	// telling the model the tool's outcome is unknown while the real 262-char
+	// answer sits in the database. Observed exactly that on chat 128cf4f5: a
+	// completed spawn_status call (tool_calls.status=3) whose result row was
+	// written at 20:30:32.786 but whose TOOL message never was.
+	//
+	// Consulting the durable row first turns a fabricated error into the actual
+	// result. Anything still missing afterwards falls through to the synthetic
+	// placeholder, which remains the correct answer for a call that genuinely
+	// never produced one.
+	msgs = recoverPersistedToolResults(ctx, repo, msgs)
+
 	msgs = repairMessageHistory(msgs)
+
+	// Drop assistant messages that carry nothing at all.
+	//
+	// A blockless assistant row is durable poison: it becomes the tail of the
+	// conversation, CallLLM's end-of-history guard sees an assistant message
+	// last and refuses to build a request, and the retry ladder re-runs against
+	// the same row forever. The chat cannot advance again without hand-editing
+	// the database. Measured: 22 such rows on the live database, and the two
+	// newest wedged their chats at 24 logged failures each.
+	//
+	// SaveMessage now refuses to create these (see internal/threads:
+	// validateSaveMessageOpts), so this is the recovery half — it exists for
+	// rows written BEFORE that guard, and it is what lets an already-wedged
+	// chat heal on its next turn instead of staying stuck forever.
+	//
+	// Safe to drop rather than repair: the row has no text, no tool calls and
+	// no thinking, so removing it discards nothing the model could read. It is
+	// deliberately NOT deleted from the database — this load is a read path,
+	// the transcript keeps whatever the user saw, and a read path that quietly
+	// rewrites history is far harder to reason about than one that filters.
+	if kept, dropped := dropBlocklessAssistantMessages(msgs); dropped > 0 {
+		logging.Warn("[LoadHistory] Dropped blockless assistant message(s) from loaded history",
+			"chatID", chatID,
+			"thread", thread,
+			"dropped", dropped,
+			"messageCountBefore", len(msgs),
+			"messageCountAfter", len(kept))
+		msgs = kept
+	}
 
 	// The invariant must hold from here on. A violation now means repair itself
 	// is broken, which is ours to fix, not the conversation's to absorb.
@@ -153,4 +203,123 @@ func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 	}
 
 	return msgs, nil
+}
+
+// dropBlocklessAssistantMessages removes assistant messages that carry no
+// content, no tool calls and no reasoning — rows that came from a turn which
+// produced literally nothing.
+//
+// Returns the filtered slice and how many were removed. Non-assistant messages
+// are never touched: a tool message with no results or a user message with no
+// text are different bugs with different repairs, and silently dropping either
+// would hide them.
+func dropBlocklessAssistantMessages(msgs []message.Message) ([]message.Message, int) {
+	dropped := 0
+	kept := make([]message.Message, 0, len(msgs))
+	for i := range msgs {
+		m := &msgs[i]
+		if m.Role == message.Assistant && isBlocklessAssistant(m) {
+			dropped++
+			continue
+		}
+		kept = append(kept, msgs[i])
+	}
+	if dropped == 0 {
+		// Nothing to do — return the original slice so the common path does
+		// not pay for a copy.
+		return msgs, 0
+	}
+	return kept, dropped
+}
+
+// isBlocklessAssistant reports whether an assistant message would render as
+// zero content blocks. Mirrors the inputs threads.createAssistantContentBlocks
+// uses, so the two cannot disagree about what "empty" means.
+func isBlocklessAssistant(m *message.Message) bool {
+	if strings.TrimSpace(m.Content().String()) != "" {
+		return false
+	}
+	if len(m.ToolCalls()) > 0 {
+		return false
+	}
+	if strings.TrimSpace(m.ReasoningContent().String()) != "" {
+		return false
+	}
+	return true
+}
+
+// recoverPersistedToolResults fills in tool results that exist in the durable
+// tool_call_results table but never made it into the message history as a
+// tool_result content block.
+//
+// Returns history with a synthetic TOOL message appended for each recovered
+// result, placed immediately after the assistant message that made the call so
+// the tool-pairing invariant holds. Messages are otherwise untouched.
+//
+// This runs BEFORE repairMessageHistory so that recovered results win over the
+// "unknown outcome" placeholder that repair would otherwise synthesize. A call
+// with no durable row is left alone — repair's placeholder is the right answer
+// for a tool that genuinely never reported.
+func recoverPersistedToolResults(ctx context.Context, repo db.Repository, msgs []message.Message) []message.Message {
+	if len(msgs) == 0 || repo == nil {
+		return msgs
+	}
+
+	// Which tool calls already have a result in history?
+	answered := make(map[string]bool)
+	for i := range msgs {
+		if msgs[i].Role != message.Tool {
+			continue
+		}
+		for _, tr := range msgs[i].ToolResults() {
+			answered[tr.ToolCallID] = true
+		}
+	}
+
+	out := make([]message.Message, 0, len(msgs))
+	recovered := 0
+	for i := range msgs {
+		out = append(out, msgs[i])
+		if msgs[i].Role != message.Assistant {
+			continue
+		}
+
+		var parts []message.ContentPart
+		for _, tc := range msgs[i].ToolCalls() {
+			if answered[tc.ID] {
+				continue
+			}
+			row, err := repo.GetToolCallResult(ctx, tc.ID)
+			if err != nil || row == nil || row.Content == "" {
+				// No durable result — leave it for repairMessageHistory, which
+				// synthesizes the "outcome unknown" placeholder.
+				continue
+			}
+			parts = append(parts, message.ToolResult{
+				ToolCallID: tc.ID,
+				Name:       tc.Name,
+				Content:    row.Content,
+				IsError:    row.IsError,
+			})
+			answered[tc.ID] = true
+			recovered++
+		}
+
+		if len(parts) > 0 {
+			out = append(out, message.Message{
+				ID:    fmt.Sprintf("recovered-tool-result-%s", msgs[i].ID),
+				Role:  message.Tool,
+				Parts: parts,
+			})
+		}
+	}
+
+	if recovered == 0 {
+		return msgs
+	}
+	logging.Warn("[LoadHistory] Recovered tool result(s) from tool_call_results that were missing from message history",
+		"recovered", recovered,
+		"messageCountBefore", len(msgs),
+		"messageCountAfter", len(out))
+	return out
 }

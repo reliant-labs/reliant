@@ -72,8 +72,10 @@ type spawnE2EEnv struct {
 	statuses      []map[string]interface{}
 	toolStatuses  []map[string]interface{}
 
-	script    []scriptedToolCallsResponse
-	scriptIdx int
+	// script is indexed by callLLMCount (the global CallLLM sequence number
+	// across the parent and any spawned child), so the turn a stub serves is
+	// determined by that counter rather than by a separate cursor.
+	script []scriptedToolCallsResponse
 }
 
 func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script []scriptedToolCallsResponse) *spawnE2EEnv {
@@ -169,6 +171,12 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		},
 		activity.RegisterOptions{Name: "ValidateThreadOwnership"},
 	)
+	env.RegisterActivityWithOptions(
+		func(_ context.Context, _ map[string]interface{}) (map[string]interface{}, error) {
+			return map[string]interface{}{}, nil
+		},
+		activity.RegisterOptions{Name: "LoadPresetParams"},
+	)
 
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
@@ -243,6 +251,7 @@ func spawnE2EWorkflowInput(chatID string) WorkflowInput {
 			Thread:       "thread-" + chatID,
 			ThreadMode:   model.ThreadModeNew,
 			WorkflowName: "agent",
+			ProjectPath:  "/project",
 		},
 	}
 }

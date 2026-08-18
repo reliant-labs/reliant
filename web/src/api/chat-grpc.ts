@@ -16,10 +16,10 @@ import {
   SendAgentMessageRequestSchema,
   ListQueuedAgentMessagesRequestSchema,
   CancelQueuedAgentMessageRequestSchema,
-  ClaimQueuedAgentMessagesRequestSchema,
+  InterruptThreadRequestSchema,
   ListMessagesRequestSchema,
   UpdateChatStateRequestSchema,
-  CancelChatRequestSchema,
+  TerminateChatRequestSchema,
   PauseChatRequestSchema,
   ResumeChatRequestSchema,
   DismissChatRequestSchema,
@@ -51,7 +51,7 @@ export type {
 } from "../types/chat";
 
 // Re-export proto enums for consumers
-export { ChatState, ChatWorkflowStatus, MessageRole, StreamingState, DisplayStyle, ContentBlockType } from "../types/chat";
+export { ChatState, WorkflowState, WorkflowStopReason, MessageRole, StreamingState, DisplayStyle, ContentBlockType } from "../types/chat";
 
 import type {
   Chat,
@@ -485,35 +485,25 @@ export const chatGrpc = {
     return { success: response.success, message: response.message };
   },
 
-  // Take queued messages back off a thread's mailbox so they can be resent as
-  // ordinary turns. Omit messageId to claim the whole queue ("send all"), or
-  // pass one to claim a single entry ("send now").
+  // Stop what a thread is doing right now so it reads its mailbox at once,
+  // instead of at the end of the work already in flight.
   //
-  // The returned list is authoritative and is the ONLY thing the caller may
-  // resend. The claim is a single atomic statement server-side, so an entry
-  // the agent's drain won first simply is not in the result — resending from
-  // a locally-cached queue view instead would put that message into the
-  // conversation twice, which is exactly what this endpoint replaced.
-  async claimQueuedAgentMessages(
+  // Takes no message id, deliberately. Interrupt is an action on the THREAD:
+  // it cancels the executing tool calls, and the next call_llm delivers
+  // whatever the mailbox holds, oldest first. That is what makes "queue a
+  // message, then decide to send it now" work without a race — there is no row
+  // to update, so there is no window in which the update and the delivery can
+  // disagree. Queue first (sendAgentMessage), then interrupt.
+  async interruptThread(
     chatId: string,
-    threadId: string,
-    messageId?: string
-  ): Promise<{ messages: QueuedAgentMessageView[] }> {
+    threadId: string
+  ): Promise<{ cancelledToolCalls: number; undeliverableToolCalls: string[] }> {
     const client = grpcClient.chat();
-    const request = create(ClaimQueuedAgentMessagesRequestSchema, {
-      chatId,
-      threadId,
-      messageId,
-    });
-    const response = await client.claimQueuedAgentMessages(request);
+    const request = create(InterruptThreadRequestSchema, { chatId, threadId });
+    const response = await client.interruptThread(request);
     return {
-      messages: response.messages.map((m) => ({
-        id: m.id,
-        body: m.body,
-        created_at: m.createdAt,
-        sender_kind: m.senderKind,
-        attachments: m.attachments,
-      })),
+      cancelledToolCalls: response.cancelledToolCalls,
+      undeliverableToolCalls: response.undeliverableToolCalls,
     };
   },
 
@@ -569,14 +559,14 @@ export const chatGrpc = {
     };
   },
 
-  // Cancel the running workflow
+  // Terminate the running workflow
   async cancel(chatId: string): Promise<{
     success: boolean;
     message: string;
   }> {
     const client = grpcClient.chat();
-    const request = create(CancelChatRequestSchema, { chatId });
-    const response = await client.cancelChat(request);
+    const request = create(TerminateChatRequestSchema, { chatId });
+    const response = await client.terminateChat(request);
     return {
       success: response.success,
       message: response.message,

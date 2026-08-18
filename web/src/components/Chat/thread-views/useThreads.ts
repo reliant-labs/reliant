@@ -11,6 +11,7 @@ import { useMemo } from "react";
 import type { Message } from "../../../api/client";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
 import type { WorkflowExecution } from "../ExecutionSidebar/types";
+import type { ActiveThreadUpdate } from "../../../types/streaming";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, isSpawnOrigin } from "./threadUtils";
 import { useActiveThreadIds, useActiveThreads } from "../../../store/threadActivityStore";
 import { useIsChatRunning } from "../../../store/activityStore";
@@ -39,7 +40,7 @@ export interface ThreadInfo {
 export function useThreads(
   messages: Message[],
   chatId: string,
-  workflowExecution?: WorkflowExecution
+  workflowExecution?: WorkflowExecution | WorkflowExecution[]
 ): ThreadInfo[] {
 // Use centralized activity selectors (SINGLE SOURCE OF TRUTH)
   const isChatActive = useIsChatRunning(chatId);
@@ -68,56 +69,86 @@ export function useThreads(
     const threads: ThreadInfo[] = [];
     const seenThreads = new Set<string>();
 
+    const addThreadFromActiveUpdate = (
+      activeThread: ActiveThreadUpdate,
+      count: number,
+      isMain: boolean,
+    ) => {
+      const threadId = activeThread.thread;
+      const resolvedName = !isMain
+        ? resolveThreadNameFromActiveThreads(threadId, activeThreads)
+        : undefined;
+      threads.push({
+        id: threadId,
+        name: isMain ? "Main" : (resolvedName || "Thread"),
+        messageCount: count,
+        isMain,
+        isActive: isMain
+          ? isChatActive
+          : activeThreadIds.has(threadId) || activeThread.status === "running" || activeThread.status === "active",
+        isSpawn: isSpawnOrigin(activeThread.origin),
+        color: getThreadColor(threadId, isMain),
+        firstMessageAt: firstTimestamps.get(threadId),
+      });
+      seenThreads.add(threadId);
+    };
+
     // Walk workflow tree to build thread list in order
     function processWorkflow(wf: WorkflowExecution, treeParentThread?: string) {
-      if (seenThreads.has(wf.thread)) return;
+      const alreadySeen = seenThreads.has(wf.thread);
 
-      seenThreads.add(wf.thread);
+      if (!alreadySeen) {
+        seenThreads.add(wf.thread);
 
-      const isMain = wf.thread === chatId || wf.thread === "0";
-      let name = "Main";
-      if (!isMain) {
-        if (wf.threadTitle) {
-          name = formatNodeId(wf.threadTitle);
-        } else if (wf.spawnedByNodeId) {
-          name = formatNodeId(wf.spawnedByNodeId);
-        } else {
-          name = "Thread";
+        const isMain = wf.thread === chatId || wf.thread === "0";
+        let name = "Main";
+        if (!isMain) {
+          if (wf.threadTitle) {
+            name = formatNodeId(wf.threadTitle);
+          } else if (wf.spawnedByNodeId) {
+            name = formatNodeId(wf.spawnedByNodeId);
+          } else {
+            name = "Thread";
+          }
         }
+
+        // Activity detection:
+        // - Main thread is active if root workflow is running (isChatActive)
+        // - Child threads: check activeThreadIds first (for Temporal child workflows),
+        //   but also consider active if root is running (for inline workflows)
+        //   since inline workflows don't emit separate thread status updates
+        const threadIsActive = isMain 
+          ? isChatActive 
+          : (activeThreadIds.has(wf.thread) || (isChatActive && wf.status === 'running'));
+
+        // Use authoritative parentThread from backend (thread table), fall back to tree-derived
+        const parentThread = isMain
+          ? undefined
+          : wf.parentThread || (treeParentThread !== wf.thread ? treeParentThread : undefined);
+
+        threads.push({
+          id: wf.thread,
+          name,
+          messageCount: messageCounts.get(wf.thread) || 0,
+          isMain,
+          isActive: threadIsActive,
+          isSpawn: isSpawnOrigin(wf.origin),
+          color: getThreadColor(wf.thread, isMain),
+          firstMessageAt: firstTimestamps.get(wf.thread),
+          parentThread,
+        });
       }
 
-      // Activity detection:
-      // - Main thread is active if root workflow is running (isChatActive)
-      // - Child threads: check activeThreadIds first (for Temporal child workflows),
-      //   but also consider active if root is running (for inline workflows)
-      //   since inline workflows don't emit separate thread status updates
-      const threadIsActive = isMain 
-        ? isChatActive 
-        : (activeThreadIds.has(wf.thread) || (isChatActive && wf.status === 'running'));
-
-      // Use authoritative parentThread from backend (thread table), fall back to tree-derived
-      const parentThread = isMain
-        ? undefined
-        : wf.parentThread || (treeParentThread !== wf.thread ? treeParentThread : undefined);
-
-      threads.push({
-        id: wf.thread,
-        name,
-        messageCount: messageCounts.get(wf.thread) || 0,
-        isMain,
-        isActive: threadIsActive,
-        isSpawn: isSpawnOrigin(wf.origin),
-        color: getThreadColor(wf.thread, isMain),
-        firstMessageAt: firstTimestamps.get(wf.thread),
-        parentThread,
-      });
-
-      for (const child of wf.children) {
+      for (const child of wf.children || []) {
         processWorkflow(child, wf.thread);
       }
     }
 
-    if (workflowExecution) {
+    if (Array.isArray(workflowExecution)) {
+      for (const root of workflowExecution) {
+        processWorkflow(root);
+      }
+    } else if (workflowExecution) {
       processWorkflow(workflowExecution);
     }
 
@@ -136,6 +167,26 @@ export function useThreads(
       seenThreads.add(chatId);
     }
 
+    // Add threads from live thread updates before message-only fallbacks. A
+    // running async spawn may have no messages in the bounded chat snapshot and
+    // no row in the latest root workflow tree, but it still needs to stay
+    // classifiable so ChatHeader can exclude it while BackgroundWorkPill links
+    // to it.
+    for (const activeThread of activeThreads) {
+      const threadId = activeThread.thread;
+      if (!threadId || seenThreads.has(threadId)) continue;
+      const count = messageCounts.get(threadId) || 0;
+      if (
+        count === 0 &&
+        activeThread.status !== "running" &&
+        activeThread.status !== "active"
+      ) {
+        continue;
+      }
+      const isMain = threadId === chatId || threadId === "0";
+      addThreadFromActiveUpdate(activeThread, count, isMain);
+    }
+
     // Add threads from messages that weren't discovered from workflow tree
     // This handles inline workflows that create messages on new threads
     // without spawning separate child workflows
@@ -152,6 +203,10 @@ export function useThreads(
       
       // Resolve thread name and spawn status from activeThreads streaming data
       const activeThread = activeThreads.find(at => at.thread === threadId);
+      if (activeThread) {
+        addThreadFromActiveUpdate(activeThread, count, isMain);
+        continue;
+      }
       const resolvedName = !isMain ? resolveThreadNameFromActiveThreads(threadId, activeThreads) : undefined;
       threads.push({
         id: threadId,
@@ -159,7 +214,7 @@ export function useThreads(
         messageCount: count,
         isMain,
         isActive: threadIsActive,
-        isSpawn: isSpawnOrigin(activeThread?.origin),
+        isSpawn: false,
         color: getThreadColor(threadId, isMain),
         firstMessageAt: firstTimestamps.get(threadId),
       });

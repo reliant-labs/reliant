@@ -12,6 +12,8 @@ import type { ToolApprovalRequest } from "../../../api/client";
 // hit, or pushed off-screen by the diff above them.
 vi.mock("../../../store/chatStoreHooks", () => ({
   useChat: () => undefined,
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
   useToolCallStates: () => new Map(),
 }));
 vi.mock("../../../hooks/approval-queries", () => ({

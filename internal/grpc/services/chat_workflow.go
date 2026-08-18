@@ -506,7 +506,7 @@ func (s *ChatService) UpdateWorkflowParams(
 		if wfErr != nil || wf == nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
 		}
-		if wf.Status != db.WorkflowStatusRunning {
+		if wf.Status != db.Active() {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("thread workflow is not running"))
 		}
 	}
@@ -677,7 +677,7 @@ func (s *ChatService) GetThreadWorkflowInputs(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
 	}
 
-	isRunning := wf.Status == db.WorkflowStatusRunning
+	isRunning := wf.Status == db.Active()
 
 	// Resolve to root workflow ID for Temporal queries.
 	// Child workflows are inline goroutines with synthetic DB IDs that Temporal doesn't know.
@@ -731,7 +731,8 @@ func (s *ChatService) buildWorkflowExecutionTree(
 		Id:           wf.ID,
 		WorkflowName: wf.WorkflowName,
 		Thread:       wf.Thread,
-		Status:       wf.Status,
+		State:        wf.Status.State,
+		StopReason:   wf.Status.StopReason,
 		CreatedAt:    wf.CreatedAt.Format(time.RFC3339),
 		MessageCount: 0, // TODO: count messages by thread
 	}

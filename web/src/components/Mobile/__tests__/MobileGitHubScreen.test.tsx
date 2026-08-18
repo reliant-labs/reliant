@@ -59,11 +59,18 @@ describe("MobileGitHubScreen", () => {
     expect(screen.getByText("GitHub connected")).toBeInTheDocument();
   });
 
-  it("calls onBack from the top-level header", async () => {
+  it("calls onBack from the settings drill-in header", async () => {
     const { default: userEvent } = await import("@testing-library/user-event");
     const onBack = vi.fn();
     render(<MobileGitHubScreen onBack={onBack} />);
     await userEvent.setup().click(screen.getByRole("button", { name: /back to settings/i }));
     expect(onBack).toHaveBeenCalled();
+  });
+
+  it("renders as a top-level drawer destination when onBack is omitted", () => {
+    render(<MobileGitHubScreen />);
+    expect(screen.getByRole("heading", { name: "GitHub" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open menu/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /back to settings/i })).not.toBeInTheDocument();
   });
 });

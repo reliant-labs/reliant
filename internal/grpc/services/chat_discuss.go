@@ -198,7 +198,7 @@ func (s *ChatService) handleDiscussMode(
 	}
 
 	// 6. Return with workflow_status still Paused
-	workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusPaused)
+	workflowStatus := fmt.Sprintf("%d", db.Paused())
 	return connect.NewResponse(&reliantv1.SendMessageResponse{
 		ChatId:         req.Msg.ChatId,
 		WorkflowId:     workflowID,
