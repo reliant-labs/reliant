@@ -199,6 +199,11 @@ $RECYCLE.BIN/
 # this project does not use).
 .dev-ports.sh
 
+# Supervisor pid for `task dev-electron`, written by
+# scripts/dev-electron-supervise.sh and read by `task dev-electron-stop`.
+# Per-worktree runtime state, same as .dev-ports.sh above.
+.dev-electron.pid
+
 # Temporal artifacts (logs, pids, db)
 .temporal/
 temporal.db
