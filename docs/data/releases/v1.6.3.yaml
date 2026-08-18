@@ -1,0 +1,11 @@
+version: "v1.6.3"
+date: "2026-08-18"
+title: "The binary reports its real version"
+summary: "Released binaries printed `reliant version dev` regardless of what was built. The version command read package variables nothing ever wrote, while the release injected a different package entirely. Also clears the forge contract-lint backlog and stops a live-network test from failing CI."
+items:
+  - title: "`reliant version` reports the released version"
+    description: "the command read Version/Commit/BuildDate from its own package, but every build path injects internal/version instead — so those variables were never written and every released binary reported `dev` and `unknown`. The command now reads the package that is actually injected, and a test pins it so the two cannot drift apart again."
+  - title: "The forge contract lint is clean"
+    description: "168 exportedvars and requirecontract findings are resolved. The genuinely link-injected variables in internal/builddefaults and internal/version keep their package-var form with an explanatory exclusion, because converting them to getters would silently break the -X injection the release depends on."
+  - title: "A live-network test no longer fails CI"
+    description: "TestWebSearchTool queried live DuckDuckGo behind only a short-mode skip, so it ran on every pull request and failed on bot challenges for reasons unrelated to the change under test. It now needs the same explicit opt-in as its sibling."
