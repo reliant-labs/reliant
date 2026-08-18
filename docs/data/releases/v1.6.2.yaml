@@ -1,0 +1,11 @@
+version: "v1.6.2"
+date: "2026-08-18"
+title: "Packaged builds reach the hosted backend again"
+summary: "Fixes a release-pipeline defect that shipped every packaged app pointed at http://localhost:8080, where nothing runs on a user's machine. Both the Electron app and the Go binary were affected, and neither had any signal that the config was missing."
+items:
+  - title: "The desktop app connects to the hosted backend"
+    description: "the release pipeline never injected the hosted endpoint into packaged Electron builds, so the daemon was aimed at localhost:8080 and had nothing to talk to. The build-time config generator wrote analytics and auth keys but no server URL at all, on all three platforms."
+  - title: "The released binary carries its hosted defaults"
+    description: "the same defect on the Go side: internal/builddefaults is documented as injected via linker flags for released builds, but the release step set only the version and build type, so the shipped binary fell back to the same localhost default."
+  - title: "A release that would ship the wrong endpoint now fails"
+    description: "an empty or localhost server URL fails the release build instead of producing an artifact that points at nothing. The original bug was silent — a localhost default is correct when building from source and useless in a released artifact, and nothing distinguished the two."
