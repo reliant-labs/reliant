@@ -13,6 +13,14 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.6.1" description="August 17, 2026">
+### npm license gate and two CI reliability fixes
+
+- **npm dependency licenses are gated in CI** the npm half of the license gate now runs beside the Go one, on the same allowlist-not-blocklist bar — an unrecognized license fails rather than passing quietly. The web tree passes with 205 production dependencies checked.
+- **The websearch demo no longer fails CI on bot challenges** TestWebSearchDemo queries live DuckDuckGo, which answers a share of automated requests with a challenge response. It is now behind an explicit opt-in instead of running by default, so a full CI pass no longer fails on an upstream rate limit.
+- **e2e harness documents why its daemon router is nil** the story harness passes a nil daemonRouter deliberately — it is only used by the greenfield code-presence probe, which skips itself when nil. That is now stated at the call site rather than left to be rediscovered.
+</Update>
+
 <Update label="v1.6.0" description="August 17, 2026">
 ### Async spawn, workflow lifecycle, and interruptible turns
 
