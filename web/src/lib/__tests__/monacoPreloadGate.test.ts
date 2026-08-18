@@ -25,6 +25,7 @@ describe('Monaco preload gate', () => {
       '/m/new',
       '/m/daemons',
       '/m/daemons/daemon-1',
+      '/m/github',
       '/m/account',
     ]) {
       expect(shouldPreloadMonaco(path), `${path} should skip Monaco`).toBe(

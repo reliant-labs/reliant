@@ -58,6 +58,12 @@ export interface EventMap {
   "refetch:planTasks": { entityId?: string };
   "refetch:fileTree": { entityId?: string };
 
+  // The agent drained these mailbox rows into the transcript. Published from
+  // the chat-update stream in the same synchronous task that commits the
+  // resulting messages, so the pending-queue strip lets go of them in the
+  // same React commit the transcript entries appear in.
+  "agentMailbox:drained": { chatId: string; thread: string; messageIds: string[] };
+
   // Daemon
   "daemon:heartbeat": undefined;
 

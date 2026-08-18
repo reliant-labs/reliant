@@ -207,7 +207,7 @@ func TestStory08_TerminateMidLoopResumesAtPosition(t *testing.T) {
 	require.NoError(t, err, "SendMessage after terminate")
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	// 4. Resume proof: exactly ONE more LLM turn ran, and it came from the
 	//    phase-two worker — the phase-one planner was never consulted again.

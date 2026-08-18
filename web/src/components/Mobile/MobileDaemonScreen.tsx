@@ -13,17 +13,22 @@
  */
 
 import { useState } from "react";
-import { Link, useParams } from "@tanstack/react-router";
-import { ChevronLeft, Loader2, Play } from "lucide-react";
+import { Link, useNavigate, useParams } from "@tanstack/react-router";
+import { AlertTriangle, ChevronLeft, Loader2, Pause, Play, Trash2 } from "lucide-react";
 import { timestampDate } from "@bufbuild/protobuf/wkt";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
+import {
+  useDaemonList,
+  useDeleteDaemon,
+  useResumeDaemon,
+  useSuspendDaemon,
+} from "@/hooks/useOnboardingQueries";
 import {
   getDaemonStatusMessage,
   type Daemon,
 } from "@/services/controlPlane/daemon";
 import { cn } from "../../lib/utils";
-import { canResume, heartbeatMs, sizeLabel } from "./daemonPresentation";
+import { canResume, canSuspend, heartbeatMs, sizeLabel } from "./daemonPresentation";
 import { DaemonStatusPill } from "./MobileDaemonList";
 import { relativeTimeFromMs } from "./relativeTime";
 import { useVisibilityPolling } from "./useVisibilityPolling";
@@ -35,6 +40,12 @@ import {
 } from "./MobileChrome";
 
 const POLL_INTERVAL_MS = 5_000;
+
+const MOBILE_SECONDARY_ACTION =
+  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg border border-border px-5 text-sm font-medium text-foreground active:bg-foreground/5 disabled:opacity-60";
+
+const MOBILE_DANGER_ACTION =
+  "flex min-h-[48px] items-center justify-center gap-2 rounded-lg bg-destructive px-5 text-sm font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60";
 
 function fmtTimestamp(ts?: Timestamp): string {
   if (!ts) return "—";
@@ -58,39 +69,126 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ResumeButton({ daemon }: { daemon: Daemon }) {
+function LifecycleActions({ daemon }: { daemon: Daemon }) {
+  const navigate = useNavigate();
   const [error, setError] = useState("");
-  // The hook swallows reasoned quota errors — the global upgrade interceptor
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // These hooks swallow reasoned quota errors — the global upgrade interceptor
   // has already opened the upgrade modal, and rendering the raw
   // "[resource_exhausted] …" under it is the duplicate the desktop pill hit.
   const resume = useResumeDaemon({
     onError: (err) =>
       setError(err instanceof Error ? err.message : "Failed to resume"),
   });
+  const suspend = useSuspendDaemon({
+    onError: (err) =>
+      setError(err instanceof Error ? err.message : "Failed to suspend"),
+  });
+  const remove = useDeleteDaemon({
+    onSuccess: async () => {
+      navigate({ to: "/m/daemons", replace: true });
+    },
+    onError: (err) =>
+      setError(err instanceof Error ? err.message : "Failed to delete"),
+  });
+
+  const busy = resume.isPending || suspend.isPending || remove.isPending;
 
   return (
-    <div>
-      <button
-        type="button"
-        onClick={() => {
-          setError("");
-          resume.mutate(daemon.id);
-        }}
-        disabled={resume.isPending}
-        // 56px, above the shared 48px floor — a primary action a user may be
-        // tapping one-handed while walking, which is exactly the case this
-        // whole screen exists for.
-        className={cn(MOBILE_PRIMARY_ACTION, "min-h-[56px] w-full")}
-      >
-        {resume.isPending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Play className="h-4 w-4" />
+    <div className="space-y-3">
+      <div className="grid gap-2">
+        {canResume(daemon) && (
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              resume.mutate(daemon.id);
+            }}
+            disabled={busy}
+            // 56px, above the shared 48px floor — a primary action a user may be
+            // tapping one-handed while walking, which is exactly the case this
+            // whole screen exists for.
+            className={cn(MOBILE_PRIMARY_ACTION, "min-h-[56px] w-full")}
+          >
+            {resume.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            {resume.isPending ? "Resuming…" : "Resume"}
+          </button>
         )}
-        {resume.isPending ? "Resuming…" : "Resume"}
-      </button>
+
+        {canSuspend(daemon) && (
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              suspend.mutate(daemon.id);
+            }}
+            disabled={busy}
+            className={cn(MOBILE_SECONDARY_ACTION, "w-full")}
+          >
+            {suspend.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Pause className="h-4 w-4" />
+            )}
+            {suspend.isPending ? "Suspending…" : "Suspend"}
+          </button>
+        )}
+
+        {!confirmDelete ? (
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            disabled={busy}
+            className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-destructive/40 px-5 text-sm font-medium text-destructive active:bg-destructive/10 disabled:opacity-60"
+          >
+            <Trash2 className="h-4 w-4" />
+            Delete
+          </button>
+        ) : (
+          <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+              <p className="text-sm text-destructive">
+                Delete this machine? This action cannot be undone.
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDelete(false)}
+                disabled={busy}
+                className={MOBILE_SECONDARY_ACTION}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setError("");
+                  remove.mutate(daemon.id);
+                }}
+                disabled={busy}
+                className={MOBILE_DANGER_ACTION}
+              >
+                {remove.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {remove.isPending ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {error && (
-        <p className="mt-2 text-center text-xs text-destructive">{error}</p>
+        <p className="text-center text-xs text-destructive">{error}</p>
       )}
     </div>
   );
@@ -168,7 +266,7 @@ export function MobileDaemonScreen() {
             <p className="text-sm text-muted-foreground">{statusMessage}</p>
           )}
 
-          {canResume(daemon) && <ResumeButton daemon={daemon} />}
+          <LifecycleActions daemon={daemon} />
         </MobileCardGroup>
 
         <MobileCardGroup label="Details">

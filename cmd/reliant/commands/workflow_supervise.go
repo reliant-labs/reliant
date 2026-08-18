@@ -516,7 +516,7 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	report := statusReport{
 		ExecutionID: executionID,
 		Workflow:    root.GetWorkflowName(),
-		Status:      chatWorkflowStatusString(root.GetStatus()),
+		Status:      chatWorkflowStatusString(root),
 		Outcome:     root.GetOutcome(),
 		Started:     root.GetCreatedAt(),
 		Completed:   root.GetCompletedAt(),
@@ -582,7 +582,7 @@ func buildStatusNode(wf *reliantv1.WorkflowExecution, gateByThread map[string]st
 		NodeID:    wf.GetSpawnedByNodeId(),
 		Record:    wf.GetWorkflowName(),
 		Thread:    wf.GetThread(),
-		Status:    chatWorkflowStatusString(wf.GetStatus()),
+		Status:    chatWorkflowStatusString(wf),
 		Gate:      gateByThread[wf.GetThread()],
 		Started:   wf.GetCreatedAt(),
 		Completed: wf.GetCompletedAt(),
@@ -759,7 +759,7 @@ func childWorkflowResult(c *reliantv1.WorkflowExecution) string {
 	case execfollow.OutcomeSuccess:
 		return "ok"
 	}
-	status := chatWorkflowStatusString(c.GetStatus())
+	status := chatWorkflowStatusString(c)
 	switch status {
 	case "failed", "cancelled", "expired":
 		return "FAIL"
@@ -1239,15 +1239,15 @@ func resolveSelection(q askuser.Question, line string) (selected []string, freet
 }
 
 // ============================================================================
-// workflow cancel / pause / resume
+// workflow terminate / pause / resume
 // ============================================================================
 
-func newWorkflowCancelCmd() *cobra.Command {
+func newWorkflowTerminateCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "cancel <execution-id>",
-		Short: "Cancel a running workflow execution",
-		Long: `Cancels the workflow for a chat via ChatService.CancelChat. Cancel is
-terminal and DROPS the resume checkpoint — the workflow cannot be resumed
+		Use:   "terminate <execution-id>",
+		Short: "Terminate a running workflow execution",
+		Long: `Terminates the workflow for a chat via ChatService.TerminateChat. Terminate
+is terminal and DROPS the resume checkpoint — the workflow cannot be resumed
 afterward (start a new run instead). Use 'workflow pause' to stop while
 preserving the ability to resume.`,
 		Args: cobra.ExactArgs(1),
@@ -1256,11 +1256,11 @@ preserving the ability to resume.`,
 			if err != nil {
 				return err
 			}
-			resp, err := clients.chat.CancelChat(cmd.Context(), connect.NewRequest(&reliantv1.CancelChatRequest{ChatId: args[0]}))
+			resp, err := clients.chat.TerminateChat(cmd.Context(), connect.NewRequest(&reliantv1.TerminateChatRequest{ChatId: args[0]}))
 			if err != nil {
-				return clients.rpcError(err, "cancelling workflow")
+				return clients.rpcError(err, "terminating workflow")
 			}
-			return reportMutation(cmd, resp.Msg.GetSuccess(), resp.Msg.GetMessage(), "Cancelled workflow "+args[0])
+			return reportMutation(cmd, resp.Msg.GetSuccess(), resp.Msg.GetMessage(), "Terminated workflow "+args[0])
 		},
 	}
 	return cmd
@@ -1272,7 +1272,7 @@ func newWorkflowPauseCmd() *cobra.Command {
 		Short: "Pause a running workflow execution (keeps it resumable)",
 		Long: `Pauses the workflow for a chat via ChatService.PauseChat. Pause PRESERVES
 the resume checkpoint: the workflow stops at a safe point and can be continued
-later with 'workflow resume'. Contrast 'workflow cancel', which is terminal
+later with 'workflow resume'. Contrast 'workflow terminate', which is terminal
 and drops the checkpoint.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -1342,21 +1342,6 @@ func printJSONIndent(w io.Writer, v any) error {
 	return enc.Encode(v)
 }
 
-func roleString(r reliantv1.MessageRole) string {
-	switch r {
-	case reliantv1.MessageRole_MESSAGE_ROLE_USER:
-		return "user"
-	case reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT:
-		return "assistant"
-	case reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM:
-		return "system"
-	case reliantv1.MessageRole_MESSAGE_ROLE_TOOL:
-		return "tool"
-	default:
-		return "unknown"
-	}
-}
-
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
@@ -1365,12 +1350,6 @@ func truncate(s string, n int) string {
 		return s[:n]
 	}
 	return s[:n-1] + "…"
-}
-
-// collapseWS flattens runs of whitespace/newlines to single spaces for compact
-// one-line rendering of tool inputs/results.
-func collapseWS(s string) string {
-	return strings.Join(strings.Fields(s), " ")
 }
 
 // durationMs computes elapsed milliseconds between two RFC3339 timestamps,

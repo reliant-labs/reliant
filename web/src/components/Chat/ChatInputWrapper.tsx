@@ -7,24 +7,17 @@ interface ChatInputWrapperProps
     ComponentProps<typeof ChatInput>,
     never
   > {
-  scrollState?: {
-    isAtBottom: boolean;
-    hasScrolledUp: boolean;
-    scrollToBottom: () => Promise<void>;
-    resumeAutoScroll: () => void;
-  } | null;
+  onScrollToBottom?: () => void;
 }
 
 /**
- * Wrapper for ChatInput that integrates with scroll state.
- * Scrolls to bottom when the user sends a message.
+ * Wrapper for ChatInput that scrolls the timeline to the bottom once the
+ * user's message has been sent, so the reply lands in view.
  */
 export const ChatInputWrapper = forwardRef<
-  HTMLDivElement,
+  HTMLTextAreaElement,
   ChatInputWrapperProps
->(function ChatInputWrapper({ scrollState, onSend, ...props }, ref) {
-  const scrollToBottom = scrollState?.scrollToBottom;
-
+>(function ChatInputWrapper({ onScrollToBottom, onSend, ...props }, ref) {
   // When user sends a message, scroll to bottom so they can see the response
   const handleSend = useCallback(
     async (
@@ -37,11 +30,9 @@ export const ChatInputWrapper = forwardRef<
     ) => {
       await onSend(message, attachmentIds, workflow, workflowParams, targetThread, selectedPresets);
 
-      if (scrollToBottom) {
-        await scrollToBottom();
-      }
+      onScrollToBottom?.();
     },
-    [onSend, scrollToBottom]
+    [onSend, onScrollToBottom]
   );
 
   return (

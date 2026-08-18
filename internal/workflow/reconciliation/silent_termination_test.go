@@ -156,7 +156,7 @@ func terminatedChatWorkflow() *db.Workflow {
 		ID:           "wf-1",
 		ChatID:       "chat-1",
 		Thread:       "thread-main",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		WorkflowName: "builtin://agent",
 	}
 }
@@ -177,7 +177,7 @@ func TestReconciler_HardTermination_EmitsUserVisibleError(t *testing.T) {
 
 	// The DB status is repaired to Failed, which is what keeps the position
 	// checkpoint and routes the next message into resume-at-position.
-	assert.Equal(t, db.WorkflowStatusFailed, repo.rows["wf-1"].Status)
+	assert.Equal(t, db.Failed(), repo.rows["wf-1"].Status)
 
 	// ...and, unlike before, the user is told.
 	updates := repo.errorUpdates()
@@ -238,7 +238,7 @@ func TestReconciler_HardTermination_WhilePaused_EmitsError(t *testing.T) {
 	// A run parked on a pause that dies is if anything MORE surprising: the
 	// user was waiting on a resume that will never come.
 	wf := terminatedChatWorkflow()
-	wf.Status = db.WorkflowStatusPaused
+	wf.Status = db.Paused()
 	repo := newTerminationRepo(wf)
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -252,7 +252,7 @@ func TestReconciler_HardTermination_WhilePaused_EmitsError(t *testing.T) {
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
-	assert.Equal(t, db.WorkflowStatusFailed, repo.rows["wf-1"].Status)
+	assert.Equal(t, db.Failed(), repo.rows["wf-1"].Status)
 	require.Len(t, repo.errorUpdates(), 1, "a paused run that was terminated must also notify")
 }
 
@@ -294,7 +294,7 @@ func TestReconciler_CleanCompletionDrift_EmitsNoError(t *testing.T) {
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
-	assert.Equal(t, db.WorkflowStatusCompleted, repo.rows["wf-1"].Status)
+	assert.Equal(t, db.Completed(), repo.rows["wf-1"].Status)
 	assert.Empty(t, repo.errorUpdates(), "a completed run must not report an error")
 }
 
@@ -313,6 +313,6 @@ func TestReconciler_UserCancelledDrift_EmitsNoError(t *testing.T) {
 	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
 	require.Empty(t, errs)
 
-	assert.Equal(t, db.WorkflowStatusCancelled, repo.rows["wf-1"].Status)
+	assert.Equal(t, db.Cancelled(), repo.rows["wf-1"].Status)
 	assert.Empty(t, repo.errorUpdates(), "a user cancel must not report an error")
 }

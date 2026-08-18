@@ -61,6 +61,30 @@ func (r *Repo) EmitStreamFinalizedUpdate(ctx context.Context, chatID string, upd
 	return r.CreateChatUpdate(ctx, chatID, UpdateTypeStreamFinalized, update.MessageID, data)
 }
 
+// EmitAgentMessagesDrainedUpdate announces the mailbox rows a drain just
+// turned into transcript messages, so the pending-queue strip can drop them in
+// the same commit those messages appear in rather than waiting for its next
+// poll.
+//
+// Callers MUST pass the transaction context the drain's saves run in. Emitted
+// outside it, this would be visible to a reader before the messages it
+// announces, and the strip would clear against a transcript that has not shown
+// them yet -- the same message missing from both places, which is worse than
+// showing it in both.
+//
+// entity_id is unique per drain (not per thread): every drain is a distinct
+// event naming a distinct set of ids, so collapsing two of them under one
+// entity in the snapshot dedup would lose the older one's ids.
+func (r *Repo) EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update AgentMessagesDrainedUpdate) error {
+	update.UpdateTypeName = "agent_messages_drained"
+	data, err := MarshalUpdate(update)
+	if err != nil {
+		return fmt.Errorf("failed to marshal agent messages drained update: %w", err)
+	}
+	return r.CreateChatUpdate(ctx, chatID, UpdateTypeAgentMessagesDrained,
+		EntityIDForAgentMessagesDrained(update.Thread), data)
+}
+
 // EmitToolCallBackgroundedUpdate emits a tool call backgrounded update
 func (r *Repo) EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error {
 	update.UpdateType = UpdateTypeToolCall

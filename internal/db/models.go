@@ -482,17 +482,38 @@ type BackgroundProcess struct {
 	UpdatedAt   time.Time                   `json:"updated_at"`
 }
 
-// WorkflowStatus represents the status of a workflow execution.
-type WorkflowStatus = core.WorkflowStatus
+// WorkflowStatus is a run's lifecycle: state plus the reason it stopped.
+// Build one with the core constructors (db.Pending(), db.Active(),
+// db.Completed(), db.Failed(), db.Paused(), db.Cancelled()) and ask it
+// questions with Live() / Resumable() rather than comparing fields.
+type (
+	WorkflowStatus     = core.WorkflowStatus
+	WorkflowState      = core.WorkflowState
+	WorkflowStopReason = core.WorkflowStopReason
+)
+
+// Lifecycle constructors, re-exported so the db package reads naturally at
+// call sites that already import it.
+var (
+	Pending   = core.Pending
+	Active    = core.Active
+	Completed = core.Completed
+	Failed    = core.Failed
+	Paused    = core.Paused
+	Cancelled = core.Cancelled
+	Stopped   = core.Stopped
+)
 
 const (
-	WorkflowStatusPending   WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_PENDING
-	WorkflowStatusRunning   WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_RUNNING
-	WorkflowStatusCompleted WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED
-	WorkflowStatusFailed    WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_FAILED
-	WorkflowStatusCancelled WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_CANCELLED
-	WorkflowStatusPaused    WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_PAUSED
-	WorkflowStatusExpired   WorkflowStatus = reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED
+	WorkflowStatePending = core.WorkflowStatePending
+	WorkflowStateActive  = core.WorkflowStateActive
+	WorkflowStateStopped = core.WorkflowStateStopped
+
+	StopReasonUnspecified = core.StopReasonUnspecified
+	StopReasonCompleted   = core.StopReasonCompleted
+	StopReasonFailed      = core.StopReasonFailed
+	StopReasonPaused      = core.StopReasonPaused
+	StopReasonCancelled   = core.StopReasonCancelled
 )
 
 // Workflow is an alias to the shared core workflow model.
@@ -512,7 +533,11 @@ const (
 	ThreadOriginNode  = core.ThreadOriginNode
 )
 
-// Thread lifecycle statuses, mirroring CHAT_WORKFLOW_STATUS.
+// ThreadStatusForStopReason maps a workflow's stop reason onto the thread
+// status its owned threads take. See core for why PAUSED is not terminal.
+var ThreadStatusForStopReason = core.ThreadStatusForStopReason
+
+// Thread lifecycle statuses, mirroring the workflow lifecycle.
 //
 // Deliberately NOT re-exported as db.ThreadStatus (a named type): these are
 // plain int32 constants for the same reason the durable tool-call status enum
@@ -524,7 +549,6 @@ const (
 	ThreadStatusCompleted = core.ThreadStatusCompleted
 	ThreadStatusFailed    = core.ThreadStatusFailed
 	ThreadStatusCancelled = core.ThreadStatusCancelled
-	ThreadStatusExpired   = core.ThreadStatusExpired
 )
 
 // ContextWindow is an alias to the shared core context-window model.

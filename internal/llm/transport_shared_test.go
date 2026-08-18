@@ -40,7 +40,8 @@ func TestStreamingAndResilientClientsShareOnePool(t *testing.T) {
 	}
 
 	// The underlying pool is the same object for every caller.
-	if ResilientTransport() != ResilientTransport() {
+	first, second := ResilientTransport(), ResilientTransport()
+	if first != second {
 		t.Fatal("shared transport identity is unstable")
 	}
 }

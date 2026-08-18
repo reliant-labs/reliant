@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/XSAM/otelsql"
-	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/otel/attribute"
 
@@ -333,77 +332,4 @@ func missingMigrationVersions(db *sql.DB, want []int64) ([]int64, error) {
 // This is the source of truth for the currently logged-in user.
 func getUserIDFromAuthFile() (string, error) {
 	return auth.ReadUserIDFromAuthFile()
-}
-
-// seedAPIKeyFromEnv seeds an API key into the api_keys table from environment variables.
-// This is for development use only.
-//
-// Environment variables:
-//   - RELIANT_SEED_API_KEY: The API key to seed (required)
-//   - RELIANT_SEED_PROVIDER: The provider name (required, e.g., "anthropic", "openai", "openrouter")
-//
-// The user ID is read from the Electron app's auth file.
-func seedAPIKeyFromEnv(db *sql.DB) error {
-	apiKey := os.Getenv("RELIANT_SEED_API_KEY")
-	provider := os.Getenv("RELIANT_SEED_PROVIDER")
-
-	// Both must be set
-	if apiKey == "" || provider == "" {
-		logging.Debug("Skipping API key seeding",
-			"hasApiKey", apiKey != "",
-			"hasProvider", provider != "")
-		return nil // Not configured, skip silently
-	}
-
-	logging.Info("Attempting to seed API key from environment", "provider", provider)
-
-	// Get user ID from the Electron app's auth file
-	userID, err := getUserIDFromAuthFile()
-	if err != nil {
-		return fmt.Errorf("failed to get user ID from auth file: %w", err)
-	}
-	if userID == "" {
-		return fmt.Errorf("no user_id found in auth file - please log in first")
-	}
-
-	// Validate provider is one of the supported ones
-	validProviders := map[string]bool{
-		"codex":      true,
-		"anthropic":  true,
-		"openai":     true,
-		"gemini":     true,
-		"groq":       true,
-		"openrouter": true,
-		"xai":        true,
-		"azure":      true,
-		"bedrock":    true,
-		"vertexai":   true,
-		"copilot":    true,
-	}
-
-	if !validProviders[provider] {
-		return fmt.Errorf("invalid provider: %s", provider)
-	}
-
-	now := time.Now().UTC()
-	keyID := uuid.New().String()
-
-	// Upsert into api_keys table
-	_, err = db.Exec(
-		`INSERT INTO api_keys (id, user_id, provider, api_key, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6)
-		 ON CONFLICT(user_id, provider) DO UPDATE SET
-		   api_key = excluded.api_key,
-		   updated_at = excluded.updated_at`,
-		keyID, userID, provider, apiKey, now, now,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to seed API key: %w", err)
-	}
-
-	logging.Info("Seeded API key from environment",
-		"provider", provider,
-		"userID", userID)
-
-	return nil
 }

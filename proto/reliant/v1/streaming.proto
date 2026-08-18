@@ -32,6 +32,11 @@ enum ChatUpdateType {
   // stream reaches a terminal state (completed / aborted / cancelled), so
   // consumers can retire streaming placeholders (delta identity protocol).
   CHAT_UPDATE_TYPE_STREAM_FINALIZED = 19;
+  // Announces the agent_messages ids that just left a thread's mailbox and
+  // became transcript messages. Written in the SAME transaction as those
+  // messages, so the pending-queue strip and the transcript can never both
+  // be showing the same message.
+  CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED = 20;
 }
 
 // UserUpdateType categorizes user-level update events

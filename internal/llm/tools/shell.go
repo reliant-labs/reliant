@@ -175,9 +175,36 @@ func shellDescriptionCommon() string {
 - File reading → Use View tool
 
 # 🔎 SEARCHING THE CODEBASE
-This tool IS the search tool — there is no separate grep/glob tool. Prefer
-ripgrep, and keep every search SCOPED YOURSELF; nothing scopes it for you:
-- Use 'rg' when available, falling back to 'grep -r' / 'find' when it is not.
+The single best thing you can do when searching the codebase is combine multiple
+tools calls in each turn. The vast majority of time is eaten up in LLM turns, so
+reducing that is precious. When searching through deeper call chains, the best way
+to do this is via an LSP that gives you the full graph, otherwise you may spend 50-100+
+calls at ~10s per turn. 
+
+## Go — 'gopls' (for Go packages)
+    gopls call_hierarchy path/to/file.go:LINE:COL   # callers AND callees
+    gopls implementation path/to/file.go:LINE:COL   # interface -> concrete types
+    gopls references     path/to/file.go:LINE:COL   # only when rg is ambiguous
+Get LINE:COL from an rg hit first ('rg -n' gives the line; the column is the
+1-based offset of the identifier on it). You can CHAIN the lookup and the query
+in ONE command rather than spending a turn on each:
+    f=internal/svc/x.go; l=$(rg -n 'func .*executeApproval' $f | cut -d: -f1); \
+      gopls call_hierarchy $f:$l:34; gopls implementation $f:$l:34
+Do not use it for plain name lookup — that is a grep, which is faster than gopls.
+
+## Other languages
+Capability varies, and a command that is not installed is worse than no advice.
+Probe before relying on one: 'command -v <tool> >/dev/null && <tool> ...'.
+TypeScript and C# reach a language server through an MCP bridge when the harness
+enables one; that bridge exposes references/definition/hover but NOT call
+hierarchy, so caller walks there stay with rg — keep them shallow and verify.
+'hover' is still uniquely valuable: it returns an INFERRED type ('const x =
+useFoo()' with no annotation), which rg cannot compute at all.
+Load the 'code-search' skill for the per-language capability table.
+
+
+Prefer ripgrep for other generic searches:
+- Otherwise use 'rg' when available, falling back to 'grep -r' / 'find' when it is not.
 - ALWAYS search from a relative path ('rg pattern .', 'rg pattern internal/'),
   never an absolute root.
 - Exclude vendored trees, which are large and rarely what you want:
@@ -185,6 +212,7 @@ ripgrep, and keep every search SCOPED YOURSELF; nothing scopes it for you:
   ('rg' already honours .gitignore, which usually covers these.)
 - Bound the results: 'rg -l' for filenames only, 'rg -m 20', or pipe to 'head'.
   An unbounded match dump can exhaust the output budget on a large repo.
+- Be careful with flags: the -r flag is a replace flag for instance.
 
 # 🚫 NEVER SCAN THE FILESYSTEM
 Commands like 'find / -name ...', 'find ~ ...' or 'grep -r ... /usr' are REFUSED

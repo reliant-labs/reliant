@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -42,10 +43,11 @@ type ChildWorkflowInitOpts struct {
 // InjectMessageConfig contains configuration for an inject message to save after creating
 // the child workflow's thread.
 type InjectMessageConfig struct {
-	Role        string
-	Content     string
-	Attachments []string
-	Files       []InjectFile // Files loaded from disk to attach
+	Role         string
+	Content      string
+	DisplayStyle string
+	Attachments  []string
+	Files        []InjectFile // Files loaded from disk to attach
 }
 
 // InjectFile holds binary file data loaded from disk for injection.
@@ -53,6 +55,112 @@ type InjectFile struct {
 	Filename string // original filename for type detection
 	MIMEType string
 	Data     []byte
+}
+
+const (
+	defaultInjectRole         = "user"
+	defaultInjectDisplayStyle = "hidden"
+)
+
+func buildInjectMessageConfig(ic *reliantv1.InjectConfig, logger log.Logger) *InjectMessageConfig {
+	if ic == nil {
+		return nil
+	}
+	content := model.CelStringValue(ic.GetContent())
+	if content == "" {
+		return nil
+	}
+	attIDs, attFiles := resolveInjectAttachments(ic, logger)
+	return &InjectMessageConfig{
+		Role:         injectRoleOrDefault(model.CelStringValue(ic.GetRole())),
+		Content:      content,
+		DisplayStyle: injectDisplayStyleOrDefault(model.CelStringValue(ic.GetDisplayStyle())),
+		Attachments:  attIDs,
+		Files:        attFiles,
+	}
+}
+
+func buildInjectSaveMessageInput(chatID, thread, workflowID string, ic *reliantv1.InjectConfig, logger log.Logger) *types.SaveMessageInput {
+	injectMsg := buildInjectMessageConfig(ic, logger)
+	if injectMsg == nil {
+		return nil
+	}
+	return &types.SaveMessageInput{
+		ChatID:       chatID,
+		Thread:       thread,
+		Role:         injectMsg.Role,
+		DisplayStyle: injectMsg.DisplayStyle,
+		Content:      injectMsg.Content,
+		Attachments:  injectMsg.Attachments,
+		InjectFiles:  injectFilesToData(injectMsg.Files),
+		WorkflowID:   workflowID,
+	}
+}
+
+func injectRoleOrDefault(role string) string {
+	if role == "" {
+		return defaultInjectRole
+	}
+	return role
+}
+
+func injectDisplayStyleOrDefault(displayStyle string) string {
+	if displayStyle == "" {
+		return defaultInjectDisplayStyle
+	}
+	return displayStyle
+}
+
+// injectIdempotencyKey derives the key the inject message dedupes on. It names
+// the POSITION IN THE GRAPH that produced the injection, and deliberately
+// contains nothing about the Temporal run that happened to execute it.
+//
+// That is the whole point. SaveMessage's default key is scoped to the RunID, so
+// on resume — which reuses the workflow ID but gets a NEW RunID — the seed
+// message computed a fresh key, missed the dedup, and was written a second
+// time. The child agent read it as a new instruction and restarted work it had
+// already started. Observed in production: an implementer thread told twice to
+// begin "Attempt 1 of 4", the second copy byte-identical and 30 minutes late.
+//
+// The parts, and why each is load-bearing:
+//
+//   - workflowID + nodeID: which node of which workflow seeded this thread.
+//   - childThreadID: the thread being seeded. This also carries the `memo` flag
+//     transitively, which is why memo needs no separate component here — the
+//     thread ID is DERIVED by ExecutionContext.ForChild, whose key includes the
+//     iteration only when memo is false. A memoized fork therefore resolves one
+//     thread across all iterations while a non-memoized one resolves a distinct
+//     thread per iteration, so two frames differing only in memo can never
+//     share a childThreadID. TestInjectKey_MemoIsCapturedViaThreadIdentity
+//     pins this; if ForChild's derivation ever stops folding memo in, that test
+//     fails and memo must become an explicit component.
+//   - loop presence AND iteration, as separate facts: a loop frame at iteration
+//     0 and a frame with no loop at all resolve DIFFERENT threads, so "0" is not
+//     a safe stand-in for "no loop". They are spelled "noloop" and "iter:N" so
+//     the two can never collide.
+//
+// Components are length-prefixed rather than merely delimited. Node IDs come
+// from user-authored workflow YAML and may contain any character including the
+// separator, so plain joining lets one frame impersonate another: node
+// "implement|review" on thread "thread" renders identically to node "review" on
+// thread "thread|implement", and one of the two injections is silently deduped
+// away. Length prefixes make the encoding unambiguous for any input.
+//
+// Every component must stay run-independent. Adding anything that varies per
+// execution reintroduces the duplicate this exists to prevent.
+func injectIdempotencyKey(opts ChildWorkflowInitOpts) string {
+	loop := "noloop"
+	if opts.LoopIteration != nil {
+		loop = fmt.Sprintf("iter:%d", *opts.LoopIteration)
+	}
+	var b strings.Builder
+	b.WriteString("inject")
+	for _, part := range []string{
+		opts.ChildWorkflowID, opts.ChildThreadID, opts.SpawnedByNodeID, loop,
+	} {
+		fmt.Fprintf(&b, "|%d:%s", len(part), part)
+	}
+	return b.String()
 }
 
 // initChildWorkflow creates the child workflow+thread and optionally saves an inject message.
@@ -128,18 +236,22 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 		// Build input for the SaveMessage activity.
 		// V2_SaveMessage expects {"runtime": {...}, "node": {"args": {"resolved_role": ..., ...}}}.
 		flatInput := &types.SaveMessageInput{
-			ChatID:      opts.ChatID,
-			Thread:      opts.ChildThreadID,
-			Role:        opts.InjectMessage.Role,
-			Content:     opts.InjectMessage.Content,
-			Attachments: opts.InjectMessage.Attachments,
-			InjectFiles: injectFilesToData(opts.InjectMessage.Files),
-			WorkflowID:  opts.ChildWorkflowID,
+			ChatID:       opts.ChatID,
+			Thread:       opts.ChildThreadID,
+			Role:         injectRoleOrDefault(opts.InjectMessage.Role),
+			DisplayStyle: injectDisplayStyleOrDefault(opts.InjectMessage.DisplayStyle),
+			Content:      opts.InjectMessage.Content,
+			Attachments:  opts.InjectMessage.Attachments,
+			InjectFiles:  injectFilesToData(opts.InjectMessage.Files),
+			WorkflowID:   opts.ChildWorkflowID,
 		}
 		rtx := types.RuntimeContext{
 			ChatID:     opts.ChatID,
 			Thread:     opts.ChildThreadID,
 			WorkflowID: opts.ChildWorkflowID,
+			// Run-independent, so a resumed run recognizes the seed it already
+			// wrote instead of telling the child to start over.
+			MessageIdempotencyKey: injectIdempotencyKey(opts),
 		}
 		saveInput := types.ActivityInput{Runtime: rtx, Node: buildSaveMessageNode(flatInput)}
 
@@ -162,21 +274,14 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 	return nil
 }
 
-// resolveInjectAttachments processes an InjectConfig's attachments (and legacy_attachments)
-// into attachment IDs and loaded file data.
+// resolveInjectAttachments processes an InjectConfig's attachments into
+// attachment IDs and loaded file data.
 //
 // Each InjectAttachment's oneof source is handled:
 //   - id: appended to the returned attachment ID list
 //   - path: file is read from disk, appended to the returned files list
 //   - data: raw bytes, appended to the returned files list (uses filename/mime_type from the message)
-//
-// The legacy_attachments field (deprecated field 3) is also parsed for backwards compatibility.
 func resolveInjectAttachments(ic *reliantv1.InjectConfig, logger log.Logger) (ids []string, files []InjectFile) {
-	// Handle legacy attachments field (deprecated CelString with comma-separated IDs)
-	if legacy := ic.GetLegacyAttachments(); legacy != nil {
-		ids = append(ids, model.ParseAttachments(model.CelStringValue(legacy))...)
-	}
-
 	for _, att := range ic.GetAttachments() {
 		switch s := att.GetSource().(type) {
 		case *reliantv1.InjectAttachment_Id:

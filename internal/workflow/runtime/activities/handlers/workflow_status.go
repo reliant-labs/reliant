@@ -246,13 +246,13 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// Check if workflow already exists (e.g., branched chat with pending status)
 		existingWorkflow, err := a.repo.GetWorkflow(ctx, input.WorkflowID)
 		if err == nil && existingWorkflow != nil {
-			if existingWorkflow.Status == db.WorkflowStatusRunning {
+			if existingWorkflow.Status.State == db.WorkflowStateActive {
 				return nil // Already running
 			}
 			// Transition to running from any non-running state (pending, completed, failed, cancelled).
 			// This handles follow-up messages where SendMessage starts a new Temporal run
 			// reusing the same workflow ID after the previous run completed.
-			return a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusRunning)
+			return a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.Active())
 		}
 
 		// Create new workflow record
@@ -277,7 +277,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 				ChatID:          input.ChatID,
 				WorkflowName:    input.WorkflowName,
 				Thread:          thread,
-				Status:          db.WorkflowStatusRunning,
+				Status:          db.Active(),
 				SpawnedByNodeID: spawnedByNodeID,
 				LoopIteration:   input.LoopIteration,
 				CreatedAt:       time.Now().UTC(),
@@ -315,7 +315,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 					ChatID:          input.ChatID,
 					WorkflowName:    input.WorkflowName,
 					Thread:          thread,
-					Status:          db.WorkflowStatusRunning,
+					Status:          db.Active(),
 					SpawnedByNodeID: spawnedByNodeID,
 					LoopIteration:   input.LoopIteration,
 					CreatedAt:       time.Now().UTC(),
@@ -330,16 +330,16 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 			}
 
 			// Update status to running if needed
-			if existingWorkflow.Status != db.WorkflowStatusRunning {
-				if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusRunning); err != nil {
+			if existingWorkflow.Status.State != db.WorkflowStateActive {
+				if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.Active()); err != nil {
 					return fmt.Errorf("failed to update workflow status: %w", err)
 				}
 			}
 
 			logging.Info("[WorkflowStatus] Child workflow status updated",
 				"workflowID", input.WorkflowID,
-				"previousStatus", existingWorkflow.Status,
-				"newStatus", db.WorkflowStatusRunning)
+				"previousStatus", existingWorkflow.Status.Label(),
+				"newStatus", db.Active().Label())
 		}
 
 		return nil
@@ -353,7 +353,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// retry is safe.
 		var transitionedTo string
 		if err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
-			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
+			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Completed()); err != nil {
 				return err
 			}
 			// The verdict lands in the SAME commit as the terminal status. Two
@@ -392,7 +392,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		a.clearCheckpoint(ctx, input.WorkflowID)
 		// Cascade completion to any thread records owned by this workflow
 		// Thread records ("thread:*") are created by fork()/new() in action configs
-		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCompleted); err != nil {
+		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.StopReasonCompleted); err != nil {
 			return err
 		}
 		// Threads are not a workflows row and need their own cascade call —
@@ -400,30 +400,30 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// defense-in-depth alongside ThreadStatusActivity's own "completed"
 		// call: a worker that dies between the two activities otherwise
 		// leaves the descendant's thread stuck at running forever.
-		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.WorkflowStatusCompleted)
+		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.StopReasonCompleted)
 
 	case "failed":
 		// NOTE: the position checkpoint is intentionally KEPT on failure — it
 		// is what lets the next user message resume the run at position.
-		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
+		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.Failed()); err != nil {
 			return err
 		}
-		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusFailed); err != nil {
+		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.StopReasonFailed); err != nil {
 			return err
 		}
-		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.WorkflowStatusFailed)
+		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.StopReasonFailed)
 
 	case "cancelled":
-		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
+		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.Cancelled()); err != nil {
 			return err
 		}
 		// User-cancelled runs start fresh on the next message — drop the
 		// checkpoint (resume-at-position applies only to failed/terminated).
 		a.clearCheckpoint(ctx, input.WorkflowID)
-		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.WorkflowStatusCancelled); err != nil {
+		if err := a.repo.CascadeTerminalStatusToDescendants(ctx, input.WorkflowID, db.StopReasonCancelled); err != nil {
 			return err
 		}
-		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.WorkflowStatusCancelled)
+		return a.repo.CascadeTerminalStatusToThreadSubtree(ctx, input.WorkflowID, db.StopReasonCancelled)
 
 	case "paused":
 		// Self-pause: workflow is pausing itself (e.g., due to rate limit
@@ -435,7 +435,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// SendMessage's resume routing and the reconciler's progress-watchdog
 		// pause exclusion consult. Leaving it "running" hides the pause from
 		// both — the watchdog then terminates a legitimately parked workflow.
-		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.WorkflowStatusPaused); err != nil {
+		if err := a.repo.UpdateWorkflowStatus(ctx, input.WorkflowID, db.Paused()); err != nil {
 			return err
 		}
 		if input.ChatID != "" {

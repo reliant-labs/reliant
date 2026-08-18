@@ -147,16 +147,27 @@ WHERE t.workflow_id = subtree.id
 -- workflows, each with a thread still reporting running.
 --
 -- Fails CLOSED in the same direction as ListStrandedSpawnToolCalls: a thread
--- whose workflow is still running (2) or paused (6) is never touched, because
--- inventing a terminal status for a thread backing live work is
--- unrecoverable -- it would falsely mark an in-flight agent's mailbox
--- resolvable and its conversation finished. A thread that stays stranded a
--- little longer is recoverable; one wrongly closed is not.
+-- whose workflow is still LIVE — active, or stopped only because it is paused
+-- — is never touched, because inventing a terminal status for a thread backing
+-- live work is unrecoverable: it would falsely mark an in-flight agent's
+-- mailbox resolvable and its conversation finished. A thread that stays
+-- stranded a little longer is recoverable; one wrongly closed is not.
+--
+-- The thread inherits the workflow's stop REASON, translated into the thread
+-- status vocabulary (threads keep a flat status; they have no
+-- pending/active distinction to make). This is the SQL twin of
+-- core.ThreadStatusForStopReason — a repaired cancel must not read as a
+-- repaired success.
 UPDATE threads AS t
-SET status = w.status, completed_at = NOW()
+SET status = CASE w.stop_reason
+        WHEN 1 THEN 3  -- COMPLETED -> thread completed
+        WHEN 2 THEN 4  -- FAILED    -> thread failed
+        WHEN 4 THEN 5  -- CANCELLED -> thread cancelled
+    END,
+    completed_at = NOW()
 FROM workflows w
 WHERE t.workflow_id = w.id
-  AND w.status IN (3, 4, 5, 7)
+  AND w.state = 3 AND w.stop_reason IN (1, 2, 4)
   AND t.status IN (2, 6);
 
 -- name: DeleteThread :exec

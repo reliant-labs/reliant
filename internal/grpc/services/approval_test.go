@@ -90,7 +90,7 @@ func createApprovalTestData(t *testing.T, repo *db.Repo) (chatID, workflowID str
 		ChatID:       chatID,
 		WorkflowName: "test-workflow",
 		Thread:       "/test",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	})
 	require.NoError(t, err)
 

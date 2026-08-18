@@ -72,6 +72,15 @@ function completeAssistantMessage(
   } as unknown as ChatUpdate;
 }
 
+// Content deltas are coalesced onto an animation frame, so a test that streams
+// text must let that frame run before reading the placeholder. Non-content
+// deltas (block starts, tool_use_start) still commit synchronously.
+function flushCoalescingFrame(): Promise<void> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => setTimeout(resolve, 0)),
+  );
+}
+
 function streamingTempIds(chatId: string): string[] {
   const state = useChatStore.getState();
   const inMessages = getMessagesFromCache(chatId)
@@ -84,7 +93,7 @@ function streamingTempIds(chatId: string): string[] {
 }
 
 describe("late delta tails after finalization", () => {
-  it("does not fabricate an empty streaming message from a content-only tail (no message_id / old server)", () => {
+  it("does not fabricate an empty streaming message from a content-only tail (no message_id / old server)", async () => {
     const chatId = "chat-tail-content";
     seedChat(chatId);
     const store = useChatStore.getState();
@@ -93,10 +102,9 @@ describe("late delta tails after finalization", () => {
       completeAssistantMessage(chatId, "m1", 2, "2026-01-01T00:00:10.000Z"),
     ]);
 
-    // Stale tail: a content delta for the already-finalized stream. The
-    // newline makes it bypass the flush buffer and hit the store directly.
-    // Old-server deltas carry no message_id — the empty-tail guard is what
-    // protects the content case.
+    // Stale tail: a content delta for the already-finalized stream, read after
+    // its coalescing frame commits. Old-server deltas carry no message_id —
+    // the empty-tail guard is what protects the content case.
     store.processChatStreamUpdates(chatId, [
       {
         update_type: "streaming_delta",
@@ -105,6 +113,7 @@ describe("late delta tails after finalization", () => {
         delta: "stale tail\n",
       } as unknown as ChatUpdate,
     ]);
+    await flushCoalescingFrame();
 
     expect(streamingTempIds(chatId)).toHaveLength(0);
   });
@@ -205,7 +214,7 @@ describe("late delta tails after finalization", () => {
 });
 
 describe("incremental streaming placeholder updates", () => {
-  it("updates the in-flight placeholder in place across delta batches (no duplicate)", () => {
+  it("updates the in-flight placeholder in place across delta batches (no duplicate)", async () => {
     const chatId = "chat-incremental";
     seedChat(chatId);
     const store = useChatStore.getState();
@@ -221,8 +230,8 @@ describe("incremental streaming placeholder updates", () => {
         m.id.startsWith("streaming-temp"),
       );
 
-    // First batch: start a block and stream some text. The newline forces the
-    // batch past the flush buffer so it lands in the store synchronously.
+    // First batch: start a block and stream some text. The block start commits
+    // synchronously; the text lands when the coalescing frame fires.
     store.processChatStreamUpdates(chatId, [
       {
         update_type: "streaming_delta",
@@ -236,6 +245,7 @@ describe("incremental streaming placeholder updates", () => {
         delta: "Hello\n",
       } as unknown as ChatUpdate,
     ]);
+    await flushCoalescingFrame();
 
     expect(slicePlaceholders()).toHaveLength(1);
     // Never co-mingled into the persisted messages array.
@@ -251,6 +261,7 @@ describe("incremental streaming placeholder updates", () => {
         delta: " world\n",
       } as unknown as ChatUpdate,
     ]);
+    await flushCoalescingFrame();
 
     const placeholders = slicePlaceholders();
     expect(placeholders).toHaveLength(1);

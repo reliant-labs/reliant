@@ -159,6 +159,9 @@ type Repository interface {
 	UpsertToolCall(ctx context.Context, call *ToolCall) error
 	UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error
 	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
+	// GetToolCallResult reads the recorded result for a single call, or nil
+	// if none was ever written.
+	GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// Batch reads for the message read path — one query per page of messages,
 	// not one per message.
@@ -293,7 +296,14 @@ type Repository interface {
 	// ListQueuedAgentMessagesForThread returns queued messages in send order
 	// -- delivery order must match send order.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error)
-	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) error
+	// MarkAgentMessagesDelivered moves queued rows to delivered and returns the
+	// ids it actually moved. A caller that gets back fewer ids than it asked for
+	// lost a race to a concurrent drain and must not write its own copies of
+	// those messages -- see core.AgentMessageStore.
+	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
+	// SetAgentMessagesDeliveredMessageID backfills the envelope pointer on rows
+	// already claimed by MarkAgentMessagesDelivered.
+	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	// CancelQueuedAgentMessage deletes a mailbox row only if it is still
 	// queued -- see core.AgentMessageStore for the race it guards against.
@@ -369,7 +379,6 @@ type Repository interface {
 	// builds instead of scanning all update types with a limit.
 	GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]ChatUpdate, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
-	GetNextSequenceNumber(ctx context.Context, chatID string) (int64, error)
 
 	// Question methods
 	CreateQuestion(ctx context.Context, question *Question) error
@@ -393,6 +402,7 @@ type Repository interface {
 	EmitToolCallCancelledUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitToolCallBackgroundedUpdate(ctx context.Context, chatID string, update ToolCallUpdate) error
 	EmitStreamFinalizedUpdate(ctx context.Context, chatID string, update StreamFinalizedUpdate) error
+	EmitAgentMessagesDrainedUpdate(ctx context.Context, chatID string, update AgentMessagesDrainedUpdate) error
 	// Refetch Signals (tell frontend to re-fetch specific data)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType RefetchType, opts RefetchOpts) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType RefetchType) error
@@ -463,7 +473,7 @@ type Repository interface {
 	// passes what actually happened: a descendant of a cancelled run is
 	// cancelled, not completed, and a supervision surface that counts completed
 	// units must not be handed a terminated subtree to count.
-	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status WorkflowStatus) error
+	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error
 	// ReapOrphanedWorkflowDescendants ends every running/paused workflow whose
 	// parent is already terminal — at the terminal ancestor's own status — and
 	// reports how many rows it moved. The backstop for a write path that reached
@@ -530,7 +540,7 @@ type Repository interface {
 	// docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
 	// own orphaned mailboxes invisible to ListThreadsWithOrphanedAgentMessages
 	// (it only matches threads already in a terminal status).
-	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status WorkflowStatus) error
+	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error
 	// ReapOrphanedThreads ends every running/paused thread whose workflow is
 	// already terminal, at the workflow's own status, and reports how many
 	// rows it moved. The backstop for a write path that reached a terminal
@@ -611,7 +621,15 @@ type Repository interface {
 	EmitNodeExecutionEvent(ctx context.Context, eventType string, state *NodeExecutionState) error
 
 	// Transactions
+	//
+	// RunTx is read-write SERIALIZABLE. RunTxReadOnly runs READ ONLY
+	// DEFERRABLE, which takes NO predicate locks and cannot fail with
+	// SQLSTATE 40001 — prefer it for read paths, since under SERIALIZABLE a
+	// read's predicate locks are what abort concurrent writers on unrelated
+	// rows. See TxOptions for the full rationale.
 	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+	RunTxReadOnly(ctx context.Context, f func(ctx context.Context) error) error
+	RunTxWithOptions(ctx context.Context, opts TxOptions, f func(ctx context.Context) error) error
 
 	// Lifecycle
 	Close() error

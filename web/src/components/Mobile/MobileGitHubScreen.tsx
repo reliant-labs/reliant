@@ -15,12 +15,18 @@
 import { useState } from "react";
 import { ChevronRight, Github } from "lucide-react";
 import { useGitHubCredential } from "@/hooks/useGitHubCredential";
-import { MobileCardGroup, MOBILE_ROW, MobileRowIcon } from "./MobileChrome";
+import {
+  MobileCardGroup,
+  MOBILE_ROW,
+  MobileRowIcon,
+  MobileScreenHeader,
+} from "./MobileChrome";
 import { MobileGitHubPanel } from "./MobileGitHubPanel";
 import { MobileGitHubRepoList } from "./MobileGitHubRepoList";
+import { MobileMenuButton } from "./MobileMenuButton";
 import { MobileSettingsSectionHeader } from "./MobileSettingsSectionHeader";
 
-export function MobileGitHubScreen({ onBack }: { onBack: () => void }) {
+export function MobileGitHubScreen({ onBack }: { onBack?: () => void }) {
   const [browsing, setBrowsing] = useState(false);
   const { hasToken } = useGitHubCredential();
 
@@ -30,7 +36,11 @@ export function MobileGitHubScreen({ onBack }: { onBack: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <MobileSettingsSectionHeader title="GitHub" onBack={onBack} />
+      {onBack ? (
+        <MobileSettingsSectionHeader title="GitHub" onBack={onBack} />
+      ) : (
+        <MobileScreenHeader title="GitHub" leading={<MobileMenuButton />} />
+      )}
       <div className="min-h-0 flex-1 overflow-y-auto">
         <MobileGitHubPanel />
 

@@ -25,10 +25,13 @@ import {
   applyLogSlice,
   applyToolCallStateUpdates,
   bySequenceNumber,
+  isAbortedFinalizeReason,
   mergeActiveThreads,
   mergeMessages,
   resolveStreamingBase,
+  settleCancelledStreamBlocks,
   snapshotReplacesMessages,
+  toolStatusSurvivesStreamAbort,
 } from "../lib/chatStreamReducers";
 
 import * as Sentry from "@sentry/react";
@@ -114,7 +117,7 @@ import {
 import { DEFAULT_WORKFLOW } from "./preferencesStore";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
-  STREAMING_FLUSH_TIMEOUT_MS,
+  STREAMING_FLUSH_FALLBACK_MS,
 } from "../lib/constants";
 import { trackEvent } from "../lib/analytics";
 
@@ -154,13 +157,30 @@ function toApprovalStatus(
 }
 
 // ============================================================================
-// Streaming Delta Buffer - batch updates on newlines for fewer re-renders
+// Streaming Delta Buffer - coalesce content deltas onto one animation frame
+//
+// Every commit is a Zustand set plus a React Query cache write, which
+// re-renders the whole timeline and makes Virtuoso re-measure every row. At
+// delta rate that is the scroll jitter users see, so content deltas are
+// accumulated and committed at most once per frame — coalescing on TIME.
+//
+// This used to flush on newlines, which tied the repaint rate to the shape of
+// the prose: markdown lists and code blocks committed many times a second,
+// while a long unbroken line waited out the full fallback delay. A newline is
+// a property of the text, not a signal about when to repaint.
+//
+// Non-content deltas (block starts, tool_use_start, cancellations) stay
+// immediate — they are rare, and callers read them straight out of the
+// returned array to drive tool state. Any buffered content is drained ahead of
+// them so a thread's deltas stay strictly ordered.
 // ============================================================================
 
 interface StreamingBuffer {
   deltas: StreamingDelta[];
-  pendingText: string; // Accumulated text that doesn't end in newline yet
-  flushTimeoutId: ReturnType<typeof setTimeout> | null;
+  /** Handle of the armed animation frame, or null when none is armed. */
+  frameId: number | null;
+  /** Watchdog for when the frame never fires (background tab, no rAF). */
+  fallbackTimeoutId: ReturnType<typeof setTimeout> | null;
 }
 
 // Buffers are keyed by "chatId:thread" to support multiple simultaneous streams
@@ -311,12 +331,42 @@ function getStreamingBuffer(
   if (!buffer) {
     buffer = {
       deltas: [],
-      pendingText: "",
-      flushTimeoutId: null,
+      frameId: null,
+      fallbackTimeoutId: null,
     };
     streamingBuffers.set(key, buffer);
   }
   return buffer;
+}
+
+// rAF is absent in non-browser environments (node test runners, SSR). Reading
+// it through globalThis on every call rather than caching a reference keeps a
+// test that stubs rAF working, and keeps us honest about jsdom, which does
+// provide one.
+function scheduleFrame(callback: () => void): number | null {
+  const raf = (globalThis as { requestAnimationFrame?: (cb: () => void) => number })
+    .requestAnimationFrame;
+  return typeof raf === "function" ? raf(callback) : null;
+}
+
+function cancelFrame(frameId: number): void {
+  const caf = (globalThis as { cancelAnimationFrame?: (id: number) => void })
+    .cancelAnimationFrame;
+  if (typeof caf === "function") caf(frameId);
+}
+
+// Disarm both schedulers. Every teardown path funnels through here: a frame or
+// timer that survives its buffer would resurrect a placeholder for a stream
+// that already ended.
+function cancelBufferFlush(buffer: StreamingBuffer): void {
+  if (buffer.frameId !== null) {
+    cancelFrame(buffer.frameId);
+    buffer.frameId = null;
+  }
+  if (buffer.fallbackTimeoutId !== null) {
+    clearTimeout(buffer.fallbackTimeoutId);
+    buffer.fallbackTimeoutId = null;
+  }
 }
 
 // Check if a buffer exists for a chat+thread
@@ -335,8 +385,8 @@ function clearStreamingBuffer(
 ): void {
   const key = getBufferKey(chatId, thread);
   const buffer = streamingBuffers.get(key);
-  if (buffer?.flushTimeoutId) {
-    clearTimeout(buffer.flushTimeoutId);
+  if (buffer) {
+    cancelBufferFlush(buffer);
   }
   streamingBuffers.delete(key);
 }
@@ -347,8 +397,8 @@ function clearStreamingBuffersForChat(chatId: string): void {
   for (const key of [...streamingBuffers.keys()]) {
     if (key.startsWith(`${chatId}:`)) {
       const buffer = streamingBuffers.get(key);
-      if (buffer?.flushTimeoutId) {
-        clearTimeout(buffer.flushTimeoutId);
+      if (buffer) {
+        cancelBufferFlush(buffer);
       }
       streamingBuffers.delete(key);
     }
@@ -409,9 +459,10 @@ const applyNodeExecutionUpdates = (
     sort: bySequenceNumber,
   });
 
-// Buffer streaming deltas and flush on newlines
-// Returns deltas that should be processed immediately
-// Thread-aware: groups deltas by thread and buffers each separately
+// Coalesce streaming content deltas onto one animation frame per thread.
+// Returns the deltas the caller must process immediately.
+// Thread-aware: groups deltas by thread and buffers each separately, so two
+// threads streaming at once never share a buffer or a commit.
 function bufferStreamingDeltas(
   chatId: string,
   deltas: StreamingDelta[],
@@ -434,6 +485,24 @@ function bufferStreamingDeltas(
     const buffer = getStreamingBuffer(chatId, thread);
     const bufferKey = getBufferKey(chatId, thread);
 
+    // Commit whatever has accumulated for this thread. Re-reads the buffer
+    // from the map rather than closing over it: a chat switch, finalization,
+    // or completed message between scheduling and firing DELETES the buffer,
+    // and that deletion is precisely the signal to drop this flush.
+    const flushBuffer = () => {
+      const buf = streamingBuffers.get(bufferKey);
+      if (!buf) return;
+      buf.frameId = null;
+      if (buf.fallbackTimeoutId !== null) {
+        clearTimeout(buf.fallbackTimeoutId);
+        buf.fallbackTimeoutId = null;
+      }
+      if (buf.deltas.length === 0) return;
+      const pending = buf.deltas;
+      buf.deltas = [];
+      flushCallback(pending, thread);
+    };
+
     for (const delta of threadDeltas) {
       // Skip thinking deltas entirely - not displayed, causes memory issues
       if (
@@ -443,47 +512,35 @@ function bufferStreamingDeltas(
         continue;
       }
 
-      // Non-content deltas (tool_use_start, etc.) flush immediately
+      // Non-content deltas (tool_use_start, etc.) are handled immediately.
+      // Anything already buffered goes with them, or the thread's deltas
+      // would reach the store out of order.
       if (delta.delta_type !== "content_block_delta") {
-        // Flush any pending content first
         if (buffer.deltas.length > 0) {
           immediateDeltas.push(...buffer.deltas);
           buffer.deltas = [];
-          buffer.pendingText = "";
         }
+        cancelBufferFlush(buffer);
         immediateDeltas.push(delta);
         continue;
       }
 
-      // Content delta - check for newlines
-      const text = delta.delta || "";
-      buffer.pendingText += text;
       buffer.deltas.push(delta);
 
-      // If we have a newline, flush the buffer
-      if (text.includes("\n")) {
-        immediateDeltas.push(...buffer.deltas);
-        buffer.deltas = [];
-        buffer.pendingText = "";
-
-        // Clear any pending flush timeout
-        if (buffer.flushTimeoutId) {
-          clearTimeout(buffer.flushTimeoutId);
-          buffer.flushTimeoutId = null;
-        }
-      } else {
-        // No newline - set a timeout to flush if we don't get one soon
-        if (buffer.flushTimeoutId) {
-          clearTimeout(buffer.flushTimeoutId);
-        }
-        buffer.flushTimeoutId = setTimeout(() => {
-          const buf = streamingBuffers.get(bufferKey);
-          if (buf && buf.deltas.length > 0) {
-            flushCallback(buf.deltas, thread);
-            buf.deltas = [];
-            buf.pendingText = "";
-          }
-        }, STREAMING_FLUSH_TIMEOUT_MS);
+      // The first delta of a frame arms the schedulers; every later one just
+      // accumulates, which is what collapses a burst into a single commit.
+      if (buffer.frameId === null && buffer.fallbackTimeoutId === null) {
+        buffer.frameId = scheduleFrame(flushBuffer);
+        // The watchdog runs ALONGSIDE the frame rather than instead of it: a
+        // tab backgrounded mid-stream throttles or suspends rAF without
+        // cancelling the request, so the frame may only be reached minutes
+        // later. Whichever fires first commits and disarms the other. When
+        // there is no rAF at all (non-browser), the watchdog is the only
+        // scheduler and the behavior degrades to the old timer path.
+        buffer.fallbackTimeoutId = setTimeout(
+          flushBuffer,
+          STREAMING_FLUSH_FALLBACK_MS,
+        );
       }
     }
   }
@@ -1957,8 +2014,20 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // Ids finalized by THIS batch's markers — not yet committed to state, so
         // union them into the drop check for the same-batch marker+tail case.
         const batchFinalizedIds = new Set<string>();
+        // Ids whose stream STOPPED (cancelled/aborted) rather than completed. A
+        // cancelled step persists nothing and is re-dispatched, so no message
+        // row will ever arrive to replace the placeholder — its unfinished tool
+        // blocks have to be settled here or they render as "executing" forever.
+        const batchAbortedIds = new Set<string>();
+        // Threads named by an aborting marker. The legacy id-less delta path
+        // builds a `streaming-temp-*` placeholder, so the marker's message id
+        // matches nothing; the thread is the only handle onto it.
+        const abortedThreadKeys = new Set<string>();
         for (const u of streamFinalizedUpdates) {
           if (u.message_id) batchFinalizedIds.add(u.message_id);
+          if (!isAbortedFinalizeReason(u.reason)) continue;
+          if (u.message_id) batchAbortedIds.add(u.message_id);
+          abortedThreadKeys.add(normalizeThreadKey(chatId, u.thread));
         }
 
         // Delta identity: an assistant message id is "finalized" once its stream
@@ -1988,69 +2057,69 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             ),
         );
 
-        // Buffer streaming deltas and flush on newlines to reduce re-renders
-        // This batches char-by-char content_block_delta events until we hit a newline
-        // Thread-aware: each thread has its own buffer and streaming message
+        // Commit a coalesced batch of content deltas for one thread.
+        //
+        // bufferStreamingDeltas already deferred this onto an animation frame
+        // (or the background-tab watchdog), so the whole batch becomes exactly
+        // one state commit and this body runs synchronously — a second rAF
+        // here would cost an extra frame of latency and, worse, would never
+        // run at all on the watchdog path in a backgrounded tab.
         const handleBufferedFlush = (
           bufferedDeltas: StreamingDelta[],
           thread: string | undefined,
         ) => {
-          // PERFORMANCE: Use requestAnimationFrame to batch state updates with React's render cycle
-          // This ensures the timeout-triggered flush doesn't cause an extra render
-          requestAnimationFrame(() => {
-            // FIX 1: Guard against stale flushes - skip if buffer was cleared (complete message arrived)
-            if (!hasStreamingBuffer(chatId, thread)) {
-              logger.debug(
-                "[Streaming] Skipping stale buffered flush - buffer was cleared",
-                {
-                  chatId: chatId.slice(0, 8),
-                  thread: thread?.slice(0, 8),
-                },
-              );
-              return;
-            }
-
-            // Delta identity: finalization can land between buffering and flush.
-            // Re-apply the drop rule here so a marker (or persisted message) that
-            // arrived in the interim retires the buffered tail instead of
-            // flushing a placeholder for an already-finalized id.
-            const flushDeltas = bufferedDeltas.filter(
-              (d) => !isFinalizedId(d.message_id),
+          // FIX 1: Guard against stale flushes - skip if buffer was cleared (complete message arrived)
+          if (!hasStreamingBuffer(chatId, thread)) {
+            logger.debug(
+              "[Streaming] Skipping stale buffered flush - buffer was cleared",
+              {
+                chatId: chatId.slice(0, 8),
+                thread: thread?.slice(0, 8),
+              },
             );
-            if (flushDeltas.length === 0) {
-              logger.debug(
-                "[Streaming] Skipping buffered flush - deltas finalized before flush",
-                {
-                  chatId: chatId.slice(0, 8),
-                  thread: thread?.slice(0, 8),
-                },
-              );
-              return;
-            }
+            return;
+          }
 
-            // Process buffered deltas asynchronously (they were delayed by the buffer timeout)
-            const threadKey = normalizeThreadKey(chatId, thread);
-            const currentStreamingMsg = resolveStreamingBase(
-              get().streamingMessages[chatId],
-              threadKey,
+          // Delta identity: finalization can land between buffering and flush.
+          // Re-apply the drop rule here so a marker (or persisted message) that
+          // arrived in the interim retires the buffered tail instead of
+          // flushing a placeholder for an already-finalized id.
+          const flushDeltas = bufferedDeltas.filter(
+            (d) => !isFinalizedId(d.message_id),
+          );
+          if (flushDeltas.length === 0) {
+            logger.debug(
+              "[Streaming] Skipping buffered flush - deltas finalized before flush",
+              {
+                chatId: chatId.slice(0, 8),
+                thread: thread?.slice(0, 8),
+              },
             );
+            return;
+          }
 
-            const flushedMsg = processStreamingDeltas(
-              flushDeltas,
-              currentStreamingMsg,
-            );
-            if (flushedMsg) {
-              set((s) => ({
-                streamingMessages: {
-                  ...s.streamingMessages,
-                  [chatId]: {
-                    ...(s.streamingMessages[chatId] || {}),
-                    [threadKey]: flushedMsg,
-                  },
+          // Process buffered deltas asynchronously (they were delayed by the coalescing frame)
+          const threadKey = normalizeThreadKey(chatId, thread);
+          const currentStreamingMsg = resolveStreamingBase(
+            get().streamingMessages[chatId],
+            threadKey,
+          );
+
+          const flushedMsg = processStreamingDeltas(
+            flushDeltas,
+            currentStreamingMsg,
+          );
+          if (flushedMsg) {
+            set((s) => ({
+              streamingMessages: {
+                ...s.streamingMessages,
+                [chatId]: {
+                  ...(s.streamingMessages[chatId] || {}),
+                  [threadKey]: flushedMsg,
                 },
-              }));
-            }
-          });
+              },
+            }));
+          }
         };
 
         const streamingDeltas = bufferStreamingDeltas(
@@ -2216,20 +2285,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // overwriting with what should be an identical re-delivery.
         const batchToolResults: ToolResultsByCallId = {};
         const batchToolResultSourceMsgId: Record<string, string> = {};
+        let inBatchDuplicateCount = 0;
         messageUpdates.forEach((protoMsg) => {
           if (protoMsg.role === MessageRole.TOOL) {
             protoMsg.contentBlocks.forEach((block) => {
               if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
                 const existingMsgId = batchToolResultSourceMsgId[block.toolCallId];
                 if (existingMsgId !== undefined) {
-                  logger.warn(
-                    "[ChatStore] Duplicate tool result for tool_call_id in one batch — keeping first, dropping re-delivery",
-                    {
-                      toolCallId: block.toolCallId,
-                      firstMessageId: existingMsgId,
-                      duplicateMessageId: protoMsg.id,
-                    },
-                  );
+                  // Re-delivery within one batch is expected traffic (a resync
+                  // snapshot overlapping live results), so it is counted, not
+                  // logged per occurrence — see the aggregate below.
+                  inBatchDuplicateCount++;
                   return;
                 }
                 batchToolResultSourceMsgId[block.toolCallId] = protoMsg.id;
@@ -2341,22 +2407,53 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // tool_call_id already present from a prior batch means this batch's
         // copy is a re-delivery (retry / reconnect snapshot overlapping a
         // live result), not a new result — the PK at rest guarantees at most
-        // one real result per call. Keep the existing entry and warn rather
-        // than risk clobbering real output with a re-delivered error stub.
+        // one real result per call. Keep the existing entry rather than risk
+        // clobbering real output with a re-delivered error stub.
+        //
+        // Re-delivery is the steady state, not an anomaly: every gap-resync
+        // re-sends a window of up to 200 messages, so warning per occurrence
+        // produced bursts of hundreds of synchronous IPC calls inside a single
+        // frame. Only a re-delivery whose CONTENT DIFFERS from the stored copy
+        // is genuinely suspicious (that is the clobbering case the warning was
+        // added to catch); identical re-deliveries are counted and reported
+        // once per batch at debug level.
         const existingToolResults = snapshotReplaces
           ? {}
           : state.toolResultsByCallId[chatId] || {};
+        let redeliveredCount = 0;
+        const conflictingToolCallIds: string[] = [];
         for (const toolCallId of Object.keys(batchToolResults)) {
           if (toolCallId in existingToolResults) {
-            logger.warn(
-              "[ChatStore] Tool result already recorded for tool_call_id — keeping existing, dropping re-delivery from this batch",
-              {
-                toolCallId,
-                sourceMessageId: batchToolResultSourceMsgId[toolCallId],
-              },
-            );
+            const existing = existingToolResults[toolCallId];
+            const incoming = batchToolResults[toolCallId];
+            if (
+              existing.content !== incoming.content ||
+              existing.is_error !== incoming.is_error
+            ) {
+              conflictingToolCallIds.push(toolCallId);
+            }
+            redeliveredCount++;
             delete batchToolResults[toolCallId];
           }
+        }
+        if (conflictingToolCallIds.length > 0) {
+          // The real signal: a second, DIFFERENT result for a call whose
+          // tool_call_id is a primary key at rest. First write still wins.
+          logger.warn(
+            "[ChatStore] Tool result re-delivered with different content — keeping existing",
+            {
+              chatId: chatId.slice(0, 8),
+              count: conflictingToolCallIds.length,
+              toolCallIds: conflictingToolCallIds.slice(0, 5),
+            },
+          );
+        }
+        if (redeliveredCount > 0 || inBatchDuplicateCount > 0) {
+          logger.debug("[ChatStore] Dropped re-delivered tool results", {
+            chatId: chatId.slice(0, 8),
+            alreadyRecorded: redeliveredCount,
+            duplicatesInBatch: inBatchDuplicateCount,
+          });
         }
         const updatedToolResults: ToolResultsByCallId = {
           ...existingToolResults,
@@ -2420,7 +2517,23 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   },
                 );
 
-                // Find the complete assistant message for this thread and merge cancelled blocks
+                // Merge the cancelled blocks into the message they were
+                // STREAMED UNDER — the one whose id the placeholder carries.
+                //
+                // Matching on thread alone grafts them onto every complete
+                // assistant message in the thread, including turns written
+                // long afterwards. That is how one cancelled tool call came to
+                // re-render on every subsequent turn: each new assistant
+                // message that arrived matched the filter and collected the
+                // same orphaned card. It survived only in the client's merged
+                // copy, so a reload — which refetches the untouched server
+                // rows — appeared to "fix" it.
+                //
+                // Delta identity makes the correct target exact: the
+                // placeholder's id is the pre-allocated id CallLLM streamed
+                // under and the id persistInterruptedTurn saves the partial
+                // as, so the blocks rejoin their own turn or nothing.
+                const streamedUnderId = streamingMsg.id;
                 updatedMessages = updatedMessages.map((msg) => {
                   const msgThreadKey = normalizeThreadKey(
                     chatId,
@@ -2429,7 +2542,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                   if (
                     msg.role === MessageRole.ASSISTANT &&
                     isProtoMessageComplete(msg) &&
-                    msgThreadKey === threadKey
+                    msgThreadKey === threadKey &&
+                    msg.id === streamedUnderId
                   ) {
                     // Dedup by TOOL CALL ID, not block id.
                     //
@@ -2482,8 +2596,133 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // aborted/cancelled marker (no persisted message) leaves the placeholder
         // behind unless we delete it by id here. Keyed by placeholder identity,
         // so it also catches a thread mismatch between marker and placeholder.
+        // A stream that STOPPED (pause/interrupt) names a message id that will
+        // never become a row: the cancelled step is all-or-nothing and gets
+        // re-dispatched, so nothing durable arrives to describe what its tool
+        // calls did. Retiring the placeholder alone is not enough — the tool's
+        // live status stays "executing" in toolCallStates, and the card reads
+        // that before it reads anything else (ToolExecution's currentStatus
+        // resolution), so the cancelled tool keeps spinning against a chat that
+        // has already stopped. Settle those blocks to "cancelled" and publish
+        // the same status on the tool-state channel every card reads.
+        // Fold this batch's tool statuses BEFORE deciding what the abort has to
+        // settle: a "completed" riding the same batch as the finalize marker
+        // must protect its tool from being repainted as cancelled.
+        const toolCallStatesBeforeAbort = applyToolCallStateUpdates(
+          state.toolCallStates[chatId] || new Map(),
+          allToolExecutionUpdates,
+          chatId,
+        );
+
+        const abortSettledToolUpdates: ToolExecutionStateUpdate[] = [];
+        const settledAbortedThreadKeys = new Set<string>();
+        if (abortedThreadKeys.size > 0 || batchAbortedIds.size > 0) {
+          for (const [threadKey, msg] of [...mergedStreamingMsgs]) {
+            if (!msg) continue;
+            // Match by id when the server stamped one, else by thread — the
+            // legacy id-less path has only a fabricated streaming-temp-* id.
+            const matches =
+              batchAbortedIds.has(msg.id) || abortedThreadKeys.has(threadKey);
+            if (!matches) continue;
+
+            const { message: settledMsg, cancelledToolCallIds } =
+              settleCancelledStreamBlocks(msg, toolCallStatesBeforeAbort);
+
+            for (const toolCallId of cancelledToolCallIds) {
+              const known = toolCallStatesBeforeAbort.get(toolCallId);
+              abortSettledToolUpdates.push({
+                update_type: "tool_execution_state",
+                id: toolCallId,
+                chat_id: chatId,
+                tool_call_id: toolCallId,
+                tool_name: known?.toolName || "",
+                status: "cancelled",
+                node_id: "",
+                sequence_number: 0,
+                timestamp: new Date().toISOString(),
+              });
+            }
+
+            logger.debug("[Streaming] Settling cancelled stream placeholder", {
+              chatId: chatId.slice(0, 8),
+              thread: threadKey.slice(0, 8),
+              messageId: msg.id,
+              cancelledTools: cancelledToolCallIds.length,
+            });
+
+            // The placeholder is the ONLY record of this stream — no message
+            // row is coming. Keep it, now settled, so the user can still see
+            // what was in flight when they stopped the chat, instead of the
+            // blocks vanishing. Blocks that carry nothing to show are dropped.
+            const hasVisibleContent = (settledMsg.contentBlocks || []).some(
+              (block) =>
+                block.type === ContentBlockType.TOOL_CALL ||
+                (block.content || "").length > 0,
+            );
+            if (hasVisibleContent) {
+              mergedStreamingMsgs.set(threadKey, settledMsg);
+            } else {
+              mergedStreamingMsgs.delete(threadKey);
+            }
+            // Settled here, so the retire-by-id pass below must leave it alone.
+            settledAbortedThreadKeys.add(threadKey);
+          }
+        }
+
+        // The marker can also ride the SAME batch as the deltas it ends, which
+        // the placeholder walk above cannot reach: those deltas name an id this
+        // batch finalizes, so THE DROP RULE retires them as a stale tail and no
+        // placeholder is ever built for them. The tool status they published is
+        // still in the map though, so without this the card reads "executing"
+        // for a stream that is already over — the same forever-spinning tool,
+        // reached by a different door.
+        //
+        // Scoped to the tool calls those dropped deltas actually named, so a
+        // tool belonging to some other thread that happens to share the batch
+        // is untouched: cancelling one tool must never take its siblings down
+        // with it.
+        if (batchAbortedIds.size > 0) {
+          const alreadySettled = new Set(
+            abortSettledToolUpdates.map((u) => u.tool_call_id),
+          );
+          for (const delta of rawStreamingDeltas) {
+            const toolCallId = delta.tool_call?.id;
+            if (!toolCallId || !delta.message_id) continue;
+            if (!batchAbortedIds.has(delta.message_id)) continue;
+            if (alreadySettled.has(toolCallId)) continue;
+
+            const known = toolCallStatesBeforeAbort.get(toolCallId);
+            if (toolStatusSurvivesStreamAbort(known?.status)) continue;
+
+            alreadySettled.add(toolCallId);
+            abortSettledToolUpdates.push({
+              update_type: "tool_execution_state",
+              id: toolCallId,
+              chat_id: chatId,
+              tool_call_id: toolCallId,
+              tool_name: known?.toolName || delta.tool_call?.name || "",
+              status: "cancelled",
+              node_id: "",
+              sequence_number: 0,
+              timestamp: new Date().toISOString(),
+            });
+          }
+        }
+
+        // Retire any placeholder whose id was finalized this batch. The
+        // completedThreads path above only fires when a COMPLETE assistant
+        // message arrives; a stream finalized by a marker alone leaves the
+        // placeholder behind unless we delete it by id here. Keyed by
+        // placeholder identity, so it also catches a thread mismatch between
+        // marker and placeholder.
+        //
+        // Skips a thread the abort pass just settled: there, the marker's
+        // message will NEVER be persisted, so the settled placeholder is the
+        // only surviving record of the stream and deleting it would take the
+        // cancelled tool cards off screen with it.
         if (newlyFinalizedIds.size > 0) {
           for (const [threadKey, msg] of [...mergedStreamingMsgs]) {
+            if (settledAbortedThreadKeys.has(threadKey)) continue;
             if (msg && newlyFinalizedIds.has(msg.id)) {
               logger.debug("[Streaming] Retiring placeholder for finalized id", {
                 chatId: chatId.slice(0, 8),
@@ -2563,13 +2802,18 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           );
         }
 
-        // Process tool execution state updates (dedup by tool_call_id,
-        // guard terminal statuses).
-        const updatedToolCallStates = applyToolCallStateUpdates(
-          state.toolCallStates[chatId] || new Map(),
-          allToolExecutionUpdates,
-          chatId,
-        );
+        // Process tool execution state updates (dedup by tool_call_id, guard
+        // terminal statuses). The batch's own updates were already folded above
+        // (toolCallStatesBeforeAbort) so the abort pass could see them; all
+        // that remains is the cancellations that pass produced.
+        const updatedToolCallStates =
+          abortSettledToolUpdates.length > 0
+            ? applyToolCallStateUpdates(
+                toolCallStatesBeforeAbort,
+                abortSettledToolUpdates,
+                chatId,
+              )
+            : toolCallStatesBeforeAbort;
 
         // NOTE: chat activity is NOT updated here.
         // It is handled by handleChatActivityChanged() in globalUpdatesStore.ts
@@ -2992,6 +3236,24 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.IDLE);
+
+    // Drop any half-arrived streaming placeholder this pause just orphaned.
+    //
+    // Same defect as cancelChat, reached by a different door: a tool call
+    // whose input was mid-stream when the pause landed has no input, and the
+    // renderers key "Preparing..." off `input === undefined`, so it renders
+    // forever. Pausing is in fact the EASIER case to hit — a pause is
+    // something a user does deliberately while watching work happen, which is
+    // exactly when a tool call is likely to be streaming.
+    //
+    // The snapshot self-heal in processChatStreamUpdates cannot rescue this
+    // one: it only fires for a chat the server reports as NOT running, and a
+    // paused chat's workflow is still very much alive (status RUNNING in
+    // Temporal, with a pending activity). Refusing to clear live streaming
+    // state on a running chat is correct there — a mid-run reconnect must not
+    // blank a genuinely streaming tool call — so the pause has to clean up
+    // after itself, exactly as the cancel does.
+    get().clearStreamingState(chatId);
 
     // Make the API call to actually pause the workflow
     try {
@@ -3442,11 +3704,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   reset: () => {
     // Clear all streaming buffers (safety net for any orphaned buffers)
     // Note: streamingBuffers is keyed by "chatId:thread", so we clear all
-    for (const key of streamingBuffers.keys()) {
-      const buffer = streamingBuffers.get(key);
-      if (buffer?.flushTimeoutId) {
-        clearTimeout(buffer.flushTimeoutId);
-      }
+    for (const buffer of streamingBuffers.values()) {
+      cancelBufferFlush(buffer);
     }
     streamingBuffers.clear();
 

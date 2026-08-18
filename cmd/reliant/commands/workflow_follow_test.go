@@ -24,7 +24,8 @@ type fakeChatService struct {
 
 	mu         sync.Mutex
 	updates    []*reliantv1.ChatUpdate
-	rootStatus reliantv1.ChatWorkflowStatus
+	rootState  reliantv1.WorkflowState
+	rootReason reliantv1.WorkflowStopReason
 	sawBearer  string
 }
 
@@ -56,7 +57,8 @@ func (f *fakeChatService) GetWorkflowExecutions(_ context.Context, _ *connect.Re
 	root := &reliantv1.WorkflowExecution{
 		Id:           "wf-1",
 		WorkflowName: "builtin://agent",
-		Status:       f.rootStatus,
+		State:        f.rootState,
+		StopReason:   f.rootReason,
 	}
 	return connect.NewResponse(&reliantv1.GetWorkflowExecutionsResponse{
 		RootWorkflow: root,
@@ -72,7 +74,7 @@ func TestWorkflowFollowEndToEnd(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 
-	fake := &fakeChatService{rootStatus: reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_COMPLETED}
+	fake := &fakeChatService{rootState: reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED, rootReason: reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED}
 	fake.updates = []*reliantv1.ChatUpdate{
 		{
 			SequenceNumber: 1,

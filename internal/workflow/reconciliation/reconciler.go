@@ -573,21 +573,21 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 	wasTerminated := false
 	switch execStatus {
 	case enums.WORKFLOW_EXECUTION_STATUS_RUNNING:
-		mappedStatus = db.WorkflowStatusRunning
+		mappedStatus = db.Active()
 		isRunning = true
 	case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-		mappedStatus = db.WorkflowStatusCompleted
+		mappedStatus = db.Completed()
 	case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 		enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
 		// TERMINATED = system/operator kill → Failed (resumable at position).
 		// Only CANCELED (user cancel) maps to Cancelled.
-		mappedStatus = db.WorkflowStatusFailed
+		mappedStatus = db.Failed()
 		wasTerminated = execStatus == enums.WORKFLOW_EXECUTION_STATUS_TERMINATED
 	case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
-		mappedStatus = db.WorkflowStatusCancelled
+		mappedStatus = db.Cancelled()
 	case enums.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		// Workflow continued - treat as running since there's a new run
-		mappedStatus = db.WorkflowStatusRunning
+		mappedStatus = db.Active()
 		isRunning = true
 	default:
 		// Unknown status - treat as completed to allow starting fresh
@@ -595,7 +595,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 			"workflowID", workflowID,
 			"status", execStatus.String(),
 		)
-		mappedStatus = db.WorkflowStatusCompleted
+		mappedStatus = db.Completed()
 	}
 
 	state := &TemporalWorkflowState{
@@ -726,7 +726,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// Reconcile workflows that can drift against Temporal state:
 	// - running: should usually map directly to Temporal running/terminal states
 	// - paused: may become stale if Temporal execution is gone/terminal
-	if wf.Status != db.WorkflowStatusRunning && wf.Status != db.WorkflowStatusPaused {
+	if wf.Status != db.Active() && wf.Status != db.Paused() {
 		return result
 	}
 
@@ -739,7 +739,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	if !temporalState.Exists {
 		// Workflow not in Temporal (expired/lost) — repair DB status
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusCompleted, wf.Status)
+		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Completed(), wf.Status)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark lost workflow as completed: %w", err)
 			return result
@@ -762,7 +762,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// declared transition_to target (idempotent no-op if the activity did).
 		r.transitionChatOnCompletion(ctx, wf)
 
-		result.TemporalStatus = db.WorkflowStatusCompleted
+		result.TemporalStatus = db.Completed()
 		result.WasStale = true
 		result.NeedsRecovery = true
 
@@ -779,8 +779,8 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// the stuck-task path stays running-only, so a paused stuck observation
 	// still clears.
 	notWedgedOrStuck := !temporalState.HasStuckTask && !temporalState.HasWedgedWorkflowTask
-	pausedForWedge := wf.Status == db.WorkflowStatusPaused && temporalState.HasWedgedWorkflowTask
-	if notWedgedOrStuck || (wf.Status != db.WorkflowStatusRunning && !pausedForWedge) {
+	pausedForWedge := wf.Status == db.Paused() && temporalState.HasWedgedWorkflowTask
+	if notWedgedOrStuck || (wf.Status != db.Active() && !pausedForWedge) {
 		r.clearStuckObservation(wf.ID)
 	}
 
@@ -789,7 +789,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// PAUSED workflows never accumulate — pause (user pause, retry-exhaustion
 	// self-pause, daemon-offline circuit breaker) always marks the DB status
 	// paused, so the user is not awaiting progress.
-	suspicious := wf.Status == db.WorkflowStatusRunning && temporalState.quiescent()
+	suspicious := wf.Status == db.Active() && temporalState.quiescent()
 	if !suspicious {
 		r.clearProgressObservation(wf.ID)
 	}
@@ -810,7 +810,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// the chat is permanently unrecoverable. A healthy paused workflow has NO
 	// pending workflow task, so it can never trip this detector.
 	if temporalState.HasWedgedWorkflowTask &&
-		(wf.Status == db.WorkflowStatusRunning || wf.Status == db.WorkflowStatusPaused) {
+		(wf.Status == db.Active() || wf.Status == db.Paused()) {
 		if !r.observeTask(ctx, wf, wedgeObservationTaskType, "", pollers) {
 			// Not yet confirmed (pollers absent, or debounce still counting).
 			return result
@@ -838,7 +838,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 		// Mark failed (CAS prevents duplicate transitions). Failed + kept
 		// position checkpoint = the next user message resumes at position.
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusFailed, wf.Status)
+		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark wedged workflow as failed: %w", err)
 			return result
@@ -858,7 +858,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		}
 
 		result.WasStale = true
-		result.TemporalStatus = db.WorkflowStatusFailed
+		result.TemporalStatus = db.Failed()
 
 		return result
 	}
@@ -869,7 +869,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// the reconciler must do nothing. Only a task that stays Scheduled
 	// while the task queue has active pollers, across the debounce window,
 	// is treated as lost and recovered.
-	if temporalState.HasStuckTask && wf.Status == db.WorkflowStatusRunning {
+	if temporalState.HasStuckTask && wf.Status == db.Active() {
 		if !r.observeTask(ctx, wf, temporalState.StuckTaskType, temporalState.StuckActivityID, pollers) {
 			// Not yet confirmed (pollers absent, or debounce still counting).
 			return result
@@ -941,7 +941,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		r.clearStuckObservation(wf.ID)
 
 		// Mark workflow as failed in DB (CAS prevents duplicate transitions)
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusFailed, wf.Status)
+		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark workflow as failed: %w", err)
 			return result
@@ -960,7 +960,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		}
 
 		result.WasStale = true
-		result.TemporalStatus = db.WorkflowStatusFailed
+		result.TemporalStatus = db.Failed()
 
 		return result
 	}
@@ -1027,7 +1027,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 			// Mark failed (CAS prevents duplicate transitions). Failed + kept
 			// position checkpoint = the next user message resumes at position.
-			swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.WorkflowStatusFailed, wf.Status)
+			swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
 			if err != nil {
 				result.Error = fmt.Errorf("failed to mark stalled workflow as failed: %w", err)
 				return result
@@ -1048,7 +1048,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 			result.WasStale = true
 			result.ProgressStalled = true
-			result.TemporalStatus = db.WorkflowStatusFailed
+			result.TemporalStatus = db.Failed()
 
 			return result
 		}
@@ -1056,14 +1056,14 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	// Temporal has the workflow - check for status mismatch
 	// Special case: DB says paused, Temporal says running = intentional pause (keep paused)
-	if wf.Status == db.WorkflowStatusPaused && temporalState.Status == db.WorkflowStatusRunning {
+	if wf.Status == db.Paused() && temporalState.Status == db.Active() {
 		// Intentional pause - don't override
 		return result
 	}
 
 	// Special case: DB says paused, but Temporal says completed/failed/cancelled
 	// The Temporal execution ended while paused — repair DB status.
-	if wf.Status == db.WorkflowStatusPaused && !temporalState.IsRunning {
+	if wf.Status == db.Paused() && !temporalState.IsRunning {
 		logging.Warn("[Reconciler] Paused workflow's Temporal execution ended, repairing",
 			"workflowID", wf.ID,
 			"chatID", wf.ChatID,
@@ -1084,7 +1084,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// execution ended without the workflow reporting it, so nothing has
 		// told the user. A parked run dying is if anything MORE surprising —
 		// the user was waiting on a pause they expected to resume from.
-		if temporalState.Status == db.WorkflowStatusFailed {
+		if temporalState.Status == db.Failed() {
 			logging.Error("[Reconciler] Paused workflow ended terminally without reporting it - notifying user",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
@@ -1119,7 +1119,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			result.WasStale = true
 			// Drift-repaired to a terminal Completed here (not via the
 			// WorkflowStatus activity) — transition the chat to any target.
-			if temporalState.Status == db.WorkflowStatusCompleted {
+			if temporalState.Status == db.Completed() {
 				r.transitionChatOnCompletion(ctx, wf)
 			}
 			// A run that ended badly and never said so. Reaching this branch
@@ -1129,7 +1129,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// the user, since nothing else will. Cancelled is excluded — a
 			// user cancel is the one terminal status the user already knows
 			// about, having asked for it.
-			if temporalState.Status == db.WorkflowStatusFailed {
+			if temporalState.Status == db.Failed() {
 				logging.Error("[Reconciler] Workflow ended terminally without reporting it - notifying user",
 					"workflowID", wf.ID,
 					"chatID", wf.ChatID,
@@ -1363,7 +1363,7 @@ func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bo
 	}
 	var pausedIDs []string
 	for _, cw := range chatWorkflows {
-		if cw.Status == db.WorkflowStatusPaused {
+		if cw.Status == db.Paused() {
 			pausedIDs = append(pausedIDs, cw.ID)
 		}
 	}
@@ -1653,9 +1653,9 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 // distinction is not lost.
 func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.AgentMessageKind {
 	switch status {
-	case core.WorkflowStatusCancelled:
+	case db.Cancelled():
 		return core.AgentMessageKindCancelled
-	case core.WorkflowStatusCompleted:
+	case db.Completed():
 		return core.AgentMessageKindCompletion
 	default:
 		// Failed, Expired, or any other terminal value this repair's own
@@ -1690,7 +1690,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 // function is never even offered one to fabricate a result for.
 //
 // The recipient's own liveness decides the row's status. Delivery happens
-// ONLY in drainAgentMessagesAtBoundary, at a live agent loop-step boundary,
+// ONLY in CallLLM, which drains the mailbox before it reads history,
 // so a row addressed to a thread that has already exited is undeliverable
 // the moment it is written — not late, unreachable. That is the COMMON case
 // here rather than an edge: a background spawn runs as a workflow.Go
@@ -1868,28 +1868,16 @@ func (r *Reconciler) closeStrandedBackgroundSpawnCall(ctx context.Context, call 
 // spawn_status: nothing will read it, and the instruction would be addressed
 // to no one. It states what happened instead, so the row is legible as a
 // record rather than as a pending instruction.
+//
+// This used to branch on an EXPIRED workflow status to say "the run expired"
+// rather than "the result was lost". That branch was unreachable — nothing
+// ever wrote EXPIRED — so every caller has always taken the wording below,
+// and only the reachable variants remain.
 func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead bool) string {
-	expired := call.WorkflowStatus == reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED
-
 	if recipientDead {
-		if expired {
-			return fmt.Sprintf(
-				"Sub-agent %q expired before it could report back, and the thread that "+
-					"spawned it had already exited — this report was never delivered.",
-				call.ChildThreadID,
-			)
-		}
 		return fmt.Sprintf(
 			"Sub-agent %q finished, but the thread that spawned it had already exited — "+
 				"this report was never delivered.",
-			call.ChildThreadID,
-		)
-	}
-
-	if expired {
-		return fmt.Sprintf(
-			"Sub-agent's run expired before it could report back. "+
-				"Use spawn_status(agent_id=%q) to see what it produced before it stopped.",
 			call.ChildThreadID,
 		)
 	}
@@ -1903,10 +1891,10 @@ func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead
 // resolveOrphanedAgentMessages marks mailbox rows undelivered when the thread
 // they were queued for has already exited, and returns how many rows it moved.
 //
-// A message is delivered only by drainAgentMessagesAtBoundary, at an agent
-// loop-step boundary. A human (SendAgentMessage) or peer agent (spawn_send)
-// can queue into a thread that is genuinely running and whose loop then exits
-// before reaching the next boundary — an inherent race that no enqueue-time
+// A message is delivered only by CallLLM, which drains the thread's mailbox
+// before it reads history. A human (SendAgentMessage) or peer agent
+// (spawn_send) can queue into a thread that is genuinely running and whose
+// loop then exits before another CallLLM — an inherent race that no enqueue-time
 // liveness check can close, because the thread really was live at enqueue
 // time. The live path now resolves the mailbox as the thread goes terminal
 // (ThreadStatusActivity.resolveMailbox); this is the backstop for the rows
@@ -2032,11 +2020,11 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		errors = append(errors, repairErr)
 	}
 
-	allWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.WorkflowStatusRunning)
+	allWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.Active())
 	if err != nil {
 		return reconciled, append(errors, fmt.Errorf("failed to list running workflows: %w", err))
 	}
-	pausedWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.WorkflowStatusPaused)
+	pausedWorkflows, err := r.repo.ListWorkflowsByStatus(ctx, db.Paused())
 	if err != nil {
 		return reconciled, append(errors, fmt.Errorf("failed to list paused workflows: %w", err))
 	}

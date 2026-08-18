@@ -237,10 +237,14 @@ func (f *PreviewForwarder) upstreamError(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Reliant-Preview-Error", "upstream")
 	w.WriteHeader(http.StatusBadGateway)
+	// Both writes go out as text/plain (set above), so the browser never parses
+	// them as markup and the reflected values cannot script.
 	if errors.Is(err, syscall.ECONNREFUSED) || isTimeout(err) {
+		//nolint:gosec // G705: text/plain response, not an HTML sink
 		fmt.Fprintf(w, "nothing is listening on port %d inside this workspace — start your dev server (binding localhost/127.0.0.1/::1 is fine) and reload.\n", port)
 		return
 	}
+	//nolint:gosec // G705: text/plain response, not an HTML sink
 	fmt.Fprintf(w, "preview upstream on port %d failed: %v\n", port, err)
 }
 

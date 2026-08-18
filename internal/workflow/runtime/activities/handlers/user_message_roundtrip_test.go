@@ -52,7 +52,7 @@ func setupChatWithWorkflowAndThread(t *testing.T, repo db.Repository) (chatID, w
 		ChatID:       chatID,
 		WorkflowName: "test-workflow",
 		Thread:       workflowID, // Root workflow: thread = workflow ID
-		Status:       db.WorkflowStatusPending,
+		Status:       db.Pending(),
 	}
 	_, _, _, err := svc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow: wf,
@@ -333,7 +333,7 @@ func TestUserMessageRoundTrip_ForkedThread(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "test-workflow",
 		Thread:       childThread,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	_, _, _, err = parentSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow:       childWf,
@@ -649,7 +649,7 @@ func TestUserMessageRoundTrip_SubThreadReply(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: "agent",
 		Thread:       childThread,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}
 	_, _, _, err = svc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
 		Workflow:       childWf,

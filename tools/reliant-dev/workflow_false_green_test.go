@@ -44,7 +44,7 @@ func failedRoot() *db.Workflow {
 		ChatID:       "e10cabae",
 		WorkflowName: "builtin://forge-one-shot",
 		Thread:       "t-root",
-		Status:       db.WorkflowStatusCompleted,
+		Status:       db.Completed(),
 		CreatedAt:    time.Date(2026, 7, 22, 1, 0, 0, 0, time.UTC),
 		CompletedAt:  &completed,
 		Outcome:      strPtr(execfollow.OutcomeFailure),

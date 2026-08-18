@@ -5,7 +5,7 @@ params:
   skills:
     - git-operations
   tools:
-  - tag:shell     # Git operations + search the codebase (rg/grep/find)
+  - tag:shell     # Git operations + search the codebase (rg, and a language server for callers/implementations)
   - view          # Read configs, check files
   model:
     tags: [fast]

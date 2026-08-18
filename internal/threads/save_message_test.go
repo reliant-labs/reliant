@@ -302,15 +302,37 @@ func TestSaveMessage_AssistantMessage(t *testing.T) {
 		}
 	})
 
-	t.Run("allows empty assistant message", func(t *testing.T) {
-		// Should not error, just warn
+	// This used to assert "allows empty assistant message — should not error,
+	// just warn". That permissiveness was the bug: the row it allowed has ZERO
+	// content blocks, becomes the tail of the thread, and makes CallLLM's
+	// end-of-history guard fail every subsequent turn forever (the retry ladder
+	// keeps re-reading the same row). Observed on the live database as 22 such
+	// rows, two of which wedged their chats at 24 logged failures each.
+	//
+	// Rejecting costs only a turn that produced nothing; allowing costs the
+	// whole thread, unrecoverably without editing the database.
+	t.Run("rejects a blockless assistant message", func(t *testing.T) {
 		_, err := h.svc.SaveMessage(ctx, SaveMessageOpts{
 			ChatID: h.chatID,
 			Thread: thread.ID,
 			Role:   int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 		})
+		if err == nil {
+			t.Fatal("an assistant message with no content, tool calls or thinking must be refused")
+		}
+	})
+
+	// Thinking produces a content block, so a reasoning-only turn is not
+	// blockless and must still be accepted.
+	t.Run("allows a reasoning-only assistant message", func(t *testing.T) {
+		_, err := h.svc.SaveMessage(ctx, SaveMessageOpts{
+			ChatID:   h.chatID,
+			Thread:   thread.ID,
+			Role:     int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
+			Thinking: &ThinkingContent{Content: "considering"},
+		})
 		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
+			t.Fatalf("a thinking-only assistant message carries a block and must be allowed: %v", err)
 		}
 	})
 }

@@ -74,6 +74,12 @@ type InlineLoopExecutor struct {
 	// Propagated from the root workflow to support nested spawn tool calls.
 	makeThreadPauseCtrl func(string) *PauseController
 
+	// threadInterrupt observes interrupts for this loop's thread.
+	threadInterrupt *ThreadInterrupt
+
+	// makeThreadInterrupt creates per-thread interrupt handles for spawned/nested threads.
+	makeThreadInterrupt func(string) *ThreadInterrupt
+
 	// iterationCheckpoint, when set, is invoked at the start of each sequential
 	// iteration with the iteration index. Set only for TOP-LEVEL loops by
 	// DynamicWorkflow to persist the position checkpoint {loopID, iteration}
@@ -184,6 +190,18 @@ func (e *InlineLoopExecutor) WithMakeThreadPauseCtrl(fn func(string) *PauseContr
 	return e
 }
 
+// WithThreadInterrupts sets the interrupt handle for this loop's thread.
+func (e *InlineLoopExecutor) WithThreadInterrupts(interrupt *ThreadInterrupt) *InlineLoopExecutor {
+	e.threadInterrupt = interrupt
+	return e
+}
+
+// WithMakeThreadInterrupt sets the per-thread interrupt handle factory for spawn support.
+func (e *InlineLoopExecutor) WithMakeThreadInterrupt(fn func(string) *ThreadInterrupt) *InlineLoopExecutor {
+	e.makeThreadInterrupt = fn
+	return e
+}
+
 // WithIterationCheckpoint sets the per-iteration position-checkpoint callback.
 // Only DynamicWorkflow sets this, and only for top-level loops.
 func (e *InlineLoopExecutor) WithIterationCheckpoint(fn func(iteration int)) *InlineLoopExecutor {
@@ -273,10 +291,46 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 		return false
 	}
 
+	// A cancel that arrives while this thread is parked must be observed
+	// HERE, not at the step boundary below.
+	//
+	// The boundary check at the top of the loop only runs for a goroutine
+	// that is still going around the loop. A thread that has fanned work out
+	// to background spawns is not: it is parked on the Await below, whose
+	// other three disjuncts all describe a CHILD making progress. A user
+	// cancelling the parent changes none of them, so the flag was set and
+	// nothing read it — the check that would have stopped the thread sat on
+	// the far side of a wait the cancel itself could not end. The wait is
+	// unbounded by design (see above), so "eventually" meant "when some child
+	// happened to finish," which for a parent whose children were the thing
+	// being cancelled was never.
+	//
+	// Returning early rather than exiting the loop here keeps ONE place that
+	// decides what cancellation means: this releases the park, and the
+	// boundary check at the top of the loop — now reachable — returns
+	// ErrThreadCancelled. runSpawnInlineChild maps that to a cancelled tool
+	// call and a tool result, which is the invariant that keeps the provider
+	// from deadlocking on an unanswered tool call.
+	if e.pauseCtrl.IsCancelled() {
+		e.logger.Info("[InlineLoop] Thread cancelled while parked on background spawns; releasing wait",
+			"loopID", e.loopID,
+			"thread", thread,
+		)
+		return false
+	}
+
 	startCompletions := e.childTracker.detachedCompletionCount(thread)
 	startMessageWakes := e.childTracker.agentMessageWakeCount(thread)
+	threadInterrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, thread)
+	startInterruptEpoch := threadInterrupt.Epoch()
 	if err := workflow.Await(e.ctx, func() bool {
-		return e.childTracker.detachedCompletionCount(thread) > startCompletions ||
+		// Cancellation is a first-class reason to stop waiting, alongside the
+		// child-progress and same-thread interrupt conditions. It is checked
+		// inside the predicate because that is the only thing Temporal
+		// re-evaluates while the goroutine is parked.
+		return e.pauseCtrl.IsCancelled() ||
+			threadInterrupt.InterruptedSince(startInterruptEpoch) ||
+			e.childTracker.detachedCompletionCount(thread) > startCompletions ||
 			e.childTracker.agentMessageWakeCount(thread) > startMessageWakes ||
 			!e.childTracker.hasLiveDetachedSpawns(thread)
 	}); err != nil {
@@ -301,7 +355,16 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	// the predicate exactly once; a re-entered loop that finds an empty
 	// mailbox (the drain already ran, or the row was cancelled) takes a
 	// normal turn and comes back with a fresh snapshot.
-	return e.childTracker.detachedCompletionCount(thread) > startCompletions ||
+	//
+	// Cancellation wins over any child progress that raced with it: a cancel
+	// arriving in the same moment a child completed must still not ask the
+	// loop to re-enter and deliver that result. The boundary check stops the
+	// thread either way, but saying so here keeps the answer unambiguous.
+	if e.pauseCtrl.IsCancelled() {
+		return false
+	}
+	return threadInterrupt.InterruptedSince(startInterruptEpoch) ||
+		e.childTracker.detachedCompletionCount(thread) > startCompletions ||
 		e.childTracker.agentMessageWakeCount(thread) > startMessageWakes
 }
 
@@ -368,14 +431,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 
 		presetName, err := ResolvePresetName(rawName, evalCtx)
 		if err != nil {
-			e.logger.Warn("[InlineLoop] Failed to resolve preset template, skipping",
-				"loopID", e.loopID,
-				"iteration", e.iteration,
-				"group", groupName,
-				"template", rawName,
-				"error", err,
-			)
-			continue
+			return fmt.Errorf("resolve preset template %q for group %q: %w", rawName, groupName, err)
 		}
 		if presetName != rawName {
 			e.logger.Info("[InlineLoop] Resolved preset template",
@@ -390,15 +446,11 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 			continue
 		}
 
+		// A preset the caller named must load. Skipping it silently ran the
+		// iteration under the workflow's defaults instead.
 		params, err := e.loadPresetParams(ctx, presetName)
 		if err != nil {
-			e.logger.Warn("[InlineLoop] Failed to load preset",
-				"loopID", e.loopID,
-				"preset", presetName,
-				"group", groupName,
-				"error", err,
-			)
-			continue // Skip failed presets, don't fail the whole workflow
+			return fmt.Errorf("load preset %q for group %q: %w", presetName, groupName, err)
 		}
 
 		// Merge params into iterInputs (nested: group params under iterInputs[groupName])
@@ -508,8 +560,10 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 	var lastIterationOutputs map[string]interface{}
 
 	// Resume-at-position: begin at the checkpointed iteration instead of 0.
-	// Guarded on e.iteration == 0 so a pause-cancel re-Execute() of the same
-	// executor (see workflow.go retryLoop) never rewinds real progress.
+	// Guarded on e.iteration == 0 so a re-Execute() of the same executor never
+	// rewinds real progress. Pause no longer causes such a re-Execute (it is
+	// handled in place, below), but a re-entry through any other path must
+	// still not reset an iteration counter that has advanced.
 	if e.startIteration > 0 && e.iteration == 0 {
 		e.iteration = e.startIteration
 		e.logger.Info("[InlineLoop] Resuming loop at checkpointed iteration",
@@ -543,12 +597,21 @@ func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
 		// Check for pause signal at iteration boundary
 		e.pauseCtrl.DoCheckPause(e.ctx)
 
-		// Deliver any queued agent mailbox messages (spec §5.3). Must run
-		// AFTER the previous iteration's execute_tools has saved its tool
-		// results (true here: we are at the TOP of the loop, before the next
-		// call_llm) so the drained message never lands between an
-		// assistant-with-tool_calls row and its tool_results row.
-		drainAgentMessagesAtBoundary(e.ctx, e.chatID, e.GetThread())
+		// A spawned thread runs INLINE in the parent's Temporal execution, so
+		// cancelling one is not something Temporal can do for us — it is this
+		// check. InlineWorkflowExecutor has the same check at its own step
+		// boundary, but a spawn runs `builtin://agent`, whose body is a LOOP:
+		// this executor is what drives the spawned turns, so without a check
+		// here clicking cancel on an async spawn set the flag and nothing ever
+		// observed it. Stopping at the top of an iteration means no activity is
+		// in flight and the thread's history stays consistent.
+		if e.pauseCtrl.IsCancelled() {
+			e.logger.Info("[InlineLoop] Thread cancelled by user; stopping",
+				"loopID", e.loopID,
+				"iteration", e.iteration,
+			)
+			return nil, ErrThreadCancelled
+		}
 
 		// Auto-stop when items-based sequential loop exhausts its items
 		if e.resolvedItems != nil && e.iteration >= len(e.resolvedItems) {
@@ -805,11 +868,11 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 			Inputs: e.workflowInputs,
 			Iter:   e.buildIterContextModel(),
 		}
+		// No fallback: continuing without the preset runs the iteration under
+		// the workflow's defaults — a different model and tool set than the
+		// caller asked for — while reporting success.
 		if err := e.loadAndMergePresets(e.ctx, iterInputs, presetEvalCtx); err != nil {
-			e.logger.Warn("[InlineLoop] Failed to load presets, continuing without them",
-				"loopID", e.loopID,
-				"error", err,
-			)
+			return nil, fmt.Errorf("load presets for loop %s: %w", e.loopID, err)
 		}
 	}
 
@@ -883,7 +946,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		WithProjectPath(e.projectPath).
 		WithWorkflow(e.subWorkflow).
 		WithPauseController(e.pauseCtrl).
-		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl)
+		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, e.GetThread())).
+		WithMakeThreadInterrupt(e.makeThreadInterrupt)
 
 	// Initialize with start event
 	events := []*core.WorkflowEvent{{
@@ -1021,6 +1086,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				}
 				nestedExecutor = nestedExecutor.WithPauseController(e.pauseCtrl).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, nestedExecutor.GetThread())).
+					WithMakeThreadInterrupt(e.makeThreadInterrupt).
 					WithInvocationContract(nestedContract)
 
 				nestedOutput, err := nestedExecutor.Execute()
@@ -1077,7 +1144,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 								}
 								e.logger.Info("[InlineLoop] Node output available for inject",
 									"nodeID", nodeID,
-									"response_text", rtStr,
+									// Same reason as the nodeOutputs log below: an
+									// assistant turn can quote a secret it just read.
+									"response_text", redactString(rtStr),
 								)
 							}
 						}
@@ -1181,16 +1250,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					// Create child thread and optionally save inject message
 					// For non-inherit modes, this creates the thread with proper fork metadata
 					if model.NodeThreadMode(evalResult) != model.ThreadModeInherit {
-						var injectMsg *InjectMessageConfig
-						if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
-							attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
-							injectMsg = &InjectMessageConfig{
-								Role:        model.CelStringValue(ic.GetRole()),
-								Content:     model.CelStringValue(ic.GetContent()),
-								Attachments: attIDs,
-								Files:       attFiles,
-							}
-						}
+						injectMsg := buildInjectMessageConfig(model.NodeInjectConfig(evalResult), e.logger)
 
 						parentWorkflowID := ""
 						if iterExecContext.Parent != nil {
@@ -1225,7 +1285,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 							)
 							return nil, fmt.Errorf("failed to initialize child workflow thread for step %s: %w", step.Node.GetId(), initErr)
 						}
-					} else if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
+					} else if flatInput := buildInjectSaveMessageInput(e.chatID, childExecCtx.Thread, e.workflowID, model.NodeInjectConfig(evalResult), e.logger); flatInput != nil {
 						// For inherit mode, just save the inject message (thread already exists)
 						activityCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
 							StartToCloseTimeout: 30 * time.Second,
@@ -1236,16 +1296,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 								MaximumAttempts:    3,
 							},
 						})
-						attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
-						flatInput := &types.SaveMessageInput{
-							ChatID:      e.chatID,
-							Thread:      childExecCtx.Thread,
-							Role:        model.CelStringValue(ic.GetRole()),
-							Content:     model.CelStringValue(ic.GetContent()),
-							Attachments: attIDs,
-							InjectFiles: injectFilesToData(attFiles),
-							WorkflowID:  e.workflowID,
-						}
 						rtx := types.RuntimeContext{
 							ChatID:     e.chatID,
 							Thread:     childExecCtx.Thread,
@@ -1266,6 +1316,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				}
 				inlineExecutor = inlineExecutor.WithPauseController(e.pauseCtrl).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, inlineExecutor.GetThread())).
+					WithMakeThreadInterrupt(e.makeThreadInterrupt).
 					WithInvocationContract(contract)
 
 				// Execute workflow inline
@@ -1333,7 +1385,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					"stepID", step.Node.GetId(),
 					"outputKeys", getMapKeys(inlineOutput),
 					"responseTextType", respTextType,
-					"responseTextPreview", respText,
+					// Preview of an assistant turn, which can quote a secret it
+					// just read — redact as the nodeOutputs log does.
+					"responseTextPreview", redactString(respText),
 				)
 
 				// Create completion event
@@ -1402,17 +1456,34 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				stepEvent := iterExecutor.HandleCompletion(running)
 				runningSteps = removeRunningStep(runningSteps, running)
 
-				// Handle CanceledError - activity was cancelled by the shared activityCtx
-				// (e.g., due to pause). Propagate upward so the parent workflow can
-				// run checkPause() (which blocks until resume and refreshes activityCtx)
-				// before re-triggering the step.
+				// Handle CanceledError - the activity was cancelled by the shared
+				// activityCtx (i.e. the user paused). Block until resume HERE and
+				// re-dispatch just this step, keeping the iteration's frame — and
+				// its position — on the stack.
+				//
+				// See the matching comment in inline_workflow_executor.go: this
+				// used to return the error, unwinding to the top-level retryLoop,
+				// which re-entered the node and re-ran its on-entry side effects.
 				if stepEvent.Error != nil {
 					var canceledErr *temporal.CanceledError
 					if errors.As(stepEvent.Error, &canceledErr) {
-						e.logger.Info("[InlineLoop] Activity cancelled, propagating to parent for re-trigger",
+						e.logger.Info("[InlineLoop] Activity cancelled (pause), blocking until resume then retrying in place",
 							"stepID", running.StepID,
+							"iteration", e.iteration,
 						)
-						return nil, stepEvent.Error
+						e.pauseCtrl.DoCheckPause(e.ctx)
+						// A genuine CancelWorkflow (not a pause) must still unwind.
+						if e.ctx.Err() != nil {
+							return nil, e.ctx.Err()
+						}
+						// Yield so replay does not trip deadlock detection.
+						_ = workflow.Sleep(e.ctx, 0)
+						newRunning := iterExecutor.Start(&core.TriggeredNode{
+							Node:  running.Node,
+							Event: running.Event,
+						})
+						runningSteps = append(runningSteps, newRunning)
+						continue
 					}
 				}
 

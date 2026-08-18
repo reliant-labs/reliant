@@ -40,12 +40,11 @@ func TestReviveThread(t *testing.T) {
 		{"previous turn completed", ThreadStatusCompleted},
 		{"previous turn failed", ThreadStatusFailed},
 		{"previous turn was cancelled", ThreadStatusCancelled},
-		{"previous turn expired", ThreadStatusExpired},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			wfID := "wf-revive-" + tc.name
 			threadID := "th-revive-" + tc.name
-			insertTestWorkflowWithParent(t, repo, wfID, chatID, nil, WorkflowStatusCompleted)
+			insertTestWorkflowWithParent(t, repo, wfID, chatID, nil, Completed())
 			insertTestThreadForWorkflow(t, repo, threadID, chatID, wfID, ThreadStatusRunning)
 
 			completedAt := time.Now().UTC()
@@ -99,7 +98,7 @@ func TestReviveThread_LeavesLiveThreadsAlone(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			wfID := "wf-revive-live-" + tc.name
 			threadID := "th-revive-live-" + tc.name
-			insertTestWorkflowWithParent(t, repo, wfID, chatID, nil, WorkflowStatusRunning)
+			insertTestWorkflowWithParent(t, repo, wfID, chatID, nil, Active())
 			insertTestThreadForWorkflow(t, repo, threadID, chatID, wfID, tc.status)
 
 			rows, err := repo.ReviveThread(ctx, threadID)
@@ -133,11 +132,11 @@ func TestReviveThread_OnlyTargetThread(t *testing.T) {
 	chatID := "chat-thread-revive-scope"
 	createActivityTestChat(t, repo, chatID)
 
-	insertTestWorkflowWithParent(t, repo, "wf-scope-main", chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, "wf-scope-main", chatID, nil, Completed())
 	insertTestThreadForWorkflow(t, repo, "th-scope-main", chatID, "wf-scope-main", ThreadStatusCompleted)
 
 	parent := "wf-scope-main"
-	insertTestWorkflowWithParent(t, repo, "wf-scope-spawn", chatID, &parent, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, "wf-scope-spawn", chatID, &parent, Completed())
 	insertTestThreadForWorkflow(t, repo, "th-scope-spawn", chatID, "wf-scope-spawn", ThreadStatusCompleted)
 
 	if _, err := repo.ReviveThread(ctx, "th-scope-main"); err != nil {

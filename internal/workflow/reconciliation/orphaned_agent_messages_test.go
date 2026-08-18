@@ -109,8 +109,8 @@ func TestResolveOrphanedAgentMessages_SurfacesListFailure(t *testing.T) {
 // repair that never happens.
 func TestReconcileRunningWorkflows_RunsOrphanedMailboxSweep(t *testing.T) {
 	repo := newMockRepo()
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
-	repo.workflowsByStatus[db.WorkflowStatusPaused] = nil
+	repo.workflowsByStatus[db.Active()] = nil
+	repo.workflowsByStatus[db.Paused()] = nil
 	repo.orphanedMailboxThreads = []string{"dead-thread-1"}
 	repo.orphanedMailboxRows = map[string]int64{"dead-thread-1": 1}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())

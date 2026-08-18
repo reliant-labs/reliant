@@ -38,10 +38,11 @@ entry: [agent_loop]
 nodes:
   - id: agent_loop
     type: loop
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0)
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.pending_inbox == true
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
+        pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
       entry: [call_llm]
       nodes:
         - id: call_llm
@@ -69,7 +70,7 @@ nodes:
 // rootDrainEvent is one entry in the ordered trace of the activities that
 // define the boundary invariant.
 type rootDrainEvent struct {
-	kind   string // "call_llm", "save_assistant", "save_tool_results", "drain"
+	kind   string // "call_llm", "save_assistant", "save_tool_results", "save_other"
 	thread string
 }
 
@@ -79,8 +80,13 @@ type rootDrainEnv struct {
 	seq []rootDrainEvent
 
 	callLLMCount int32
-	drainThreads []string
+	// callLLMThreads records the thread each call_llm ran for. CallLLM owns
+	// mailbox delivery, so this is the record of which threads had their
+	// mailbox delivered.
+	callLLMThreads []string
 
+	// pendingInboxTurns marks no-tool turns that should force one mailbox drain continuation.
+	pendingInboxTurns map[int]bool
 	// turns is how many turns emit tool calls before the run winds down.
 	turns int
 }
@@ -147,23 +153,6 @@ func newRootDrainEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, turns
 		activity.RegisterOptions{Name: "SaveMessage"},
 	)
 
-	// The activity under investigation.
-	//
-	// Takes the real input type rather than a map: the drain is dispatched as
-	// a LOCAL activity, whose arguments reach the registered function by
-	// reflection instead of through the data converter, so a mismatched
-	// parameter type panics rather than decoding.
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, input types.DrainAgentMessagesInput) (types.DrainAgentMessagesOutput, error) {
-			e.mu.Lock()
-			e.drainThreads = append(e.drainThreads, input.Thread)
-			e.mu.Unlock()
-			e.record("drain", input.Thread)
-			return types.DrainAgentMessagesOutput{}, nil
-		},
-		activity.RegisterOptions{Name: "DrainAgentMessages"},
-	)
-
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
 			return e.callLLMStub(input)
@@ -188,13 +177,18 @@ func (e *rootDrainEnv) record(kind, thread string) {
 
 func (e *rootDrainEnv) callLLMStub(input types.ActivityInput) (map[string]interface{}, error) {
 	idx := int(atomic.AddInt32(&e.callLLMCount, 1)) - 1
+	e.mu.Lock()
+	e.callLLMThreads = append(e.callLLMThreads, input.Runtime.Thread)
+	e.mu.Unlock()
 	e.record("call_llm", input.Runtime.Thread)
+	pendingInbox := e.pendingInboxTurns[idx]
 
 	if idx >= e.turns {
-		// Wind down: no tool calls, the loop's while condition goes false.
+		// Wind down: no tool calls, unless a late mailbox message forces one continuation.
 		return map[string]interface{}{
 			"response_text": "done",
 			"tool_calls":    nil,
+			"pending_inbox": pendingInbox,
 			"message":       map[string]interface{}{"role": "assistant", "text": "done"},
 		}, nil
 	}
@@ -208,6 +202,7 @@ func (e *rootDrainEnv) callLLMStub(input types.ActivityInput) (map[string]interf
 	return map[string]interface{}{
 		"response_text": "working",
 		"tool_calls":    toolCalls,
+		"pending_inbox": pendingInbox,
 		"message":       map[string]interface{}{"role": "assistant", "text": "working"},
 	}, nil
 }
@@ -283,16 +278,38 @@ func (s *RootThreadMailboxDrainSuite) TestRootThreadRun_DrainsMailboxAtEveryBoun
 
 	s.T().Logf("activity trace: %+v", e.trace())
 
-	require.NotEmpty(s.T(), e.drainThreads,
-		"a ROOT-thread agent run must dispatch DrainAgentMessages — if this is empty, "+
-			"a message queued from the chat composer is never delivered")
-	for _, th := range e.drainThreads {
+	// Delivery is not a workflow-level step. CallLLM drains the mailbox itself,
+	// immediately before it reads history (CallLLMActivity.drainAgentMailbox),
+	// so what proves a root-thread run delivers is that CallLLM runs for the
+	// ROOT thread — which is what SendAgentMessage targets.
+	require.NotEmpty(s.T(), e.callLLMThreads,
+		"a ROOT-thread agent run must call the LLM — that call is what delivers "+
+			"a message queued from the chat composer")
+	for _, th := range e.callLLMThreads {
 		require.Equal(s.T(), rootThread, th,
-			"the drain must be keyed on the ROOT thread, which is what SendAgentMessage targets")
+			"delivery is keyed on the thread CallLLM runs for, which must be the ROOT thread")
 	}
-	// One drain per loop iteration: 3 call_llm turns => 3 boundaries.
-	require.Equal(s.T(), 3, len(e.drainThreads),
-		"the drain runs once per agent-loop iteration")
+}
+
+func (s *RootThreadMailboxDrainSuite) TestRootThreadRun_PendingInboxForcesExactlyOneContinuation() {
+	env := s.NewTestWorkflowEnvironment()
+	const chatID = "chat-root-pending-inbox"
+	const rootThread = "wf-" + chatID
+	e := newRootDrainEnv(s.T(), env, 0)
+	e.pendingInboxTurns = map[int]bool{0: true}
+
+	env.ExecuteWorkflow(DynamicWorkflow, rootDrainWorkflowInput(chatID, rootThread))
+
+	require.True(s.T(), env.IsWorkflowCompleted())
+	require.NoError(s.T(), env.GetWorkflowError())
+	require.Equal(s.T(), 2, int(atomic.LoadInt32(&e.callLLMCount)),
+		"pending_inbox on a no-tool turn must buy exactly one more CallLLM turn")
+	var kinds []string
+	for _, ev := range e.trace() {
+		kinds = append(kinds, ev.kind)
+	}
+	require.Equal(s.T(), []string{"call_llm", "save_other", "call_llm", "save_other"}, kinds,
+		"the continuation must drain once and then exit instead of spinning")
 }
 
 // TestRootThreadRun_DrainLandsAfterToolResultsAndBeforeNextCallLLM pins the
@@ -332,46 +349,47 @@ func (s *RootThreadMailboxDrainSuite) TestRootThreadRun_DrainLandsAfterToolResul
 		"expected a tool_results row for each of the 2 tool-calling turns")
 
 	// The exact shape the invariant requires, pinned rather than merely
-	// walked: drain sits at the head of each iteration, never inside an
-	// assistant/tool_results pair.
+	// walked. Delivery now happens INSIDE call_llm (immediately before it
+	// reads history), so there is no separate drain event — and that is a
+	// strictly stronger guarantee than the old "drain sits at the head of each
+	// iteration": delivery cannot land between an assistant-with-tool_calls row
+	// and its tool_results row, because it does not exist as a step that could
+	// be scheduled there.
 	var kinds []string
 	for _, ev := range trace {
 		kinds = append(kinds, ev.kind)
 	}
 	require.Equal(s.T(), []string{
-		"drain", "call_llm", "save_assistant", "save_tool_results",
-		"drain", "call_llm", "save_assistant", "save_tool_results",
-		"drain", "call_llm", "save_other",
+		"call_llm", "save_assistant", "save_tool_results",
+		"call_llm", "save_assistant", "save_tool_results",
+		"call_llm", "save_other",
 	}, kinds)
 
-	// Walk the trace: between a save_assistant and its following
-	// save_tool_results there must be NO drain.
-	openAssistant := false
+	// The invariant restated as the property, not the shape: every
+	// save_assistant is immediately followed by its save_tool_results, with
+	// nothing in between. This is what deadlocks the provider when violated,
+	// and it is what any future change to delivery must keep true.
 	for i, ev := range trace {
-		switch ev.kind {
-		case "save_assistant":
-			openAssistant = true
-		case "save_tool_results":
-			openAssistant = false
-		case "drain":
-			require.False(s.T(), openAssistant,
-				"drain at trace index %d landed between an assistant-with-tool_calls row and "+
-					"its tool_results row — this is the provider-deadlock ordering violation", i)
+		if ev.kind != "save_assistant" {
+			continue
 		}
+		require.Less(s.T(), i+1, len(trace),
+			"an assistant-with-tool_calls row must be followed by its tool_results row")
+		require.Equal(s.T(), "save_tool_results", trace[i+1].kind,
+			"nothing may land between an assistant-with-tool_calls row and its "+
+				"tool_results row — that is the provider deadlock the mailbox exists to prevent")
 	}
 
-	// And the drain must precede a call_llm (it is a pre-turn boundary), not
-	// trail the run uselessly after the last one.
-	firstDrain, firstCallLLM := -1, -1
+	// Delivery must still happen before the model reads history — that is the
+	// whole point of delivering at all. It is inside CallLLM, so what this
+	// asserts is that the run reaches a call_llm at all.
+	var firstCallLLM = -1
 	for i, ev := range trace {
-		if ev.kind == "drain" && firstDrain < 0 {
-			firstDrain = i
-		}
-		if ev.kind == "call_llm" && firstCallLLM < 0 {
+		if ev.kind == "call_llm" {
 			firstCallLLM = i
+			break
 		}
 	}
-	require.GreaterOrEqual(s.T(), firstDrain, 0, "expected at least one drain in the trace")
-	require.Less(s.T(), firstDrain, firstCallLLM,
-		"the drain must run BEFORE the call_llm of its iteration")
+	require.GreaterOrEqual(s.T(), firstCallLLM, 0,
+		"expected at least one call_llm — that is what delivers the mailbox")
 }

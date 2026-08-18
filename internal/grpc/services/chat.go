@@ -9,6 +9,7 @@ import (
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -18,9 +19,12 @@ import (
 // ChatService implements the ChatService RPC handlers
 type ChatService struct {
 	reliantv1connect.UnimplementedChatServiceHandler
-	database     db.Repository
-	tempClient   client.Client
-	pauseService *workflow.PauseService
+	database   db.Repository
+	tempClient client.Client
+	// runs owns pause/resume. Handlers ask it for an outcome and render that;
+	// they hold no PauseService handle, so the lifecycle machinery has exactly
+	// one door. See internal/runs.
+	runs         *runs.Service
 	threads      *threads.Service
 	taskQueue    string
 	streamingHub streaming.StreamingHub
@@ -38,10 +42,13 @@ func NewChatService(database db.Repository, tempClient client.Client, pauseServi
 	}
 
 	return &ChatService{
-		database:     database,
-		tempClient:   tempClient,
-		pauseService: pauseService,
-		threads:      threads.NewService(database),
+		database:   database,
+		tempClient: tempClient,
+		runs:       runs.NewService(database, tempClient, pauseService),
+		threads: threads.NewService(database,
+			threads.WithTemporalSignaler(tempClient),
+			threads.WithToolCanceler(daemonRouter),
+		),
 		taskQueue:    taskQueue,
 		streamingHub: hub,
 		daemonRouter: daemonRouter,

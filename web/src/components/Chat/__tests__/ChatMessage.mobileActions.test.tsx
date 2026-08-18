@@ -14,6 +14,8 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useToolResultsByCallId: () => ({}),
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
 }));
 
 vi.mock("../../../store/projectStore", () => ({

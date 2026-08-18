@@ -35,8 +35,8 @@ func agentMessageStatusOf(t *testing.T, rawDB *sql.DB, ctx context.Context, thre
 //
 // The agent is genuinely running when the user queues a message, so every
 // enqueue-time liveness check correctly accepts it -- and then the agent's
-// loop exits before reaching another step boundary. Delivery only ever
-// happens at a boundary (drainAgentMessagesAtBoundary), so the row is
+// loop exits before it ever calls the LLM again. Delivery only ever
+// happens in CallLLM's mailbox drain, so the row is
 // undeliverable from that moment on. Before the fix nothing marked it,
 // nothing surfaced it and nothing retried it: it sat at queued with
 // delivered_at NULL forever, while the user held a receipt saying it would
@@ -103,12 +103,11 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 }
 
 // TestThreadStatus_ResolvesMailboxOnEveryTerminalPath pins that the fix is
-// not tied to the happy path. A thread that fails, is cancelled, or expires
-// strands its mailbox exactly as completion does, so all four terminal verbs
-// must resolve it -- handled coherently in one place rather than patched per
-// exit path.
+// not tied to the happy path. A thread that fails or is cancelled strands its
+// mailbox exactly as completion does, so every terminal verb must resolve it --
+// handled coherently in one place rather than patched per exit path.
 func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
-	for _, verb := range []string{"completed", "failed", "cancelled", "expired"} {
+	for _, verb := range []string{"completed", "failed", "cancelled"} {
 		t.Run(verb, func(t *testing.T) {
 			repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 			t.Cleanup(cleanup)

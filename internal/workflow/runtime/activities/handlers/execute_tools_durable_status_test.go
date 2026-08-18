@@ -349,6 +349,9 @@ func TestDurableStatus_CancelledContextDoesNotDiscardCompletedSibling(t *testing
 	require.NoError(t, err)
 	assert.Equal(t, core.ToolCallStatusCompleted, call.Status,
 		"a completed tool must persist as COMPLETED even when the shared context is dead")
+	persisted := getToolCallResult(t, f.h, toolCallID)
+	require.NotNil(t, persisted, "terminal result must persist even when the shared context is dead")
+	assert.Equal(t, result.GetContent(), persisted.Content)
 }
 
 // The other half of the rule: a call that was still in flight when the context
@@ -374,6 +377,10 @@ func TestDurableStatus_CancelledContextStillCancelsUnfinishedTool(t *testing.T) 
 	call, err := f.h.Repo().GetToolCall(context.Background(), toolCallID)
 	require.NoError(t, err)
 	assert.Equal(t, core.ToolCallStatusCancelled, call.Status)
+	persisted := getToolCallResult(t, f.h, toolCallID)
+	require.NotNil(t, persisted, "a cancelled terminal tool still owes the provider a persisted result")
+	assert.True(t, persisted.IsError)
+	assert.Contains(t, persisted.Content, "cancelled")
 }
 
 func getToolCallResult(t *testing.T, h *IdempotencyTestHelper, toolCallID string) *core.ToolCallResult {

@@ -19,7 +19,8 @@ import (
 
 // ErrorSubstring is the stable substring planted in the daemon-offline connect
 // error message by NATSDaemonRouter.SendDaemonCommand / SendToolRequestSync /
-// SendKillProcess when isDaemonReachable reports the daemon is not connected.
+// SendKillProcess when daemonRequestError classifies the request as having
+// reached no connected daemon.
 // The wrapping path is:
 //
 //	connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))

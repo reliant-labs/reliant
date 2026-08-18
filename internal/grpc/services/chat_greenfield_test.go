@@ -136,7 +136,7 @@ func TestGreenfieldGuidanceSkipsAfterFirstTurn(t *testing.T) {
 			ChatID:       chat.ID,
 			WorkflowName: "builtin://agent",
 			Thread:       chat.ID,
-			Status:       db.WorkflowStatusPending,
+			Status:       db.Pending(),
 			CreatedAt:    now,
 		},
 		ThreadID: chat.ID,

@@ -18,6 +18,7 @@ import { createPortal } from "react-dom";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   FolderOpen,
+  Github,
   MessageSquarePlus,
   Search,
   Server,
@@ -45,6 +46,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/m/search", label: "Search", icon: Search },
   { to: "/m/workflows", label: "Workflows", icon: Workflow },
   { to: "/m/daemons", label: "Machines", icon: Server },
+  { to: "/m/github", label: "GitHub", icon: Github },
   { to: "/m/settings", label: "Settings", icon: Settings },
   { to: "/m/account", label: "Account", icon: User },
 ];

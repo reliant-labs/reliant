@@ -9,7 +9,6 @@ import (
 	"net/http"
 
 	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -73,18 +72,22 @@ func NewDaemonServer(cfg *DaemonConfig) *DaemonServer {
 	}
 	addr := fmt.Sprintf("%s:%d", bindAddr, cfg.Port)
 
-	var handler http.Handler
+	// protocols stays nil under TLS so Start's http2.ConfigureServer owns the
+	// HTTP/2 setup. Cleartext accepts prior-knowledge HTTP/2 alongside
+	// HTTP/1.1 on the same port; net/http dispatches both through srv.Handler,
+	// so securityHeaders applies to HTTP/2 requests too.
+	var protocols *http.Protocols
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
-		handler = securityHeaders(mux)
 		logging.Info("Daemon gRPC server configured for HTTPS/HTTP2", "cert", cfg.TLSCertFile)
 	} else {
-		handler = securityHeaders(h2c.NewHandler(mux, &http2.Server{}))
+		protocols = cleartextHTTP2Protocols()
 		logging.Info("Daemon gRPC server configured for h2c (HTTP/2 cleartext)")
 	}
 
 	srv := &http.Server{
-		Addr:    addr,
-		Handler: handler,
+		Addr:      addr,
+		Handler:   securityHeaders(mux),
+		Protocols: protocols,
 
 		// IMPORTANT: ToolsDaemonService uses long-lived bidi streaming.
 		ReadTimeout:       0,

@@ -1106,8 +1106,16 @@ func marshalMapFieldToYAML(fd protoreflect.FieldDescriptor, val protoreflect.Val
 	m := &yaml.Node{Kind: yaml.MappingNode}
 	valDesc := fd.MapValue()
 
+	// protoreflect's Range is explicitly unordered, so collect and sort before
+	// emitting — see sortedKeys for why unstable output breaks callers.
+	entries := make(map[string]protoreflect.Value, mapVal.Len())
 	mapVal.Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
-		keyStr := k.String()
+		entries[k.String()] = v
+		return true
+	})
+
+	for _, keyStr := range sortedKeys(entries) {
+		v := entries[keyStr]
 
 		switch valDesc.Kind() {
 		case protoreflect.StringKind:
@@ -1136,8 +1144,7 @@ func marshalMapFieldToYAML(fd protoreflect.FieldDescriptor, val protoreflect.Val
 		default:
 			// Unsupported map value type — skip silently.
 		}
-		return true
-	})
+	}
 
 	return m, nil
 }

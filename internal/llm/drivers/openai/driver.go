@@ -597,18 +597,6 @@ func isImageMimeType(mimeType string) bool {
 	}
 }
 
-// extractFilenameFromPath extracts the filename from a file path
-func extractFilenameFromPath(path string) string {
-	// Simple filename extraction - can be improved
-	parts := []rune(path)
-	for i := len(parts) - 1; i >= 0; i-- {
-		if parts[i] == '/' || parts[i] == '\\' {
-			return string(parts[i+1:])
-		}
-	}
-	return path
-}
-
 func (o *OpenaiClient) responsesInstructions(prompts []string) string {
 	var sb strings.Builder
 	for _, p := range AppendOpenAIFamilyGuidance(prompts, o.Options.Model) {

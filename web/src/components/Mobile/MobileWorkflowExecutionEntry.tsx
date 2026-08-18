@@ -16,7 +16,7 @@
 import { Link } from "@tanstack/react-router";
 import { Loader2, Workflow as WorkflowIcon } from "lucide-react";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
-import { ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
+import { WorkflowState } from "../../gen/reliant/v1/chat_pb";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 
 interface MobileWorkflowExecutionEntryProps {
@@ -31,8 +31,8 @@ export function MobileWorkflowExecutionEntry({
   if (!execution) return null;
 
   const running =
-    execution.status === ChatWorkflowStatus.RUNNING ||
-    execution.status === ChatWorkflowStatus.PENDING;
+    execution.state === WorkflowState.ACTIVE ||
+    execution.state === WorkflowState.PENDING;
 
   return (
     <Link

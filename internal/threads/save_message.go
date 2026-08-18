@@ -283,11 +283,39 @@ func validateSaveMessageOpts(opts SaveMessageOpts) error {
 			return fmt.Errorf("content or attachments are required for user messages")
 		}
 	case reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT:
-		// Warn but allow empty assistant messages
-		if opts.Content == "" && len(opts.ToolCalls) == 0 {
-			slog.Warn("Saving assistant message with no content or tool_calls",
-				"chat_id", opts.ChatID,
-				"thread", opts.Thread,
+		// An assistant message with nothing in it produces a row with ZERO
+		// content blocks, and that row is durable poison: every later turn
+		// loads it as the tail of the conversation, so CallLLM's
+		// end-of-history guard fires with
+		//
+		//   conversation history ends with assistant message after all
+		//   transformations ... this usually means the user message was saved
+		//   to a different thread than CallLLM reads from
+		//
+		// which is a misleading message for this cause — nothing is misrouted.
+		// The chat then cannot advance: the retry ladder re-runs CallLLM, the
+		// same empty row is still the tail, and it fails identically. Measured
+		// on real data: 22 such rows accumulated, and the two newest (both at
+		// 18:10:14) are exactly the two chats that wedged, at 24 logged
+		// failures each.
+		//
+		// This used to warn and continue. Warning was the wrong call: the row
+		// it allows is unrecoverable without hand-editing the database,
+		// whereas rejecting the write costs only the turn that produced
+		// nothing — and a turn that produced nothing has no content to lose.
+		// Fail closed, at the point where the bad state would be created.
+		//
+		// Thinking counts as content: createAssistantContentBlocks emits a
+		// thinking block, so a thinking-only turn is NOT blockless and stays
+		// allowed. The condition below mirrors that function's inputs exactly,
+		// so this predicate and the block-creation logic cannot drift.
+		hasThinking := opts.Thinking != nil && opts.Thinking.Content != ""
+		if opts.Content == "" && len(opts.ToolCalls) == 0 && !hasThinking {
+			return fmt.Errorf(
+				"refusing to save an assistant message with no content, tool calls, or thinking "+
+					"(chat=%s, thread=%s): the row would have zero content blocks and would wedge "+
+					"every subsequent turn of this thread",
+				opts.ChatID, opts.Thread,
 			)
 		}
 	case reliantv1.MessageRole_MESSAGE_ROLE_TOOL:

@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -37,14 +37,13 @@ func (s *DaemonTokenService) CreateDaemonToken(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 
-	name := req.Msg.GetName()
+	// The fallback names the SERVER, not the caller — os.Hostname() here always
+	// reported the api-server's own host, which is the same string for every
+	// client and so labels nothing. A caller that wants a meaningful label
+	// sends one (the CLI sends "<instance-id>@<hostname>").
+	name := strings.TrimSpace(req.Msg.GetName())
 	if name == "" {
-		hostname, _ := os.Hostname()
-		if hostname != "" {
-			name = hostname
-		} else {
-			name = "daemon"
-		}
+		name = "daemon"
 	}
 
 	rawToken, record, err := s.patService.CreatePAT(ctx, userID, name, false, nil)

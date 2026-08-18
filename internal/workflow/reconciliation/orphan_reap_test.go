@@ -34,8 +34,8 @@ func TestReconciler_ReapsOrphanedDescendantsEveryPass(t *testing.T) {
 	// Deliberately EMPTY: after a cancel the root is terminal and nothing is
 	// listed as running. The pre-fix pass returned here before touching
 	// anything, which is why the orphans survived every 30s poll forever.
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = nil
-	repo.workflowsByStatus[db.WorkflowStatusPaused] = nil
+	repo.workflowsByStatus[db.Active()] = nil
+	repo.workflowsByStatus[db.Paused()] = nil
 
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, nil)
 
@@ -51,7 +51,7 @@ func TestReconciler_ReapsOrphanedDescendantsEveryPass(t *testing.T) {
 func TestReconciler_ReapRunsBeforeWorkflowsAreListed(t *testing.T) {
 	repo := newMockRepo()
 	repo.reapRows = 1
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{runningWorkflow()}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
@@ -69,7 +69,7 @@ func TestReconciler_ReapRunsBeforeWorkflowsAreListed(t *testing.T) {
 func TestReconciler_ReapFailureIsReportedAndDoesNotAbortThePass(t *testing.T) {
 	repo := newMockRepo()
 	repo.reapErr = errors.New("db unavailable")
-	repo.workflowsByStatus[db.WorkflowStatusRunning] = []*db.Workflow{runningWorkflow()}
+	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 
 	tempClient := &mockReconcilerTemporalClient{}
 	tempClient.setPollersActive(true)
@@ -82,6 +82,6 @@ func TestReconciler_ReapFailureIsReportedAndDoesNotAbortThePass(t *testing.T) {
 	assert.Equal(t, 1, repo.reapCalls)
 	// The rest of the pass still ran: the reap is a backstop, not a gate on
 	// the detectors that repair live workflows.
-	assert.Contains(t, repo.callOrder, "list-"+db.WorkflowStatusRunning.String(),
+	assert.Contains(t, repo.callOrder, "list-"+db.Active().Label(),
 		"the pass must continue past a failed reap")
 }

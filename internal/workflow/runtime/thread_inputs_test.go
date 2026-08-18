@@ -21,7 +21,7 @@ func TestChildWorkflowTracker_RegisterThreadInputs(t *testing.T) {
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs := map[string]interface{}{"model": "gpt-4", "temperature": 0.7}
-	tracker.RegisterThreadInputs("thread-abc", inputs)
+	tracker.RegisterThreadInputs("thread-abc", inputs, nil)
 
 	got := tracker.GetThreadInputs("thread-abc")
 	assert.Equal(t, inputs, got)
@@ -48,7 +48,7 @@ func TestChildWorkflowTracker_UnregisterThreadInputs(t *testing.T) {
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs := map[string]interface{}{"model": "claude"}
-	tracker.RegisterThreadInputs("thread-1", inputs)
+	tracker.RegisterThreadInputs("thread-1", inputs, nil)
 	assert.NotNil(t, tracker.GetThreadInputs("thread-1"))
 
 	tracker.UnregisterThreadInputs("thread-1")
@@ -61,8 +61,8 @@ func TestChildWorkflowTracker_MultipleThreads(t *testing.T) {
 	inputs1 := map[string]interface{}{"model": "gpt-4"}
 	inputs2 := map[string]interface{}{"model": "claude", "mode": "fast"}
 
-	tracker.RegisterThreadInputs("thread-a", inputs1)
-	tracker.RegisterThreadInputs("thread-b", inputs2)
+	tracker.RegisterThreadInputs("thread-a", inputs1, nil)
+	tracker.RegisterThreadInputs("thread-b", inputs2, nil)
 
 	assert.Equal(t, "gpt-4", tracker.GetThreadInputs("thread-a")["model"])
 	assert.Equal(t, "claude", tracker.GetThreadInputs("thread-b")["model"])
@@ -75,8 +75,8 @@ func TestChildWorkflowTracker_GetAllThreadInputs(t *testing.T) {
 
 	inputs1 := map[string]interface{}{"a": 1}
 	inputs2 := map[string]interface{}{"b": 2}
-	tracker.RegisterThreadInputs("t1", inputs1)
-	tracker.RegisterThreadInputs("t2", inputs2)
+	tracker.RegisterThreadInputs("t1", inputs1, nil)
+	tracker.RegisterThreadInputs("t2", inputs2, nil)
 
 	all := tracker.GetAllThreadInputs()
 	assert.Len(t, all, 2)
@@ -89,7 +89,7 @@ func TestChildWorkflowTracker_SharedPointerMutation(t *testing.T) {
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs := map[string]interface{}{"model": "gpt-4"}
-	tracker.RegisterThreadInputs("thread-1", inputs)
+	tracker.RegisterThreadInputs("thread-1", inputs, nil)
 
 	// Mutate through the registry
 	got := tracker.GetThreadInputs("thread-1")
@@ -130,13 +130,22 @@ func testWorkflowWithThreadInputs(ctx workflow.Context) error {
 		"temperature": 0.9,
 		"mode":        "research",
 	}
-	childTracker.RegisterThreadInputs("thread-abc", threadInputs)
+	childTracker.RegisterThreadInputs("thread-abc", threadInputs, nil)
 
 	// Register a second thread
 	thread2Inputs := map[string]interface{}{
 		"model": "gemini",
 	}
-	childTracker.RegisterThreadInputs("thread-def", thread2Inputs)
+	childTracker.RegisterThreadInputs("thread-def", thread2Inputs, nil)
+
+	// A spawned agent running under a preset that pins its own model. "model"
+	// is owned by the thread, so a global update must not overwrite it.
+	presetThreadInputs := map[string]interface{}{
+		"model": map[string]interface{}{"tags": []interface{}{"moderate"}},
+		"mode":  "auto",
+	}
+	childTracker.RegisterThreadInputs("thread-preset", presetThreadInputs,
+		map[string]bool{"model": true})
 
 	// Set up query handler for root inputs
 	if err := workflow.SetQueryHandler(ctx, "get_workflow_inputs", func() (map[string]interface{}, error) {
@@ -297,6 +306,75 @@ func (s *ThreadInputsSuite) TestSignal_GlobalUpdate_PropagatesToThreadInputs() {
 	env.ExecuteWorkflow(testWorkflowWithThreadInputs)
 }
 
+// A global param update must not overwrite an input the thread set explicitly
+// for itself. Regression test for preset-pinned models being silently replaced
+// by the root chat's model: the `implementer` preset pins model tags
+// [moderate] (claude-5-sonnet), but every user message re-sent the root's own
+// model tags [flagship], which the global fan-out copied into every registered
+// child — so spawned agents started on sonnet and flipped mid-run to
+// claude-5-opus, carrying opus's adaptive thinking and effort settings.
+func (s *ThreadInputsSuite) TestSignal_GlobalUpdate_DoesNotOverwriteThreadOwnedInput() {
+	env := s.NewTestWorkflowEnvironment()
+
+	env.RegisterDelayedCallback(func() {
+		// The root chat re-broadcasts its own model on every message.
+		env.SignalWorkflow("update_workflow_state", map[string]interface{}{
+			"model": map[string]interface{}{"tags": []interface{}{"flagship"}},
+			"mode":  "plan",
+		})
+	}, 100*time.Millisecond)
+
+	env.RegisterDelayedCallback(func() {
+		result, err := env.QueryWorkflow("get_thread_inputs", "thread-preset")
+		s.NoError(err)
+		var threadInputs map[string]interface{}
+		s.NoError(result.Get(&threadInputs))
+
+		// The preset's pinned model must survive the global update.
+		s.Equal(
+			map[string]interface{}{"tags": []interface{}{"moderate"}},
+			threadInputs["model"],
+			"preset-owned model must not be overwritten by the root's global update",
+		)
+
+		// A key the thread does NOT own still tracks the global update.
+		s.Equal("plan", threadInputs["mode"],
+			"non-owned keys should still receive global updates")
+
+		env.CancelWorkflow()
+	}, 200*time.Millisecond)
+
+	env.ExecuteWorkflow(testWorkflowWithThreadInputs)
+}
+
+// A thread-scoped update targets the thread deliberately, so it MUST still be
+// able to change an owned key — only the blind global fan-out is held back.
+func (s *ThreadInputsSuite) TestSignal_ThreadScopedUpdate_OverridesOwnedInput() {
+	env := s.NewTestWorkflowEnvironment()
+
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow("update_workflow_state", map[string]interface{}{
+			"__thread": "thread-preset",
+			"model":    map[string]interface{}{"id": "claude-5-opus"},
+		})
+	}, 100*time.Millisecond)
+
+	env.RegisterDelayedCallback(func() {
+		result, err := env.QueryWorkflow("get_thread_inputs", "thread-preset")
+		s.NoError(err)
+		var threadInputs map[string]interface{}
+		s.NoError(result.Get(&threadInputs))
+		s.Equal(
+			map[string]interface{}{"id": "claude-5-opus"},
+			threadInputs["model"],
+			"an explicit thread-scoped update must override an owned key",
+		)
+		env.CancelWorkflow()
+	}, 200*time.Millisecond)
+
+	env.ExecuteWorkflow(testWorkflowWithThreadInputs)
+}
+
 func (s *ThreadInputsSuite) TestSignal_ThreadScopedUpdate_UnregisteredThread() {
 	env := s.NewTestWorkflowEnvironment()
 
@@ -444,8 +522,8 @@ func TestChildWorkflowTracker_GlobalPropagation_Unit(t *testing.T) {
 
 	inputs1 := map[string]interface{}{"model": "claude", "mode": "research"}
 	inputs2 := map[string]interface{}{"model": "gemini"}
-	tracker.RegisterThreadInputs("t1", inputs1)
-	tracker.RegisterThreadInputs("t2", inputs2)
+	tracker.RegisterThreadInputs("t1", inputs1, nil)
+	tracker.RegisterThreadInputs("t2", inputs2, nil)
 
 	// Simulate global propagation: apply update to all thread inputs
 	update := map[string]interface{}{"ask": false}
@@ -471,7 +549,7 @@ func TestChildWorkflowTracker_GlobalPropagation_DoesNotAffectUnregistered(t *tes
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs1 := map[string]interface{}{"model": "claude"}
-	tracker.RegisterThreadInputs("t1", inputs1)
+	tracker.RegisterThreadInputs("t1", inputs1, nil)
 
 	// Unregister t1, then propagate
 	tracker.UnregisterThreadInputs("t1")

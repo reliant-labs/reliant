@@ -194,14 +194,7 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       };
 
       try {
-        await sendWithDaemonWait({
-          action: performSend,
-          onWaiting: () => {
-            // Only fires if the first attempt was actually deferred, so a
-            // healthy send stays silent.
-            toast.info("Your machine is starting — this message will send automatically.");
-          },
-        });
+        await sendWithDaemonWait({ action: performSend });
       } catch (error) {
         logger.error("Error sending message:", error);
         if (isDaemonConnectingError(error)) {
@@ -267,12 +260,16 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
     }
   }, [chatId]);
 
-  // Fetch workflow executions for sidebar
-  const { data: workflowExecutionsData } = useWorkflowExecutions(chatId);
+  // Fetch workflow executions for sidebar/header metadata
+  const { data: workflowExecutionsData, allWorkflows: allWorkflowExecutionsData } = useWorkflowExecutions(chatId);
   const workflowExecution = useMemo(() => {
     if (!workflowExecutionsData) return undefined;
     return transformWorkflowExecution(workflowExecutionsData);
   }, [workflowExecutionsData]);
+  const workflowExecutions = useMemo(
+    () => allWorkflowExecutionsData.map(transformWorkflowExecution),
+    [allWorkflowExecutionsData],
+  );
 
   // Handle restart conversation (when workflow was lost)
   const handleRestartConversation = useCallback(async () => {
@@ -312,6 +309,7 @@ export function ChatContainer({ tabId, isFocused = true }: ChatContainerProps) {
       onStopStreaming={handleStopStreaming}
       isFocused={isFocused}
       workflowExecution={workflowExecution}
+      workflowExecutions={workflowExecutions}
       isDiscussMode={isDiscussMode}
       onToggleDiscuss={handleToggleDiscuss}
       hasPendingQuestion={!!pendingQuestion}

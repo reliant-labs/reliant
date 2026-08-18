@@ -53,7 +53,10 @@ func TestThreadStatus_StartedEmitsRunningForTheUI(t *testing.T) {
 // Terminal verbs must survive untouched — the UI compares those by name to
 // decide a thread has finished.
 func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
-	for _, verb := range []string{"completed", "failed", "cancelled", "expired"} {
+	// No "expired": nothing ever produced that verb, so it was removed along
+	// with the vestigial EXPIRED status. Temporal's TIMED_OUT is recorded as a
+	// failure.
+	for _, verb := range []string{"completed", "failed", "cancelled"} {
 		t.Run(verb, func(t *testing.T) {
 			h := NewIdempotencyTestHelper(t)
 			defer h.Cleanup()
@@ -82,18 +85,18 @@ func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
 	}
 }
 
-// Every thread update must carry origin, even when the caller does not supply
-// one — and almost none of them do (the inline executor only passes an origin
-// for a fork).
+// Every thread update must carry persisted identity metadata, even when the
+// caller does not supply it — and almost none of them do (the inline executor
+// only passes an origin for a fork).
 //
 // Omitting it is invisible on a live stream, because the client merges
-// successive updates and carries origin forward from the previous record. It
-// is NOT invisible on reconnect: GetLatestNonMessageUpdatesPerEntity keeps only
+// successive updates and carries fields forward from the previous record. It is
+// NOT invisible on reconnect: GetLatestNonMessageUpdatesPerEntity keeps only
 // the newest row per entity, so a reloading client receives this update alone,
-// with nothing to carry forward from. origin comes back undefined,
-// isSpawnOrigin() goes false, and BackgroundWorkPill silently drops every
-// running spawn — the chat looks idle while six sub-agents are still working.
-func TestThreadStatus_UpdateCarriesPersistedOrigin(t *testing.T) {
+// with nothing to carry forward from. Without origin, isSpawnOrigin() goes false
+// and BackgroundWorkPill silently drops every running spawn; without title, the
+// same pill falls back to generic "Agent".
+func TestThreadStatus_UpdateCarriesPersistedMetadata(t *testing.T) {
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -106,29 +109,36 @@ func TestThreadStatus_UpdateCarriesPersistedOrigin(t *testing.T) {
 	h.CreateTestProject(ctx, projectID, userID)
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
+	threadTitle := "spawned sub-agent"
+	workflowID := uuid.New().String()
+	originNodeID := "spawn-toolu_123"
 	_, err := h.Repo().CreateThread(ctx, &db.Thread{
-		ID:     threadID,
-		ChatID: chatID,
-		Origin: db.ThreadOriginSpawn,
+		ID: threadID, ChatID: chatID, WorkflowID: &workflowID,
+		Title: &threadTitle, Origin: db.ThreadOriginSpawn, OriginNodeID: &originNodeID,
 	})
 	require.NoError(t, err)
 
 	activityInstance := NewThreadStatusActivity(h.Repo())
 	var out ThreadStatusOutput
-	// Origin deliberately left empty: this is what the inline executor sends
-	// for a spawned sub-agent's thread.
+	// Identity fields deliberately left empty: this is what the inline executor
+	// sends for many spawned sub-agent lifecycle updates.
 	require.NoError(t, h.ExecuteActivity(activityInstance.Execute, ThreadStatusInput{
-		ChatID:      chatID,
-		ThreadID:    threadID,
-		Status:      "started",
-		WorkflowID:  threadID,
-		ThreadTitle: "spawned sub-agent",
+		ChatID:   chatID,
+		ThreadID: threadID,
+		Status:   "started",
 	}, &out))
 	require.True(t, out.Success)
 
 	require.Equal(t, db.ThreadOriginSpawn, latestThreadUpdateField(t, h, chatID, threadID, "origin"),
 		"a thread update read in isolation (the reconnect snapshot) must still "+
 			"identify the thread as a spawn, or the background-work pill drops it")
+	require.Equal(t, threadTitle, latestThreadUpdateField(t, h, chatID, threadID, "thread_title"),
+		"a lifecycle row read in isolation must still carry the persisted title, "+
+			"or the background-work pill falls back to generic Agent")
+	require.Equal(t, workflowID, latestThreadUpdateField(t, h, chatID, threadID, "workflow_id"),
+		"the update must carry workflow_id so question attribution still targets the right spawn")
+	require.Equal(t, originNodeID, latestThreadUpdateField(t, h, chatID, threadID, "origin_node_id"),
+		"origin_node_id is part of persisted thread provenance and should survive lifecycle updates")
 }
 
 // A caller that DOES state an origin is authoritative over the stored column —

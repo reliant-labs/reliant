@@ -4,6 +4,8 @@ tag: agent
 params:
   model:
     tags: [moderate]
+  skills:
+    - code-search
   tools:
     - tag:default
   spawn_presets:

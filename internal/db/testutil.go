@@ -2,7 +2,7 @@
 package db
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"fmt"
@@ -141,7 +141,7 @@ func createPkgTestDB(baseDSN string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve working directory: %w", err)
 	}
-	sum := sha1.Sum([]byte(wd))
+	sum := sha256.Sum256([]byte(wd))
 	pkgName := fmt.Sprintf("%s_test_%s", baseName, hex.EncodeToString(sum[:6]))
 
 	// Connect to the base (maintenance) database to create the package database
@@ -158,6 +158,10 @@ func createPkgTestDB(baseDSN string) (string, error) {
 		return "", fmt.Errorf("check package database: %w", err)
 	}
 	if !exists {
+		// CREATE DATABASE takes no bind parameters, so the name must be
+		// interpolated. pkgName is not user input: it is baseName plus a hex
+		// digest of the working directory, and quoteIdent escapes it.
+		//nolint:gosec // G701: identifier is locally derived and quoted
 		if _, err := admin.Exec(fmt.Sprintf(`CREATE DATABASE %s`, quoteIdent(pkgName))); err != nil {
 			// Tolerate a race with a parallel process that created it first.
 			if !strings.Contains(strings.ToLower(err.Error()), "already exists") {

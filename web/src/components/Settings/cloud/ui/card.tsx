@@ -16,7 +16,7 @@ export function Card({ interactive, className, children, ...rest }: CardProps) {
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
+        "min-w-0 rounded-lg border border-border bg-card text-card-foreground shadow-sm",
         interactive &&
           "transition-shadow hover:shadow-md focus-within:shadow-md",
         className

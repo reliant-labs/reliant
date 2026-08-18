@@ -183,7 +183,7 @@ func TestStory10_TerminateMidNestedLoopResumesAtInnerIteration(t *testing.T) {
 	require.NoError(t, err, "SendMessage after terminate")
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	// 4. THE FINDING-1 ASSERTION. Reset-and-replay replays inner iterations 0 and
 	//    1 from history (their CallLLM activities are NOT re-executed) and

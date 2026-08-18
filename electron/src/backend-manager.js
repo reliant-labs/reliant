@@ -209,23 +209,6 @@ class BackendManager {
   }
 
   /**
-   * Clean up any orphaned `reliant daemon` processes from previous runs.
-   * This can happen if the app crashed or was force-killed without proper
-   * cleanup. Called on startup to ensure a clean state.
-   *
-   * Scope: ONLY `reliant daemon …` processes. Historically this also tried
-   * to reap an Electron-spawned api-server, but Electron no longer spawns
-   * the api-server (cloud-dev / prod ship it separately). Matching the bare
-   * binary path would kill cloud-dev's air-managed `reliant server api` /
-   * `reliant server gateway` / `reliant server worker` (they share the
-   * binary), then the auto-mint that runs ~2s later 502s because its
-   * downstream is dead. So the grep is anchored to ` daemon ` to keep server
-   * subcommands out of the kill set.
-   *
-   * Dev: scoped to the binary path (per-worktree); prod: any reliant daemon
-   * owned by the current user. Both go through the `\bdaemon\b` filter.
-   */
-  /**
    * Resolve dev-mode binary path, instanceId, and the ps search pattern used
    * for orphan cleanup. Idempotent — safe to call from cleanupOrphanedProcesses
    * (which runs before getBinaryPath) and again from getBinaryPath itself.
@@ -263,6 +246,153 @@ class BackendManager {
     this.devProcessSearchPattern = `reliant-${this.instanceId}`;
   }
 
+  /**
+   * Look up a pid's parent.
+   *
+   * Returns one of:
+   *   { status: 'ok', ppid }  — the process exists and this is its parent
+   *   { status: 'gone' }      — the process no longer exists
+   *   { status: 'unknown' }   — we could not find out
+   *
+   * 'unknown' is a distinct answer on purpose. Every caller treats it as
+   * "leave this process alone": a lineage probe that fails must not degrade
+   * into the old behaviour of killing whatever matched a pattern.
+   */
+  readProcessParent(pid) {
+    const { execSync } = require('child_process');
+
+    if (process.platform === 'win32') {
+      try {
+        const out = execSync(
+          `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter \\"ProcessId=${pid}\\").ParentProcessId"`,
+          { encoding: 'utf8', timeout: 5000 }
+        ).trim();
+        if (!out) {
+          return { status: 'gone' };
+        }
+        const ppid = parseInt(out, 10);
+        return Number.isNaN(ppid) ? { status: 'unknown' } : { status: 'ok', ppid };
+      } catch (e) {
+        return { status: 'unknown' };
+      }
+    }
+
+    try {
+      const out = execSync(`ps -o ppid= -p ${pid}`, { encoding: 'utf8', timeout: 5000 }).trim();
+      if (!out) {
+        return { status: 'gone' };
+      }
+      const ppid = parseInt(out, 10);
+      return Number.isNaN(ppid) ? { status: 'unknown' } : { status: 'ok', ppid };
+    } catch (e) {
+      // ps exits non-zero when the pid does not exist.
+      return { status: 'gone' };
+    }
+  }
+
+  /**
+   * Is `pid` a live process?  Used only to ask whether a daemon's PARENT is
+   * still around, so a failure to answer is reported as "alive" — the answer
+   * that keeps us from killing anything.
+   */
+  isProcessAlive(pid) {
+    const { execSync } = require('child_process');
+    try {
+      if (process.platform === 'win32') {
+        const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
+          encoding: 'utf8',
+          timeout: 5000
+        });
+        return out.includes(String(pid));
+      }
+      execSync(`kill -0 ${pid}`, { timeout: 1000 });
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Decide whether a daemon pid is genuinely ORPHANED, i.e. nobody is left to
+   * shut it down.
+   *
+   * This is the whole point of the module and the thing a `ps | grep` cannot
+   * do. A command line does not say who owns the process, so pattern matching
+   * cannot tell a crashed run's leftover daemon from the healthy daemon of a
+   * dev stack that is running right now. Two Electron stacks in the SAME
+   * worktree share a binary path, a data dir and a `--data-dir ./data`
+   * argument; every byte the old grep looked at is identical between them.
+   * The only thing that differs is lineage, so lineage is what we read.
+   *
+   * A daemon is an orphan only when its parent is provably gone: on Unix the
+   * kernel reparents it to init/launchd (ppid 1) the instant its Electron
+   * exits. Anything else — a live parent, a pid we cannot resolve, our own
+   * child — is NOT an orphan and is left strictly alone. Killing a live
+   * daemon strands a colleague's or an agent's running session; leaving a
+   * stale one costs a little memory until the next launch. The asymmetry is
+   * the reason every uncertain branch below answers "not an orphan".
+   */
+  classifyDaemonProcess(pid) {
+    const numericPid = parseInt(pid, 10);
+
+    if (Number.isNaN(numericPid) || numericPid <= 0) {
+      return { orphaned: false, reason: `unparseable pid ${pid}` };
+    }
+
+    if (numericPid === process.pid) {
+      return { orphaned: false, reason: 'this Electron process' };
+    }
+
+    if (this.process && numericPid === this.process.pid) {
+      return { orphaned: false, reason: 'our own daemon' };
+    }
+
+    const parent = this.readProcessParent(numericPid);
+
+    if (parent.status === 'gone') {
+      return { orphaned: false, reason: 'already exited' };
+    }
+
+    if (parent.status === 'unknown') {
+      return { orphaned: false, reason: 'could not determine owner' };
+    }
+
+    if (parent.ppid === process.pid) {
+      // Spawned by us earlier in this same launch — start() may have raced
+      // cleanup, or a restart is in flight. Either way it is not abandoned.
+      return { orphaned: false, reason: 'child of this Electron process' };
+    }
+
+    if (parent.ppid <= 1) {
+      return { orphaned: true, reason: 'reparented to init — its Electron is gone' };
+    }
+
+    if (this.isProcessAlive(parent.ppid)) {
+      return { orphaned: false, reason: `owned by live pid ${parent.ppid}` };
+    }
+
+    // Parent is recorded but no longer alive: a dying stack we caught mid-exit.
+    return { orphaned: true, reason: `owner pid ${parent.ppid} is dead` };
+  }
+
+  /**
+   * On startup, terminate daemons left behind by a run that died without
+   * shutting its daemon down — a crash, a force-quit, a failed update.
+   *
+   * Two steps, and the split matters: a `ps` pattern (or tasklist, or the
+   * data-dir's runtime record) only proposes CANDIDATES, and
+   * classifyDaemonProcess() alone decides. Nothing here is killed for looking
+   * like a daemon; it is killed only for having no live owner.
+   *
+   * The comment this replaces said the dev-mode binary path scoped cleanup
+   * "per-worktree", which is true and insufficient: it separates different
+   * worktrees, while two dev stacks launched from the SAME worktree share one
+   * RELIANT_BACKEND_BIN, one data dir, and identical daemon argv. Under the
+   * old pattern-only logic a starting Electron reaped the healthy, connected
+   * daemon of a stack running right beside it — SIGTERM, 2s, then SIGKILL,
+   * stranding whatever tool calls were in flight. That is the regression the
+   * ownership test and backend-manager-orphan-cleanup.test.js exist to stop.
+   */
   async cleanupOrphanedProcesses() {
     const { execSync } = require('child_process');
 
@@ -272,10 +402,14 @@ class BackendManager {
 
     try {
       if (process.platform === 'darwin' || process.platform === 'linux') {
-        // Anchor the search to the `daemon` subcommand. In dev we also scope
-        // to this worktree's binary path so parallel worktrees don't stomp
-        // each other; in prod the binary path varies by app-bundle install,
-        // so `reliant daemon` alone is the right shape.
+        // The ps pattern only NARROWS the candidate set — it never decides
+        // anything. It is anchored to the `daemon` subcommand because matching
+        // the bare binary path would sweep in cloud-dev's air-managed
+        // `reliant server api` / `server gateway` / `server worker`, which
+        // share the binary; killing those made the auto-mint that runs ~2s
+        // later 502 against a dead downstream. Every candidate that survives
+        // the pattern is then put to classifyDaemonProcess(), which is what
+        // actually establishes whether it is abandoned.
         const binaryPart = this.isDevelopment && this.devProcessSearchPattern
           ? this.devProcessSearchPattern
           : 'reliant';
@@ -301,11 +435,6 @@ class BackendManager {
             const parts = line.trim().split(/\s+/);
             const pid = parts[1];
 
-            // Skip our own process
-            if (pid === String(this.process?.pid)) {
-              continue;
-            }
-
             // Defense in depth: even though the grep pattern includes
             // " daemon", a binary path that happens to contain "daemon" as a
             // substring (unlikely but possible) would slip through. Require
@@ -314,37 +443,33 @@ class BackendManager {
               continue;
             }
 
-            log.info(`[BackendManager] Found orphaned process: PID ${pid}`);
+            const { orphaned, reason } = this.classifyDaemonProcess(pid);
+            if (!orphaned) {
+              log.debug(`[BackendManager] Leaving daemon PID ${pid} alone (${reason})`);
+              continue;
+            }
+
+            log.info(`[BackendManager] Found orphaned process: PID ${pid} (${reason})`);
             pidsToKill.push(pid);
           }
-          
+
           if (pidsToKill.length > 0) {
             log.warn(`[BackendManager] Found ${pidsToKill.length} orphaned backend process(es): ${pidsToKill.join(', ')}`);
-            
+
+            // SIGTERM only. The daemon drains in-flight tool calls on SIGTERM;
+            // SIGKILL strands them, and a daemon slow to drain is a daemon
+            // doing exactly the work we would be destroying. An orphan that
+            // outlives this call is harmless — it holds no data-dir lock we
+            // need, and the next launch reclassifies it.
             for (const pid of pidsToKill) {
               try {
-                // Try graceful shutdown first
-                log.info(`[BackendManager] Killing orphaned process ${pid}...`);
+                log.info(`[BackendManager] Terminating orphaned process ${pid}...`);
                 execSync(`kill -TERM ${pid}`, { timeout: 1000 });
               } catch (e) {
                 // Process might already be gone
               }
             }
-            
-            // Wait a moment for graceful shutdown
-            await new Promise(resolve => setTimeout(resolve, 2000));
-            
-            // Force kill any remaining
-            for (const pid of pidsToKill) {
-              try {
-                execSync(`kill -0 ${pid}`, { timeout: 1000 }); // Check if still running
-                log.warn(`[BackendManager] Force killing orphaned process ${pid}...`);
-                execSync(`kill -9 ${pid}`, { timeout: 1000 });
-              } catch (e) {
-                // Process is gone, which is what we want
-              }
-            }
-            
+
             log.info('[BackendManager] Orphaned process cleanup complete');
           }
         } catch (e) {
@@ -400,13 +525,17 @@ class BackendManager {
             const match = line.match(new RegExp(`${searchName.replace('.', '\\.')}\\s+(\\d+)`));
             if (match) {
               const pid = match[1];
-              
-              // Skip our own process
-              if (pid === String(this.process?.pid)) {
+
+              // Same ownership test as the Unix path — tasklist's IMAGENAME
+              // filter is as blind to who owns a process as ps is, so two
+              // same-worktree stacks look identical here too.
+              const { orphaned, reason } = this.classifyDaemonProcess(pid);
+              if (!orphaned) {
+                log.debug(`[BackendManager] Leaving daemon PID ${pid} alone (${reason})`);
                 continue;
               }
-              
-              log.info(`[BackendManager] Found orphaned process: PID ${pid}`);
+
+              log.info(`[BackendManager] Found orphaned process: PID ${pid} (${reason})`);
               pidsToKill.push(pid);
             }
           }
@@ -486,57 +615,41 @@ class BackendManager {
           continue;
         }
         
-        // Skip if it's our own process
-        if (pid === process.pid || pid === this.process?.pid) {
-          log.debug('[BackendManager] Lock file PID is our own process, skipping');
-          continue;
-        }
-        
-        // Check if process is running
-        if (process.platform === 'win32') {
-          try {
-            execSync(`tasklist /FI "PID eq ${pid}" /NH`, { encoding: 'utf8', timeout: 5000 });
-            log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid}`);
-            execSync(`taskkill /PID ${pid} /F`, { timeout: 5000 });
-            log.info(`[BackendManager] Killed orphaned process ${pid} from lock file`);
-          } catch (e) {
-            // Process not found or already dead
-            log.debug('[BackendManager] Lock file process not running:', pid);
+        // Naming a pid is not owning it. In dev, `--data-dir ./data` resolves
+        // against Electron's cwd, so two stacks launched from the same
+        // worktree write this record to the SAME file — the pid in it is
+        // simply whichever daemon started last, very possibly a healthy one
+        // belonging to a stack that is running right now. Put it to the same
+        // ownership test as a ps hit, and act only on a proven orphan.
+        const { orphaned, reason } = this.classifyDaemonProcess(pid);
+
+        if (!orphaned) {
+          log.debug(`[BackendManager] Lock file PID ${pid} left alone (${reason})`);
+          // Deliberately NOT unlinking. A record that belongs to a live daemon
+          // is that daemon's readiness contract with its own Electron
+          // (checkHealth reads it); deleting it makes a healthy stack look
+          // unhealthy and hang for the full startup timeout.
+          if (reason !== 'already exited') {
+            continue;
           }
         } else {
-          // Unix: check if process exists
+          log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid} (${reason})`);
           try {
-            execSync(`kill -0 ${pid}`, { timeout: 1000 });
-            // Process exists - kill it
-            log.warn(`[BackendManager] Found orphaned process from lock file: PID ${pid}`);
-            
-            try {
+            if (process.platform === 'win32') {
+              execSync(`taskkill /PID ${pid}`, { timeout: 5000 });
+            } else {
+              // SIGTERM only — see the Unix scan above for why we do not
+              // escalate to SIGKILL against a tools-daemon.
               execSync(`kill -TERM ${pid}`, { timeout: 1000 });
-              // Wait for graceful shutdown
-              await new Promise(resolve => setTimeout(resolve, 2000));
-              
-              // Check if still running
-              try {
-                execSync(`kill -0 ${pid}`, { timeout: 1000 });
-                // Still running - force kill
-                log.warn(`[BackendManager] Force killing orphaned process ${pid}`);
-                execSync(`kill -9 ${pid}`, { timeout: 1000 });
-              } catch (e) {
-                // Process exited gracefully
-              }
-            } catch (e) {
-              // SIGTERM failed, try SIGKILL
-              try { execSync(`kill -9 ${pid}`, { timeout: 1000 }); } catch (e2) { /* ignore */ }
             }
-            
-            log.info(`[BackendManager] Killed orphaned process ${pid} from lock file`);
+            log.info(`[BackendManager] Signalled orphaned process ${pid} from lock file`);
           } catch (e) {
-            // Process doesn't exist - stale lock file
-            log.debug('[BackendManager] Lock file process not running:', pid);
+            // Already gone, or not ours to signal.
           }
         }
-        
-        // Remove the stale lock file so the new process can start fresh
+
+        // Only reached for a record whose process is gone or was just told to
+        // exit: remove it so the next daemon starts against a clean slate.
         try {
           fs.unlinkSync(lockFilePath);
           log.info('[BackendManager] Removed stale lock file');

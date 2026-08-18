@@ -75,6 +75,17 @@ func (s *toolCallStore) GetToolCall(ctx context.Context, id string) (*core.ToolC
 	return toolCallFromPG(row), nil
 }
 
+func (s *toolCallStore) GetToolCallResult(ctx context.Context, toolCallID string) (*core.ToolCallResult, error) {
+	row, err := s.q.GetToolCallResult(ctx, toolCallID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get tool call result: %w", err)
+	}
+	return toolCallResultFromPG(row), nil
+}
+
 func (s *toolCallStore) ListToolCallsByChat(ctx context.Context, chatID string) ([]*core.ToolCall, error) {
 	rows, err := s.q.ListToolCallsByChat(ctx, chatID)
 	if err != nil {
@@ -161,7 +172,10 @@ func (s *toolCallStore) ListStrandedBackgroundSpawnToolCalls(ctx context.Context
 			ChatID:         row.ChatID,
 			ParentThreadID: toolCallNullStringToPtr(row.ParentThreadID),
 			ChildThreadID:  row.ChildThreadID,
-			WorkflowStatus: core.WorkflowStatus(row.WorkflowStatus),
+			WorkflowStatus: core.WorkflowStatus{
+				State:      core.WorkflowState(row.WorkflowState),
+				StopReason: core.WorkflowStopReason(row.WorkflowStopReason),
+			},
 		})
 	}
 	return calls, nil

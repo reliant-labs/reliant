@@ -27,7 +27,7 @@ import {
 import { cn } from "../../lib/utils";
 import { useSurface } from "../../lib/surfaceContext";
 import { GenericToolRenderer, ToolContentArea, type ToolRenderContext, type ToolResultData } from "./tool-renderers";
-import { useChat, useToolCallStates } from "../../store/chatStoreHooks";
+import { useChat, useChatMessages, useStreamingMessages, useToolCallStates } from "../../store/chatStoreHooks";
 import {
   useApproveToolRequest,
   useDenyToolRequest,
@@ -41,14 +41,161 @@ import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
-import { ToolCallStatus, ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
+import {
+  ContentBlockType,
+  ToolCallStatus,
+  WorkflowState,
+  WorkflowStopReason,
+} from "../../gen/reliant/v1/chat_pb";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { findWorkflowById } from "../../lib/workflowTree";
+import { useActiveThreads } from "../../store/threadActivityStore";
+import type { ContentBlock, Message, WorkflowExecutionData } from "../../types/chat";
 
 export type { ToolResultData };
 
 /** Component status strings, as accepted by ToolExecutionProps.status. */
 type DisplayStatus = NonNullable<ToolExecutionProps["status"]>;
+
+type ToolCallInput = Record<string, unknown> | string | undefined;
+
+function baseToolName(rawName: string): string {
+  const lower = rawName.toLowerCase();
+  return lower.startsWith("mcp__") ? lower.split("__").pop() || lower : lower;
+}
+
+function inputObject(input: ToolCallInput): Record<string, unknown> | null {
+  return typeof input === "object" && input !== null ? input : null;
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function isGenericSpawnLabel(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized === "agent" || normalized === "builtin://agent" || normalized === "spawn_tool";
+}
+
+function nonGenericStringField(value: unknown): string | undefined {
+  const str = stringField(value);
+  if (!str || isGenericSpawnLabel(str)) return undefined;
+  return str;
+}
+
+function parseToolInput(raw?: string): Record<string, unknown> | string | undefined {
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return raw;
+  }
+}
+
+function walkWorkflowExecutions(
+  workflows: WorkflowExecutionData[],
+  visit: (workflow: WorkflowExecutionData) => boolean,
+): WorkflowExecutionData | undefined {
+  for (const workflow of workflows) {
+    if (visit(workflow)) return workflow;
+    const found = walkWorkflowExecutions(workflow.children, visit);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+function workflowTitle(workflow: WorkflowExecutionData | undefined): string | undefined {
+  if (!workflow) return undefined;
+  return nonGenericStringField(workflow.threadTitle) || nonGenericStringField(workflow.spawnedByNodeId) || nonGenericStringField(workflow.workflowName);
+}
+
+function messageSeq(message: Message): number {
+  const seq = (message as { seq?: unknown }).seq;
+  if (typeof seq === "bigint") return Number(seq);
+  if (typeof seq === "number") return seq;
+  return 0;
+}
+
+function collectMessagesInRenderOrder(messages: Message[]): Message[] {
+  return messages
+    .slice()
+    .sort((a, b) => {
+      const seqA = messageSeq(a);
+      const seqB = messageSeq(b);
+      if (seqA !== seqB) return seqA - seqB;
+      return new Date(a.createdAt || "").getTime() - new Date(b.createdAt || "").getTime();
+    });
+}
+
+function toolResultCallIdsContaining(messages: Message[], needle: string): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    for (const block of message.contentBlocks || []) {
+      if (
+        block.type === ContentBlockType.TOOL_RESULT &&
+        block.toolCallId &&
+        block.content?.includes(needle)
+      ) {
+        ids.add(block.toolCallId);
+      }
+    }
+  }
+  return ids;
+}
+
+function findBashCallForProcess(messages: Message[], processId: string): ContentBlock | undefined {
+  const resultCallIds = toolResultCallIdsContaining(messages, processId);
+  let lastMatch: ContentBlock | undefined;
+  for (const message of collectMessagesInRenderOrder(messages)) {
+    const blocks = (message.contentBlocks || [])
+      .slice()
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    for (const block of blocks) {
+      if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "bash") {
+        continue;
+      }
+      if (
+        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
+        block.matchedResult?.content?.includes(processId)
+      ) {
+        lastMatch = block;
+      }
+    }
+  }
+  return lastMatch;
+}
+
+function findSpawnCallForAgent(messages: Message[], agentId: string): ContentBlock | undefined {
+  const resultCallIds = toolResultCallIdsContaining(messages, agentId);
+  let fallback: ContentBlock | undefined;
+  for (const message of collectMessagesInRenderOrder(messages)) {
+    const blocks = (message.contentBlocks || [])
+      .slice()
+      .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+    for (const block of blocks) {
+      if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "spawn") {
+        continue;
+      }
+      if (block.childWorkflowId === agentId) {
+        fallback = block;
+        continue;
+      }
+      if (
+        (block.toolCallId && resultCallIds.has(block.toolCallId)) ||
+        block.matchedResult?.content?.includes(agentId)
+      ) {
+        fallback = block;
+      }
+    }
+  }
+  return fallback;
+}
+
+function spawnTitleFromInput(input: ToolCallInput): string | undefined {
+  const obj = inputObject(input);
+  if (!obj) return undefined;
+  return nonGenericStringField(obj.title) || nonGenericStringField(obj.preset);
+}
 
 /** Maps the durable proto status onto the component's display status vocabulary. */
 export function durableStatusToDisplayStatus(status: ToolCallStatus | undefined): DisplayStatus | undefined {
@@ -76,18 +223,25 @@ export function durableStatusToDisplayStatus(status: ToolCallStatus | undefined)
  * for a spawn call the child workflow — not the tool call — is the authority
  * on whether the agent is still running.
  */
-export function workflowStatusToDisplayStatus(status: ChatWorkflowStatus | undefined): DisplayStatus | undefined {
-  switch (status) {
-    case ChatWorkflowStatus.COMPLETED:
+export function workflowLifecycleToDisplayStatus(
+  state: WorkflowState | undefined,
+  stopReason: WorkflowStopReason | undefined,
+): DisplayStatus | undefined {
+  if (state === WorkflowState.PENDING || state === WorkflowState.ACTIVE) {
+    return "executing";
+  }
+  if (state !== WorkflowState.STOPPED) {
+    return undefined;
+  }
+
+  switch (stopReason) {
+    case WorkflowStopReason.COMPLETED:
       return "completed";
-    case ChatWorkflowStatus.FAILED:
+    case WorkflowStopReason.FAILED:
       return "failed";
-    case ChatWorkflowStatus.CANCELLED:
+    case WorkflowStopReason.CANCELLED:
       return "cancelled";
-    case ChatWorkflowStatus.RUNNING:
-    case ChatWorkflowStatus.PENDING:
-    case ChatWorkflowStatus.PAUSED:
-    case ChatWorkflowStatus.EXPIRED:
+    case WorkflowStopReason.PAUSED:
       return "executing";
     default:
       return undefined;
@@ -151,6 +305,7 @@ function ToolExecutionComponent({
   density = "compact",
 }: ToolExecutionProps) {
   const toolNameLower = (toolCall.name || '').toLowerCase();
+  const toolBaseName = baseToolName(toolCall.name || '');
   const isViewOnlyToolFlag = isViewOnlyTool(toolNameLower);
   const isTaskToolFlag = isTaskTool(toolNameLower);
   const isReadToolFlag = isReadToolWithResults(toolNameLower);
@@ -191,6 +346,13 @@ function ToolExecutionComponent({
 
   const currentChat = useChat(chatId || "");
   const chatWorktreeId = currentChat?.worktreeId;
+  const chatMessages = useChatMessages(chatId || undefined);
+  const streamingMessages = useStreamingMessages(chatId || "");
+  const allDisplayMessages = useMemo(
+    () => [...chatMessages, ...streamingMessages],
+    [chatMessages, streamingMessages],
+  );
+  const activeThreads = useActiveThreads(chatId || "");
 
   // Subscribe to live tool call state. Keyed by the LLM tool-call id, which is
   // what the backend addresses tool status by — it is the only id that exists
@@ -231,7 +393,10 @@ function ToolExecutionComponent({
     if (spawnChildWorkflowId) {
       // Default to "executing" while the child workflow row doesn't exist
       // yet (the spawn was just dispatched) or reports an unmapped status.
-      return workflowStatusToDisplayStatus(spawnChildWorkflow?.status) ?? "executing";
+      return workflowLifecycleToDisplayStatus(
+        spawnChildWorkflow?.state,
+        spawnChildWorkflow?.stopReason,
+      ) ?? "executing";
     }
 
     if (liveStatus) {
@@ -323,21 +488,53 @@ function ToolExecutionComponent({
     return paramDescription || paramNotes || null;
   }, [isTaskToolFlag, toolCall.input, toolNameLower, storedTask]);
 
-  // The thread this spawn owns, as recorded by the code that created it:
-  // tool_calls.child_workflow_id, and a spawned sub-agent's thread id equals
-  // its workflow id.
-  //
-  // This used to search for it — first scanning live thread-activity updates,
-  // then walking the workflow tree for a workflow whose spawnedByNodeId
-  // matched `spawn-${toolCall.id}`. Both are derivations of a fact already
-  // stored on this very tool call, and both miss: measured on live data,
-  // child_workflow_id is present on 394/394 spawn calls while
-  // spawned_by_node_id is present on only 368 of them — and absent on ALL
-  // THREE currently-executing spawns. Since this value gates the "open full
-  // thread view" control, a running spawn simply had no expand button, and
-  // finished ones mostly did. That is the same failure the preview had, from
-  // the same cause.
-  const spawnThreadId = isSpawnToolFlag ? toolCall.childWorkflowId : undefined;
+  const resolvedWaitTarget = useMemo(() => {
+    const input = inputObject(toolCall.input);
+    if (!input) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+
+    if (toolBaseName === "bash_wait") {
+      const processId = stringField(input.process_id);
+      if (!processId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+      const bashCall = findBashCallForProcess(allDisplayMessages, processId);
+      const bashInput = parseToolInput(bashCall?.input);
+      const bashObj = inputObject(bashInput);
+      const description = stringField(bashObj?.description) || stringField(bashObj?.Description);
+      const command = stringField(bashObj?.command) || stringField(bashObj?.Command);
+      return {
+        displayInput: description || command ? { ...input, description, command } : toolCall.input,
+        threadId: undefined,
+      };
+    }
+
+    if (toolBaseName === "spawn_status") {
+      const agentId = stringField(input.agent_id);
+      if (!agentId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+
+      const activeThread = activeThreads.find((thread) => thread.thread === agentId || thread.workflow_id === agentId);
+      const workflow = findWorkflowById(allWorkflows, agentId) ||
+        walkWorkflowExecutions(allWorkflows, (candidate) => candidate.thread === agentId);
+      const spawnCall = findSpawnCallForAgent(allDisplayMessages, agentId);
+      const spawnInput = parseToolInput(spawnCall?.input);
+      const title =
+        nonGenericStringField(activeThread?.thread_title) ||
+        nonGenericStringField(activeThread?.title) ||
+        workflowTitle(workflow) ||
+        spawnTitleFromInput(spawnInput) ||
+        nonGenericStringField(activeThread?.agent_name);
+
+      return {
+        displayInput: title ? { ...input, title } : toolCall.input,
+        threadId: agentId,
+      };
+    }
+
+    return { displayInput: toolCall.input, threadId: undefined as string | undefined };
+  }, [toolCall.input, toolBaseName, allDisplayMessages, activeThreads, allWorkflows]);
+
+  // The thread this tool can open, as recorded by the code that created it or
+  // directly named by spawn_status. For spawn calls, tool_calls.child_workflow_id
+  // is the child thread. For spawn_status, agent_id already IS that thread id.
+  const spawnThreadId = isSpawnToolFlag ? toolCall.childWorkflowId : resolvedWaitTarget.threadId;
 
   // Handlers
   const handleApprove = useCallback(() => {
@@ -533,11 +730,11 @@ function ToolExecutionComponent({
   const renderContext: ToolRenderContext = {
     toolName: toolCall.name,
     toolCallId: toolCall.id,
-    childWorkflowId: toolCall.childWorkflowId,
+    childWorkflowId: spawnThreadId,
     // Normalize the streaming-window undefined to {} HERE, once, rather than
     // in every renderer: ToolCallData.input is absent until the call's
     // arguments arrive, but a renderer's contract is that `input` is present.
-    input: toolCall.input ?? {},
+    input: resolvedWaitTarget.displayInput ?? {},
     result: toolResult,
     worktreeId: chatWorktreeId,
     chatId,
@@ -684,7 +881,7 @@ function ToolExecutionComponent({
               {getStatusIcon()}
             </span>
             <span className="min-w-0 text-xs truncate">
-              {formatToolCallDisplay(toolCall.name, toolCall.input)}
+              {formatToolCallDisplay(toolCall.name, resolvedWaitTarget.displayInput)}
             </span>
             <span className={cn(
               "px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0",
@@ -712,7 +909,7 @@ function ToolExecutionComponent({
                 Open
               </button>
             )}
-            {isSpawnToolFlag && spawnThreadId && onSelectThread && (
+            {(isSpawnToolFlag || toolBaseName === "spawn_status") && spawnThreadId && onSelectThread && (
               <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
                 className="p-0.5 hover:bg-muted rounded transition-colors"

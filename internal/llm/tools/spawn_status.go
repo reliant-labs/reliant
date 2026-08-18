@@ -213,14 +213,14 @@ func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID string) 
 			info.ElapsedMs = 0
 		}
 
-		isRunning := child.WorkflowStatus != nil && workflowStatusIsLive(*child.WorkflowStatus)
+		isRunning := child.WorkflowStatus != nil && child.WorkflowStatus.Live()
 		if isRunning {
 			runningCount++
 			if info.Status != "starting" {
 				info.Status = "running"
 			}
 		} else if child.WorkflowStatus != nil {
-			info.Status = workflowStatusLabel(*child.WorkflowStatus)
+			info.Status = child.WorkflowStatus.Label()
 		}
 
 		if info.AgentID != "" {
@@ -247,7 +247,7 @@ func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID string) 
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("=== Sub-Agents (%d) ===\n\n", len(infos)))
+	fmt.Fprintf(&sb, "=== Sub-Agents (%d) ===\n\n", len(infos))
 	for i, info := range infos {
 		if i > 0 {
 			sb.WriteString("\n---\n\n")
@@ -434,7 +434,7 @@ func verifyIsOwnChild(rctx *rctx.ToolContext, repo db.Repository, callerThreadID
 			return nil
 		}
 	}
-	return fmt.Errorf("agent_id %q is not a sub-agent spawned from this thread. Use spawn_status (omit agent_id) to see your sub-agents.", agentID)
+	return fmt.Errorf("agent_id %q is not a sub-agent spawned from this thread; use spawn_status (omit agent_id) to see your sub-agents", agentID)
 }
 
 // spawnInputPresetAndTitle extracts the preset and title the LLM originally
@@ -475,35 +475,7 @@ func toolCallStatusLabel(status int32) string {
 	}
 }
 
-// workflowStatusIsLive mirrors workflowStatusIsTerminal's complement: a
-// workflow status that has not reached a terminal state is still doing work
-// (or paused, which will resume).
-func workflowStatusIsLive(status int32) bool {
-	switch status {
-	case int32(db.WorkflowStatusPending), int32(db.WorkflowStatusRunning), int32(db.WorkflowStatusPaused):
-		return true
-	default:
-		return false
-	}
-}
-
-func workflowStatusLabel(status int32) string {
-	switch status {
-	case int32(db.WorkflowStatusPending):
-		return "pending"
-	case int32(db.WorkflowStatusRunning):
-		return "running"
-	case int32(db.WorkflowStatusCompleted):
-		return "completed"
-	case int32(db.WorkflowStatusFailed):
-		return "failed"
-	case int32(db.WorkflowStatusCancelled):
-		return "cancelled"
-	case int32(db.WorkflowStatusPaused):
-		return "paused"
-	case int32(db.WorkflowStatusExpired):
-		return "expired"
-	default:
-		return "unknown"
-	}
-}
+// The local workflowStatusIsLive/workflowStatusLabel helpers that used to live
+// here are gone: db.WorkflowStatus.Live() and .Label() answer both questions,
+// and a second copy of "which statuses count as still working" is exactly the
+// kind of drift the shared predicate exists to prevent.

@@ -12,7 +12,48 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
+
+// Resume outcome classes for metrics/alerting. These are the label values of
+// reliant_workflow_resume_outcome_total; keep them in sync with the metric's
+// help text in internal/observability/metrics.go.
+//
+// The split that matters is reset_replay versus everything else. Reset-and-
+// replay is the resume mechanism and is strictly better than any checkpoint we
+// could write — it rebuilds the nested engine stack AND the in-memory node
+// outputs. The other four labels are the cases it provably cannot serve, and
+// counting them is what decides whether a position stack ever needs a read
+// side. See specs/workflow-lifecycle-refactor.md, "Adversarial review".
+const (
+	resumeOutcomeResetReplay            = "reset_replay"
+	resumeOutcomeHistoryLimitExceeded   = "history_limit_exceeded"
+	resumeOutcomeNoReplayableHistory    = "no_replayable_history"
+	resumeOutcomeResetAttemptsExhausted = "reset_attempts_exhausted"
+	resumeOutcomeResetError             = "reset_error"
+)
+
+// recordResumeOutcome counts one resume attempt and logs it with the same
+// label. Both, always: the counter is what makes the ratio queryable where
+// Prometheus is scraped, and the log is what makes it recoverable where it is
+// not (a single-user desktop install exports no metrics, and those installs
+// are exactly where the long-running chats that hit the history cap live).
+func recordResumeOutcome(outcome, workflowID, chatID string, detail error) {
+	observability.WorkflowResumeOutcomeTotal.WithLabelValues(outcome).Inc()
+
+	// One stable message with a varying label, so the ratio is greppable:
+	//   rg '\[ResumeOutcome\]' | grep -o 'outcome=[a-z_]*' | sort | uniq -c
+	args := []interface{}{
+		"outcome", outcome,
+		"workflowID", workflowID,
+		"chatID", chatID,
+		"replayServed", outcome == resumeOutcomeResetReplay,
+	}
+	if detail != nil {
+		args = append(args, "reason", detail.Error())
+	}
+	logging.Info("[ResumeOutcome] Interrupted-workflow resume attempt settled", args...)
+}
 
 // ErrWorkflowNotFound is returned when a workflow cannot be found in Temporal.
 var ErrWorkflowNotFound = errors.New("workflow not found")
@@ -145,7 +186,7 @@ func (ps *PauseService) PauseWorkflow(ctx context.Context, workflowID, chatID, r
 	}
 
 	// Update workflow status in DB so the UI shows "paused"
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusPaused); err != nil {
+	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Paused()); err != nil {
 		logging.Error("[PauseService] Failed to update workflow status to paused",
 			"workflowID", workflowID,
 			"error", err,
@@ -187,29 +228,32 @@ func isWorkflowAlreadyDoneErr(err error) bool {
 // and updates the DB to match. If Temporal can't be reached or the workflow
 // is gone, it defaults to completed.
 func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID string) {
-	status := db.WorkflowStatusCompleted // default if we can't determine
+	reason := db.StopReasonCompleted // default if we can't determine
 
 	descResp, err := ps.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	if err == nil && descResp != nil && descResp.WorkflowExecutionInfo != nil {
 		switch descResp.WorkflowExecutionInfo.Status {
 		case enums.WORKFLOW_EXECUTION_STATUS_COMPLETED:
-			status = db.WorkflowStatusCompleted
+			reason = db.StopReasonCompleted
 		case enums.WORKFLOW_EXECUTION_STATUS_FAILED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 			enums.WORKFLOW_EXECUTION_STATUS_TERMINATED:
 			// TERMINATED = system/operator kill → Failed (resumable at
 			// position). Only CANCELED (user cancel) maps to Cancelled.
-			status = db.WorkflowStatusFailed
+			// TIMED_OUT lands here too, which is why there is no separate
+			// "expired" reason: it has always been recorded as a failure.
+			reason = db.StopReasonFailed
 		case enums.WORKFLOW_EXECUTION_STATUS_CANCELED:
-			status = db.WorkflowStatusCancelled
+			reason = db.StopReasonCancelled
 		default:
-			status = db.WorkflowStatusCompleted
+			reason = db.StopReasonCompleted
 		}
 	}
 
+	status := db.Stopped(reason)
 	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, status); err != nil {
 		logging.Error("[PauseService] Failed to reconcile workflow status",
 			"workflowID", workflowID,
-			"targetStatus", status,
+			"targetStatus", status.Label(),
 			"error", err,
 		)
 		return
@@ -217,9 +261,9 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 
 	// Cascade to child workflows, at the status the run actually reached. When a
 	// root workflow's Temporal execution has expired, children's status
-	// notifications were likely lost too — leaving them stuck at running/paused
+	// notifications were likely lost too — leaving them stuck at active/paused
 	// and the chat permanently "active".
-	if err := ps.database.CascadeTerminalStatusToDescendants(ctx, workflowID, status); err != nil {
+	if err := ps.database.CascadeTerminalStatusToDescendants(ctx, workflowID, reason); err != nil {
 		logging.Error("[PauseService] Failed to cascade terminal status to child workflows",
 			"workflowID", workflowID,
 			"error", err,
@@ -227,7 +271,7 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 	}
 	// Threads are not a workflows row and need their own cascade call — see
 	// docs/incidents/2026-08-12-spawn-history-cap.md.
-	if err := ps.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, status); err != nil {
+	if err := ps.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason); err != nil {
 		logging.Error("[PauseService] Failed to cascade terminal status to threads",
 			"workflowID", workflowID,
 			"error", err,
@@ -311,15 +355,21 @@ func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID s
 			if dbErr != nil {
 				return fmt.Errorf("%w: %s", ErrWorkflowNotFound, workflowID)
 			}
-			if wf.Status != db.WorkflowStatusExpired && wf.Status != db.WorkflowStatusPaused {
-				return fmt.Errorf("%w: %s (status: %d)", ErrWorkflowNotFound, workflowID, wf.Status)
+			// A row that is parked awaiting resume is the one state where a
+			// failed reset is not "the workflow is gone" — it is a workflow
+			// that legitimately has nothing running to signal. This used to
+			// also admit an EXPIRED status; nothing ever wrote that value
+			// (Temporal TIMED_OUT is recorded as a failure), so the case was
+			// unreachable and is not carried forward.
+			if wf.Status.StopReason != db.StopReasonPaused {
+				return fmt.Errorf("%w: %s (status: %s)", ErrWorkflowNotFound, workflowID, wf.Status.Label())
 			}
 		}
 		return fmt.Errorf("failed to resume workflow: %w", err)
 	}
 
 	// Signal sent successfully — update DB status to running
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 		logging.Error("[PauseService] Failed to update workflow status to running",
 			"workflowID", workflowID,
 			"error", err,
@@ -367,7 +417,7 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 	}
 
 	// Update DB status to running
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 		logging.Error("[PauseService] Failed to update workflow status to running after reset",
 			"workflowID", workflowID,
 			"error", err,
@@ -416,7 +466,7 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 		return "", fmt.Errorf("failed to send resume signal after reset: %w", err)
 	}
 
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 		logging.Error("[PauseService] Failed to update workflow status to running after interrupted resume",
 			"workflowID", workflowID,
 			"error", err,
@@ -443,12 +493,15 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	desc, err := ps.temporalClient.DescribeWorkflowExecution(ctx, workflowID, "")
 	if err != nil {
 		if isWorkflowAlreadyDoneErr(err) { // includes not-found
+			recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, err)
 			return "", ErrNoReplayableHistory
 		}
+		recordResumeOutcome(resumeOutcomeResetError, workflowID, chatID, err)
 		return "", fmt.Errorf("failed to describe interrupted workflow: %w", err)
 	}
 	info := desc.GetWorkflowExecutionInfo()
 	if info == nil || info.GetExecution() == nil {
+		recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, nil)
 		return "", ErrNoReplayableHistory
 	}
 
@@ -461,6 +514,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 		enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
 		// eligible
 	default:
+		recordResumeOutcome(resumeOutcomeNoReplayableHistory, workflowID, chatID, nil)
 		return "", ErrNoReplayableHistory
 	}
 
@@ -478,6 +532,7 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 			"historyLength", historyLen,
 			"limit", temporalHistoryCountLimit,
 		)
+		recordResumeOutcome(resumeOutcomeHistoryLimitExceeded, workflowID, chatID, nil)
 		return "", ErrHistoryLimitExceeded
 	}
 
@@ -489,14 +544,20 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 			"chatID", chatID,
 			"attempts", ps.resetGuard.Attempts(workflowID),
 		)
+		recordResumeOutcome(resumeOutcomeResetAttemptsExhausted, workflowID, chatID, nil)
 		return "", ErrResetAttemptsExhausted
 	}
 
 	newRunID, err := ResetInterruptedWorkflow(ctx, ps.temporalClient, workflowID, runID, status)
 	if err != nil {
+		recordResumeOutcome(resumeOutcomeResetError, workflowID, chatID, err)
 		return "", fmt.Errorf("failed to reset interrupted workflow: %w", err)
 	}
 	ps.resetGuard.Record(workflowID, historyLen)
+
+	// The good path: replay rebuilt the nested stack, including in-memory node
+	// outputs that no checkpoint could restore.
+	recordResumeOutcome(resumeOutcomeResetReplay, workflowID, chatID, nil)
 
 	logging.Info("[PauseService] Interrupted workflow reset for resume",
 		"workflowID", workflowID,

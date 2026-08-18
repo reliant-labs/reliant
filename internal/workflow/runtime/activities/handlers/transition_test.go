@@ -67,7 +67,7 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: oneShotWF,
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}))
 
 	activity := NewWorkflowStatusActivity(h.Repo())
@@ -88,7 +88,7 @@ func TestWorkflowStatus_TransitionToOnCompletion(t *testing.T) {
 		// Status write committed.
 		wf, err := h.Repo().GetWorkflow(ctx, workflowID)
 		require.NoError(t, err)
-		assert.Equal(t, db.WorkflowStatusCompleted, wf.Status)
+		assert.Equal(t, db.Completed(), wf.Status)
 
 		// Chat graduated to the target workflow.
 		assert.Equal(t, agentWF, chatWorkflowName(t, ctx, h.Repo(), chatID))
@@ -125,7 +125,7 @@ func TestWorkflowStatus_NoTransitionWhenTargetAbsent(t *testing.T) {
 		ChatID:       chatID,
 		WorkflowName: agentWF,
 		Thread:       chatID,
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 	}))
 
 	activity := NewWorkflowStatusActivity(h.Repo())
@@ -163,10 +163,10 @@ func TestWorkflowStatus_ChildCompletionDoesNotTransition(t *testing.T) {
 	setChatWorkflow(t, ctx, h.Repo(), chatID, oneShotWF)
 
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
-		ID: parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: parentID, Status: db.WorkflowStatusRunning,
+		ID: parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: parentID, Status: db.Active(),
 	}))
 	require.NoError(t, h.Repo().CreateWorkflow(ctx, &db.Workflow{
-		ID: childID, ParentID: &parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: childID, Status: db.WorkflowStatusRunning,
+		ID: childID, ParentID: &parentID, ChatID: chatID, WorkflowName: oneShotWF, Thread: childID, Status: db.Active(),
 	}))
 
 	activity := NewWorkflowStatusActivity(h.Repo())

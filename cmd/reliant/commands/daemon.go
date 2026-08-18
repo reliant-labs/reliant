@@ -20,6 +20,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -27,6 +28,22 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/spf13/cobra"
 )
+
+const toolsDaemonLogFilename = "tools-daemon.log"
+
+func toolsDaemonLogPath(dataDir string) string {
+	return filepath.Join(dataDir, "logs", toolsDaemonLogFilename)
+}
+
+func setupToolsDaemonLogging(dataDir string) {
+	logging.SetupWithRotation(slog.LevelInfo, false, &logging.RotationConfig{
+		Filename:   toolsDaemonLogPath(dataDir),
+		MaxSizeMB:  50,
+		MaxBackups: 3,
+		MaxAgeDays: 30,
+		Compress:   true,
+	})
+}
 
 func newDaemonCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -75,9 +92,15 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection) e
 	}
 
 	// Step 2: Call CreateDaemonToken RPC on DaemonTokenService (JWT-authed).
-	hostname, _ := os.Hostname()
+	// The token's name is a human-facing label in `auth token list`, not a
+	// lookup key (daemon-kind PATs are found by hash, and revoked by name or id
+	// only among api-kind tokens). Stamping the stable instance id into it
+	// keeps two registrations from the same machine recognizable as such even
+	// if the hostname flipped between them.
+	tokenName := instanceid.Label()
 
-	logging.Info("Registering daemon via CreateDaemonToken", "api_url", apiURL, "hostname", hostname)
+	logging.Info("Registering daemon via CreateDaemonToken",
+		"api_url", apiURL, "token_name", tokenName, "instance_id", instanceid.ID())
 
 	// Registration is JWT-only (a PAT cannot mint a daemon PAT), so the bearer
 	// is the login session rather than the connection's resolved token.
@@ -85,7 +108,7 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection) e
 	client := reliantv1connect.NewDaemonTokenServiceClient(httpClient, apiURL)
 
 	resp, err := client.CreateDaemonToken(ctx, connect.NewRequest(&reliantv1.CreateDaemonTokenRequest{
-		Name: hostname,
+		Name: tokenName,
 	}))
 	if err != nil {
 		logging.Error("CreateDaemonToken failed", "error", err, "code", connect.CodeOf(err), "api_url", apiURL)
@@ -291,8 +314,7 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 		return nil, fmt.Errorf("saving daemon credentials: %w", err)
 	}
 
-	hostname, _ := os.Hostname()
-	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted (host: %s)\n", hostname)
+	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted (host: %s)\n", instanceid.Label())
 	return creds, nil
 }
 
@@ -404,7 +426,13 @@ Credential resolution order:
 				return fmt.Errorf("--background is not yet implemented")
 			}
 
-			logging.Setup(slog.LevelInfo)
+			// Keep the foreground stdout stream used by Electron/task while also
+			// persisting an independently rotated tools-daemon log. Do not share
+			// reliant.log with the API server: dev-electron can run both processes
+			// against the same data root, and separate lumberjack writers must not
+			// rotate the same file.
+			setupToolsDaemonLogging(dataDir)
+			defer logging.Close() //nolint:errcheck
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -571,7 +599,7 @@ Credential resolution order:
 	cmd.Flags().StringVar(&tlsKey, "tls-key", envOrDefault("TLS_KEY_FILE", ""), "TLS key file path")
 	cmd.Flags().StringVar(&tlsMode, "tls-mode", envOrDefault("DAEMON_TLS_MODE", ""), "TLS mode (tls, insecure_tls_skip_verify, h2c, or disabled)")
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
-	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: hostname)")
+	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
 	cmd.Flags().BoolVar(&serverMode, "server-mode", envOrDefault("DAEMON_SERVER_MODE", "") == "true", "Listen for incoming gateway connections instead of dialing out")
 	cmd.Flags().IntVar(&listenPort, "listen-port", envOrDefaultInt("DAEMON_LISTEN_PORT", 9190), "Port to listen on in server mode")
 
@@ -904,7 +932,7 @@ func newDaemonLogsCmd() *cobra.Command {
 		Short: "Tail daemon logs",
 		Long:  `Streams daemon log output. Defaults to the last 50 lines with live follow.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			logPath := filepath.Join(dataDir, "logs", "reliant.log")
+			logPath := toolsDaemonLogPath(dataDir)
 
 			f, err := os.Open(logPath)
 			if err != nil {

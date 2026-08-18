@@ -68,12 +68,6 @@ var patternFields = map[string]bool{
 	"exclude":   true,
 }
 
-// commandFields are the JSON keys holding a shell command line.
-var commandFields = map[string]bool{
-	"command": true,
-	"cmd":     true,
-}
-
 // extractArgv reads the argv form of a run request.
 //
 // It returns an empty slice when the request carries no argv — including when

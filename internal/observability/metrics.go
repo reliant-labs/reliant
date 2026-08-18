@@ -275,6 +275,49 @@ var (
 	)
 )
 
+// ─── Workflow Resume Metrics ────────────────────────────────────────────────
+
+var (
+	// WorkflowResumeOutcomeTotal counts how an interrupted run's resume was
+	// served, by outcome:
+	//   reset_replay              - reset-and-replay SUCCEEDED. Temporal
+	//                               replayed the recorded history and rebuilt
+	//                               the entire nested engine stack, including
+	//                               in-memory node outputs. The good path.
+	//   history_limit_exceeded    - the run was at Temporal's per-execution
+	//                               history cap. Reset structurally CANNOT
+	//                               help: it forks from inside the oversized
+	//                               history. Fell back to coarse restart.
+	//   no_replayable_history     - ghost execution: past retention, never
+	//                               recorded, or not in an eligible state.
+	//   reset_attempts_exhausted  - the bounded guard gave up after repeated
+	//                               resets made no forward progress.
+	//   reset_error               - the reset itself failed unexpectedly.
+	//
+	// THIS COUNTER DECIDES WHETHER THE POSITION STACK'S READ SIDE IS BUILT.
+	// The position stack is only worth reading for runs that replay cannot
+	// serve, which is precisely the three non-reset_replay fallback labels.
+	// If reset_replay dominates in practice, the correct outcome is to keep
+	// reset-and-replay as THE resume mechanism and leave the stack as
+	// diagnostics. Read it as a ratio, not an absolute:
+	//
+	//   sum(reliant_workflow_resume_outcome_total{outcome!="reset_replay"})
+	//     / sum(reliant_workflow_resume_outcome_total)
+	//
+	// Every increment is paired with a structured log carrying the same
+	// outcome label, so the same ratio is recoverable from logs alone where
+	// Prometheus is not scraped (single-user desktop installs).
+	WorkflowResumeOutcomeTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "workflow",
+			Name:      "resume_outcome_total",
+			Help:      "Interrupted-workflow resume attempts by outcome (reset_replay, history_limit_exceeded, no_replayable_history, reset_attempts_exhausted, reset_error). Non-reset_replay outcomes are the cases a position stack would have to serve.",
+		},
+		[]string{"outcome"},
+	)
+)
+
 // ─── Temporal Metrics ───────────────────────────────────────────────────────
 
 var (
@@ -337,6 +380,8 @@ func initMetrics() {
 		ToolExecutionErrorsTotal,
 		// Reconciler
 		ReconcilerAnomaliesTotal,
+		// Workflow resume
+		WorkflowResumeOutcomeTotal,
 		// Temporal
 		TemporalWorkflowsTotal,
 		TemporalActivityDuration,

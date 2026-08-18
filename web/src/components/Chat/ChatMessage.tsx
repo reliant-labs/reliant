@@ -77,6 +77,7 @@ interface ChatMessageProps {
   chatId?: string; // Chat ID for branching functionality
   onSelectThread?: (threadId: string | null) => void;
   timelineVariant?: ChatTimelineVariant;
+  compactToolSpacing?: boolean;
   /**
    * Rendered as the sticky header above the timeline rather than in the flow.
    * Clamps to a single line, drops attachments and hover actions, and never
@@ -169,6 +170,7 @@ function ChatMessageComponent({
   chatId: propChatId,
   onSelectThread,
   timelineVariant = "compact",
+  compactToolSpacing = false,
   pinned = false,
 }: ChatMessageProps) {
   const isUser = message.role === MessageRole.USER;
@@ -213,55 +215,6 @@ function ChatMessageComponent({
   const [showActionsSheet, setShowActionsSheet] = useState(false);
   const bubbleRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // Track prop changes to diagnose re-renders
-  const prevPropsRef = useRef<null | {
-    messageBlockCount: number;
-    messageUpdatedAt?: string;
-    approvalsLength: number;
-    isLatestMessage: boolean;
-    isStreaming: boolean;
-    chatId?: string;
-  }>(null);
-
-  useEffect(() => {
-    const prev = prevPropsRef.current;
-    if (prev) {
-      const changes: string[] = [];
-      if (prev.messageBlockCount !== (message.contentBlocks?.length || 0)) {
-        changes.push(
-          `blocks(${prev.messageBlockCount}→${message.contentBlocks?.length || 0})`,
-        );
-      }
-      if (prev.messageUpdatedAt !== message.updatedAt) {
-        changes.push(
-          `updatedAt(${prev.messageUpdatedAt}→${message.updatedAt})`,
-        );
-      }
-      if (prev.approvalsLength !== approvals.length) {
-        changes.push(`approvals(${prev.approvalsLength}→${approvals.length})`);
-      }
-      if (prev.isLatestMessage !== isLatestMessage) {
-        changes.push(`isLatest(${prev.isLatestMessage}→${isLatestMessage})`);
-      }
-      if (prev.isStreaming !== isStreaming) {
-        changes.push(`isStreaming(${prev.isStreaming}→${isStreaming})`);
-      }
-      if (prev.chatId !== chatId) {
-        changes.push(`chatId(${prev.chatId?.slice(-8)}→${chatId?.slice(-8)})`);
-      }
-
-      // Debug logging removed
-    }
-
-    prevPropsRef.current = {
-      messageBlockCount: message.contentBlocks?.length || 0,
-      messageUpdatedAt: message.updatedAt,
-      approvalsLength: approvals.length,
-      isLatestMessage,
-      isStreaming,
-      chatId: chatId ?? undefined,
-    };
-  });
 
   // Listen for font changes and force re-render
   useEffect(() => {
@@ -901,13 +854,21 @@ function ChatMessageComponent({
   // down for a toolbar that is not there: mobile shows these actions in a
   // long-press sheet and never reveals the hover toolbar at all, the pinned
   // breadcrumb has no toolbar, and the newest message uses the inline variant.
+  //
+  // Compact split-turn tool rows are NOT an exception. They tighten their
+  // spacing but still float a toolbar, and a tool row's controls — Open,
+  // push-to-background, cancel, and the Approve/Deny pair — sit flush right,
+  // directly under it. Dropping the band to close the gap put the toolbar back
+  // on top of exactly those buttons the moment the row was hovered, so the
+  // condition tracks "does this message float a toolbar", which is the same
+  // test the render below uses.
   const reservesToolbarBand = !pinned && !showInlineActions && !isMobile;
 
   return (
     <div
       className={cn(
         "group copy-toast message-container relative",
-        "mb-1",
+        compactToolSpacing ? "mb-0" : "mb-1",
         variantClass,
         copied && "copied",
         isOptimistic && "opacity-60",
@@ -991,7 +952,6 @@ function ChatMessageComponent({
                           : isExpanded
                             ? EXPANDED_MESSAGE_MAX_HEIGHT
                             : COLLAPSED_MESSAGE_MAX_HEIGHT,
-                        transition: "max-height 0.2s ease-in-out",
                         // Truncation reads as text fading out rather than a
                         // full-width button bar, which cost more vertical space
                         // than the teaser it labelled. A mask is used instead of
@@ -1047,6 +1007,7 @@ function ChatMessageComponent({
             <div
               className={cn(
                 "message-content group/assistant relative w-full px-2",
+                compactToolSpacing && "py-0",
                 timelineVariant === "card" && "rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm",
                 timelineVariant === "minimal" && "px-0"
               )}
@@ -1176,6 +1137,7 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
       prev.chatId === next.chatId &&
       prev.hideToolExecutions === next.hideToolExecutions &&
       prev.timelineVariant === next.timelineVariant &&
+      prev.compactToolSpacing === next.compactToolSpacing &&
       prev.onSelectThread === next.onSelectThread &&
       prev.approvals === next.approvals
     );
@@ -1191,6 +1153,7 @@ export const ChatMessage = memo(ChatMessageComponent, (prev, next) => {
   if (prev.chatId !== next.chatId) return false;
   if (prev.hideToolExecutions !== next.hideToolExecutions) return false;
   if (prev.timelineVariant !== next.timelineVariant) return false;
+  if (prev.compactToolSpacing !== next.compactToolSpacing) return false;
   if (prev.onSelectThread !== next.onSelectThread) return false;
 
   // Check approvals - if same reference, skip deep comparison

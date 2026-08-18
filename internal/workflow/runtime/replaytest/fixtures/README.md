@@ -39,22 +39,15 @@ fixtures make that class of change fail at **test time** instead.
 
 Your change made `DynamicWorkflow` (or code it calls **inside the workflow
 sandbox** — executors, routers, CEL/template evaluation that gates commands)
-emit a different command sequence for at least one recorded history. You have
-exactly two options — pick one **deliberately**:
+emit a different command sequence for at least one recorded history.
 
-### (a) Make the change replay-compatible (default choice)
+**This is expected, and the fix is to regenerate:**
 
-Old histories must keep taking the old code path. The standard tool is
-[`workflow.GetVersion`](https://docs.temporal.io/develop/go/versioning):
-
-```go
-v := workflow.GetVersion(ctx, "my-change-id", workflow.DefaultVersion, 1)
-if v == workflow.DefaultVersion {
-    // old behavior — replayed histories land here
-} else {
-    // new behavior — fresh runs land here
-}
 ```
+make replay-fixtures
+```
+
+then commit the updated JSON together with your change.
 
 Things that break replay: adding/removing/reordering `workflow.ExecuteActivity`
 calls, changing an activity's registered name, adding/removing timers
@@ -63,24 +56,35 @@ structure, changing side effects, or changing any branch condition that gates
 the above. Things that do NOT break replay: activity *implementation* changes,
 changes to values that don't alter the command sequence, logging.
 
-### (b) Accept the break and regenerate the fixtures
+### Do not add a version gate
 
-```
-make replay-fixtures
-```
+`workflow.GetVersion` keeps old histories on the old code path by keeping the
+old code path. **We do not do that here.** This product has not launched, so
+there is no fleet of long-lived in-flight runs worth preserving a dead branch
+for — and a gate is not free: it is a permanent fork in the workflow, it can
+never be deleted (removing a recorded version wedges the very histories it was
+added to protect), and every later change has to reason about both sides of it.
+Two gates compose into four paths.
 
-then commit the updated JSON together with your change.
+Cut to the new code, delete the old path, and regenerate the fixtures.
 
-**Understand what you are accepting.** When this deploys, every in-flight
-workflow run whose history matches the old shape will wedge with TMPRL1100 the
-next time its worker replays it (immediately, on the deploy itself). Those
-runs will NOT self-heal: they depend on the reconciler detecting the wedged
-execution and the resume/checkpoint machinery starting a replacement run from
-the last position checkpoint, with thread history as conversation truth.
-That recovery loses in-memory workflow state (node outputs of the old run) and
-costs a user-visible interruption. Acceptable for genuinely-needed breaking
-changes; not acceptable as a side effect nobody noticed — which is the failure
-mode this suite exists to prevent.
+If you are changing a workflow where in-flight runs genuinely cannot be
+interrupted, that is a conversation to have explicitly — not a default to reach
+for.
+
+**Know what regenerating does.** When the change deploys, every in-flight
+workflow run whose history matches the old shape wedges with TMPRL1100 the next
+time its worker replays it (immediately, on the deploy itself). Those runs do
+not self-heal on their own: the reconciler detects the wedged execution and the
+resume/checkpoint machinery starts a replacement run from the last position
+checkpoint, with thread history as conversation truth. That recovery loses the
+old run's in-memory state (its node outputs) and costs a user-visible
+interruption.
+
+That is the price of cutting cleanly, and it is the right price to pay. What
+this suite exists to prevent is not the break — it is a break landing that
+**nobody noticed**, with no regenerated fixtures and no one aware that live runs
+needed recovering.
 
 ## Regenerating
 

@@ -60,6 +60,27 @@ WHERE thread_id = $1;
 -- The high-water mark has to span the whole context-window chain the branch
 -- resolves, not just its own rows. Walking the chain here keeps the allocator
 -- honest without teaching every caller about forks.
+--
+-- The two halves are deliberately SEPARATE max lookups combined with GREATEST,
+-- rather than the single `WHERE chat_id = $1 OR context_window_id IN (...)`
+-- this used to be. An OR across two different columns cannot use either
+-- index, so that form degraded into a FULL SEQUENTIAL SCAN of messages —
+-- measured at 35ms over 221k rows, against an index-driven 1.7ms for this
+-- version.
+--
+-- Speed is the lesser reason. Every transaction here runs at SERIALIZABLE, and
+-- a sequential scan takes a predicate lock covering the ENTIRE table, so this
+-- allocator conflicted with every concurrent message insert anywhere in the
+-- system — not merely those in the same chat. That is what surfaced to users
+-- as "failed to save mailbox envelope: ... could not serialize access due to
+-- read/write dependencies among transactions (SQLSTATE 40001)" while several
+-- spawns were saving messages at once. Restricting each branch to an index
+-- narrows the predicate lock to the rows actually consulted.
+--
+-- `= ANY(ARRAY(...))` rather than `IN (SELECT ...)`: Postgres will not push a
+-- recursive-CTE reference down into an index condition, so the IN form
+-- re-introduced the seq scan. Materializing the chain into an array lets the
+-- planner use idx_messages_context_window_ordinal.
 WITH RECURSIVE chain AS (
     SELECT cw.id, cw.parent_context_window_id
     FROM context_windows cw
@@ -69,10 +90,17 @@ WITH RECURSIVE chain AS (
     FROM context_windows parent
     JOIN chain ON chain.parent_context_window_id = parent.id
 )
-SELECT COALESCE(MAX(m.seq), -1) + 1 AS next_seq
-FROM messages m
-WHERE m.chat_id = $1
-   OR m.context_window_id IN (SELECT id FROM chain);
+SELECT COALESCE(
+    GREATEST(
+        -- This chat's own rows (messages_chat_seq_key).
+        (SELECT MAX(m.seq) FROM messages m WHERE m.chat_id = $1),
+        -- Rows inherited through the fork chain
+        -- (idx_messages_context_window_ordinal).
+        (SELECT MAX(m.seq) FROM messages m
+          WHERE m.context_window_id = ANY(ARRAY(SELECT id FROM chain)))
+    ),
+    -1
+) + 1 AS next_seq;
 
 -- name: GetNextOrdinalByContextWindow :one
 -- Get next ordinal for a specific context window

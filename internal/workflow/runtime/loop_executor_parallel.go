@@ -318,6 +318,10 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 	iterExecContext := e.buildParallelIterExecContext(gCtx, index, resolvedItem, key)
 
 	// Create step executor
+	iterThread := ""
+	if iterExecContext != nil {
+		iterThread = iterExecContext.Thread
+	}
 	iterExecutor := NewStepExecutor(
 		gCtx,
 		e.workflowID,
@@ -331,7 +335,9 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 		WithProjectPath(e.projectPath).
 		WithWorkflow(e.subWorkflow).
 		WithPauseController(e.pauseCtrl).
-		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl)
+		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, iterThread)).
+		WithMakeThreadInterrupt(e.makeThreadInterrupt)
 
 	// Initialize with start event
 	events := []*core.WorkflowEvent{{
@@ -419,6 +425,8 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					WithProjectPath(e.projectPath).
 					WithPauseController(e.pauseCtrl).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, nestedExecutor.GetThread())).
+					WithMakeThreadInterrupt(e.makeThreadInterrupt).
 					WithInvocationContract(nestedContract)
 
 				nestedOutput, err := nestedExecutor.Execute()
@@ -482,16 +490,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 					// Create child thread for non-inherit modes
 					if model.NodeThreadMode(evalResult) != model.ThreadModeInherit {
-						var injectMsg *InjectMessageConfig
-						if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
-							attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
-							injectMsg = &InjectMessageConfig{
-								Role:        model.CelStringValue(ic.GetRole()),
-								Content:     model.CelStringValue(ic.GetContent()),
-								Attachments: attIDs,
-								Files:       attFiles,
-							}
-						}
+						injectMsg := buildInjectMessageConfig(model.NodeInjectConfig(evalResult), e.logger)
 
 						parentWorkflowID := ""
 						if iterExecContext.Parent != nil {
@@ -518,7 +517,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 							result.Error = fmt.Errorf("failed to init child workflow thread: %w", initErr)
 							return result
 						}
-					} else if ic := model.NodeInjectConfig(evalResult); ic != nil && model.CelStringValue(ic.GetContent()) != "" {
+					} else if flatInput := buildInjectSaveMessageInput(e.chatID, childExecCtx.Thread, e.workflowID, model.NodeInjectConfig(evalResult), e.logger); flatInput != nil {
 						// Inherit mode: just save inject message
 						activityCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
 							StartToCloseTimeout: 30 * time.Second,
@@ -529,16 +528,6 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 								MaximumAttempts:    3,
 							},
 						})
-						attIDs, attFiles := resolveInjectAttachments(ic, e.logger)
-						flatInput := &types.SaveMessageInput{
-							ChatID:      e.chatID,
-							Thread:      childExecCtx.Thread,
-							Role:        model.CelStringValue(ic.GetRole()),
-							Content:     model.CelStringValue(ic.GetContent()),
-							Attachments: attIDs,
-							InjectFiles: injectFilesToData(attFiles),
-							WorkflowID:  e.workflowID,
-						}
 						rtx := types.RuntimeContext{
 							ChatID:     e.chatID,
 							Thread:     childExecCtx.Thread,
@@ -555,6 +544,8 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					WithProjectPath(e.projectPath).
 					WithPauseController(e.pauseCtrl).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
+					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, inlineExecutor.GetThread())).
+					WithMakeThreadInterrupt(e.makeThreadInterrupt).
 					WithInvocationContract(contract).
 					WithWorkflowContext(gCtx) // CRITICAL: use goroutine's context
 
@@ -777,17 +768,8 @@ func (e *InlineLoopExecutor) buildParallelIterExecContext(
 					"index", index,
 					"error", err,
 				)
-			} else if evalIC := model.NodeInjectConfig(evalResult); evalIC != nil {
-				content := model.CelStringValue(evalIC.GetContent())
-				if content != "" {
-					attIDs, attFiles := resolveInjectAttachments(evalIC, e.logger)
-					injectMsg = &InjectMessageConfig{
-						Role:        model.CelStringValue(evalIC.GetRole()),
-						Content:     content,
-						Attachments: attIDs,
-						Files:       attFiles,
-					}
-				}
+			} else {
+				injectMsg = buildInjectMessageConfig(model.NodeInjectConfig(evalResult), e.logger)
 			}
 		}
 	}

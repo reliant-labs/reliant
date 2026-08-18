@@ -110,17 +110,15 @@ func TestHashWalkDir_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // cancel immediately
 
-	_, err := hashWalkDir(ctx, t.TempDir())
-	// The walk itself may return context.Canceled, or it may succeed
-	// because the dir is empty (the context check only fires every 1000 files).
-	// For an empty dir, no error is expected — so build a dir with >1000 entries.
-
+	// A cancelled walk may return context.Canceled, or may succeed because the
+	// dir is empty (the context check only fires every 1000 files). For an
+	// empty dir no error is expected — so build a dir with >1000 entries.
 	dir := t.TempDir()
 	for i := 0; i < 1100; i++ {
 		writeFile(t, filepath.Join(dir, fmt.Sprintf("f%04d.txt", i)), "x")
 	}
 
-	_, err = hashWalkDir(ctx, dir)
+	_, err := hashWalkDir(ctx, dir)
 	require.Error(t, err, "cancelled context should return an error for large dirs")
 	assert.ErrorIs(t, err, context.Canceled)
 }

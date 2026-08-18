@@ -19,6 +19,21 @@ type RuntimeContext struct {
 	// for legacy histories and non-LLM activities.
 	AssistantMessageID string `json:"assistant_message_id,omitempty"`
 
+	// MessageIdempotencyKey, when non-empty, IS the idempotency key SaveMessage
+	// persists and dedupes on, replacing the per-run key the activity would
+	// otherwise derive from its Temporal RunID.
+	//
+	// Set it only for a message whose identity is the position in the workflow
+	// graph rather than the activity execution that happened to write it — the
+	// inject message seeded into a child thread is the one such message today
+	// (see runtime.injectIdempotencyKey). A resumed run gets a NEW RunID, so a
+	// RunID-scoped key cannot recognize the seed it already wrote and the child
+	// agent is told a second time to start work it had already started.
+	//
+	// Callers that do NOT set this keep RunID scoping, which is what they want:
+	// an assistant or tool message belongs to the run that produced it.
+	MessageIdempotencyKey string `json:"message_idempotency_key,omitempty"`
+
 	// Loop context
 	LoopNodeID    string `json:"loop_node_id,omitempty"`
 	LoopIteration int    `json:"loop_iteration,omitempty"`

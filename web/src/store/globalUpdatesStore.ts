@@ -38,6 +38,29 @@ import { setDaemonLastSeen } from "../api/grpc-client";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
+/**
+ * Republish the drain announcements in a chat-update batch onto the event bus.
+ *
+ * The mailbox strip is fed by a poll, so before this signal existed the only
+ * thing that retired a drained row was the next poll happening to come back
+ * without it — leaving the message rendered in the transcript AND in the strip
+ * for up to a poll interval. The announcement rides the same ordered channel
+ * as the messages it describes, so publishing it right after those messages
+ * are committed closes that window rather than shrinking it.
+ */
+function publishDrainedMailboxRows(chatId: string, updates: ChatUpdate[]): void {
+  for (const update of updates) {
+    if (update.update_type !== "agent_messages_drained") continue;
+    if (!update.message_ids?.length) continue;
+
+    getEventBus().emit("agentMailbox:drained", {
+      chatId,
+      thread: update.thread,
+      messageIds: update.message_ids,
+    });
+  }
+}
+
 // Timestamp when the app started - only notify for events after this
 const appStartTime = Date.now();
 
@@ -399,6 +422,13 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
 
     // Route incremental chat updates (merge semantics)
     useChatStore.getState().processChatStreamUpdates(chatId, updates);
+
+    // Then announce the mailbox rows this batch drained. AFTER the messages
+    // are committed, and in the same synchronous task: the two land in one
+    // React commit, so the strip never renders empty against a transcript
+    // that has not shown the message yet. The reverse order would open
+    // exactly that gap.
+    publishDrainedMailboxRows(chatId, updates);
   },
 
   handleChatSnapshot: (updates) => {
@@ -410,6 +440,12 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
 
     // Route snapshot updates (replace semantics — prevents cross-chat message leaking)
     useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
+
+    // A reconnect replays the drain announcements alongside the messages they
+    // describe. Publishing them here too means a client that was offline
+    // through a drain still retires those rows on the way back, instead of
+    // showing them until the next poll.
+    publishDrainedMailboxRows(chatId, updates);
   },
 
 

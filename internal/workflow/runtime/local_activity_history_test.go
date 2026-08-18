@@ -67,42 +67,6 @@ func watchDispatch(env *testsuite.TestWorkflowEnvironment, name string) *dispatc
 	return d
 }
 
-// TestDrainAgentMessages_DispatchedLocally pins that a new execution (which
-// takes the maximum version of the agent-mailbox-drain gate) drains its
-// mailbox through a LOCAL activity.
-func TestDrainAgentMessages_DispatchedLocally(t *testing.T) {
-	var suite testsuite.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-
-	var localCalls int
-	env.RegisterActivityWithOptions(
-		func(_ context.Context, in types.DrainAgentMessagesInput) (types.DrainAgentMessagesOutput, error) {
-			localCalls++
-			require.Equal(t, "chat-1", in.ChatID)
-			require.Equal(t, "thread-1", in.Thread)
-			return types.DrainAgentMessagesOutput{}, nil
-		},
-		activity.RegisterOptions{Name: "DrainAgentMessages"},
-	)
-	dispatch := watchDispatch(env, "DrainAgentMessages")
-
-	env.ExecuteWorkflow(func(ctx workflow.Context) error {
-		drainAgentMessagesAtBoundary(ctx, "chat-1", "thread-1")
-		return nil
-	})
-
-	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-	require.Equal(t, 1, localCalls, "drain must run exactly once per boundary")
-
-	require.Zero(t, dispatch.regular,
-		"DrainAgentMessages was dispatched as a REGULAR activity (6 history events); "+
-			"it must use workflow.ExecuteLocalActivity (1 marker event). This drain runs "+
-			"once per agent-loop boundary and cost 8,100 events in the history-cap "+
-			"incident — see docs/incidents/2026-08-12-spawn-history-cap.md")
-	require.Equal(t, 1, dispatch.local, "expected exactly one local dispatch")
-}
-
 // TestEmitStreamFinalized_DispatchedLocally pins the SUCCESS path — the hot
 // one, fired once per agent turn — as a local activity.
 func TestEmitStreamFinalized_DispatchedLocally(t *testing.T) {

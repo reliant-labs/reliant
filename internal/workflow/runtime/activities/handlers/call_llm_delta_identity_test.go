@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/streaming"
 )
 
@@ -167,6 +174,106 @@ func TestWriteStreamingDelta_NilState(t *testing.T) {
 	require.Len(t, deltas, 1)
 	assert.Empty(t, deltas[0].MessageID)
 	assert.Zero(t, deltas[0].StreamSeq)
+}
+
+type cancellingMockLLMDriver struct {
+	ready chan struct{}
+}
+
+func (m *cancellingMockLLMDriver) Name() string { return "mock" }
+func (m *cancellingMockLLMDriver) Model() models.Model {
+	return models.Model{ID: "mock-model", Name: "Mock Model"}
+}
+func (m *cancellingMockLLMDriver) SendMessages(context.Context, []string, []message.Message, []tools.Tool) (*llm.DriverResponse, error) {
+	return nil, nil
+}
+func (m *cancellingMockLLMDriver) StreamResponse(ctx context.Context, _ []string, _ []message.Message, _ []tools.Tool) <-chan llm.DriverEvent {
+	ch := make(chan llm.DriverEvent, 2)
+	ch <- llm.DriverEvent{Type: llm.EventContentStart}
+	ch <- llm.DriverEvent{Type: llm.EventContentDelta, Content: "partial answer"}
+	close(m.ready)
+	go func() {
+		<-ctx.Done()
+		close(ch)
+	}()
+	return ch
+}
+func (m *cancellingMockLLMDriver) ValidateKey(context.Context) error { return nil }
+
+// An interrupted turn PERSISTS its partial rather than handing it back.
+//
+// This used to assert the opposite: that the activity returned a CanceledError
+// carrying the partial as cancellation details, which the workflow harvested.
+// That channel only worked because the workflow WAITED for the cancelled
+// activity to return (WaitForCancellation), and that wait is what made every
+// stop take 1-3s -- a cancelled activity's return only reaches the worker on a
+// heartbeat. The wait is gone, so the details channel is gone with it: the
+// activity writes the row itself, on a context detached from the cancellation.
+//
+// The durable row is now the contract. Its identity comes from the step's
+// position in the graph (callLLMIdempotencyKey), so the re-dispatch that
+// follows an interrupt converges on this same row instead of adding a second
+// assistant message for one turn.
+func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
+	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
+	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	})
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
+	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+	hub := &captureHub{}
+	activityInstance := NewCallLLMActivity(h.Repo(), hub, nil, &staticConfigProvider{}, resolver, nil)
+
+	input := callLLMInput(chat.ID, chat.ID, "mock-model")
+	runCancelled := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
+		cancelCtx, cancel := context.WithCancel(actCtx)
+		defer cancel()
+		go func() {
+			<-driver.ready
+			cancel()
+		}()
+		return activityInstance.Execute(cancelCtx, input)
+	}
+
+	h.env.RegisterActivity(runCancelled)
+	_, err := h.env.ExecuteActivity(runCancelled, input)
+	require.NoError(t, err, "an interrupted turn is not an activity failure any more")
+
+	// The partial must exist in the transcript, not just in a payload that the
+	// SDK would have thrown away.
+	msgs, err := h.Repo().ListMessages(ctx, chat.ID, db.MessageListOptions{})
+	require.NoError(t, err)
+
+	var partial string
+	for _, m := range msgs {
+		if m.Role != reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+			continue
+		}
+		blocks, err := h.Repo().ListContentBlocks(ctx, m.ID)
+		require.NoError(t, err)
+		for _, b := range blocks {
+			if b.Content != nil {
+				partial += *b.Content
+			}
+		}
+	}
+	assert.Contains(t, partial, "partial answer",
+		"the text the user watched stream in must survive the interrupt")
+
+	var sawCancelled bool
+	for _, delta := range hub.captured() {
+		if delta.DeltaType == streaming.DeltaTypeStreamCancelled {
+			sawCancelled = true
+		}
+	}
+	assert.True(t, sawCancelled, "UI must still be told the stream stopped")
 }
 
 // Compile-time check that the test hub satisfies the interface.

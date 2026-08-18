@@ -1,11 +1,11 @@
 /**
- * Resume gating — the mobile surface's ONLY daemon write.
+ * Mobile daemon lifecycle gating.
  *
- * `daemonResume: true` with `daemonManage: false` means this table is the
- * entire scope boundary for daemon mutation on a phone. A regression that
- * flips `resumable` on for ACTIVE or PENDING doesn't fail loudly; it produces
- * a button that either no-ops against the control plane or races a start
- * that's already in flight, so it's pinned here per status.
+ * `daemonManage: true` lets a phone create, suspend and delete machines, but
+ * lifecycle transitions still need a status table. A regression that flips
+ * Resume or Suspend on for ACTIVE/PENDING incorrectly doesn't fail loudly; it
+ * produces a button that either no-ops against the control plane or races a
+ * transition already in flight, so the rules are pinned here per status.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -13,6 +13,7 @@ import { DaemonStatus, DaemonSize } from '@/gen/controlplane/v1/public/shared_pb
 import type { Daemon } from '@/services/controlPlane/daemon'
 import {
   canResume,
+  canSuspend,
   heartbeatMs,
   presentDaemon,
   sizeLabel,
@@ -32,8 +33,7 @@ describe('canResume', () => {
   })
 
   it('does NOT offer Resume for a running daemon', () => {
-    // The headline rule: a machine that is already up must not present a
-    // write action on a surface that only has one.
+    // A machine that is already up must not present a duplicate start action.
     expect(canResume(daemon({ status: DaemonStatus.ACTIVE }))).toBe(false)
   })
 
@@ -43,13 +43,26 @@ describe('canResume', () => {
   })
 
   it('does NOT offer Resume for a failed daemon', () => {
-    // Recovery needs the desktop recreate path, which is daemonManage.
+    // Recovery is delete + fresh create rather than a lifecycle transition.
     expect(canResume(daemon({ status: DaemonStatus.FAILED }))).toBe(false)
   })
 
   it('does NOT offer Resume for an unrecognized status', () => {
     // A status the client doesn't know about must fail closed, not open.
     expect(canResume(daemon({ status: 99 as DaemonStatus }))).toBe(false)
+  })
+})
+
+describe('canSuspend', () => {
+  it('offers Suspend for a running daemon', () => {
+    expect(canSuspend(daemon({ status: DaemonStatus.ACTIVE }))).toBe(true)
+  })
+
+  it('does NOT offer Suspend for non-running states', () => {
+    expect(canSuspend(daemon({ status: DaemonStatus.PENDING }))).toBe(false)
+    expect(canSuspend(daemon({ status: DaemonStatus.SUSPENDED }))).toBe(false)
+    expect(canSuspend(daemon({ status: DaemonStatus.DISCONNECTED }))).toBe(false)
+    expect(canSuspend(daemon({ status: DaemonStatus.FAILED }))).toBe(false)
   })
 })
 

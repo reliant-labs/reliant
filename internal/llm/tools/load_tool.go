@@ -176,7 +176,7 @@ func (t *loadToolTool) searchTools(chatID, query string, permission string) Tool
 	}
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("Found %d tools matching '%s':\n\n", len(results), query))
+	fmt.Fprintf(&sb, "Found %d tools matching '%s':\n\n", len(results), query)
 
 	for _, r := range results {
 		tags := make([]string, len(r.Tags))
@@ -187,7 +187,7 @@ func (t *loadToolTool) searchTools(chatID, query string, permission string) Tool
 		if !r.PermissionAllowed {
 			status = fmt.Sprintf("requires %s permission", r.MinPermission)
 		}
-		sb.WriteString(fmt.Sprintf("- **%s** [%s] (%s)\n", r.Name, strings.Join(tags, ", "), status))
+		fmt.Fprintf(&sb, "- **%s** [%s] (%s)\n", r.Name, strings.Join(tags, ", "), status)
 	}
 
 	sb.WriteString("\nUse load_tool with name to load a specific tool.")

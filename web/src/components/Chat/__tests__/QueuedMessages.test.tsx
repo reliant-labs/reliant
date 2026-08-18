@@ -6,23 +6,22 @@
  * take it back. The behaviors pinned here are the ones where getting it wrong
  * costs the user something real:
  *
- *  - a queued message is VISIBLE, with a live age, so "queued for delivery"
- *    is verifiable rather than a claim a toast made once.
+ *  - a queued message is VISIBLE, with a live age, so delivery state is
+ *    verifiable without a transient toast.
  *  - Cancel that SUCCEEDS removes the entry.
  *  - Cancel that LOSES the race (success: false — the agent already drained
- *    it) does NOT remove the entry and says why. Pretending it worked would
- *    tell the user their message was revoked while the agent acts on it.
- *  - "Send now" / "Send all" CLAIM the messages in one atomic call and then
- *    resend exactly what came back. This used to be cancel-then-send from the
- *    client, which left a window between the two calls; a bulk version would
- *    have multiplied that window by the size of the queue. Resending the
- *    locally-rendered list instead of the claim's result is the specific
- *    mistake that lands a user's text in the conversation twice.
+ *    it) does NOT remove the entry. Pretending it worked would tell the user
+ *    their message was revoked while the agent acts on it.
+ *  - INTERRUPT stops the work in flight so the agent reads the queue on its
+ *    next turn. It does NOT pull messages back out of the mailbox and resend
+ *    them: the agent's own call_llm delivers the whole queue, in order. An
+ *    earlier design claimed rows client-side and resent them, which had to
+ *    race the agent's delivery and could land a user's text in the
+ *    conversation twice.
  *
- * The manual-send cases pass isRunning, and it is not decoration: those
- * buttons exist for a queue the agent is still going to read. An idle queue
- * flushes itself (queuedAutoFlush.test.tsx), so mounting one of these idle
- * would be testing the click against a strip that had already emptied itself.
+ * The interrupt cases pass isRunning, and it is not decoration: there is only
+ * something to interrupt while the agent is working. An idle agent's queue is
+ * absorbed by the next ordinary send, server-side.
  */
 
 import { fireEvent, screen, waitFor, act } from "@testing-library/react";
@@ -35,13 +34,15 @@ const THREAD_ID = "thread-xyz";
 
 const {
   cancelQueuedAgentMessageMock,
-  claimQueuedAgentMessagesMock,
+  interruptThreadMock,
   toastInfoMock,
+  toastWarningMock,
   toastErrorMock,
 } = vi.hoisted(() => ({
   cancelQueuedAgentMessageMock: vi.fn(),
-  claimQueuedAgentMessagesMock: vi.fn(),
+  interruptThreadMock: vi.fn(),
   toastInfoMock: vi.fn(),
+  toastWarningMock: vi.fn(),
   toastErrorMock: vi.fn(),
 }));
 
@@ -51,7 +52,7 @@ const {
 vi.mock("../../../api/chat-grpc", () => ({
   chatGrpc: {
     cancelQueuedAgentMessage: cancelQueuedAgentMessageMock,
-    claimQueuedAgentMessages: claimQueuedAgentMessagesMock,
+    interruptThread: interruptThreadMock,
   },
   QUEUED_SENDER_KIND_HUMAN: 5,
 }));
@@ -61,7 +62,7 @@ vi.mock("../../../lib/toast-manager", () => ({
     info: toastInfoMock,
     error: toastErrorMock,
     success: vi.fn(),
-    warning: vi.fn(),
+    warning: toastWarningMock,
   },
 }));
 
@@ -166,7 +167,7 @@ describe("QueuedMessages", () => {
     expect(toastInfoMock).not.toHaveBeenCalled();
   });
 
-  it("Cancel on an already-delivered message keeps the entry and says why", async () => {
+  it("Cancel on an already-delivered message keeps the entry without a toast", async () => {
     cancelQueuedAgentMessageMock.mockResolvedValue({
       success: false,
       message: "Already delivered to the agent.",
@@ -186,134 +187,135 @@ describe("QueuedMessages", () => {
     fireEvent.click(screen.getByLabelText("Cancel queued message"));
 
     await waitFor(() => {
-      expect(toastInfoMock).toHaveBeenCalledWith("Already delivered to the agent.");
+      expect(onRefresh).toHaveBeenCalled();
     });
     // The row still stands on the server, so the UI must not claim otherwise.
     expect(onForget).not.toHaveBeenCalled();
-    expect(onRefresh).toHaveBeenCalled();
+    expect(toastInfoMock).not.toHaveBeenCalled();
     expect(screen.getByText("check the migration file")).toBeTruthy();
   });
 
-  it("Send now claims the message atomically, then sends what it got back", async () => {
-    claimQueuedAgentMessagesMock.mockResolvedValue({
-      messages: [queued({ id: "queued-7", body: "run the tests" })],
+  it("Interrupt stops the agent so it reads the queue on its next turn", async () => {
+    interruptThreadMock.mockResolvedValue({
+      cancelledToolCalls: 2,
+      undeliverableToolCalls: [],
     });
-    const onSendNow = vi.fn().mockResolvedValue(undefined);
+    const onInterrupted = vi.fn().mockResolvedValue(undefined);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
 
     renderWithQuery(
       <QueuedMessages
         chatId={CHAT_ID}
         threadId={THREAD_ID}
         messages={[queued({ id: "queued-7", body: "run the tests" })]}
-        onRefresh={vi.fn()}
-        onSendNow={onSendNow}
-        isRunning={true}
+        onRefresh={onRefresh}
+        onInterrupted={onInterrupted}
+        isRunning
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Send now"));
+    fireEvent.click(
+      screen.getByLabelText("Interrupt the agent and deliver queued messages now"),
+    );
 
     await waitFor(() => {
-      expect(onSendNow).toHaveBeenCalledWith("run the tests", []);
+      expect(onInterrupted).toHaveBeenCalled();
     });
-    expect(claimQueuedAgentMessagesMock).toHaveBeenCalledWith(CHAT_ID, THREAD_ID, "queued-7");
-    expect(onSendNow).toHaveBeenCalledTimes(1);
+
+    // Per THREAD, not per message: interrupt takes no message id, because the
+    // agent delivers its whole mailbox on the turn this unblocks.
+    expect(interruptThreadMock).toHaveBeenCalledWith(CHAT_ID, THREAD_ID);
+    expect(interruptThreadMock).toHaveBeenCalledTimes(1);
+    expect(onRefresh).toHaveBeenCalled();
   });
 
-  it("Send now does NOT send when the drain won the message first", async () => {
-    // An empty claim is the whole verdict: the row was already drained, so
-    // this caller owns nothing and may resend nothing. There is no second
-    // call whose answer could disagree.
-    claimQueuedAgentMessagesMock.mockResolvedValue({ messages: [] });
-    const onSendNow = vi.fn().mockResolvedValue(undefined);
+  it("interrupts without non-error toasts for queue delivery", async () => {
+    interruptThreadMock.mockResolvedValue({
+      cancelledToolCalls: 1,
+      undeliverableToolCalls: ["toolu_stuck"],
+    });
+    const onInterrupted = vi.fn().mockResolvedValue(undefined);
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
 
     renderWithQuery(
       <QueuedMessages
         chatId={CHAT_ID}
         threadId={THREAD_ID}
-        messages={[queued({ id: "queued-7", body: "run the tests" })]}
-        onRefresh={vi.fn()}
-        onSendNow={onSendNow}
-        isRunning={true}
+        messages={[queued({ id: "q-1", body: "stop that" })]}
+        onRefresh={onRefresh}
+        onInterrupted={onInterrupted}
+        isRunning
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Send now"));
+    fireEvent.click(
+      screen.getByLabelText("Interrupt the agent and deliver queued messages now"),
+    );
 
     await waitFor(() => {
-      expect(toastInfoMock).toHaveBeenCalled();
+      expect(onInterrupted).toHaveBeenCalled();
     });
-    // The agent already has this message. Sending it now would put the user's
-    // text into the conversation a second time.
-    expect(onSendNow).not.toHaveBeenCalled();
+    expect(onRefresh).toHaveBeenCalled();
+    expect(toastInfoMock).not.toHaveBeenCalled();
+    expect(toastWarningMock).not.toHaveBeenCalled();
   });
 
-  it("Send all flushes the whole queue in one claim, in order", async () => {
-    claimQueuedAgentMessagesMock.mockResolvedValue({
-      messages: [
-        queued({ id: "q-1", body: "first" }),
-        queued({ id: "q-2", body: "second" }),
-      ],
+  it("interrupting with nothing in flight is still a success", async () => {
+    // The agent was between tool calls. Not a failure: the queue is delivered
+    // on its next turn regardless, and the strip remains the confirmation.
+    interruptThreadMock.mockResolvedValue({
+      cancelledToolCalls: 0,
+      undeliverableToolCalls: [],
     });
-    const onSendNow = vi.fn().mockResolvedValue(undefined);
+    const onInterrupted = vi.fn().mockResolvedValue(undefined);
 
     renderWithQuery(
       <QueuedMessages
         chatId={CHAT_ID}
         threadId={THREAD_ID}
-        messages={[
-          queued({ id: "q-1", body: "first" }),
-          queued({ id: "q-2", body: "second" }),
-        ]}
-        onRefresh={vi.fn()}
-        onSendNow={onSendNow}
-        isRunning={true}
+        messages={[queued({ id: "q-1", body: "one more thing" })]}
+        onRefresh={vi.fn().mockResolvedValue(undefined)}
+        onInterrupted={onInterrupted}
+        isRunning
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Send all queued messages now"));
+    fireEvent.click(
+      screen.getByLabelText("Interrupt the agent and deliver queued messages now"),
+    );
 
     await waitFor(() => {
-      expect(onSendNow).toHaveBeenCalledTimes(2);
+      expect(onInterrupted).toHaveBeenCalled();
     });
-    // ONE claim for the whole queue, not one per message: a per-message loop
-    // would reintroduce the partial-failure window this replaced.
-    expect(claimQueuedAgentMessagesMock).toHaveBeenCalledTimes(1);
-    expect(claimQueuedAgentMessagesMock).toHaveBeenCalledWith(CHAT_ID, THREAD_ID, undefined);
-    expect(onSendNow.mock.calls.map((c) => c[0])).toEqual(["first", "second"]);
+    expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
-  it("Send all resends only what the claim returned, not the local list", async () => {
-    // The strip still shows both, but the agent drained one before the click
-    // landed — so the claim returns one. Resending from the rendered list
-    // would put an already-delivered message into the conversation twice.
-    claimQueuedAgentMessagesMock.mockResolvedValue({
-      messages: [queued({ id: "q-2", body: "still mine" })],
-    });
-    const onSendNow = vi.fn().mockResolvedValue(undefined);
+  it("surfaces a failed interrupt instead of pretending the agent stopped", async () => {
+    interruptThreadMock.mockRejectedValue(new Error("network down"));
+    const onInterrupted = vi.fn().mockResolvedValue(undefined);
 
     renderWithQuery(
       <QueuedMessages
         chatId={CHAT_ID}
         threadId={THREAD_ID}
-        messages={[
-          queued({ id: "q-1", body: "already drained" }),
-          queued({ id: "q-2", body: "still mine" }),
-        ]}
-        onRefresh={vi.fn()}
-        onSendNow={onSendNow}
-        isRunning={true}
+        messages={[queued({ id: "q-1", body: "stop" })]}
+        onRefresh={vi.fn().mockResolvedValue(undefined)}
+        onInterrupted={onInterrupted}
+        isRunning
       />,
     );
 
-    fireEvent.click(screen.getByLabelText("Send all queued messages now"));
+    fireEvent.click(
+      screen.getByLabelText("Interrupt the agent and deliver queued messages now"),
+    );
 
     await waitFor(() => {
-      expect(onSendNow).toHaveBeenCalledTimes(1);
+      expect(toastErrorMock).toHaveBeenCalled();
     });
-    expect(onSendNow).toHaveBeenCalledWith("still mine", []);
-    expect(onSendNow).not.toHaveBeenCalledWith("already drained", []);
+    // The agent was NOT interrupted, so nothing downstream may act as if it was.
+    expect(onInterrupted).not.toHaveBeenCalled();
   });
+
 
   it("caps the list height and scrolls, so the queue cannot push the composer off screen", () => {
     // The strip sits directly above the composer. Without a cap, a queue of
@@ -380,28 +382,36 @@ describe("QueuedMessages", () => {
     );
   });
 
-  it("offers Send all only when more than one message is queued", () => {
+  it("offers Interrupt only while the agent is actually working", () => {
+    // An idle agent has no work in flight to stop, and its queue is absorbed
+    // by the next ordinary send server-side. Offering the button there would
+    // promise something the click cannot deliver.
     const { rerender } = renderWithQuery(
       <QueuedMessages
         chatId={CHAT_ID}
         threadId={THREAD_ID}
         messages={[queued({ id: "q-1" })]}
         onRefresh={vi.fn()}
-        onSendNow={vi.fn()}
+        onInterrupted={vi.fn()}
       />,
     );
-    expect(screen.queryByLabelText("Send all queued messages now")).toBeNull();
+    expect(
+      screen.queryByLabelText("Interrupt the agent and deliver queued messages now"),
+    ).toBeNull();
 
     rerender(
       <QueuedMessages
         chatId={CHAT_ID}
         threadId={THREAD_ID}
-        messages={[queued({ id: "q-1" }), queued({ id: "q-2" })]}
+        messages={[queued({ id: "q-1" })]}
         onRefresh={vi.fn()}
-        onSendNow={vi.fn()}
+        onInterrupted={vi.fn()}
+        isRunning
       />,
     );
-    expect(screen.getByLabelText("Send all queued messages now")).toBeTruthy();
+    expect(
+      screen.getByLabelText("Interrupt the agent and deliver queued messages now"),
+    ).toBeTruthy();
   });
 
   it("surfaces a failed cancel RPC instead of silently dropping the entry", async () => {

@@ -42,11 +42,11 @@ func TestSaveMessageToThread_UsesThreadsOwnWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateWorkflow(ctx, &Workflow{
 		ID: parentWorkflowID, ChatID: chatID, WorkflowName: "builtin://agent",
-		Thread: parentWorkflowID, Status: WorkflowStatusRunning, CreatedAt: now,
+		Thread: parentWorkflowID, Status: Active(), CreatedAt: now,
 	}))
 	require.NoError(t, repo.CreateWorkflow(ctx, &Workflow{
 		ID: spawnThreadID, ChatID: chatID, WorkflowName: "builtin://agent",
-		Thread: spawnThreadID, Status: WorkflowStatusRunning, CreatedAt: now,
+		Thread: spawnThreadID, Status: Active(), CreatedAt: now,
 	}))
 
 	// The caller hands over the PARENT's workflow, as SendMessage does.
@@ -80,7 +80,7 @@ func TestSaveMessageToThread_MainThreadKeepsCallerWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, repo.CreateWorkflow(ctx, &Workflow{
 		ID: mainThreadID, ChatID: chatID, WorkflowName: "builtin://agent",
-		Thread: mainThreadID, Status: WorkflowStatusRunning, CreatedAt: now,
+		Thread: mainThreadID, Status: Active(), CreatedAt: now,
 	}))
 
 	saved, err := repo.SaveMessageToThread(ctx, chatID, mainThreadID,

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/instanceid"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/log"
 	"google.golang.org/grpc"
@@ -39,8 +40,16 @@ func NewExternalClient(ctx context.Context, cfg ExternalClientConfig) (client.Cl
 	hostPort := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 
 	opts := client.Options{
-		HostPort:      hostPort,
-		Namespace:     cfg.Namespace,
+		HostPort:  hostPort,
+		Namespace: cfg.Namespace,
+		// The SDK default identity is "<pid>@<hostname>", and the hostname in
+		// it is not stable: macOS reports the same machine as *.local or *.lan
+		// depending on how it is currently reachable. A LastWorkerIdentity that
+		// changes on a network event reads as "the worker moved hosts" when
+		// nothing moved — that misread happened during a real incident. The
+		// instance id makes the machine segment stable while keeping the pid
+		// and hostname that made the default readable.
+		Identity:      instanceid.WorkerIdentity(),
 		DataConverter: NewFlexibleDataConverter(),
 		ConnectionOptions: client.ConnectionOptions{
 			DialOptions: []grpc.DialOption{

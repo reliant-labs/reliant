@@ -14,6 +14,8 @@ vi.mock("../../../store/chatStoreHooks", () => ({
   useToolResultsByCallId: () => ({}),
   useToolCallStates: () => new Map(),
   useChat: () => ({ worktreeId: "worktree-1" }),
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
 }));
 
 vi.mock("../../../store/projectStore", () => ({
@@ -175,6 +177,23 @@ describe("ChatMessage hover actions", () => {
     );
 
     expect(toolbar().parentElement?.parentElement).not.toHaveClass("pt-7");
+  });
+
+  it("reserves the band on a compact tool row, which still floats a toolbar", () => {
+    // Split-turn tool rows tighten their vertical spacing, but they still get
+    // the floating toolbar — and a tool row's own controls (Open, background,
+    // cancel, approve/deny) sit flush right, exactly under it. Skipping the
+    // band to save space put the toolbar back over those buttons on hover,
+    // which is the collision the band exists to prevent.
+    render(
+      <ChatMessage
+        message={buildMessage(MessageRole.ASSISTANT)}
+        chatId="chat-1"
+        compactToolSpacing
+      />,
+    );
+
+    expect(toolbar().parentElement?.parentElement).toHaveClass("pt-7");
   });
 
   it("charges no band on mobile, where the toolbar never reveals", () => {

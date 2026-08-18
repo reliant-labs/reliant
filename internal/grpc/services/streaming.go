@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -716,13 +717,17 @@ func (s *StreamingService) getNonMessageUpdates(ctx context.Context, chatID stri
 		return nil, err
 	}
 
-	origins := s.threadOrigins(ctx, chatID)
+	metadata := s.threadMetadata(ctx, chatID)
+	toolCalls := s.snapshotToolCalls(ctx, updates)
 
 	result := make([]*reliantv1.ChatUpdateData, 0, len(updates))
 	for _, update := range updates {
 		data := update.Data
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD {
-			data = withThreadOrigin(data, origins)
+			data = withThreadMetadata(data, metadata)
+		}
+		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL {
+			data = withToolCallSnapshot(data, toolCalls)
 		}
 		result = append(result, &reliantv1.ChatUpdateData{
 			UpdateType:     update.UpdateType,
@@ -737,43 +742,66 @@ func (s *StreamingService) getNonMessageUpdates(ctx context.Context, chatID stri
 	return result, nil
 }
 
-// threadOrigins maps thread id -> threads.origin for one chat.
+type threadSnapshotMetadata struct {
+	origin       string
+	title        string
+	workflowID   string
+	originNodeID string
+	status       int32
+	completedAt  *time.Time
+}
+
+// threadMetadata maps thread id -> authoritative thread-table metadata for one chat.
 //
 // Returns an empty map on error: reconciliation below is an enhancement of the
 // stored payload, so losing it degrades the snapshot to exactly what it was
 // before rather than failing the whole initial sync.
-func (s *StreamingService) threadOrigins(ctx context.Context, chatID string) map[string]string {
+func (s *StreamingService) threadMetadata(ctx context.Context, chatID string) map[string]threadSnapshotMetadata {
 	threadRows, err := s.database.ListThreadsByConversation(ctx, chatID)
 	if err != nil {
-		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list threads for origin reconciliation",
+		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list threads for metadata reconciliation",
 			"error", err, "chatID", chatID[:8])
-		return map[string]string{}
+		return map[string]threadSnapshotMetadata{}
 	}
-	origins := make(map[string]string, len(threadRows))
+	metadata := make(map[string]threadSnapshotMetadata, len(threadRows))
 	for _, row := range threadRows {
-		if row != nil && row.Origin != "" {
-			origins[row.ID] = row.Origin
+		if row == nil {
+			continue
 		}
+		entry := threadSnapshotMetadata{origin: row.Origin}
+		if row.Title != nil {
+			entry.title = *row.Title
+		}
+		if row.WorkflowID != nil {
+			entry.workflowID = *row.WorkflowID
+		}
+		if row.OriginNodeID != nil {
+			entry.originNodeID = *row.OriginNodeID
+		}
+		entry.status = row.Status
+		entry.completedAt = row.CompletedAt
+		metadata[row.ID] = entry
 	}
-	return origins
+	return metadata
 }
 
-// withThreadOrigin fills in a thread update's `origin` from the threads table
-// when the stored payload lacks it.
+// withThreadMetadata fills missing identity fields from the threads table.
 //
 // The snapshot delivers ONE update per entity, onto a client with no prior
 // record, so unlike the live stream it cannot carry a missing field forward
-// from an earlier update. A thread update written without an origin therefore
-// reaches the UI as origin=undefined, isSpawnOrigin() goes false, and the
-// background-work pill drops running sub-agents entirely.
+// from an earlier update. A thread update written without origin reaches the UI
+// as origin=undefined, isSpawnOrigin() goes false, and the background-work pill
+// drops running sub-agents entirely. The same isolation applies to thread_title:
+// a compact/lifecycle row without it makes the pill fall back to generic
+// "Agent" even though threads.title has the real spawn title.
 //
-// The emitters now always write origin, but chat_updates is an append-only log:
-// rows written before that fix keep their gap forever, and they are exactly the
-// rows a reload of an existing chat reads. threads.origin is the authority for
-// this field either way, so reconciling here heals old chats and makes the
-// snapshot independent of which emitter version wrote the row.
-func withThreadOrigin(data json.RawMessage, origins map[string]string) json.RawMessage {
-	if len(origins) == 0 {
+// Emitters now write these fields, but chat_updates is an append-only log: rows
+// written before the fix keep their gap forever, and they are exactly the rows
+// a reload of an existing chat reads. The threads table is the authority for
+// these identity fields either way, so reconciling here heals old chats and
+// makes the snapshot independent of which emitter version wrote the row.
+func withThreadMetadata(data json.RawMessage, metadata map[string]threadSnapshotMetadata) json.RawMessage {
+	if len(metadata) == 0 {
 		return data
 	}
 
@@ -781,24 +809,160 @@ func withThreadOrigin(data json.RawMessage, origins map[string]string) json.RawM
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return data
 	}
-	if origin, ok := payload["origin"].(string); ok && origin != "" {
-		return data
-	}
 	threadID, ok := payload["thread"].(string)
 	if !ok {
 		return data
 	}
-	origin, ok := origins[threadID]
+	entry, ok := metadata[threadID]
 	if !ok {
 		return data
 	}
 
-	payload["origin"] = origin
+	changed := false
+	if entry.origin != "" {
+		if origin, ok := payload["origin"].(string); !ok || origin == "" {
+			payload["origin"] = entry.origin
+			changed = true
+		}
+	}
+	if entry.title != "" {
+		if title, ok := payload["thread_title"].(string); !ok || title != entry.title {
+			payload["thread_title"] = entry.title
+			changed = true
+		}
+	}
+	if entry.workflowID != "" {
+		if workflowID, ok := payload["workflow_id"].(string); !ok || workflowID == "" {
+			payload["workflow_id"] = entry.workflowID
+			changed = true
+		}
+	}
+	if entry.originNodeID != "" {
+		if originNodeID, ok := payload["origin_node_id"].(string); !ok || originNodeID == "" {
+			payload["origin_node_id"] = entry.originNodeID
+			changed = true
+		}
+	}
+	if status := core.ThreadStatusLabel(entry.status); status != "unknown" {
+		if current, ok := payload["status"].(string); !ok || current != status {
+			payload["status"] = status
+			changed = true
+		}
+	}
+	if entry.completedAt != nil {
+		completedAt := entry.completedAt.UTC().Format(time.RFC3339)
+		if current, ok := payload["completed_at"].(string); !ok || current != completedAt {
+			payload["completed_at"] = completedAt
+			changed = true
+		}
+	} else if _, ok := payload["completed_at"]; ok {
+		delete(payload, "completed_at")
+		changed = true
+	}
+	if !changed {
+		return data
+	}
+
 	patched, err := json.Marshal(payload)
 	if err != nil {
 		return data
 	}
 	return patched
+}
+
+func (s *StreamingService) snapshotToolCalls(ctx context.Context, updates []db.ChatUpdate) map[string]*db.ToolCall {
+	toolCallIDs := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, update := range updates {
+		if update.UpdateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL {
+			continue
+		}
+		var payload struct {
+			ToolCallID string `json:"tool_call_id"`
+		}
+		if err := json.Unmarshal(update.Data, &payload); err != nil || payload.ToolCallID == "" {
+			continue
+		}
+		if _, ok := seen[payload.ToolCallID]; ok {
+			continue
+		}
+		seen[payload.ToolCallID] = struct{}{}
+		toolCallIDs = append(toolCallIDs, payload.ToolCallID)
+	}
+	if len(toolCallIDs) == 0 {
+		return map[string]*db.ToolCall{}
+	}
+	calls, err := s.database.ListToolCallsByIDs(ctx, toolCallIDs)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to list tool calls for snapshot reconciliation",
+			"error", err, "toolCallCount", len(toolCallIDs))
+		return map[string]*db.ToolCall{}
+	}
+	byID := make(map[string]*db.ToolCall, len(calls))
+	for _, call := range calls {
+		if call != nil {
+			byID[call.ID] = call
+		}
+	}
+	return byID
+}
+
+func withToolCallSnapshot(data json.RawMessage, toolCalls map[string]*db.ToolCall) json.RawMessage {
+	if len(toolCalls) == 0 {
+		return data
+	}
+
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return data
+	}
+	toolCallID, ok := payload["tool_call_id"].(string)
+	if !ok || toolCallID == "" {
+		return data
+	}
+	call, ok := toolCalls[toolCallID]
+	if !ok || call == nil {
+		return data
+	}
+
+	payload["status"] = toolCallStatusString(call.Status)
+	if call.ToolName != "" {
+		payload["tool_name"] = call.ToolName
+	}
+	if call.StartedAt != nil {
+		payload["started_at"] = call.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if call.CompletedAt != nil {
+		payload["completed_at"] = call.CompletedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if call.ChildWorkflowID != nil && *call.ChildWorkflowID != "" {
+		payload["child_workflow_id"] = *call.ChildWorkflowID
+	}
+
+	patched, err := json.Marshal(payload)
+	if err != nil {
+		return data
+	}
+	return patched
+}
+
+func toolCallStatusString(status core.ToolCallStatus) string {
+	switch status {
+	case core.ToolCallStatusPending:
+		return string(db.ToolCallStatusPending)
+	case core.ToolCallStatusExecuting:
+		return string(db.ToolCallStatusExecuting)
+	case core.ToolCallStatusCompleted:
+		return string(db.ToolCallStatusCompleted)
+	case core.ToolCallStatusFailed:
+		return string(db.ToolCallStatusFailed)
+	case core.ToolCallStatusCancelled:
+		return string(db.ToolCallStatusCancelled)
+	case core.ToolCallStatusBackgrounded:
+		return string(db.ToolCallStatusBackgrounded)
+	default:
+		return ""
+	}
 }
 
 // formatChatUpdateDataJSON wraps message updates in a {message: ...} envelope

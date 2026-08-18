@@ -78,7 +78,7 @@ func (a *ThreadStatusActivity) Name() string {
 // through unchanged, since the UI compares those by name.
 func wireStatusFromVerb(verb string) string {
 	switch verb {
-	case "completed", "failed", "cancelled", "expired":
+	case "completed", "failed", "cancelled":
 		return verb
 	default:
 		return "running"
@@ -98,8 +98,6 @@ func threadStatusFromVerb(verb string) (int32, bool) {
 		return db.ThreadStatusFailed, true
 	case "cancelled":
 		return db.ThreadStatusCancelled, true
-	case "expired":
-		return db.ThreadStatusExpired, true
 	default:
 		return db.ThreadStatusRunning, false
 	}
@@ -124,12 +122,23 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 		return ThreadStatusOutput{}, fmt.Errorf("failed to update thread status: %w", err)
 	}
 
-	// threads.origin is the authority, not the caller. Most callers of this
-	// activity pass no origin at all (the inline executor only sets one for a
-	// fork), and an update that omits it erases the spawn provenance for any
-	// consumer that reads this row on its own — see emitThreadUpdate.
-	if input.Origin == "" && updated != nil {
-		input.Origin = updated.Origin
+	// The threads row is the authority for identity metadata, not whichever
+	// caller happened to invoke this lifecycle activity. Most callers pass only
+	// the thread id and verb; if this row omits title/origin/workflow metadata,
+	// a snapshot that reads it alone cannot classify or name the spawn.
+	if updated != nil {
+		if input.Origin == "" {
+			input.Origin = updated.Origin
+		}
+		if input.ThreadTitle == "" && updated.Title != nil {
+			input.ThreadTitle = *updated.Title
+		}
+		if input.WorkflowID == "" && updated.WorkflowID != nil {
+			input.WorkflowID = *updated.WorkflowID
+		}
+		if input.NodeID == "" && updated.OriginNodeID != nil {
+			input.NodeID = *updated.OriginNodeID
+		}
 	}
 
 	if terminal {
@@ -154,14 +163,14 @@ func (a *ThreadStatusActivity) Execute(ctx context.Context, input ThreadStatusIn
 // them here rather than at the loop's break statements is what makes the
 // coverage total instead of per-path.
 //
-// It lives in the ACTIVITY, not in workflow code, deliberately. The drain at
-// the loop-step boundary needs workflow.GetVersion (changeID
-// "agent-mailbox-drain") because it emits a command that replayed histories
-// have no record of; a second workflow-side call site would need its own
-// distinct changeID or in-flight runs would wedge with TMPRL1100. An activity
-// adds no workflow command at all, so this resolution is invisible to replay
-// and needs no gate — and since ThreadStatus is already invoked on every
-// terminal transition, it costs no additional activity dispatch either.
+// It lives in the ACTIVITY, not in workflow code, deliberately. Workflow code
+// that emits a new command has to reckon with replay: a history recorded
+// before the command existed wedges with TMPRL1100 when it replays against
+// code that now issues it. An activity adds no workflow command at all, so
+// this resolution is invisible to replay — and since ThreadStatus is already
+// invoked on every terminal transition, it costs no additional activity
+// dispatch either. (Mailbox DELIVERY is in CallLLM for the same reason: it is
+// activity-side work, not a workflow command.)
 //
 // Best-effort by the same rule as the drain itself: the thread's lifecycle
 // write has already landed and is the more important fact. Failing the

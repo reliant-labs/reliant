@@ -92,21 +92,78 @@ func (s *agentMessageStore) ListQueuedAgentMessagesForThread(ctx context.Context
 // `/*SLICE:...*/?` marker that is not present in the Postgres query, so it
 // silently matches only the first id. ListToolCallsByMessageIDs in
 // tool_call_store.go works around the same defect the same way.
-func (s *agentMessageStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) error {
+// MarkAgentMessagesDelivered moves queued rows to delivered and reports which
+// ones it actually moved.
+//
+// The status = 1 guard and the RETURNING are what make a drain idempotent. The
+// drain lists its rows before writing them, so two drains racing on one thread
+// can select the same queued rows; without the guard the loser's UPDATE would
+// silently re-deliver rows that are already delivered and repoint
+// delivered_message_id at its own duplicate envelope. Returning the ids that
+// moved lets the caller see it lost and abandon its inserts instead of writing
+// the same messages into the transcript twice.
+func (s *agentMessageStore) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
 	if len(ids) == 0 {
-		return nil
+		return nil, nil
+	}
+
+	// An empty id claims the rows with delivered_message_id left NULL: the
+	// column is a FK into messages, and a claim happens BEFORE the envelope it
+	// will point at exists. The caller backfills it in the same transaction.
+	var delivered interface{}
+	if deliveredMessageID != "" {
+		delivered = deliveredMessageID
 	}
 
 	placeholders := make([]string, len(ids))
 	args := make([]interface{}, 0, len(ids)+2)
-	args = append(args, deliveredAt, deliveredMessageID)
+	args = append(args, deliveredAt, delivered)
 	for i, id := range ids {
 		placeholders[i] = fmt.Sprintf("$%d", i+3)
 		args = append(args, id)
 	}
 
 	query := fmt.Sprintf(
-		`UPDATE agent_messages SET status = 2, delivered_at = $1, delivered_message_id = $2 WHERE id IN (%s)`,
+		`UPDATE agent_messages SET status = 2, delivered_at = $1, delivered_message_id = $2 `+
+			`WHERE id IN (%s) AND status = 1 RETURNING id`,
+		strings.Join(placeholders, ", "),
+	)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var claimed []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		claimed = append(claimed, id)
+	}
+	return claimed, rows.Err()
+}
+
+// SetAgentMessagesDeliveredMessageID backfills the envelope pointer on rows the
+// caller already claimed. Builds its own IN clause for the same sqlc.slice()
+// defect described above.
+func (s *agentMessageStore) SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	placeholders := make([]string, len(ids))
+	args := make([]interface{}, 0, len(ids)+1)
+	args = append(args, deliveredMessageID)
+	for i, id := range ids {
+		placeholders[i] = fmt.Sprintf("$%d", i+2)
+		args = append(args, id)
+	}
+
+	query := fmt.Sprintf(
+		`UPDATE agent_messages SET delivered_message_id = $1 WHERE id IN (%s)`,
 		strings.Join(placeholders, ", "),
 	)
 

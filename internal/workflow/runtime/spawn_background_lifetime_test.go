@@ -152,9 +152,9 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_WaitsPastOldCeiling() {
 // deadlock regression.
 //
 // A parent that has fanned work out to sub-agents parks here with its
-// children still live. Delivery of a queued message happens ONLY in
-// drainAgentMessagesAtBoundary, at the top of the loop body — which a parked
-// loop never reaches. Before this fix the wait predicate watched child
+// children still live. Delivery of a queued message happens ONLY in CallLLM's
+// mailbox drain — which a parked loop never reaches. Before this fix the wait
+// predicate watched child
 // completions and nothing else, so a message queued into a waiting parent was
 // undeliverable until some child happened to finish for unrelated reasons.
 //

@@ -6,9 +6,9 @@
  */
 import { describe, it, expect, vi } from "vitest";
 import { render } from "@testing-library/react";
-import { ChatWorkflowStatus } from "../../../gen/reliant/v1/chat_pb";
+import { WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 
-let mockAllWorkflows: Array<{ id: string; status: ChatWorkflowStatus; children: unknown[] }> = [];
+let mockAllWorkflows: Array<{ id: string; state: WorkflowState; stopReason: WorkflowStopReason; children: unknown[] }> = [];
 
 vi.mock("../../../store/activityStore", () => ({
   useActivityStore: () => undefined,
@@ -20,13 +20,19 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
 vi.mock("../ToolExecution", () => ({
   ToolExecution: () => <div data-testid="tool-row" />,
   durableStatusToDisplayStatus: () => undefined,
-  workflowStatusToDisplayStatus: (status: ChatWorkflowStatus | undefined) => {
-    switch (status) {
-      case ChatWorkflowStatus.COMPLETED:
+  workflowLifecycleToDisplayStatus: (
+    state: WorkflowState | undefined,
+    stopReason: WorkflowStopReason | undefined,
+  ) => {
+    if (state !== WorkflowState.STOPPED) {
+      return "executing";
+    }
+    switch (stopReason) {
+      case WorkflowStopReason.COMPLETED:
         return "completed";
-      case ChatWorkflowStatus.CANCELLED:
+      case WorkflowStopReason.CANCELLED:
         return "cancelled";
-      case ChatWorkflowStatus.FAILED:
+      case WorkflowStopReason.FAILED:
         return "failed";
       default:
         return "executing";
@@ -52,7 +58,7 @@ function pillText(container: HTMLElement, colorClass: string): string | undefine
 
 describe("ToolExecutionGroup rollup counts a spawn by its child workflow's status", () => {
   it("counts a spawn whose child is still running as running, not completed", () => {
-    mockAllWorkflows = [{ id: "wf-1", status: ChatWorkflowStatus.RUNNING, children: [] }];
+    mockAllWorkflows = [{ id: "wf-1", state: WorkflowState.ACTIVE, stopReason: WorkflowStopReason.UNSPECIFIED, children: [] }];
 
     const { container } = render(<ToolExecutionGroup executions={[spawnCall("1", "wf-1")]} />);
 
@@ -61,7 +67,7 @@ describe("ToolExecutionGroup rollup counts a spawn by its child workflow's statu
   });
 
   it("counts a spawn whose child has completed as completed, not running", () => {
-    mockAllWorkflows = [{ id: "wf-2", status: ChatWorkflowStatus.COMPLETED, children: [] }];
+    mockAllWorkflows = [{ id: "wf-2", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.COMPLETED, children: [] }];
 
     const { container } = render(<ToolExecutionGroup executions={[spawnCall("2", "wf-2")]} />);
 

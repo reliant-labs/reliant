@@ -23,7 +23,8 @@ func (s *workflowStore) CreateWorkflow(ctx context.Context, workflow *core.Workf
 		ChatID:          workflow.ChatID,
 		WorkflowName:    workflow.WorkflowName,
 		Thread:          workflow.Thread,
-		Status:          int32(workflow.Status),
+		State:           int32(workflow.Status.State),
+		StopReason:      int32(workflow.Status.StopReason),
 		SpawnedByNodeID: ptrToNullString(workflow.SpawnedByNodeID),
 		LoopIteration:   workflowPtrToNullInt64(workflow.LoopIteration),
 		CreatedAt:       workflow.CreatedAt,
@@ -97,20 +98,43 @@ func (s *workflowStore) GetRootWorkflowStatusForChats(ctx context.Context, chatI
 			}
 			return nil, err
 		}
-		if status, ok := row.Status.(int32); ok {
-			result[row.ChatID] = core.WorkflowStatus(status)
-		} else if status, ok := row.Status.(int64); ok {
-			result[row.ChatID] = core.WorkflowStatus(int32(status))
+		// The query returns CASE expressions, which sqlc types as interface{};
+		// the driver hands back int32 or int64 depending on the branch.
+		state, stateOK := coerceInt32(row.State)
+		reason, reasonOK := coerceInt32(row.StopReason)
+		if !stateOK || !reasonOK {
+			continue
+		}
+		result[row.ChatID] = core.WorkflowStatus{
+			State:      core.WorkflowState(state),
+			StopReason: core.WorkflowStopReason(reason),
 		}
 	}
 	return result, nil
 }
 
+// coerceInt32 narrows the untyped integer a CASE expression scans into.
+func coerceInt32(v interface{}) (int32, bool) {
+	switch n := v.(type) {
+	case int32:
+		return n, true
+	case int64:
+		return int32(n), true
+	default:
+		return 0, false
+	}
+}
+
 func (s *workflowStore) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus core.WorkflowStatus) (bool, error) {
+	// The swap is conditioned on BOTH halves of the expected status: two rows
+	// that are each STOPPED for different reasons are different statuses, and
+	// a CAS expecting one must not win against the other.
 	_, err := s.q.CompareAndSwapWorkflowStatus(ctx, pgdb.CompareAndSwapWorkflowStatusParams{
-		Status:   int32(newStatus),
-		ID:       id,
-		Status_2: int32(expectedStatus),
+		State:        int32(newStatus.State),
+		StopReason:   int32(newStatus.StopReason),
+		ID:           id,
+		State_2:      int32(expectedStatus.State),
+		StopReason_2: int32(expectedStatus.StopReason),
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -122,7 +146,11 @@ func (s *workflowStore) CompareAndSwapWorkflowStatus(ctx context.Context, id str
 }
 
 func (s *workflowStore) UpdateWorkflowStatus(ctx context.Context, id string, status core.WorkflowStatus) error {
-	_, err := s.q.UpdateWorkflowStatus(ctx, pgdb.UpdateWorkflowStatusParams{Status: int32(status), ID: id})
+	_, err := s.q.UpdateWorkflowStatus(ctx, pgdb.UpdateWorkflowStatusParams{
+		State:      int32(status.State),
+		StopReason: int32(status.StopReason),
+		ID:         id,
+	})
 	return err
 }
 
@@ -145,10 +173,14 @@ func (s *workflowStore) UpdateWorkflowName(ctx context.Context, id string, workf
 	return nil
 }
 
-func (s *workflowStore) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, status core.WorkflowStatus) error {
+// CascadeTerminalStatusToDescendants drains a finished run's subtree. Only the
+// stop reason is passed: every descendant it touches becomes STOPPED by
+// definition, so the state is implied and the reason is the part that must not
+// be laundered (a descendant of a cancelled run was cancelled, not completed).
+func (s *workflowStore) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason core.WorkflowStopReason) error {
 	return s.q.CascadeTerminalStatusToDescendants(ctx, pgdb.CascadeTerminalStatusToDescendantsParams{
-		ParentID: sql.NullString{String: parentWorkflowID, Valid: true},
-		Status:   int32(status),
+		ParentID:   sql.NullString{String: parentWorkflowID, Valid: true},
+		StopReason: int32(reason),
 	})
 }
 
@@ -173,7 +205,10 @@ func (s *workflowStore) DeleteWorkflowsByChat(ctx context.Context, chatID string
 }
 
 func (s *workflowStore) ListWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
-	rows, err := s.q.ListWorkflowsByStatus(ctx, int32(status))
+	rows, err := s.q.ListWorkflowsByStatus(ctx, pgdb.ListWorkflowsByStatusParams{
+		State:      int32(status.State),
+		StopReason: int32(status.StopReason),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -181,7 +216,10 @@ func (s *workflowStore) ListWorkflowsByStatus(ctx context.Context, status core.W
 }
 
 func (s *workflowStore) ListRootWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
-	rows, err := s.q.ListRootWorkflowsByStatus(ctx, int32(status))
+	rows, err := s.q.ListRootWorkflowsByStatus(ctx, pgdb.ListRootWorkflowsByStatusParams{
+		State:      int32(status.State),
+		StopReason: int32(status.StopReason),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +350,7 @@ func workflowFromPG(row pgdb.Workflow) *core.Workflow {
 		ChatID:          row.ChatID,
 		WorkflowName:    row.WorkflowName,
 		Thread:          row.Thread,
-		Status:          core.WorkflowStatus(row.Status),
+		Status:          core.WorkflowStatus{State: core.WorkflowState(row.State), StopReason: core.WorkflowStopReason(row.StopReason)},
 		SpawnedByNodeID: nullStringToPtr(row.SpawnedByNodeID),
 		LoopIteration:   workflowNullInt64ToPtr(row.LoopIteration),
 		CreatedAt:       row.CreatedAt,

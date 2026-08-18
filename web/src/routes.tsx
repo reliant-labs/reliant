@@ -85,6 +85,8 @@ const MobileWorkflowCatalog = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
 const MobileSettingsScreen = lazyRouteComponent(
   () => import('./components/Mobile/MobileSettingsScreen'), 'MobileSettingsScreen')
+const MobileGitHubScreen = lazyRouteComponent(
+  () => import('./components/Mobile/MobileGitHubScreen'), 'MobileGitHubScreen')
 const MobileWorkflowDetailRoute = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileWorkflowDetailRoute')
 const MobileChatWorkflowRoute = lazyRouteComponent(
@@ -452,9 +454,8 @@ const mobileNewChatRoute = createRoute({
   component: MobileNewChat,
 })
 
-// Daemons are view + Resume only on this surface (daemonManage: false); the
-// screens enforce that, the routes just have to exist under the shell so they
-// inherit the surface provider.
+// Machine management is mobile-native now: list/detail routes live under the
+// shell so they inherit the mobile surface provider and its lifecycle gates.
 const mobileDaemonsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/daemons',
@@ -501,6 +502,12 @@ const mobileSettingsRoute = createRoute({
   getParentRoute: () => mobileLayoutRoute,
   path: '/m/settings',
   component: MobileSettingsScreen,
+})
+
+const mobileGitHubRoute = createRoute({
+  getParentRoute: () => mobileLayoutRoute,
+  path: '/m/github',
+  component: MobileGitHubScreen,
 })
 
 // Both of these existed as links before they existed as routes — every
@@ -550,6 +557,7 @@ const routeTree = rootRoute.addChildren([
       mobileWorkflowDetailRoute,
       mobileChatWorkflowRoute,
       mobileSettingsRoute,
+      mobileGitHubRoute,
     ]),
     onboardingRoute,
     settingsRoute,

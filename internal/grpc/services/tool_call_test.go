@@ -10,7 +10,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/require"
 )
@@ -92,7 +91,7 @@ func (f *fakeDaemonRouter) ResolveDaemonID(_ context.Context, _ string) (string,
 	return "test-daemon-id", nil
 }
 
-func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
+func TestCancelToolCall_DeliversCancelToDaemonAndSucceeds(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -152,8 +151,8 @@ func TestCancelToolCall_SetsCancelSignalAndSucceeds(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.Msg.Success)
 
-	// Verify the in-memory cancel signal was set
-	require.True(t, shell.GetCancelSignal().IsCancelled(toolCallID))
+	require.Len(t, router.cancelCalls, 1)
+	require.Equal(t, toolCallID, router.cancelCalls[0].requestID)
 }
 
 func toolCallTestIntPtr(v int) *int { return &v }

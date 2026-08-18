@@ -39,10 +39,7 @@ function CollapsibleContent({
     <div className="rounded-md border border-border/50 bg-background/50">
       <div
         ref={contentRef}
-        className={cn(
-          "overflow-hidden transition-all duration-200",
-          !isFullyExpanded && `max-h-[${maxHeight}px]`
-        )}
+        className="overflow-hidden"
         style={!isFullyExpanded ? { maxHeight: `${maxHeight}px` } : undefined}
       >
         {children}

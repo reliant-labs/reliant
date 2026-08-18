@@ -15,7 +15,7 @@
 import { useEffect } from "react";
 import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { chatGrpc, type WorkflowExecutionData } from "../api/chat-grpc";
-import { ChatWorkflowStatus } from "../gen/reliant/v1/chat_pb";
+import { WorkflowState } from "../gen/reliant/v1/chat_pb";
 import { subscribeToRefetch } from "../store/refetchStore";
 import { chatDetailKeys } from "./chat-detail-keys";
 
@@ -134,7 +134,7 @@ export function useWorkflowExecutions(
   const latest = query.data?.latest ?? null;
 
   const hasRunningWorkflow = all.some(
-    (wf) => wf.status === ChatWorkflowStatus.RUNNING,
+    (wf) => wf.state === WorkflowState.ACTIVE,
   );
 
   return {

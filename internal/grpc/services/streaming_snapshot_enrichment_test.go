@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -183,4 +184,59 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 		"live and reload paths must agree on which thread the spawn owns")
 	require.Equal(t, fromList.ToolCallStatus, fromSnapshot.ToolCallStatus,
 		"live and reload paths must agree on tool-call status")
+}
+
+func TestChatSnapshot_ToolCallUpdateUsesDurableStatus(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	fixture := setupToolCallDurableFixture(t, ctx, repo, `{"command":"sleep 600"}`)
+
+	completedAt := time.Now().UTC()
+	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
+		ID: fixture.toolCallID, ChatID: fixture.chatID, ThreadID: &fixture.threadID, MessageID: &fixture.messageID,
+		ToolName: "bash", Status: core.ToolCallStatusCompleted, CompletedAt: &completedAt,
+		RequestedAt: completedAt.Add(-time.Minute), StartedAt: ptr.Of(completedAt.Add(-30 * time.Second)),
+		CreatedAt: completedAt.Add(-time.Minute), UpdatedAt: completedAt,
+	}))
+
+	// The persisted event stream can lag the durable row after cancellation or a
+	// worker restart. A fresh snapshot must not replay the stale executing event
+	// after the completed message block and make the tool look live again.
+	require.NoError(t, repo.EmitToolCallUpdate(ctx, fixture.chatID, db.ToolCallUpdate{
+		ToolCallID: fixture.toolCallID,
+		ToolName:   "bash",
+		Status:     db.ToolCallStatusExecuting,
+	}))
+
+	snapshot, _, err := NewStreamingService(repo, nil, nil, nil).buildChatSnapshot(ctx, fixture.chatID)
+	require.NoError(t, err)
+
+	var block *reliantv1.ContentBlock
+	for _, message := range snapshot.Messages {
+		for _, candidate := range message.ContentBlocks {
+			if candidate.ToolCallId != nil && *candidate.ToolCallId == fixture.toolCallID {
+				block = candidate
+			}
+		}
+	}
+	require.NotNil(t, block, "snapshot must carry the tool-call block")
+	require.NotNil(t, block.ToolCallStatus)
+	require.Equal(t, reliantv1.ToolCallStatus_TOOL_CALL_STATUS_COMPLETED, *block.ToolCallStatus)
+
+	var payload map[string]any
+	for _, update := range snapshot.OtherUpdates {
+		if update.UpdateType != reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL {
+			continue
+		}
+		var candidate map[string]any
+		require.NoError(t, json.Unmarshal([]byte(update.DataJson), &candidate))
+		if candidate["tool_call_id"] == fixture.toolCallID {
+			payload = candidate
+		}
+	}
+	require.NotNil(t, payload, "snapshot must carry the tool-call status update")
+	require.Equal(t, string(db.ToolCallStatusCompleted), payload["status"],
+		"durable tool_calls.status must override stale chat_updates status")
 }

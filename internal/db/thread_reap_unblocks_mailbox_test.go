@@ -36,7 +36,7 @@ func TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep(t *testing.T) {
 	// 288-row shape.
 	strandedWf := "wf-unblock-stranded"
 	strandedThread := "th-unblock-stranded"
-	insertTestWorkflowWithParent(t, repo, strandedWf, chatID, nil, WorkflowStatusCompleted)
+	insertTestWorkflowWithParent(t, repo, strandedWf, chatID, nil, Completed())
 	insertTestThreadForWorkflow(t, repo, strandedThread, chatID, strandedWf, ThreadStatusRunning)
 
 	// A repair report addressed to that dead thread, still queued: exactly

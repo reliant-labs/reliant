@@ -16,16 +16,45 @@ enum ChatState {
   CHAT_STATE_ARCHIVED = 3;
 }
 
-// ChatWorkflowStatus tracks workflow lifecycle for a chat
-enum ChatWorkflowStatus {
-  CHAT_WORKFLOW_STATUS_UNSPECIFIED = 0;
-  CHAT_WORKFLOW_STATUS_PENDING = 1;
-  CHAT_WORKFLOW_STATUS_RUNNING = 2;
-  CHAT_WORKFLOW_STATUS_COMPLETED = 3;
-  CHAT_WORKFLOW_STATUS_FAILED = 4;
-  CHAT_WORKFLOW_STATUS_CANCELLED = 5;
-  CHAT_WORKFLOW_STATUS_PAUSED = 6;
-  CHAT_WORKFLOW_STATUS_EXPIRED = 7;
+// WorkflowState is where a workflow run IS: it has not started, it is going,
+// or it has stopped. Why it stopped is WorkflowStopReason, carried alongside.
+//
+// This replaces the older eight-value status enum, which conflated the two.
+// That enum also carried EXPIRED, which no code path ever wrote: Temporal
+// TIMED_OUT is deliberately mapped to FAILED, so the value was read in four
+// places and set in none. It is gone rather than ported.
+enum WorkflowState {
+  WORKFLOW_STATE_UNSPECIFIED = 0;
+  // PENDING: created, no run started yet. Its first step is still ahead of it,
+  // so work queued now is drained when it starts.
+  WORKFLOW_STATE_PENDING = 1;
+  // ACTIVE: a Temporal execution is progressing.
+  WORKFLOW_STATE_ACTIVE = 2;
+  // STOPPED: not executing. Read the stop reason to learn whether it finished,
+  // died, or is parked awaiting a resume.
+  WORKFLOW_STATE_STOPPED = 3;
+}
+
+// WorkflowStopReason is why a STOPPED run stopped. Meaningless (UNSPECIFIED)
+// for any other state.
+//
+// PAUSED is a stop reason rather than a state because a paused run is not
+// executing — but it is still LIVE, because it resumes and finishes. That
+// distinction is what WorkflowState alone cannot express, and it is why the
+// two fields always travel together.
+enum WorkflowStopReason {
+  WORKFLOW_STOP_REASON_UNSPECIFIED = 0;
+  // COMPLETED: ran to a terminal node. Nothing to resume — there is no
+  // position left, so the next message starts a new run.
+  WORKFLOW_STOP_REASON_COMPLETED = 1;
+  // FAILED: died mid-run (error, worker loss, or an operator/system
+  // terminate). Resumable at position.
+  WORKFLOW_STOP_REASON_FAILED = 2;
+  // PAUSED: parked deliberately and awaiting resume. Live, and resumable.
+  WORKFLOW_STOP_REASON_PAUSED = 3;
+  // CANCELLED: hard-stopped by a user or operator. Terminal by intent — the
+  // position checkpoint is dropped, so the next message starts fresh.
+  WORKFLOW_STOP_REASON_CANCELLED = 4;
 }
 
 // MessageRole identifies the sender of a message
@@ -129,12 +158,25 @@ service ChatService {
   // contract when the message was already delivered.
   rpc CancelQueuedAgentMessage(CancelQueuedAgentMessageRequest) returns (CancelQueuedAgentMessageResponse) {}
 
-  // ClaimQueuedAgentMessages takes queued messages back off a thread's
-  // mailbox and returns them, so the caller can resend them as ordinary
-  // turns. One atomic statement, so the caller either owns a message or the
-  // agent does -- never both. This is what "Send now" / "Send all" use
-  // instead of cancel-then-send.
-  rpc ClaimQueuedAgentMessages(ClaimQueuedAgentMessagesRequest) returns (ClaimQueuedAgentMessagesResponse) {}
+  // InterruptThread stops what a thread is doing right now so it reads its
+  // mailbox at once, instead of at the end of the work already in flight.
+  //
+  // This is the "stop, this changes things" verb, as distinct from
+  // SendAgentMessage's "finish up, then read this". It cancels every tool
+  // call currently executing on the thread, each through the same per-tool
+  // path CancelToolCall uses -- so each cancelled call still records a
+  // durable outcome and still returns a tool_result. That matters: a tool
+  // call with no result deadlocks the provider, so an interrupt that simply
+  // killed the work would corrupt the conversation it was trying to steer.
+  //
+  // Deliberately takes no message id. Interrupt is an action on the THREAD,
+  // not a property of one queued message: it stops the work, and the next
+  // call_llm delivers whatever the mailbox holds, oldest first. That is what
+  // makes "queue a message, then decide to send it now" work without racing
+  // the delivery -- there is no row to update and no window to lose.
+  //
+  // Queue the message first (SendAgentMessage), then interrupt.
+  rpc InterruptThread(InterruptThreadRequest) returns (InterruptThreadResponse) {}
   
   // ListMessages lists messages for a chat with content blocks
   rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {}
@@ -142,8 +184,8 @@ service ChatService {
   // UpdateChatState changes chat state (idle/archived)
   rpc UpdateChatState(UpdateChatStateRequest) returns (UpdateChatStateResponse) {}
   
-  // CancelChat cancels the running workflow for a chat
-  rpc CancelChat(CancelChatRequest) returns (CancelChatResponse) {}
+  // TerminateChat forcefully terminates the running workflow for a chat
+  rpc TerminateChat(TerminateChatRequest) returns (TerminateChatResponse) {}
 
   // PauseChat pauses the running workflow (keeps it resumable)
   rpc PauseChat(PauseChatRequest) returns (PauseChatResponse) {}
@@ -219,7 +261,7 @@ message Chat {
   string updated_at = 20;
   string last_active = 21;
   optional string last_message_at = 22; // When last message was sent/received (for activity sorting)
-  optional ChatWorkflowStatus workflow_status = 23; // Source of truth for chat activity
+  reserved 23;                         // was: workflow_status (ChatWorkflowStatus), split into workflow_state + workflow_stop_reason
   reserved 24; // was: is_busy (now derived from workflow_status == 'running')
   map<string, string> selected_presets = 25; // Preset selections per target ("" = workflow-level, "Agent A" = group)
   // needs_recovery is true when the Temporal workflow was lost and the user needs to send a new message to continue
@@ -229,6 +271,10 @@ message Chat {
   bool unread = 28; // Whether this chat has unseen content (decoupled from activity/state)
   reserved 29; // was: can_discuss (removed: always enabled when paused)
   optional string active_daemon_id = 30; // Active daemon for this session (UI-selectable)
+  // Source of truth for chat activity. Always read as a pair: the state says
+  // whether a run is going, the stop reason says why a stopped one stopped.
+  WorkflowState workflow_state = 31;
+  WorkflowStopReason workflow_stop_reason = 32;
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -522,26 +568,26 @@ message CancelQueuedAgentMessageResponse {
   string message = 2;   // Human-readable receipt, or the reason it couldn't be cancelled.
 }
 
-// ClaimQueuedAgentMessagesRequest takes queued messages back off a thread's
-// mailbox so the caller can resend them as ordinary turns.
-message ClaimQueuedAgentMessagesRequest {
+// InterruptThreadRequest stops the work in flight on one thread.
+message InterruptThreadRequest {
   string chat_id = 1;
-  string thread_id = 2;            // Must belong to chat_id.
-  // Leave message_id unset to claim the whole queue ("send all"); set it to
-  // claim exactly one entry ("send now").
-  optional string message_id = 3;
+  // The thread to interrupt. Its executing tool calls are cancelled; the
+  // thread's mailbox is delivered by the next call_llm.
+  string thread_id = 2;
 }
 
-// ClaimQueuedAgentMessagesResponse returns exactly the entries this call
-// removed, oldest first.
-//
-// There is no success flag, deliberately. The claim is a single atomic
-// statement, so "what did I get" IS the answer: an entry the agent's drain
-// won first is simply absent. Callers must resend what came back and nothing
-// else -- treating a locally-cached queue view as authoritative is what would
-// reintroduce the double-send this endpoint exists to make impossible.
-message ClaimQueuedAgentMessagesResponse {
-  repeated QueuedAgentMessage messages = 1;
+// InterruptThreadResponse reports what the interrupt actually stopped.
+message InterruptThreadResponse {
+  // How many executing tool calls were cancelled. Zero is a normal, successful
+  // outcome: the thread was between tool calls, or already winding down. The
+  // queued mailbox is still delivered either way.
+  int32 cancelled_tool_calls = 1;
+
+  // Honest about partial delivery, in the same spirit as
+  // SendAgentMessageResponse. A tool whose cancellation could not be delivered
+  // (daemon offline, spawn unreachable) is named here rather than silently
+  // counted as cancelled -- it may still be running.
+  repeated string undeliverable_tool_calls = 2;
 }
 
 // ListMessagesRequest lists messages for a chat
@@ -587,13 +633,13 @@ message UpdateChatStateResponse {
   string message = 3;
 }
 
-// CancelChatRequest cancels a chat's workflow
-message CancelChatRequest {
+// TerminateChatRequest forcefully terminates a chat's workflow
+message TerminateChatRequest {
   string chat_id = 1;
 }
 
-// CancelChatResponse confirms cancellation
-message CancelChatResponse {
+// TerminateChatResponse confirms termination
+message TerminateChatResponse {
   bool success = 1;
   string message = 2;
 }
@@ -806,7 +852,7 @@ message WorkflowExecution {
   string id = 1;
   string workflow_name = 2;
   string thread = 3;
-  ChatWorkflowStatus status = 4;
+  reserved 4; // was: status (ChatWorkflowStatus), split into state + stop_reason
   optional string parent_id = 5;
   string created_at = 6;
   optional string completed_at = 7;
@@ -833,8 +879,11 @@ message WorkflowExecution {
   // no outcome, which is NOT a failure: it means the workflow never said.
   // Orthogonal to status: status is the lifecycle (Temporal-owned, reconciled
   // against it), outcome is whether the work passed. A run that routes to a
-  // `failed` node has status=completed and outcome=failure.
+  // `failed` node has state=STOPPED/reason=COMPLETED and outcome=failure.
   optional string outcome = 17;
+  // Lifecycle, always read as a pair. See WorkflowState / WorkflowStopReason.
+  WorkflowState state = 20;
+  WorkflowStopReason stop_reason = 21;
 }
 
 // GetThreadWorkflowInputsRequest fetches workflow inputs for a specific thread

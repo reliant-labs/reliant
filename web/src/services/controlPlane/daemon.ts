@@ -41,6 +41,7 @@ export interface CreateDaemonArgs {
   // the raw enum number on the wire.
   daemonType: number;
   size: number;
+  idleTimeout?: string;
   gitRepo?: string;
   gitBranch?: string;
 }
@@ -59,6 +60,7 @@ export async function createDaemon(args: CreateDaemonArgs): Promise<string> {
     name: args.name,
     daemonType: args.daemonType,
     size: args.size,
+    idleTimeout: args.idleTimeout ?? "",
     gitRepo: args.gitRepo ?? "",
     gitBranch: args.gitBranch ?? "",
   });
@@ -68,6 +70,16 @@ export async function createDaemon(args: CreateDaemonArgs): Promise<string> {
 export async function resumeDaemon(daemonId: string): Promise<void> {
   if (!daemonId) throw new Error("Cannot resume daemon: no daemon id available");
   await getControlPlaneClient(DaemonService).resumeDaemon({ daemonId });
+}
+
+export async function suspendDaemon(daemonId: string): Promise<void> {
+  if (!daemonId) throw new Error("Cannot suspend daemon: no daemon id available");
+  await getControlPlaneClient(DaemonService).suspendDaemon({ daemonId });
+}
+
+export async function deleteDaemon(daemonId: string): Promise<void> {
+  if (!daemonId) throw new Error("Cannot delete daemon: no daemon id available");
+  await getControlPlaneClient(DaemonService).deleteDaemon({ daemonId });
 }
 
 // ── Helpers used by ComputeStep / GitHubConnectStep ─────────────

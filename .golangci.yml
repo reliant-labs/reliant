@@ -25,6 +25,9 @@ linters:
       - tools/dev
       - cmd/test-analytics
       - cmd/test-vertexai
+      # Gitignored scratch space for throwaway reproduction programs. Not part
+      # of the build or the repo, so it should not gate the lint.
+      - tmp
     
     # Rules-based exclusions
     rules:

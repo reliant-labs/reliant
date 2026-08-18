@@ -124,14 +124,25 @@ entry: [agent_loop]
 nodes:
   - id: agent_loop
     type: loop
-    # Continues while: has tool calls OR has feedback from ask_question. No tools and no feedback = return to user.
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true
+    # Continues while: has tool calls, OR has feedback from ask_question, OR a
+    # message landed in the mailbox while the last response was streaming.
+    #
+    # That last term is what stops a late message being stranded. call_llm
+    # delivers the mailbox before it reads history, so anything queued DURING
+    # the response is not in that turn; without this the loop would exit on a
+    # thread holding an undelivered message. Looping once more routes back
+    # through call_llm, which delivers it.
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
         message: "{{nodes.call_llm.message}}"
         response_text: "{{nodes.call_llm.response_text}}"
         has_feedback: "{{has(nodes.ask_question) && has(nodes.ask_question.has_feedback) ? nodes.ask_question.has_feedback : false}}"
+        # Guarded like its siblings: an iteration that has not reached call_llm
+        # (or a replayed shape where the node output is absent) must evaluate
+        # to false, not blow up the whole output evaluation.
+        pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
 
       entry: [call_llm]
 
@@ -179,6 +190,7 @@ nodes:
             tool_results: "{{output.tool_results}}"
           args:
             tool_calls: "{{nodes.call_llm.tool_calls}}"
+            compaction_threshold: "{{nodes.call_llm.compaction_threshold}}"
 
         - id: compact
           type: compact

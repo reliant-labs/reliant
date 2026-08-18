@@ -55,7 +55,7 @@ func TestStory07_CompactionTriggersAndConversationContinues(t *testing.T) {
 	workflowID := created.WorkflowId
 
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	// The compaction summary message must be persisted as a system message.
 	msgs := h.Messages(chatID, workflowID)

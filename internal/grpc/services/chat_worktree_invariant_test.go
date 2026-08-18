@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/require"
 )
@@ -210,10 +211,12 @@ nodes:
 		Version:    1,
 	}))
 
+	temporal := &atomicityTestTemporalClient{}
 	service := &ChatService{
 		database:   repo,
 		threads:    threads.NewService(repo),
-		tempClient: &atomicityTestTemporalClient{},
+		tempClient: temporal,
+		runs:       runs.NewService(repo, temporal, nil),
 	}
 
 	// No WorktreeId, exactly as the CLI sends it.

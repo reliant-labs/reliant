@@ -5,7 +5,6 @@ import (
 	"context"
 	"testing"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
@@ -30,7 +29,7 @@ func TestRepairStrandedBackgroundSpawns_EnqueuesCompletion(t *testing.T) {
 	before := anomalyCount("stranded_background_spawn_repaired")
 	repo := newMockRepo()
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-1", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-1", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 
@@ -57,10 +56,11 @@ func TestRepairStrandedBackgroundSpawns_MapsTerminalStatusToKind(t *testing.T) {
 		wfStatus db.WorkflowStatus
 		wantKind core.AgentMessageKind
 	}{
-		{"completed", db.WorkflowStatusCompleted, core.AgentMessageKindCompletion},
-		{"cancelled", db.WorkflowStatusCancelled, core.AgentMessageKindCancelled},
-		{"failed", db.WorkflowStatusFailed, core.AgentMessageKindFailed},
-		{"expired", reliantv1.ChatWorkflowStatus_CHAT_WORKFLOW_STATUS_EXPIRED, core.AgentMessageKindFailed},
+		{"completed", db.Completed(), core.AgentMessageKindCompletion},
+		{"cancelled", db.Cancelled(), core.AgentMessageKindCancelled},
+		{"failed", db.Failed(), core.AgentMessageKindFailed},
+		// The "expired" case that used to sit here is gone with the status:
+		// nothing ever wrote EXPIRED, so it could not reach this mapping.
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestRepairStrandedBackgroundSpawns_MapsTerminalStatusToKind(t *testing.T) {
 func TestRepairStrandedBackgroundSpawns_SkipsMissingParentThread(t *testing.T) {
 	repo := newMockRepo()
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		{ToolCallID: "tc-no-parent", ChatID: "chat-1", ParentThreadID: nil, ChildThreadID: "child-thread-1", WorkflowStatus: db.WorkflowStatusCompleted},
+		{ToolCallID: "tc-no-parent", ChatID: "chat-1", ParentThreadID: nil, ChildThreadID: "child-thread-1", WorkflowStatus: db.Completed()},
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 
@@ -105,7 +105,7 @@ func TestRepairStrandedBackgroundSpawns_IdempotentAcrossPasses(t *testing.T) {
 	before := anomalyCount("stranded_background_spawn_repaired")
 	repo := newMockRepo()
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-race", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-race", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	// First call inserts; every call after simulates the unique index
 	// already holding a row for this tool_call_id.
@@ -142,8 +142,8 @@ func TestRepairStrandedBackgroundSpawns_IdempotentAcrossPasses(t *testing.T) {
 // exceeding its history-count cap, which killed both of its detached spawn
 // goroutines mid-flight, and this repair then wrote two reports addressed to
 // that dead parent at status = 1 (queued). Delivery only ever happens in
-// drainAgentMessagesAtBoundary, at a LIVE agent's loop-step boundary, so a
-// thread that has already exited takes no further step and both rows were
+// CallLLM's mailbox drain, so a thread that has already exited never calls
+// the LLM again and both rows were
 // undeliverable the moment they were written — verified on the live DB as
 // still status=1, delivered_at NULL.
 //
@@ -155,7 +155,7 @@ func TestRepairStrandedBackgroundSpawns_DeadParentGetsUndeliveredReport(t *testi
 	repo := newMockRepo()
 	repo.withThread("parent-thread-1", core.ThreadStatusFailed)
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-dead-parent", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-dead-parent", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 
@@ -182,7 +182,7 @@ func TestRepairStrandedBackgroundSpawns_LiveParentStaysQueued(t *testing.T) {
 	repo := newMockRepo()
 	repo.withThread("parent-thread-1", core.ThreadStatusRunning)
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-live-parent", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-live-parent", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 
@@ -204,7 +204,7 @@ func TestRepairStrandedBackgroundSpawns_LiveParentStaysQueued(t *testing.T) {
 func TestRepairStrandedBackgroundSpawns_UnreadableParentThreadStaysQueued(t *testing.T) {
 	repo := newMockRepo() // no threads registered → GetThread errors
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-unknown-parent", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-unknown-parent", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 
@@ -230,7 +230,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesBackgroundedToolCall(t *testing.T)
 	repo.withThread("parent-thread-1", core.ThreadStatusFailed)
 	repo.withBackgroundedToolCall("tc-still-backgrounded", "chat-1")
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-still-backgrounded", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-still-backgrounded", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 
@@ -256,7 +256,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesToolCallWhenReportAlreadyExists(t 
 	repo.withThread("parent-thread-1", core.ThreadStatusRunning)
 	repo.withBackgroundedToolCall("tc-already-reported", "chat-1")
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-already-reported", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-already-reported", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	repo.enqueueAgentMessageInsertsFn = func(*db.AgentMessage) (bool, error) { return false, nil }
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
@@ -283,7 +283,7 @@ func TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent(t *testing.T) 
 	repo.withThread("parent-thread-1", core.ThreadStatusCompleted)
 	repo.withBackgroundedToolCall("tc-idem", "chat-1")
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-idem", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-idem", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	calls := 0
 	repo.enqueueAgentMessageInsertsFn = func(*db.AgentMessage) (bool, error) {
@@ -313,7 +313,7 @@ func TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent(t *testing.T) 
 func TestReconcileRunningWorkflows_RepairsStrandedBackgroundSpawns(t *testing.T) {
 	repo := newMockRepo()
 	repo.strandedBackgroundSpawns = []*db.StrandedBackgroundSpawn{
-		strandedBackgroundSpawn("tc-wired", "chat-1", "parent-thread-1", "child-thread-1", db.WorkflowStatusCompleted),
+		strandedBackgroundSpawn("tc-wired", "chat-1", "parent-thread-1", "child-thread-1", db.Completed()),
 	}
 	reconciler := NewReconciler(repo, &mockReconcilerTemporalClient{}, DefaultConfig())
 

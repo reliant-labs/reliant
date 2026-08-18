@@ -75,11 +75,47 @@ Postgres is the only supported database driver. SQLite support has been removed.
 
 ### Logs
 
+**⚠️ FIRST: which stack produced the thing you are debugging?** There are two
+log locations and picking the wrong one wastes a long time — the symptom is
+that a chat id greps to a few incidental hits (or none), or the specific
+`toolu_...` ids you are chasing are absent entirely, while the chat plainly
+exists in the DB.
+
+**Control-plane-backed stack (`forge env up` — the usual one)** — logs go to
+`control-plane/.forge/logs/dev/`, NOT to this worktree's `./data/`:
+
+| Log File                                                 | Content                                         |
+| -------------------------------------------------------- | ----------------------------------------------- |
+| `control-plane/.forge/logs/dev/reliant-temporal-worker.log` | **Activities: tool execution, call_llm, spawns.** Where tool call ids live. Busiest and usually the one you want. |
+| `control-plane/.forge/logs/dev/reliant-api-server.log`      | RPC handlers: interrupt, pause, send, queueing   |
+| `control-plane/.forge/logs/dev/daemon-gateway.log`          | Daemon connections + tool routing                |
+| `control-plane/.forge/logs/dev/admin-server.log`            | Admin/proxy                                      |
+
+Pair it with the matching DB: that stack's chats/tool_calls are in the
+**control-plane postgres on port 5434**, database `reliant` (read-only for
+debugging — it holds real data, never drop or mutate it). A chat that is NOT in
+5433 is almost certainly here.
+
+**This worktree's own `scripts/dev.sh` stack** — logs stay local:
+
 | Log File                  | Content                                          |
 | ------------------------- | ------------------------------------------------ |
 | `./data/logs.txt`         | Combined dev server output (Air, Vite, Electron) |
 | `./data/logs/reliant.log` | Structured application logs                      |
 | `./data/build-errors.log` | Go compilation errors (Air)                      |
+
+Its DB is the per-worktree postgres on **5433**.
+
+Quick disambiguation — run this before trusting any log grep:
+
+```bash
+C=<chat-id>
+for f in ../control-plane/.forge/logs/dev/reliant-temporal-worker.log \
+         ../control-plane/.forge/logs/dev/reliant-api-server.log \
+         ./data/logs/reliant.log; do
+  printf "%s: %s\n" "$f" "$(grep -c "$C" "$f" 2>/dev/null)"
+done
+```
 
 ### Proxyman request correlation (debug workflow)
 

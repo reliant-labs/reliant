@@ -22,6 +22,7 @@ import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { AttachmentPreview } from "./AttachmentPreview";
 import { WorkflowSelector } from "./WorkflowSelector";
 import { ChatTextArea } from "./ChatTextArea";
+import { useCodeContexts, extractMarkers } from "./useCodeContexts";
 import { useSlashCommands } from "../../hooks/useSlashCommands";
 import { PromptPicker } from "./PromptPicker";
 import { useThinkingCapability } from "../../hooks/useThinkingCapability";
@@ -50,7 +51,7 @@ import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesSt
 import { useChatStore } from "../../store/chatStore";
 import { useChat, getChatFromCache, patchChatCaches } from "../../hooks/chat-queries";
 import { usePendingQuestion } from "../../hooks/approval-queries";
-import { ChatWorkflowStatus } from "../../gen/reliant/v1/chat_pb";
+import { isWorkflowPaused } from "../../lib/workflowLifecycle";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
@@ -62,7 +63,6 @@ import {
 } from "../../lib/paramUtils";
 import { parseAskUserMetadata } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
-import { QueuedMessages } from "./QueuedMessages";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { loadTagModelConfigs } from "../Settings/ModelPreferences";
 import { useGlobalDataStore } from "../../store/globalDataStore";
@@ -138,7 +138,7 @@ interface ChatInputProps {
   onToggleDiscuss?: () => void;
 }
 
-const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
+const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
   function ChatInputComponent(
     {
       onSend,
@@ -158,7 +158,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
   ) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
-    const textareaRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     // Guards against double-queueing from a fast second Enter while the RPC is
     // in flight. A ref, not state: it must be readable synchronously.
     const queueingRef = useRef(false);
@@ -166,6 +166,10 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
 
     // Actions offered by the "/" menu in the composer.
     const slashCommandList = useSlashCommands();
+
+    // File references attached to the next message. Held as state rather than
+    // as marker text inside the message so the composer stays a plain textarea.
+    const { contexts, removeContext, clearContexts } = useCodeContexts();
 
     // Controlled so the "change workflow" shortcut can open the picker.
     const [workflowSelectorOpen, setWorkflowSelectorOpen] = useState(false);
@@ -1101,17 +1105,12 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     // Check if workflow is paused (for discuss mode button)
     const chatForStatusQuery = useChat(chatId || undefined);
     const chatForStatus = chatForStatusQuery.data;
-    const isPaused = chatForStatus?.workflowStatus === ChatWorkflowStatus.PAUSED;
-
-    // Is there still a run that will reach another loop-step boundary, and so
-    // drain its own mailbox? Mirrors WorkflowStatusIsLive in
-    // internal/db/core/chat.go: PENDING has its first iteration ahead of it and
-    // PAUSED resumes, so both deliver queued messages normally. Only a run that
-    // is none of these leaves queued rows stranded with nothing to send them.
-    const isWorkflowLive =
-      chatForStatus?.workflowStatus === ChatWorkflowStatus.RUNNING ||
-      chatForStatus?.workflowStatus === ChatWorkflowStatus.PENDING ||
-      isPaused;
+    const isPaused = chatForStatus
+      ? isWorkflowPaused(
+          chatForStatus.workflowState,
+          chatForStatus.workflowStopReason,
+        )
+      : false;
 
     // Thread color for border - non-main threads get their color
     const threadBorderColor = useMemo(() => {
@@ -1219,27 +1218,23 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
     const handleSend = async () => {
       const hasContent = input.trim().length > 0;
       const hasAttachments = attachments.length > 0;
+
       
-      // Parse markers from input text
-      // Format: [[filePath:startLine-endLine]] where filePath can be full path or just filename
-      const markerPattern = /\[\[([^\]]+):(\d+)-(\d+)\]\]/g;
-      const markers: Array<{ filePath: string; fileName: string; startLine: number; endLine: number }> = [];
-      let match;
-      while ((match = markerPattern.exec(input)) !== null) {
-        const filePath = match[1];
-        const fileName = filePath.split('/').pop() || filePath;
-        markers.push({
-          filePath,
-          fileName,
-          startLine: parseInt(match[2], 10),
-          endLine: parseInt(match[3], 10),
-        });
-      }
+      // File references come from the chip row. A draft saved before chips
+      // existed can still carry raw marker text, so fold any of those in too.
+      const fromText = extractMarkers(input);
+      const markers = [...contexts, ...fromText.contexts];
       const hasCodeContexts = markers.length > 0;
 
-      if ((hasContent || hasAttachments || hasCodeContexts) && !effectiveStreaming && isMessagingAllowed) {
-        // Keep markers in the message text so it displays as the user typed it
-        const messageText = input.trim();
+      const willSend =
+        (hasContent || hasAttachments || hasCodeContexts) &&
+        !effectiveStreaming &&
+        isMessagingAllowed;
+
+      if (willSend) {
+        // Markers never appear in the body now — the chips hold them, and the
+        // referenced content is appended below as code blocks.
+        const messageText = fromText.text.trim();
         const attachmentIds = attachments.map((a) => a.id);
         
         // Format code contexts as part of the message
@@ -1323,6 +1318,7 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         // raises its own toast from ChatContainer.
         handleClearInput(); // This will clear both input and auto-draft
         clearAttachments(attachmentSessionId);
+        clearContexts();
 
         try {
           await onSend(
@@ -1366,13 +1362,16 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         ? selectedThreadId
         : mainThreadId;
 
-    // The mailbox we are queueing INTO. Polled only while the agent is
-    // running, because an idle agent never drains it.
-    const {
-      messages: queuedMessages,
-      refresh: refreshQueuedMessages,
-      forget: forgetQueuedMessage,
-    } = useQueuedAgentMessages(chatId, targetThreadId, effectiveStreaming);
+    // The mailbox we are queueing INTO. ChatPresenter renders the strip that
+    // displays it (above the background-work pill, which the composer cannot
+    // reach from here); this subscription exists so a fresh queue can be
+    // published the instant the RPC succeeds rather than a poll later. Both
+    // readers key on the same chat+thread, so they share one cache entry.
+    const { refresh: refreshQueuedMessages } = useQueuedAgentMessages(
+      chatId,
+      targetThreadId,
+      effectiveStreaming,
+    );
 
     const handleQueue = useCallback(async () => {
       const message = input.trim();
@@ -1398,9 +1397,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         }
         handleClearInput();
         clearAttachments(attachmentSessionId);
-        toast.info("Queued for delivery — it will be read at the agent's next turn.");
         // Populate the strip now rather than up to a poll interval later, so
-        // the message the user just queued appears with the toast.
+        // the message the user just queued appears immediately.
         await refreshQueuedMessages();
       } catch (error) {
         logger.error("[ChatInput] Failed to queue agent message", {
@@ -1422,39 +1420,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
       clearAttachments,
       refreshQueuedMessages,
     ]);
-
-    // "Send now" on a queued message: the strip has already revoked it, so
-    // this puts the text back through the ordinary turn-starting path. Params
-    // and presets mirror handleSend so a force-pushed message is configured
-    // exactly like one typed into the composer.
-    const handleSendQueuedNow = useCallback(
-      async (body: string, attachmentIds?: string[]) => {
-        const validTargetNames = new Set(presetTargets.map((t) => t.name));
-        const presetsToSend = Object.entries(selectedPresets).reduce(
-          (acc, [k, v]) => (v && validTargetNames.has(k) ? { ...acc, [k]: v } : acc),
-          {} as Record<string, string>
-        );
-        const paramsToSend =
-          Object.keys(workflowParams).length > 0 ? workflowParams : undefined;
-
-        await onSend(
-          body,
-          attachmentIds && attachmentIds.length > 0 ? attachmentIds : undefined,
-          selectedWorkflow ?? workflowName,
-          paramsToSend,
-          undefined,
-          Object.keys(presetsToSend).length > 0 ? presetsToSend : undefined
-        );
-      },
-      [
-        onSend,
-        presetTargets,
-        selectedPresets,
-        workflowParams,
-        selectedWorkflow,
-        workflowName,
-      ]
-    );
 
     const handleAttachClick = () => {
       fileInputRef.current?.click();
@@ -1708,20 +1673,6 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="max-w-[1200px] mx-auto">
             <div ref={containerRef} className="mt-1 mb-1.5">
-              {/* Messages already queued into the running agent's mailbox.
-                  Sits above the tray, outside the composer's border, because
-                  it is not part of the thing you are typing — it is what you
-                  already sent and can still take back. */}
-              <QueuedMessages
-                chatId={chatId}
-                threadId={targetThreadId}
-                messages={queuedMessages}
-                onRefresh={refreshQueuedMessages}
-                onForget={forgetQueuedMessage}
-                onSendNow={handleSendQueuedNow}
-                isRunning={effectiveStreaming}
-                isWorkflowLive={isWorkflowLive}
-              />
               <div
                 className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${isDiscussMode ? "border-blue-500/70" : hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
                 data-onboarding="chat-input"
@@ -1781,6 +1732,8 @@ const ChatInputComponent = forwardRef<HTMLDivElement, ChatInputProps>(
                         chatId={chatId}
                         placeholder={placeholder}
                         slashCommands={slashCommandList}
+                        contexts={contexts}
+                        onRemoveContext={removeContext}
                       />
                     </div>
 

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -158,7 +159,7 @@ func (s *ChatService) CreateChat(
 		ChatID:       chatID,
 		WorkflowName: workflowName,
 		Thread:       workflowID, // Root workflow: thread = workflow ID
-		Status:       db.WorkflowStatusPending,
+		Status:       db.Pending(),
 		CreatedAt:    now,
 	}
 
@@ -283,7 +284,7 @@ func (s *ChatService) CreateChat(
 	}
 
 	runID := workflowRun.GetRunID()
-	s.updateWorkflowRunIDs(ctx, chatID, workflowID, runID)
+	s.runs.RecordRun(ctx, chatID, workflowID, runID)
 
 	// Workflow record was already created above with CreateWorkflowWithThread (status=pending)
 	// WorkflowStatus activity will update it to 'running' when the workflow starts
@@ -402,9 +403,9 @@ func (s *ChatService) GetChat(
 	if workflowID := chat.MainThreadID(); workflowID != "" {
 		// Check if the root workflow needs ghost recovery
 		wf, wfErr := s.database.GetWorkflow(ctx, workflowID)
-		if wfErr == nil && wf != nil && wf.Status == db.WorkflowStatusRunning {
+		if wfErr == nil && wf != nil && wf.Status == db.Active() {
 			// DB says running — verify Temporal agrees
-			temporalState, err := s.getTemporalWorkflowState(ctx, workflowID)
+			temporalState, err := s.runs.State(ctx, workflowID)
 			if err != nil {
 				logging.Warn("Failed to query Temporal for workflow status",
 					"error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
@@ -482,7 +483,7 @@ func (s *ChatService) UpdateChat(
 				fmt.Errorf("failed to get root workflow: %w", err))
 		}
 
-		if rootWorkflow.Status != db.WorkflowStatusPending {
+		if rootWorkflow.Status != db.Pending() {
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
 				fmt.Errorf("cannot change workflow after chat has started - use Branch instead"))
 		}
@@ -791,7 +792,11 @@ func (s *ChatService) ListMessages(
 			logging.Error("Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
 		}
-		totalCount, err = threadsSvc.CountCurrentMessages(ctx, threadID)
+		// The display count, not the LLM one: listThreadMessages reads the
+		// transcript (which crosses compaction boundaries), so a total that
+		// stopped at the newest summary would describe a different list than
+		// the one being returned.
+		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
 		if err != nil {
 			logging.Error("Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load messages"))
@@ -960,18 +965,17 @@ func (s *ChatService) UpdateChatState(
 	}), nil
 }
 
-// CancelChat cancels the running workflow for a chat
-func (s *ChatService) CancelChat(
+// TerminateChat forcefully terminates the running workflow for a chat.
+func (s *ChatService) TerminateChat(
 	ctx context.Context,
-	req *connect.Request[reliantv1.CancelChatRequest],
-) (*connect.Response[reliantv1.CancelChatResponse], error) {
+	req *connect.Request[reliantv1.TerminateChatRequest],
+) (*connect.Response[reliantv1.TerminateChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
 	}
 
-	// Get chat to verify ownership
 	chat, err := s.database.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
@@ -980,122 +984,21 @@ func (s *ChatService) CancelChat(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("chat has no workflow"))
-	}
-
-	workflowID := *chat.WorkflowID
-
-	// User cancel is the explicit "start fresh next time" marker: drop the
-	// position checkpoint so the next message never resumes this run at
-	// position, regardless of how the run's terminal status settles (the
-	// workflow's own cancelled-path clears it too, but a wedged run never
-	// reaches that path). Best-effort.
-	if err := s.database.DeleteWorkflowCheckpoint(ctx, workflowID); err != nil {
-		logging.Warn("CancelChat: failed to clear workflow checkpoint",
-			"workflowID", workflowID, "error", err)
-	}
-
-	// Check if the Temporal workflow is still running before sending cancel signal.
-	// If it's already completed/terminated, reconcile the DB status directly
-	// so the frontend receives an activity=IDLE event.
-	temporalState, temporalErr := s.getTemporalWorkflowState(ctx, workflowID)
-	if temporalErr == nil && temporalState != nil {
-		if !temporalState.Exists || !temporalState.IsRunning {
-			// Workflow already finished in Temporal — reconcile DB status
-			// so the activity event fires and unblocks the frontend
-			logging.Info("CancelChat: workflow not running in Temporal, reconciling DB status",
-				"workflowID", workflowID,
-				"temporalExists", temporalState.Exists,
-				"temporalStatus", temporalState.Status,
-			)
-			status := db.WorkflowStatusCancelled
-			if temporalState.Exists {
-				status = temporalState.Status
-			}
-			s.reconcileWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning, status)
-			return connect.NewResponse(&reliantv1.CancelChatResponse{
-				Success: true,
-				Message: "Chat cancelled successfully",
-			}), nil
+	if err := s.runs.Terminate(ctx, req.Msg.ChatId); err != nil {
+		switch {
+		case errors.Is(err, runs.ErrNoWorkflow):
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		case errors.Is(err, runs.ErrChatNotFound):
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		default:
+			logging.Error("Failed to terminate workflow", "error", err, "chatID", req.Msg.ChatId)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to terminate workflow"))
 		}
 	}
 
-	// The run is live in Temporal. A user cancel is authoritative and terminal:
-	// unlike the reconciler — which leaves a question-parked run alone because a
-	// human still owns it — an explicit cancel must kill the run even when it is
-	// parked on a gate.
-
-	// 1. Void any pending question so the run is no longer awaiting input and the
-	//    chat's computed activity drops the AWAITING_INPUT state. Best-effort;
-	//    the terminate + status swap below are what actually stop the run.
-	if q, qErr := s.database.GetPendingQuestionByChatID(ctx, req.Msg.ChatId); qErr != nil {
-		logging.Warn("CancelChat: failed to look up pending question",
-			"chatID", req.Msg.ChatId, "error", qErr)
-	} else if q != nil {
-		cancelledResponse := `{"action":"cancelled","reason":"chat cancelled by user"}`
-		if err := s.database.ResolveQuestion(ctx, q.ID, &cancelledResponse); err != nil {
-			logging.Warn("CancelChat: failed to void pending question",
-				"chatID", req.Msg.ChatId, "questionID", q.ID, "error", err)
-		}
-	}
-
-	// 2. Forcefully terminate the workflow. A graceful CancelWorkflow only
-	//    requests cancellation cooperatively; a run parked on a signal Await
-	//    (e.g. an ask_question gate) never observes it and stays RUNNING forever
-	//    (status=2). Terminate is the same forceful stop the reconciler uses for
-	//    wedged runs. Best-effort — we still reconcile the DB status below.
-	if err := s.tempClient.TerminateWorkflow(ctx, workflowID, "", "Chat cancelled by user"); err != nil {
-		logging.Warn("CancelChat: failed to terminate workflow in Temporal (continuing to reconcile DB)",
-			"error", err, "workflowID", workflowID)
-	}
-
-	// 3. Move the workflow row to CANCELLED. CAS (not a blind write) so a run
-	//    that settled terminally underneath us is never clobbered — the swap that
-	//    succeeds also emits the chat_activity_changed (IDLE) event that unblocks
-	//    the frontend, the same transition the not-running branch performs. Cover
-	//    a paused run too, since a user cancel overrides a pause. If neither swap
-	//    lands the run was already terminal, and its own transition already fired.
-	swapped, err := s.database.CompareAndSwapWorkflowStatus(ctx, workflowID, db.WorkflowStatusCancelled, db.WorkflowStatusRunning)
-	if err != nil {
-		logging.Error("CancelChat: failed to mark workflow cancelled", "error", err, "workflowID", workflowID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to cancel workflow"))
-	}
-	if !swapped {
-		if _, err := s.database.CompareAndSwapWorkflowStatus(ctx, workflowID, db.WorkflowStatusCancelled, db.WorkflowStatusPaused); err != nil {
-			logging.Warn("CancelChat: failed to cancel paused workflow", "error", err, "workflowID", workflowID)
-		}
-	}
-
-	// 4. Cascade to the subtree. The terminate above is a HARD kill, so the
-	//    workflow's own completion handler never runs — and that handler is
-	//    what normally drives the status activity's cancelled arm, the only
-	//    thing that cascades on a cancel. Step 3 covers the root row the
-	//    handler would have written; this covers the spawn and thread rows it
-	//    would have drained. Without it every descendant stays at running/paused
-	//    forever (nothing revisits a row with a parent_id), so `workflow ps`
-	//    reports a cancelled run as live and the chat stays "active" in
-	//    chats_with_activity — which makes the IDLE event step 3 is meant to
-	//    emit compute to RUNNING instead.
-	//
-	//    CANCELLED, not completed: these rows were terminated mid-flight and
-	//    never finished their work. Recording them as completed made a cancelled
-	//    run indistinguishable from a successful one in every later count.
-	if err := s.database.CascadeTerminalStatusToDescendants(ctx, workflowID, db.WorkflowStatusCancelled); err != nil {
-		logging.Error("CancelChat: failed to cascade cancellation to child workflows",
-			"error", err, "workflowID", workflowID)
-	}
-	// Threads are not a workflows row: the same hard kill skips
-	// ThreadStatusActivity too, so the thread(s) this subtree owns need their
-	// own cascade call. See docs/incidents/2026-08-12-spawn-history-cap.md.
-	if err := s.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, db.WorkflowStatusCancelled); err != nil {
-		logging.Error("CancelChat: failed to cascade cancellation to threads",
-			"error", err, "workflowID", workflowID)
-	}
-
-	return connect.NewResponse(&reliantv1.CancelChatResponse{
+	return connect.NewResponse(&reliantv1.TerminateChatResponse{
 		Success: true,
-		Message: "Chat cancelled successfully",
+		Message: "Chat terminated successfully",
 	}), nil
 }
 
@@ -1125,11 +1028,34 @@ func (s *ChatService) PauseChat(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("chat has no workflow"))
 	}
 
-	// Use PauseService for unified pause logic (stop worker, update DB, emit event).
-	// PauseWorkflow returns nil even when the workflow already completed (it reconciles
-	// the DB status in that case), so success here means the workflow is stopped.
-	if err := s.pauseService.PauseWorkflow(ctx, *chat.WorkflowID, req.Msg.ChatId, "manual"); err != nil {
-		logging.Error("Failed to pause workflow", "error", err, "workflowID", *chat.WorkflowID)
+	// Kill the tools BEFORE freeing the workflow to re-dispatch. The pause
+	// signal below cancels the ExecuteTools activity at its next step
+	// boundary, which frees the workflow to move on -- if that happened
+	// first, the successor step could start while a tool from the current
+	// step is still provably running on the daemon, and tools are not
+	// idempotent. Push the same immediate daemon cancel InterruptThread uses,
+	// scoped to every thread of the chat instead of one, and do it first.
+	threadsSvc := s.threads
+	if threadsSvc == nil {
+		threadsSvc = threads.NewService(s.database,
+			threads.WithTemporalSignaler(s.tempClient),
+			threads.WithToolCanceler(s.daemonRouter),
+		)
+	}
+	if _, err := threadsSvc.CancelChatToolCalls(ctx, threads.CancelChatToolCallsOpts{
+		UserID: userID,
+		ChatID: req.Msg.ChatId,
+	}); err != nil {
+		logging.Warn("Failed to push tool cancel while pausing; the workflow-level pause still applies",
+			"error", err, "chatID", req.Msg.ChatId)
+	}
+
+	// A run that had already finished is not an error — the service reconciles
+	// the stale row and reports success, because the user's intent is met.
+	// A failed cancel push above must not strand the workflow un-paused, so
+	// this always runs regardless of that outcome.
+	if err := s.runs.Pause(ctx, req.Msg.ChatId); err != nil {
+		logging.Error("Failed to pause workflow", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pause workflow"))
 	}
 
@@ -1164,67 +1090,33 @@ func (s *ChatService) ResumeChat(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("chat has no workflow"))
 	}
 
-	workflowID := *chat.WorkflowID
-
-	// Check if this is a stuck workflow (DB says failed but Temporal says running)
-	// Stuck workflows cannot be resumed - user must branch to continue
-	wf, err := s.database.GetWorkflow(ctx, workflowID)
-	if err == nil && wf != nil && wf.Status == db.WorkflowStatusFailed {
-		temporalState, temporalErr := s.getTemporalWorkflowState(ctx, workflowID)
-		if temporalErr == nil && temporalState.Exists && temporalState.IsRunning {
-			logging.Warn("Attempted to resume stuck workflow - blocking",
-				"chatID", req.Msg.ChatId,
-				"workflowID", workflowID,
-			)
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
-		}
-	}
-
-	// Check if workflow is expired — needs reset-based resume
-	isExpired := wf != nil && wf.Status == db.WorkflowStatusExpired
-
-	// Use PauseService for unified resume logic
-	// PauseService.ResumeWorkflow handles both paused (signal) and expired (reset) workflows
-	if err := s.pauseService.ResumeWorkflow(ctx, workflowID, req.Msg.ChatId); err != nil {
-		// Check if the workflow was lost and needs recovery
-		if errors.Is(err, workflow.ErrWorkflowNotFound) {
-			logging.Info("Workflow not found in Temporal - signaling recovery needed",
-				"workflowID", workflowID,
-				"chatID", req.Msg.ChatId,
-			)
-			// Return success=false with needs_recovery and recovery_type
-			// The frontend should prompt the user to confirm starting a new workflow
-			return connect.NewResponse(&reliantv1.ResumeChatResponse{
-				Success:       false,
-				Message:       "The workflow session was interrupted and cannot be resumed. Your message history is preserved. Would you like to start a new conversation?",
-				WorkflowId:    workflowID,
-				NeedsRecovery: true,
-				RecoveryType:  reliantv1.RecoveryType_RECOVERY_TYPE_WORKFLOW_LOST,
-			}), nil
-		}
-		logging.Error("Failed to resume workflow", "error", err, "workflowID", workflowID)
+	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId)
+	if err != nil {
+		logging.Error("Failed to resume workflow", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resume workflow"))
 	}
 
-	// If workflow was expired and reset, update the chat's run ID from the new Temporal run
-	runID := ""
-	if isExpired {
-		// Fetch the new run ID from Temporal (reset created a new run)
-		temporalState, temporalErr := s.getTemporalWorkflowState(ctx, workflowID)
-		if temporalErr == nil && temporalState.Exists {
-			runID = temporalState.RunID
-			s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, runID)
-		}
-	} else if chat.RunID != nil {
-		runID = *chat.RunID
+	switch outcome.Kind {
+	case runs.OutcomeUnresumable:
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
+
+	case runs.OutcomeNeedsRecovery, runs.OutcomeNeedsRestart:
+		// The frontend prompts the user to confirm starting a new conversation.
+		return connect.NewResponse(&reliantv1.ResumeChatResponse{
+			Success:       false,
+			Message:       "The workflow session was interrupted and cannot be resumed. Your message history is preserved. Would you like to start a new conversation?",
+			WorkflowId:    outcome.WorkflowID,
+			NeedsRecovery: true,
+			RecoveryType:  reliantv1.RecoveryType_RECOVERY_TYPE_WORKFLOW_LOST,
+		}), nil
 	}
 
 	return connect.NewResponse(&reliantv1.ResumeChatResponse{
 		Success:      true,
 		Message:      "Chat resumed successfully",
-		WorkflowId:   workflowID,
-		RunId:        runID,
+		WorkflowId:   outcome.WorkflowID,
+		RunId:        outcome.RunID,
 		RecoveryType: reliantv1.RecoveryType_RECOVERY_TYPE_RESUMED,
 	}), nil
 }
@@ -1363,7 +1255,7 @@ func (s *ChatService) CompactChat(
 
 	// Check if a workflow is already running - use Temporal as source of truth
 	if workflowID := chat.MainThreadID(); workflowID != "" {
-		temporalState, err := s.getTemporalWorkflowState(ctx, workflowID)
+		temporalState, err := s.runs.State(ctx, workflowID)
 		if err != nil {
 			logging.Error("Failed to check workflow status for compaction",
 				"error", err,
@@ -1410,7 +1302,7 @@ func (s *ChatService) CompactChat(
 	}
 
 	runID := workflowRun.GetRunID()
-	s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, runID)
+	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
 
 	return connect.NewResponse(&reliantv1.CompactChatResponse{
 		ChatId:     req.Msg.ChatId,
@@ -1672,8 +1564,11 @@ func (s *ChatService) listThreadMessages(
 //     resolved to (LoadMessagesInSeqRange), rather than each sibling's whole
 //     history -- exactly mirroring what windowByMainThread would have kept
 //     from an unbounded read, at a fraction of the read cost.
-//   - Total: CountCurrentMessages(main) covers the main thread's own
-//     CW-chain-resolved count; CountMessagesInChat(chat) - CountMessagesInThread(main)
+//   - Total: CountDisplayMessages(main) covers the main thread's own
+//     CW-chain-resolved count -- the DISPLAY resolution, matching the
+//     transcript this page is a window into; the LLM count stops at a
+//     compaction summary and would undercount a compacted chat by its whole
+//     summarized history. CountMessagesInChat(chat) - CountMessagesInThread(main)
 //     covers every sibling thread's messages (siblings don't inherit from
 //     elsewhere, so their own chat_id-scoped rows are their whole count).
 //   - HasMore: taken directly from the main thread's own hasMoreOlder. This
@@ -1757,7 +1652,7 @@ func (s *ChatService) listMessagesBounded(
 	// push the reported page past recentLimit main-thread messages.
 	messages = windowByMainThread(messages, mainThreadID, recentLimit)
 
-	mainCount, err := threadsSvc.CountCurrentMessages(ctx, mainThreadID)
+	mainCount, err := threadsSvc.CountDisplayMessages(ctx, mainThreadID)
 	if err != nil {
 		return nil, 0, 0, false, fmt.Errorf("failed to count main thread messages: %w", err)
 	}

@@ -106,6 +106,15 @@ function slicePlaceholders(chatId: string) {
   ).filter((m): m is NonNullable<typeof m> => !!m);
 }
 
+// Content deltas are coalesced onto an animation frame, so a test that streams
+// text must let that frame run before reading the placeholder. Non-content
+// deltas (block starts, tool_use_start) still commit synchronously.
+function flushCoalescingFrame(): Promise<void> {
+  return new Promise((resolve) =>
+    requestAnimationFrame(() => setTimeout(resolve, 0)),
+  );
+}
+
 beforeEach(seedChat);
 
 describe("delta identity: placeholder identity", () => {
@@ -317,7 +326,7 @@ describe("delta identity: concurrent streams on two threads", () => {
     } as unknown as ChatUpdate;
   }
 
-  it("interleaves two threads' streams without one blocking or clobbering the other", () => {
+  it("interleaves two threads' streams without one blocking or clobbering the other", async () => {
     const chatId = "chat-concurrent-threads";
     const store = useChatStore.getState();
 
@@ -330,6 +339,7 @@ describe("delta identity: concurrent streams on two threads", () => {
       threadedDelta("assistant-main", "", "main two\n"),
       threadedDelta("assistant-spawn", "spawn", "spawn two\n"),
     ]);
+    await flushCoalescingFrame();
 
     const placeholders = slicePlaceholders(chatId);
     expect(placeholders.map((m) => m.id).sort()).toEqual([

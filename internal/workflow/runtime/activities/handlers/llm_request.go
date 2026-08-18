@@ -269,7 +269,7 @@ func flattenToolContentToText(messages []message.Message) []message.Message {
 			if sb.Len() > 0 {
 				sb.WriteString("\n\n")
 			}
-			sb.WriteString(fmt.Sprintf("[Called tool %s with input: %s]", call.Name, call.Input))
+			fmt.Fprintf(&sb, "[Called tool %s with input: %s]", call.Name, call.Input)
 		}
 
 		role := msg.Role
@@ -281,7 +281,7 @@ func flattenToolContentToText(messages []message.Message) []message.Message {
 			if result.IsError {
 				status = "error"
 			}
-			sb.WriteString(fmt.Sprintf("[Tool %s %s: %s]", result.Name, status, result.Content))
+			fmt.Fprintf(&sb, "[Tool %s %s: %s]", result.Name, status, result.Content)
 			// Tool messages have no valid free-text role of their own; fold into the user turn.
 			role = message.User
 		}

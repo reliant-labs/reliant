@@ -7,7 +7,7 @@ params:
   spawn_presets:
   - researcher
   tools:
-  - tag:shell    # search the codebase via the shell tool (rg/grep/find)
+  - tag:shell    # search the codebase via the shell tool (rg, and a language server for callers/implementations)
   - tag:web      # fetch for documentation
   - view         # File access
   model:

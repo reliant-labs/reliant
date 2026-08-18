@@ -443,7 +443,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "test-workflow",
 			Thread:       "thread-1",
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		}
 
@@ -496,7 +496,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "test-workflow",
 			Thread:       "existing-thread",
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		}
 
@@ -539,7 +539,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "test-workflow",
 			Thread:       "forked-thread",
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		}
 
@@ -598,7 +598,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "loop-workflow",
 			Thread:       "loop-thread-0",
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		}
 		if _, _, _, err := h.svc.CreateWorkflowWithThread(ctx, CreateWorkflowWithThreadOpts{
@@ -617,7 +617,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "loop-workflow",
 			Thread:       "loop-thread-1",
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		}
 		_, thread, cw, err := h.svc.CreateWorkflowWithThread(ctx, CreateWorkflowWithThreadOpts{
@@ -658,7 +658,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "test",
 			Thread:       "thread-x",
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 		}
 
 		_, _, _, err := h.svc.CreateWorkflowWithThread(ctx, CreateWorkflowWithThreadOpts{
@@ -678,7 +678,7 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 			ChatID:       h.chatID,
 			WorkflowName: "test",
 			Thread:       "", // Will be generated
-			Status:       db.WorkflowStatusRunning,
+			Status:       db.Active(),
 			CreatedAt:    time.Now().UTC(),
 		}
 

@@ -98,6 +98,34 @@ func (nopLogger) Info(string, ...interface{})  {}
 func (nopLogger) Warn(string, ...interface{})  {}
 func (nopLogger) Error(string, ...interface{}) {}
 
+func TestBuildInjectMessageConfig(t *testing.T) {
+	logger := nopLogger{}
+
+	t.Run("defaults role and display style", func(t *testing.T) {
+		input := buildInjectSaveMessageInput("chat-1", "thread-1", "workflow-1", &reliantv1.InjectConfig{
+			Content: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "seed prompt"}},
+		}, logger)
+
+		require.NotNil(t, input)
+		assert.Equal(t, "user", input.Role)
+		assert.Equal(t, "hidden", input.DisplayStyle)
+		assert.Equal(t, "seed prompt", input.Content)
+	})
+
+	t.Run("preserves explicit visible display style", func(t *testing.T) {
+		input := buildInjectSaveMessageInput("chat-1", "thread-1", "workflow-1", &reliantv1.InjectConfig{
+			Role:         &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "assistant"}},
+			Content:      &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "visible note"}},
+			DisplayStyle: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "info"}},
+		}, logger)
+
+		require.NotNil(t, input)
+		assert.Equal(t, "assistant", input.Role)
+		assert.Equal(t, "info", input.DisplayStyle)
+		assert.Equal(t, "visible note", input.Content)
+	})
+}
+
 func TestResolveInjectAttachments(t *testing.T) {
 	logger := nopLogger{}
 
@@ -257,33 +285,6 @@ func TestResolveInjectAttachments(t *testing.T) {
 		// Second file: from data
 		assert.Equal(t, "inline.txt", files[1].Filename)
 		assert.Equal(t, []byte("inline"), files[1].Data)
-	})
-
-	t.Run("legacy attachments", func(t *testing.T) {
-		ic := &reliantv1.InjectConfig{
-			LegacyAttachments: &reliantv1.CelString{
-				Value: &reliantv1.CelString_Literal{Literal: `["legacy-id-1","legacy-id-2"]`},
-			},
-		}
-		ids, files := resolveInjectAttachments(ic, logger)
-		assert.Equal(t, []string{"legacy-id-1", "legacy-id-2"}, ids)
-		assert.Empty(t, files)
-	})
-
-	t.Run("legacy + new attachments", func(t *testing.T) {
-		ic := &reliantv1.InjectConfig{
-			LegacyAttachments: &reliantv1.CelString{
-				Value: &reliantv1.CelString_Literal{Literal: `["legacy-1"]`},
-			},
-			Attachments: []*reliantv1.InjectAttachment{
-				{Source: &reliantv1.InjectAttachment_Id{Id: "new-1"}},
-				{Source: &reliantv1.InjectAttachment_Id{Id: "new-2"}},
-			},
-		}
-		ids, files := resolveInjectAttachments(ic, logger)
-		// Legacy IDs come first (processed before new attachments)
-		assert.Equal(t, []string{"legacy-1", "new-1", "new-2"}, ids)
-		assert.Empty(t, files)
 	})
 
 	t.Run("path source with nonexistent file", func(t *testing.T) {

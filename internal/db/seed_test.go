@@ -10,10 +10,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
-// NOTE: seedAPIKeyFromEnv now uses Postgres $N placeholders. A behavioral test
-// for it requires a live Postgres connection, which the db package unit tests do
-// not provision, so it is exercised via integration paths rather than here.
-
 func TestGetUserIDFromAuthFile(t *testing.T) {
 	// Create a temp home directory
 	tempHome := t.TempDir()

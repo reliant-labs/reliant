@@ -1,15 +1,16 @@
 /**
- * The pending-queue strip, wired into the real composer.
+ * The composer's half of the pending-queue wiring.
  *
- * QueuedMessages.test.tsx pins the strip's own behavior against props. This
- * pins the wiring, which is where the user's actual complaint lived: they
- * queued a message, got a toast, and saw nothing. Two things have to hold for
- * that to be fixed:
+ * The strip itself renders in ChatPresenter (above the background-work pill —
+ * see ChatPresenter.attentionBand.test.tsx), not here. What the composer still
+ * owns is the mailbox subscription that makes the strip correct:
  *
- *  - the strip reads the mailbox of the thread the composer queues INTO, so a
- *    queued message shows up above the tray at all.
- *  - queueing refreshes it immediately, so the message appears WITH the toast
- *    rather than up to a poll interval later.
+ *  - it subscribes to the mailbox of the thread it queues INTO, so both
+ *    readers share one cache entry and the strip cannot end up displaying a
+ *    different thread's queue than the one Enter writes to.
+ *  - queueing refreshes that mailbox immediately, so a queued message appears
+ *    without waiting up to a poll interval — the user's original complaint was
+ *    queueing a message and seeing nothing.
  *
  * The composer is mounted streaming, because that is the only state in which
  * queueing exists.
@@ -140,7 +141,7 @@ function typeInComposer(text: string) {
   return editor;
 }
 
-describe("the queued-message strip inside the composer", () => {
+describe("the composer's queued-mailbox subscription", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useAttachmentStore.getState().reset();
@@ -149,7 +150,7 @@ describe("the queued-message strip inside the composer", () => {
     cancelQueuedAgentMessageMock.mockResolvedValue({ success: true, message: "Cancelled" });
   });
 
-  it("reads the mailbox of the thread the composer queues into", async () => {
+  it("subscribes to the mailbox of the thread it queues into", async () => {
     listQueuedAgentMessagesMock.mockResolvedValue({
       messages: [queuedRow("already waiting")],
     });
@@ -158,27 +159,26 @@ describe("the queued-message strip inside the composer", () => {
       <ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming={true} />,
     );
 
+    // The mailbox read is keyed on chat + main thread — the same key the
+    // presenter's strip reads, so the two share one cache entry rather than
+    // showing different queues.
     await waitFor(() => {
-      expect(screen.getByText("already waiting")).toBeTruthy();
+      expect(listQueuedAgentMessagesMock).toHaveBeenCalledWith(
+        CHAT_ID,
+        MAIN_THREAD_ID,
+      );
     });
-    expect(listQueuedAgentMessagesMock).toHaveBeenCalledWith(CHAT_ID, MAIN_THREAD_ID);
   });
 
-  it("shows a just-queued message without waiting for the next poll", async () => {
+  it("re-reads the mailbox as soon as a message is queued, not on the next poll", async () => {
     renderWithQuery(
       <ChatInput onSend={vi.fn()} chatId={CHAT_ID} isStreaming={true} />,
     );
 
-    // Nothing queued yet, so the strip is absent — not an empty box.
     await waitFor(() => {
       expect(listQueuedAgentMessagesMock).toHaveBeenCalled();
     });
-    expect(screen.queryByTestId("queued-messages")).toBeNull();
-
-    // The next read reflects the message about to be queued.
-    listQueuedAgentMessagesMock.mockResolvedValue({
-      messages: [queuedRow("check the migration file")],
-    });
+    const readsBeforeQueueing = listQueuedAgentMessagesMock.mock.calls.length;
 
     const editor = typeInComposer("check the migration file");
     fireEvent.keyDown(editor, { key: "Enter" });
@@ -186,11 +186,15 @@ describe("the queued-message strip inside the composer", () => {
     await waitFor(() => {
       expect(sendAgentMessageMock).toHaveBeenCalledTimes(1);
     });
-    // The refresh is driven by the queue succeeding, not by the 2.5s poll —
-    // this resolves well inside a single interval.
+    // Driven by the queue succeeding, not by the 2.5s poll — this resolves
+    // well inside a single interval, which is what puts the message on screen
+    // immediately instead of up to an interval later.
     await waitFor(() => {
-      expect(screen.getByText("check the migration file")).toBeTruthy();
+      expect(listQueuedAgentMessagesMock.mock.calls.length).toBeGreaterThan(
+        readsBeforeQueueing,
+      );
     });
+    expect(toastInfoMock).not.toHaveBeenCalled();
   });
 
   it("does not poll the mailbox while the agent is idle", async () => {

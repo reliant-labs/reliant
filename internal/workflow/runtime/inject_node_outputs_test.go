@@ -51,8 +51,9 @@ func TestInjectWithNodeOutputs(t *testing.T) {
 
 		criticNode := makeProtoTestNode("critic_turn", "builtin://agent",
 			&reliantv1.InjectConfig{
-				Role:    makeCelLiteral("user"),
-				Content: makeCelLiteral("Please review the following plan:\n\n{{nodes.planner_turn.response_text}}"),
+				Role:         makeCelLiteral("user"),
+				Content:      makeCelLiteral("Please review the following plan:\n\n{{nodes.planner_turn.response_text}}"),
+				DisplayStyle: makeCelLiteral("{{inputs.inject_style}}"),
 			}, true)
 
 		evalResult, err := EvaluateNodeConfig(
@@ -60,7 +61,7 @@ func TestInjectWithNodeOutputs(t *testing.T) {
 			nodeOutputs,
 			"test-workflow-id",
 			"test-workflow",
-			map[string]interface{}{"mode": "agent"},
+			map[string]interface{}{"mode": "agent", "inject_style": "info"},
 			map[string]interface{}{"iteration": 1},
 			nil,
 			nil,
@@ -73,6 +74,7 @@ func TestInjectWithNodeOutputs(t *testing.T) {
 		assert.Contains(t, model.CelStringValue(inject.GetContent()), "Here is my detailed plan:")
 		assert.Contains(t, model.CelStringValue(inject.GetContent()), "1. Do step one")
 		assert.Equal(t, "user", model.CelStringValue(inject.GetRole()))
+		assert.Equal(t, "info", model.CelStringValue(inject.GetDisplayStyle()))
 	})
 
 	t.Run("inject with missing node errors", func(t *testing.T) {
@@ -224,6 +226,32 @@ func TestInjectWithMixedContent(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "The answer from step A was: 42. Please verify this.", model.CelStringValue(model.NodeInjectConfig(evalResult).GetContent()))
+	})
+
+	t.Run("inject display_style can use templates", func(t *testing.T) {
+		node := makeProtoTestNode("step_b", "builtin://agent",
+			&reliantv1.InjectConfig{
+				Role:         makeCelLiteral("user"),
+				Content:      makeCelLiteral("Status: {{inputs.status}}"),
+				DisplayStyle: makeCelLiteral("{{inputs.display_style}}"),
+			}, false)
+
+		evalResult, err := EvaluateNodeConfig(
+			node,
+			map[string]interface{}{},
+			"test-workflow-id",
+			"test-workflow",
+			map[string]interface{}{"status": "needs attention", "display_style": "warning"},
+			nil,
+			nil,
+			nil,
+		)
+
+		require.NoError(t, err)
+		inject := model.NodeInjectConfig(evalResult)
+		require.NotNil(t, inject)
+		assert.Equal(t, "Status: needs attention", model.CelStringValue(inject.GetContent()))
+		assert.Equal(t, "warning", model.CelStringValue(inject.GetDisplayStyle()))
 	})
 
 	t.Run("inject with multiple node references", func(t *testing.T) {

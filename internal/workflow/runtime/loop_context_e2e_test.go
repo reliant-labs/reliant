@@ -218,7 +218,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 		ID:           workflowID,
 		ChatID:       chatID,
 		WorkflowName: "test-workflow",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		CreatedAt:    time.Now(),
 	})
 	require.NoError(t, err)

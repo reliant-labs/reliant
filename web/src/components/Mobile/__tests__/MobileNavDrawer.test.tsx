@@ -46,7 +46,7 @@ function buildTree(onClose: () => void, isOpenGetter: () => boolean) {
     ),
   });
 
-  const paths = ["/m/chats", "/m/new", "/m/daemons", "/m/account"];
+  const paths = ["/m/chats", "/m/new", "/m/daemons", "/m/github", "/m/account"];
 
   return rootRoute.addChildren(
     paths.map((path) =>
@@ -74,7 +74,7 @@ describe("MobileNavDrawer", () => {
     expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
   });
 
-  it("renders all six destinations plus the project switcher when open", async () => {
+  it("renders all seven destinations plus the project switcher when open", async () => {
     renderAt("/m/chats", true, vi.fn());
     const dialog = await screen.findByRole("dialog", { name: "Navigation" });
     expect(dialog).toBeInTheDocument();
@@ -83,6 +83,7 @@ describe("MobileNavDrawer", () => {
     expect(screen.getByRole("link", { name: /Search/ })).toHaveAttribute("href", "/m/search");
     expect(screen.getByRole("link", { name: /Workflows/ })).toHaveAttribute("href", "/m/workflows");
     expect(screen.getByRole("link", { name: /Machines/ })).toHaveAttribute("href", "/m/daemons");
+    expect(screen.getByRole("link", { name: /GitHub/ })).toHaveAttribute("href", "/m/github");
     expect(screen.getByRole("link", { name: /Settings/ })).toHaveAttribute("href", "/m/settings");
     expect(screen.getByRole("link", { name: /Account/ })).toHaveAttribute("href", "/m/account");
     expect(screen.getByRole("link", { name: /Project/ })).toHaveAttribute("href", "/m/projects");

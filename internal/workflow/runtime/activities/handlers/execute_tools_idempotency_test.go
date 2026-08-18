@@ -220,10 +220,6 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 	})
 
 	t.Run("Retry does not re-execute tool", func(t *testing.T) {
-		// Note: Current implementation doesn't have full idempotency caching
-		// This test documents the current behavior - tool WILL be re-executed
-		// If idempotency is added later, this test should be updated
-
 		// Execute again (simulating retry)
 		var output ExecuteToolsOutput
 		err := h.ExecuteActivity(activityInstance.Execute, input, &output)
@@ -232,18 +228,12 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 		require.Len(t, output.ToolResults, 1)
 		assert.False(t, output.ToolResults[0].IsError)
 
-		// Current behavior: tool is executed again
-		// Future behavior with idempotency: should still be 1
-		executionCount := mockExecutor.GetExecutionCount(toolCallID)
-		t.Logf("Execution count after retry: %d (current implementation re-executes)", executionCount)
-		// Note: This assertion documents current behavior
-		// When idempotency is added, change this to assert.Equal(t, 1, executionCount)
+		assert.Equal(t, 1, mockExecutor.GetExecutionCount(toolCallID),
+			"a call with an already-terminal row must not be re-executed on retry")
 	})
 }
 
 func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
-	t.Skip("Skipping until idempotency is implemented - current implementation does not prevent re-execution")
-
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

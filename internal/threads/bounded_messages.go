@@ -177,10 +177,42 @@ func (s *Service) CountCurrentMessages(ctx context.Context, threadID string) (in
 	}
 
 	visited := make(map[string]bool)
-	return s.countMessagesFromCW(ctx, latestCW, visited)
+	return s.countMessagesFromCWOpts(ctx, latestCW, visited, resolveOpts{})
+}
+
+// CountDisplayMessages is the count-only mirror of LoadDisplayMessages, the
+// same way CountCurrentMessages mirrors LoadCurrentMessages.
+//
+// There are two resolutions in this package and therefore two counts: the LLM
+// one stops at a compaction summary, the transcript one crosses it. A display
+// read that reported the LLM count was wrong by the whole summarized history
+// -- on the chat that surfaced this, 13 against a 1,539-message transcript,
+// because all three compactions in its ancestry were counted out but shown.
+func (s *Service) CountDisplayMessages(ctx context.Context, threadID string) (int, error) {
+	if threadID == "" {
+		return 0, fmt.Errorf("thread ID cannot be empty")
+	}
+
+	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
+	if err != nil {
+		return 0, nil
+	}
+
+	visited := make(map[string]bool)
+	return s.countMessagesFromCWOpts(ctx, latestCW, visited, resolveOpts{crossCompaction: true})
 }
 
 func (s *Service) countMessagesFromCW(ctx context.Context, cw *db.ContextWindow, visited map[string]bool) (int, error) {
+	return s.countMessagesFromCWOpts(ctx, cw, visited, resolveOpts{})
+}
+
+// countMessagesFromCWOpts walks the CW chain summing COUNTs. It must track
+// resolveMessagesFromCWOpts branch for branch -- same compaction stop, same
+// fork cut, same crossCompaction behavior -- or the total disagrees with the
+// list it describes.
+func (s *Service) countMessagesFromCWOpts(
+	ctx context.Context, cw *db.ContextWindow, visited map[string]bool, opts resolveOpts,
+) (int, error) {
 	if cw == nil {
 		return 0, nil
 	}
@@ -195,8 +227,9 @@ func (s *Service) countMessagesFromCW(ctx context.Context, cw *db.ContextWindow,
 	}
 
 	// Compaction boundary: nothing upstream contributes once a summary
-	// exists, matching resolveMessagesFromCW.
-	if cw.CompactionSummaryMessageID != nil {
+	// exists -- unless this is the transcript's count, which shows the
+	// summarized turns and so must keep counting past them.
+	if cw.CompactionSummaryMessageID != nil && !opts.crossCompaction {
 		return localCount, nil
 	}
 
@@ -212,10 +245,21 @@ func (s *Service) countMessagesFromCW(ctx context.Context, cw *db.ContextWindow,
 	// The parent CW's own fully-resolved count (its local messages plus
 	// whatever IT inherited), mirroring resolveMessagesFromCW's unfiltered
 	// recursive call on the parent before this fork's cut is applied.
-	parentTotal, err := s.countMessagesFromCW(ctx, parentCW, visited)
+	parentTotal, err := s.countMessagesFromCWOpts(ctx, parentCW, visited, opts)
 	if err != nil {
 		return 0, err
 	}
+
+	// A compaction CW is not a fork (Compact always sets ForkAtMessageID =
+	// nil), so there is no cut to apply and the parent is inherited whole.
+	// Reaching here on one means crossCompaction sent the walk past the
+	// boundary. This mirrors resolveMessagesFromCWOpts; applying the fork cut
+	// anyway would resolve forkSeq to -1 and count out the entire parent
+	// window, which is the list-side bug this count has to stay in step with.
+	if cw.CompactionSummaryMessageID != nil {
+		return localCount + parentTotal, nil
+	}
+
 	parentLocalCount, err := s.repo.CountMessagesByContextWindow(ctx, parentCW.ID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to count parent CW messages: %w", err)

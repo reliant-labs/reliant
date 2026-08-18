@@ -44,7 +44,12 @@ func (s *scriptedRoundTripper) RoundTrip(req *http.Request) (*http.Response, err
 		body = string(b)
 	}
 
+	// Deliberately a non-canonical key. lowercaseHeaderTransport writes
+	// req.Header["authorization"] by direct map access to reproduce Claude
+	// Code's exact wire casing, so looking it up canonically would miss the
+	// header these tests exist to assert on.
 	auth := ""
+	//nolint:staticcheck // SA1008: lowercase casing is the behavior under test
 	if vals, ok := req.Header["authorization"]; ok && len(vals) > 0 {
 		auth = vals[0]
 	}

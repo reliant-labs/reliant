@@ -281,7 +281,7 @@ function createMarkdownComponents(
         // --info rather than --primary: primary is the theme accent, which is
         // mocha/teal/pink/orange depending on the color scheme, so links only
         // read as blue on some themes. --info is blue in every scheme.
-        className="text-info no-underline hover:underline transition-all duration-200 cursor-pointer"
+        className="text-info no-underline hover:underline transition-colors duration-200 cursor-pointer"
         onClick={(e) => {
           if (href && onLinkClick) {
             e.preventDefault();

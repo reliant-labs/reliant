@@ -97,8 +97,11 @@ describe("MobileSettingsScreen", () => {
     expect(screen.queryByText("GitHub")).not.toBeInTheDocument();
   });
 
-  it("notes what isn't available on mobile", () => {
+  it("notes top-level mobile management and what remains desktop-only", () => {
     renderMobile();
+    expect(
+      screen.getByText(/Machines and GitHub are available from the main menu/i),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/MCP servers, prompts, keyboard shortcuts/i),
     ).toBeInTheDocument();

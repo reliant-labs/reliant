@@ -19,7 +19,11 @@ import (
 // If someone changes the YAML expressions, these tests fail.
 
 const (
-	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true`
+	// The pending_inbox term keeps the loop alive for one more turn when a
+	// message landed in the mailbox while the last response was streaming.
+	// Without it the loop exits holding an undelivered message (call_llm
+	// delivers BEFORE reading history, so a mid-turn arrival misses that turn).
+	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true`
 	edgeCallLLMToApproval      = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
 	edgeCallLLMToAskQuestion   = `(nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask`

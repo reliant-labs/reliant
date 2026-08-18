@@ -144,7 +144,7 @@ func TestGetChatActivity_Running(t *testing.T) {
 
 	chatID := "chat-running"
 	createActivityTestChat(t, repo, chatID)
-	insertTestWorkflow(t, repo, "wf-1", chatID, "builtin://agent", WorkflowStatusRunning)
+	insertTestWorkflow(t, repo, "wf-1", chatID, "builtin://agent", Active())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestGetChatActivity_RunningWithThreadWorkflow(t *testing.T) {
 
 	// Only a thread-prefixed workflow is running. Previously excluded
 	// from the activity view, causing the chat to appear IDLE.
-	insertTestWorkflow(t, repo, "wf-thread", chatID, "thread:abc123", WorkflowStatusRunning)
+	insertTestWorkflow(t, repo, "wf-thread", chatID, "thread:abc123", Active())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -200,7 +200,7 @@ func TestGetChatActivity_ApprovalTakesPriorityOverRunning(t *testing.T) {
 	createActivityTestChat(t, repo, chatID)
 
 	// Both a running workflow AND a pending approval exist.
-	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", WorkflowStatusRunning)
+	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", Active())
 	insertTestApproval(t, repo, "approval-pri", chatID, 1) // PENDING
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
@@ -218,7 +218,7 @@ func TestGetChatActivity_Paused(t *testing.T) {
 
 	chatID := "chat-paused"
 	createActivityTestChat(t, repo, chatID)
-	insertTestWorkflow(t, repo, "wf-paused", chatID, "builtin://agent", WorkflowStatusPaused)
+	insertTestWorkflow(t, repo, "wf-paused", chatID, "builtin://agent", Paused())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -238,8 +238,8 @@ func TestGetChatActivity_RunningTakesPriorityOverPaused(t *testing.T) {
 
 	// One workflow running, another paused (e.g. a paused thread alongside a
 	// live one). The chat must still read RUNNING.
-	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", WorkflowStatusRunning)
-	insertTestWorkflow(t, repo, "wf-paused", chatID, "thread:abc123", WorkflowStatusPaused)
+	insertTestWorkflow(t, repo, "wf-run", chatID, "builtin://agent", Active())
+	insertTestWorkflow(t, repo, "wf-paused", chatID, "thread:abc123", Paused())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -282,7 +282,7 @@ func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
 	createActivityTestChat(t, repo, chatID)
 
 	// Start a workflow → activity should be RUNNING (1).
-	insertTestWorkflow(t, repo, "wf-transition", chatID, "builtin://agent", WorkflowStatusRunning)
+	insertTestWorkflow(t, repo, "wf-transition", chatID, "builtin://agent", Active())
 
 	activity, err := repo.GetChatActivity(ctx, chatID)
 	if err != nil {
@@ -293,7 +293,7 @@ func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
 	}
 
 	// Complete the workflow → activity should transition to IDLE (0).
-	if err := repo.UpdateWorkflowStatus(ctx, "wf-transition", WorkflowStatusCompleted); err != nil {
+	if err := repo.UpdateWorkflowStatus(ctx, "wf-transition", Completed()); err != nil {
 		t.Fatalf("UpdateWorkflowStatus: %v", err)
 	}
 
@@ -352,8 +352,8 @@ func TestGetChatActivity_Error_WhenNothingSucceededAfterFailure(t *testing.T) {
 
 	chatID := "chat-failed"
 	createActivityTestChat(t, repo, chatID)
-	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
-	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", Active())
+	completeWorkflowNow(t, repo, "wf-fail", Failed())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -380,13 +380,13 @@ func TestGetChatActivity_ErrorClearedAfterRecovery(t *testing.T) {
 	chatID := "chat-recovered"
 	createActivityTestChat(t, repo, chatID)
 
-	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
-	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", Active())
+	completeWorkflowNow(t, repo, "wf-fail", Failed())
 
 	// The user retries and it works. completed_at is stamped by the same
 	// production path, so the retry lands strictly after the failure.
-	insertTestWorkflow(t, repo, "wf-retry", chatID, "builtin://agent", WorkflowStatusRunning)
-	completeWorkflowNow(t, repo, "wf-retry", WorkflowStatusCompleted)
+	insertTestWorkflow(t, repo, "wf-retry", chatID, "builtin://agent", Active())
+	completeWorkflowNow(t, repo, "wf-retry", Completed())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -407,11 +407,11 @@ func TestGetChatActivity_ErrorNotClearedByEarlierSuccess(t *testing.T) {
 	chatID := "chat-success-then-failure"
 	createActivityTestChat(t, repo, chatID)
 
-	insertTestWorkflow(t, repo, "wf-ok", chatID, "builtin://agent", WorkflowStatusRunning)
-	completeWorkflowNow(t, repo, "wf-ok", WorkflowStatusCompleted)
+	insertTestWorkflow(t, repo, "wf-ok", chatID, "builtin://agent", Active())
+	completeWorkflowNow(t, repo, "wf-ok", Completed())
 
-	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
-	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", Active())
+	completeWorkflowNow(t, repo, "wf-fail", Failed())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -431,9 +431,9 @@ func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
 	chatID := "chat-failed-then-running"
 	createActivityTestChat(t, repo, chatID)
 
-	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", WorkflowStatusRunning)
-	completeWorkflowNow(t, repo, "wf-fail", WorkflowStatusFailed)
-	insertTestWorkflow(t, repo, "wf-live", chatID, "builtin://agent", WorkflowStatusRunning)
+	insertTestWorkflow(t, repo, "wf-fail", chatID, "builtin://agent", Active())
+	completeWorkflowNow(t, repo, "wf-fail", Failed())
+	insertTestWorkflow(t, repo, "wf-live", chatID, "builtin://agent", Active())
 
 	activity, err := repo.GetChatActivity(context.Background(), chatID)
 	if err != nil {
@@ -448,14 +448,10 @@ func TestGetChatActivity_RunningTakesPriorityOverPastFailure(t *testing.T) {
 // Sequence allocation (SERIALIZABLE contention)
 // ---------------------------------------------------------------------------
 
-// Sequence numbers are the cursor a reconnecting stream resumes from
-// ("WHERE sequence_number > $cursor ORDER BY sequence_number ASC"), so the one
-// property every consumer depends on is that they STRICTLY INCREASE. They do
-// not need to be contiguous, and after the move to a Postgres sequence they are
-// not: a rolled-back or retried transaction consumes its value permanently.
-//
-// This pins the property that matters and, by not asserting contiguity,
-// documents the property that deliberately does not hold.
+// Sequence numbers are the cursor a reconnecting stream resumes from. The
+// scoped counter and ledger insert share a transaction, so committed values
+// must be contiguous: another user's traffic cannot create a gap, and a
+// rollback rolls the counter increment back with the update.
 func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -474,29 +470,25 @@ func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
 	}
 
 	for i := 1; i < len(seqs); i++ {
-		if seqs[i] <= seqs[i-1] {
-			t.Fatalf("sequence numbers must strictly increase, got %v (index %d did not advance)", seqs, i)
+		if seqs[i] != seqs[i-1]+1 {
+			t.Fatalf("sequence numbers must be contiguous, got %v (index %d did not advance by one)", seqs, i)
 		}
 	}
 }
 
-// The regression: allocating a sequence with SELECT MAX(sequence_number)+1
-// under SERIALIZABLE takes a predicate lock covering rows that do not exist
-// yet, so any CONCURRENT insert for the same user forms a read/write
-// dependency and Postgres aborts one side with SQLSTATE 40001. That surfaced
-// to users as "failed to get max user sequence ... (SQLSTATE 40001)" on
-// SendMessage, after burning every retry.
-//
-// nextval() takes no predicate lock, so concurrent allocators cannot conflict.
+// The scoped allocator intentionally serializes writers to one user by
+// updating that user's counter row. Under this repository's SERIALIZABLE
+// isolation, waiters may retry with SQLSTATE 40001 after the row conflict.
+// The production transaction wrapper must absorb those retries rather than
+// surfacing a failed SendMessage under normal fan-out.
 //
 // Scope note, so this test is not trusted for more than it proves: it drives
 // real concurrent writes through the production path and passes, but it does
 // NOT reliably reproduce the 40001 on its own — verified by reverting to the
-// MAX()+1 allocator, where it still passed. Reproducing the abort needs the
-// contention the live system had (a 218k-row user_updates table, many spawns,
-// and long-running transactions widening the conflict window), which a fixture
-// this size does not recreate. It guards the invariant (concurrent writes to
-// one user's counter must succeed) rather than the historical failure.
+// MAX()+1 allocator, where it still passed. Reproducing exhausted retries needs
+// the contention the live system had (many spawns and long-running ambient
+// transactions widening the conflict window). It guards the invariant that
+// concurrent writes to one user's scoped counter must succeed.
 func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()

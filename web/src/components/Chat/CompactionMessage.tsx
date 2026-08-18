@@ -96,7 +96,7 @@ export const CompactionMessage = memo(function CompactionMessage({
     <div className="mb-3 mx-2">
       <div
         className={cn(
-          "border rounded-lg transition-all duration-200",
+          "border rounded-lg transition-colors duration-200",
           "bg-muted/30 border-border/50",
           "hover:border-border/70"
         )}

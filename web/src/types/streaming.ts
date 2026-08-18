@@ -76,13 +76,9 @@ export interface WorkflowStatusUpdate {
   update_type: "workflow_status";
   workflow_id: string;
   workflow_name: string;
-  status:
-    | "started"
-    | "completed"
-    | "cancelled"
-    | "failed"
-    | "paused"
-    | "expired";
+  // No "expired": nothing produces it. Temporal's TIMED_OUT is deliberately
+  // recorded as a failure, so the verb was only ever matched, never emitted.
+  status: "started" | "completed" | "cancelled" | "failed" | "paused";
   timestamp: string;
   // Empty string for the root workflow. Lets a consumer tell a root terminal
   // from a child's without a second lookup.
@@ -200,6 +196,20 @@ export interface StreamFinalizedUpdate {
   thread?: string;
   reason: "completed" | "aborted" | "cancelled";
   last_stream_seq?: number;
+  sequence_number?: number;
+}
+
+// AgentMessagesDrainedUpdate names the mailbox rows that just became transcript
+// messages. Written in the same transaction as those messages, so a consumer
+// that applies a batch in order retires the pending-queue entry and shows the
+// transcript entry together — the two can never be on screen at once.
+//
+// message_ids are agent_messages row ids (what the strip is keyed by), NOT
+// messages.id.
+export interface AgentMessagesDrainedUpdate {
+  update_type: "agent_messages_drained";
+  thread: string;
+  message_ids: string[];
   sequence_number?: number;
 }
 
@@ -325,6 +335,7 @@ export type ChatUpdate =
   | ChatMetadataUpdate
   | StreamingDelta
   | StreamFinalizedUpdate
+  | AgentMessagesDrainedUpdate
   | RunOutputUpdate
   | NodeExecutionUpdate
   | WorkflowExecutionUpdate

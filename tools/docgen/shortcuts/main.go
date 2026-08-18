@@ -67,15 +67,6 @@ func (s Shortcut) EffectiveWebBinding() string {
 	return s.WebBinding
 }
 
-// ParsedBinding represents a parsed key binding
-type ParsedBinding struct {
-	Key   string
-	Cmd   bool // Cmd on Mac, Ctrl on Windows
-	Ctrl  bool // Always Ctrl (for Cmd+Ctrl bindings)
-	Shift bool
-	Alt   bool
-}
-
 func main() {
 	if len(os.Args) < 4 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <yaml_file> <ts_output> <md_output>\n", os.Args[0])
@@ -131,39 +122,6 @@ func main() {
 	}
 
 	fmt.Printf("Generated shortcuts: %s (%d shortcuts), %s\n", tsOutput, len(config.Shortcuts), mdOutput)
-}
-
-func parseBinding(binding string) ParsedBinding {
-	p := ParsedBinding{}
-
-	// Handle simple keys without modifiers
-	if !strings.Contains(binding, "+") {
-		p.Key = binding
-		return p
-	}
-
-	parts := strings.Split(binding, "+")
-	for i, part := range parts {
-		part = strings.TrimSpace(part)
-		if i == len(parts)-1 {
-			// Last part is the key
-			p.Key = part
-		} else {
-			// Modifier
-			switch part {
-			case "Cmd":
-				p.Cmd = true
-			case "Ctrl":
-				p.Ctrl = true
-			case "Shift":
-				p.Shift = true
-			case "Alt":
-				p.Alt = true
-			}
-		}
-	}
-
-	return p
 }
 
 func generateTypeScript(config ShortcutsConfig) string {

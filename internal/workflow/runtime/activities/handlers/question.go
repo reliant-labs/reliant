@@ -271,8 +271,36 @@ func (a *QuestionResolveActivity) Execute(ctx context.Context, input QuestionRes
 		responseData = &input.ResponseData
 	}
 
+	// Read the row before resolving: the emit below needs its chat/thread/step
+	// scoping, and after ResolveQuestion the lookup would still work but the
+	// ordering keeps the emit honest about what was actually closed.
+	question, err := a.repo.GetQuestionByID(ctx, input.QuestionID)
+	if err != nil {
+		logger.Warn("[QuestionResolve] Failed to load question for update emission",
+			"questionID", input.QuestionID, "error", err)
+	}
+
 	if err := a.repo.ResolveQuestion(ctx, input.QuestionID, responseData); err != nil {
 		return QuestionResolveOutput{}, fmt.Errorf("failed to resolve question: %w", err)
+	}
+
+	// A timed-out question is closed as far as the user is concerned, so the
+	// feed must say so. Without this the last question update stays "pending"
+	// forever and every later open of the chat replays that gate — the question
+	// reappears even though nothing is waiting on it. Best-effort: the DB row
+	// is already resolved, which is what actually unblocks the run.
+	if question != nil {
+		if err := a.repo.EmitQuestionUpdate(ctx, question.ChatID, db.QuestionUpdate{
+			QuestionID: question.ID,
+			ChatID:     question.ChatID,
+			WorkflowID: question.WorkflowID,
+			ThreadID:   question.ThreadID,
+			StepID:     question.StepID,
+			Status:     "resolved",
+		}); err != nil {
+			logger.Warn("[QuestionResolve] Failed to emit question resolved update",
+				"questionID", input.QuestionID, "error", err)
+		}
 	}
 
 	return QuestionResolveOutput{Success: true}, nil

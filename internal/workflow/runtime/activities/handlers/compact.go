@@ -591,6 +591,14 @@ func (a *CompactActivity) emitThreadUpdate(ctx context.Context, chatID, thread, 
 	now := time.Now().UTC()
 	threadID := fmt.Sprintf("%s-%s-compact", chatID, thread)
 
+	persisted, err := a.repo.GetThread(ctx, thread)
+	if err != nil {
+		logging.Warn("[CompactActivity] Failed to load thread metadata for compact update",
+			"error", err,
+			"chatID", chatID,
+			"thread", thread)
+	}
+
 	// NOTE: planning_mode is now a workflow input param, not a chat field.
 	// The frontend gets planning_mode from the workflow state.
 	updateData := map[string]interface{}{
@@ -602,6 +610,20 @@ func (a *CompactActivity) emitThreadUpdate(ctx context.Context, chatID, thread, 
 		"current_activity":            currentActivity,
 		"current_activity_started_at": now.Format(time.RFC3339),
 		"created_at":                  now.Format(time.RFC3339),
+	}
+	if persisted != nil {
+		if persisted.WorkflowID != nil && *persisted.WorkflowID != "" {
+			updateData["workflow_id"] = *persisted.WorkflowID
+		}
+		if persisted.Title != nil && *persisted.Title != "" {
+			updateData["thread_title"] = *persisted.Title
+		}
+		if persisted.Origin != "" {
+			updateData["origin"] = persisted.Origin
+		}
+		if persisted.OriginNodeID != nil && *persisted.OriginNodeID != "" {
+			updateData["origin_node_id"] = *persisted.OriginNodeID
+		}
 	}
 
 	updateDataJSON, err := json.Marshal(updateData)

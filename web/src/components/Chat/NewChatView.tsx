@@ -53,7 +53,7 @@ export function NewChatView({
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<
     string | undefined
   >(undefined);
-  const chatInputRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const workspaceDropdownRef = useRef<HTMLDivElement>(null);
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);

@@ -213,8 +213,8 @@ func (s *ChatService) BranchChat(
 		ID:           branchWorkflowID,
 		ChatID:       branchChatID,
 		WorkflowName: workflowName,
-		Thread:       branchWorkflowID,         // Root workflow: thread = workflow ID
-		Status:       db.WorkflowStatusPending, // Pending until first message (allows workflow switching)
+		Thread:       branchWorkflowID, // Root workflow: thread = workflow ID
+		Status:       db.Pending(),     // Pending until first message (allows workflow switching)
 		CreatedAt:    time.Now().UTC(),
 	}
 

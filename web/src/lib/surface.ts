@@ -5,8 +5,8 @@
  * feature-equivalent:
  *
  *   - `desktop` — the full ADE (Electron or desktop browser). Everything.
- *   - `mobile`  — the phone web app under `/m/*`. Monitor runs, chat with
- *     existing workflows, trigger work. NOT an authoring environment.
+ *   - `mobile`  — the phone web app under `/m/*`. Chat, trigger work, manage
+ *     machines/GitHub, and monitor runs. NOT an authoring environment.
  *   - `embed`   — a white-labeled chat/workflow widget hosted inside someone
  *     else's app. Narrower still, and the host owns navigation and auth.
  *
@@ -73,7 +73,7 @@ export interface SurfaceCapabilities {
   daemonView: boolean;
   /** Resume a suspended daemon. Safe, fast, high-value on mobile. */
   daemonResume: boolean;
-  /** Create/suspend/delete daemons. Slow + destructive; deferred on mobile. */
+  /** Create, suspend, and delete daemons. */
   daemonManage: boolean;
 
   // ─── Shell ────────────────────────────────────────────────────────
@@ -209,8 +209,8 @@ const MOBILE: SurfaceCapabilities = {
   gitManagement: false,
   daemonView: true,
   daemonResume: true,
-  // Slow and destructive — wants push notifications before it makes sense.
-  daemonManage: false,
+  // Mobile has a dedicated machine management surface for create/suspend/delete.
+  daemonManage: true,
   // A trimmed account/sign-out screen is separate from the full settings tree.
   settings: false,
   mobileAccount: true,

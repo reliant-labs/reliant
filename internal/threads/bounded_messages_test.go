@@ -195,11 +195,9 @@ func TestLoadRecentMessagesBefore_FastPath_MatchesSlowPath(t *testing.T) {
 	ctx := context.Background()
 
 	thread, cw := h.createThread("simple-thread", h.chatID)
-	var ids []string
 	for i := int64(1); i <= 20; i++ {
 		id := "msg-" + string(rune('a'+i))
 		h.addMessageWithID(id, h.chatID, thread.ID, cw.ID, i, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER))
-		ids = append(ids, id)
 	}
 
 	all, err := h.svc.LoadCurrentMessages(ctx, thread.ID)

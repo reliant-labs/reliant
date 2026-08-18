@@ -18,6 +18,7 @@ import { ChatHeader } from "./ChatHeader";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
 import { BackgroundWorkPill } from "./BackgroundWorkPill";
+import { QueuedMessages } from "./QueuedMessages";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
@@ -35,6 +36,8 @@ import { useViewerStore } from "../../store/viewerStore";
 import { MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { useCapability } from "../../lib/surfaceContext";
 import { useThreadMessages } from "../../hooks/message-queries";
+import { useChat } from "../../hooks/chat-queries";
+import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 
 interface ChatPresenterProps {
   // Message data
@@ -73,8 +76,9 @@ interface ChatPresenterProps {
   isFocused?: boolean;
   paneId?: string;
 
-  // Workflow execution sidebar
+  // Workflow execution sidebar/timeline metadata
   workflowExecution?: WorkflowExecution;
+  workflowExecutions?: WorkflowExecution[];
 
   // Discuss mode
   isDiscussMode?: boolean;
@@ -109,6 +113,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   isFocused = true,
   paneId,
   workflowExecution,
+  workflowExecutions,
   isDiscussMode,
   onToggleDiscuss,
   hasPendingQuestion,
@@ -116,7 +121,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   isLoadingOlderMessages,
   hasOlderMessages,
 }: ChatPresenterProps) {
-  const chatInputRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // The workflow viewer (side/inline panel, its mouse-drag resize handles,
   // and the execution-detail chrome it exposes) is desktop-only: it can't
@@ -139,6 +144,37 @@ export const ChatPresenter = memo(function ChatPresenter({
     },
     [openCommandsViewer, projectId, worktreeId],
   );
+
+  // The queued mailbox is read HERE rather than inside the composer so the
+  // attention band above the input has one owner and one order: what you
+  // already sent and can still take back sits above the ambient readout of
+  // what is running. Rendered from the composer, the strip could only ever
+  // appear below the background-work pill, since the pill is a sibling the
+  // composer is mounted after.
+  //
+  // The mailbox is the one the composer queues INTO, so both must derive the
+  // target thread the same way: a selected side thread, else the chat's main
+  // thread.
+  const chatForQueue = useChat(chatId || undefined).data;
+  const queueThreadId =
+    selectedThreadId && selectedThreadId !== chatId
+      ? selectedThreadId
+      : chatForQueue?.workflowId;
+
+  // The SAME "the agent is actually working" signal the composer computes, and
+  // deliberately not isChatBusy — which is RUNNING *or* AWAITING_INPUT, so it
+  // is still true while a question waits on the user. Two things read this and
+  // both would be wrong under isChatBusy: the mailbox poll (an agent parked on
+  // a question drains nothing, so polling it is pure noise), and the
+  // "Interrupt & send now" button, which must not be offered when there is no
+  // work in flight to stop.
+  const isAgentWorking = isChatBusy && !isDiscussMode && !hasPendingQuestion;
+
+  const {
+    messages: queuedMessages,
+    refresh: refreshQueuedMessages,
+    forget: forgetQueuedMessage,
+  } = useQueuedAgentMessages(chatId || undefined, queueThreadId, isAgentWorking);
 
   // Workspace state store for persisting workflow viewer state
   const getWorkflowViewerOpen = useWorkspaceStateStore((state) => state.getWorkflowViewerOpen);
@@ -354,13 +390,21 @@ export const ChatPresenter = memo(function ChatPresenter({
     resumeFollowRef.current = cb;
   }, []);
 
-  // Scroll state from ChatMessagesContainer
-  const [scrollState, setScrollState] = useState<{
-    isAtBottom: boolean;
-    hasScrolledUp: boolean;
-    scrollToBottom: () => Promise<void>;
-    resumeAutoScroll: () => void;
-  } | null>(null);
+  // Jump the timeline to the newest message. Prefers the callback
+  // InterleavedTimeline registers, because that also resets its
+  // userScrolledUpRef so followOutput resumes; a bare scrollToIndex would move
+  // the viewport while leaving follow mode off.
+  const scrollToBottom = useCallback(() => {
+    if (resumeFollowRef.current) {
+      resumeFollowRef.current();
+    } else {
+      virtuosoRef.current?.scrollToIndex({
+        index: "LAST",
+        align: "end",
+        behavior: "auto",
+      });
+    }
+  }, []);
 
   // Thinking indicator element, passed as Virtuoso footer
   const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingQuestion;
@@ -383,53 +427,54 @@ export const ChatPresenter = memo(function ChatPresenter({
   const prevHasThinkingFooterRef = useRef(false);
   useEffect(() => {
     if (hasThinkingFooter && !prevHasThinkingFooterRef.current && virtuosoAtBottomRef.current) {
-      // Footer just appeared and user was at the bottom — use resumeFollow
-      // to avoid the programmatic scroll being mistaken for user scroll-up
-      requestAnimationFrame(() => {
-        if (resumeFollowRef.current) {
-          resumeFollowRef.current();
-        } else {
-          virtuosoRef.current?.scrollToIndex({ index: "LAST", align: "end", behavior: "auto" });
-        }
-      });
+      // Footer just appeared and user was at the bottom — scrollToBottom
+      // routes through resumeFollow so this isn't mistaken for user scroll-up
+      requestAnimationFrame(scrollToBottom);
     }
     prevHasThinkingFooterRef.current = hasThinkingFooter;
-  }, [hasThinkingFooter]);
+  }, [hasThinkingFooter, scrollToBottom]);
 
-  // Render the timeline
-  const renderTimeline = () => {
-    // With a thread selected, render THAT THREAD's own messages rather than
-    // the chat-wide list narrowed down to it. Filtering only showed whatever
-    // part of the thread happened to survive a window sized for the main
-    // transcript, so selecting a busy spawn could show a fraction of it and
-    // look complete. The thread-scoped read has the whole thread.
-    const timelineMessages = selectedThreadMessages ?? messages;
-    const filteredMessages = timelineMessages.filter(
+  // With a thread selected, render THAT THREAD's own messages rather than the
+  // chat-wide list narrowed down to it. Filtering only showed whatever part of
+  // the thread happened to survive a window sized for the main transcript, so
+  // selecting a busy spawn could show a fraction of it and look complete. The
+  // thread-scoped read has the whole thread.
+  //
+  // Only the thread branch is filtered here: `messages` arrives from
+  // ChatContainer already sorted and TOOL-filtered, while the thread-scoped
+  // read comes straight from the API with neither applied. Memoized because
+  // this array is InterleavedTimeline's `messages` prop and the timeline is
+  // memo()'d — filtering on every render would hand it a fresh array each
+  // pass and defeat that memo entirely.
+  const timelineMessages = useMemo(() => {
+    if (!selectedThreadMessages) return messages;
+    return selectedThreadMessages.filter(
       (message: Message) => message.role !== MessageRole.TOOL
     );
+  }, [selectedThreadMessages, messages]);
 
-    return (
-      <InterleavedTimeline
-        messages={filteredMessages}
-        approvals={approvals}
-        errorEvents={errorEvents}
-        infoEvents={infoEvents}
-        runOutputs={runOutputs}
-        chatId={chatId || ""}
-        workflowExecution={workflowExecution}
-        selectedThreads={selectedThreads}
-        isStreaming={isChatBusy}
-        virtuosoRef={virtuosoRef}
-        onAtBottomStateChange={handleAtBottomStateChange}
-        onResumeFollow={handleResumeFollow}
-        footer={thinkingFooter}
-        onSelectThread={setSelectedThreadId}
-        onLoadOlderMessages={onLoadOlderMessages}
-        isLoadingOlderMessages={isLoadingOlderMessages}
-        hasOlderMessages={hasOlderMessages}
-      />
-    );
-  };
+  // Render the timeline
+  const renderTimeline = () => (
+    <InterleavedTimeline
+      messages={timelineMessages}
+      approvals={approvals}
+      errorEvents={errorEvents}
+      infoEvents={infoEvents}
+      runOutputs={runOutputs}
+      chatId={chatId || ""}
+      workflowExecution={workflowExecution}
+      selectedThreads={selectedThreads}
+      isStreaming={isChatBusy}
+      virtuosoRef={virtuosoRef}
+      onAtBottomStateChange={handleAtBottomStateChange}
+      onResumeFollow={handleResumeFollow}
+      footer={thinkingFooter}
+      onSelectThread={setSelectedThreadId}
+      onLoadOlderMessages={onLoadOlderMessages}
+      isLoadingOlderMessages={isLoadingOlderMessages}
+      hasOlderMessages={hasOlderMessages}
+    />
+  );
 
   return (
     <div className="flex h-full layout-stable relative flex-1 min-w-0 min-h-0">
@@ -443,7 +488,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           chatId={chatId}
           selectedThreadId={selectedThreadId}
           onSelectThread={setSelectedThreadId}
-          workflowExecution={workflowExecution}
+          workflowExecution={workflowExecutions ?? workflowExecution}
           // Omitting the callback (rather than passing a no-op) is what
           // suppresses the "Show/Hide Workflow" menu entry — ChatHeader
           // gates on `onToggleWorkflowViewer &&`.
@@ -520,13 +565,7 @@ export const ChatPresenter = memo(function ChatPresenter({
 
         {/* Messages Area - hidden when workflow viewer is expanded in inline mode */}
         {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && (
-        <ChatMessagesContainer
-          chatId={chatId ?? undefined}
-          onScrollStateChange={setScrollState}
-          virtuosoRef={virtuosoRef}
-          virtuosoAtBottom={virtuosoAtBottom}
-          resumeFollowRef={resumeFollowRef}
-        >
+        <ChatMessagesContainer chatId={chatId ?? undefined}>
           {(messages.length > 0 ||
             runOutputs.length > 0 ||
             errorEvents.length > 0 ||
@@ -534,6 +573,26 @@ export const ChatPresenter = memo(function ChatPresenter({
             renderTimeline()}
         </ChatMessagesContainer>
         )}
+
+        {/* Messages already queued into the running agent's mailbox. Above the
+            background-work pill deliberately: this is what the user already
+            sent and can still take back, so it outranks the ambient readout of
+            what is running. */}
+        {/* Same gutters and max width as the composer below, so the strip and
+            the input it belongs to share one column. */}
+        <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8">
+          <div className="mx-auto max-w-[1200px]">
+            <QueuedMessages
+              chatId={chatId || undefined}
+              threadId={queueThreadId}
+              messages={queuedMessages}
+              onRefresh={refreshQueuedMessages}
+              onForget={forgetQueuedMessage}
+              onInterrupted={refreshQueuedMessages}
+              isRunning={isAgentWorking}
+            />
+          </div>
+        </div>
 
         {/* Background work (async spawns + running commands) — the spawn tool
             call that started them scrolls away, so this is the fixed surface
@@ -578,8 +637,8 @@ export const ChatPresenter = memo(function ChatPresenter({
 
         {/* Floating scroll-to-bottom button */}
         <ScrollToBottomButton
-          visible={!!(scrollState?.hasScrolledUp)}
-          onClick={() => scrollState?.scrollToBottom()}
+          visible={!virtuosoAtBottom}
+          onClick={scrollToBottom}
         />
 
         {/* Input Area - Collapsible when not focused, hidden when workflow viewer is expanded in inline mode */}
@@ -587,7 +646,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           <div className="flex-shrink-0">
             <ChatInputWrapper
               ref={chatInputRef}
-              scrollState={scrollState}
+              onScrollToBottom={scrollToBottom}
               onSend={handleSendWithThread}
               onStop={onStopStreaming}
               disabled={false}

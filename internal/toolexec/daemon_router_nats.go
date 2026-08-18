@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonliveness"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 )
@@ -253,21 +252,6 @@ const daemonStaleThreshold = 90 * time.Second
 // router skip DB-based liveness checks for single-replica deployments.
 type LocalConnectionChecker interface {
 	HasConnectedDaemonsForUser(userID string) bool
-}
-
-// isDaemonReachable checks whether the daemon is online. If the resolver also
-// satisfies LocalConnectionChecker and reports a live stream on this gateway,
-// the DB lookup is skipped — the in-memory map is authoritative for the
-// connections this process owns. Otherwise it falls back to the auth header
-// hint and finally to the DB attachment query.
-func (r *NATSDaemonRouter) isDaemonReachable(ctx context.Context, userID string) (bool, error) {
-	if checker, ok := r.resolver.(LocalConnectionChecker); ok && checker.HasConnectedDaemonsForUser(userID) {
-		return true, nil
-	}
-	if interceptors.DaemonLastSeenFresh(ctx, daemonStaleThreshold) {
-		return true, nil
-	}
-	return r.IsDaemonOnline(ctx, userID)
 }
 
 // IsDaemonOnline is a thin wrapper that delegates to

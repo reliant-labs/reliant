@@ -13,11 +13,16 @@ import { DaemonStatus, DaemonSize } from '@/gen/controlplane/v1/public/shared_pb
 import type { Daemon } from '@/services/controlPlane/daemon'
 
 const resumeMutate = vi.fn()
+const suspendMutate = vi.fn()
+const deleteMutate = vi.fn()
+const navigate = vi.fn()
 let daemons: Daemon[] = []
 
 vi.mock('@/hooks/useOnboardingQueries', () => ({
   useDaemonList: () => ({ data: daemons, isLoading: false }),
   useResumeDaemon: () => ({ mutate: resumeMutate, isPending: false }),
+  useSuspendDaemon: () => ({ mutate: suspendMutate, isPending: false }),
+  useDeleteDaemon: () => ({ mutate: deleteMutate, isPending: false }),
 }))
 
 // The screen only needs Link/useParams; the real router would want a whole
@@ -26,6 +31,7 @@ vi.mock('@tanstack/react-router', () => ({
   Link: ({ children, ...props }: { children?: React.ReactNode }) => (
     <a {...props}>{children}</a>
   ),
+  useNavigate: () => navigate,
   useParams: () => ({ daemonId: 'd1' }),
 }))
 
@@ -49,6 +55,9 @@ function daemon(overrides: Partial<Daemon> = {}): Daemon {
 
 beforeEach(() => {
   resumeMutate.mockClear()
+  suspendMutate.mockClear()
+  deleteMutate.mockClear()
+  navigate.mockClear()
 })
 
 describe('MobileDaemonScreen', () => {
@@ -81,11 +90,31 @@ describe('MobileDaemonScreen', () => {
     expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument()
   })
 
-  it('never renders suspend or delete — those are daemonManage', () => {
+  it('offers Suspend for a running daemon and calls the shared mutation', async () => {
     daemons = [daemon({ status: DaemonStatus.ACTIVE })]
     render(<MobileDaemonScreen />)
+
+    await userEvent.click(screen.getByRole('button', { name: /suspend/i }))
+    expect(suspendMutate).toHaveBeenCalledWith('d1')
+  })
+
+  it('confirms before deleting and calls the shared delete mutation', async () => {
+    daemons = [daemon({ status: DaemonStatus.ACTIVE })]
+    render(<MobileDaemonScreen />)
+
+    await userEvent.click(screen.getByRole('button', { name: /^delete$/i }))
+    expect(deleteMutate).not.toHaveBeenCalled()
+
+    const deleteButtons = screen.getAllByRole('button', { name: /^delete$/i })
+    await userEvent.click(deleteButtons[deleteButtons.length - 1])
+    expect(deleteMutate).toHaveBeenCalledWith('d1')
+  })
+
+  it('does not offer Suspend for a daemon that is already starting', () => {
+    daemons = [daemon({ status: DaemonStatus.PENDING })]
+    render(<MobileDaemonScreen />)
     expect(screen.queryByRole('button', { name: /suspend/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /delete/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^delete$/i })).toBeInTheDocument()
   })
 
   it('surfaces the gateway status message when the daemon is unhealthy', () => {

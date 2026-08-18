@@ -111,8 +111,17 @@ outputs:
 nodes:
   - id: agent_loop
     type: loop
-    # Continue while response tool not called OR has feedback from ask_question, AND under max turns
-    while: (outputs.completed != true || outputs.has_feedback == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+    # Continue while the response tool has not been called, OR there is
+    # feedback from ask_question, OR a message landed in the mailbox while the
+    # last response was streaming — AND we are still under max turns.
+    #
+    # pending_inbox stops a late message being stranded: call_llm delivers the
+    # mailbox before it reads history, so anything queued DURING the response
+    # belongs to the next turn, and without this the loop could finish holding
+    # an undelivered message. It sits INSIDE the max_turns conjunction on
+    # purpose — a queued message earns another turn, but it must not buy an
+    # unbounded number of them.
+    while: (outputs.completed != true || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       entry: [call_llm]
 
@@ -125,6 +134,10 @@ nodes:
         response: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && nodes.execute_tools.response_data != null && inputs.response_tool_name in nodes.execute_tools.response_data ? nodes.execute_tools.response_data[inputs.response_tool_name] : null}}"
         completed: "{{has(nodes.execute_tools) && has(nodes.execute_tools.response_data) && nodes.execute_tools.response_data != null && inputs.response_tool_name in nodes.execute_tools.response_data && nodes.execute_tools.response_data[inputs.response_tool_name] != null}}"
         has_feedback: "{{has(nodes.ask_question) && has(nodes.ask_question.has_feedback) ? nodes.ask_question.has_feedback : false}}"
+        # Guarded like its siblings: an iteration that has not reached call_llm
+        # (or a replayed shape where the node output is absent) must evaluate
+        # to false, not blow up the whole output evaluation.
+        pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
 
       nodes:
         - id: call_llm
@@ -175,6 +188,7 @@ nodes:
             tool_results: "{{output.tool_results}}"
           args:
             tool_calls: "{{nodes.call_llm.tool_calls}}"
+            compaction_threshold: "{{nodes.call_llm.compaction_threshold}}"
             # Pre-creates key so CEL can safely access dynamic response_data[tool_name]
             expected_response_tools:
               - "{{inputs.response_tool_name}}"

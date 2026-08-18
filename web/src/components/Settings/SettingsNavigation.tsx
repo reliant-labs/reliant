@@ -31,8 +31,12 @@ interface SectionGroup {
 
 const sectionGroups: SectionGroup[] = [
   {
-    label: "Account",
+    label: "Essentials",
     items: [
+      { id: "general", label: "AI", icon: Sparkles },
+      ...(hasControlPlane
+        ? [{ id: "environments", label: "Machines", icon: Server }]
+        : []),
       { id: "account", label: "Account", icon: User },
     ],
   },
@@ -40,15 +44,12 @@ const sectionGroups: SectionGroup[] = [
     label: "Cloud",
     items: [
       // In-app cloud settings. These replaced the old external "Manage cloud
-      // account" portal link — the overview / environments / AI / billing nav
-      // now lives inside the app as first-party /settings sections backed by
+      // account" portal link — the overview / environments / billing nav now
+      // lives inside the app as first-party /settings sections backed by
       // controlplane.v1 public RPCs. Gated on hasControlPlane because they're
       // meaningless without a control-plane backend.
       ...(hasControlPlane
-        ? [
-            { id: "billing", label: "Billing", icon: CreditCard },
-            { id: "environments", label: "Machines", icon: Server },
-          ]
+        ? [{ id: "billing", label: "Billing", icon: CreditCard }]
         : []),
       { id: "git-connections", label: "GitHub", icon: Github },
     ],
@@ -63,7 +64,6 @@ const sectionGroups: SectionGroup[] = [
   {
     label: "AI & Tools",
     items: [
-      { id: "general", label: "AI", icon: Sparkles },
       { id: "mcp", label: "MCP Servers", icon: McpIcon },
       { id: "browser", label: "Web Browser", icon: Globe },
       { id: "prompts", label: "Prompts", icon: List },

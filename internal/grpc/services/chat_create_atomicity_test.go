@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -85,10 +86,12 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 	}))
 
 	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: true}
+	temporal := &atomicityTestTemporalClient{}
 	service := &ChatService{
 		database:   failingRepo,
 		threads:    threads.NewService(failingRepo),
-		tempClient: &atomicityTestTemporalClient{},
+		tempClient: temporal,
+		runs:       runs.NewService(failingRepo, temporal, nil),
 	}
 
 	_, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{
@@ -157,10 +160,12 @@ func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
 	}))
 
 	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: false}
+	temporal := &atomicityTestTemporalClient{}
 	service := &ChatService{
 		database:   failingRepo,
 		threads:    threads.NewService(failingRepo),
-		tempClient: &atomicityTestTemporalClient{},
+		tempClient: temporal,
+		runs:       runs.NewService(failingRepo, temporal, nil),
 	}
 
 	resp, err := service.CreateChat(ctx, connect.NewRequest(&reliantv1.CreateChatRequest{

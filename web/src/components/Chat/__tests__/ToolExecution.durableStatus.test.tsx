@@ -11,6 +11,8 @@ import { ToolCallStatus } from "../../../gen/reliant/v1/chat_pb";
 
 vi.mock("../../../store/chatStoreHooks", () => ({
   useChat: () => undefined,
+  useChatMessages: () => [],
+  useStreamingMessages: () => [],
   useToolCallStates: () => new Map(),
 }));
 vi.mock("../../../hooks/approval-queries", () => ({

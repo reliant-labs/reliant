@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -135,22 +136,20 @@ func transcriptBodies(t *testing.T, ctx context.Context, repo *db.Repo, chatID s
 	return bodies
 }
 
-// TestSendMessage_AbsorbsQueuedMailboxAheadOfNewMessage is the ordering bug.
-//
-// The user queued two messages into a thread whose agent never reached another
-// drain boundary, then typed a new one. seq is allocated at SAVE time, so the
-// old behaviour (save the new message, start a run, let the run drain the
-// mailbox later) gave the OLDER text HIGHER seq values and rendered it beneath
-// the message sent after it — "my most recent message shows first". Absorbing
-// the mailbox before saving the new message is what restores send order.
-func TestSendMessage_AbsorbsQueuedMailboxAheadOfNewMessage(t *testing.T) {
+// TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM pins the single
+// delivery boundary: starting a new run must not move queued messages into the
+// transcript. The run's first call_llm drains and frames them before reading
+// history, exactly like every subsequent turn.
+func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.WorkflowStatusCompleted)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
+	temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED}
 	service := &ChatService{
 		database:   repo,
-		tempClient: &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
+		tempClient: temporal,
+		runs:       runs.NewService(repo, temporal, nil),
 	}
 
 	base := time.Now().UTC().Add(-time.Hour)
@@ -161,14 +160,14 @@ func TestSendMessage_AbsorbsQueuedMailboxAheadOfNewMessage(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Msg.MessageId)
 
-	assert.Equal(t, []string{"queued first", "queued second", "typed last"},
-		transcriptBodies(t, ctx, repo, fx.chatID),
-		"queued messages must land ahead of the message the user typed after them")
+	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID),
+		"SendMessage must not duplicate call_llm's mailbox delivery")
 
 	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
-	assert.Empty(t, remaining,
-		"absorbed rows are claimed by a DELETE ... RETURNING, so they must not remain queued for a later drain")
+	require.Len(t, remaining, 2, "queued messages must remain for the run's first call_llm drain")
+	assert.Equal(t, "queued first", remaining[0].Body)
+	assert.Equal(t, "queued second", remaining[1].Body)
 }
 
 // TestSendMessage_RunningWorkflowLeavesMailboxAlone is the boundary of the fix.
@@ -179,10 +178,12 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.WorkflowStatusRunning)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
+	temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
 	service := &ChatService{
 		database:   repo,
-		tempClient: &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
+		tempClient: temporal,
+		runs:       runs.NewService(repo, temporal, nil),
 	}
 
 	queueHumanMessage(t, repo, fx.chatID, fx.rootThreadID, fx.rootThreadID,
@@ -208,18 +209,18 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 		"only the new message is persisted; the queued one arrives through the drain with its envelope")
 }
 
-// TestSendMessage_LeavesPeerAgentMessagesQueued scopes the absorb to the human's
-// own messages, exactly as ClaimQueuedAgentMessages does. A sub-agent's
-// spawn_send is machine output that belongs in the drain's envelope framing, not
-// in the transcript as if the user had typed it.
-func TestSendMessage_LeavesPeerAgentMessagesQueued(t *testing.T) {
+// TestSendMessage_LeavesEveryMailboxKindQueued verifies SendMessage does not
+// become a second deliverer for either human or peer-agent mailbox rows.
+func TestSendMessage_LeavesEveryMailboxKindQueued(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.WorkflowStatusCompleted)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
+	temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED}
 	service := &ChatService{
 		database:   repo,
-		tempClient: &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_COMPLETED},
+		tempClient: temporal,
+		runs:       runs.NewService(repo, temporal, nil),
 	}
 
 	require.NoError(t, repo.EnqueueAgentMessage(ctx, &db.AgentMessage{
@@ -238,37 +239,38 @@ func TestSendMessage_LeavesPeerAgentMessagesQueued(t *testing.T) {
 	_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "typed last"))
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"human instruction", "typed last"},
-		transcriptBodies(t, ctx, repo, fx.chatID),
-		"only the human's own queued messages are absorbed into the transcript")
+	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID))
 
 	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
-	require.Len(t, remaining, 1, "a peer agent's message must stay queued for the drain")
+	require.Len(t, remaining, 2, "both mailbox kinds must stay queued for call_llm")
 	assert.Equal(t, core.AgentMessageKindMessage, remaining[0].Kind)
+	assert.Equal(t, core.AgentMessageKindHumanMessage, remaining[1].Kind)
 }
 
-// TestSendMessage_AbsorbsMailboxOnPausedResume covers the other non-running
-// entry point: a paused run takes no loop steps either, so its mailbox is just
-// as stale, and the resume saves its message inside a transaction the claim must
-// join (a claim that committed without its saves would DELETE the user's words).
-func TestSendMessage_AbsorbsMailboxOnPausedResume(t *testing.T) {
+// TestSendMessage_PausedResumeLeavesMailboxForCallLLM covers the other
+// non-running entry point. Resume mechanics remain separate from queue delivery;
+// the resumed run drains on its next call_llm.
+func TestSendMessage_PausedResumeLeavesMailboxForCallLLM(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.WorkflowStatusPaused)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Paused())
+	temporal := &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING}
 	service := &ChatService{
-		database:     repo,
-		tempClient:   &absorbTestTemporalClient{exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING},
-		pauseService: nil,
+		database:   repo,
+		tempClient: temporal,
+		// No pause controller: the resume panics after the messages are
+		// saved, which is exactly the seam this test wants.
+		runs: runs.NewService(repo, temporal, nil),
 	}
 
 	queueHumanMessage(t, repo, fx.chatID, fx.rootThreadID, fx.rootThreadID,
 		"queued while paused", time.Now().UTC().Add(-time.Minute))
 
-	// pauseService is nil, so the resume itself panics after the messages are
-	// saved. The transaction under test has already committed by then; recover
-	// and assert on what it persisted.
+	// The run-lifecycle service is nil, so the resume itself panics after the
+	// messages are saved. The transaction under test has already committed by
+	// then; recover and assert on what it persisted.
 	func() {
 		defer func() { _ = recover() }()
 		_, _ = service.SendMessage(ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
@@ -280,11 +282,11 @@ func TestSendMessage_AbsorbsMailboxOnPausedResume(t *testing.T) {
 		}))
 	}()
 
-	assert.Equal(t, []string{"queued while paused", "resume now"},
-		transcriptBodies(t, ctx, repo, fx.chatID),
-		"a paused resume must absorb the stale mailbox ahead of the resuming message")
+	assert.Equal(t, []string{"resume now"}, transcriptBodies(t, ctx, repo, fx.chatID),
+		"resume persists the new message but does not deliver the mailbox")
 
 	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
-	assert.Empty(t, remaining)
+	require.Len(t, remaining, 1)
+	assert.Equal(t, "queued while paused", remaining[0].Body)
 }

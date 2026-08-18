@@ -6,6 +6,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -22,6 +23,14 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 )
+
+// maxHeartbeatThrottleInterval is worker.Options.MaxHeartbeatThrottleInterval.
+// Pulled out as a named constant, rather than inlined in workerOpts below, so
+// TestMaxHeartbeatThrottleIntervalStaysLow can pin it: this value alone
+// determines how fast a pending Temporal cancellation reaches a running
+// activity (see the comment on its use below), so raising it silently raises
+// user-visible cancel latency.
+const maxHeartbeatThrottleInterval = 500 * time.Millisecond
 
 // Config holds the dependencies needed to create and start a Temporal worker.
 type Config struct {
@@ -99,42 +108,54 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		MaxConcurrentWorkflowTaskPollers: 5,
 		MaxConcurrentActivityTaskPollers: 10,
 		WorkerStopTimeout:                5 * time.Second,
-		// This is NOT just a throttle — it is also the heartbeat RPC's own
-		// deadline. The SDK sets the RPC timeout to this value, floored at
-		// minRPCTimeout=1s (internal_task_handlers.go internalHeartBeat):
+		// This is the SDK's heartbeat batching window. Ticks from
+		// ActivityWrapper's background heartbeater (activityHeartbeatInterval,
+		// 500ms, workflow/runtime/registry.go) that land inside an open window
+		// are swallowed locally (temporalInvoker.Heartbeat) — no RPC, no
+		// cancellation check — until the window closes and the last details are
+		// sent. Temporal delivers a pending cancellation ONLY in a heartbeat
+		// RPC's response, so cancel latency for anything on this path is
+		// bounded by this value, not by how often RecordHeartbeat is called.
+		// Verified against SDK v1.37.0 and v1.47.0 source; see
+		// specs/fast-cancel-briefing.md for the full trace.
+		//
+		// This value was previously raised from 500ms to 3s to fix activities
+		// dying with "context canceled" mid-flight. That fix targeted the wrong
+		// mechanism: it assumed this value was ALSO the heartbeat RPC's
+		// deadline, floored at minRPCTimeout=1s (internal_task_handlers.go
+		// internalHeartBeat):
 		//
 		//	recordTimeout := i.heartbeatThrottleInterval
 		//	if recordTimeout < minRPCTimeout { recordTimeout = minRPCTimeout }
 		//	ctx, cancel := context.WithTimeout(ctx, recordTimeout)
 		//
-		// At 500ms the floor applied, so every heartbeat had exactly ONE second
-		// to complete a round trip to the Temporal server. A single slow trip
-		// failed the RPC, DeadlineExceeded mapped to a retryable gRPC code, and
-		// the SDK cancelled the whole activity context — killing a healthy
-		// activity seconds into a 30-day StartToCloseTimeout.
+		// But the floor means the deadline was ALREADY 1s at 500ms — raising
+		// this to 3s never widened that 1s budget at all, and could not have
+		// fixed the reported deaths. (The RPC failures were more likely
+		// symptomatic of a genuinely overloaded Temporal server; see
+		// spuriousHeartbeatCancel below for the real backstop.) What raising it
+		// DID do was directly add 2.5s of avoidable cancel latency, since this
+		// value is the sole determinant of how fast a cancel reaches a running
+		// activity.
 		//
-		// The user-visible damage was not a timeout message. Whatever operation
-		// happened to be in flight died with the context and reported ITS error
-		// instead: "streaming cancelled by user" from CallLLM (which no user
-		// cancelled), and "failed to connect to database ... operation was
-		// canceled" from SaveMessage (with Postgres up, healthy, and reachable
-		// the whole time). Observed 63+ times across two log windows, every one
-		// with cause="context deadline exceeded".
-		//
-		// 3s gives a round trip three times the budget. The cost is that a
-		// server-side cancellation now reaches a running activity in up to ~3s
-		// rather than ~500ms; per-tool and per-spawn cancellation do not depend
-		// on this path (they run over the daemon router and a workflow signal
-		// respectively), so that latency is not user-visible.
-		//
-		// spuriousHeartbeatCancel in workflow/runtime/registry.go still converts
-		// any that slip through into a retry rather than a chat-parking pause.
-		// This reduces how often that safety net is needed; it does not replace
-		// it.
-		MaxHeartbeatThrottleInterval: 3 * time.Second,
+		// Restored to 500ms: cancel latency for this path now matches
+		// activityHeartbeatInterval instead of being 6x slower than it, and the
+		// per-RPC deadline is unchanged (still floored to 1s). The only real
+		// cost is 6x more heartbeat RPCs per activity, which raises the odds
+		// that any single one is slow — spuriousHeartbeatCancel exists
+		// specifically to absorb that and convert it to a retry rather than a
+		// user-visible cancellation.
+		MaxHeartbeatThrottleInterval: maxHeartbeatThrottleInterval,
 		BuildID:                      v2workflow.WorkerBuildID,
-		DeadlockDetectionTimeout:     30 * time.Second,
-		Interceptors:                 []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
+		// Set explicitly rather than inherited from the client, so the identity
+		// is stable no matter how the client was constructed (tests and the
+		// replay harness build their own). This is the value that surfaces as
+		// Temporal's LastWorkerIdentity, which is what "did the worker restart?"
+		// is actually read from — see internal/instanceid for why the SDK's
+		// hostname-based default cannot answer that question.
+		Identity:                 instanceid.WorkerIdentity(),
+		DeadlockDetectionTimeout: 30 * time.Second,
+		Interceptors:             []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
 	}
 
 	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOpts)

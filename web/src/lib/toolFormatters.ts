@@ -659,6 +659,47 @@ export const formatSkillParams: ToolFormatter = (input) => {
   return { summary: '', fullText: 'skill()' };
 };
 
+function formatWaitLabel(value: string, maxLength = 50): string {
+  const oneLine = value.replace(/\s+/g, ' ').trim();
+  return oneLine.length > maxLength ? oneLine.slice(0, maxLength - 1) + '…' : oneLine;
+}
+
+/**
+ * Format bash_wait parameters without leaking opaque process UUIDs into the row.
+ * ToolExecution may augment the display-only input with the original bash
+ * description/command after resolving process_id back to the bash call.
+ */
+export const formatBashWaitParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: 'process', fullText: 'bash_wait(process)', structured: {} };
+  const processId = input.process_id as string | undefined;
+  const description = (input.description as string | undefined)?.trim();
+  const command = (input.command as string | undefined)?.trim();
+  const label = description || command || 'process';
+  return {
+    summary: formatWaitLabel(label),
+    fullText: `bash_wait(${label})`,
+    structured: { processId, description, command },
+  };
+};
+
+/**
+ * Format spawn_status parameters without showing agent/thread UUIDs. In listing
+ * mode it names the list; in single-agent mode ToolExecution may augment the
+ * display-only input with the resolved spawn title.
+ */
+export const formatSpawnStatusParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: 'all agents', fullText: 'spawn_status(all agents)', structured: {} };
+  const agentId = input.agent_id as string | undefined;
+  const title = (input.title as string | undefined)?.trim();
+  const wait = Boolean(input.wait);
+  const label = agentId ? (title || 'this agent') : 'all agents';
+  return {
+    summary: formatWaitLabel(label),
+    fullText: `spawn_status(${wait && agentId ? 'wait for ' : ''}${label})`,
+    structured: { agentId, title, wait },
+  };
+};
+
 /**
  * Format spawn tool parameters
  */
@@ -720,6 +761,8 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   find_replace: formatFindReplaceParams,
   load_tool: formatLoadToolParams,
   skill: formatSkillParams,
+  bash_wait: formatBashWaitParams,
+  spawn_status: formatSpawnStatusParams,
   spawn: formatSpawnParams,
 };
 

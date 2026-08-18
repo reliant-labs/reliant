@@ -35,6 +35,11 @@ vi.mock("../../api/chat-grpc", () => ({
 }));
 
 import { useQueuedAgentMessages } from "../queued-agent-messages";
+import { initEventBus } from "../../lib/events";
+
+// The hook subscribes through the same singleton, which is idempotent — this
+// is the bus the hook will use, not a second one.
+const getEventBus = initEventBus;
 
 const HUMAN = 5;
 
@@ -140,6 +145,93 @@ describe("useQueuedAgentMessages", () => {
     await act(async () => {
       await result.current.refresh();
     });
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+  });
+
+  // The bug the drain announcement exists for.
+  //
+  // The agent taking a message off the queue is the ORDINARY way a row leaves
+  // the mailbox, and it used to be the one way that produced no signal at all.
+  // The message became a transcript entry immediately; the strip kept showing
+  // it until some later poll happened to answer without it. For that whole
+  // window the user saw their message twice, in two different places.
+  //
+  // Without the drain subscription these three tests fail: the row is still in
+  // the strip after the announcement, because only a poll could remove it.
+  it("drops a message the moment the agent announces it drained it", async () => {
+    listQueuedAgentMessagesMock.mockResolvedValue({ messages: [queued("q-1")] });
+
+    const { result } = renderQueue();
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+
+    // The drain committed. No poll has run since, and none needs to.
+    act(() => {
+      getEventBus().emit("agentMailbox:drained", {
+        chatId: CHAT_ID,
+        thread: THREAD_ID,
+        messageIds: ["q-1"],
+      });
+    });
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(0));
+  });
+
+  // The drain races polls exactly the way a user claim does, so it needs the
+  // same durability: a poll that asked before the drain must not resurrect the
+  // row when it answers after it.
+  it("keeps a drained message dropped when a poll from before the drain lands after it", async () => {
+    listQueuedAgentMessagesMock.mockResolvedValueOnce({ messages: [queued("q-1")] });
+
+    const { result } = renderQueue();
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+
+    const inFlight = deferred<{ messages: QueuedAgentMessageView[] }>();
+    listQueuedAgentMessagesMock.mockReturnValueOnce(inFlight.promise);
+    act(() => {
+      void result.current.refresh();
+    });
+
+    act(() => {
+      getEventBus().emit("agentMailbox:drained", {
+        chatId: CHAT_ID,
+        thread: THREAD_ID,
+        messageIds: ["q-1"],
+      });
+    });
+    await waitFor(() => expect(result.current.messages).toHaveLength(0));
+
+    await act(async () => {
+      inFlight.resolve({ messages: [queued("q-1")] });
+      await inFlight.promise;
+    });
+
+    await waitFor(() => expect(result.current.messages).toHaveLength(0));
+    expect(result.current.messages.map((m) => m.id)).not.toContain("q-1");
+  });
+
+  // A drain announcement is addressed to one thread's mailbox. Applying
+  // another's ids would tombstone rows this queue never had — and since a
+  // tombstone is only released by a response that OMITS the id, a stray one
+  // would sit in the set for the life of the thread.
+  it("ignores a drain announcement addressed to another thread or chat", async () => {
+    listQueuedAgentMessagesMock.mockResolvedValue({ messages: [queued("q-1")] });
+
+    const { result } = renderQueue();
+    await waitFor(() => expect(result.current.messages).toHaveLength(1));
+
+    act(() => {
+      getEventBus().emit("agentMailbox:drained", {
+        chatId: CHAT_ID,
+        thread: "some-other-thread",
+        messageIds: ["q-1"],
+      });
+      getEventBus().emit("agentMailbox:drained", {
+        chatId: "some-other-chat",
+        thread: THREAD_ID,
+        messageIds: ["q-1"],
+      });
+    });
+
     await waitFor(() => expect(result.current.messages).toHaveLength(1));
   });
 

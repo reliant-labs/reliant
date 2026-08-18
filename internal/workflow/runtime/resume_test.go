@@ -431,6 +431,10 @@ func workIterations(rec *resumeEnvRecorder) []int {
 // only the TOP-LEVEL node — never the nested loop node or its iteration. This is
 // the structural reason the coarse fresh-restart-with-checkpoint cannot express
 // a mid-nested-get-it-right position (Finding-1's root cause).
+//
+// This limitation is real and expected: resuming precisely inside a nested loop
+// is what reset-and-replay is for, and Temporal already provides it. A position
+// table that tried to describe the nesting was the wrong answer to it.
 func TestDynamicWorkflow_NestedLoop_FlatCheckpointOmitsNestedIteration(t *testing.T) {
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
@@ -468,11 +472,12 @@ func TestDynamicWorkflow_NestedLoop_CoarseResumeRestartsNestedAtZero(t *testing.
 		"coarse resume at the top-level node restarts the nested loop at iteration 0 — the flat checkpoint cannot resume mid-nested-loop")
 }
 
-// The nested-resume fix is engine-level, so it applies to ANY nested loop — not
-// only the get-it-right (loop-inside-a-workflow-node) shape. This uses a PLAIN
-// loop-nested-in-loop and shows the same structural fact: the flat checkpoint
-// records only the TOP-LEVEL loop ("outer"), never the inner loop's iteration,
-// which is why only reset-and-replay can resume the inner loop precisely.
+// The nested-resume limitation is engine-level, so it applies to ANY nested
+// loop — not only the get-it-right (loop-inside-a-workflow-node) shape. This
+// uses a PLAIN loop-nested-in-loop and shows the same structural fact: the flat
+// checkpoint records only the TOP-LEVEL loop ("outer"), never the inner loop's
+// iteration, which is why only reset-and-replay can resume the inner loop
+// precisely.
 const resumeGenericNestedLoopYAML = `
 name: resume-test
 entry: [outer]

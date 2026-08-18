@@ -22,7 +22,7 @@ describe("thread origin precedence", () => {
   // on disk permanently. Letting the stream win re-poisoned already-correct
   // threads on every reload — new chats looked fixed, old ones stayed broken.
   it("does not let a stale streamed origin override the workflow tree", () => {
-    const fromTree = { origin: "spawn" as ThreadOrigin, isSpawn: true };
+    const fromTree: { origin?: ThreadOrigin; isSpawn: boolean } = { origin: "spawn", isSpawn: true };
     const result = applyStreamOrigin(fromTree, "node");
 
     expect(result.origin).toBe("spawn");

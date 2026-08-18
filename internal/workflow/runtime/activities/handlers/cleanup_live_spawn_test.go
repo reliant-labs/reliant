@@ -86,7 +86,7 @@ func TestCleanup_DoesNotRepairRunningSpawn(t *testing.T) {
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
 
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
-		core.ToolCallStatusExecuting, core.WorkflowStatusRunning)
+		core.ToolCallStatusExecuting, core.Active())
 
 	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
@@ -111,7 +111,7 @@ func TestCleanup_RepairsSpawnWhoseChildWorkflowEnded(t *testing.T) {
 	// Call row still says EXECUTING (its terminal write was lost — the very
 	// thing a crash does), but the child workflow is over.
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
-		core.ToolCallStatusExecuting, core.WorkflowStatusFailed)
+		core.ToolCallStatusExecuting, core.Failed())
 
 	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
@@ -132,7 +132,7 @@ func TestCleanup_DoesNotRepairPausedSpawn(t *testing.T) {
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
 
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
-		core.ToolCallStatusExecuting, core.WorkflowStatusPaused)
+		core.ToolCallStatusExecuting, core.Paused())
 
 	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)
@@ -151,7 +151,7 @@ func TestCleanup_RepairsTerminalCallWithNoResult(t *testing.T) {
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
 
 	toolCallID, _ := seedSpawnToolCall(t, repo, ctx, chatID, cwID,
-		core.ToolCallStatusCancelled, core.WorkflowStatusCancelled)
+		core.ToolCallStatusCancelled, core.Cancelled())
 
 	output, err := NewCleanupActivity(repo).Execute(ctx, CleanupInput{ChatID: chatID})
 	require.NoError(t, err)

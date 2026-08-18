@@ -53,7 +53,7 @@ export interface BaseChatInputProps {
   inlineSendButton?: boolean;
 }
 
-export const BaseChatInput = forwardRef<HTMLDivElement, BaseChatInputProps>(
+export const BaseChatInput = forwardRef<HTMLTextAreaElement, BaseChatInputProps>(
   function BaseChatInput(
     {
       value,
@@ -73,7 +73,7 @@ export const BaseChatInput = forwardRef<HTMLDivElement, BaseChatInputProps>(
     },
     ref
   ) {
-    const textareaRef = useRef<HTMLDivElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     // Forward the internal ref to the parent
     useImperativeHandle(ref, () => textareaRef.current!, []);

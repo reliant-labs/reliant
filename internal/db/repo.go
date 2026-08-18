@@ -27,7 +27,8 @@ import (
 type transactionKey string
 
 const (
-	txKey transactionKey = `tx`
+	txKey          transactionKey = `tx`
+	afterCommitKey transactionKey = `after-commit`
 
 	// Retry configuration
 	maxRetries     = 3
@@ -37,6 +38,22 @@ const (
 	// Default timeout for database operations
 	defaultDBTimeout = 10 * time.Second
 )
+
+// afterCommitCallbacks belongs to one transaction ATTEMPT. A failed attempt's
+// callbacks are discarded with its transaction; only the callbacks collected
+// by the attempt that actually commits are run.
+type afterCommitCallbacks struct {
+	callbacks []func()
+}
+
+func runAfterCommit(ctx context.Context, callback func()) error {
+	callbacks, ok := ctx.Value(afterCommitKey).(*afterCommitCallbacks)
+	if !ok || callbacks == nil {
+		return errors.New("after-commit callback requires repository transaction")
+	}
+	callbacks.callbacks = append(callbacks.callbacks, callback)
+	return nil
+}
 
 // ============================================================================
 // TRANSACTION HELPER TYPES
@@ -293,9 +310,14 @@ func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx co
 		}
 	}()
 
-	// Execute the transaction function
+	// Execute the transaction function. After-commit callbacks live on this
+	// attempt's context so a SERIALIZABLE retry cannot publish events created by
+	// the rolled-back attempt.
 	execTime := time.Now()
-	err := f(context.WithValue(ctx, txKey, tx))
+	afterCommit := &afterCommitCallbacks{}
+	txCtx := context.WithValue(ctx, txKey, tx)
+	txCtx = context.WithValue(txCtx, afterCommitKey, afterCommit)
+	err := f(txCtx)
 	result.execDuration = time.Since(execTime)
 
 	if err != nil {
@@ -315,6 +337,9 @@ func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx co
 	}
 
 	result.committed = true
+	for _, callback := range afterCommit.callbacks {
+		callback()
+	}
 	return result
 }
 
@@ -339,15 +364,118 @@ func logTransactionTiming(metrics *txMetrics, result *txResult) {
 	}
 }
 
+// Isolation selects a transaction's isolation level.
+//
+// The zero value is IsolationDefault, which means SERIALIZABLE — deliberately,
+// so that the DANGEROUS choice is always the explicit one. A zero-valued
+// TxOptions therefore behaves exactly as every transaction did before this type
+// existed, and forgetting to think about isolation cannot silently weaken a
+// guarantee.
+type Isolation int
+
+const (
+	// IsolationDefault is SERIALIZABLE. Correct for anything that writes.
+	IsolationDefault Isolation = iota
+
+	// IsolationSerializable is the explicit spelling of the default. Use it
+	// when a transaction's serializability is load-bearing and you want that
+	// stated at the call site rather than inherited.
+	IsolationSerializable
+
+	// IsolationReadCommitted weakens isolation to Postgres' own default.
+	//
+	// Only valid where the transaction's correctness does not depend on the
+	// absence of concurrent modification: it can see rows committed by other
+	// transactions BETWEEN its own statements, so two reads in one transaction
+	// may disagree, and a read-then-write sequence has no protection against a
+	// lost update.
+	//
+	// The gain is that it takes no predicate locks and cannot raise 40001. For
+	// a single-statement lookup — where "between statements" has no meaning —
+	// that is a strict win. For anything multi-statement it is a correctness
+	// decision, not a performance tweak, and needs a reason at the call site.
+	IsolationReadCommitted
+)
+
+// sqlLevel maps to database/sql's isolation constants.
+func (i Isolation) sqlLevel() sql.IsolationLevel {
+	if i == IsolationReadCommitted {
+		return sql.LevelReadCommitted
+	}
+	return sql.LevelSerializable
+}
+
+func (i Isolation) String() string {
+	switch i {
+	case IsolationReadCommitted:
+		return "read committed"
+	default:
+		return "serializable"
+	}
+}
+
+// TxOptions configures a transaction. The zero value is the historical
+// default: a read-write SERIALIZABLE transaction.
+type TxOptions struct {
+	// Isolation selects the isolation level. Zero value = SERIALIZABLE.
+	Isolation Isolation
+
+	// ReadOnly runs the transaction as READ ONLY DEFERRABLE.
+	//
+	// This is a scalability lever, not a safety annotation. Every transaction
+	// here is SERIALIZABLE, where a read takes PREDICATE LOCKS over whatever it
+	// touched — and a read that cannot use an index takes one over the whole
+	// relation. Those locks are what make two transactions on completely
+	// disjoint chats abort each other with SQLSTATE 40001.
+	//
+	// Postgres treats READ ONLY DEFERRABLE specially: such a transaction takes
+	// NO predicate locks at all and can never be aborted with a serialization
+	// failure. It waits at BEGIN until it can obtain a snapshot guaranteed free
+	// of later conflicts, and from then on runs without contributing to — or
+	// suffering from — the serialization graph.
+	//
+	// So a read-only path marked here stops both taking conflicts and CAUSING
+	// them for concurrent writers. With one user running a dozen agents against
+	// one chat, measured contention was 81 serialization failures in ~50
+	// minutes (12 of which exhausted the retry budget and reached the user), so
+	// removing read paths from the graph is the highest-leverage change
+	// available short of a schema redesign.
+	//
+	// The cost is the DEFERRABLE wait: on a busy database BEGIN can block
+	// briefly. That is the right trade for a read (it delays one query) and the
+	// wrong one for anything that writes — Postgres rejects writes in a
+	// read-only transaction outright, so a mislabelled path fails loudly rather
+	// than silently corrupting.
+	ReadOnly bool
+}
+
 func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
+	return r.RunTxWithOptions(ctx, TxOptions{}, f)
+}
+
+// RunTxReadOnly runs f in a READ ONLY DEFERRABLE transaction. Sugar for the
+// common case; see TxOptions.ReadOnly for why this matters.
+func (r *Repo) RunTxReadOnly(ctx context.Context, f func(ctx context.Context) error) error {
+	return r.RunTxWithOptions(ctx, TxOptions{ReadOnly: true}, f)
+}
+
+// RunTxWithOptions is RunTx with explicit transaction options.
+func (r *Repo) RunTxWithOptions(ctx context.Context, opts TxOptions, f func(ctx context.Context) error) error {
 	// Check if database is initialized
 	if r.DB == nil {
 		observability.DBErrorsTotal.WithLabelValues("transaction", string(r.driver)).Inc()
 		return errors.New("database connection not initialized")
 	}
 
-	// Check if we're already in a transaction - if so, just execute the function
-	// This prevents nested transactions
+	// Already inside a transaction: join it rather than opening a nested one.
+	//
+	// The caller's options are deliberately IGNORED here, because the ambient
+	// transaction already exists and its mode cannot be changed mid-flight.
+	// This is safe in the direction that matters — a read-only inner call
+	// joining a read-write outer transaction just reads — and the opposite
+	// (a writing inner call joining a read-only outer transaction) is rejected
+	// by Postgres at the point of the write, which is exactly where the
+	// mistake is.
 	if _, ok := ctx.Value(txKey).(pgdb.DBTX); ok {
 		return f(ctx)
 	}
@@ -355,18 +483,18 @@ func (r *Repo) RunTx(ctx context.Context, f func(ctx context.Context) error) err
 	// Initialize metrics
 	metrics := &txMetrics{txStartTime: time.Now()}
 
-	err := r.runTxWithRetries(ctx, f, metrics)
+	err := r.runTxWithRetries(ctx, opts, f, metrics)
 	duration := time.Since(metrics.txStartTime).Seconds()
 	observability.DBQueryDuration.WithLabelValues("transaction", string(r.driver)).Observe(duration)
 	return err
 }
 
 // runTxWithRetries executes the transaction with retry logic
-func (r *Repo) runTxWithRetries(ctx context.Context, f func(ctx context.Context) error, metrics *txMetrics) error {
+func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx context.Context) error, metrics *txMetrics) error {
 	var lastErr error
 
 	for attempt := 0; attempt <= maxRetries; attempt++ {
-		result, err := r.attemptTransaction(ctx, f, metrics)
+		result, err := r.attemptTransaction(ctx, opts, f, metrics)
 		if err != nil {
 			// Begin transaction failed
 			if isRetryableError(err) && attempt < maxRetries {
@@ -431,9 +559,9 @@ func (r *Repo) runTxWithRetries(ctx context.Context, f func(ctx context.Context)
 
 // attemptTransaction tries to begin and execute a single transaction
 // Returns (result, nil) if transaction was started, (nil, err) if begin failed
-func (r *Repo) attemptTransaction(ctx context.Context, f func(ctx context.Context) error, metrics *txMetrics) (*txResult, error) {
+func (r *Repo) attemptTransaction(ctx context.Context, opts TxOptions, f func(ctx context.Context) error, metrics *txMetrics) (*txResult, error) {
 	beginTime := time.Now()
-	tx, err := r.DB.BeginImmediate(ctx)
+	tx, err := r.DB.BeginTxWithOptions(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -456,12 +584,41 @@ func (w *WrappedDBTX) DB(ctx context.Context) pgdb.DBTX {
 	return w.db
 }
 
-// BeginImmediate starts a transaction with Serializable isolation.
+// BeginImmediate starts a read-write transaction with Serializable isolation.
 func (w *WrappedDBTX) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
-	return w.db.BeginTx(ctx, &sql.TxOptions{
-		Isolation: sql.LevelSerializable,
-		ReadOnly:  false,
+	return w.BeginTxWithOptions(ctx, TxOptions{})
+}
+
+// BeginTxWithOptions starts a SERIALIZABLE transaction, read-only when asked.
+//
+// database/sql's ReadOnly maps to Postgres READ ONLY. Combined with
+// SERIALIZABLE it also implies DEFERRABLE behavior for the purpose that
+// matters here: the transaction takes no predicate locks and cannot fail with
+// a serialization error. See TxOptions.ReadOnly.
+func (w *WrappedDBTX) BeginTxWithOptions(ctx context.Context, opts TxOptions) (*sql.Tx, error) {
+	tx, err := w.db.BeginTx(ctx, &sql.TxOptions{
+		Isolation: opts.Isolation.sqlLevel(),
+		ReadOnly:  opts.ReadOnly,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	// DEFERRABLE only has meaning for a SERIALIZABLE READ ONLY transaction —
+	// it is what buys the "no predicate locks, cannot be aborted" guarantee.
+	// It is a no-op under READ COMMITTED (which already takes none), so it is
+	// applied only where it does something.
+	if opts.ReadOnly && opts.Isolation.sqlLevel() == sql.LevelSerializable {
+		// database/sql has no DEFERRABLE flag. Without it the transaction is
+		// READ ONLY but still participates in the serialization graph — it can
+		// still be aborted with 40001, which is the entire thing we are trying
+		// to avoid. Set it explicitly on the open transaction.
+		if _, err := tx.ExecContext(ctx, "SET TRANSACTION READ ONLY DEFERRABLE"); err != nil {
+			tx.Rollback()
+			return nil, fmt.Errorf("set read-only deferrable: %w", err)
+		}
+	}
+	return tx, nil
 }
 
 // SQLDB exposes the underlying pool for stores that own their SQL rather than
@@ -598,23 +755,38 @@ func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int6
 	return sequence.Int64, nil
 }
 
-// GetNextSequenceNumber returns the next sequence number for a chat's updates.
-//
-// Uses a Postgres sequence for the same reason as GetNextUserSequenceNumber
-// (see its doc comment): under SERIALIZABLE, the previous SELECT MAX(...)+1
-// took a predicate lock that conflicted with every concurrent insert for the
-// same chat and aborted one side with SQLSTATE 40001. Chat updates are written
-// by every parallel spawn in a chat, so this was the same failure with an even
-// hotter key.
-func (r *Repo) GetNextSequenceNumber(ctx context.Context, chatID string) (int64, error) {
-	var nextSeq int64
-	query := `SELECT nextval('chat_updates_sequence_number_seq')`
+const (
+	updateStreamKindUser = "user"
+	updateStreamKindChat = "chat"
+)
 
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query).Scan(&nextSeq)
-	if err != nil {
-		return 0, fmt.Errorf("failed to allocate chat sequence: %w", err)
+// allocateUpdateSequence advances one logical stream's transactional counter.
+//
+// The counter update and the ledger insert MUST share a transaction. The row
+// lock is what prevents N+1 from committing before N, and rolling the
+// transaction back must roll both the counter and ledger row back together.
+// Keeping this primitive transaction-only makes it impossible for a future
+// caller to accidentally consume a cursor outside the durable write.
+func (r *Repo) allocateUpdateSequence(ctx context.Context, streamKind, streamID string) (int64, error) {
+	if _, ok := ctx.Value(txKey).(pgdb.DBTX); !ok {
+		return 0, fmt.Errorf("allocate %s update sequence: transaction required", streamKind)
 	}
 
+	var nextSeq int64
+	query := `
+		INSERT INTO update_stream_counters (
+			stream_kind, stream_id, last_assigned_seq
+		) VALUES (?, ?, 1)
+		ON CONFLICT (stream_kind, stream_id) DO UPDATE
+		SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
+		RETURNING last_assigned_seq
+	`
+	query = r.bindQuery(query)
+
+	err := r.DB.DB(ctx).QueryRowContext(ctx, query, streamKind, streamID).Scan(&nextSeq)
+	if err != nil {
+		return 0, fmt.Errorf("allocate %s update sequence: %w", streamKind, err)
+	}
 	return nextSeq, nil
 }
 
@@ -628,7 +800,7 @@ func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType r
 	// This prevents UNIQUE constraint violations when parallel goroutines try to create updates
 	err := r.RunTx(ctx, func(ctx context.Context) error {
 		// Get next sequence number within the transaction
-		nextSeq, err := r.GetNextSequenceNumber(ctx, chatID)
+		nextSeq, err := r.allocateUpdateSequence(ctx, updateStreamKindChat, chatID)
 		if err != nil {
 			return fmt.Errorf("failed to get next sequence number: %w", err)
 		}
@@ -659,16 +831,21 @@ func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType r
 			return err
 		}
 
+		if r.onChatUpdate != nil {
+			committedUpdate := chatUpdate
+			if err := runAfterCommit(ctx, func() {
+				r.onChatUpdate(chatID, committedUpdate.SequenceNumber, committedUpdate)
+			}); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	// Notify hub after successful DB commit (fire-and-forget)
-	if r.onChatUpdate != nil {
-		r.onChatUpdate(chatID, chatUpdate.SequenceNumber, chatUpdate)
-	}
 	return nil
 }
 
@@ -705,17 +882,33 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// dedup the Go caller used to do.
 	//
 	// Tool-call updates need a different identity than entity_id. Their entity
-	// id is built as "tool-<content_block_id>-<timestamp>"
+	// id is built as "tool-<tool_call_id>-<timestamp>"
 	// (EntityIDForToolCall), so every status transition of the SAME tool call
 	// — pending → executing → completed — lands under a DISTINCT entity_id and
 	// per-entity dedup can never collapse them. The frontend keys tool state by
-	// content_block_id and only ever renders the latest status, so replaying
-	// every historical transition is pure weight: deduping on the embedded
-	// content_block_id instead of the whole entity_id halves the update count
-	// on a long chat (measured 10,571 → 5,327).
+	// tool_call_id and only ever renders the latest status, so replaying every
+	// historical transition is pure weight: deduping on the JSON tool_call_id
+	// instead of the whole entity_id halves the update count on a long chat
+	// (measured 10,571 → 5,327).
 	//
-	// split_part(entity_id, '-', 2) is the content_block_id: the ids are
-	// "tool-<block>-<ts>" and block ids ("toolu_…") contain no '-'.
+	// The tool id can contain '-' (for example resumptions and synthesized ids),
+	// so parsing it back out of entity_id with split_part is unsafe. The payload
+	// already carries the canonical key; use data::jsonb->>'tool_call_id'.
+	//
+	// Question updates need the same treatment, for a user-visible reason. A
+	// question writes TWO rows over its life — "pending" when the gate opens
+	// and "resolved" when it is answered — and EntityIDForQuestion also embeds
+	// a timestamp, so per-entity_id dedup keeps BOTH. The snapshot then replays
+	// the stale "pending" row to a client that is opening the chat, and an
+	// already-answered question renders until the "resolved" row is applied
+	// behind it. That is the "answered ask briefly pops up on open" flash.
+	// Collapsing to the latest status per question makes the pending row
+	// unreachable rather than merely short-lived.
+	//
+	// Question ids are UUIDs, which contain '-', so split_part cannot pick them
+	// out the way it does for tool calls. The timestamp suffix has no '-' of
+	// its own, so stripping the final '-' segment yields "question-<uuid>" —
+	// stable across both transitions, and distinct per question.
 	query := `
 		SELECT DISTINCT ON (dedup_key)
 			id,
@@ -734,8 +927,9 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 				entity_id,
 				data,
 				created_at,
-				CASE WHEN update_type = ?
-					THEN split_part(entity_id, '-', 2)
+				CASE
+					WHEN update_type = ? THEN COALESCE(NULLIF(data::jsonb->>'tool_call_id', ''), entity_id)
+					WHEN update_type = ? THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
 					ELSE entity_id
 				END AS dedup_key
 			FROM chat_updates
@@ -747,6 +941,7 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 
 	rows, err := r.DB.DB(ctx).QueryContext(ctx, query,
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL),
+		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION),
 		chatID,
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE),
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED))
@@ -916,7 +1111,6 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 	streamingState := ComputeStreamingState(blockValues)
 
 	// Build content blocks array and extract attachments for response
-	contentBlocks := []map[string]interface{}{}
 
 	// First, collect all attachment IDs from image and file_reference blocks
 	attachmentIDs := []string{}
@@ -977,7 +1171,7 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 
 	}
 	// One serializer for a block's wire shape (see ContentBlockPayloads).
-	contentBlocks = r.ContentBlockPayloads(ctx, blocks)
+	contentBlocks := r.ContentBlockPayloads(ctx, blocks)
 
 	// Get context_sequence from context_window for frontend compatibility
 	var contextSequence int
@@ -1104,34 +1298,6 @@ func (r *Repo) GetLatestUserUpdateSequence(ctx context.Context, userID string) (
 	return sequence.Int64, nil
 }
 
-// GetNextUserSequenceNumber returns the next sequence number for a user's updates.
-//
-// Allocation goes through a Postgres sequence, NOT SELECT MAX(...)+1. Every
-// transaction here runs at SERIALIZABLE, where the old MAX() query took a
-// predicate lock covering rows that did not exist yet — so any concurrent
-// insert for the same user produced a read/write dependency and one side was
-// aborted with SQLSTATE 40001. Because all of a user's chats share one counter,
-// the conflict rate scaled with spawn fan-out, and the failure surfaced to the
-// user as a failed SendMessage after burning every retry.
-//
-// nextval() is non-transactional: it takes no predicate lock and never blocks a
-// concurrent caller, so two allocations at once simply get two values. The
-// trade is that numbers are no longer gap-free — a rolled-back transaction
-// consumes its value — which is fine because every consumer uses these as an
-// ordered cursor (`sequence_number > $cursor ORDER BY sequence_number`), never
-// as a dense range. See the migration for the full rationale.
-func (r *Repo) GetNextUserSequenceNumber(ctx context.Context, userID string) (int64, error) {
-	var nextSeq int64
-	query := `SELECT nextval('user_updates_sequence_number_seq')`
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query).Scan(&nextSeq)
-	if err != nil {
-		return 0, fmt.Errorf("failed to allocate user sequence: %w", err)
-	}
-
-	return nextSeq, nil
-}
-
 // CreateUserUpdate creates a new user update for the global WebSocket.
 //
 // This mirrors CreateChatUpdate semantics:
@@ -1139,16 +1305,14 @@ func (r *Repo) GetNextUserSequenceNumber(ctx context.Context, userID string) (in
 // 2) writes go through RunTx with retry logic for transient errors
 // 3) nested transaction calls (ctx already carrying txKey) are supported
 func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
-	// Whether the caller supplied an explicit ID. When they didn't, we derive
-	// the ID from the sequence number and MUST re-derive it on every retry:
-	// GetNextUserSequenceNumber is a racy SELECT MAX+1, so a concurrent writer
-	// can collide on user_updates_pkey; RunTx retries, allocates a fresh
-	// sequence, and the ID has to follow it. (CreateChatUpdate is race-free for
-	// the same reason — it recomputes the ID inside the tx on each attempt.)
+	// Whether the caller supplied an explicit ID. When they didn't, derive the
+	// ID again on every transaction retry because the scoped allocation from a
+	// failed attempt rolls back and the retried attempt obtains the then-current
+	// next value.
 	callerSuppliedID := update.ID != ""
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
 		// Get next sequence number within the transaction for atomicity.
-		nextSeq, err := r.GetNextUserSequenceNumber(txCtx, update.UserID)
+		nextSeq, err := r.allocateUpdateSequence(txCtx, updateStreamKindUser, update.UserID)
 		if err != nil {
 			return fmt.Errorf("failed to get next user sequence number: %w", err)
 		}
@@ -1182,16 +1346,21 @@ func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 		if err != nil {
 			return fmt.Errorf("failed to insert user update: %w", err)
 		}
+
+		if r.onUserUpdate != nil {
+			committedUpdate := *update
+			if err := runAfterCommit(txCtx, func() {
+				r.onUserUpdate(&committedUpdate)
+			}); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
 
-	// Notify hub after successful DB commit (fire-and-forget)
-	if r.onUserUpdate != nil {
-		r.onUserUpdate(update)
-	}
 	return nil
 }
 

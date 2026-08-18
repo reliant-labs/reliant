@@ -7,7 +7,11 @@
  * chatStore.streamEvents.test.ts / chatStore.messageMerge.test.ts.
  */
 import type { Message } from "../api/client";
-import { MessageRole, StreamingState } from "../gen/reliant/v1/chat_pb";
+import {
+  ContentBlockType,
+  MessageRole,
+  StreamingState,
+} from "../gen/reliant/v1/chat_pb";
 import type { ActiveThreadUpdate } from "../types/streaming";
 import type {
   ToolCallState,
@@ -86,7 +90,7 @@ export const TERMINAL_TOOL_STATUSES = new Set(["cancelled", "backgrounded"]);
 // down with it, and a completed tool repainted as cancelled is a lie about work
 // the user already has the results of. Whichever terminal status lands first is
 // the one that describes what the tool did.
-const SETTLED_TOOL_STATUSES = new Set(["completed", "failed"]);
+export const SETTLED_TOOL_STATUSES = new Set(["completed", "failed"]);
 
 /**
  * Fold tool-execution-state updates into the per-call status Map (keyed by
@@ -133,37 +137,176 @@ export function applyToolCallStateUpdates(
   return next;
 }
 
+// Finalize reasons that mean the stream STOPPED rather than finished. A step
+// cancelled mid-stream persists nothing and is re-dispatched (all-or-nothing),
+// so the assistant message id named by the marker never becomes a row — the
+// blocks streamed under it are all the record there will ever be of it.
+const ABORTED_FINALIZE_REASONS = new Set(["cancelled", "aborted"]);
+
+export function isAbortedFinalizeReason(reason: string | undefined): boolean {
+  return !!reason && ABORTED_FINALIZE_REASONS.has(reason);
+}
+
 /**
- * Merge active-thread updates into the existing thread list (dedup by id).
+ * Whether a tool that already carries this status describes its own outcome
+ * well enough that a stream ending underneath it must leave it alone.
+ *
+ * "completed"/"failed" ran to a result the user already has. "backgrounded" is
+ * a deliberate request to keep the tool running past the turn that started it,
+ * so the stream stopping says nothing about it. "cancelled" is already settled.
+ */
+export function toolStatusSurvivesStreamAbort(
+  status: string | undefined,
+): boolean {
+  if (!status) return false;
+  return SETTLED_TOOL_STATUSES.has(status) || TERMINAL_TOOL_STATUSES.has(status);
+}
+
+/**
+ * Settle the tool blocks of a streaming placeholder whose stream was cancelled
+ * or aborted, returning the tool-call ids that had not reached an outcome.
+ *
+ * A tool block only counts as unsettled when nothing else already described
+ * what it did: `settledStatuses` carries the durable/live statuses that landed
+ * on the separate tool-state channel, and a tool that genuinely completed keeps
+ * that status. Everything left really did stop when the stream stopped, so it
+ * settles to "cancelled" rather than being left mid-flight.
+ *
+ * Pure: returns a new message with new blocks, leaving the input untouched.
+ */
+export function settleCancelledStreamBlocks(
+  message: Message,
+  settledStatuses: Map<string, ToolCallState> | undefined,
+): { message: Message; cancelledToolCallIds: string[] } {
+  const cancelledToolCallIds: string[] = [];
+  const blocks = (message.contentBlocks || []) as Array<
+    Message["contentBlocks"][number] & { status?: string }
+  >;
+
+  const nextBlocks = blocks.map((block) => {
+    if (!block || block.type !== ContentBlockType.TOOL_CALL) return block;
+    if (block.status) return block;
+    const durable = block.toolCallId
+      ? settledStatuses?.get(block.toolCallId)?.status
+      : undefined;
+    if (toolStatusSurvivesStreamAbort(durable)) return block;
+    if (block.toolCallId) cancelledToolCallIds.push(block.toolCallId);
+    return { ...block, status: "cancelled" };
+  });
+
+  return {
+    message: {
+      ...message,
+      contentBlocks: nextBlocks,
+      streamingState: StreamingState.COMPLETE,
+    },
+    cancelledToolCallIds,
+  };
+}
+
+const COMPACT_THREAD_ID_SUFFIX = "-compact";
+
+function threadMergeKey(update: ActiveThreadUpdate): string {
+  return update.thread || update.id;
+}
+
+function threadDisplayEntry(prev: ActiveThreadUpdate, next: ActiveThreadUpdate): ActiveThreadUpdate {
+  if (prev.id.endsWith(COMPACT_THREAD_ID_SUFFIX) && !next.id.endsWith(COMPACT_THREAD_ID_SUFFIX)) {
+    return next;
+  }
+  return prev;
+}
+
+// Shallow field-by-field comparison of a merged entry against the entry
+// already in the list. Every field mergeActiveThreads can produce is scalar
+// or a small plain object (router_decision), so Object.is per top-level field
+// (with one level deeper for router_decision) is exact — no false "unchanged".
+function threadEntryUnchanged(
+  prev: ActiveThreadUpdate,
+  merged: ActiveThreadUpdate,
+): boolean {
+  if (
+    prev.id !== merged.id ||
+    prev.thread !== merged.thread ||
+    prev.chat_id !== merged.chat_id ||
+    prev.workflow_id !== merged.workflow_id ||
+    prev.workflow_name !== merged.workflow_name ||
+    prev.run_id !== merged.run_id ||
+    prev.agent_name !== merged.agent_name ||
+    prev.title !== merged.title ||
+    prev.is_planning_mode !== merged.is_planning_mode ||
+    prev.status !== merged.status ||
+    prev.current_activity !== merged.current_activity ||
+    prev.current_activity_started_at !== merged.current_activity_started_at ||
+    prev.spawned_by_tool_call_id !== merged.spawned_by_tool_call_id ||
+    prev.spawned_by_node_id !== merged.spawned_by_node_id ||
+    prev.origin !== merged.origin ||
+    prev.origin_node_id !== merged.origin_node_id ||
+    prev.thread_title !== merged.thread_title ||
+    prev.created_at !== merged.created_at ||
+    prev.completed_at !== merged.completed_at
+  ) {
+    return false;
+  }
+  const prevRd = prev.router_decision;
+  const mergedRd = merged.router_decision;
+  if (prevRd === mergedRd) return true;
+  if (!prevRd || !mergedRd) return false;
+  return prevRd.workflow === mergedRd.workflow && prevRd.preset === mergedRd.preset;
+}
+
+/**
+ * Merge active-thread updates into the existing thread list (dedup by logical
+ * thread, not just event id).
  * When a later update (e.g. a completion) omits identity fields, the prior
  * values are preserved so the timeline keeps thread names and routing info.
  * Pure — the caller writes the result to threadActivityStore.
+ *
+ * Identity-stable: a merge that produces no observable change returns the
+ * SAME array reference (and untouched entries keep their own object
+ * reference), so a downstream memo keyed on this array does not invalidate
+ * for a repeated no-op update (e.g. a duplicate status ping). When in doubt
+ * this always falls through to producing a new reference — a missed update
+ * would be worse than an extra render.
  */
 export function mergeActiveThreads(
   existing: ActiveThreadUpdate[],
   updates: ActiveThreadUpdate[],
 ): ActiveThreadUpdate[] {
   const next = [...existing];
+  let changed = false;
   for (const update of updates) {
-    const idx = next.findIndex((t) => t.id === update.id);
+    const updateKey = threadMergeKey(update);
+    const idx = next.findIndex((t) => threadMergeKey(t) === updateKey);
     if (idx >= 0) {
       const prev = next[idx];
-      next[idx] = {
+      const displayEntry = threadDisplayEntry(prev, update);
+      const merged: ActiveThreadUpdate = {
         ...prev,
         ...update,
+        id: displayEntry.id,
         thread_title: update.thread_title || prev.thread_title,
         spawned_by_node_id: update.spawned_by_node_id || prev.spawned_by_node_id,
         origin: update.origin || prev.origin,
         origin_node_id: update.origin_node_id || prev.origin_node_id,
+        workflow_id: update.workflow_id || prev.workflow_id,
         spawned_by_tool_call_id:
           update.spawned_by_tool_call_id || prev.spawned_by_tool_call_id,
         router_decision: update.router_decision || prev.router_decision,
+        created_at: displayEntry.created_at,
       };
+      if (threadEntryUnchanged(prev, merged)) {
+        // Keep prev's reference — nothing observable changed for this entry.
+        continue;
+      }
+      next[idx] = merged;
+      changed = true;
     } else {
       next.push(update);
+      changed = true;
     }
   }
-  return next;
+  return changed ? next : existing;
 }
 
 /**

@@ -128,13 +128,28 @@ func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextW
 			return nil, fmt.Errorf("failed to resolve parent CW: %w", err)
 		}
 
-		// A chained CW that isn't a compaction boundary (handled above) is
-		// always a fork -- Compact always sets CompactionSummaryMessageID, so
-		// reaching here with ParentContextWindowID set means ForkThread built
-		// this CW. Cut the parent's history at the fork message. The cut only
-		// applies to messages from the DIRECT parent CW; messages the parent
-		// inherited from its own ancestors were already filtered when the
-		// parent resolved them, so they pass through.
+		// A compaction CW is not a fork: Compact always sets
+		// ForkAtMessageID = nil. We only reach this point on one when
+		// crossCompaction sent the walk past the boundary, and the parent it
+		// is crossing into is the window the summary summarizes -- so the
+		// whole of it is history to inherit, with no cut to apply.
+		//
+		// Running the fork cut here anyway resolved forkSeq to -1, and since
+		// no real seq is negative that dropped every message belonging to the
+		// direct parent window. Down a chain of compactions the loss
+		// compounded: each boundary discarded what the one below it had just
+		// resolved, leaving only the newest window's messages, and a branch
+		// taken off such a chat inherited just that remainder. The reported
+		// symptom was a transcript that bottomed out at the newest compaction
+		// summary with thousands of older messages unreachable.
+		isCompactionBoundary := cw.CompactionSummaryMessageID != nil
+
+		// Otherwise this is a fork -- reaching here with ParentContextWindowID
+		// set and no compaction summary means ForkThread built this CW. Cut
+		// the parent's history at the fork message. The cut only applies to
+		// messages from the DIRECT parent CW; messages the parent inherited
+		// from its own ancestors were already filtered when the parent
+		// resolved them, so they pass through.
 		//
 		// ForkAtMessageID is nil when the fork's parent had no messages at
 		// fork time (forking an empty thread) -- there is no message to
@@ -158,13 +173,14 @@ func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextW
 		parentCWID := *cw.ParentContextWindowID
 		var filtered []*db.Message
 		for _, msg := range parentMsgs {
-			if msg.ContextWindowID == parentCWID {
+			if !isCompactionBoundary && msg.ContextWindowID == parentCWID {
 				// Message is from direct parent's context window - apply fork filter
 				if msg.Seq <= forkSeq {
 					filtered = append(filtered, msg)
 				}
 			} else {
-				// Message is inherited from grandparent+ - already filtered, include as-is
+				// Inherited from grandparent+ (already filtered), or crossing a
+				// compaction boundary, which inherits its parent whole.
 				filtered = append(filtered, msg)
 			}
 		}

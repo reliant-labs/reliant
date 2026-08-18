@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
+	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
@@ -237,35 +238,54 @@ const (
 	// activityHeartbeatInterval is how often ActivityWrapper heartbeats while an
 	// activity runs.
 	//
-	// The worker throttles these to MaxHeartbeatThrottleInterval (3s, see
-	// internal/workersetup) — that value is also the heartbeat RPC's deadline,
-	// which is why it is no longer 500ms. So ticks at this cadence are
-	// coalesced, and a server-side cancellation propagates within ~3s rather
-	// than ~500ms.
+	// Temporal delivers a pending cancellation to an activity ONLY in a
+	// heartbeat RPC's response. The SDK's temporalInvoker.Heartbeat swallows
+	// any RecordHeartbeat call that lands inside an open batching window
+	// entirely locally — it just overwrites the pending details and returns
+	// nil, with no RPC and no cancellation check. So calling RecordHeartbeat
+	// more often than the window is open cannot speed up cancellation: cancel
+	// latency == MaxHeartbeatThrottleInterval (internal/workersetup), full
+	// stop. Verified against SDK v1.37.0 and v1.47.0 source, both identical;
+	// see specs/fast-cancel-briefing.md.
 	//
-	// The interval is deliberately left BELOW the throttle: it costs nothing
-	// (the SDK drops the surplus), and it means a heartbeat is always ready to
-	// go the moment the throttle window opens, rather than adding its own
-	// latency on top.
+	// The interval here is set to match the throttle (500ms) rather than
+	// below it: it costs nothing extra (the SDK drops any surplus ticks), and
+	// it means a heartbeat is always ready to go the instant the throttle
+	// window opens, rather than adding its own latency on top of the window.
+	//
+	// The throttle is ALSO the heartbeat RPC's own deadline, but floored at
+	// minRPCTimeout=1s (internal_task_handlers.go internalHeartBeat) — so a
+	// throttle at or below 1s never tightens that budget below 1s. There is
+	// no floor-related reason to keep the throttle above 500ms.
 	activityHeartbeatInterval = 500 * time.Millisecond
 
 	// activityHeartbeatTimeout is how long Temporal waits for a heartbeat before
 	// declaring the activity dead and re-dispatching it. It is the recovery time
 	// for a worker that died WITHOUT releasing its activities — SIGKILL, OOM,
 	// crash, or an air rebuild that orphaned the process. A worker that exits
-	// cleanly reports the failure itself and never reaches this deadline.
+	// cleanly reports the failure itself and never reaches this deadline. It is
+	// NOT on the cancellation path — cancel latency is governed entirely by
+	// MaxHeartbeatThrottleInterval above.
 	//
 	// It deliberately does NOT need to cover a rebuild: a restarted worker is a
 	// new worker and never reclaims the old activity task, so stretching this
 	// only lengthens the dead air before the retry can start. Sizing is against
-	// the EFFECTIVE heartbeat cadence, which is the worker's throttle interval
-	// (3s), not activityHeartbeatInterval — the SDK coalesces the surplus ticks.
+	// the EFFECTIVE heartbeat cadence, which is the worker's throttle interval,
+	// not activityHeartbeatInterval directly — the SDK coalesces surplus ticks
+	// down to one delivery per throttle window.
 	//
-	// 30s is ten consecutive missed heartbeats at that cadence. It was 10s when
-	// the throttle was 500ms; leaving it there after raising the throttle would
-	// have meant barely three missed beats, so a machine briefly pinned by
-	// `go build` could trip a false "worker died" and have its activity
-	// re-dispatched underneath it. The two values have to move together.
+	// The throttle interval is derived as 0.8*HeartbeatTimeout capped by
+	// MaxHeartbeatThrottleInterval (getHeartbeatThrottleInterval); ours is
+	// 0.8*30s=24s, capped down to the 500ms MaxHeartbeatThrottleInterval, so
+	// this value does not itself determine the effective cadence — the cap
+	// does. Left at 30s (unchanged) rather than shortened to match the new
+	// 500ms throttle: at 500ms, "ten missed heartbeats" would be only 5s,
+	// tight enough that a worker briefly pinned by GC, a `go build`, or a slow
+	// Temporal server round trip could trip a false "worker died" and have a
+	// healthy, still-running activity re-dispatched underneath it — a far
+	// worse failure mode (duplicate work, non-idempotent tool calls) than a
+	// few extra seconds of dead-worker recovery time. No evidence motivates
+	// shortening it, so it stays.
 	activityHeartbeatTimeout = 30 * time.Second
 )
 
@@ -368,11 +388,11 @@ func isTerminal(err error) bool {
 //
 // Type conversion is handled by Temporal's serialization layer - no manual conversion needed!
 type ActivityWrapper[I any, O any] struct {
-	outputType       reflect.Type
-	name             string
-	activity         func(ctx context.Context, input I) (O, error)
-	repo             db.Repository
-	managesLifecycle bool
+	outputType reflect.Type
+	name       string
+	activity   func(ctx context.Context, input I) (O, error)
+	repo       db.Repository
+	workKind   lifecycle.WorkKind
 }
 
 // NewActivityWrapper creates a new type-safe activity wrapper.
@@ -475,12 +495,20 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		"workflowID", workflowID,
 		"stepID", stepID)
 
-	// Belt-and-suspenders: if Temporal is executing an activity for this workflow,
-	// the workflow IS running. Ensure the DB agrees. This is a fast no-op when the
-	// workflow is already marked Running, and self-heals stale status otherwise.
-	// Skip lifecycle activities that manage status transitions themselves, and
-	// skip if context is already cancelled (pause/shutdown in progress).
-	if w.repo != nil && chatID != "" && ctx.Err() == nil && !w.managesLifecycle {
+	// Belt-and-suspenders: if Temporal is executing AGENT work for this
+	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
+	// no-op when already marked Running, and self-heals stale status otherwise.
+	//
+	// Restricted to agent work for the same reason the stopped-run guard is.
+	// Lifecycle work runs precisely WHILE a run is stopped (that is how it
+	// resumes), and observability work reports on a run that may already have
+	// stopped — letting either one assert "this run is running" would undo a
+	// pause the user just asked for. Only agent work executing is real proof
+	// the run is live.
+	//
+	// Skipped when the context is already cancelled (pause/shutdown in
+	// progress), for the same reason.
+	if w.repo != nil && chatID != "" && ctx.Err() == nil && w.workKind == lifecycle.AgentWork {
 		w.repo.EnsureWorkflowRunning(ctx, workflowID, chatID)
 	}
 
@@ -568,6 +596,29 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			panic(r)
 		}
 	}()
+
+	// Nothing runs for a stopped run. The lifecycle package owns what that
+	// means and which work is exempt; this boundary only asks.
+	//
+	// NON-RETRYABLE on purpose: being stopped is not a fault, and retrying
+	// would recreate the very loop the rule exists to break. Temporal records
+	// the activity as failed, the loop unwinds, and the run settles at its
+	// stopped status instead of burning turns.
+	if decision := lifecycle.MayExecuteWork(ctx, w.repo, workflowID, w.workKind); !decision.Allowed {
+		logging.Warn("[ActivityWrapper] Refusing to execute activity for a stopped workflow",
+			"activityType", activityType,
+			"workflowID", workflowID,
+			"chatID", chatID,
+			"stopReason", decision.Reason,
+			"retryable", decision.Retryable)
+		msg := fmt.Sprintf("workflow is stopped (%s); not executing %s", decision.Reason, activityType)
+		if decision.Retryable {
+			// The status row may be a stale read mid-resume; a plain error
+			// lets Temporal retry, and the next attempt sees the updated row.
+			return zeroOutput, errors.New(msg)
+		}
+		return zeroOutput, temporal.NewNonRetryableApplicationError(msg, "WorkflowStopped", nil)
+	}
 
 	// Execute the typed activity directly - no conversion needed!
 	// Temporal already deserialized the input to type I
@@ -1245,30 +1296,51 @@ func NewActivityRegistry(repo db.Repository) *ActivityRegistry {
 	}
 }
 
-// RegisterActivity registers a typed activity with automatic middleware wrapping.
-// Temporal handles all JSON serialization/deserialization - no manual conversion needed!
+// RegisterActivity registers ordinary AGENT work — the activities that advance
+// a conversation. This is the guarded kind: a stopped run refuses it.
+//
+// If what you are registering only reports state (see RegisterObservability-
+// Activity) or changes the run's own status (see RegisterLifecycleActivity),
+// use those instead. Registering reporting work here is what previously got
+// EmitToolCallStatus blocked on paused runs, blinding the UI at exactly the
+// moment a user was trying to understand why their chat had stopped.
 func RegisterActivity[TInput any, TOutput any](
 	registry *ActivityRegistry,
 	act TypedActivity[TInput, TOutput],
 ) {
-	registerActivityInternal(registry, act, false)
+	registerActivityInternal(registry, act, lifecycle.AgentWork)
 }
 
-// RegisterLifecycleActivity registers a typed activity that manages workflow lifecycle
-// transitions (e.g. status changes, cleanup). These activities are excluded from the
-// automatic "ensure workflow running" check in the activity wrapper, since they manage
-// status transitions themselves.
+// RegisterLifecycleActivity registers work that changes or repairs the run's
+// OWN state: status writes, checkpoints, cleanup, the error explaining why it
+// stopped.
+//
+// Exempt from the stopped-run rule, and it must be — this is how a stopped run
+// reports, repairs and un-stops itself. The activity that writes "started" on
+// resume is itself issued by a run still marked stopped.
 func RegisterLifecycleActivity[TInput any, TOutput any](
 	registry *ActivityRegistry,
 	act TypedActivity[TInput, TOutput],
 ) {
-	registerActivityInternal(registry, act, true)
+	registerActivityInternal(registry, act, lifecycle.LifecycleWork)
+}
+
+// RegisterObservabilityActivity registers work that only REPORTS what already
+// happened — tool call status, stream markers, execution events.
+//
+// Exempt from the stopped-run rule. Suppressing it stops no work (the work is
+// already done or already stopped); it only hides the outcome from the user.
+func RegisterObservabilityActivity[TInput any, TOutput any](
+	registry *ActivityRegistry,
+	act TypedActivity[TInput, TOutput],
+) {
+	registerActivityInternal(registry, act, lifecycle.ObservabilityWork)
 }
 
 func registerActivityInternal[TInput any, TOutput any](
 	registry *ActivityRegistry,
 	act TypedActivity[TInput, TOutput],
-	managesLifecycle bool,
+	kind lifecycle.WorkKind,
 ) {
 	name := act.Name()
 
@@ -1278,7 +1350,7 @@ func registerActivityInternal[TInput any, TOutput any](
 	// - Chat updates dual-write for UI tracking
 	// - Structured logging and observability
 	wrapper := NewActivityWrapper(name, act.Execute, registry.repo)
-	wrapper.managesLifecycle = managesLifecycle
+	wrapper.workKind = kind
 
 	// Wrap with error classification middleware
 	// The function signature matches what Temporal expects for typed activities
@@ -1461,3 +1533,7 @@ RegisterActivity(registry, &ProcessMessageActivity{repo: repo, llm: llmClient})
 // Register with Temporal worker
 registry.RegisterWithWorker(worker)
 */
+
+// The stopped-workflow guard formerly lived here as workflowIsStopped. It now
+// lives in internal/workflow/lifecycle, which owns what "stopped" means and
+// which work is exempt; see the call in Execute.

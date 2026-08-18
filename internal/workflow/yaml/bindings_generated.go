@@ -100,6 +100,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "execute_tools",
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
+			"compaction_threshold":    {},
 			"expected_response_tools": {},
 			"resolved_tool_calls":     {},
 			"response_tool_schemas":   {},

@@ -174,17 +174,6 @@ CREATE TABLE public.chat_updates (
 );
 
 --
--- Name: chat_updates_sequence_number_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.chat_updates_sequence_number_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
-
---
 -- Name: chats; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -264,14 +253,15 @@ CREATE TABLE public.workflows (
     chat_id text NOT NULL,
     workflow_name text NOT NULL,
     thread text NOT NULL,
-    status integer DEFAULT 2 NOT NULL,
     spawned_by_node_id text,
     loop_iteration bigint,
     created_at timestamp with time zone NOT NULL,
     completed_at timestamp with time zone,
     worker_started_at timestamp with time zone,
     worker_stopped_at timestamp with time zone,
-    outcome text
+    outcome text,
+    state integer DEFAULT 2 NOT NULL,
+    stop_reason integer DEFAULT 0 NOT NULL
 );
 
 --
@@ -307,15 +297,15 @@ CREATE VIEW public.chats_with_activity AS
               WHERE ((q.chat_id = c.id) AND (q.status = 1)))) THEN 2
             WHEN (EXISTS ( SELECT 1
                FROM public.workflows w
-              WHERE ((w.chat_id = c.id) AND (w.status = 2)))) THEN 1
-            WHEN (( SELECT max(w.completed_at) FILTER (WHERE (w.status = 4)) AS max
+              WHERE ((w.chat_id = c.id) AND (w.state = 2)))) THEN 1
+            WHEN (( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 2))) AS max
                FROM public.workflows w
-              WHERE (w.chat_id = c.id)) > COALESCE(( SELECT max(w.completed_at) FILTER (WHERE (w.status = 3)) AS max
+              WHERE (w.chat_id = c.id)) > COALESCE(( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 1))) AS max
                FROM public.workflows w
               WHERE (w.chat_id = c.id)), '-infinity'::timestamp with time zone)) THEN 3
             WHEN (EXISTS ( SELECT 1
                FROM public.workflows w
-              WHERE ((w.chat_id = c.id) AND (w.status = 6)))) THEN 4
+              WHERE ((w.chat_id = c.id) AND (w.state = 3) AND (w.stop_reason = 3)))) THEN 4
             ELSE 0
         END AS activity
    FROM public.chats c;
@@ -803,6 +793,18 @@ CREATE TABLE public.tool_calls (
 );
 
 --
+-- Name: update_stream_counters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.update_stream_counters (
+    stream_kind text NOT NULL,
+    stream_id text NOT NULL,
+    last_assigned_seq bigint NOT NULL,
+    CONSTRAINT update_stream_counters_kind_check CHECK ((stream_kind = ANY (ARRAY['user'::text, 'chat'::text]))),
+    CONSTRAINT update_stream_counters_positive_check CHECK ((last_assigned_seq >= 1))
+);
+
+--
 -- Name: user_updates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -819,17 +821,6 @@ CREATE TABLE public.user_updates (
     data text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
-
---
--- Name: user_updates_sequence_number_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-CREATE SEQUENCE public.user_updates_sequence_number_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1;
 
 --
 -- Name: visibility_overrides; Type: TABLE; Schema: public; Owner: -
@@ -1328,6 +1319,13 @@ ALTER TABLE ONLY public.tool_calls
     ADD CONSTRAINT tool_calls_pkey PRIMARY KEY (id);
 
 --
+-- Name: update_stream_counters update_stream_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.update_stream_counters
+    ADD CONSTRAINT update_stream_counters_pkey PRIMARY KEY (stream_kind, stream_id);
+
+--
 -- Name: user_updates user_updates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1489,6 +1487,12 @@ CREATE INDEX idx_chat_updates_chat_seq ON public.chat_updates USING btree (chat_
 CREATE INDEX idx_chat_updates_created ON public.chat_updates USING btree (created_at DESC);
 
 --
+-- Name: idx_chats_user_project; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_user_project ON public.chats USING btree (user_id, project_id);
+
+--
 -- Name: idx_claude_auth_tokens_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1627,6 +1631,12 @@ CREATE INDEX idx_daemons_user_id ON public.daemons USING btree (user_id);
 CREATE INDEX idx_messages_chat_activity ON public.messages USING btree (chat_id, activity_id);
 
 --
+-- Name: idx_messages_chat_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_messages_chat_created_at ON public.messages USING btree (chat_id, created_at DESC);
+
+--
 -- Name: idx_messages_chat_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1699,6 +1709,12 @@ CREATE INDEX idx_questions_workflow_id ON public.questions USING btree (workflow
 CREATE INDEX idx_repos_project ON public.repos USING btree (project_id);
 
 --
+-- Name: idx_step_executions_workflow_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_step_executions_workflow_id ON public.step_executions USING btree (workflow_id);
+
+--
 -- Name: idx_task_deps_from; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1723,16 +1739,34 @@ CREATE INDEX idx_task_deps_type ON public.task_dependencies USING btree (depende
 CREATE INDEX idx_threads_origin ON public.threads USING btree (chat_id, origin);
 
 --
+-- Name: idx_tool_call_results_message_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_tool_call_results_message_id ON public.tool_call_results USING btree (message_id) WHERE (message_id IS NOT NULL);
+
+--
 -- Name: idx_tool_calls_chat; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_tool_calls_chat ON public.tool_calls USING btree (chat_id);
 
 --
+-- Name: idx_tool_calls_child_workflow_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_tool_calls_child_workflow_id ON public.tool_calls USING btree (child_workflow_id) WHERE (child_workflow_id IS NOT NULL);
+
+--
 -- Name: idx_tool_calls_message; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_tool_calls_message ON public.tool_calls USING btree (message_id);
+
+--
+-- Name: idx_tool_calls_thread_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_tool_calls_thread_id ON public.tool_calls USING btree (thread_id) WHERE (thread_id IS NOT NULL);
 
 --
 -- Name: idx_user_updates_chat; Type: INDEX; Schema: public; Owner: -
@@ -1763,6 +1797,24 @@ CREATE INDEX idx_user_updates_project ON public.user_updates USING btree (projec
 --
 
 CREATE INDEX idx_workflow_checkpoints_chat_id ON public.workflow_checkpoints USING btree (chat_id);
+
+--
+-- Name: idx_workflows_chat_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workflows_chat_id ON public.workflows USING btree (chat_id);
+
+--
+-- Name: idx_workflows_parent_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workflows_parent_id ON public.workflows USING btree (parent_id) WHERE (parent_id IS NOT NULL);
+
+--
+-- Name: idx_workflows_state; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workflows_state ON public.workflows USING btree (state, stop_reason);
 
 --
 -- Name: idx_worktrees_idempotency_key; Type: INDEX; Schema: public; Owner: -

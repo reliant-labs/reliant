@@ -14,8 +14,40 @@
 /** A wheel movement smaller than this (in px, net over a gesture) is noise. */
 const WHEEL_UP_THRESHOLD = 12;
 
-/** Wheel events separated by more than this start a new gesture. */
-const GESTURE_GAP_MS = 150;
+/**
+ * How long the wheel must be COMPLETELY IDLE before the next event starts a
+ * fresh gesture.
+ *
+ * This is an idle timeout, not a spacing limit, and the distinction is the
+ * whole point. It used to be 150ms — chosen to bound the gap between events
+ * WITHIN one flick — which meant any scroll slower than ~7 events a second
+ * reset the accumulator to zero on every event. A user nudging the wheel a few
+ * pixels at a time therefore never accumulated past WHEEL_UP_THRESHOLD, never
+ * set userScrolledUp, and could not escape follow mode at all: each nudge was
+ * immediately undone by the next streamed delta scrolling back to the bottom.
+ * A fast flick cleared the threshold inside one burst and worked fine, which
+ * is exactly the "fast is OK, slow jitters" asymmetry that was reported.
+ *
+ * A second of true silence is comfortably longer than the pause inside a slow
+ * but deliberate scroll, and far shorter than the gap between two unrelated
+ * gestures — so intent still accumulates while the user is actively scrolling,
+ * and stray deltas minutes apart still cannot add up.
+ */
+const GESTURE_IDLE_RESET_MS = 1000;
+
+/**
+ * How soon after the previous wheel event a direction change still counts as
+ * part of the SAME gesture rather than a new one.
+ *
+ * This is what separates an inertial tail from the user changing their mind.
+ * A trackpad flick downward decelerates through a tail of small upward deltas
+ * that arrive back-to-back at frame cadence — those continue the flick and
+ * must stay absorbed by its downward credit, or scrolling TO the bottom reads
+ * as scrolling away from it. A reversal that arrives after a perceptible pause
+ * is a decision, and starts a fresh gesture so the earlier downward credit
+ * cannot swallow the beginning of it.
+ */
+const DIRECTION_REVERSAL_SETTLE_MS = 150;
 
 /**
  * How long a programmatic-scroll claim stays valid.
@@ -102,8 +134,27 @@ export function createFollowState(
   // so testing each event alone reads scrolling TO the bottom as scrolling away
   // from it. Shared by wheel and touch, which differ only in how the caller
   // derives deltaY.
+  //
+  // The accumulator is reset by two things, and deliberately not by a slow
+  // cadence (see GESTURE_IDLE_RESET_MS):
+  //
+  //  - Going idle. Real silence ends a gesture; a pause inside one does not.
+  //  - Reversing direction after a pause. A downward flick must not bank
+  //    credit that swallows the beginning of a later upward scroll. The pause
+  //    is what tells that apart from an inertial tail, which reverses
+  //    instantly — see DIRECTION_REVERSAL_SETTLE_MS.
   function noteGesture(deltaY: number, timeStamp: number) {
-    if (timeStamp - lastWheelAt > GESTURE_GAP_MS) {
+    if (timeStamp - lastWheelAt > GESTURE_IDLE_RESET_MS) {
+      gestureDelta = 0;
+    } else if (
+      gestureDelta > 0 &&
+      deltaY < 0 &&
+      timeStamp - lastWheelAt > DIRECTION_REVERSAL_SETTLE_MS
+    ) {
+      // Was heading down, now heading up after a pause. Drop the downward
+      // credit so the upward gesture is measured from zero rather than from a
+      // surplus. An immediate reversal is left alone — that is the inertial
+      // tail, and the credit is exactly what absorbs it.
       gestureDelta = 0;
     }
     lastWheelAt = timeStamp;
@@ -125,6 +176,10 @@ export function createFollowState(
       if (next) {
         userScrolledUp = false;
         programmaticClaimAt = null;
+        // The gesture that carried them here is spent. Leaving its negative
+        // sum in place would let the next stray upward pixel re-trip the
+        // threshold immediately.
+        gestureDelta = 0;
       }
     },
 

@@ -139,35 +139,51 @@ message SaveMessageConfig {
   // ToolResults saves tool execution results.
   CelString tool_results = 5;
   // Attachments saves file attachment IDs.
-  CelString attachments = 6 [(reliant) = { description: "Attachment IDs to attach to the saved message. CEL expression must return []string." }];
+  CelString attachments = 6 [(reliant) = {description: "Attachment IDs to attach to the saved message. CEL expression must return []string."}];
   // DisplayStyle sets the UI display style: "info", "warning", "success", "hidden".
-  CelString display_style = 7 [(reliant) = { hidden: true }];
+  CelString display_style = 7 [(reliant) = {hidden: true}];
 }
 
 // ThreadConfig configures thread behavior for a node.
 // Threads are conversation contexts that persist messages across nodes.
 message ThreadConfig {
   // Mode determines thread relationship to parent: "inherit", "new", "fork".
-  string mode = 1 [(reliant) = { description: "Thread mode: inherit (default), new, or fork" enum_values: "inherit|new|fork" }];
+  string mode = 1 [(reliant) = {
+    description: "Thread mode: inherit (default), new, or fork"
+    enum_values: "inherit|new|fork"
+  }];
   // Memo controls thread reuse in loops. Only meaningful for new/fork modes.
   // false (default): Create fresh thread each iteration.
   // true: Create thread once, reuse across iterations.
-  CelBool memo = 2 [(reliant) = { description: "Whether to memoize thread across loop iterations" }];
+  CelBool memo = 2 [(reliant) = {description: "Whether to memoize thread across loop iterations"}];
   // Inject adds a message to the thread before execution.
-  InjectConfig inject = 3 [(reliant) = { description: "Message injection into the thread" }];
+  InjectConfig inject = 3 [(reliant) = {description: "Message injection into the thread"}];
 }
 
 // InjectConfig configures message injection into a thread.
 message InjectConfig {
   // Role is the message role: "user" (default), "system", or "assistant".
-  CelString role = 1 [(reliant) = { description: "Message role for injected message" enum_values: "user|system|assistant" }];
+  CelString role = 1 [(reliant) = {
+    description: "Message role for injected message"
+    enum_values: "user|system|assistant"
+  }];
   // Content is the message text. Required. Supports CEL expressions.
-  CelString content = 2 [(reliant) = { description: "Message content to inject" }];
+  CelString content = 2 [(reliant) = {description: "Message content to inject"}];
+  // DisplayStyle controls how the injected message is shown in Reliant.
+  // Defaults to "hidden" when unset so workflow prompts seed the LLM without
+  // rendering as human transcript content.
+  CelString display_style = 6 [(reliant) = {
+    description: "UI display style for injected message; defaults to hidden"
+    enum_values: "info|warning|success|hidden"
+  }];
   // Deprecated: use repeated attachments field (5) instead.
-  CelString legacy_attachments = 3 [deprecated = true, (reliant) = { hidden: true }];
+  CelString legacy_attachments = 3 [
+    deprecated = true,
+    (reliant) = {hidden: true}
+  ];
   reserved 4; // was: repeated CelString files (never shipped)
   // Attachments to include in the injected message.
-  repeated InjectAttachment attachments = 5 [(reliant) = { description: "Attachments to include" }];
+  repeated InjectAttachment attachments = 5 [(reliant) = {description: "Attachments to include"}];
 }
 
 // InjectAttachment specifies a single attachment source for inject.
@@ -191,15 +207,15 @@ message InjectAttachment {
 message ProjectConfig {
   // Path is the project directory path. Supports CEL expressions.
   // Empty/nil means "inherit from parent workflow".
-  CelString path = 1 [(reliant) = { description: "Project directory path for sub-workflow execution" }];
+  CelString path = 1 [(reliant) = {description: "Project directory path for sub-workflow execution"}];
 }
 
 // PresetsConfig defines preset matching and default configuration for a workflow or group.
 message PresetsConfig {
   // Tag for preset matching (e.g., "agent").
-  string tag = 1 [(reliant) = { description: "Tag for preset matching" }];
+  string tag = 1 [(reliant) = {description: "Tag for preset matching"}];
   // Default preset slug to use when none is explicitly selected.
-  string default = 2 [(reliant) = { description: "Default preset slug" }];
+  string default = 2 [(reliant) = {description: "Default preset slug"}];
 }
 
 // =============================================================================
@@ -223,7 +239,7 @@ message Node {
   // On Join nodes, the only valid values are the literals "all" and "any".
   DirectCelBool condition = 3;
 
-  reserved 4;  // thread moved to SubWorkflowArgs
+  reserved 4; // thread moved to SubWorkflowArgs
 
   // Timeout overrides the default activity timeout for this node.
   // Format: Go duration string (e.g., "5m", "1h30m", "30s").
@@ -301,29 +317,77 @@ message CallLLMArgs {
   };
 
   // Model specifies which LLM to use via tags or explicit ID.
-  CelModelSelector model = 1 [(reliant) = { description: "Model selector using tags (e.g. flagship) or explicit ID" label: "Model" placeholder: "e.g. flagship, fast, cheap, or explicit model ID" visibility_contexts: "basic" required: true category: "Model" }];
+  CelModelSelector model = 1 [(reliant) = {
+    description: "Model selector using tags (e.g. flagship) or explicit ID"
+    label: "Model"
+    placeholder: "e.g. flagship, fast, cheap, or explicit model ID"
+    visibility_contexts: "basic"
+    required: true
+    category: "Model"
+  }];
   // Temperature controls randomness (0.0 = deterministic, 1.0 = creative).
-  CelDouble temperature = 2 [(reliant) = { description: "Temperature (0-1) controls randomness" default_value: "0.7" min_value: 0 max_value: 2 label: "Temperature" visibility_contexts: "advanced" cleanup_semantics: "trim" category: "Model" }];
+  CelDouble temperature = 2 [(reliant) = {
+    description: "Temperature (0-1) controls randomness"
+    default_value: "0.7"
+    min_value: 0
+    max_value: 2
+    label: "Temperature"
+    visibility_contexts: "advanced"
+    cleanup_semantics: "trim"
+    category: "Model"
+  }];
   // MaxTokens limits the response length.
-  CelInt max_tokens = 3 [(reliant) = { description: "Maximum tokens in the response" min_value: 1 max_value: 128000 label: "Max tokens" hidden: true category: "Model" }];
+  CelInt max_tokens = 3 [(reliant) = {
+    description: "Maximum tokens in the response"
+    min_value: 1
+    max_value: 128000
+    label: "Max tokens"
+    hidden: true
+    category: "Model"
+  }];
   // ThinkingLevel enables extended thinking for complex reasoning.
-  CelString thinking_level = 4 [(reliant) = { description: "Extended thinking level for complex reasoning" enum_values: "none|low|medium|high|xhigh" default_value: "none" label: "Thinking level" visibility_contexts: "advanced" category: "Model" }];
+  CelString thinking_level = 4 [(reliant) = {
+    description: "Extended thinking level for complex reasoning"
+    enum_values: "none|low|medium|high|xhigh"
+    default_value: "none"
+    label: "Thinking level"
+    visibility_contexts: "advanced"
+    category: "Model"
+  }];
   // SystemPrompt sets the system message for this LLM call.
-  CelString system_prompt = 5 [(reliant) = { description: "System message for this LLM call" ui_hint: "textarea" label: "System prompt" placeholder: "Optional instructions for model behavior" visibility_contexts: "advanced" cleanup_semantics: "trim" category: "Prompt" }];
+  CelString system_prompt = 5 [(reliant) = {
+    description: "System message for this LLM call"
+    ui_hint: "textarea"
+    label: "System prompt"
+    placeholder: "Optional instructions for model behavior"
+    visibility_contexts: "advanced"
+    cleanup_semantics: "trim"
+    category: "Prompt"
+  }];
   // ToolsConfig configures tool availability, spawn, and permission for this call.
-  ToolsConfig tools_config = 12 [(reliant) = { description: "Tool configuration: filter, spawn, and permission" category: "Tools" }];
+  ToolsConfig tools_config = 12 [(reliant) = {
+    description: "Tool configuration: filter, spawn, and permission"
+    category: "Tools"
+  }];
   // Fields 6, 7, 8, 11 removed — replaced by tools_config.
   reserved 6, 7, 8, 11;
   // ResponseTool defines a custom structured output tool.
   ResponseTool response_tool = 9;
   // Messages injects messages for ad-hoc LLM calls without a thread.
-  repeated CallLLMMessageInput messages = 10 [(reliant) = { hidden: true }];
+  repeated CallLLMMessageInput messages = 10 [(reliant) = {hidden: true}];
   // CompactionThreshold optionally overrides the token count at which the agent
   // loop triggers compaction. When unset (<= 0), call_llm resolves the value
   // from the selected model's default_compaction_threshold, falling back to a
   // global default. Emitted back on CallLLMOutput.compaction_threshold so the
   // compact edge can read the resolved per-model value.
-  CelInt compaction_threshold = 13 [(reliant) = { description: "Token count to trigger context compaction (0 = use model default)" min_value: 0 label: "Compaction threshold" visibility_contexts: "advanced" hidden: true category: "Model" }];
+  CelInt compaction_threshold = 13 [(reliant) = {
+    description: "Token count to trigger context compaction (0 = use model default)"
+    min_value: 0
+    label: "Compaction threshold"
+    visibility_contexts: "advanced"
+    hidden: true
+    category: "Model"
+  }];
   // Skills lists namespaced skill paths (e.g. "forge/db", "code-review") whose
   // bodies are preloaded into THIS call's history. Each resolved skill is seeded
   // as a skill tool-interaction — an assistant(tool_call skill{action:load}) plus
@@ -333,7 +397,12 @@ message CallLLMArgs {
   // call_llm node can also declare it directly for per-phase preloading so a phase
   // pays the skill token cost only when it needs it. The seeded messages are
   // ephemeral — re-seeded each turn, never persisted.
-  CelStringList skills = 14 [(reliant) = { description: "Namespaced skill paths to preload for this call (seeded as skill tool-interactions)" label: "Skills" visibility_contexts: "advanced" category: "Prompt" }];
+  CelStringList skills = 14 [(reliant) = {
+    description: "Namespaced skill paths to preload for this call (seeded as skill tool-interactions)"
+    label: "Skills"
+    visibility_contexts: "advanced"
+    category: "Prompt"
+  }];
 }
 
 // ResponseTool defines a custom tool for structured LLM output.
@@ -393,13 +462,18 @@ message ExecuteToolsArgs {
 
   // ToolCalls is a CEL expression evaluating to tool calls.
   // Typically: "{{nodes.call_llm.tool_calls}}"
-  CelString tool_calls = 1 [(reliant) = { description: "CEL expression for tool calls to execute" }];
+  CelString tool_calls = 1 [(reliant) = {description: "CEL expression for tool calls to execute"}];
   // ResolvedToolCalls is populated at runtime after CEL evaluation.
-  repeated ToolCallMsg resolved_tool_calls = 2 [(reliant) = { hidden: true }];
+  repeated ToolCallMsg resolved_tool_calls = 2 [(reliant) = {hidden: true}];
   // ExpectedResponseTools filters which response tools to execute.
-  repeated string expected_response_tools = 3 [(reliant) = { hidden: true }];
+  repeated string expected_response_tools = 3 [(reliant) = {hidden: true}];
   // ResponseToolSchemas maps response tool names to their JSON schemas.
-  map<string, google.protobuf.Struct> response_tool_schemas = 4 [(reliant) = { hidden: true }];
+  map<string, google.protobuf.Struct> response_tool_schemas = 4 [(reliant) = {hidden: true}];
+  // CompactionThreshold is the resolved upstream call_llm compaction threshold.
+  // execute_tools uses it to keep a single batch of tool_result content from
+  // consuming too much of the next LLM turn. Wire this from
+  // nodes.<call_llm>.compaction_threshold so provider-specific windows are honored.
+  CelInt compaction_threshold = 5 [(reliant) = {hidden: true}];
 }
 
 // CompactArgs configures a compact node — compacts conversation context to reduce token usage.
@@ -447,9 +521,9 @@ message ApprovalArgs {
   };
 
   // Title is the approval dialog title.
-  CelString title = 1 [(reliant) = { description: "Approval dialog title" }];
+  CelString title = 1 [(reliant) = {description: "Approval dialog title"}];
   // Timeout is how long to wait for approval (e.g. "30m", "1h").
-  CelString timeout = 3 [(reliant) = { description: "How long to wait for approval" }];
+  CelString timeout = 3 [(reliant) = {description: "How long to wait for approval"}];
 
   // Reserved field numbers for removed fields.
   reserved 2; // description (removed: never rendered in UI)
@@ -472,7 +546,7 @@ message AskQuestionArgs {
   };
 
   // Metadata is a JSON string containing the question definition.
-  CelString metadata = 1 [(reliant) = { description: "JSON metadata with question text and options" }];
+  CelString metadata = 1 [(reliant) = {description: "JSON metadata with question text and options"}];
 }
 
 // SaveMessageNodeArgs configures a save_message node — saves a message to a thread.
@@ -491,35 +565,50 @@ message SaveMessageNodeArgs {
   };
 
   // Role is a CEL expression for the message role: "user", "assistant", "system".
-  CelString role = 1 [(reliant) = { description: "Message role" enum_values: "user|assistant|system|tool" }];
+  CelString role = 1 [(reliant) = {
+    description: "Message role"
+    enum_values: "user|assistant|system|tool"
+  }];
   // Content is a CEL expression for the message content.
-  CelString content = 2 [(reliant) = { description: "Message content" ui_hint: "textarea" }];
+  CelString content = 2 [(reliant) = {
+    description: "Message content"
+    ui_hint: "textarea"
+  }];
   // ToolCalls is a CEL expression for tool calls.
-  CelString tool_calls = 3 [(reliant) = { description: "Tool calls from LLM response" }];
+  CelString tool_calls = 3 [(reliant) = {description: "Tool calls from LLM response"}];
   // ToolResults is a CEL expression for tool results.
-  CelString tool_results = 4 [(reliant) = { description: "Tool execution results" hidden: true }];
+  CelString tool_results = 4 [(reliant) = {
+    description: "Tool execution results"
+    hidden: true
+  }];
   // Attachments is a CEL expression for file attachments.
-  CelString attachments = 5 [(reliant) = { description: "Attachment IDs. CEL expression must return []string." hidden: true }];
+  CelString attachments = 5 [(reliant) = {
+    description: "Attachment IDs. CEL expression must return []string."
+    hidden: true
+  }];
   // DisplayStyle is a CEL expression for UI display style.
-  CelString display_style = 6 [(reliant) = { description: "UI display style hint" enum_values: "info|warning|success|hidden" }];
+  CelString display_style = 6 [(reliant) = {
+    description: "UI display style hint"
+    enum_values: "info|warning|success|hidden"
+  }];
 
   // Resolved runtime values (populated after CEL evaluation)
-  string resolved_role = 20 [(reliant) = { hidden: true }];
-  string resolved_content = 21 [(reliant) = { hidden: true }];
-  repeated ToolCallMsg resolved_tool_calls = 22 [(reliant) = { hidden: true }];
-  repeated ToolResultMsg resolved_tool_results = 23 [(reliant) = { hidden: true }];
-  repeated string resolved_attachments = 24 [(reliant) = { hidden: true }];
-  ThinkingOutput resolved_thinking = 25 [(reliant) = { hidden: true }];
-  string resolved_display_style = 26 [(reliant) = { hidden: true }];
-  int32 token_count = 27 [(reliant) = { hidden: true }];
-  repeated InjectFileMsg resolved_inject_files = 28 [(reliant) = { hidden: true }];
-  double cost = 29 [(reliant) = { hidden: true }];
+  string resolved_role = 20 [(reliant) = {hidden: true}];
+  string resolved_content = 21 [(reliant) = {hidden: true}];
+  repeated ToolCallMsg resolved_tool_calls = 22 [(reliant) = {hidden: true}];
+  repeated ToolResultMsg resolved_tool_results = 23 [(reliant) = {hidden: true}];
+  repeated string resolved_attachments = 24 [(reliant) = {hidden: true}];
+  ThinkingOutput resolved_thinking = 25 [(reliant) = {hidden: true}];
+  string resolved_display_style = 26 [(reliant) = {hidden: true}];
+  int32 token_count = 27 [(reliant) = {hidden: true}];
+  repeated InjectFileMsg resolved_inject_files = 28 [(reliant) = {hidden: true}];
+  double cost = 29 [(reliant) = {hidden: true}];
   // ResolvedModel is the concrete model that served the completion, forwarded
   // from CallLLMOutput.model, persisted onto messages.model.
-  string resolved_model = 30 [(reliant) = { hidden: true }];
+  string resolved_model = 30 [(reliant) = {hidden: true}];
   // ResolvedAgent is the agent/workflow identity that produced the message,
   // persisted onto messages.agent.
-  string resolved_agent = 31 [(reliant) = { hidden: true }];
+  string resolved_agent = 31 [(reliant) = {hidden: true}];
 }
 
 // InjectFileMsg carries binary file data for inject file attachments.
@@ -544,15 +633,18 @@ message CreateWorktreeArgs {
   };
 
   // Name identifies this worktree.
-  CelString name = 1 [(reliant) = { description: "Worktree name, used in path" }];
+  CelString name = 1 [(reliant) = {description: "Worktree name, used in path"}];
   // Branch is the branch name to create/checkout. Auto-generated if omitted.
-  CelString branch = 2 [(reliant) = { description: "Branch name to create" hidden: true }];
+  CelString branch = 2 [(reliant) = {
+    description: "Branch name to create"
+    hidden: true
+  }];
   // BaseBranch is the branch to branch from. Defaults to repo's default branch.
-  CelString base_branch = 3 [(reliant) = { description: "Base branch to branch from" }];
+  CelString base_branch = 3 [(reliant) = {description: "Base branch to branch from"}];
   // CopyFiles lists files to copy from the source repo (searches recursively).
-  repeated string copy_files = 4 [(reliant) = { description: "Files to copy from source repo (e.g. .env)" }];
+  repeated string copy_files = 4 [(reliant) = {description: "Files to copy from source repo (e.g. .env)"}];
   // Force deletes existing worktree/branch if they exist.
-  CelBool force = 5 [(reliant) = { description: "Force creation by deleting existing worktree" }];
+  CelBool force = 5 [(reliant) = {description: "Force creation by deleting existing worktree"}];
 }
 
 // =============================================================================
@@ -574,13 +666,25 @@ message RunArgs {
   };
 
   // Command is the shell command to execute. Required.
-  CelString command = 1 [(reliant) = { description: "Shell command to execute" required: true }];
+  CelString command = 1 [(reliant) = {
+    description: "Shell command to execute"
+    required: true
+  }];
   // Env sets environment variables for the command.
-  map<string, string> env = 2 [(reliant) = { description: "Environment variables" hidden: true }];
+  map<string, string> env = 2 [(reliant) = {
+    description: "Environment variables"
+    hidden: true
+  }];
   // WorkDir sets the working directory. Defaults to project root.
-  CelString work_dir = 3 [(reliant) = { description: "Working directory for command execution" hidden: true }];
+  CelString work_dir = 3 [(reliant) = {
+    description: "Working directory for command execution"
+    hidden: true
+  }];
   // LogFile redirects stdout+stderr to this file. Engine creates parent dirs. Overwrites.
-  CelString log_file = 4 [(reliant) = { description: "Redirect stdout+stderr to this file" hidden: true }];
+  CelString log_file = 4 [(reliant) = {
+    description: "Redirect stdout+stderr to this file"
+    hidden: true
+  }];
 }
 
 // SubWorkflowArgs configures a workflow node — invokes a sub-workflow.
@@ -599,22 +703,25 @@ message SubWorkflowArgs {
   };
 
   // Ref is a workflow reference string (e.g., "builtin://agent", "project://my-flow").
-  CelString ref = 1 [(reliant) = { description: "Workflow reference (builtin://name or project://name)" }];
+  CelString ref = 1 [(reliant) = {description: "Workflow reference (builtin://name or project://name)"}];
   // Inline defines the workflow inline rather than referencing an external one.
   Workflow inline = 2;
   // Args passes input values to the sub-workflow. Keys must match declared inputs.
-  map<string, google.protobuf.Value> args = 3 [(reliant) = { description: "Input values for the sub-workflow" }];
+  map<string, google.protobuf.Value> args = 3 [(reliant) = {description: "Input values for the sub-workflow"}];
   // Presets applies preset configurations to sub-workflow inputs.
   // Format: map[group_name]preset_name. Use "default" for ungrouped inputs.
-  map<string, string> presets = 4 [(reliant) = { description: "Preset configurations for sub-workflow inputs" }];
+  map<string, string> presets = 4 [(reliant) = {description: "Preset configurations for sub-workflow inputs"}];
   // Project configures the working directory for this sub-workflow.
-  ProjectConfig project = 5 [(reliant) = { description: "Working directory override for sub-workflow" visibility_contexts: "advanced" }];
+  ProjectConfig project = 5 [(reliant) = {
+    description: "Working directory override for sub-workflow"
+    visibility_contexts: "advanced"
+  }];
   // Thread configures how this workflow node relates to conversation threads.
-  ThreadConfig thread = 6 [(reliant) = { description: "Thread mode: inherit (default), new, or fork" }];
+  ThreadConfig thread = 6 [(reliant) = {description: "Thread mode: inherit (default), new, or fork"}];
   // Passthrough forwards specified input names from the parent workflow to the child.
   // For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
   // Explicit args override passthrough values.
-  repeated string passthrough = 7 [(reliant) = { description: "Input names to forward from parent to child workflow" }];
+  repeated string passthrough = 7 [(reliant) = {description: "Input names to forward from parent to child workflow"}];
 }
 
 // LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
@@ -637,49 +744,64 @@ message LoopArgs {
   };
 
   // Ref is a workflow reference string.
-  CelString ref = 1 [(reliant) = { description: "Workflow reference for loop body" hidden: true }];
+  CelString ref = 1 [(reliant) = {
+    description: "Workflow reference for loop body"
+    hidden: true
+  }];
   // Inline defines the loop body workflow inline.
   Workflow inline = 2;
   // Args passes input values to the sub-workflow.
-  map<string, google.protobuf.Value> args = 3 [(reliant) = { description: "Input values for the loop body" hidden: true }];
+  map<string, google.protobuf.Value> args = 3 [(reliant) = {
+    description: "Input values for the loop body"
+    hidden: true
+  }];
   // Presets applies preset configurations.
-  map<string, string> presets = 4 [(reliant) = { description: "Preset configurations for loop body inputs" hidden: true }];
+  map<string, string> presets = 4 [(reliant) = {
+    description: "Preset configurations for loop body inputs"
+    hidden: true
+  }];
   // Project configures the working directory.
-  ProjectConfig project = 5 [(reliant) = { description: "Working directory override for loop body" hidden: true }];
+  ProjectConfig project = 5 [(reliant) = {
+    description: "Working directory override for loop body"
+    hidden: true
+  }];
   // While is a direct CEL expression evaluated after each iteration.
   // Loop continues while true. Required for sequential loops.
   // Has access to: outputs.* (sub-workflow output), iter.iteration (0-indexed count).
-  DirectCelBool while = 6 [(reliant) = { description: "CEL condition: loop continues while true" }];
-  reserved 7;  // was: yield
+  DirectCelBool while = 6 [(reliant) = {description: "CEL condition: loop continues while true"}];
+  reserved 7; // was: yield
 
   // === Parallel loop fields ===
 
   // Parallel enables concurrent execution of all iterations.
   // When true, items is required and while is disallowed.
   // Each iteration runs in its own thread with isolated context.
-  CelBool parallel = 8 [(reliant) = { description: "Execute all iterations concurrently" }];
+  CelBool parallel = 8 [(reliant) = {description: "Execute all iterations concurrently"}];
   // Items is a CEL expression that evaluates to a list or map.
   // For lists: iter.item is the element, iter.index is the position.
   // For maps: iter.key is the map key, iter.item is the map value, iter.index is the position.
   // Required when parallel is true. Can also be used with sequential loops.
-  CelString items = 9 [(reliant) = { description: "CEL expression evaluating to a list or map to iterate over" }];
+  CelString items = 9 [(reliant) = {description: "CEL expression evaluating to a list or map to iterate over"}];
   // Key is a CEL expression evaluated per iteration to produce the output map key.
   // Has access to iter.item, iter.index, iter.key.
   // Defaults to string(iter.index) if not specified.
   // Only used when parallel is true.
-  string key = 10 [(reliant) = { description: "CEL expression for output map key per iteration" }];
+  string key = 10 [(reliant) = {description: "CEL expression for output map key per iteration"}];
   // OnFailure controls behavior when a parallel iteration fails.
   // Values: "continue" (default, others keep running), "fail_fast" (cancel remaining),
   //   "fail_all" (wait for all, then fail if any failed).
-  string on_failure = 11 [(reliant) = { description: "Failure policy for parallel iterations" enum_values: "continue|fail_fast|fail_all" }];
+  string on_failure = 11 [(reliant) = {
+    description: "Failure policy for parallel iterations"
+    enum_values: "continue|fail_fast|fail_all"
+  }];
   // Thread configures how parallel iterations relate to conversation threads.
   // Each parallel iteration creates its own thread. Defaults to mode: new.
   // Only used when parallel is true.
-  ThreadConfig thread = 12 [(reliant) = { description: "Thread mode for parallel iterations" }];
+  ThreadConfig thread = 12 [(reliant) = {description: "Thread mode for parallel iterations"}];
   // Passthrough forwards specified input names from the parent workflow to the loop body.
   // For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
   // Explicit args override passthrough values.
-  repeated string passthrough = 13 [(reliant) = { description: "Input names to forward from parent to child workflow" }];
+  repeated string passthrough = 13 [(reliant) = {description: "Input names to forward from parent to child workflow"}];
 }
 
 // JoinArgs configures a join node — synchronizes parallel branches.
@@ -742,29 +864,35 @@ message RouterArgs {
 
   // Workflows lists candidate workflows the router can select from.
   // Mutually exclusive with `nodes` — set exactly one.
-  repeated RouterWorkflowCandidate workflows = 1 [(reliant) = { description: "Candidate workflows to route to" }];
+  repeated RouterWorkflowCandidate workflows = 1 [(reliant) = {description: "Candidate workflows to route to"}];
   reserved 2, 5;
   reserved "prompt", "include_history";
   // SystemPrompt overrides the default routing system prompt.
-  CelString system_prompt = 3 [(reliant) = { description: "Custom system prompt for the routing LLM" }];
+  CelString system_prompt = 3 [(reliant) = {description: "Custom system prompt for the routing LLM"}];
   // Model selects which LLM to use for the routing decision.
-  CelModelSelector model = 4 [(reliant) = { description: "Model for routing decision (defaults to fast model)" }];
+  CelModelSelector model = 4 [(reliant) = {description: "Model for routing decision (defaults to fast model)"}];
   // Thread configures how the selected child workflow relates to conversation threads.
   // Only applies to workflow routing mode.
-  ThreadConfig thread = 6 [(reliant) = { description: "Thread mode for the selected workflow: inherit, new, or fork" }];
+  ThreadConfig thread = 6 [(reliant) = {description: "Thread mode for the selected workflow: inherit, new, or fork"}];
   // Fallback is the preset/node to use if routing fails. Empty = error on failure.
   // In workflow routing mode, this is a preset name. In node routing mode, this is a node ID.
-  string fallback = 7 [(reliant) = { description: "Fallback preset or node ID if routing decision fails" }];
+  string fallback = 7 [(reliant) = {description: "Fallback preset or node ID if routing decision fails"}];
   // Project configures the working directory for the selected sub-workflow.
   // Only applies to workflow routing mode.
-  ProjectConfig project = 8 [(reliant) = { description: "Working directory override for selected workflow" visibility_contexts: "advanced" }];
+  ProjectConfig project = 8 [(reliant) = {
+    description: "Working directory override for selected workflow"
+    visibility_contexts: "advanced"
+  }];
   // Outputs declares named outputs for the router node. Each entry maps an output name
   // to a CEL expression evaluated against the router's execution context.
   // Only applies to workflow routing mode.
-  map<string, string> outputs = 9 [(reliant) = { description: "Declared output mappings (name → CEL expression)" visibility_contexts: "advanced" }];
+  map<string, string> outputs = 9 [(reliant) = {
+    description: "Declared output mappings (name → CEL expression)"
+    visibility_contexts: "advanced"
+  }];
   // Nodes lists candidate nodes within the current workflow to route to.
   // Mutually exclusive with `workflows` — set exactly one.
-  repeated NodeRouterCandidate nodes = 10 [(reliant) = { description: "Candidate nodes within this workflow to route to" }];
+  repeated NodeRouterCandidate nodes = 10 [(reliant) = {description: "Candidate nodes within this workflow to route to"}];
 }
 
 // =============================================================================
@@ -987,14 +1115,14 @@ message PresetInputConfig {
 
 // MessageOutput is the standardized output for activities that produce messages.
 message MessageOutput {
-  string id = 1;   // Unique message ID
+  string id = 1; // Unique message ID
   string role = 2; // "user", "assistant", or "system"
   string text = 3; // Message content
 }
 
 // ThinkingOutput contains extended thinking content from the LLM.
 message ThinkingOutput {
-  string content = 1;   // Raw thinking text
+  string content = 1; // Raw thinking text
   string signature = 2; // Signature for multi-turn preservation
 }
 
@@ -1005,7 +1133,7 @@ message CallLLMOutput {
   repeated ToolCallMsg tool_calls = 3;
   int32 token_count = 4;
   ThinkingOutput thinking = 5;
-  string upstream_request_id = 6;  // Provider request correlation ID (e.g. x-oai-request-id)
+  string upstream_request_id = 6; // Provider request correlation ID (e.g. x-oai-request-id)
   string upstream_proxyman_id = 7; // Proxyman flow correlation ID (e.g. x-proxyman-id)
   // Structured data from a response_tool call. When the node is configured with a
   // response_tool and the LLM returns a tool call to it, CallLLM parses the tool
@@ -1024,6 +1152,21 @@ message CallLLMOutput {
   // Exposed as nodes.call_llm.model so the inline save_message can persist it
   // onto messages.model. Empty when resolution produced no definition.
   string model = 11;
+  // PendingInbox reports that messages arrived in this thread's mailbox
+  // WHILE this call was streaming, and have therefore not been delivered yet.
+  //
+  // This exists to close the loop-exit gap. CallLLM delivers the mailbox
+  // before it reads history, so anything queued after that point is not part
+  // of this turn. If the model then returns no tool calls, an agent loop whose
+  // while-condition only tests tool_calls exits — and the queued message is
+  // stranded on a dead thread with nothing left to deliver it.
+  //
+  // Agent loops read this as `nodes.call_llm.pending_inbox` and keep looping,
+  // which sends them back through CallLLM, which delivers it. Checked AFTER
+  // streaming completes precisely so it covers the streaming window, which is
+  // where a user watching a long answer actually types.
+  bool pending_inbox = 14;
+
   // MessageID is the pre-allocated assistant message id this call streamed
   // under (delta identity protocol). Echoed back from
   // RuntimeContext.AssistantMessageID so the workflow can carry it into the
@@ -1052,7 +1195,7 @@ message CompactOutput {
 // ApprovalOutput is the output from the approval activity.
 message ApprovalOutput {
   string approval_id = 1;
-  string status = 2;       // "approved", "denied", or "timeout"
+  string status = 2; // "approved", "denied", or "timeout"
   string action_taken = 3; // Action button that was clicked
   google.protobuf.Struct data = 4;
 }
@@ -1102,13 +1245,13 @@ message WorkflowOutput {
 // Sequential mode: user-defined outputs are in outputs; _iterations is the system field.
 // Parallel mode: _results is a map of key → sub-workflow outputs; _completed/_failed are counts.
 message LoopOutput {
-  int32 iterations = 1;               // Total iterations completed (JSON: "_iterations")
+  int32 iterations = 1; // Total iterations completed (JSON: "_iterations")
   google.protobuf.Struct outputs = 2; // Final iteration outputs (sequential mode)
   // Parallel mode fields:
   map<string, google.protobuf.Struct> results = 3; // Map of key → iteration outputs (parallel mode, JSON: "_results")
-  int32 completed = 4;                // Count of successful iterations (parallel mode, JSON: "_completed")
-  int32 failed = 5;                   // Count of failed iterations (parallel mode, JSON: "_failed")
-  bool parallel = 6;                  // Whether this was a parallel loop execution
+  int32 completed = 4; // Count of successful iterations (parallel mode, JSON: "_completed")
+  int32 failed = 5; // Count of failed iterations (parallel mode, JSON: "_failed")
+  bool parallel = 6; // Whether this was a parallel loop execution
 }
 
 // JoinOutput is the output from a join node.
@@ -1122,18 +1265,18 @@ message JoinOutput {
 //
 // In node routing mode, only selected_node and reasoning are populated.
 message RouterOutput {
-  string selected_workflow = 1;      // The workflow ref that was selected (workflow routing mode)
-  string selected_preset = 2;        // The preset that was selected (workflow routing mode)
-  string prompt = 3;                 // The rewritten prompt for the selected workflow (workflow routing mode)
-  string reasoning = 4;              // LLM's reasoning for the selection (both modes)
+  string selected_workflow = 1; // The workflow ref that was selected (workflow routing mode)
+  string selected_preset = 2; // The preset that was selected (workflow routing mode)
+  string prompt = 3; // The rewritten prompt for the selected workflow (workflow routing mode)
+  string reasoning = 4; // LLM's reasoning for the selection (both modes)
   google.protobuf.Struct outputs = 5; // Child workflow outputs (workflow routing mode)
-  string selected_node = 6;          // The node ID that was selected (node routing mode)
+  string selected_node = 6; // The node ID that was selected (node routing mode)
 }
 
 // AskQuestionOutput is the output from the ask_question activity.
 message AskQuestionOutput {
-  bool has_feedback = 1;  // Whether the user provided feedback (vs just clicking Continue)
-  string response = 2;   // The user's feedback text (empty when has_feedback is false)
+  bool has_feedback = 1; // Whether the user provided feedback (vs just clicking Continue)
+  string response = 2; // The user's feedback text (empty when has_feedback is false)
 }
 
 // SkippedOutput is the output for nodes skipped due to conditions.

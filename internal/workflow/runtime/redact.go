@@ -3,7 +3,6 @@ package runtime
 
 import (
 	"regexp"
-	"strings"
 )
 
 // Secret redaction for workflow logs.
@@ -93,25 +92,6 @@ func redactString(s string) string {
 		out = re.ReplaceAllString(out, redactedPlaceholder)
 	}
 	return out
-}
-
-// hasSecret reports whether s contains a secret-shaped substring. Used by tests
-// and as a fast-path guard.
-func hasSecret(s string) bool {
-	if strings.Contains(s, redactedPlaceholder) {
-		return false
-	}
-	for _, m := range assignmentPattern.FindAllStringSubmatch(s, -1) {
-		if m != nil && !numericValue.MatchString(m[3]) {
-			return true
-		}
-	}
-	for _, re := range secretPatterns {
-		if re.MatchString(s) {
-			return true
-		}
-	}
-	return false
 }
 
 // redactValue returns a deep copy of v with all string leaves run through

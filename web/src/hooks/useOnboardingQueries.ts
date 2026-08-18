@@ -4,6 +4,8 @@ import {
   listDaemons,
   createDaemon,
   resumeDaemon,
+  suspendDaemon,
+  deleteDaemon,
   type CreateDaemonArgs,
 } from '@/services/controlPlane/daemon';
 import {
@@ -201,6 +203,44 @@ export function useResumeDaemon(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (daemonId: string) => resumeDaemon(daemonId),
+    onSuccess: async (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
+      await callbacks.onSuccess?.(vars);
+    },
+    onError: async (err, vars) => {
+      if (isReasonedQuotaError(err)) {
+        return;
+      }
+      await callbacks.onError?.(err, vars);
+    },
+  });
+}
+
+export function useSuspendDaemon(
+  callbacks: DaemonMutationCallbacks<string> = {},
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (daemonId: string) => suspendDaemon(daemonId),
+    onSuccess: async (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
+      await callbacks.onSuccess?.(vars);
+    },
+    onError: async (err, vars) => {
+      if (isReasonedQuotaError(err)) {
+        return;
+      }
+      await callbacks.onError?.(err, vars);
+    },
+  });
+}
+
+export function useDeleteDaemon(
+  callbacks: DaemonMutationCallbacks<string> = {},
+) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (daemonId: string) => deleteDaemon(daemonId),
     onSuccess: async (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
       await callbacks.onSuccess?.(vars);

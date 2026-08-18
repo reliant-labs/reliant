@@ -39,7 +39,7 @@ func TestSpawnFork_E2E_ChildInheritsParentMessages(t *testing.T) {
 		ChatID:       h.chatID,
 		WorkflowName: "spawned-researcher",
 		Thread:       "child-thread-1",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		CreatedAt:    time.Now().UTC(),
 	}
 
@@ -144,7 +144,7 @@ func TestCreateWorkflowWithThread_ForkFromThread_SetsForkMetadata(t *testing.T) 
 		ChatID:       h.chatID,
 		WorkflowName: "test-workflow",
 		Thread:       "child-thread-2",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		CreatedAt:    time.Now().UTC(),
 	}
 
@@ -390,7 +390,7 @@ func TestSpawnFork_EmptyParent_NoMessages(t *testing.T) {
 		ChatID:       h.chatID,
 		WorkflowName: "test",
 		Thread:       "child-empty",
-		Status:       db.WorkflowStatusRunning,
+		Status:       db.Active(),
 		CreatedAt:    time.Now().UTC(),
 	}
 

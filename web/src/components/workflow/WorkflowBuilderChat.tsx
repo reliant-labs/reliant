@@ -185,7 +185,7 @@ export function WorkflowBuilderChat({
   const persistenceKey = workflowSessionId || workflow.name || 'default';
   const persistenceKeyRef = useRef<string>(persistenceKey);
 
-  const inputRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const hasAttemptedCatalogRecoveryRef = useRef(false);
 
   // Use chat store hooks for reactive updates

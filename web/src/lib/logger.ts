@@ -124,22 +124,25 @@ function createLogFunction(level: string, alwaysEnabled = false) {
     sendToElectron(level, safe);
 
     if (level === "error" || isDev) {
-      // Use appropriate console method
+      // Use the ORIGINAL console methods, not the globals. installConsoleOverride
+      // replaces console.* with a wrapper that itself calls sendToElectron, so
+      // going through the global here shipped every logger.* call to the main
+      // process twice — two IPC round-trips and two disk writes per call.
       switch (level) {
         case "error":
-          console.error(...safe);
+          originalConsole.error(...safe);
           break;
         case "warn":
-          console.warn(...safe);
+          originalConsole.warn(...safe);
           break;
         case "debug":
-          console.debug(...safe);
+          originalConsole.debug(...safe);
           break;
         case "info":
-          console.info(...safe);
+          originalConsole.info(...safe);
           break;
         default:
-          console.log(...safe);
+          originalConsole.log(...safe);
       }
       checkAndClearConsole();
     }

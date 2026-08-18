@@ -4,7 +4,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 
@@ -92,66 +92,10 @@ func (s *ChatService) resumeInputForInterruptedRun(ctx context.Context, workflow
 	}
 }
 
-// absorbQueuedMailbox takes every still-queued HUMAN message addressed to a
-// thread and writes each one into that thread's transcript as an ordinary user
-// message, oldest first.
-//
-// This exists because messages.seq — the chat-global counter the transcript is
-// ordered by — is allocated at SAVE time, not at send time. A message the user
-// queued into a busy agent is only drained at the agent's next loop-step
-// boundary, so if a new send starts the run that eventually drains it, the
-// OLDER queued text is saved AFTER the newer message and renders beneath it.
-// That is the "my most recent message shows first" bug. Absorbing the mailbox
-// immediately before the new message is saved restores send order.
-//
-// MUST be called inside the caller's transaction, alongside the save of the
-// new user message. ClaimQueuedAgentMessagesForThread is a DELETE ... RETURNING:
-// if the claim commits and the saves do not, the rows are gone and the user's
-// words exist nowhere. Every error here is therefore returned, never logged and
-// swallowed — an aborted transaction rolls the DELETE back and leaves the
-// messages queued for the next attempt, which is strictly recoverable. A
-// best-effort absorb would trade a visible ordering bug for silent data loss.
-//
-// Peer-agent rows (spawn_send, kind 1-4) are deliberately untouched: the claim
-// query is scoped to kind = 5, so a sub-agent's report still reaches the
-// orchestrator through the normal drain with its envelope framing intact.
-func (s *ChatService) absorbQueuedMailbox(ctx context.Context, chatID, thread, workflowID string) (int, error) {
-	claimed, err := s.database.ClaimQueuedAgentMessagesForThread(ctx, thread, chatID, "")
-	if err != nil {
-		return 0, fmt.Errorf("failed to claim queued messages for thread %s: %w", thread, err)
-	}
-	if len(claimed) == 0 {
-		return 0, nil
-	}
-
-	// Oldest first — the claim is sorted by created_at, and each save takes the
-	// next seq, so the transcript ends up in the order the user typed.
-	// Attachments carry through exactly as SendAgentMessage stored them, so a
-	// queued screenshot reaches the LLM as if it had been sent directly.
-	for _, m := range claimed {
-		if _, err := s.database.SaveMessageToThread(ctx, chatID, thread,
-			int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), m.Body, &workflowID, m.Attachments, nil); err != nil {
-			return 0, fmt.Errorf("failed to persist claimed message %s: %w", m.ID, err)
-		}
-	}
-
-	logging.Info("Absorbed queued mailbox messages into the transcript ahead of a new send",
-		"chatID", chatID, "thread", thread, "count", len(claimed))
-	return len(claimed), nil
-}
-
-// saveIncomingMessages persists everything a send contributes to a thread's
-// transcript, atomically and in the order the user experienced it: first any
-// messages they had QUEUED into this thread's mailbox while the agent was
-// busy, then this send's system messages, then the new user message. The saved
-// user-message ID is returned (empty when there is no user content).
-//
-// One transaction covers the mailbox claim and every save — see
-// absorbQueuedMailbox for why splitting them would destroy messages.
-//
-// Called ONLY on paths where the workflow is not running. A live agent drains
-// its own mailbox correctly at its next loop-step boundary; claiming those rows
-// out from under it would both reorder them and defeat the mailbox's purpose.
+// saveIncomingMessages atomically persists the system and user messages a send
+// contributes to a thread. It deliberately does not inspect or drain the agent
+// mailbox: call_llm is the sole mailbox deliverer, immediately before reading
+// thread history, regardless of whether this send starts or resumes the run.
 func (s *ChatService) saveIncomingMessages(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
@@ -162,10 +106,6 @@ func (s *ChatService) saveIncomingMessages(
 ) (string, error) {
 	var savedMessageID string
 	err := s.database.RunTx(ctx, func(txCtx context.Context) error {
-		if _, err := s.absorbQueuedMailbox(txCtx, req.Msg.ChatId, thread, workflowID); err != nil {
-			return err
-		}
-
 		for _, sysMsg := range systemMessages {
 			if _, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
 				return fmt.Errorf("failed to save system message: %w", err)
@@ -279,31 +219,30 @@ func (s *ChatService) resumeFailedQuestionWorkflow(
 		logging.Warn("Failed to save resume messages during question resume", "error", saveErr)
 	}
 
-	// Deliver the answer. SignalWithRecovery reset-replays the dead run (honoring
-	// the reset guard) and re-sends the signal on the new run.
-	signalData := map[string]interface{}{
-		"status":        "resolved",
-		"response_data": responseData,
-	}
-	if err := s.pauseService.SignalWithRecovery(ctx, question.TemporalWorkflowID, "signal.question."+question.ID, signalData); err != nil {
+	// Deliver the answer. The run service reset-replays the dead run (honoring
+	// the reset guard), re-sends the signal on the new run, and refreshes the
+	// chat's run id.
+	outcome, err := s.runs.ResumeViaSignal(ctx, runs.ResumeViaSignalInput{
+		ChatID:           req.Msg.ChatId,
+		WorkflowID:       workflowID,
+		TargetWorkflowID: question.TemporalWorkflowID,
+		SignalName:       "signal.question." + question.ID,
+		SignalData: map[string]interface{}{
+			"status":        "resolved",
+			"response_data": responseData,
+		},
+	})
+	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		logging.Info("Question-parked workflow not reset-resumable - coarse restart at position",
 			"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "error", err)
 		return nil, false, presavedID
 	}
-
-	if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
-		logging.Warn("Failed to mark workflow running after question resume", "error", err, "workflowID", workflowID)
-	}
-	newRunID := ""
-	if st, e := s.getTemporalWorkflowState(ctx, workflowID); e == nil && st.Exists {
-		newRunID = st.RunID
-		s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, st.RunID)
-	}
+	newRunID := outcome.RunID
 
 	logging.Info("Question-parked workflow reset-and-resumed via answer (precise nested resume)",
 		"chatID", req.Msg.ChatId, "workflowID", workflowID, "questionID", question.ID, "newRunID", newRunID)
 
-	workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+	workflowStatus := fmt.Sprintf("%d", db.Active())
 	go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
 	return connect.NewResponse(&reliantv1.SendMessageResponse{
 		ChatId:         req.Msg.ChatId,
@@ -445,13 +384,13 @@ func (s *ChatService) resurrectGhostWorkflow(
 	)
 
 	// Step 7: Update run IDs and workflow status
-	s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, runID)
-	if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
+	if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 		logging.Warn("[Ghost Recovery] Failed to update workflow status", "error", err, "workflowID", workflowID)
 		// Non-fatal - workflow is running in Temporal
 	}
 
-	workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+	workflowStatus := fmt.Sprintf("%d", db.Active())
 	go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
 	return connect.NewResponse(&reliantv1.SendMessageResponse{
 		ChatId:         req.Msg.ChatId,
@@ -531,8 +470,8 @@ func (s *ChatService) SendMessage(
 		if err == nil && existingWorkflow != nil {
 			// Use Temporal as source of truth for workflow status
 			// For running workflows, verify Temporal agrees
-			if existingWorkflow.Status == db.WorkflowStatusRunning {
-				temporalState, temporalErr := s.getTemporalWorkflowState(ctx, workflowID)
+			if existingWorkflow.Status == db.Active() {
+				temporalState, temporalErr := s.runs.State(ctx, workflowID)
 				if temporalErr != nil {
 					// Temporal query failed - this is an error we should surface
 					logging.Error("Failed to query Temporal for workflow status",
@@ -556,7 +495,7 @@ func (s *ChatService) SendMessage(
 
 					return s.resurrectGhostWorkflow(ctx, req, chat, existingWorkflow, workflowID, userID)
 				} else if !temporalState.IsRunning {
-					if existingWorkflow.Status == db.WorkflowStatusPaused {
+					if existingWorkflow.Status == db.Paused() {
 						// Paused workflow whose Temporal execution timed out or completed.
 						// Keep status as paused — the paused handler uses PauseService.ResumeWorkflow
 						// which handles reset-based resume for expired executions.
@@ -567,14 +506,14 @@ func (s *ChatService) SendMessage(
 						)
 					} else {
 						// Running workflow that stopped — reconcile status
-						s.reconcileWorkflowStatus(ctx, workflowID, existingWorkflow.Status, temporalState.Status)
+						s.runs.Reconcile(ctx, workflowID, existingWorkflow.Status, temporalState.Status)
 						existingWorkflow.Status = temporalState.Status
 					}
 				}
 			}
 
 			switch existingWorkflow.Status {
-			case db.WorkflowStatusPaused:
+			case db.Paused():
 
 				// Discuss mode: lightweight LLM chat without resuming the workflow
 				if req.Msg.Discuss {
@@ -674,22 +613,12 @@ func (s *ChatService) SendMessage(
 					}
 				}
 
-				// Resume the workflow via PauseService which handles all cases:
-				// - Live Temporal execution: sends signal.resume
-				// - Expired/timed-out execution: resets to pause point and resumes
-				// - Lost execution: returns ErrWorkflowNotFound
-				if err := s.pauseService.ResumeWorkflow(ctx, workflowID, req.Msg.ChatId); err != nil {
-					if errors.Is(err, workflow.ErrWorkflowNotFound) {
-						logging.Warn("Paused workflow not found in Temporal during SendMessage - resuming at position with a new run",
-							"workflowID", workflowID, "chatID", req.Msg.ChatId)
-						// The paused run was lost (infra failure, not user
-						// intent) — start a new run that resumes at position.
-						resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
-						resumeThread = existingWorkflow.Thread
-						// Fall through to start a new workflow below
-						break
-					}
-					// The signal is the step that actually restarts the run.
+				// Resume the run. The service signals a live execution,
+				// reset-replays a dead-but-replayable one, and refreshes the
+				// chat's run id when a reset minted a new one.
+				outcome, resumeErr := s.runs.Resume(ctx, req.Msg.ChatId)
+				if resumeErr != nil {
+					// The resume is the step that actually restarts the run.
 					// Swallowing this failure and returning
 					// workflow_status=running below is what makes a chat look
 					// active while it is halted: the message is saved, the UI
@@ -697,9 +626,19 @@ func (s *ChatService) SendMessage(
 					// it instead — the user's message is already durable, so a
 					// retry resumes from exactly here.
 					logging.Error("Failed to resume paused workflow",
-						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
+						"error", resumeErr, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 					return nil, connect.NewError(connect.CodeInternal,
-						fmt.Errorf("failed to resume paused workflow: %w", err))
+						fmt.Errorf("failed to resume paused workflow: %w", resumeErr))
+				}
+				if outcome.Kind != runs.OutcomeResumed {
+					logging.Warn("Paused workflow could not be resumed in place during SendMessage - resuming at position with a new run",
+						"workflowID", workflowID, "chatID", req.Msg.ChatId)
+					// The paused run was lost (infra failure, not user
+					// intent) — start a new run that resumes at position.
+					resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+					resumeThread = existingWorkflow.Thread
+					// Fall through to start a new workflow below
+					break
 				}
 
 				// The run is awake. Correct the DB status now that the
@@ -708,21 +647,17 @@ func (s *ChatService) SendMessage(
 				// "started"/Resumed notification and the reconciler both still
 				// converge it, and a stale row is not worth failing a request
 				// that already did the important part.
-				if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.WorkflowStatusRunning); err != nil {
+				if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 					logging.Warn("Resumed workflow but failed to mark it running — status will be corrected by the workflow or the reconciler",
 						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 				}
 
-				// If reset-based resume happened, update the chat's run ID
-				if newState, stateErr := s.getTemporalWorkflowState(ctx, workflowID); stateErr == nil && newState.Exists {
-					if chat.RunID == nil || *chat.RunID != newState.RunID {
-						s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, newState.RunID)
-						runID = newState.RunID
-					}
+				if outcome.RunID != "" {
+					runID = outcome.RunID
 				}
 
 				// Return with updated workflow_status so frontend knows we resumed
-				workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+				workflowStatus := fmt.Sprintf("%d", db.Active())
 				go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
 				return connect.NewResponse(&reliantv1.SendMessageResponse{
 					ChatId:         req.Msg.ChatId,
@@ -733,7 +668,7 @@ func (s *ChatService) SendMessage(
 					MessageId:      savedMessageID,
 				}), nil
 
-			case db.WorkflowStatusRunning:
+			case db.Active():
 
 				// Update selected presets on chat if provided
 				if len(req.Msg.SelectedPresets) > 0 {
@@ -813,7 +748,7 @@ func (s *ChatService) SendMessage(
 					runID = *chat.RunID
 				}
 
-				workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+				workflowStatus := fmt.Sprintf("%d", db.Active())
 				var messageID string
 				if savedMsg != nil {
 					messageID = savedMsg.ID
@@ -828,58 +763,21 @@ func (s *ChatService) SendMessage(
 					MessageId:      messageID,
 				}), nil
 
-			case db.WorkflowStatusExpired:
-				// Expired workflow — reset to pause point and resume
-				logging.Info("Expired workflow detected, attempting reset-based resume",
-					"workflowID", workflowID,
-					"chatID", req.Msg.ChatId,
-				)
+			// The EXPIRED resume branch that used to sit here is gone with the
+			// status it matched: nothing ever wrote EXPIRED (Temporal
+			// TIMED_OUT is recorded as a failure), so this arm was
+			// unreachable. A timed-out run now takes the FAILED arm below,
+			// which is where it was already being routed in practice.
 
-				// Use workflow's thread from DB (not root workflow ID) to handle
-				// forked/child threads correctly.
-				targetThread := existingWorkflow.Thread
-				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-					targetThread = *req.Msg.TargetThread
+			case db.Failed():
+				// Stuck (database says failed while Temporal says running)
+				// cannot be restarted - user must branch to continue.
+				inspection, inspectErr := s.runs.Inspect(ctx, req.Msg.ChatId)
+				if inspectErr != nil {
+					logging.Error("Failed to inspect run", "error", inspectErr, "chatID", req.Msg.ChatId)
+					return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", inspectErr))
 				}
-
-				// Save messages before reset — mailbox first, so anything the
-				// user queued while the run was alive keeps its place ahead of
-				// this message rather than being drained after it.
-				savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
-				if err != nil {
-					logging.Error("Failed to save messages for expired workflow resume", "error", err, "workflowID", workflowID)
-					return nil, connect.NewError(connect.CodeInternal, err)
-				}
-
-				// Reset expired workflow (handles orphan repair, reset, resume signal)
-				newRunID, err := s.pauseService.ResumeExpiredWorkflow(ctx, workflowID, req.Msg.ChatId)
-				if err != nil {
-					logging.Error("Failed to reset expired workflow", "error", err, "workflowID", workflowID)
-					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resume expired workflow: %w", err))
-				}
-
-				// Update chat's run ID with the new run
-				s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, newRunID)
-
-				workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
-				return connect.NewResponse(&reliantv1.SendMessageResponse{
-					ChatId:         req.Msg.ChatId,
-					WorkflowId:     workflowID,
-					RunId:          newRunID,
-					Status:         "processing",
-					WorkflowStatus: &workflowStatus,
-					MessageId:      savedMessageID,
-				}), nil
-
-			case db.WorkflowStatusFailed:
-				// Check if this is a stuck workflow (DB says failed but Temporal says running)
-				// Stuck workflows cannot be restarted - user must branch to continue
-				temporalState, temporalErr := s.getTemporalWorkflowState(ctx, workflowID)
-				if temporalErr == nil && temporalState.Exists && temporalState.IsRunning {
-					logging.Warn("Attempted to resume stuck workflow - blocking",
-						"chatID", req.Msg.ChatId,
-						"workflowID", workflowID,
-					)
+				if inspection.Stuck {
 					return nil, connect.NewError(connect.CodeFailedPrecondition,
 						fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
 				}
@@ -890,7 +788,7 @@ func (s *ChatService) SendMessage(
 				// resumes PRECISELY (the rebuilt run re-parks on the same question
 				// channel and receives it) instead of coarse-restarting the loop.
 				var pendingQuestion *db.Question
-				if temporalErr == nil && temporalState.Exists && !temporalState.IsRunning {
+				if inspection.Recoverable {
 					pendingQuestion, _ = s.database.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
 				}
 				if pendingQuestion != nil && pendingQuestion.TemporalWorkflowID != "" && hasUserContent {
@@ -922,7 +820,7 @@ func (s *ChatService) SendMessage(
 				// coarse restart only when Temporal has nothing to replay (ghost),
 				// the bounded guard has given up (deterministic failure), or the run
 				// was parked on an unanswered question (handled above).
-				if temporalErr == nil && temporalState.Exists && !temporalState.IsRunning && pendingQuestion == nil {
+				if inspection.Recoverable && pendingQuestion == nil {
 					targetThread := existingWorkflow.Thread
 					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
 						targetThread = *req.Msg.TargetThread
@@ -938,49 +836,29 @@ func (s *ChatService) SendMessage(
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
 
-					newRunID, resumeErr := s.pauseService.ResumeInterruptedWorkflow(ctx, workflowID, req.Msg.ChatId)
-					if resumeErr == nil {
-						s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, newRunID)
-						logging.Info("Interrupted workflow reset-and-resumed (precise nested resume)",
-							"chatID", req.Msg.ChatId,
-							"workflowID", workflowID,
-							"newRunID", newRunID,
-						)
-						workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+					outcome, resumeErr := s.runs.ResumeInterrupted(ctx, req.Msg.ChatId)
+					if resumeErr != nil {
+						return nil, connect.NewError(connect.CodeInternal, resumeErr)
+					}
+					if outcome.Kind == runs.OutcomeResumed {
+						workflowStatus := fmt.Sprintf("%d", db.Active())
 						go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
 						return connect.NewResponse(&reliantv1.SendMessageResponse{
 							ChatId:         req.Msg.ChatId,
 							WorkflowId:     workflowID,
-							RunId:          newRunID,
+							RunId:          outcome.RunID,
 							Status:         "processing",
 							WorkflowStatus: &workflowStatus,
 							MessageId:      presavedID,
 						}), nil
 					}
-					if errors.Is(resumeErr, workflow.ErrHistoryLimitExceeded) {
-						// The run exhausted Temporal's per-execution history
-						// limit. Resetting cannot help (it forks from inside
-						// the oversized history), so this goes to the coarse
-						// fresh restart — and the user is told, because
-						// otherwise the chat simply stops with no explanation
-						// and "send a message" appears to do nothing.
-						logging.Warn("Workflow hit Temporal's history limit - fresh restart at position",
-							"chatID", req.Msg.ChatId,
-							"workflowID", workflowID,
-						)
+					if outcome.HistoryLimitExceeded {
+						// Resetting cannot help a run at the history cap, so
+						// this goes to the coarse fresh restart — and the user
+						// is told, because otherwise the chat simply stops with
+						// no explanation and "send a message" appears to do
+						// nothing.
 						s.notifyHistoryLimitRestart(ctx, req.Msg.ChatId, workflowID, targetThread)
-					} else if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) {
-						logging.Info("Interrupted workflow not reset-resumable - coarse restart at position",
-							"chatID", req.Msg.ChatId,
-							"workflowID", workflowID,
-							"reason", resumeErr,
-						)
-					} else {
-						logging.Error("Reset-and-replay of interrupted workflow failed - coarse restart at position",
-							"chatID", req.Msg.ChatId,
-							"workflowID", workflowID,
-							"error", resumeErr,
-						)
 					}
 					// Messages already saved; fall through to the coarse restart.
 				}
@@ -998,7 +876,7 @@ func (s *ChatService) SendMessage(
 					"loopIteration", resumeInput.LoopIteration,
 				)
 
-			case db.WorkflowStatusCancelled, db.WorkflowStatusCompleted:
+			case db.Cancelled(), db.Completed():
 				// User-cancelled or completed: start a fresh workflow at graph
 				// entry (thread history is still the conversation context).
 				// Fall through to normal flow.
@@ -1031,7 +909,7 @@ func (s *ChatService) SendMessage(
 		}
 
 		// Allow switching if workflow doesn't exist yet (new chat) or is pending (branched chat)
-		if rootWorkflow != nil && rootWorkflow.Status != db.WorkflowStatusPending {
+		if rootWorkflow != nil && rootWorkflow.Status != db.Pending() {
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
 				fmt.Errorf("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow"))
 		}
@@ -1178,9 +1056,9 @@ func (s *ChatService) SendMessage(
 	}
 
 	runID := workflowRun.GetRunID()
-	s.updateWorkflowRunIDs(ctx, req.Msg.ChatId, workflowID, runID)
+	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
 
-	workflowStatus := fmt.Sprintf("%d", db.WorkflowStatusRunning)
+	workflowStatus := fmt.Sprintf("%d", db.Active())
 	go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
 	return connect.NewResponse(&reliantv1.SendMessageResponse{
 		ChatId:         req.Msg.ChatId,
@@ -1261,9 +1139,9 @@ func (s *ChatService) SendAgentMessage(
 	// A non-terminal thread status is NOT sufficient to prove there is a next
 	// turn to deliver into, so the terminal check above cannot stand alone.
 	//
-	// Delivery only happens in drainAgentMessagesAtBoundary, which runs at an
-	// agent loop-step boundary. An agent that is not executing takes no steps
-	// and never drains, so a message queued to one sits at status=queued
+	// Delivery only happens in CallLLM, which drains the thread's mailbox
+	// before it reads history. An agent that is not executing never reaches
+	// another CallLLM, so a message queued to one sits at status=queued
 	// indefinitely while the receipt claims it will be read next turn.
 	//
 	// threads.status cannot answer this. It is written by the ThreadStatus
@@ -1280,7 +1158,7 @@ func (s *ChatService) SendAgentMessage(
 	// indexed primary-key read rather than a Temporal round trip on this hot
 	// user-facing path.
 	//
-	// PENDING and PAUSED count as live — see WorkflowStatusIsLive. A message
+	// PENDING and PAUSED count as live — see WorkflowStatus.Live. A message
 	// queued to either IS drained when the run starts or resumes, and
 	// refusing it would lose a message that would have arrived.
 	owningWorkflowID := target.ID
@@ -1294,13 +1172,13 @@ func (s *ChatService) SendAgentMessage(
 		// whereas wrongly accepting only reproduces today's late delivery.
 		logging.Warn("Could not read owning workflow for agent-message liveness check; allowing the queue",
 			"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId, "workflowID", owningWorkflowID)
-	} else if !core.WorkflowStatusIsLive(owningWorkflow.Status) {
+	} else if !owningWorkflow.Status.Live() {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
 				"This agent isn't currently running (its run is %s), so there is no next turn to deliver into. "+
 					"Send a normal message to the chat to start one.",
-				core.WorkflowStatusLabel(owningWorkflow.Status)),
+				owningWorkflow.Status.Label()),
 		}), nil
 	}
 
@@ -1436,8 +1314,8 @@ func (s *ChatService) ListQueuedAgentMessages(
 // CancelQueuedAgentMessage revokes a single queued mailbox entry before the
 // target agent drains it.
 //
-// This is a race against the agent's own loop boundary: drainAgentMessagesAtBoundary
-// may pick the row up between the user seeing it and clicking cancel. The
+// This is a race against the agent's own next turn: CallLLM's drain may pick
+// the row up between the user seeing it and clicking cancel. The
 // deletion is conditioned on status = queued at the database level (see
 // CancelQueuedAgentMessage in the postgres store), so the outcome is never
 // ambiguous -- either this call wins the row and deletes it, or the drain
@@ -1480,72 +1358,5 @@ func (s *ChatService) CancelQueuedAgentMessage(
 	return connect.NewResponse(&reliantv1.CancelQueuedAgentMessageResponse{
 		Success: true,
 		Message: "Cancelled. The agent will never see this message.",
-	}), nil
-}
-
-// ClaimQueuedAgentMessages takes queued messages back off a thread's mailbox
-// and hands them to the caller to resend as ordinary turns. It backs both
-// "send now" (one entry) and "send all" (the whole queue).
-//
-// The UI used to do this as cancel-then-send from the client: cancel, check
-// whether the cancel took, and only then send. That has a real gap between
-// the two calls, and a bulk version multiplies it by the size of the queue —
-// with partial failure leaving some messages sent and some delivered as
-// queued, in an order nobody chose. Here the take is one DELETE ... RETURNING,
-// so the rows that come back are exactly the rows this caller now owns; a row
-// the drain won first never appears. There is no window to lose.
-//
-// The caller must resend precisely what was returned. Anything else — a stale
-// local list, an optimistic assumption that the queue it rendered is still
-// the queue — is what would let a message be both delivered and resent.
-func (s *ChatService) ClaimQueuedAgentMessages(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ClaimQueuedAgentMessagesRequest],
-) (*connect.Response[reliantv1.ClaimQueuedAgentMessagesResponse], error) {
-	userID := auth.MustGetUserID(ctx)
-
-	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
-	}
-	if req.Msg.ThreadId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("thread_id is required"))
-	}
-
-	// Ownership: same two checks, same indistinguishable NotFound, as
-	// SendAgentMessage and ListQueuedAgentMessages.
-	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
-	if err != nil || chat == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-
-	target, err := s.database.GetThread(ctx, req.Msg.ThreadId)
-	if err != nil || target == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
-	}
-	if target.ChatID != req.Msg.ChatId {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
-	}
-
-	claimed, err := s.database.ClaimQueuedAgentMessagesForThread(
-		ctx, req.Msg.ThreadId, req.Msg.ChatId, req.Msg.GetMessageId())
-	if err != nil {
-		logging.Error("Failed to claim queued agent messages",
-			"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to claim queued messages"))
-	}
-
-	messages := make([]*reliantv1.QueuedAgentMessage, len(claimed))
-	for i, msg := range claimed {
-		messages[i] = &reliantv1.QueuedAgentMessage{
-			Id:          msg.ID,
-			Body:        msg.Body,
-			CreatedAt:   msg.CreatedAt.Format(time.RFC3339),
-			SenderKind:  int32(msg.Kind),
-			Attachments: msg.Attachments,
-		}
-	}
-
-	return connect.NewResponse(&reliantv1.ClaimQueuedAgentMessagesResponse{
-		Messages: messages,
 	}), nil
 }

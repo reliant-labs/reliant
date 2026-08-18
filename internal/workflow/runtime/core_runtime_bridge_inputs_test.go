@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -59,7 +60,11 @@ func TestInlineWorkflowExecutor_BuildSubWorkflowInputs_UsesCoreInputPolicy(t *te
 		}
 	})
 
-	t.Run("ref policy preset merge failures are non-fatal and still apply defaults", func(t *testing.T) {
+	// A preset that cannot be loaded must fail the call, not silently fall back
+	// to the workflow's defaults. Falling back ran the agent under a different
+	// model, tool set and prompt than the caller asked for while reporting
+	// success.
+	t.Run("ref policy preset merge failure is fatal", func(t *testing.T) {
 		executor := &InlineWorkflowExecutor{
 			workflowInputs:    map[string]interface{}{"parent_only": "secret"},
 			subWorkflowInputs: map[string]interface{}{"task": "analyze"},
@@ -81,15 +86,12 @@ func TestInlineWorkflowExecutor_BuildSubWorkflowInputs_UsesCoreInputPolicy(t *te
 			},
 		}
 
-		result := executor.buildSubWorkflowInputs()
-		if _, exists := result["parent_only"]; exists {
-			t.Fatalf("did not expect parent-only input inheritance in ref policy: %#v", result)
+		_, _, err := executor.buildSubWorkflowInputsWithOwnership()
+		if err == nil {
+			t.Fatal("expected an error when the preset cannot be loaded, got nil")
 		}
-		if result["task"] != "analyze" {
-			t.Fatalf("expected resolved arg task, got %#v", result)
-		}
-		if result["mode"] != "manual" {
-			t.Fatalf("expected defaults to survive preset merge failure, got %#v", result)
+		if !strings.Contains(err.Error(), "load presets") {
+			t.Fatalf("expected a preset-load error, got %v", err)
 		}
 	})
 }

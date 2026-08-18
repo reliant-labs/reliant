@@ -23,22 +23,23 @@ import (
 type UpdateType = reliantv1.ChatUpdateType
 
 var (
-	UpdateTypeMessage           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE
-	UpdateTypeApproval          UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL
-	UpdateTypeThread            UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD
-	UpdateTypeToolCall          UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL
-	UpdateTypeWorkflowStatus    UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS
-	UpdateTypeError             UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR
-	UpdateTypeChat              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_CHAT
-	UpdateTypeRunOutput         UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_RUN_OUTPUT
-	UpdateTypeNodeExecution     UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION
-	UpdateTypeExecutionLog      UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG
-	UpdateTypeWorkflowExecution UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION
-	UpdateTypeInfo              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
-	UpdateTypeWarning           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING
-	UpdateTypeRefetch           UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH
-	UpdateTypeQuestion          UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION
-	UpdateTypeStreamFinalized   UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED
+	UpdateTypeMessage              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE
+	UpdateTypeApproval             UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_APPROVAL
+	UpdateTypeThread               UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD
+	UpdateTypeToolCall             UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL
+	UpdateTypeWorkflowStatus       UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_STATUS
+	UpdateTypeError                UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_ERROR
+	UpdateTypeChat                 UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_CHAT
+	UpdateTypeRunOutput            UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_RUN_OUTPUT
+	UpdateTypeNodeExecution        UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_NODE_EXECUTION
+	UpdateTypeExecutionLog         UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_EXECUTION_LOG
+	UpdateTypeWorkflowExecution    UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WORKFLOW_EXECUTION
+	UpdateTypeInfo                 UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_INFO
+	UpdateTypeWarning              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_WARNING
+	UpdateTypeRefetch              UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_REFETCH
+	UpdateTypeQuestion             UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION
+	UpdateTypeStreamFinalized      UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED
+	UpdateTypeAgentMessagesDrained UpdateType = reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED
 )
 
 // ============================================================================
@@ -232,6 +233,40 @@ type StreamFinalizedUpdate struct {
 
 func (u StreamFinalizedUpdate) Type() UpdateType { return UpdateTypeStreamFinalized }
 
+// AgentMessagesDrainedUpdate names the mailbox rows that just became transcript
+// messages.
+//
+// The pending-queue strip is fed by a poll (ListQueuedAgentMessages), so
+// without this the only thing that ever retires a row is the next poll
+// happening to come back without it. Between the drain committing and that
+// poll landing, the message is in the transcript AND still in the strip --
+// the same words shown twice, for up to one poll interval.
+//
+// Shortening the poll is not a fix; it narrows the window and leaves the
+// double-display reachable. This closes it instead: the update is written
+// inside the drain's own transaction, so it is visible to a reader exactly
+// when the messages it announces are, and it rides the same ordered,
+// sequenced chat_updates channel those messages do. A client that applies a
+// batch in order therefore commits "row leaves the strip" and "message enters
+// the transcript" together.
+//
+// MessageIDs carries the ids the client already knows -- the agent_messages
+// row ids, which are what the strip is keyed by. Note this is deliberately
+// NOT the delivered_message_id link that agent_messages already stores: that
+// column points at the HIDDEN envelope, a message the transcript never
+// renders, so it cannot tell a client which VISIBLE entry replaced a given
+// row. The ids are what the strip needs, and they are enough.
+type AgentMessagesDrainedUpdate struct {
+	UpdateTypeName string `json:"update_type"` // Always "agent_messages_drained"
+	// Thread is the mailbox's owner -- the recipient thread whose strip
+	// these rows were showing in.
+	Thread string `json:"thread"`
+	// MessageIDs are agent_messages row ids, not messages.id.
+	MessageIDs []string `json:"message_ids"`
+}
+
+func (u AgentMessagesDrainedUpdate) Type() UpdateType { return UpdateTypeAgentMessagesDrained }
+
 // ============================================================================
 // ENTITY ID GENERATORS
 // ============================================================================
@@ -239,6 +274,13 @@ func (u StreamFinalizedUpdate) Type() UpdateType { return UpdateTypeStreamFinali
 // EntityIDForQuestion generates entity ID for question updates
 func EntityIDForQuestion(questionID string) string {
 	return "question-" + questionID + "-" + formatTimestamp()
+}
+
+// EntityIDForAgentMessagesDrained generates the entity ID for a drain
+// announcement. The timestamp makes it unique per drain -- see
+// EmitAgentMessagesDrainedUpdate for why per-thread would be wrong.
+func EntityIDForAgentMessagesDrained(thread string) string {
+	return "agent-messages-drained-" + thread + "-" + formatTimestamp()
 }
 
 // EntityIDForToolCall generates entity ID for tool call updates.

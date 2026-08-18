@@ -33,6 +33,7 @@ type ExecuteToolsInput struct {
 	ProjectPath           string                            `json:"-"`
 	ExpectedResponseTools []string                          `json:"-"`
 	ResponseToolSchemas   map[string]map[string]interface{} `json:"-"`
+	CompactionThreshold   int64                             `json:"-"`
 }
 
 // V3 returns the ActivityInput for Temporal's test framework.
@@ -45,6 +46,11 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 			Name:  tc.Name,
 			Input: encodeToolCallInputForProto(tc),
 		})
+	}
+
+	var compactionThreshold *reliantv1.CelInt
+	if t.CompactionThreshold > 0 {
+		compactionThreshold = &reliantv1.CelInt{Value: &reliantv1.CelInt_Literal{Literal: t.CompactionThreshold}}
 	}
 
 	return ActivityInput{
@@ -62,6 +68,7 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 				ExecuteTools: &reliantv1.ExecuteToolsArgs{
 					ResolvedToolCalls:     protoToolCalls,
 					ExpectedResponseTools: t.ExpectedResponseTools,
+					CompactionThreshold:   compactionThreshold,
 				},
 			},
 		},

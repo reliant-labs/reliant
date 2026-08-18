@@ -121,6 +121,11 @@ nodes:
         looks. Style is a separate later pass; do NOT fail on visual polish here.
 
         **Pass if:**
+        - The reviewer first inventories every route/page the implementation exposes
+          (static links, router config, filesystem routes, and every route named in
+          LANDING_PLAN.md) and reviews all of them, not only the homepage
+        - Each page's identity matches the plan: the homepage advertises the main product,
+          while secondary products stay in their own sections/routes
         - The hero communicates the core value proposition in one clear, specific line
           (no vague "the future of X" filler)
         - The page follows LANDING_PLAN.md: message, audience, sections, and the
@@ -139,6 +144,8 @@ nodes:
         - Imagery is placeholder
 
         **Only fail if:**
+        - The reviewer did not provide a route/page inventory with a verdict for each page
+        - The homepage or any product page advertises the wrong product relative to the plan
         - The message is unclear or off-plan, the CTA is missing/ambiguous, claims
           are unsourced or fabricated, or the copy is generic AI slop
     thread:
@@ -152,12 +159,17 @@ nodes:
           audience, sections, CTA, and proof points from the scoping conversation.
 
           Build the landing page now, but this pass is about SUBSTANCE, not polish:
-          1. Nail the hero: one specific, benefit-led value proposition line
-          2. Write the sections from the plan with concrete, human copy — speak to the
+          1. Inventory the planned routes/pages before writing: homepage, product pages,
+             feature pages, pricing, docs links, and every route named in LANDING_PLAN.md
+          2. Nail the hero: one specific, benefit-led value proposition line for the page's
+             actual job; the homepage must advertise the main product, not a secondary page
+          3. Write the sections from the plan with concrete, human copy — speak to the
              audience's problem, not a feature list
-          3. Wire the single primary CTA prominently
-          4. Use only the proof points in LANDING_PLAN.md — never invent stats or quotes
-          5. Keep the information architecture clean: hero → why → proof → CTA
+          4. Wire the single primary CTA prominently
+          5. Use only the proof points in LANDING_PLAN.md — never invent stats or quotes
+          6. Keep the information architecture clean: hero → why → proof → CTA
+          7. In the implementation notes, list every page/route you created or changed and
+             how it maps to the plan
 
           Structure the project so it can be served locally (a single `index.html`, or a
           Vite/Next project — your call based on the plan). A rough visual is fine here;
@@ -194,14 +206,19 @@ nodes:
         `reliant forge skill load frontend/design` (frontend-design). Judge against it.
 
         **Pass if:**
+        - The reviewer first inventories every route/page the implementation exposes
+          (static links, router config, filesystem routes, and every route named in
+          LANDING_PLAN.md) and visually reviews each page, not only the first URL
         - Clear visual hierarchy: the hero headline and primary CTA dominate; the eye
           is led down the page in the intended order
+        - Page identity is visually correct: homepage brand/header/hero advertise the main
+          product, and secondary product pages/sections do not take over the homepage
         - Type scale has a real floor and range — body text is comfortably readable,
           headings are decisively larger; no timid, samey sizing
         - Restrained, deliberate color and type system — brand colors from LANDING_PLAN.md,
           not arbitrary defaults; consistent spacing rhythm
         - Fully responsive: nothing overflows, truncates, or collapses on mobile widths;
-          verified at narrow and wide viewports
+          verified at narrow and wide viewports for every served page
         - Accessible: text contrast meets WCAG AA (4.5:1); interactive elements are obvious
         - It looks like a real, shipped product page
 
@@ -211,9 +228,11 @@ nodes:
         - Perfectly symmetric layouts with no focal point or hierarchy
         - Hand-drawn/inline SVG blobs standing in for real design
 
-        **Visual verification is REQUIRED before passing:** the page must be served and
-        audited via Chrome DevTools (screenshot AND accessibility snapshot) at mobile and
-        desktop widths. A snapshot alone cannot catch visual/CSS issues.
+        **Visual verification is REQUIRED before passing:** every served page/route must be
+        audited via Chrome DevTools at mobile and desktop widths with `take_screenshot` and
+        `take_snapshot`. Screenshots are mandatory; an accessibility tree/snapshot alone
+        cannot catch visual/CSS issues. The review must name the screenshot evidence used
+        for each page and viewport.
     thread:
       mode: fork
       inject:
@@ -241,10 +260,18 @@ nodes:
 
           **Visual Verification (REQUIRED before finishing):**
           Serve the page on port 4321 bound to `0.0.0.0` (e.g. a static server for a plain
-          `index.html`, or the framework dev server with `--host 0.0.0.0`), then use Chrome
-          DevTools to `take_screenshot` AND `take_snapshot` at narrow and wide viewports,
-          and check `list_console_messages`. Do not finish without both screenshot and
-          snapshot evidence at both widths.
+          `index.html`, or the framework dev server with `--host 0.0.0.0`). Then use Chrome
+          DevTools for a real browser review:
+          1. Inventory every route/page from LANDING_PLAN.md and the implementation
+             (router config, filesystem routes, and visible navigation links).
+          2. For EACH page/route, navigate to it and run `take_screenshot` at desktop width.
+          3. For EACH page/route, resize to a narrow mobile width and run `take_screenshot`.
+          4. For representative pages, also run `take_snapshot` for accessibility structure.
+          5. Check `list_console_messages`.
+          6. Include screenshot evidence in your review notes; do not merely inspect the
+             accessibility tree. A tree can say "Reliant" while the visual top is broken.
+
+          Do not finish without screenshot evidence at both widths for every page/route.
 
           Work in `{{inputs.working_directory}}`.
     save_message:
@@ -311,7 +338,21 @@ nodes:
           the fresh process's own output is what confirms the CURRENT build is live. If the
           bind failed, repeat Step 1 to free the port and start again.
 
-          **Step 4: Get the preview URL and hand it to the user.** Run
+          **Step 4: Browser-verify the served page before handoff.** Use Chrome DevTools, not
+          curl alone:
+          1. Navigate to the fresh preview URL.
+          2. Take a desktop `take_screenshot` of the top/hero and inspect it visually.
+          3. Resize to a mobile width and take another `take_screenshot`.
+          4. Run `take_snapshot` for accessibility structure and `list_console_messages`.
+          5. If the project has multiple pages/routes, repeat screenshots for every route
+             named in LANDING_PLAN.md or exposed by the implementation.
+          6. Do not hand off if screenshots show stale content, wrong product identity,
+             broken top/header layout, overflow, blank regions, or console errors.
+
+          A `take_snapshot` tree is not enough; screenshots are mandatory because the tree
+          misses visual/CSS failures.
+
+          **Step 5: Get the preview URL and hand it to the user.** Run
           `reliant preview-url 4321` — it prints the authoritative, externally-reachable URL
           for port 4321 (the same URL also appears as a `Preview URL (port 4321): ...` line in
           the `bash_list` / `bash_output` result from Step 3). Do NOT invent or guess a URL.

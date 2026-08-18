@@ -1610,13 +1610,6 @@ func (s *ToolsDaemonService) defaultDaemonForUser(userID string) *daemonConnecti
 	return best
 }
 
-// daemonForUser returns the connection for a specific daemonID, or the default daemon for the user.
-func (s *ToolsDaemonService) daemonForUser(userID string) *daemonConnection {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.defaultDaemonForUser(userID)
-}
-
 func (s *ToolsDaemonService) sendToUserDaemon(userID string, msg *reliantv1.ServerMessage) error {
 	if msg == nil {
 		return nil

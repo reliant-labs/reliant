@@ -60,7 +60,7 @@ func setupBranchAtomicitySource(t *testing.T, repo db.Repository, ctx context.Co
 			ChatID:       chatID,
 			WorkflowName: "builtin://agent",
 			Thread:       threadID,
-			Status:       db.WorkflowStatusPending,
+			Status:       db.Pending(),
 			CreatedAt:    now,
 		},
 		ThreadID: threadID,

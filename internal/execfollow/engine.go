@@ -48,8 +48,8 @@ type RawUpdate struct {
 }
 
 // RootState is the root workflow's current status, normalized to lowercase
-// ("pending", "running", "completed", "failed", "cancelled", "paused",
-// "expired"). Found is false while no root workflow exists yet.
+// ("pending", "running", "completed", "failed", "cancelled", "paused").
+// Found is false while no root workflow exists yet.
 type RootState struct {
 	Found  bool
 	Status string
@@ -250,10 +250,9 @@ func (e *Engine) Run(ctx context.Context) (int, error) {
 		// finished and event feeds that never carried a root terminal event.
 		if root, rerr := e.Source.Root(ctx); rerr == nil && root.Found && isTerminalStatus(root.Status) {
 			// One final drain in case the terminal events landed between the
-			// two calls above.
-			if c, derr := e.drain(ctx, cursor); derr == nil {
-				cursor = c
-			}
+			// two calls above. Called for its emit side effects only — every
+			// path below returns, so the advanced cursor has no reader.
+			_, _ = e.drain(ctx, cursor)
 			if e.rootTerminal != "" {
 				return exitCodeFor(e.rootTerminal, e.rootOutcome), nil
 			}
@@ -431,7 +430,7 @@ func (e *Engine) emitSyntheticRootTerminal(ctx context.Context, status, outcome 
 	}
 	eventType := EventWorkflowCompleted
 	switch status {
-	case "failed", "expired":
+	case "failed":
 		eventType = EventWorkflowFailed
 	case "cancelled":
 		eventType = EventWorkflowCancelled
@@ -458,7 +457,7 @@ func (e *Engine) OpenGates() []Event {
 }
 
 // TerminalStatus returns the normalized terminal status of the root workflow
-// ("completed", "failed", "cancelled", "expired") once Run has observed one, or
+// ("completed", "failed", "cancelled") once Run has observed one, or
 // "" if Run stopped at a gate or timeout before the root reached a terminal
 // state. This is the LIFECYCLE — pair it with TerminalOutcome before calling a
 // run successful.
@@ -773,8 +772,8 @@ func (e *Engine) mapWorkflowUpdate(u RawUpdate) (Event, bool) {
 	case enumCancelled:
 		eventType, newState = EventWorkflowCancelled, "cancelled"
 	default:
-		// "paused" and "expired" are the other statuses the producer can
-		// write. Neither is a lifecycle transition this stream models: a
+		// "paused" is the other status the producer can write. It is not a
+		// lifecycle transition this stream models: a
 		// follower learns about a park from the gate events (question /
 		// approval), which carry what is actually being waited on. Anything
 		// else is unrecognized and deliberately not guessed at.
@@ -862,7 +861,7 @@ func decodeEnum(raw json.RawMessage) int {
 
 func isTerminalStatus(status string) bool {
 	switch status {
-	case "completed", "failed", "cancelled", "expired":
+	case "completed", "failed", "cancelled":
 		return true
 	default:
 		return false

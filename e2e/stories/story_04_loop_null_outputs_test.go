@@ -58,7 +58,7 @@ func TestStory04_LoopOutputsWithNullCompletes(t *testing.T) {
 	// Without the NullValue normalization fix, the workflow fails after
 	// iteration 1 instead of completing.
 	outputs := h.WorkflowResult(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 
 	require.Equal(t, true, outputs["completed"], "outputs: %v", outputs)
 	response, ok := outputs["response"].(map[string]interface{})

@@ -189,6 +189,6 @@ func TestStory11_TerminateQuestionParkedResumesViaMarkedAnswer(t *testing.T) {
 	//    exits → the workflow completes cleanly.
 	h.ResolveQuestion(q2.ID, []string{"Continue"}, "")
 	h.WaitTemporalWorkflowDone(workflowID)
-	h.WaitWorkflowStatus(workflowID, db.WorkflowStatusCompleted)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.Equal(t, db.ChatStateIdle, h.Chat(chatID).State)
 }

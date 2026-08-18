@@ -21,7 +21,8 @@ import type {
 // Re-export proto enums for convenient use throughout the app
 export {
   ChatState,
-  ChatWorkflowStatus,
+  WorkflowState,
+  WorkflowStopReason,
   MessageRole,
   StreamingState,
   DisplayStyle,
@@ -80,5 +81,4 @@ export type WorkflowExecutionData = Omit<ProtoWorkflowExecution, 'children' | 's
 export type StepExecutionData = Omit<ProtoStepExecution, '$typeName'> & {
   $typeName?: string;
 };
-
 

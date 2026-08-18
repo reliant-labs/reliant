@@ -9,9 +9,14 @@
  * Hierarchy:
  *   /workflow/$workflowName → /workflow
  *   /workflow               → /
- *   /settings/$section      → /settings
- *   /settings               → /
+ *   /settings, /settings/*  → /
  *   anything else           → /
+ *
+ * Settings is deliberately flat. Unlike /workflow, which is a distinct hub
+ * view, /settings and /settings/$section render the same SettingsPage — the
+ * bare path just falls back to the default section. Treating /settings as a
+ * parent therefore made closing a section land back on the account tab and
+ * require a second close, so every settings path exits straight to /.
  *
  * The function is pure and takes a pathname string so it can be unit tested
  * without a router. Callers spread the result into `useNavigate()({...})`.
@@ -28,12 +33,6 @@ export function getParentRouteNavigateOptions(
     return { to: "/workflow" };
   }
   if (pathname === "/workflow") {
-    return { to: "/", search: {} };
-  }
-  if (pathname.startsWith("/settings/")) {
-    return { to: "/settings" };
-  }
-  if (pathname === "/settings") {
     return { to: "/", search: {} };
   }
   return { to: "/", search: {} };
