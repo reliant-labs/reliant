@@ -31,9 +31,17 @@ ENV GOWORK=off
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+# VERSION stamps the binary so `reliant version` reports the release rather
+# than "unknown". The release workflow already injects internal/version for the
+# Electron-bundled binary; this image built without it, so every published
+# container reported an unknown version. Defaults to "dev" for a plain
+# `docker build` with no --build-arg.
+ARG VERSION=dev
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -o /reliant ./cmd/reliant/
+    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build \
+      -ldflags "-X github.com/reliant-labs/reliant/internal/version.Version=${VERSION}" \
+      -o /reliant ./cmd/reliant/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
 # Runtime base is debian (glibc), NOT alpine (musl): since adopting the forge
