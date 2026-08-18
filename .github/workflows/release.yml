@@ -354,10 +354,49 @@ jobs:
           TARGET_OS: ${{ matrix.target_os }}
           TARGET_ARCH: ${{ matrix.target_arch }}
           VERSION: ${{ needs.prepare.outputs.version }}
+          # Compiled into the binary via -X below. VITE_API_URL is the hosted
+          # endpoint the web build already ships; the vars are overrides for
+          # when the gateway or auth host differ from it.
+          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
+          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
+          RELIANT_AUTH_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          RELIANT_AUTH_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
           set -euo pipefail
 
           LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${VERSION#v}"
+
+          # Compiled-in hosted endpoints. Same defect as build-config.js on the
+          # Electron side: internal/builddefaults documents these as injected
+          # via -X for commercial builds, but nothing injected them, so the
+          # shipped binary fell through to NeutralServerURL
+          # (http://localhost:8080) — correct for a self-hoster building from
+          # source, useless in a released artifact.
+          BD=github.com/reliant-labs/reliant/internal/builddefaults
+          if [[ -n "${RELIANT_SERVER_URL:-}" ]]; then
+            LDFLAGS="$LDFLAGS -X $BD.ServerURL=$RELIANT_SERVER_URL"
+          fi
+          if [[ -n "${RELIANT_GATEWAY_URL:-}" ]]; then
+            LDFLAGS="$LDFLAGS -X $BD.GatewayURL=$RELIANT_GATEWAY_URL"
+          fi
+          if [[ -n "${RELIANT_AUTH_URL:-}" ]]; then
+            LDFLAGS="$LDFLAGS -X $BD.AuthURL=$RELIANT_AUTH_URL"
+          fi
+          if [[ -n "${RELIANT_AUTH_KEY:-}" ]]; then
+            LDFLAGS="$LDFLAGS -X $BD.AuthKey=$RELIANT_AUTH_KEY"
+          fi
+
+          # A released binary that still points at localhost is the bug this
+          # guards; fail here rather than ship it.
+          case "${RELIANT_SERVER_URL:-}" in
+            "")
+              echo "RELIANT_SERVER_URL is empty — the released binary would default to http://localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable." >&2
+              exit 1 ;;
+            *localhost*|*127.0.0.1*)
+              echo "RELIANT_SERVER_URL is $RELIANT_SERVER_URL — a released binary must not target localhost." >&2
+              exit 1 ;;
+          esac
+          echo "Compiled-in ServerURL = $RELIANT_SERVER_URL"
 
           if [[ "$TARGET_OS" == "windows" ]]; then
             BACKEND_BIN_NAME="reliant-backend.exe"
@@ -480,6 +519,13 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # The daemon's --server target and the renderer's api-server URL.
+          # Both default to VITE_API_URL, the hosted endpoint the web build
+          # already ships; override the vars only if the daemon gateway or
+          # api-server ever split onto their own hostnames.
+          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
+          RELIANT_API_URL: ${{ vars.RELIANT_API_URL || secrets.VITE_API_URL }}
+          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
         run: |
           cat > src/build-config.js <<'SCRIPT'
           module.exports = {
@@ -493,11 +539,33 @@ jobs:
               SENTRY_TRACES_SAMPLE_RATE: '0.1',
               SUPABASE_URL: process.env.SUPABASE_URL || '',
               SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+              RELIANT_SERVER_URL: process.env.RELIANT_SERVER_URL || '',
+              RELIANT_API_URL: process.env.RELIANT_API_URL || '',
+              RELIANT_GATEWAY_URL: process.env.RELIANT_GATEWAY_URL || '',
             };
             const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
             console.log(lines.join('\n'));
           " >> src/build-config.js
           echo '};' >> src/build-config.js
+          # Fail the build rather than ship an app that points at nothing.
+          # backend-manager.js falls back to http://localhost:8080 when
+          # RELIANT_SERVER_URL is unset — correct for an OSS build run from
+          # source, useless in a packaged app on a user's machine, and silent
+          # either way. This is the check that was missing when the key was
+          # absent from the generator entirely.
+          node -e "
+            const c = require('./src/build-config.js');
+            const url = c.RELIANT_SERVER_URL || '';
+            if (!url) {
+              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable.');
+              process.exit(1);
+            }
+            if (/localhost|127\.0\.0\.1/.test(url)) {
+              console.error('build-config.js RELIANT_SERVER_URL is ' + url + ' — a packaged build must not target localhost.');
+              process.exit(1);
+            }
+            console.log('build-config.js RELIANT_SERVER_URL = ' + url);
+          "
 
       - name: Build and Publish macOS apps (Signed & Notarized)
         working-directory: electron
@@ -650,6 +718,13 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # The daemon's --server target and the renderer's api-server URL.
+          # Both default to VITE_API_URL, the hosted endpoint the web build
+          # already ships; override the vars only if the daemon gateway or
+          # api-server ever split onto their own hostnames.
+          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
+          RELIANT_API_URL: ${{ vars.RELIANT_API_URL || secrets.VITE_API_URL }}
+          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
         run: |
           cat > src/build-config.js <<'SCRIPT'
           module.exports = {
@@ -663,11 +738,33 @@ jobs:
               SENTRY_TRACES_SAMPLE_RATE: '0.1',
               SUPABASE_URL: process.env.SUPABASE_URL || '',
               SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+              RELIANT_SERVER_URL: process.env.RELIANT_SERVER_URL || '',
+              RELIANT_API_URL: process.env.RELIANT_API_URL || '',
+              RELIANT_GATEWAY_URL: process.env.RELIANT_GATEWAY_URL || '',
             };
             const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
             console.log(lines.join('\n'));
           " >> src/build-config.js
           echo '};' >> src/build-config.js
+          # Fail the build rather than ship an app that points at nothing.
+          # backend-manager.js falls back to http://localhost:8080 when
+          # RELIANT_SERVER_URL is unset — correct for an OSS build run from
+          # source, useless in a packaged app on a user's machine, and silent
+          # either way. This is the check that was missing when the key was
+          # absent from the generator entirely.
+          node -e "
+            const c = require('./src/build-config.js');
+            const url = c.RELIANT_SERVER_URL || '';
+            if (!url) {
+              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable.');
+              process.exit(1);
+            }
+            if (/localhost|127\.0\.0\.1/.test(url)) {
+              console.error('build-config.js RELIANT_SERVER_URL is ' + url + ' — a packaged build must not target localhost.');
+              process.exit(1);
+            }
+            console.log('build-config.js RELIANT_SERVER_URL = ' + url);
+          "
 
       - name: Build and Publish Linux apps
         working-directory: electron
@@ -806,6 +903,13 @@ jobs:
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
           SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          # The daemon's --server target and the renderer's api-server URL.
+          # Both default to VITE_API_URL, the hosted endpoint the web build
+          # already ships; override the vars only if the daemon gateway or
+          # api-server ever split onto their own hostnames.
+          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
+          RELIANT_API_URL: ${{ vars.RELIANT_API_URL || secrets.VITE_API_URL }}
+          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
         run: |
           cat > src/build-config.js <<'SCRIPT'
           module.exports = {
@@ -819,11 +923,33 @@ jobs:
               SENTRY_TRACES_SAMPLE_RATE: '0.1',
               SUPABASE_URL: process.env.SUPABASE_URL || '',
               SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
+              RELIANT_SERVER_URL: process.env.RELIANT_SERVER_URL || '',
+              RELIANT_API_URL: process.env.RELIANT_API_URL || '',
+              RELIANT_GATEWAY_URL: process.env.RELIANT_GATEWAY_URL || '',
             };
             const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
             console.log(lines.join('\n'));
           " >> src/build-config.js
           echo '};' >> src/build-config.js
+          # Fail the build rather than ship an app that points at nothing.
+          # backend-manager.js falls back to http://localhost:8080 when
+          # RELIANT_SERVER_URL is unset — correct for an OSS build run from
+          # source, useless in a packaged app on a user's machine, and silent
+          # either way. This is the check that was missing when the key was
+          # absent from the generator entirely.
+          node -e "
+            const c = require('./src/build-config.js');
+            const url = c.RELIANT_SERVER_URL || '';
+            if (!url) {
+              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable.');
+              process.exit(1);
+            }
+            if (/localhost|127\.0\.0\.1/.test(url)) {
+              console.error('build-config.js RELIANT_SERVER_URL is ' + url + ' — a packaged build must not target localhost.');
+              process.exit(1);
+            }
+            console.log('build-config.js RELIANT_SERVER_URL = ' + url);
+          "
 
       - name: Build and Publish Windows apps
         working-directory: electron
