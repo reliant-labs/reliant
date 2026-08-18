@@ -1226,10 +1226,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       const markers = [...contexts, ...fromText.contexts];
       const hasCodeContexts = markers.length > 0;
 
+      const hasSomethingToSend = hasContent || hasAttachments || hasCodeContexts;
       const willSend =
-        (hasContent || hasAttachments || hasCodeContexts) &&
-        !effectiveStreaming &&
-        isMessagingAllowed;
+        hasSomethingToSend && !effectiveStreaming && isMessagingAllowed;
 
       if (willSend) {
         // Markers never appear in the body now — the chips hold them, and the
@@ -1347,6 +1346,14 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         if (paramsToSend && chatId) {
           setSyncedParams({ ...paramsToSend });
         }
+      } else if (hasSomethingToSend && effectiveStreaming) {
+        // ChatTextArea decided "not streaming, send" at keydown time, but
+        // effectiveStreaming flipped true before this handler ran (it is
+        // derived from isDiscussMode / hasPendingQuestion / isStreaming,
+        // any of which can change between keydown and here). Falling off
+        // the end here would silently drop the keystroke -- queue it into
+        // the running agent's mailbox instead, same as onQueue does.
+        await handleQueue();
       }
     };
 
