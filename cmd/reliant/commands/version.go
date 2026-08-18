@@ -7,15 +7,8 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
-)
 
-// Build-time variables injected via ldflags:
-//
-//	go build -ldflags "-X ...commands.Version=1.0.0 -X ...commands.Commit=abc123 -X ...commands.BuildDate=2025-01-01"
-var (
-	Version   = "dev"
-	Commit    = "unknown"
-	BuildDate = "unknown"
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 func newVersionCmd() *cobra.Command {
@@ -28,16 +21,19 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "Print version information",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			build := version.Get()
+
 			if shortOutput {
-				fmt.Println(Version)
+				fmt.Println(build.Version)
 				return nil
 			}
 
 			if jsonOutput {
 				info := map[string]string{
-					"version": Version,
-					"commit":  Commit,
-					"built":   BuildDate,
+					"version": build.Version,
+					"commit":  build.Commit,
+					"built":   build.Date,
+					"branch":  build.Branch,
 					"go":      runtime.Version(),
 					"os":      runtime.GOOS,
 					"arch":    runtime.GOARCH,
@@ -47,9 +43,9 @@ func newVersionCmd() *cobra.Command {
 				return enc.Encode(info)
 			}
 
-			fmt.Fprintf(cmd.OutOrStdout(), "reliant version %s\n", Version)
-			fmt.Fprintf(cmd.OutOrStdout(), "  commit:  %s\n", Commit)
-			fmt.Fprintf(cmd.OutOrStdout(), "  built:   %s\n", BuildDate)
+			fmt.Fprintf(cmd.OutOrStdout(), "reliant version %s\n", build.Version)
+			fmt.Fprintf(cmd.OutOrStdout(), "  commit:  %s\n", build.Commit)
+			fmt.Fprintf(cmd.OutOrStdout(), "  built:   %s\n", build.Date)
 			fmt.Fprintf(cmd.OutOrStdout(), "  go:      %s\n", runtime.Version())
 			fmt.Fprintf(cmd.OutOrStdout(), "  os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 			return nil

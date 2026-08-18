@@ -10,6 +10,14 @@
 //   - tools/docgen/celref (CEL reference code generation)
 //   - tools/docgen/refcheck (reference data validation)
 //   - llm/tools (runtime schema queries)
+//
+// forge:exclude-contract
+//
+// Registry/lookup-table package: CELNamespaces, CELFunctions and CELHelperTypes
+// are slices populated once by this package's own init() from proto descriptors
+// and read-only thereafter. A getter would return the same slice header, so it
+// moves the mutation surface without narrowing it — and every consumer above
+// reads the tables directly by name.
 package reference
 
 import (

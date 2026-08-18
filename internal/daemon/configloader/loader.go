@@ -3,6 +3,13 @@
 // Package configloader provides filesystem-based configuration loading.
 // This package is daemon-only — it reads YAML/JSON config files directly from
 // disk and should NOT be imported by server-side code (api-server, temporal-worker).
+//
+// forge:exclude-contract
+//
+// Leaf utility package: the exported surface is concrete helpers over the
+// stdlib or the OS, with no collaborator to fake and no second implementation.
+// An interface here would have exactly one implementor and one caller shape,
+// which is indirection without a seam.
 package configloader
 
 import (
