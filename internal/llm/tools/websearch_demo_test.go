@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"testing"
 
@@ -12,10 +13,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestWebSearchDemo demonstrates the web search tool with actual output
+// TestWebSearchDemo demonstrates the web search tool with actual output.
+//
+// This queries the live DuckDuckGo endpoint, so it is gated behind an explicit
+// opt-in rather than run by default. DuckDuckGo answers a share of automated
+// requests with a bot challenge — CI saw `status 202` on one query while the
+// other two in this same test succeeded — which fails the run for a reason
+// that has nothing to do with the change under test.
+//
+// Nothing is lost by gating it. The parsing, formatting, metadata and count
+// limits are all covered offline in websearch_mock_test.go; what only this
+// test can tell you is whether the live endpoint still answers us, and that is
+// a question about DuckDuckGo rather than about a pull request.
+//
+//	RELIANT_TEST_NETWORK=1 go test ./internal/llm/tools/ -run TestWebSearchDemo
 func TestWebSearchDemo(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Skipping demo test in short mode")
+	}
+	if os.Getenv("RELIANT_TEST_NETWORK") == "" {
+		t.Skip("Skipping live-network test; set RELIANT_TEST_NETWORK=1 to run")
 	}
 
 	tool := NewWebSearchTool()
