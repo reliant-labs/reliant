@@ -1,0 +1,11 @@
+version: "v1.6.1"
+date: "2026-08-17"
+title: "npm license gate and two CI reliability fixes"
+summary: "Captures the three fixes that landed just after v1.6.0 was tagged. Adds an npm license gate alongside the existing Go one, and stops the live-network websearch demo from failing CI for reasons unrelated to the code."
+items:
+  - title: "npm dependency licenses are gated in CI"
+    description: "the npm half of the license gate now runs beside the Go one, on the same allowlist-not-blocklist bar — an unrecognized license fails rather than passing quietly. The web tree passes with 205 production dependencies checked."
+  - title: "The websearch demo no longer fails CI on bot challenges"
+    description: "TestWebSearchDemo queries live DuckDuckGo, which answers a share of automated requests with a challenge response. It is now behind an explicit opt-in instead of running by default, so a full CI pass no longer fails on an upstream rate limit."
+  - title: "e2e harness documents why its daemon router is nil"
+    description: "the story harness passes a nil daemonRouter deliberately — it is only used by the greenfield code-presence probe, which skips itself when nil. That is now stated at the call site rather than left to be rediscovered."
