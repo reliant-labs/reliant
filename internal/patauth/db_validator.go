@@ -2,6 +2,13 @@
 // daemon/gateway side. It lives in its own package to avoid an import cycle
 // between internal/auth and internal/db, and is a thin adapter over
 // internal/pat — the single hashing/minting/validation implementation.
+//
+// forge:exclude-contract
+//
+// Leaf utility package: the exported surface is concrete helpers over the
+// stdlib or the OS, with no collaborator to fake and no second implementation.
+// An interface here would have exactly one implementor and one caller shape,
+// which is indirection without a seam.
 package patauth
 
 import (

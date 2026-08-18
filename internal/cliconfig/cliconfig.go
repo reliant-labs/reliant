@@ -5,6 +5,13 @@
 // selected context. It lives next to the auth file under the platform config
 // root (e.g. ~/Library/Application Support/reliant/cli-config.json on macOS)
 // and never stores JWTs — the legacy auth file remains the JWT home.
+//
+// forge:exclude-contract
+//
+// Leaf utility package: the exported surface is concrete helpers over the
+// stdlib or the OS, with no collaborator to fake and no second implementation.
+// An interface here would have exactly one implementor and one caller shape,
+// which is indirection without a seam.
 package cliconfig
 
 import (

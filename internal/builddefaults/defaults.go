@@ -18,6 +18,14 @@
 // Precedence (see Value): explicit env var > compiled-in default (-X) > neutral
 // fallback. This mirrors the web model — the OSS source is config-agnostic; the
 // closed control-plane / commercial build supplies the hosted values.
+//
+// forge:exclude-contract
+//
+// ServerURL/GatewayURL/AuthURL/AuthKey must remain package-level string vars:
+// `-ldflags -X` can only write one of those. Behind a getter or in a struct the
+// linker flag silently does nothing, the commercial build falls through to the
+// neutral localhost default, and a shipped RC points at nothing — with no build
+// error to catch it. Value() is the accessor; the vars are the injection site.
 package builddefaults
 
 import "os"

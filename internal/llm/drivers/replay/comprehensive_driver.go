@@ -1,4 +1,12 @@
 // Copyright (c) 2025 Reliant Labs
+//
+// forge:exclude-contract
+//
+// This package implements the llm.Driver interface declared in
+// internal/llm/types.go. Its behavioral contract already exists upstream, and
+// the exported methods here are that interface's implementation plus
+// provider-specific wire handling. A local contract.go would restate an
+// interface this package does not own.
 package replay
 
 import (

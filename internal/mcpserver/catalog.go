@@ -17,6 +17,13 @@
 //   - Every call carries a policy that the daemon enforces at dispatch. This
 //     package decides what to OFFER; it is not the security boundary. See
 //     internal/daemonpolicy.
+//
+// forge:exclude-contract
+//
+// Registry/lookup-table package: the exported vars are populated once at init
+// by the packages that register into them, then read. A getter returns the
+// same map or slice header, so it moves the mutation surface without
+// narrowing it.
 package mcpserver
 
 import (

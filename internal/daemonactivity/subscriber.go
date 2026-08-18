@@ -9,6 +9,13 @@
 //
 // Fire-and-forget: no JetStream, no replay, no reply. If the signal is lost
 // the next heartbeat or the next inbound/outbound message will close the gap.
+//
+// forge:exclude-contract
+//
+// Leaf utility package: the exported surface is concrete helpers over the
+// stdlib or the OS, with no collaborator to fake and no second implementation.
+// An interface here would have exactly one implementor and one caller shape,
+// which is indirection without a seam.
 package daemonactivity
 
 import (

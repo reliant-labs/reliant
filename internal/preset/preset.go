@@ -11,6 +11,13 @@
 // Presets can be partial - they don't need to cover all params in their target.
 // However, all params that ARE specified must exist in the target. This ensures
 // typos and stale params are caught early rather than silently ignored.
+//
+// forge:exclude-contract
+//
+// Registry/lookup-table package: the exported vars are populated once at init
+// by the packages that register into them, then read. A getter returns the
+// same map or slice header, so it moves the mutation surface without
+// narrowing it.
 package preset
 
 import (
