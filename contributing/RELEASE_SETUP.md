@@ -48,6 +48,20 @@ make changelog-draft VERSION=vX.Y.Z
 
 See [docs/CHANGELOG_GUIDE.md](docs/CHANGELOG_GUIDE.md) for full changelog documentation.
 
+The YAML files under `docs/data/releases/` are the source of truth for two
+separate consumers:
+
+1. `make generate-changelog` renders them into `docs/changelog.mdx`, which
+   Mintlify publishes at <https://docs.reliantlabs.io/changelog>.
+2. The **release-notes email**, which is sent from the control-plane repo —
+   `.github/workflows/release-notes.yml` there fetches the version's YAML from
+   this repo at send time. It is a manual `workflow_dispatch`, it defaults to a
+   dry run, and it additionally requires the repo variable
+   `RELEASE_NOTES_EMAIL_ENABLED=true` in control-plane before it will send
+   anything. That variable is currently unset, so no release mail goes out.
+
+Nothing about authoring changes: write the YAML here as before.
+
 ### PR Labels for Changelog
 
 | Label | Description |
