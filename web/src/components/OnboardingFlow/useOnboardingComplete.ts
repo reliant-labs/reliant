@@ -62,7 +62,25 @@ export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> 
   return created.id;
 }
 
-export async function finalizeOnboardingSideEffects(modelProvider: ModelProvider | undefined): Promise<void> {
+/** Options for {@link finalizeOnboardingSideEffects}. */
+export interface FinalizeOptions {
+  /**
+   * Whether to navigate to `/` once the side effects are done.
+   *
+   * Cloud callers pass `false`: they still have to render
+   * `DaemonConnectingGate`, which only exists to tell the user their machine
+   * is still provisioning. Navigating here unmounted the step before the gate
+   * could render, dropping the user on `/` with onboarding marked complete and
+   * no ACTIVE daemon — the state ModernApp answers with ProjectPicker's
+   * "Connect a daemon" / "Resume a daemon" screens.
+   */
+  navigate?: boolean;
+}
+
+export async function finalizeOnboardingSideEffects(
+  modelProvider: ModelProvider | undefined,
+  { navigate = true }: FinalizeOptions = {},
+): Promise<void> {
   if (modelProvider === "reliant_credits") {
     onboardingService.provisionManagedKey().then(
       (result) => logger.info("[OnboardingComplete] Reliant provider synced", { synced: result.synced }),
@@ -79,8 +97,26 @@ export async function finalizeOnboardingSideEffects(modelProvider: ModelProvider
     import("@/components/Onboarding/constants"),
   ]);
   await useTourStore.getState().resetTourProgress();
+  if (!navigate) return;
   void router.navigate({
     to: "/",
     search: { tour: ONBOARDING_STEPS[0].id },
   });
+}
+
+/**
+ * Leave onboarding for the app, starting the post-onboarding tour.
+ *
+ * This is the deferred half of {@link finalizeOnboardingSideEffects}: callers
+ * that passed `navigate: false` so they could show `DaemonConnectingGate` call
+ * this from the gate's Continue. Setting the tour param HERE rather than
+ * relying on it surviving in `prev` is what keeps the tour starting for cloud
+ * users, whose finalize never touched the URL.
+ */
+export async function navigateAfterOnboarding(): Promise<void> {
+  const [{ router }, { ONBOARDING_STEPS }] = await Promise.all([
+    import("@/routes"),
+    import("@/components/Onboarding/constants"),
+  ]);
+  void router.navigate({ to: "/", search: { tour: ONBOARDING_STEPS[0].id } });
 }

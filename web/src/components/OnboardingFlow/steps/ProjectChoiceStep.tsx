@@ -1,5 +1,4 @@
 import { useCallback, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -8,13 +7,16 @@ import { trackEvent } from "@/lib/analytics";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useGitHubCredential } from "@/hooks/useGitHubCredential";
 import { gitService } from "@/services/controlPlane/git";
-import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import {
+  ensureProject,
+  finalizeOnboardingSideEffects,
+  navigateAfterOnboarding,
+} from "../useOnboardingComplete";
 import { markOnboardingFinalized } from "../analytics";
 import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { LaunchPlan, StepProps } from "../types";
 
 export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
-  const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
   const { hasToken: hasGithubCredential } = useGitHubCredential();
   const [busy, setBusy] = useState(false);
@@ -28,20 +30,13 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
 
   const isCloud = plan.compute === "cloud_free_trial";
 
-  // Mirrors ProjectPickerStep.goToChat: leave /onboarding for the home route
-  // while preserving any search params finalizeOnboardingSideEffects set
-  // (notably ?tour=<first-step>, which the post-onboarding wizard reads to
-  // auto-start). Stripping legacy `step` / `plan` keeps reload-safe URLs from
-  // re-entering the onboarding flow.
+  // Leave /onboarding for the home route, starting the post-onboarding tour.
+  // The cloud path's finalize ran with `navigate: false` so this gate could
+  // render, which means it never put ?tour=<first-step> in the URL — so this
+  // sets it rather than trying to preserve it from `prev`.
   const goToChat = useCallback(() => {
-    navigate({
-      to: "/",
-      search: (prev: Record<string, unknown>) => {
-        const { step: _step, plan: _plan, ...rest } = prev;
-        return rest;
-      },
-    });
-  }, [navigate]);
+    void navigateAfterOnboarding();
+  }, []);
 
   const handleStartNew = useCallback(async () => {
     if (!plan.compute) {
@@ -79,7 +74,12 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
       // the tour doesn't spotlight empty surfaces while the hosted daemon is
       // still provisioning. The gate's "Continue" handoff navigates to / and
       // preserves the tour param, so the wizard then kicks in normally.
-      await finalizeOnboardingSideEffects(finalPlan.modelProvider);
+      // Cloud defers navigation to the gate's Continue — otherwise the router
+      // leaves /onboarding before the gate can render and the user lands on /
+      // with no ACTIVE daemon.
+      await finalizeOnboardingSideEffects(finalPlan.modelProvider, {
+        navigate: !isCloud,
+      });
       if (isCloud) {
         setShowDaemonGate(true);
       }

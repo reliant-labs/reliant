@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, GitBranch, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -7,13 +6,15 @@ import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
 import { ProjectPickerModal } from "@/components/Projects/ProjectPickerModal";
-import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import {
+  finalizeOnboardingSideEffects,
+  navigateAfterOnboarding,
+} from "../useOnboardingComplete";
 import { markOnboardingFinalized } from "../analytics";
 import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { StepProps } from "../types";
 
 export function ProjectPickerStep({ plan, onBack }: StepProps) {
-  const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
 
   const projects = useProjectStore((state) => state.projects);
@@ -43,19 +44,13 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
 
   const isCloud = plan.compute === "cloud_free_trial";
 
-  // Leaves /onboarding for the home route while preserving any search params
-  // finalizeOnboardingSideEffects set (notably ?tour=<first-step>, which the
-  // post-onboarding wizard reads to auto-start). Stripping legacy `step` /
-  // `plan` keeps reload-safe URLs from re-entering the onboarding flow.
+  // Leave /onboarding for the home route, starting the post-onboarding tour.
+  // The cloud path's finalize ran with `navigate: false` so this gate could
+  // render, which means it never put ?tour=<first-step> in the URL — so this
+  // sets it rather than trying to preserve it from `prev`.
   const goToChat = useCallback(() => {
-    navigate({
-      to: "/",
-      search: (prev: Record<string, unknown>) => {
-        const { step: _step, plan: _plan, ...rest } = prev;
-        return rest;
-      },
-    });
-  }, [navigate]);
+    void navigateAfterOnboarding();
+  }, []);
 
   const finalize = useCallback(
     async (source: "existing" | "new") => {
@@ -75,7 +70,9 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
         // for the local-daemon path; the wizard takes it from there. For
         // cloud we still need the daemon-connecting gate, which renders
         // here and hands control to goToChat() on continue.
-        await finalizeOnboardingSideEffects(plan.modelProvider);
+        await finalizeOnboardingSideEffects(plan.modelProvider, {
+          navigate: !isCloud,
+        });
         if (isCloud) {
           setShowDaemonGate(true);
         }
