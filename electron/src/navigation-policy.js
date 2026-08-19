@@ -17,6 +17,12 @@
  * Extracted from main.js so it can be unit-tested without booting Electron.
  */
 
+// Duplicated rather than imported from app-protocol.js: that module pulls in
+// `fs` and Electron's `protocol`, and this one is deliberately dependency-free
+// so it can be unit-tested in plain node. The scheme name is asserted against
+// app-protocol's export in navigation-policy.test.js, so the two cannot drift.
+const APP_SCHEME = "app";
+
 /**
  * Decide whether a navigation target should be opened outside the app.
  *
@@ -37,7 +43,16 @@ function shouldOpenExternally(targetUrl, currentUrl) {
     return true;
   }
 
-  // Anything that isn't web content (mailto:, custom schemes) belongs to the OS.
+  // app:// is the packaged renderer's own scheme, so a navigation to it is
+  // in-app by definition. It has to be allowed explicitly: it is not http(s),
+  // and the rule below would hand every internal route change to the system
+  // browser — one tab per navigation, with the window stranded on the old
+  // route.
+  if (target.protocol === `${APP_SCHEME}:`) {
+    return false;
+  }
+
+  // Anything else that isn't web content (mailto:, custom schemes) belongs to the OS.
   if (target.protocol !== "http:" && target.protocol !== "https:") {
     return true;
   }
