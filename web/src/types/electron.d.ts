@@ -94,8 +94,13 @@ export interface ElectronAPI {
   onOpenProject: (callback: (projectPath: string) => void) => () => void;
 
   // OAuth
-  getOAuthRedirectUrl: () => Promise<{ success: boolean; redirectUrl?: string; error?: string }>;
-  onOAuthCallback: (callback: (callbackUrl: string) => void) => void;
+  //
+  // These two were declared here but never implemented in preload.js, so at
+  // runtime they are `undefined` in every build that has ever shipped. They are
+  // typed as optional so a call site cannot assume the main process provides
+  // them — the OAuth redirect target now comes from getAppURL() instead.
+  getOAuthRedirectUrl?: () => Promise<{ success: boolean; redirectUrl?: string; error?: string }>;
+  onOAuthCallback?: (callback: (callbackUrl: string) => void) => void;
 
   // Auth storage
   authLoad: () => Promise<{ success: boolean; session?: any; error?: string }>;

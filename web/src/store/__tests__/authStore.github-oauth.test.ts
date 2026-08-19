@@ -37,7 +37,8 @@ vi.mock('@/lib/logger', () => ({
   },
 }))
 
-vi.mock('@/lib/constants', () => ({
+vi.mock('@/lib/constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/constants')>()),
   getIsDev: () => false,
 }))
 

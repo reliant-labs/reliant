@@ -54,6 +54,70 @@ export const isElectron = (): boolean =>
  */
 export const isDev = getIsDev();
 
+/** Hosted app origin used when no build-time override is configured. */
+const DEFAULT_APP_URL = "https://app.reliantlabs.io";
+
+/**
+ * True for an origin that only means something on the machine that produced it.
+ * A loopback or file:// origin is never a valid public redirect target: handing
+ * one to an identity provider sends the user's browser to a port on their own
+ * machine that either isn't listening or belongs to an unrelated process.
+ */
+const isLocalOrigin = (origin: string): boolean => {
+  if (!origin || origin === "null") return true;
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol === "file:") return true;
+    return (
+      hostname === "localhost" ||
+      hostname === "127.0.0.1" ||
+      hostname === "[::1]" ||
+      hostname === "::1" ||
+      hostname.endsWith(".localhost")
+    );
+  } catch {
+    return true;
+  }
+};
+
+/**
+ * Public origin of the web app — the base for any URL that leaves this process
+ * and comes back, such as an OAuth `redirectTo`.
+ *
+ * In a BROWSER the document origin is always the right answer, and that
+ * includes local development: a dev server on `localhost:3000` is a real,
+ * registered redirect target that the browser genuinely navigates back to.
+ *
+ * In the PACKAGED DESKTOP APP it is not. There the renderer is served locally,
+ * so its origin is `file://` or an ephemeral loopback port that changes every
+ * launch and is registered with no provider. Handing that to an identity
+ * provider is what produced the `http://127.0.0.1:61655/auth/callback`
+ * redirects seen in the field. Electron finishes OAuth by opening the system
+ * browser, so the redirect must name a URL that is reachable from outside this
+ * process — the hosted app.
+ *
+ * Lookup order: build-time override, then the document origin when it is
+ * trustworthy for this runtime, then the hosted default.
+ */
+export const getAppURL = (): string => {
+  const configured = import.meta.env.VITE_APP_URL;
+  if (typeof configured === "string" && configured.length > 0) {
+    return configured.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const origin = window.location.origin;
+    // In a browser the document origin is the app's real address, dev servers
+    // included. In Electron it is only usable when it is a remote host — a
+    // loopback or file:// origin there is local to the desktop shell and
+    // unreachable from the system browser that completes the OAuth round trip.
+    const originIsUsable = isElectron() ? !isLocalOrigin(origin) : origin !== "null";
+    if (originIsUsable) return origin;
+  }
+
+  return DEFAULT_APP_URL;
+};
+
 /**
  * URL for the admin-server (control-plane) API.
  *

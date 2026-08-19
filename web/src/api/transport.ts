@@ -156,6 +156,11 @@ const LONG_TIMEOUT_METHODS: Record<string, number> = {
   RevertFiles: WORKTREE_OPERATION_TIMEOUT_MS,
   // OAuth flows — no timeout, user can take as long as needed (cancelled via AbortController)
   StartOAuthFlow: OAUTH_TIMEOUT_MS,
+  // StartOAuthSignIn blocks on the SAME thing: the backend opens the system
+  // browser and waits for the user to finish signing in with the provider. It
+  // was missing here, so it inherited the 10s default and aborted while the
+  // user was still on the provider's consent screen.
+  StartOAuthSignIn: OAUTH_TIMEOUT_MS,
   // OAuth token exchange - external network call
   CompleteClaudeOAuth: OAUTH_EXCHANGE_TIMEOUT_MS,
   CompleteCodexOAuth: OAUTH_EXCHANGE_TIMEOUT_MS,
