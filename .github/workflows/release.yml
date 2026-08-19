@@ -11,11 +11,6 @@ on:
         required: false
         default: false
         type: boolean
-      skip_changelog_email:
-        description: "Skip sending changelog email"
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: releases
@@ -49,7 +44,6 @@ jobs:
       electron_builder_version: ${{ steps.electron-versions.outputs.electron_builder_version }}
       duration_seconds: ${{ steps.prepare-metrics.outputs.duration_seconds }}
       proto_cache_hit: ${{ steps.prepare-metrics.outputs.proto_cache_hit }}
-      is_minor_or_major: ${{ steps.release-type.outputs.is_minor_or_major }}
 
     steps:
       - name: Checkout code
@@ -68,20 +62,6 @@ jobs:
             echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
           else
             echo "version=dev-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Detect minor/major vs patch release
-        id: release-type
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          # Extract patch number: v1.2.3 → 3
-          PATCH=$(echo "$VERSION" | sed 's/^v//' | cut -d. -f3 | cut -d- -f1)
-          if [[ "$PATCH" == "0" ]]; then
-            echo "is_minor_or_major=true" >> $GITHUB_OUTPUT
-            echo "Minor/major release detected: $VERSION"
-          else
-            echo "is_minor_or_major=false" >> $GITHUB_OUTPUT
-            echo "Patch release detected: $VERSION — changelog email will be skipped"
           fi
 
       - name: Detect release type and set config
@@ -1029,50 +1009,20 @@ jobs:
           EOF
 
   # ============================================================================
-  # NOTIFY: Send changelog email via Customer.io (minor/major releases only)
-  # Runs after successful release artifact publication. Docs deployment is handled
-  # separately by Mintlify via GitHub app.
+  # The changelog/release-notes email is NOT sent from this workflow.
   #
-  # OPT-IN, not opt-out. `skip_changelog_email` is a workflow_dispatch input, and
-  # a TAG PUSH cannot set it — github.event.inputs is null there, so the
-  # `!= 'true'` guard passes and the mail went out. Every release cut by
-  # scripts/release.sh is a tag push, which meant there was no way to ship a
-  # minor without emailing users.
+  # It moved to control-plane: .github/workflows/release-notes.yml, a manual
+  # workflow_dispatch a human runs after a release. control-plane already holds
+  # the Customer.io credentials, and mailing customers should not be a side
+  # effect of pushing a tag — which is exactly what this job's guard failed to
+  # prevent (`skip_changelog_email` was a dispatch input, and a tag push leaves
+  # dispatch inputs null, so the `!= 'true'` check passed).
   #
-  # The repo variable is the missing switch: set CHANGELOG_EMAIL_ENABLED=true
-  # when a release is genuinely announcement-worthy, and leave it unset for the
-  # bug-fix minors nobody needs a mail about. Unset means silent, which is the
-  # safe default for a value nobody remembered to set.
+  # The release notes themselves are still authored HERE, in
+  # docs/data/releases/<version>.yaml — that directory renders docs/changelog.mdx
+  # via `make generate-changelog` for the Mintlify docs site. control-plane
+  # fetches the file at send time; nothing about authoring changes.
   # ============================================================================
-  notify-changelog:
-    name: Send Changelog Email
-    needs: [prepare, release-macos, release-linux, release-windows]
-    if: >-
-      needs.prepare.outputs.channel == 'latest'
-      && needs.prepare.outputs.is_minor_or_major == 'true'
-      && github.event.inputs.dry_run != 'true'
-      && github.event.inputs.skip_changelog_email != 'true'
-      && vars.CHANGELOG_EMAIL_ENABLED == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 1
-
-      - name: Install yq
-        run: |
-          sudo wget -qO /usr/local/bin/yq https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64
-          sudo chmod +x /usr/local/bin/yq
-
-      - name: Read changelog YAML and trigger broadcast
-        env:
-          VERSION: ${{ needs.prepare.outputs.version }}
-          CUSTOMERIO_APP_API_KEY: ${{ secrets.CUSTOMERIO_APP_API_KEY }}
-          CUSTOMERIO_BROADCAST_ID: ${{ vars.CUSTOMERIO_CHANGELOG_BROADCAST_ID }}
-        run: bash ./scripts/send-changelog-email.sh
 
   # ============================================================================
   # FINALIZE: Generate unified summary after all platforms complete
