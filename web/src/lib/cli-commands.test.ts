@@ -103,3 +103,50 @@ describe('daemonStartCommand gateway handling', () => {
     );
   });
 });
+
+describe('production renders a bare command', () => {
+  // The released binary carries the hosted server/gateway/admin/auth defaults
+  // compiled in (release.yml injects them into internal/builddefaults via -X),
+  // so prod must print `reliant auth serve` with NO env prefix.
+  //
+  // This shipped broken: isNonProd() keys off VITE_CLI_DEFAULTS_BAKED and
+  // NOTHING set it — not the release workflow, not the KCL frontend env — so
+  // production always took the non-prod branch and told users to paste five
+  // RELIANT_*= overrides, including the Supabase anon key, for a binary that
+  // already knew every one of them.
+  it('emits no env prefix when the CLI defaults are baked', async () => {
+    setEnv({
+      DEV: undefined,
+      VITE_CLI_DEFAULTS_BAKED: 'true',
+      VITE_API_URL: 'https://api.reliantapi.com',
+      VITE_GATEWAY_URL: 'https://gateway.reliantapi.com',
+      VITE_CONTROL_PLANE_API_URL: 'https://admin.reliantapi.com',
+      VITE_SUPABASE_URL: 'https://dash.reliantlabs.io',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_example',
+    });
+    const { authServeCommand, daemonStartCommand } = await load();
+    expect(authServeCommand()).toBe('reliant auth serve');
+    expect(daemonStartCommand()).not.toContain('RELIANT_');
+  });
+
+  it('never leaks the auth key into a copy-pasteable prod command', async () => {
+    setEnv({
+      DEV: undefined,
+      VITE_CLI_DEFAULTS_BAKED: 'true',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_secret_looking_value',
+    });
+    const { authServeCommand } = await load();
+    expect(authServeCommand()).not.toContain('sb_publishable');
+  });
+
+  it('still emits overrides for a non-prod build', async () => {
+    // staging/preprod/dev CLI builds carry no injected defaults, so their
+    // users genuinely need the prefix — the flag is absent there.
+    setEnv({
+      VITE_CLI_DEFAULTS_BAKED: undefined,
+      VITE_API_URL: 'https://preprod.reliantapi.com',
+    });
+    const { authServeCommand } = await load();
+    expect(authServeCommand()).toContain('RELIANT_SERVER_URL=');
+  });
+});
