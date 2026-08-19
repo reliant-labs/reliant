@@ -275,7 +275,7 @@ export function useCompleteOnboarding() {
       onboardingService.completeOnboarding(data),
     onSuccess: () => {
       // Optimistically mark onboarding complete so ModernApp doesn't redirect
-      // back to ?step=goal before the refetch completes.
+      // back to /onboarding before the refetch completes.
       queryClient.setQueryData<OnboardingUser | null>(
         ['onboarding', 'currentUser'],
         (old) => ({
