@@ -1,6 +1,7 @@
 import { ChevronLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
+import { OnboardingEscapeHatch } from './OnboardingEscapeHatch';
 import { useOnboardingPlan } from './useOnboardingPlan';
 import { BACK_CLEARS, deriveStep, getStepsForPlan, stepMaxWidth, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
 import { useOnboardingTracking } from './analytics';
@@ -85,11 +86,15 @@ export function OnboardingPage() {
       >
         <div className="absolute inset-x-0 top-0 h-40 bg-[radial-gradient(circle_at_18%_0%,rgba(14,165,233,0.18),transparent_38%),radial-gradient(circle_at_82%_0%,rgba(168,85,247,0.16),transparent_34%)]" aria-hidden="true" />
 
-        {/* Progress bar */}
-        <div className="relative flex items-center justify-between border-b border-white/10 bg-white/[0.035] px-6 py-4">
+        {/* Progress bar, plus the way out. The escape hatch lives on this row
+            because onboarding suppresses the app Header and renders above
+            every other surface — without it, a user whose setup cannot
+            complete has no route to settings and no way to sign out. */}
+        <div className="relative flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-6 py-4">
           <div className="flex-1">
             <ProgressBar steps={progressSteps} currentStepIndex={safeIndex} />
           </div>
+          <OnboardingEscapeHatch className="flex-shrink-0" />
         </div>
 
         {/* Step content */}

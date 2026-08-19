@@ -7,6 +7,7 @@ import {
   PanelRight,
   PanelLeft,
   FolderGit2,
+  Settings,
 } from "lucide-react";
 import {
   useState,
@@ -59,6 +60,7 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
   (
     {
       windowAligned = true,
+      onNavigateToSettings,
       onNavigateToWorktrees,
       onNavigateToSettingsSection: _onNavigateToSettingsSection,
       onNavigateToChats: _onNavigateToChats,
@@ -317,6 +319,31 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
 
             {/* Config Health Indicator */}
             {!projectPickerMode && <ConfigHealthIndicator />}
+
+            {/* Settings. Deliberately NOT gated on `projectPickerMode`, unlike
+                every other control on this row. The Sidebar — which holds the
+                app's only other Settings link — renders solely inside the main
+                app shell, and that shell requires a selected project. A user
+                whose daemon never provisions never gets a project, so without
+                this button they cannot reach /settings at all, and therefore
+                cannot sign out. /settings itself needs neither a daemon nor a
+                project; it is gated only on auth. */}
+            {onNavigateToSettings && (
+              <Tooltip
+                content={`Settings (${formatShortcut("onToggleSettings")})`}
+                placement="bottom"
+                delay={300}
+              >
+                <button
+                  onClick={onNavigateToSettings}
+                  className="header-icon-btn p-1.5 rounded text-xs transition-colors"
+                  aria-label="Settings"
+                  data-testid="header-settings-button"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              </Tooltip>
+            )}
 
             {/* Window controls for non-Mac Electron only — browsers can't drive these */}
             {showWindowControls && (
