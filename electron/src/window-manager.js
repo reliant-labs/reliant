@@ -3,6 +3,7 @@ const path = require('path');
 const log = require('./logger');
 const windowConfig = require('./window-config');
 const { shouldOpenExternally } = require('./navigation-policy');
+const { APP_INDEX_URL } = require('./app-protocol');
 // Note: Window state persistence is now handled in main.js via the backend API
 // Each worktree stores its own window state in ./data/window-state.json
 
@@ -87,11 +88,11 @@ class WindowManager {
 
       await loadDevURL();
     } else {
-      // In production, web files are in Resources/web (extraResources)
-      const webPath = path.join(process.resourcesPath, 'web');
-      const indexPath = path.join(webPath, 'index.html');
-      log.debug('[WindowManager] Loading index.html from:', indexPath);
-      await window.loadFile(indexPath);
+      // Served over app:// for the same reason as the main window: the bundle's
+      // root-absolute asset paths resolve against the filesystem root under
+      // file://, which yields a blank window. See app-protocol.js.
+      log.info('[WindowManager] Loading renderer from:', APP_INDEX_URL);
+      await window.loadURL(APP_INDEX_URL);
     }
 
     // Store window metadata

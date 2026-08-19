@@ -50,3 +50,27 @@ test("an unknown current URL keeps navigation in-app", () => {
   // first navigation at the browser.
   assert.strictEqual(shouldOpenExternally("http://127.0.0.1:5183/auth", ""), false);
 });
+
+test("app:// routes stay in-app", () => {
+  // The packaged renderer is served from app://, so its own route changes are
+  // in-app by definition. The generic "not http(s) => external" rule would
+  // hand every one of them to shell.openExternal — a browser tab per
+  // navigation, with the window stranded on the old route.
+  const PACKAGED = "app://bundle/";
+  assert.strictEqual(shouldOpenExternally("app://bundle/chat/abc", PACKAGED), false);
+  assert.strictEqual(shouldOpenExternally("app://bundle/auth", PACKAGED), false);
+  assert.strictEqual(shouldOpenExternally("app://bundle/", PACKAGED), false);
+});
+
+test("outbound links still leave a packaged window", () => {
+  const PACKAGED = "app://bundle/";
+  assert.strictEqual(shouldOpenExternally("https://reliantlabs.io/docs", PACKAGED), true);
+  assert.strictEqual(shouldOpenExternally("mailto:support@reliantlabs.io", PACKAGED), true);
+});
+
+test("the scheme matches the one app-protocol actually serves", () => {
+  // navigation-policy duplicates the scheme name to stay dependency-free;
+  // this is the assertion that keeps the two from drifting.
+  const { APP_ORIGIN } = require("../src/app-protocol");
+  assert.strictEqual(shouldOpenExternally(`${APP_ORIGIN}/chat/abc`, APP_ORIGIN), false);
+});

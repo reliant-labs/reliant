@@ -8,6 +8,7 @@ const {
   Tray,
   globalShortcut,
   Notification,
+  protocol,
 } = require("electron");
 
 // NOTE: With HTTP/2 (TLS), connection limits are not a concern.
@@ -34,6 +35,17 @@ const WindowManager = require("./window-manager");
 const BrowserManager = require("./browser-manager");
 const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
+const {
+  APP_INDEX_URL,
+  registerAppProtocol,
+  registerSchemePrivileges,
+} = require("./app-protocol");
+const { watchRendererHealth } = require("./renderer-health");
+const {
+  formatDiagnosticsReport,
+  shouldAutoOpenDevTools,
+  shouldShowDevToolsMenuItem,
+} = require("./diagnostics");
 const authStorage = require("./auth-storage");
 const cliInstaller = require("./cli-installer");
 const {
@@ -1007,29 +1019,32 @@ async function createWindow(options = {}) {
     }
   });
 
-  if (app.isPackaged) {
-    mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
-      if (navigationUrl.startsWith("file://")) {
-        event.preventDefault();
-        const webPath = path.join(process.resourcesPath, "web", "index.html");
-        mainWindow.loadFile(webPath);
-      }
-    });
-  }
+  // NOTE: packaged builds no longer intercept in-app navigation. Under the old
+  // file:// load this handler existed because history navigation produced
+  // file:///some/route, which had no document behind it; it forced a reload of
+  // index.html and threw the route away. app:// serves index.html for unknown
+  // paths (the SPA fallback in app-protocol.js), so the router now handles its
+  // own routes and intercepting would break deep links.
 
   // Disable refresh and DevTools in production (installed builds only)
   if (app.isPackaged) {
     mainWindow.webContents.on("before-input-event", (event, input) => {
-      // Allow refresh but reload from file in production
+      // Reload in place. Previously this reloaded index.html from disk to work
+      // around file:// losing the route; app:// serves the current route
+      // correctly, so an ordinary reload preserves where the user was.
       if ((input.meta && input.key.toLowerCase() === "r") ||
           (input.control && input.key.toLowerCase() === "r") ||
           input.key === "F5") {
         event.preventDefault();
-        const webPath = path.join(process.resourcesPath, "web", "index.html");
-        mainWindow.loadFile(webPath);
+        mainWindow.webContents.reload();
       }
 
-      // Disable DevTools shortcuts in production
+      // DevTools keyboard shortcuts stay disabled in packaged builds so an
+      // ordinary user cannot open them by accident. The View menu item is the
+      // deliberate path in, and RELIANT_DEVTOOLS=1 is the one for a user we
+      // are actively debugging with. Blocking the KEYS is not the same as
+      // forcing DevTools closed, which is what previously made a blank window
+      // impossible to inspect at all.
       if (input.control && input.shift && input.key.toLowerCase() === "i") {
         event.preventDefault();
       }
@@ -1059,11 +1074,6 @@ async function createWindow(options = {}) {
       if (input.meta && input.key.toLowerCase() === "u") {
         event.preventDefault();
       }
-    });
-
-    // Completely disable DevTools in production
-    mainWindow.webContents.on("devtools-opened", () => {
-      mainWindow.webContents.closeDevTools();
     });
   }
 
@@ -1345,14 +1355,37 @@ async function createWindow(options = {}) {
     }
   });
 
-  mainWindow.webContents.on("did-fail-load", async (_e, code, desc, url) => {
-    log.error("[Window] did-fail-load:", { code, desc, url });
+  mainWindow.webContents.on("did-fail-load", async (_e, code, desc, url, isMainFrame) => {
+    log.error("[Window] did-fail-load:", { code, desc, url, isMainFrame });
+
+    // Only a top-level document failure is fatal. A failed subresource leaves
+    // a window that is up but possibly blank; renderer-health.js reports that
+    // case, and tearing the app down here would kill it before it could.
+    if (!isMainFrame) {
+      return;
+    }
+
     await dialog.showErrorBox(
       "Renderer load failed",
       `${code}: ${desc}\nURL: ${url || "(file)"}`
     );
     app.exit(1);
   });
+
+  // Catch the blank-window failure that reports success everywhere else.
+  watchRendererHealth(mainWindow, log, {
+    onUnhealthy: (reason) => {
+      log.error(
+        "[Window] renderer never mounted — see the log for the failing assets:",
+        reason
+      );
+    },
+  });
+
+  if (shouldAutoOpenDevTools({ isPackaged: app.isPackaged, env: process.env })) {
+    log.info("[Window] RELIANT_DEVTOOLS set — opening DevTools");
+    mainWindow.webContents.openDevTools({ mode: "detach" });
+  }
 
   // Crash / responsiveness diagnostics with recovery
   mainWindow.webContents.on("crashed", (event, killed) => {
@@ -1424,9 +1457,12 @@ async function createWindow(options = {}) {
   log.debug("[Window] process.env.USE_DEV_SERVER:", process.env.USE_DEV_SERVER);
 
   if (app.isPackaged) {
-    const webPath = path.join(process.resourcesPath, "web", "index.html");
-    log.debug("[Window] Production mode - loading from:", webPath);
-    await mainWindow.loadFile(webPath);
+    // Served over app:// rather than loadFile(). The bundle is built with
+    // base "/" for the web deploy, and those root-absolute asset paths
+    // resolve against the filesystem root under file:// — which is why
+    // v1.6.3 opened a blank window. See app-protocol.js.
+    log.info("[Window] Production mode - loading from:", APP_INDEX_URL);
+    await mainWindow.loadURL(APP_INDEX_URL);
   } else {
     log.debug(`[Window] Waiting for Vite at ${DEV_URL} ...`);
     await waitForPort(DEV_PORT).catch(async () => {
@@ -3456,6 +3492,74 @@ function createApplicationMenu() {
         { role: "zoomout" },
         { type: "separator" },
         { role: "togglefullscreen" },
+
+        // Diagnostics. These are the only tools a user has when the window
+        // comes up blank, so they must be reachable from the menu bar — which
+        // still works when nothing has rendered.
+        { type: "separator" },
+        ...(shouldShowDevToolsMenuItem()
+          ? [
+              {
+                label: "Toggle Developer Tools",
+                accelerator:
+                  process.platform === "darwin" ? "Cmd+Alt+Shift+I" : "Ctrl+Shift+Alt+I",
+                click: () => {
+                  const focusedWindow = BrowserWindow.getFocusedWindow();
+                  if (!focusedWindow) return;
+                  if (focusedWindow.webContents.isDevToolsOpened()) {
+                    focusedWindow.webContents.closeDevTools();
+                  } else {
+                    focusedWindow.webContents.openDevTools({ mode: "detach" });
+                  }
+                },
+              },
+            ]
+          : []),
+        {
+          label: "Open Log File",
+          click: async () => {
+            const logPath = log.getLogPath();
+            if (!logPath) {
+              await dialog.showErrorBox("No log file", "The log path is not available.");
+              return;
+            }
+            // Reveal rather than open: the user gets the folder and can hand
+            // the file to us, and it does not depend on a .log association.
+            shell.showItemInFolder(logPath);
+          },
+        },
+        {
+          label: "Copy Diagnostics",
+          click: async () => {
+            const { clipboard } = require("electron");
+            const focusedWindow = BrowserWindow.getFocusedWindow();
+            let backendReady = false;
+            let backendPort = null;
+            let apiUrl = "";
+            try {
+              if (backendManager) {
+                backendReady = await backendManager.isReady();
+                backendPort = backendManager.getPort();
+                apiUrl = backendManager.apiUrl || "";
+              }
+            } catch {
+              // Diagnostics must never fail on the way to being reported.
+            }
+            const report = formatDiagnosticsReport({
+              version: app.getVersion(),
+              electronVersion: process.versions.electron,
+              platform: process.platform,
+              arch: process.arch,
+              logPath: log.getLogPath(),
+              rendererUrl: focusedWindow ? focusedWindow.webContents.getURL() : "",
+              backendReady,
+              backendPort,
+              apiUrl,
+            });
+            clipboard.writeText(report);
+            log.info("[Diagnostics] copied to clipboard:\n" + report);
+          },
+        },
       ],
     },
     {
@@ -3692,6 +3796,10 @@ function ensureDirectoriesExist() {
   }
 }
 
+// Scheme privileges must be declared before the app is ready, or app:// is
+// treated as an opaque origin and localStorage throws in the renderer.
+registerSchemePrivileges(protocol);
+
 // Single instance lock - MUST be before protocol registration
 // Only enforce in production. In development, allow multiple instances to run
 // (e.g., dev build alongside production, or multiple worktrees).
@@ -3836,6 +3944,14 @@ app.whenReady().then(async () => {
   log.debug("[App] Electron version:", process.versions.electron);
   log.debug("[App] Node version:", process.versions.node);
   log.debug("[App] Chrome version:", process.versions.chrome);
+
+  // Serve the packaged renderer over app://. Must be registered before the
+  // first window loads.
+  if (app.isPackaged) {
+    const webRoot = path.join(process.resourcesPath, "web");
+    registerAppProtocol(protocol, webRoot, log);
+    log.info("[App] ✓ app:// protocol registered for", webRoot);
+  }
 
   // Ensure required directories exist
   const dirStart = Date.now();
