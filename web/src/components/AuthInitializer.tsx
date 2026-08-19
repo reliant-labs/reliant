@@ -38,6 +38,25 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         logger.info("[AuthInitializer] User logged out, resetting prefetch and API check state");
         hasPrefetched.current = false;
         resetApiKeyCheck();
+
+        // The onboarding checklist is per-user, but it mirrors itself to
+        // localStorage (`reliant.checklist.*`) so a reload can decide offline
+        // whether the guide was already dismissed. That mirror is device-wide
+        // and outlives the session, so without this reset the NEXT account to
+        // sign in on this device inherits the previous user's progress.
+        //
+        // `welcomeShown` is the damaging one: apiKeySetupStore treats it as
+        // "this user has been introduced to the product" and defers the
+        // api-key-setup modal until it is true. Inherited, it reads as true
+        // for a brand-new user, so the modal fires immediately — including
+        // over `/onboarding`, whose z-40 overlay it outranks at z-50.
+        void import("../store/onboardingChecklistStore").then(
+          ({ useOnboardingChecklistStore }) => {
+            useOnboardingChecklistStore.getState().reset();
+          },
+        ).catch((error) => {
+          logger.warn("[AuthInitializer] Checklist reset failed:", error);
+        });
       }
 
       if (hasInitializedAuthenticatedStartup.current) {
