@@ -68,6 +68,9 @@ export function UpgradeAccount() {
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  // Which provider's link is starting, or null. Cleared only on failure — a
+  // success navigates away to the provider.
+  const [pendingProvider, setPendingProvider] = useState<LinkableProvider | null>(null)
 
   // No-email-after-upgrade fallback (e.g. GitHub with a private email): the
   // user enters a billing email, verifies it via OTP, and only then do we
@@ -102,6 +105,10 @@ export function UpgradeAccount() {
 
   const handleLink = async (provider: LinkableProvider) => {
     setError(null)
+    // Only the clicked provider gets the pending state; the rest are disabled.
+    // A shared flag lit every button at once, which reads as the app linking an
+    // account the user never picked.
+    setPendingProvider(provider)
     setSubmitting(true)
     try {
       // Thread returnTo through the OAuth state so /auth/callback lands the
@@ -115,6 +122,7 @@ export function UpgradeAccount() {
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to link ${provider}`)
       setSubmitting(false)
+      setPendingProvider(null)
     }
   }
 
@@ -436,12 +444,14 @@ export function UpgradeAccount() {
             <OAuthButton
               provider="github"
               onClick={() => handleLink('github')}
-              loading={submitting}
+              loading={pendingProvider === 'github'}
+              disabled={submitting}
             />
             <OAuthButton
               provider="google"
               onClick={() => handleLink('google')}
-              loading={submitting}
+              loading={pendingProvider === 'google'}
+              disabled={submitting}
             />
           </div>
 

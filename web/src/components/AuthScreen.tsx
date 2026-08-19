@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '@/store/authStore'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { OAuthButton } from './OAuthButton'
+import type { SocialProvider } from './icons/SocialProviderIcon'
 import { ForgotPassword } from './ForgotPassword'
 import { EmailVerification } from './EmailVerification'
 import { PasswordInput, ConfirmPasswordInput } from './PasswordInput'
@@ -17,6 +18,9 @@ export function AuthScreen() {
   const [signupEmailForVerification, setSignupEmailForVerification] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  // The provider whose sign-in is currently starting, or null. On success the
+  // page navigates or redirects away, so this is only cleared on failure.
+  const [pendingProvider, setPendingProvider] = useState<SocialProvider | null>(null)
 
   const { signIn, signUp, signInAnonymously, signInWithGithub, signInWithGoogle, signInWithApple } = useAuthStore()
   const navigate = useNavigate()
@@ -125,6 +129,11 @@ export function AuthScreen() {
   }
 
   const handleOAuthSignIn = async (provider: 'google' | 'github' | 'apple') => {
+    // Track WHICH provider is starting, not just that something is. The button
+    // for the clicked provider shows the pending state; the others are merely
+    // disabled, so the UI never claims to be connecting to a provider the user
+    // did not choose.
+    setPendingProvider(provider)
     setLoading(true)
     setError(null)
 
@@ -160,6 +169,7 @@ export function AuthScreen() {
 
       setError(errorMessage)
       setLoading(false)
+      setPendingProvider(null)
     }
   }
 
@@ -283,12 +293,14 @@ export function AuthScreen() {
             <OAuthButton
               provider="github"
               onClick={() => handleOAuthSignIn('github')}
-              loading={loading}
+              loading={pendingProvider === 'github'}
+              disabled={loading}
             />
             <OAuthButton
               provider="google"
               onClick={() => handleOAuthSignIn('google')}
-              loading={loading}
+              loading={pendingProvider === 'google'}
+              disabled={loading}
             />
           </div>
 

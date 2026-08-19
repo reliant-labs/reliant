@@ -1,8 +1,19 @@
 import type { ComponentProps } from 'react'
+import { Loader2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { SocialProviderIcon, type SocialProvider } from './icons/SocialProviderIcon'
 
 interface OAuthButtonProps extends Omit<ComponentProps<'button'>, 'children'> {
   provider: SocialProvider
+  /**
+   * This provider's sign-in is in flight. Starting a provider round-trip can
+   * take seconds before the browser moves, so the button must acknowledge the
+   * click — otherwise the screen looks inert and users click again.
+   *
+   * Pass this ONLY for the provider that was actually clicked. Driving every
+   * button from one shared flag makes the app look like it is signing in with
+   * a provider the user never chose.
+   */
   loading?: boolean
 }
 
@@ -29,30 +40,36 @@ const providerConfig = {
 
 export function OAuthButton({ provider, loading = false, disabled, ...props }: OAuthButtonProps) {
   const config = providerConfig[provider]
-  
+
   return (
     <button
       type="button"
+      // Disabled while ANY provider is in flight (the caller passes `disabled`
+      // for the others), so a second click cannot start a competing sign-in.
       disabled={loading || disabled}
-      className={`
-        w-full inline-flex justify-center items-center gap-3 py-2.5 px-4 
-        border rounded-lg shadow-sm text-sm font-medium 
-        transition-colors duration-200
-        disabled:opacity-50 disabled:cursor-not-allowed
-        focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2
-        ${config.bgColor}
-        ${config.textColor}
-        ${config.borderColor}
-      `}
+      // aria-busy tracks this provider alone: a screen reader should announce
+      // the one the user chose as busy, not the whole row.
+      aria-busy={loading}
+      data-testid={`oauth-button-${provider}`}
+      className={cn(
+        'w-full inline-flex justify-center items-center gap-3 py-2.5 px-4',
+        'border rounded-lg shadow-sm text-sm font-medium',
+        'transition-colors duration-200',
+        'disabled:opacity-50 disabled:cursor-not-allowed',
+        'focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2',
+        config.bgColor,
+        config.textColor,
+        config.borderColor,
+      )}
       {...props}
     >
       {loading ? (
-        <div className="w-5 h-5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+        <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
       ) : (
         <SocialProviderIcon provider={provider} />
       )}
       <span>
-        {loading ? 'Connecting...' : `Continue with ${config.name}`}
+        {loading ? `Connecting to ${config.name}...` : `Continue with ${config.name}`}
       </span>
     </button>
   )
