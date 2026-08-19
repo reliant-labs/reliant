@@ -1032,6 +1032,17 @@ jobs:
   # NOTIFY: Send changelog email via Customer.io (minor/major releases only)
   # Runs after successful release artifact publication. Docs deployment is handled
   # separately by Mintlify via GitHub app.
+  #
+  # OPT-IN, not opt-out. `skip_changelog_email` is a workflow_dispatch input, and
+  # a TAG PUSH cannot set it — github.event.inputs is null there, so the
+  # `!= 'true'` guard passes and the mail went out. Every release cut by
+  # scripts/release.sh is a tag push, which meant there was no way to ship a
+  # minor without emailing users.
+  #
+  # The repo variable is the missing switch: set CHANGELOG_EMAIL_ENABLED=true
+  # when a release is genuinely announcement-worthy, and leave it unset for the
+  # bug-fix minors nobody needs a mail about. Unset means silent, which is the
+  # safe default for a value nobody remembered to set.
   # ============================================================================
   notify-changelog:
     name: Send Changelog Email
@@ -1041,6 +1052,7 @@ jobs:
       && needs.prepare.outputs.is_minor_or_major == 'true'
       && github.event.inputs.dry_run != 'true'
       && github.event.inputs.skip_changelog_email != 'true'
+      && vars.CHANGELOG_EMAIL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
