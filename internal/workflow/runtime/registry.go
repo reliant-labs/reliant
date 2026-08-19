@@ -835,6 +835,12 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		"workflow_id":    workflowID,
 		"is_retrying":    isRetrying,
 	}
+	// Scope the error to the thread that produced it. Omitted entirely when
+	// the activity has no thread, so the timeline's "no thread means
+	// chat-scoped" branch still applies rather than matching on "".
+	if thread := extractThread(input); thread != "" {
+		errorData["thread"] = thread
+	}
 	if maxAttempts > 0 {
 		errorData["max_attempts"] = int(maxAttempts)
 	}
@@ -1053,6 +1059,64 @@ func extractChatID(input interface{}) string {
 				if chatIDVal := val.Field(i); chatIDVal.Kind() == reflect.String {
 					return chatIDVal.String()
 				}
+			}
+		}
+	}
+
+	return ""
+}
+
+// extractThread pulls the thread an activity was working on out of its input,
+// so the error event it produces can be scoped to that thread.
+//
+// Without it every activity error is chat-global, and the timeline shows it in
+// EVERY thread of the chat — including spawns that started long after the
+// error and never saw it. Observed: a run of DrainAgentMessages failures
+// rendered at the top of a spawn thread that did not exist when they happened.
+// InterleavedTimeline already scopes an error that carries a thread; nothing
+// was filling the field in.
+//
+// Returns "" when the input has no thread, which is the honest answer for a
+// genuinely chat-scoped activity. The timeline keeps showing those everywhere
+// rather than guessing a thread — guessing is what produced the wrong-thread
+// render to begin with.
+func extractThread(input interface{}) string {
+	if input == nil {
+		return ""
+	}
+
+	if inputMap, ok := input.(map[string]interface{}); ok {
+		if thread, ok := inputMap["thread"].(string); ok {
+			return thread
+		}
+	}
+
+	val := reflect.ValueOf(input)
+	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return ""
+		}
+		val = val.Elem()
+	}
+
+	if val.Kind() != reflect.Struct {
+		return ""
+	}
+
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Type().Field(i)
+
+		if jsonTag := field.Tag.Get("json"); jsonTag != "" {
+			if strings.Split(jsonTag, ",")[0] == "thread" {
+				if threadVal := val.Field(i); threadVal.Kind() == reflect.String {
+					return threadVal.String()
+				}
+			}
+		}
+
+		if field.Name == "Thread" {
+			if threadVal := val.Field(i); threadVal.Kind() == reflect.String {
+				return threadVal.String()
 			}
 		}
 	}

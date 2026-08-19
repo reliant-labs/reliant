@@ -43,8 +43,11 @@ interface ChatTextAreaProps {
   onStop?: () => void;
   /**
    * Called when Enter is pressed while streaming, instead of inserting a
-   * newline. Queues the message for the agent's next turn. Omit to preserve
-   * the default behavior (Enter inserts a newline while streaming).
+   * newline. Queues the message for the agent's next turn. Enter is always
+   * handled deliberately while streaming -- if this is omitted, it falls
+   * back to `onStop` (matching the "streaming turns Enter/the send button
+   * into stop" behavior elsewhere) rather than inserting a newline or doing
+   * nothing.
    */
   onQueue?: () => void;
   disabled?: boolean;
@@ -215,16 +218,21 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
         if (e.nativeEvent.isComposing) return;
 
         if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
+          // Enter is always fully handled here -- it must never fall through
+          // to the textarea's default newline insertion. A keystroke must
+          // always produce a deliberate outcome: send, queue, or (when
+          // there's no mailbox to queue into, e.g. the workflow-builder
+          // composer) stop, matching what the send button already does once
+          // streaming starts.
+          e.preventDefault();
           if (!isStreaming) {
-            e.preventDefault();
             onSend();
-            return;
-          }
-          if (onQueue) {
-            e.preventDefault();
+          } else if (onQueue) {
             onQueue();
-            return;
+          } else if (onStop) {
+            onStop();
           }
+          return;
         }
 
         // Shift+Enter falls through to the textarea's own newline handling.

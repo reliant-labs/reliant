@@ -152,6 +152,13 @@ export const BaseChatInput = forwardRef<HTMLTextAreaElement, BaseChatInputProps>
               useInlineMode ? "items-end pb-1" : "flex-col gap-1"
             )}>
               <div className="flex-1">
+                {/*
+                  No onQueue: this composer (workflow builder) has no running
+                  agent mailbox to queue into. ChatTextArea falls back to
+                  onStop for Enter while streaming instead of inserting a
+                  newline or doing nothing, matching what the send button
+                  already does once streaming starts.
+                */}
                 <ChatTextArea
                   ref={textareaRef}
                   value={value}
