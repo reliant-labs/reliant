@@ -2,21 +2,27 @@ import { create } from 'zustand'
 import type { User, Session, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
+import { getAppURL } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
 import { devAuthGrpc } from '@/api/grpc-unauth'
 
 const isElectron = !!window.electronAPI
+
+/**
+ * Where the identity provider should send the user back to.
+ *
+ * This must be the PUBLIC app URL, never the renderer's own origin. In the
+ * packaged desktop app the renderer is served from a local address, so
+ * `window.location.origin` is an ephemeral loopback port — sending that to a
+ * provider produced the `http://127.0.0.1:<port>/auth/callback` redirects users
+ * hit in the field. `getAppURL()` resolves the hosted origin and only falls
+ * through to the document origin when that origin is genuinely public.
+ *
+ * Electron completes the round trip by opening the provider in the system
+ * browser (see linkOAuthIdentity), which lands on the hosted callback page.
+ */
 const getOAuthRedirectUrl = async (): Promise<string> => {
-  if (!isElectron || !window.electronAPI?.getOAuthRedirectUrl) {
-    return `${window.location.origin}/auth/callback`
-  }
-
-  const response = await window.electronAPI.getOAuthRedirectUrl()
-  if (!response?.success || !response.redirectUrl) {
-    throw new Error(response?.error || 'Failed to initialize OAuth callback listener')
-  }
-
-  return response.redirectUrl
+  return `${getAppURL()}/auth/callback`
 }
 
 // Append OAuth round-trip state to the redirect URL as query params. Replaces
