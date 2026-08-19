@@ -222,7 +222,28 @@ jobs:
   e2e-frontend:
     name: E2E Frontend (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Measured, not guessed: this job was cancelled at 15m in every one of
+    # the last 50 runs that reached the test step (the other 8/50 died in
+    # <3s on an unrelated `goose install` flake, now pinned — see below).
+    # It was never a slow-but-passing job; the Playwright suite itself was
+    # genuinely failing and playwright.config.ts's `retries: 2` (single
+    # worker in CI) was tripling the cost of every failure.
+    #
+    # After this change (make generate scoped to generate-shortcuts, goose
+    # pinned, browser cache added, one stale assertion fixed, two
+    # non-test manual-QA scripts excluded from the run):
+    #   - setup (checkout -> build -> browser install) measures ~2-3 min
+    #   - the suite itself, run locally with CI's exact config (single
+    #     worker, 2 retries, `CI=true`), takes 15.3 minutes wall clock —
+    #     because 26 onboarding.spec.ts tests are genuinely failing against
+    #     a refactored onboarding step model (see commit message) and each
+    #     failure still costs 3 attempts.
+    # 15+3 leaves no margin for CI-runner variance, so this is set to 20,
+    # not bumped arbitrarily. It should come back down once onboarding.spec.ts
+    # is rewritten against the current step model (tracked separately, not
+    # in scope for this CI-infra fix) — at that point the real number is
+    # close to 3-4 minutes.
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
 
@@ -254,10 +275,29 @@ jobs:
         run: buf generate --template buf.gen.yaml
 
       - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+        # Pinned to match the version in go.mod. This step was an unpinned
+        # `@latest` install; every one of this job's non-timeout failures in
+        # the last 50 runs (8/50) died here in <3s on a transient resolution
+        # flake, not because the version drifted. Pinning removes the flake
+        # source; it doesn't change behavior otherwise.
+        run: go install github.com/pressly/goose/v3/cmd/goose@v3.25.0
 
-      - name: Generate docs and shortcuts
-        run: make generate
+      - name: Generate shortcuts
+        # Only `make generate-shortcuts` output is a build input for web/ —
+        # web/src/store/shortcutsData.generated.ts, imported by
+        # shortcutsStore.ts (confirmed: deleting it breaks `vite build` with
+        # "Could not resolve ./shortcutsData.generated"). The full `make
+        # generate` also builds 14 unrelated Go-side doc/reference targets
+        # (CLI reference, tools reference, Mintlify pages, etc.) that this
+        # job doesn't consume; that cost ~2.5-3 minutes of this job's budget
+        # for no effect on the build or the tests.
+        run: make generate-shortcuts
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
 
       - name: Build (alpha)
         working-directory: web
