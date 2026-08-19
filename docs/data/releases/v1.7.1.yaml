@@ -1,0 +1,11 @@
+version: "v1.7.1"
+date: "2026-08-19"
+title: "A maintenance build with the v1.7.0 fixes"
+summary: "No new user-facing changes since v1.7.0 — this is a rebuild carrying the same fixes, cut after repairing the release and CI pipeline that had been unable to publish. If you are already on v1.7.0 there is nothing new to gain by updating."
+items:
+  - title: "Same application as v1.7.0"
+    description: "every user-facing fix in this build shipped in v1.7.0: the packaged desktop app loading at all, OAuth no longer redirecting to a local address, onboarding no longer ejecting you mid-setup, settings and sign-out reachable without a working machine, onboarding state no longer leaking between accounts, and cloud machines no longer able to run unfunded. Nothing in the application changed between v1.7.0 and v1.7.1."
+  - title: "The release pipeline can publish again"
+    description: "the image build had been failing on every push for over a week, which meant no new container image was published and deployments were pinned to a stale build. The causes were entirely in the build system — a private image registry that CI never authenticated to, credentials pointing at a workload-identity pool that did not resolve, a binary the container expected but nothing produced, and a tool installed to a directory nothing read. This build is the first to complete that pipeline end to end."
+  - title: "The end-to-end test suite reports real results"
+    description: "the browser test job had been hitting its time limit and being cancelled before it could report, so it had never once passed. It now completes in well under a minute rather than timing out at fifteen, and the onboarding tests were rewritten against the current sign-in and setup flow instead of a step that no longer exists."

@@ -13,6 +13,14 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.1" description="August 19, 2026">
+### A maintenance build with the v1.7.0 fixes
+
+- **Same application as v1.7.0** every user-facing fix in this build shipped in v1.7.0: the packaged desktop app loading at all, OAuth no longer redirecting to a local address, onboarding no longer ejecting you mid-setup, settings and sign-out reachable without a working machine, onboarding state no longer leaking between accounts, and cloud machines no longer able to run unfunded. Nothing in the application changed between v1.7.0 and v1.7.1.
+- **The release pipeline can publish again** the image build had been failing on every push for over a week, which meant no new container image was published and deployments were pinned to a stale build. The causes were entirely in the build system — a private image registry that CI never authenticated to, credentials pointing at a workload-identity pool that did not resolve, a binary the container expected but nothing produced, and a tool installed to a directory nothing read. This build is the first to complete that pipeline end to end.
+- **The end-to-end test suite reports real results** the browser test job had been hitting its time limit and being cancelled before it could report, so it had never once passed. It now completes in well under a minute rather than timing out at fifteen, and the onboarding tests were rewritten against the current sign-in and setup flow instead of a step that no longer exists.
+</Update>
+
 <Update label="v1.7.0" description="August 19, 2026">
 ### The desktop app loads, and sign-in stops sending you to nowhere
 
