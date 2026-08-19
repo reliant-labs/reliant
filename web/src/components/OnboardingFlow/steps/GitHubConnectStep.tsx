@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -10,7 +9,10 @@ import { useEventBus } from "@/lib/event-context";
 import { useCloneRepo, useCompleteOnboarding, useCreateDaemon } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
 import { gitService } from "@/services/controlPlane/git";
-import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import {
+  finalizeOnboardingSideEffects,
+  navigateAfterOnboarding,
+} from "../useOnboardingComplete";
 import { markOnboardingFinalized } from "../analytics";
 import { DaemonConnectingGate } from "../DaemonConnectingGate";
 import type { StepProps } from "../types";
@@ -63,7 +65,6 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
 }
 
 export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
-  const navigate = useNavigate();
   const createProject = useProjectStore((state) => state.createProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const projects = useProjectStore((state) => state.projects);
@@ -247,7 +248,9 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         modelProvider: plan.modelProvider,
       });
       markOnboardingFinalized(plan, "github");
-      await finalizeOnboardingSideEffects(plan.modelProvider);
+      // This path always shows the gate below, so navigation is always the
+      // gate's job — see FinalizeOptions.navigate.
+      await finalizeOnboardingSideEffects(plan.modelProvider, { navigate: false });
       // Show the daemon gate before navigating — the daemon may still be
       // provisioning. We hand the gate the UUID we already used for the
       // CloneRepo call so its polling looks up the same row.
@@ -286,19 +289,9 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
       <div className="space-y-6">
         <DaemonConnectingGate
           daemonRef={gateDaemonRef}
-          onContinue={() =>
-            // Preserve any search params finalizeOnboardingSideEffects set
-            // (notably ?tour=<first-step> for the post-onboarding wizard).
-            // Stripping legacy `step`/`plan` keeps reload-safe URLs from
-            // re-entering the onboarding flow.
-            navigate({
-              to: "/",
-              search: (prev: Record<string, unknown>) => {
-                const { step: _step, plan: _plan, ...rest } = prev;
-                return rest;
-              },
-            })
-          }
+          // finalize ran with `navigate: false` so this gate could render, so
+          // it never set ?tour=<first-step>. This sets it on the way out.
+          onContinue={() => void navigateAfterOnboarding()}
         />
       </div>
     );
