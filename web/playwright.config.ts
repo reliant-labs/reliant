@@ -7,6 +7,14 @@ const baseURL = process.env.BASE_URL || (isCI ? 'http://localhost:4173' : 'http:
 
 export default defineConfig({
   testDir: './e2e',
+  // Manual QA scripts, not automated tests — excluded from the default run:
+  //  - debug-canvas.spec.ts: zero `expect()` calls, pure console.log
+  //    diagnostics against onboarding-gated app state.
+  //  - workflow-builder-validation.spec.ts: hardcodes `localhost:3046`,
+  //    unrelated to this config's managed webServer (localhost:4173), so it
+  //    can never pass here. Run either manually with `playwright test
+  //    e2e/<file>` against a dev server when needed.
+  testIgnore: ['**/debug-canvas.spec.ts', '**/workflow-builder-validation.spec.ts'],
   fullyParallel: true,
   forbidOnly: isCI,
   retries: isCI ? 2 : 0,

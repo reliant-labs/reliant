@@ -9,13 +9,17 @@ test.describe('Branding - Favicon', () => {
   });
 
   test('uses app favicon instead of Vite default', async ({ page }) => {
-    const favicon = page.locator('head link[rel="icon"]');
-    await expect(favicon).toHaveCount(1);
+    // index.html declares two rel="icon" links: an SVG primary and a PNG
+    // fallback for browsers without SVG favicon support. Both are expected.
+    const favicons = page.locator('head link[rel="icon"]');
+    const hrefs = await favicons.evaluateAll((links) => links.map((l) => l.getAttribute('href')));
 
-    const href = await favicon.getAttribute('href');
-    expect(href).toBeTruthy();
-    expect(href).not.toContain('vite.svg');
-    // Preferred convention
-    expect(href).toContain('favicon');
+    expect(hrefs.length).toBeGreaterThan(0);
+    for (const href of hrefs) {
+      expect(href).toBeTruthy();
+      expect(href).not.toContain('vite.svg');
+      // Preferred convention
+      expect(href).toContain('favicon');
+    }
   });
 });
