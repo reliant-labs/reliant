@@ -13,6 +13,13 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.4" description="August 20, 2026">
+### Picks up the forge scaffolding fix
+
+- **Generated project code compiles without goimports installed** forge generated a file with an import nothing used. It normally went unnoticed because forge runs goimports over its own output before checking it, and goimports quietly removes unused imports — so the mistake was harmless on machines that had that tool and fatal on machines that did not, which included our own build servers. The import is gone at the source, so the generated code is now correct as written rather than only after a formatter that forge does not install.
+- **The toolchain reports its real version** forge now reads its version from a file committed alongside the code, instead of depending entirely on a value stamped in at build time. A build made from source used to report itself as "dev" and could not say what it actually was.
+</Update>
+
 <Update label="v1.7.3" description="August 20, 2026">
 ### Windows builds again
 
