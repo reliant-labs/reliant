@@ -38,6 +38,27 @@ import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
 import { getCachedChatList, getChatFromCache } from "../hooks/chat-queries";
 
+/**
+ * Whether a chat is blocked on the user.
+ *
+ * Three ways a chat can want you, and they are deliberately treated alike by
+ * the triage shortcut: it is waiting on an approval, it failed and needs a
+ * decision, or it has said something you have not read. This is the same rule
+ * the sidebar's "Needs Attention" sort uses, kept in one place so the shortcut
+ * and the list can never disagree about what is waiting.
+ */
+export function chatNeedsAttention(
+  chat: Chat,
+  activities: Map<string, ChatActivity>,
+): boolean {
+  const activity = activities.get(chat.id) ?? ChatActivity.IDLE;
+  return (
+    activity === ChatActivity.AWAITING_INPUT ||
+    activity === ChatActivity.ERROR ||
+    chat.unread
+  );
+}
+
 async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
   const projectId = useProjectStore.getState().currentProject?.id;
   if (projectId) {
@@ -252,6 +273,8 @@ interface ChatNavigationState {
   navigateToChat: (chatId: string) => void;
   navigateNext: () => Promise<void>;
   navigatePrev: () => Promise<void>;
+  /** Jump to the next chat blocked on the user. Returns false when none are. */
+  navigateToNextAttention: () => Promise<boolean>;
 
   // Queue management
   removeFromQueue: (chatId: string) => Promise<void>;
@@ -398,6 +421,53 @@ export const useChatNavigationStore = create<ChatNavigationState>((set, get) => 
     });
 
     await selectChatWithWorktreeContext(prevChat);
+  },
+
+  // Jump to the next chat that is waiting on the user.
+  //
+  // Cycles rather than always landing on the first: starting from the chat
+  // after the active one and wrapping means repeated presses walk the whole
+  // queue instead of bouncing between the top two. The active chat is checked
+  // last so a chat you are already looking at is where you end up only when it
+  // is the only one waiting.
+  navigateToNextAttention: async () => {
+    const orderedChats = await getOrderedChatList();
+    if (orderedChats.length === 0) return false;
+
+    const activities = useActivityStore.getState().activities;
+    const { useChatStore } = await import("./chatStore");
+    const activeChatId = useChatStore.getState().activeChatId;
+
+    const currentIndex = orderedChats.findIndex((c) => c.id === activeChatId);
+
+    // Rotate so the search starts just past the active chat and wraps.
+    const rotated =
+      currentIndex === -1
+        ? orderedChats
+        : [
+            ...orderedChats.slice(currentIndex + 1),
+            ...orderedChats.slice(0, currentIndex + 1),
+          ];
+
+    const target = rotated.find((chat) => chatNeedsAttention(chat, activities));
+
+    if (!target) {
+      logger.info("[ChatNavigation] No chats need attention");
+      return false;
+    }
+
+    if (target.id === activeChatId) {
+      logger.info("[ChatNavigation] Already on the only chat needing attention");
+      return true;
+    }
+
+    logger.info("[ChatNavigation] Navigate to chat needing attention", {
+      from: activeChatId?.slice(0, 8),
+      to: target.id.slice(0, 8),
+    });
+
+    await selectChatWithWorktreeContext(target);
+    return true;
   },
 
   // Remove a specific chat from queue (e.g., when archived)

@@ -337,7 +337,32 @@ function ReliantAIPanel() {
                     </div>
                   </div>
                 )}
-                <RedeemCouponForm className="mt-4" />
+                {/* Secondary by design. Billing owns the canonical redemption
+                    card — it explains that one code covers credit OR machine
+                    minutes, and shows both balances. This one stays because a
+                    user staring at an empty AI balance should not have to
+                    navigate away to fix it, but it points at the fuller
+                    surface rather than competing with it. */}
+                <div className="mt-6 border-t border-border pt-4">
+                  <RedeemCouponForm size="sm" />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Coupons can add account credit or machine minutes — the same
+                    code works either way.{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        navigate({
+                          to: "/settings/$section",
+                          params: { section: "billing" },
+                        })
+                      }
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      Billing
+                    </button>{" "}
+                    has the full view.
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
@@ -381,7 +406,7 @@ function ReliantAIPanel() {
                   </div>
                 </div>
                 {overview?.spendCapReached && (
-                  <p className="mt-3 text-sm text-amber-600">
+                  <p className="mt-3 text-sm text-warning">
                     Your monthly spend cap has been reached.
                   </p>
                 )}

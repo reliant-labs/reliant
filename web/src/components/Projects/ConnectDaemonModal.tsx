@@ -26,6 +26,13 @@
  * same question and offers the same way out. The server remains the authority;
  * this only stops the UI committing to a flow it has been told will fail.
  *
+ * When the answer is no, the cloud tile is not rendered AT ALL rather than
+ * rendered disabled. Every brand-new account is in that state — the signup
+ * compute auto-grant is gone, so a new user resolves to NO_SUBSCRIPTION — and
+ * a permanently-greyed tile as the screen's first choice made the two controls
+ * that actually fix it (redeem a coupon, set up billing) read as secondary.
+ * They take its place instead.
+ *
  * Extracted from ProjectPicker.tsx so the gate is directly testable.
  */
 import { useCallback, useEffect, useState } from "react";
@@ -36,7 +43,6 @@ import { RedeemCouponForm } from "../RedeemCouponForm";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useCloudEligibility, useCreateDaemon } from "@/hooks/useOnboardingQueries";
 import { capabilities } from "../../services/controlPlane/capabilities";
-import { cn } from "../../lib/utils";
 
 const MANAGED_DAEMON_TYPE = 1;
 const MANAGED_DAEMON_SIZE_SMALL = 1;
@@ -136,14 +142,12 @@ export function ConnectDaemonModal({
 
   const startingCloud = createDaemonMutation.isPending;
 
-  const cloudUnavailableCopy = !hasCloud
+  // Why the user is not being offered a cloud daemon. Only reached when
+  // `canStartCloud` is false — the enabled tile carries its own copy.
+  const cloudBlockedCopy = !hasCloud
     ? "Cloud daemons are not enabled for this deployment."
-    : eligibilityLoading
-      ? "Checking your plan…"
-      : !eligible
-        ? (reason ??
-          "Redeem a coupon code or choose a plan to start a cloud machine.")
-        : "Provision a hosted daemon now. No install required.";
+    : (reason ??
+      "Redeem a coupon code or choose a plan to start a cloud machine.");
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Connect a daemon" size="lg">
@@ -154,32 +158,36 @@ export function ConnectDaemonModal({
             hosted Reliant Cloud daemon or your own self-hosted machine.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              type="button"
-              onClick={() => {
-                setMode("cloud");
-                void startCloudDaemon();
-              }}
-              disabled={!canStartCloud}
-              className={cn(
-                "flex min-w-0 flex-col items-start gap-3 rounded-xl border-2 p-5 text-left transition-all",
-                canStartCloud
-                  ? "border-primary/25 bg-primary/5 hover:border-primary/50 hover:bg-primary/10"
-                  : "cursor-not-allowed border-border/50 bg-muted/30 opacity-70",
-              )}
-            >
-              <div className="rounded-lg bg-primary/15 p-2.5 text-primary">
-                <Cloud className="h-6 w-6" />
-              </div>
-              <div className="space-y-1">
-                <span className="block text-sm font-semibold text-foreground">
-                  Reliant Cloud
-                </span>
-                <span className="block text-xs leading-relaxed text-muted-foreground">
-                  {cloudUnavailableCopy}
-                </span>
-              </div>
-            </button>
+            {/* Only offered when it would work. An account with no compute
+                entitlement — which is every brand-new account, now that the
+                signup auto-grant is gone — used to get this tile rendered as a
+                greyed-out no-op, with the coupon form and plans link demoted
+                to a panel below it. Presenting a dead control as the first
+                choice on the screen makes the working ones look secondary.
+                When the user cannot start a cloud daemon, the panel below is
+                the cloud option. */}
+            {canStartCloud && (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("cloud");
+                  void startCloudDaemon();
+                }}
+                className="flex min-w-0 flex-col items-start gap-3 rounded-xl border-2 border-primary/25 bg-primary/5 p-5 text-left transition-all hover:border-primary/50 hover:bg-primary/10"
+              >
+                <div className="rounded-lg bg-primary/15 p-2.5 text-primary">
+                  <Cloud className="h-6 w-6" />
+                </div>
+                <div className="space-y-1">
+                  <span className="block text-sm font-semibold text-foreground">
+                    Reliant Cloud
+                  </span>
+                  <span className="block text-xs leading-relaxed text-muted-foreground">
+                    Provision a hosted daemon now. No install required.
+                  </span>
+                </div>
+              </button>
+            )}
 
             <button
               type="button"
@@ -200,20 +208,37 @@ export function ConnectDaemonModal({
             </button>
           </div>
 
-          {/* An ineligible user must always get the explanation AND the way
-              out — otherwise this screen is a dead end with a greyed button
-              and no account of why. Mirrors ComputeStep's affordances. */}
-          {hasCloud && !eligible && !eligibilityLoading && (
+          {/* With the greyed tile gone, this panel IS the cloud option for a
+              blocked user: the explanation of why, plus the two actions that
+              change it. Both render as full-width controls rather than as
+              links under a disabled button, because here they are the only
+              cloud actions available. */}
+          {!canStartCloud && !eligibilityLoading && (
             <div className="space-y-3 rounded-xl border border-border/50 bg-muted/30 p-4">
-              <p className="text-xs text-muted-foreground">{reason}</p>
-              <RedeemCouponForm onRedeemed={() => void refetchEligibility()} />
-              <button
-                type="button"
-                onClick={goToBilling}
-                className="text-xs font-medium text-primary transition-colors hover:underline"
-              >
-                View plans
-              </button>
+              <div className="space-y-1">
+                <p className="text-sm font-medium text-foreground">
+                  Reliant Cloud
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {cloudBlockedCopy}
+                </p>
+              </div>
+              {hasCloud && (
+                <>
+                  <RedeemCouponForm
+                    variant="button"
+                    size="sm"
+                    onRedeemed={() => void refetchEligibility()}
+                  />
+                  <button
+                    type="button"
+                    onClick={goToBilling}
+                    className="inline-flex w-full items-center justify-center rounded-lg border border-primary/40 bg-primary/10 px-3 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+                  >
+                    Set up billing
+                  </button>
+                </>
+              )}
             </div>
           )}
         </div>

@@ -79,7 +79,12 @@ beforeEach(() => {
 });
 
 describe("ConnectDaemonModal — cloud eligibility", () => {
-  it("does NOT provision when the user is ineligible", async () => {
+  // The ineligible user is not offered the tile at all any more, which is a
+  // stronger guarantee than the old disabled one: there is no cloud control to
+  // click, so no click can reach CreateDaemon. (It used to render greyed out,
+  // which made a dead control the first thing on the screen and pushed the
+  // working ones — coupon, billing — into a panel underneath.)
+  it("does NOT offer a cloud tile, and never provisions, when the user is ineligible", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "Redeem a coupon code or choose a plan to start a cloud machine.",
@@ -88,10 +93,11 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
 
     render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
-    const cloud = screen.getByRole("button", { name: /Reliant Cloud/i });
-    await userEvent.click(cloud);
+    expect(
+      screen.queryByRole("button", { name: /Reliant Cloud/i }),
+    ).not.toBeInTheDocument();
 
-    // The click must not reach CreateDaemon. This is the money assertion.
+    // Nothing on the screen can start a machine. This is the money assertion.
     await waitFor(() => {
       expect(mockCreateDaemon).not.toHaveBeenCalled();
     });
@@ -106,14 +112,14 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
 
     render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
-    // The reason appears twice by design: once as the cloud card's own copy
-    // and once in the explainer panel beneath it, which also carries the
-    // coupon form and the plans link.
+    // The panel that replaces the tile carries the reason plus both ways out.
     expect(
-      screen.getAllByText(/Redeem a coupon code or choose a plan/i).length,
-    ).toBeGreaterThan(0);
+      screen.getByText(/Redeem a coupon code or choose a plan/i),
+    ).toBeInTheDocument();
     expect(screen.getByTestId("redeem-coupon")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /View plans/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Set up billing/i }),
+    ).toBeEnabled();
   });
 
   // Never block an entitled user — the failure mode of an over-eager gate is
@@ -128,9 +134,13 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
     });
   });
 
-  // While eligibility is still loading we must not present an enabled button:
+  // While eligibility is still loading we must not present a cloud control:
   // "not yet known" is not "allowed". (Loading is not the negative of success.)
-  it("does not provision while eligibility is still loading", async () => {
+  //
+  // Loading is also NOT the ineligible state — showing "you have no plan" to a
+  // user whose plan simply has not loaded yet would be a lie that resolves
+  // itself a moment later, so neither the tile nor the blocked panel renders.
+  it("offers no cloud control at all while eligibility is still loading", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: null,
@@ -139,7 +149,15 @@ describe("ConnectDaemonModal — cloud eligibility", () => {
 
     render(<ConnectDaemonModal isOpen onClose={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("button", { name: /Reliant Cloud/i }));
+    expect(
+      screen.queryByRole("button", { name: /Reliant Cloud/i }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("redeem-coupon")).not.toBeInTheDocument();
+
+    // Self-hosted is always available and is unaffected by eligibility.
+    expect(
+      screen.getByRole("button", { name: /Self-hosted/i }),
+    ).toBeEnabled();
 
     await waitFor(() => {
       expect(mockCreateDaemon).not.toHaveBeenCalled();

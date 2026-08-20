@@ -125,6 +125,30 @@ describe("shortcut definitions", () => {
       expect(result.shortcut?.id).toBe("stopStreaming");
     });
 
+    it("closes the modal instead of pausing the chat behind it", () => {
+      // The regression this guards: with an open modal, Escape resolved to
+      // stopStreaming and paused the underlying chat. Search, file search and
+      // every other overlay looked like they were "eating" Escape when they
+      // were in fact closing AND pausing the chat behind them.
+      const registry = buildRegistry(MAC_DESKTOP);
+      const result = registry.resolve("Escape", ["modal", "global"]);
+
+      expect(result.shortcut?.id).toBe("dismissModal");
+    });
+
+    it("closes the modal even while its search box has focus", () => {
+      // Every one of these overlays autofocuses a text input, so the modal
+      // context is almost never active on its own.
+      const registry = buildRegistry(MAC_DESKTOP);
+      const result = registry.resolve("Escape", [
+        "modal",
+        "chat-input",
+        "global",
+      ]);
+
+      expect(result.shortcut?.id).toBe("dismissModal");
+    });
+
     it("closes the slash menu instead of stopping the response", () => {
       // The regression this guards: without a slash-menu entry the global
       // Escape wins and the menu cannot be dismissed with the keyboard.

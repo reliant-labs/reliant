@@ -446,6 +446,86 @@ test.describe('Onboarding Flow', () => {
 // Failure Scenarios
 // ---------------------------------------------------------------------------
 
+/**
+ * The state a REAL new user is in on the Compute step.
+ *
+ * mockGrpcRoutes seeds `eligible: true`, which is the funded path every other
+ * test here exercises. But the compute auto-grant at signup is gone, so an
+ * actual brand-new account comes back NO_SUBSCRIPTION — and that was the one
+ * state where the step's primary control, "Start cloud daemon", could never be
+ * clicked. It rendered greyed out with the two controls that fix it (redeem a
+ * coupon, set up billing) demoted to small links underneath.
+ *
+ * These pin the first screen a new user actually sees.
+ */
+test.describe('Onboarding – Compute with no billing (the new-user default)', () => {
+  test.beforeEach(async ({ page }) => {
+    await mockGrpcRoutes(page);
+    // Override the funded default from mockGrpcRoutes: no subscription, no
+    // granted minutes — a fresh account that has never paid.
+    await page.route(
+      '**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility',
+      (route: Route) =>
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            eligible: false,
+            reason: 3, // COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION
+            hasActiveSubscription: false,
+            grantedMinutesRemaining: '0',
+            planName: '',
+          }),
+        }),
+    );
+    await loginWithApiKey(page);
+  });
+
+  test('offers no dead "Start cloud daemon" button, and promotes coupon + billing instead', async ({
+    page,
+  }) => {
+    await gotoOnboarding(page);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+
+    // The reported bug: a button that is always grey. It is now absent.
+    await expect(dialog.getByRole('button', { name: 'Start cloud daemon' })).toHaveCount(0);
+
+    // The two controls that CAN change this user's state are the ones on offer.
+    await expect(dialog.getByRole('button', { name: /Have a coupon code/i })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: /Set up billing/i })).toBeEnabled();
+
+    // And the self-hosted path — which needs no billing at all — is still here.
+    await expect(dialog.getByRole('button', { name: /I'll connect my own/i })).toBeEnabled();
+  });
+
+  test('no control on the Compute step is disabled', async ({ page }) => {
+    await gotoOnboarding(page);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    await dialog.getByRole('button', { name: /Have a coupon code/i }).waitFor();
+
+    // A disabled control here is the whole defect, in any form.
+    const buttons = await dialog.getByRole('button').all();
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const button of buttons) {
+      await expect(button).toBeEnabled();
+    }
+  });
+
+  test('the coupon field opens in place, so redeeming never leaves onboarding', async ({
+    page,
+  }) => {
+    await gotoOnboarding(page);
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+
+    await dialog.getByRole('button', { name: /Have a coupon code/i }).click();
+
+    await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^Redeem$/ })).toBeEnabled();
+    // Still on Compute — the step did not navigate away.
+    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible();
+  });
+});
+
 test.describe('Onboarding – Failure Scenarios', () => {
   test.beforeEach(async ({ page }) => {
     await mockGrpcRoutes(page);

@@ -9,6 +9,7 @@ import {
   FileText,
   Pencil,
   Server,
+  Ticket,
   Wallet,
 } from "lucide-react";
 
@@ -61,6 +62,7 @@ import {
 } from "./billingUtils";
 import { formatMachineMinutesShort } from "@/lib/formatMachineMinutes";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
+import { cn } from "@/lib/utils";
 
 type BillingTab = "overview" | "plans" | "invoices" | "usage";
 
@@ -147,6 +149,26 @@ function ErrorBanner({ message }: { message: string }) {
 
 function Loading({ label }: { label: string }) {
   return <div className="text-sm text-muted-foreground">{label}</div>;
+}
+
+// Groups a run of cards under one label so the Overview tab reads as three
+// answers — what you have, what you are on, what you have used — instead of an
+// undifferentiated stack of equally-weighted panels.
+function SectionHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div>
+      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {title}
+      </h3>
+      <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
 }
 
 // redirectToStripe navigates the browser to a hosted Stripe URL. In dev the
@@ -278,58 +300,110 @@ function OverviewTab({
 
   const loading = subQ.isLoading || walletQ.isLoading || usageQ.isLoading;
 
+  const refetchAfterRedeem = () => {
+    // A coupon can land as wallet credit OR as machine minutes, and the form
+    // does not know which until the server answers, so refresh both readouts.
+    void walletQ.refetch();
+    void usageQ.refetch();
+  };
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8">
       <ErrorBanner message={error} />
 
       {loading ? (
         <Loading label="Loading billing…" />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-            {/* Wallet credits */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-muted-foreground" />
-                  Credit balance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-4">
-                <div>
-                  <p className="text-3xl font-semibold text-foreground">
-                    {walletUi.balance}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Available credits for Reliant usage
-                  </p>
-                </div>
-                {walletUi.warning && (
-                  <div className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
-                    <p className="font-semibold">{walletUi.warning.title}</p>
-                    <p>{walletUi.warning.message}</p>
+          {/* ── What you have ─────────────────────────────────────────── */}
+          <section className="flex flex-col gap-3">
+            <SectionHeading
+              title="Balance"
+              description="Credit pays for AI usage. Machine minutes pay for machines."
+            />
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {/* Wallet credits */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-muted-foreground" />
+                    Credit balance
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <div>
+                    <p className="text-3xl font-semibold text-foreground">
+                      {walletUi.balance}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Available credits for Reliant usage
+                    </p>
                   </div>
-                )}
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Add credits:
-                  </span>
-                  {TOPUP_PRESETS_CENTS.map((cents) => (
-                    <Button
-                      key={cents}
-                      size="sm"
-                      variant="outline"
-                      disabled={topupMutation.isPending}
-                      onClick={() => handleTopup(cents)}
-                    >
-                      ${(cents / 100).toFixed(0)}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  {walletUi.warning && (
+                    <div className="rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
+                      <p className="font-semibold">{walletUi.warning.title}</p>
+                      <p>{walletUi.warning.message}</p>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Add credits:
+                    </span>
+                    {TOPUP_PRESETS_CENTS.map((cents) => (
+                      <Button
+                        key={cents}
+                        size="sm"
+                        variant="outline"
+                        disabled={topupMutation.isPending}
+                        onClick={() => handleTopup(cents)}
+                      >
+                        ${(cents / 100).toFixed(0)}
+                      </Button>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Compute plan */}
+              {/* Coupons. There is ONE redemption RPC and the server decides
+                  what a code grants, so there is one input here — not one per
+                  kind — and the copy carries that, because a user holding a
+                  machine-minutes code will otherwise go looking for a second
+                  box that does not exist. It renders open: this card is the
+                  answer to "where do I put my code", and an answer behind a
+                  disclosure link is the bug we are fixing. */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Ticket className="h-4 w-4 text-muted-foreground" />
+                    Redeem a coupon
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="flex flex-col gap-4">
+                  <p className="text-sm text-muted-foreground">
+                    One box, either kind of code. A coupon can add account
+                    credit or machine minutes — enter it below and we&apos;ll
+                    tell you which one it applied.
+                  </p>
+                  <RedeemCouponForm
+                    variant="open"
+                    onRedeemed={refetchAfterRedeem}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Credit shows up in the balance beside this card. Machine
+                    minutes show up under Usage this period, and are spent
+                    after your plan&apos;s included hours.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          </section>
+
+          {/* ── What you are on ───────────────────────────────────────── */}
+          <section className="flex flex-col gap-3">
+            <SectionHeading
+              title="Plan"
+              description="One compute subscription covers every machine on your account."
+            />
             <Card>
               <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className="flex items-center gap-2">
@@ -408,79 +482,92 @@ function OverviewTab({
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </section>
 
-          {/* Usage this period */}
-          <Card>
-            <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Usage this period</CardTitle>
-              <button
-                type="button"
-                onClick={onGoToUsage}
-                className="text-left text-sm font-medium text-primary hover:underline sm:text-right"
-              >
-                See detail →
-              </button>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
-                <span className="font-medium text-foreground">Hours used</span>
-                <span className="text-muted-foreground">
-                  {usageUi.usedHours.toFixed(1)} h /{" "}
-                  {usageUi.includedHours.toFixed(0)} h included
-                </span>
-              </div>
-              <div className="mt-2 h-2.5 rounded-full bg-muted">
-                <div
-                  className={`h-2.5 rounded-full ${
-                    usageUi.pct >= 90 ? "bg-amber-500" : "bg-primary"
-                  }`}
-                  style={{ width: `${usageUi.pct}%` }}
-                />
-              </div>
-              {usageUi.grantedMinutesRemaining > 0 && (
-                <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="font-medium text-foreground">Coupon minutes</p>
-                    <p className="text-xs text-muted-foreground">
-                      One-time, does not renew — spent after included hours,
-                      before overage
-                    </p>
+          {/* ── What you have used ────────────────────────────────────── */}
+          <section className="flex flex-col gap-3">
+            <SectionHeading
+              title="Usage"
+              description="Machine time drawn against this billing period."
+            />
+            <Card>
+              <CardHeader className="gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>Usage this period</CardTitle>
+                <button
+                  type="button"
+                  onClick={onGoToUsage}
+                  className="text-left text-sm font-medium text-primary hover:underline sm:text-right"
+                >
+                  See detail →
+                </button>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <span className="font-medium text-foreground">Hours used</span>
+                  <span className="text-muted-foreground">
+                    {usageUi.usedHours.toFixed(1)} h /{" "}
+                    {usageUi.includedHours.toFixed(0)} h included
+                  </span>
+                </div>
+                <div className="mt-2 h-2.5 rounded-full bg-muted">
+                  <div
+                    className={cn(
+                      "h-2.5 rounded-full",
+                      usageUi.pct >= 90 ? "bg-warning" : "bg-primary",
+                    )}
+                    style={{ width: `${usageUi.pct}%` }}
+                  />
+                </div>
+                {usageUi.grantedMinutesRemaining > 0 && (
+                  <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="font-medium text-foreground">Coupon minutes</p>
+                      <p className="text-xs text-muted-foreground">
+                        One-time, does not renew — spent after included hours,
+                        before overage
+                      </p>
+                    </div>
+                    <span className="font-medium text-foreground">
+                      {formatMachineMinutesShort(usageUi.grantedMinutesRemaining)}
+                    </span>
                   </div>
-                  <span className="font-medium text-foreground">
-                    {formatMachineMinutesShort(usageUi.grantedMinutesRemaining)}
-                  </span>
-                </div>
-              )}
-              {/* Redeeming belongs next to the balance it changes: this panel
-                  is where a user looks when they want more machine time, and
-                  it previously showed coupon minutes with no way to add any. */}
-              <div className="mt-4">
-                <RedeemCouponForm onRedeemed={() => void usageQ.refetch()} />
-              </div>
-              {usageUi.overageHours > 0 && (
-                <div className="mt-4 flex flex-col gap-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-600 sm:flex-row sm:items-center sm:justify-between dark:text-amber-400">
-                  <span className="font-medium">
-                    Overage: {usageUi.overageHours.toFixed(1)} h
-                  </span>
-                  <span>Estimated: {usageUi.estimatedOverageCost}</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                )}
+                {usageUi.overageHours > 0 && (
+                  <div className="mt-4 flex flex-col gap-1 rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-sm text-warning sm:flex-row sm:items-center sm:justify-between">
+                    <span className="font-medium">
+                      Overage: {usageUi.overageHours.toFixed(1)} h
+                    </span>
+                    <span>Estimated: {usageUi.estimatedOverageCost}</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </section>
 
-          <BillingEmailRow />
-
-          <div className="flex justify-end">
-            <Button
-              variant="outline"
-              onClick={handleManageStripe}
-              disabled={portalMutation.isPending}
-            >
-              <ArrowUpRight className="h-4 w-4" />
-              {portalMutation.isPending ? "Opening…" : "Manage in Stripe"}
-            </Button>
-          </div>
+          {/* ── Account settings ──────────────────────────────────────── */}
+          {/* Deliberately last and visibly quieter: the billing email and the
+              Stripe portal are things you set once, not things you read. They
+              previously sat at the same weight as the balance. */}
+          <section className="flex flex-col gap-3 border-t border-border pt-6">
+            <SectionHeading
+              title="Billing account"
+              description="Receipts, payment method, and Stripe's own portal."
+            />
+            <BillingEmailRow />
+            <div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleManageStripe}
+                disabled={portalMutation.isPending}
+              >
+                <ArrowUpRight className="h-4 w-4" />
+                {portalMutation.isPending
+                  ? "Opening…"
+                  : "Manage payment method in Stripe"}
+              </Button>
+            </div>
+          </section>
         </>
       )}
     </div>

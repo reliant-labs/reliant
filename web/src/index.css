@@ -143,24 +143,24 @@
 
   .dark {
     /* VIBRANT BLUE DARK THEME - colorful & modern */
-    --background: 222 47% 11%;       /* Deep blue-gray */
+    --background: 222 47% 11%;       /* Page — the darkest surface */
     --foreground: 210 40% 98%;       /* Soft white text */
-    --card: 222 47% 13%;
+    --card: 222 47% 17%;             /* Lifted a full step above the page */
     --card-foreground: 210 40% 98%;
-    --popover: 222 47% 13%;
+    --popover: 222 47% 22%;          /* Floats above cards */
     --popover-foreground: 210 40% 98%;
     --primary: 217 91% 70%;          /* Bright blue */
     --primary-foreground: 222 47% 11%;
     --secondary: 280 85% 70%;        /* Purple accent */
     --secondary-foreground: 222 47% 11%;
-    --muted: 217 33% 17%;            /* Dark blue-gray */
+    --muted: 217 33% 21%;            /* Reads against the lifted card */
     --muted-foreground: 215 20% 65%;
-    --accent: 217 33% 17%;           /* Dark blue accent */
+    --accent: 217 33% 21%;           /* Kept in step with --muted */
     --accent-foreground: 210 40% 98%;
     --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
-    --border: 217 33% 24%;           /* Dark blue-gray border */
-    --input: 217 33% 24%;
+    --border: 217 33% 32%;           /* Carries the card edge on its own */
+    --input: 217 33% 32%;
     --ring: 217 91% 70%;
 
     /* Code colors fallback (before themed data attributes apply) */
@@ -188,11 +188,13 @@
     --status-processing: 199 89% 58%;
     --status-pending: 280 85% 65%;
 
-    /* Dark elevation - use theme colors */
+    /* Dark elevation — must climb in the same order as .elevation-0..5.
+       Previously raised=muted sat ABOVE overlay=card, so elevation-1 rendered
+       lighter than elevation-2 and the ladder read backwards. */
     --surface-base: var(--background);
-    --surface-raised: var(--muted);
-    --surface-overlay: var(--card);
-    --surface-modal: var(--card);
+    --surface-raised: var(--card);
+    --surface-overlay: var(--popover);
+    --surface-modal: var(--popover);
 
     /* Chat input colors - better contrast for dark mode */
     --chat-input-bg: hsl(217 33% 20%);        /* Slightly lighter than muted */

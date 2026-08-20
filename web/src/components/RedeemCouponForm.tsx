@@ -32,6 +32,11 @@ export interface RedeemCouponFormProps {
    * right when most visits are not redemptions and a permanent input invites
    * hunting for a code the user does not have.
    *
+   * "button" is the same disclosure with a full-width solid button as the
+   * trigger, for screens where redeeming is one of the few things the user can
+   * actually do and the affordance has to carry the weight of a primary
+   * control rather than sit under one as a link.
+   *
    * "open" renders the input immediately, for places where redeeming is the
    * point.
    *
@@ -40,7 +45,7 @@ export interface RedeemCouponFormProps {
    * `variant={eligible ? "collapsed" : "open"}`) will not collapse or expand
    * an already-mounted form — it will just look stuck. Pick one and leave it.
    */
-  variant?: "collapsed" | "open";
+  variant?: "collapsed" | "open" | "button";
   /** Compact sizing for dense cards. */
   size?: "sm" | "md";
   className?: string;
@@ -103,7 +108,15 @@ export function RedeemCouponForm({
         type="button"
         onClick={() => setOpen(true)}
         className={cn(
-          "text-sm font-medium text-primary hover:underline",
+          variant === "button"
+            ? cn(
+                // border-transparent, not no border: this button is normally
+                // stacked with bordered siblings, and without it the two sit
+                // 2px apart in height.
+                "inline-flex w-full items-center justify-center rounded-lg border border-transparent bg-primary font-semibold text-primary-foreground transition-colors hover:bg-primary/90",
+                small ? "px-3 py-2 text-xs" : "px-4 py-2.5 text-sm",
+              )
+            : "text-sm font-medium text-primary hover:underline",
           className,
         )}
       >
@@ -157,7 +170,7 @@ export function RedeemCouponForm({
         </p>
       )}
       {redeemed && (
-        <p className={cn("text-emerald-600", small ? "text-xs" : "text-sm")}>
+        <p className={cn("text-success", small ? "text-xs" : "text-sm")}>
           {redeemed}
         </p>
       )}
