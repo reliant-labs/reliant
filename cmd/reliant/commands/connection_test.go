@@ -281,6 +281,55 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 			t.Errorf("gateway = %q, want the localhost server as-is", conn.GatewayURL)
 		}
 	})
+
+	// prod's api-server is api.reliantapi.com, whose gateway is
+	// gateway.reliantapi.com — NOT gateway-api.reliantapi.com, which does not
+	// resolve. The `api` label names the SERVICE, not an environment, so
+	// prefixing it the way an env label is prefixed invents a dead host. This
+	// shipped: the packaged app derived gateway-api.<domain> and the daemon
+	// could never reach a gateway.
+	t.Run("an api. server derives the sibling gateway. host", func(t *testing.T) {
+		writeContexts(t, cfg)
+		conn, err := resolveWithArgs(t, "--server", "https://api.reliantapi.com")
+		if err != nil {
+			t.Fatalf("resolveServer: %v", err)
+		}
+		const want = "https://gateway.reliantapi.com"
+		if conn.GatewayURL != want {
+			t.Errorf("gateway = %q, want %q (gateway-api.reliantapi.com does not exist)", conn.GatewayURL, want)
+		}
+	})
+}
+
+// TestDeriveGatewayURL pins the host-rewriting rule directly, including the
+// env-label cases that must keep working alongside the `api.` fix.
+func TestDeriveGatewayURL(t *testing.T) {
+	cases := []struct {
+		name   string
+		server string
+		want   string
+	}{
+		// `api` names the service, so the gateway is its SIBLING, not a
+		// prefixed form of it. Verified live: gateway.reliantapi.com resolves,
+		// gateway-api.reliantapi.com is NXDOMAIN.
+		{"prod api host", "https://api.reliantapi.com", "https://gateway.reliantapi.com"},
+		// An environment label keeps the prefix form. Verified live:
+		// gateway-preprod.reliantapi.com resolves.
+		{"preprod env label", "https://preprod.reliantapi.com", "https://gateway-preprod.reliantapi.com"},
+		{"staging env label", "https://staging.reliantapi.com", "https://gateway-staging.reliantapi.com"},
+		{"apex", "https://reliantapi.com", "https://gateway.reliantapi.com"},
+		{"localhost untouched", "http://localhost:3091", "http://localhost:3091"},
+		{"loopback untouched", "http://127.0.0.1:8080", "http://127.0.0.1:8080"},
+		{"port preserved", "https://api.reliantapi.com:8443", "https://gateway.reliantapi.com:8443"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := deriveGatewayURL(tc.server); got != tc.want {
+				t.Errorf("deriveGatewayURL(%q) = %q, want %q", tc.server, got, tc.want)
+			}
+		})
+	}
 }
 
 func TestDescribeServerNamesTheSource(t *testing.T) {
