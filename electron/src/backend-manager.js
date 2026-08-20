@@ -5,6 +5,11 @@ const { app } = require('electron');
 const log = require('./logger');
 const dotenv = require('dotenv');
 const daemonCreds = require('./daemon-creds');
+const {
+  DAEMON_NON_INTERACTIVE_FLAG,
+  DAEMON_STATE_STREAM_FIELD,
+  DAEMON_STREAM_AWAITING_CREDENTIALS,
+} = require('./daemon-contract');
 
 // Default API URL — NEUTRAL (localhost) for the OSS build.
 //
@@ -158,6 +163,14 @@ class BackendManager {
    */
   buildDaemonArgs() {
     const args = ['daemon', 'start'];
+
+    // Electron owns the whole sign-in flow (login page, ensureDaemonCreds
+    // pre-mint, restart-on-sign-in). The daemon's own interactive
+    // registration — opening a localhost browser tab — is broken under
+    // headless Electron (no TTY) and must never run; this flag tells it to
+    // idle and publish stream: "awaiting_credentials" instead. See
+    // daemon-contract.js.
+    args.push(DAEMON_NON_INTERACTIVE_FLAG);
 
     // Pass hosted API URL
     args.push('--server', this.apiUrl);
@@ -805,6 +818,26 @@ class BackendManager {
     }
   }
 
+  /**
+   * Wait for the daemon to become ready. Resolves `true` once the gateway
+   * stream is connected. Resolves `false` (does NOT reject) as soon as the
+   * daemon reports it is idling under --non-interactive with no
+   * credentials (isAwaitingCredentials()) — that is the expected steady
+   * state until the user signs in, not a failure, and the Go daemon sits in
+   * it indefinitely rather than exiting. Rejecting on a timeout here would
+   * misclassify "waiting for sign-in" as "crashed": every caller of this
+   * method either shows an error dialog or (in the child-process exit
+   * handler's case) feeds handleCrash's 5-attempt restart loop, respawning
+   * — and, pre-fix, browser-tab-opening — every attempt. Resolving `false`
+   * promptly instead lets callers hand the port to the renderer (which
+   * already shows the login page independent of daemon readiness) and stay
+   * quiet, with no dialog and no restart loop, until sign-in triggers
+   * restartBackendForAuthPrincipalChange.
+   *
+   * A genuine startup failure (never wrote a record, disconnected, wrong
+   * pid — anything NOT "awaiting credentials") still rejects on timeout,
+   * preserving the existing crash-detection contract callers rely on.
+   */
   async waitForReady(timeout = null) {
     const actualTimeout = timeout || this.startupTimeout;
 
@@ -812,14 +845,6 @@ class BackendManager {
       const startTime = Date.now();
 
       const checkReady = async () => {
-        // Check if we've exceeded timeout
-        if (Date.now() - startTime > actualTimeout) {
-          reject(new Error(
-            `Daemon failed to become ready within ${actualTimeout}ms — ${this.describeDaemonState()}`
-          ));
-          return;
-        }
-
         // The daemon doesn't expose a local HTTP health endpoint; readiness is
         // read out of the runtime record it publishes. See checkHealth().
         try {
@@ -831,6 +856,23 @@ class BackendManager {
           }
         } catch (error) {
           // Daemon not ready yet, continue polling
+        }
+
+        // Waiting for the user to sign in is not a timeout condition —
+        // settle immediately rather than either rejecting or blocking the
+        // caller for the full startup timeout.
+        if (this.isAwaitingCredentials()) {
+          log.info('[BackendManager] Daemon awaiting credentials — not ready, but not a crash');
+          resolve(false);
+          return;
+        }
+
+        // Check if we've exceeded timeout
+        if (Date.now() - startTime > actualTimeout) {
+          reject(new Error(
+            `Daemon failed to become ready within ${actualTimeout}ms — ${this.describeDaemonState()}`
+          ));
+          return;
         }
 
         // Schedule next check - poll faster for quicker startup
@@ -888,6 +930,32 @@ class BackendManager {
           : state.stream === 'connected'
       );
     });
+  }
+
+  /**
+   * Is the running daemon idling under --non-interactive with no
+   * credentials, per its own runtime record?
+   *
+   * This is the distinction the whole "make Electron patient" fix hinges
+   * on: a daemon in this state is NOT crashed and NOT stuck — it is doing
+   * exactly what --non-interactive tells it to do, and will sit here
+   * indefinitely until Electron mints a PAT and respawns it after sign-in.
+   * Callers (waitForReady, the whenReady startup path, handleCrash) must
+   * treat it as distinct from every other non-ready state, which is exactly
+   * "still starting up" or "actually broken".
+   *
+   * Reads the record fresh (like checkHealth) rather than reusing
+   * lastDaemonState, since callers poll this independently of checkHealth.
+   */
+  isAwaitingCredentials() {
+    if (!this.process || this.process.killed) {
+      return false;
+    }
+    const state = this.readDaemonState();
+    if (!state || state.pid !== this.process.pid) {
+      return false;
+    }
+    return state[DAEMON_STATE_STREAM_FIELD] === DAEMON_STREAM_AWAITING_CREDENTIALS;
   }
 
   /**
@@ -1179,10 +1247,19 @@ class BackendManager {
         }
       });
 
-      // Wait for daemon to be ready
+      // Wait for daemon to be ready. Resolves `false` (does not throw) when
+      // the daemon is legitimately idling under --non-interactive with no
+      // credentials — the process is alive and spawned successfully, it is
+      // just not yet able to serve tool calls. isRunning tracks "the daemon
+      // process exists and did not crash"; isReady()/checkHealth() is the
+      // separate, correct place to ask "can it serve a tool call right now".
       const readyStart = Date.now();
-      await this.waitForReady();
-      log.info(`[BackendManager] ✓ Daemon ready in ${Date.now() - readyStart}ms`);
+      const ready = await this.waitForReady();
+      if (ready) {
+        log.info(`[BackendManager] ✓ Daemon ready in ${Date.now() - readyStart}ms`);
+      } else {
+        log.info(`[BackendManager] Daemon spawned but awaiting credentials (not yet ready) after ${Date.now() - readyStart}ms`);
+      }
 
       this.isRunning = true;
 

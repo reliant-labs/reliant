@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nats-io/nats.go"
@@ -66,11 +67,25 @@ const (
 // Event is the wire format for a daemon lifecycle event.
 //
 // Versioned so consumers can detect and reject unsupported newer payloads
-// without crashing.
+// without crashing. Schema must match the consumer's DaemonEvent struct in
+// `control-plane/internal/natsio/messages.go`.
 //
 // Reason is set on disconnected / connect_failed events and surfaced to the
 // frontend on the daemon record so users see e.g. "Couldn't connect — dial
 // tcp: i/o timeout" instead of a generic "Disconnected" badge.
+//
+// Name/Hostname/Platform are set on connected events only, carrying the
+// identity the daemon asserted at registration (see
+// ToolsDaemonService.notifyConnected) so a control-plane consumer upserting
+// an external daemon has something better than the daemon id to show as its
+// name. All three are additive optional fields (added without bumping
+// Version): an older consumer's encoding/json.Unmarshal silently drops
+// unknown fields, so it keeps working unchanged, and a consumer built
+// against this version treats missing fields as "" — the same as an old
+// publisher — so the two schemas can evolve independently as long as new
+// fields stay optional. A bump would only be warranted for a change a
+// pre-upgrade consumer could misinterpret (e.g. a field whose meaning
+// changes, or a field going from optional to load-bearing).
 type Event struct {
 	Version   int       `json:"version"`
 	Type      EventType `json:"type"`
@@ -78,6 +93,9 @@ type Event struct {
 	DaemonID  string    `json:"daemonId"`
 	Timestamp time.Time `json:"timestamp"`
 	Reason    string    `json:"reason,omitempty"`
+	Name      string    `json:"name,omitempty"`
+	Hostname  string    `json:"hostname,omitempty"`
+	Platform  string    `json:"platform,omitempty"`
 }
 
 // Publisher implements toolexec.DaemonConnectionListener and writes events
@@ -115,30 +133,61 @@ func NewPublisher(nc *nats.Conn) (*Publisher, error) {
 	return &Publisher{js: js}, nil
 }
 
-// OnDaemonConnected satisfies toolexec.DaemonConnectionListener.
+// OnDaemonConnected satisfies toolexec.DaemonConnectionListener. Callers that
+// have the daemon's registered identity available should call
+// OnDaemonConnectedWithInfo instead so the control plane gets a usable name.
 func (p *Publisher) OnDaemonConnected(userID, daemonID string) {
-	p.publish(EventTypeConnected, SubjectConnected, userID, daemonID, "")
+	p.publishConnected(userID, daemonID, "", "", "")
+}
+
+// OnDaemonConnectedWithInfo satisfies toolexec.DaemonConnectionInfoListener.
+// name/hostname/platform are whatever the daemon asserted in its
+// DaemonRegister message (internal/grpc/services/tools_daemon.go); any of
+// them may be empty. ToolsDaemonService.notifyConnected calls this instead
+// of OnDaemonConnected when the listener implements the interface, so this
+// is the path actually used in production; OnDaemonConnected above only
+// exists to satisfy the base interface and covers callers/tests with no
+// identity to give.
+func (p *Publisher) OnDaemonConnectedWithInfo(userID, daemonID, name, hostname, platform string) {
+	p.publishConnected(userID, daemonID, name, hostname, platform)
 }
 
 // OnDaemonDisconnected satisfies toolexec.DaemonConnectionListener.
 func (p *Publisher) OnDaemonDisconnected(userID, daemonID string) {
-	p.publish(EventTypeDisconnected, SubjectDisconnected, userID, daemonID, "")
+	p.publish(EventTypeDisconnected, SubjectDisconnected, userID, daemonID, "", "", "", "")
 }
 
 // OnDaemonDisconnectedWithReason is like OnDaemonDisconnected but carries a
 // human-readable reason that the control plane persists on the daemon row.
 func (p *Publisher) OnDaemonDisconnectedWithReason(userID, daemonID, reason string) {
-	p.publish(EventTypeDisconnected, SubjectDisconnected, userID, daemonID, reason)
+	p.publish(EventTypeDisconnected, SubjectDisconnected, userID, daemonID, reason, "", "", "")
 }
 
 // OnDaemonConnectFailed is called by the connector loop whenever an outbound
 // dial / registration attempt fails. The reason is the wrapped error returned
 // by connectOnce.
 func (p *Publisher) OnDaemonConnectFailed(userID, daemonID, reason string) {
-	p.publish(EventTypeConnectFailed, SubjectConnectFailed, userID, daemonID, reason)
+	p.publish(EventTypeConnectFailed, SubjectConnectFailed, userID, daemonID, reason, "", "", "")
 }
 
-func (p *Publisher) publish(t EventType, subject, userID, daemonID, reason string) {
+// publishConnected resolves the display name and publishes a connected
+// event. This is the ONE place that decides name precedence — name, then
+// hostname, then the daemon id itself — so Event.Name is never empty on the
+// wire and every consumer, present or future, can use it as-is without
+// re-deriving the rule. Hostname/Platform still travel unresolved alongside
+// it for consumers (like the control plane) that want the raw value too.
+func (p *Publisher) publishConnected(userID, daemonID, name, hostname, platform string) {
+	resolvedName := strings.TrimSpace(name)
+	if resolvedName == "" {
+		resolvedName = strings.TrimSpace(hostname)
+	}
+	if resolvedName == "" {
+		resolvedName = daemonID
+	}
+	p.publish(EventTypeConnected, SubjectConnected, userID, daemonID, "", resolvedName, hostname, platform)
+}
+
+func (p *Publisher) publish(t EventType, subject, userID, daemonID, reason, name, hostname, platform string) {
 	if p == nil || p.js == nil {
 		return
 	}
@@ -149,6 +198,9 @@ func (p *Publisher) publish(t EventType, subject, userID, daemonID, reason strin
 		DaemonID:  daemonID,
 		Timestamp: time.Now().UTC(),
 		Reason:    reason,
+		Name:      name,
+		Hostname:  hostname,
+		Platform:  platform,
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {

@@ -70,7 +70,7 @@ func TestEnsureDaemonCredentials_ReadOnlyFileTolerated(t *testing.T) {
 	// Pass a different gateway URL to force the drift-rewrite (persist) path.
 	const driftedGateway = "https://gateway-staging.reliantapi.com:8443"
 	target := &connection{ServerURL: serverURL, GatewayURL: driftedGateway}
-	creds, err := ensureDaemonCredentials(context.Background(), cmd, target)
+	creds, err := ensureDaemonCredentials(context.Background(), cmd, target, false)
 	if err != nil {
 		t.Fatalf("ensureDaemonCredentials returned error on read-only creds file: %v", err)
 	}

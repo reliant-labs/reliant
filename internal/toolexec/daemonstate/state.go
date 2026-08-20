@@ -48,6 +48,14 @@ const (
 	// StreamListening is the server-mode analogue of connecting: the daemon is
 	// accepting gateway dial-ins but none is attached.
 	StreamListening Stream = "listening"
+	// StreamAwaitingCredentials means the daemon has no usable credentials and
+	// (running non-interactively, e.g. spawned by Electron) is idling rather
+	// than exiting or opening an interactive login flow. It is waiting for a
+	// credential to appear on disk — normally because Electron's own login UI
+	// signed the user in and minted one. Electron reads this exact string from
+	// `stream` in daemon-state.json to distinguish "waiting for sign-in" from
+	// a crash, instead of reporting a timeout after waitForReady's 30s.
+	StreamAwaitingCredentials Stream = "awaiting_credentials"
 )
 
 // Established reports whether the daemon can currently serve tool calls.

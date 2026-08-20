@@ -23,6 +23,13 @@ import (
 // ErrAuthNotConfigured is returned when OAuth is attempted without required env vars.
 var ErrAuthNotConfigured = fmt.Errorf("auth provider not configured")
 
+// ErrNonInteractiveLoginRequired is returned by Login when LoginOptions.NonInteractive
+// is set and no session is already available. The PKCE flow this function runs
+// has no non-interactive form — it always needs a browser and a human — so a
+// caller that must never pop a browser (the tools daemon) gets this error
+// instead of one.
+var ErrNonInteractiveLoginRequired = fmt.Errorf("interactive login required but running non-interactively")
+
 func getAuthURL() string {
 	return builddefaults.Value("RELIANT_AUTH_URL", builddefaults.AuthURL, "")
 }
@@ -45,7 +52,14 @@ func requireAuthConfig() (serverURL string, anonKey string, err error) {
 }
 
 // LoginOptions configures the OAuth PKCE login flow.
-type LoginOptions struct{}
+type LoginOptions struct {
+	// NonInteractive, when true, makes Login refuse to open a browser or
+	// start the local login-page HTTP server, returning
+	// ErrNonInteractiveLoginRequired immediately instead. Set this for any
+	// caller that must never surface interactive login UX itself — the tools
+	// daemon in particular, which Electron drives through its own login page.
+	NonInteractive bool
+}
 
 // LoginResult holds the tokens and user info returned after a successful login.
 type LoginResult struct {
@@ -146,6 +160,10 @@ func LoginWithOAuthProvider(ctx context.Context, provider string, opts LoginOpti
 
 // Login performs login via a local web page that supports email/password and OAuth providers.
 func Login(ctx context.Context, opts LoginOptions) (*LoginResult, error) {
+	if opts.NonInteractive {
+		return nil, ErrNonInteractiveLoginRequired
+	}
+
 	serverURL, anonKey, err := requireAuthConfig()
 	if err != nil {
 		return nil, err
@@ -326,7 +344,12 @@ func buildAuthURL(serverURL, redirectURI, challenge, provider string) (string, e
 
 // --- Browser opener ---
 
-func openBrowser(url string) error {
+// openBrowser is a var, not a plain func, so tests can substitute a fake and
+// assert it is never called — the same seam internal/auth/oauthcallback uses
+// for the same reason (see its openBrowser var).
+var openBrowser = defaultOpenBrowser
+
+func defaultOpenBrowser(url string) error {
 	switch runtime.GOOS {
 	case "darwin":
 		return exec.Command("open", url).Start()

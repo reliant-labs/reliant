@@ -71,7 +71,14 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // The daemon PAT is minted by, and scoped to, conn's server — the one the
 // resolved context names — so registering never silently targets a different
 // server than the rest of the CLI.
-func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection) error {
+//
+// nonInteractive, when true, forbids the OAuth login step from opening a
+// browser or starting the local login-page HTTP server: it is passed straight
+// through to auth.Login, which returns auth.ErrNonInteractiveLoginRequired
+// instead of running the interactive flow. Callers that must idle rather than
+// fail outright (see waitForCredentialsNonInteractive) detect that sentinel
+// with errors.Is.
+func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, nonInteractive bool) error {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
 	accessToken, err := auth.ReadAccessTokenFromAuthFile()
@@ -79,8 +86,10 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection) e
 		return fmt.Errorf("reading auth file: %w", err)
 	}
 	if accessToken == "" {
-		fmt.Fprintln(cmd.OutOrStdout(), "Not logged in. Starting authentication...")
-		result, err := auth.Login(ctx, auth.LoginOptions{})
+		if !nonInteractive {
+			fmt.Fprintln(cmd.OutOrStdout(), "Not logged in. Starting authentication...")
+		}
+		result, err := auth.Login(ctx, auth.LoginOptions{NonInteractive: nonInteractive})
 		if err != nil {
 			return fmt.Errorf("login failed: %w", err)
 		}
@@ -156,10 +165,11 @@ func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool 
 // ensureDaemonCredentials returns existing daemon credentials or creates new ones.
 // This is the shared credential resolution logic used by both `open` and `daemon start`.
 //
-// If no credentials exist, runs the interactive registration flow: prompts
-// for sign-in (if not already), then mints a PAT via CreateDaemonToken.
-// Most users will instead use `--token` to paste a PAT minted from the web UI.
-func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection) (*auth.DaemonCredentials, error) {
+// If no credentials exist, runs the registration flow: prompts for sign-in
+// (if not already, and unless nonInteractive is set — see registerDaemon),
+// then mints a PAT via CreateDaemonToken. Most users will instead use
+// `--token` to paste a PAT minted from the web UI.
+func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
 	creds, err := auth.ReadDaemonCredentials(apiURL)
@@ -176,7 +186,9 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		if daemonCredsExpiringSoon(creds, time.Now()) {
 			logging.Warn("stored daemon PAT is expired or near expiry — re-minting",
 				"expiresAt", creds.ExpiresAt.Format(time.RFC3339))
-			fmt.Fprintln(cmd.OutOrStdout(), "Daemon credentials expired. Re-registering...")
+			if !nonInteractive {
+				fmt.Fprintln(cmd.OutOrStdout(), "Daemon credentials expired. Re-registering...")
+			}
 			_ = auth.DeleteDaemonCredentials(apiURL)
 			creds = nil
 		} else {
@@ -190,11 +202,11 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 			}
 			return creds, nil
 		}
-	} else {
+	} else if !nonInteractive {
 		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
 	}
 
-	if err := registerDaemon(ctx, cmd, conn); err != nil {
+	if err := registerDaemon(ctx, cmd, conn, nonInteractive); err != nil {
 		return nil, fmt.Errorf("daemon registration failed: %w", err)
 	}
 
@@ -204,6 +216,115 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		return nil, fmt.Errorf("failed to read daemon credentials after registration")
 	}
 	return creds, nil
+}
+
+// daemonCredentialPollInterval is how often a non-interactive daemon with no
+// usable credentials re-checks disk for one appearing there. In practice this
+// is Electron's own pre-mint path (electron/src/daemon-creds.js) writing
+// ~/.reliant/daemon.json after the user signs in through Electron's login
+// page and respawns the daemon — but polling also covers the case where the
+// daemon is left running and the file simply appears underneath it. A stat
+// plus small JSON read is cheap enough to afford every few seconds.
+//
+// A var, not a const, so tests can shrink it rather than spending real wall
+// clock time waiting out the production interval.
+var daemonCredentialPollInterval = 3 * time.Second
+
+// waitForCredentialsNonInteractive is what a non-interactive daemon does
+// instead of running the OAuth login flow: it stays resident and idle,
+// publishing daemonstate.StreamAwaitingCredentials so `daemon status` and
+// Electron's own health check can report "waiting for sign-in" honestly
+// instead of as a crash, and re-checks the credentials file on disk until one
+// appears or ctx is cancelled (SIGINT/SIGTERM are wired to ctx cancellation by
+// watchShutdownSignals, so this loop stays responsive to graceful shutdown).
+func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, conn *connection, dataDir string) (*auth.DaemonCredentials, error) {
+	fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found and running non-interactively — waiting for sign-in...")
+	if err := daemonstate.SetStream(dataDir, daemonstate.StreamAwaitingCredentials, "waiting for credentials to appear on disk"); err != nil {
+		logging.Warn("failed to publish awaiting-credentials daemon state", "error", err)
+	}
+
+	// Check immediately before the first tick: a credential can already be on
+	// disk (e.g. a slow registerDaemon call lost a race with Electron's own
+	// pre-mint), and there is no reason to make that case wait a full poll
+	// interval.
+	if creds := pollDaemonCredentials(cmd, conn); creds != nil {
+		return creds, nil
+	}
+
+	ticker := time.NewTicker(daemonCredentialPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+			if creds := pollDaemonCredentials(cmd, conn); creds != nil {
+				return creds, nil
+			}
+		}
+	}
+}
+
+// pollDaemonCredentials is one credential-check attempt shared by the
+// immediate check and every subsequent tick in
+// waitForCredentialsNonInteractive. Returns nil (never an error) when there is
+// nothing usable yet — a bad read or a not-yet-valid credential is exactly the
+// same as "nothing yet" to the caller, which just waits for the next tick.
+func pollDaemonCredentials(cmd *cobra.Command, conn *connection) *auth.DaemonCredentials {
+	creds, err := auth.ReadDaemonCredentials(conn.ServerURL)
+	if err != nil {
+		logging.Warn("error re-checking daemon credentials while awaiting sign-in", "error", err)
+		return nil
+	}
+	if creds == nil {
+		return nil
+	}
+	// A credential can appear on disk already past its expiry (a stale mount,
+	// a slow write racing a clock) — keep waiting for a good one rather than
+	// handing the caller something that will fail the very first gateway
+	// reach-out.
+	if daemonCredsExpiringSoon(creds, time.Now()) {
+		return nil
+	}
+	fmt.Fprintln(cmd.OutOrStdout(), "Daemon credentials found — resuming startup")
+	return creds
+}
+
+// resolveOrAwaitCredentials calls ensureDaemonCredentials and, when running
+// non-interactively with no usable credentials, falls into
+// waitForCredentialsNonInteractive instead of surfacing
+// auth.ErrNonInteractiveLoginRequired as a fatal error. This is the seam used
+// by both the initial credential resolution and the auth-failure retry path
+// in `daemon start`, so neither can regress into popping a browser.
+func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	creds, err := ensureDaemonCredentials(ctx, cmd, conn, nonInteractive)
+	if err == nil {
+		return creds, nil
+	}
+	if nonInteractive && errors.Is(err, auth.ErrNonInteractiveLoginRequired) {
+		return waitForCredentialsNonInteractive(ctx, cmd, conn, dataDir)
+	}
+	return nil, err
+}
+
+// registerOrAwaitCredentials is resolveOrAwaitCredentials's counterpart for
+// the auth-failure retry path: the caller has already deleted stale
+// credentials and needs a fresh registration, but a non-interactive daemon
+// must idle rather than fail when that requires a login it cannot run.
+func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	regErr := registerDaemon(ctx, cmd, conn, nonInteractive)
+	if regErr == nil {
+		newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL)
+		if readErr != nil || newCreds == nil {
+			return nil, fmt.Errorf("failed to read credentials after re-registration")
+		}
+		return newCreds, nil
+	}
+	if nonInteractive && errors.Is(regErr, auth.ErrNonInteractiveLoginRequired) {
+		return waitForCredentialsNonInteractive(ctx, cmd, conn, dataDir)
+	}
+	return nil, fmt.Errorf("re-registration failed: %w", regErr)
 }
 
 // persistDaemonCredentials best-effort writes daemon credentials to disk.
@@ -352,7 +473,10 @@ After registering, run 'reliant daemon start' to connect.`,
 				return nil
 			}
 
-			return registerDaemon(cmd.Context(), cmd, conn)
+			// `daemon register` is always an explicit, interactive CLI
+			// invocation — never spawned by Electron — so it never passes
+			// nonInteractive.
+			return registerDaemon(cmd.Context(), cmd, conn, false)
 		},
 	}
 
@@ -395,17 +519,18 @@ func watchShutdownSignals(sigCh <-chan os.Signal, w io.Writer, cancel context.Ca
 
 func newDaemonStartCmd() *cobra.Command {
 	var (
-		port       string
-		grpcURL    string
-		dataDir    string
-		background bool
-		tlsCert    string
-		tlsKey     string
-		tlsMode    string
-		useToken   bool
-		daemonName string
-		serverMode bool
-		listenPort int
+		port           string
+		grpcURL        string
+		dataDir        string
+		background     bool
+		tlsCert        string
+		tlsKey         string
+		tlsMode        string
+		useToken       bool
+		daemonName     string
+		serverMode     bool
+		listenPort     int
+		nonInteractive bool
 	)
 
 	cmd := &cobra.Command{
@@ -419,7 +544,14 @@ execution capabilities.
 Credential resolution order:
   1. Daemon credentials file (created by 'reliant daemon register')
   2. If logged in but not registered, auto-registers and creates credentials
-  3. If not logged in, prompts for login and then auto-registers`,
+  3. If not logged in, prompts for login and then auto-registers — unless
+     --non-interactive (or RELIANT_DAEMON_NON_INTERACTIVE) is set, in which
+     case the daemon never opens a browser or runs the login flow itself. It
+     instead stays resident and idle, publishing "awaiting_credentials" in its
+     runtime state, and polls for a credentials file to appear on disk (see
+     'reliant daemon status' and internal/toolexec/daemonstate). This is the
+     mode Electron spawns in: its own login page owns interactive sign-in, and
+     the daemon must never pop a second one.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if background {
 				// TODO: implement background fork/detach
@@ -487,7 +619,7 @@ Credential resolution order:
 					return err
 				}
 			} else {
-				creds, err = ensureDaemonCredentials(ctx, cmd, conn)
+				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, dataDir, nonInteractive)
 				if err != nil {
 					return err
 				}
@@ -564,14 +696,12 @@ Credential resolution order:
 						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
 					_ = auth.DeleteDaemonCredentials(conn.ServerURL)
 
-					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
-					if regErr := registerDaemon(ctx, cmd, conn); regErr != nil {
-						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
+					if !nonInteractive {
+						fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
 					}
-
-					newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL)
-					if readErr != nil || newCreds == nil {
-						return fmt.Errorf("failed to read credentials after re-registration")
+					newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, dataDir, nonInteractive)
+					if regErr != nil {
+						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
 					}
 
 					logging.Info("Re-registered successfully, retrying connection...")
@@ -602,6 +732,14 @@ Credential resolution order:
 	cmd.Flags().StringVar(&daemonName, "name", "", "Human-friendly daemon name (default: <instance-id>@<hostname>)")
 	cmd.Flags().BoolVar(&serverMode, "server-mode", envOrDefault("DAEMON_SERVER_MODE", "") == "true", "Listen for incoming gateway connections instead of dialing out")
 	cmd.Flags().IntVar(&listenPort, "listen-port", envOrDefaultInt("DAEMON_LISTEN_PORT", 9190), "Port to listen on in server mode")
+	// Precedence: explicit --non-interactive on the command line always wins
+	// (cobra only applies this default when the flag is absent); otherwise
+	// RELIANT_DAEMON_NON_INTERACTIVE; otherwise false (interactive, the
+	// existing CLI behavior). Electron spawns the daemon with this flag set
+	// so it never opens a browser — Electron's own login page owns
+	// interactive sign-in. See registerDaemon / waitForCredentialsNonInteractive.
+	cmd.Flags().BoolVar(&nonInteractive, "non-interactive", envOrDefaultBool("RELIANT_DAEMON_NON_INTERACTIVE", false),
+		"Never open a browser or run interactive login; idle and wait for credentials to appear on disk instead")
 
 	return cmd
 }
@@ -740,6 +878,8 @@ stream is not established.`,
 				fmt.Fprintln(out, "Daemon is running and its gateway stream is established")
 			case state.Stream == daemonstate.StreamUnknown:
 				fmt.Fprintln(out, "Daemon process exists but its gateway stream state is unknown")
+			case state.Stream == daemonstate.StreamAwaitingCredentials:
+				fmt.Fprintln(out, "Daemon is running but has no usable credentials — waiting for sign-in")
 			default:
 				fmt.Fprintf(out, "Daemon process exists but its gateway stream is NOT established (%s)\n", state.Stream)
 			}

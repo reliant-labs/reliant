@@ -106,6 +106,8 @@ type daemonConnection struct {
 	userID       string
 	daemonID     string
 	name         string
+	hostname     string
+	platform     string
 	labels       map[string]string
 	daemonType   string // "local" or "cloud"
 	connectedAt  time.Time
@@ -255,12 +257,20 @@ func (s *ToolsDaemonService) AddConnectionListener(l toolexec.DaemonConnectionLi
 	s.listenersMu.Unlock()
 }
 
-// notifyConnected calls OnDaemonConnected on all registered listeners.
+// notifyConnected calls OnDaemonConnectedWithInfo on any listener that
+// implements toolexec.DaemonConnectionInfoListener (currently just
+// daemonevents.Publisher), falling back to plain OnDaemonConnected for
+// listeners that only care about identity (NATSToolBridge,
+// daemonquery.Responder/UserResponder). Each listener gets exactly one call.
 // Must be called OUTSIDE s.mu to avoid deadlocks.
-func (s *ToolsDaemonService) notifyConnected(userID, daemonID string) {
+func (s *ToolsDaemonService) notifyConnected(userID, daemonID, name, hostname, platform string) {
 	s.listenersMu.RLock()
 	defer s.listenersMu.RUnlock()
 	for _, l := range s.listeners {
+		if infoListener, ok := l.(toolexec.DaemonConnectionInfoListener); ok {
+			infoListener.OnDaemonConnectedWithInfo(userID, daemonID, name, hostname, platform)
+			continue
+		}
 		l.OnDaemonConnected(userID, daemonID)
 	}
 }
@@ -637,6 +647,8 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		userID:              userID,
 		daemonID:            daemonID,
 		name:                reg.GetName(),
+		hostname:            reg.GetHostname(),
+		platform:            reg.GetPlatform(),
 		labels:              reg.GetLabels(),
 		daemonType:          reg.GetDaemonType(),
 		connectedAt:         now2,
@@ -664,7 +676,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	s.supersedeIncumbent(oldConn)
 
 	// Notify listeners outside the mutex.
-	s.notifyConnected(userID, daemonID)
+	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
 
 	// Publish an immediate heartbeat so the frontend knows the daemon is
@@ -775,6 +787,8 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		userID:              userID,
 		daemonID:            daemonID,
 		name:                reg.GetName(),
+		hostname:            reg.GetHostname(),
+		platform:            reg.GetPlatform(),
 		labels:              reg.GetLabels(),
 		daemonType:          reg.GetDaemonType(),
 		connectedAt:         now,
@@ -802,7 +816,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Replaced old daemon connection (outbound)", "userID", userID, "daemonID", daemonID)
 	}
 
-	s.notifyConnected(userID, daemonID)
+	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
 
