@@ -2,8 +2,11 @@
 package anthropic
 
 import (
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -58,7 +61,7 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		"anthropic-version":                         "2023-06-01",
 		"accept-language":                           "*",
 		"sec-fetch-mode":                            "cors",
-		"accept-encoding":                           "br, gzip, deflate",
+		"accept-encoding":                           claudeCodeAcceptEncoding,
 	}
 	if opts.SessionID != nil && *opts.SessionID != "" {
 		lowercaseHeaders["x-claude-code-session-id"] = *opts.SessionID
@@ -92,8 +95,12 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	// This driver builds its own transport chain (token refresh + lowercase
 	// headers), so it opts out of the client llm.NewAnthropicSDKClient installs
 	// and must re-add the idle timeout itself — the option list is last-wins.
+	//
+	// decompressingTransport is outermost so it decodes the final response,
+	// while the idle timeout still measures stalls on the raw network stream
+	// underneath it.
 	customHTTPClient := &http.Client{
-		Transport: llm.WrapWithIdleTimeout(finalTransport),
+		Transport: &decompressingTransport{base: llm.WrapWithIdleTimeout(finalTransport)},
 	}
 
 	clientOptions = append(clientOptions,
@@ -252,6 +259,79 @@ func cloneRequestForRetry(req *http.Request) *http.Request {
 	}
 	clone.Body = body
 	return clone
+}
+
+// claudeCodeAcceptEncoding is the encoding list sent upstream. Setting this
+// header by hand turns OFF net/http's transparent decompression — Go only
+// decodes a response when it chose the encoding itself — so every value here
+// must be one decompressingTransport can decode. Brotli was advertised for a
+// long time and never decoded, which handed encoding/json a raw brotli frame
+// and failed every non-streaming call with
+// `invalid character '\x03' looking for beginning of value`.
+const claudeCodeAcceptEncoding = "gzip, deflate"
+
+// decompressingTransport decodes Content-Encoding that net/http would have
+// handled had the request not carried an explicit accept-encoding.
+//
+// Streaming never hit the original bug (the SSE reader tolerates the framing)
+// but is decoded here too, so both paths see identical bytes.
+type decompressingTransport struct {
+	base http.RoundTripper
+}
+
+func (t *decompressingTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	resp, err := base.RoundTrip(req)
+	if err != nil || resp == nil {
+		return resp, err
+	}
+
+	var decoded io.ReadCloser
+	switch strings.ToLower(strings.TrimSpace(resp.Header.Get("Content-Encoding"))) {
+	case "gzip":
+		gz, gzErr := gzip.NewReader(resp.Body)
+		if gzErr != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("claude-code: gzip response: %w", gzErr)
+		}
+		decoded = &wrappedBody{Reader: gz, closers: []io.Closer{gz, resp.Body}}
+	case "deflate":
+		fl := flate.NewReader(resp.Body)
+		decoded = &wrappedBody{Reader: fl, closers: []io.Closer{fl, resp.Body}}
+	default:
+		// identity, empty, or an encoding we never asked for: leave it alone.
+		return resp, nil
+	}
+
+	resp.Body = decoded
+	// The body no longer matches these, and a stale Content-Length makes the
+	// SDK truncate the decoded JSON.
+	resp.Header.Del("Content-Encoding")
+	resp.Header.Del("Content-Length")
+	resp.ContentLength = -1
+	resp.Uncompressed = true
+	return resp, nil
+}
+
+// wrappedBody closes the decompressor and the underlying body together, so the
+// connection is still released back to the pool.
+type wrappedBody struct {
+	io.Reader
+	closers []io.Closer
+}
+
+func (b *wrappedBody) Close() error {
+	var err error
+	for _, c := range b.closers {
+		if cerr := c.Close(); cerr != nil && err == nil {
+			err = cerr
+		}
+	}
+	return err
 }
 
 // lowercaseHeaderTransport is a custom RoundTripper that sets headers with exact casing
