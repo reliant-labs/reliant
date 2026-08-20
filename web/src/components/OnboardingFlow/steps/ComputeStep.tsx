@@ -138,6 +138,12 @@ export function ComputeStep({
         "Redeem a coupon code or choose a plan to start a cloud machine.");
   const loading = forcedEligibility == null && cloudLoading;
 
+  // Whether a "Start cloud daemon" click would actually reach a machine. Named
+  // and derived the same way ConnectDaemonModal does, because it is the same
+  // question asked at the other door into the same action — and it now decides
+  // whether the button EXISTS, not merely whether it is disabled.
+  const canStartCloud = HAS_CLOUD_DAEMONS && eligible && !loading;
+
   // Daemon mutations via React Query. We use mutateAsync below because the
   // surrounding handler needs to sequence listDaemons → resume/create →
   // updatePlan; the hooks' default-onError still suppresses reasoned-quota
@@ -417,63 +423,89 @@ export function ComputeStep({
                     Fastest
                   </span>
                 </div>
+                {/* Describes what the user can do RIGHT NOW. Promising "start
+                    a hosted daemon now" to someone with no compute plan sets
+                    up the dead end this card no longer has. */}
                 <span className="block text-xs leading-relaxed text-muted-foreground">
-                  {HAS_CLOUD_DAEMONS
-                    ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
-                    : "Cloud daemons are not enabled for this environment."}
+                  {!HAS_CLOUD_DAEMONS
+                    ? "Cloud daemons are not enabled for this environment."
+                    : canStartCloud || loading
+                      ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
+                      : // Deliberately says what Reliant Cloud IS and stops.
+                        // The `reason` line directly below names what to do
+                        // about it, and having both sentences give the same
+                        // instruction read as a stutter.
+                        "A hosted machine, ready in a few minutes with nothing to install."}
                 </span>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleCloud}
-              disabled={
-                startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
-              }
-              className={cn(
-                "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
-                startingCloud || !HAS_CLOUD_DAEMONS || !eligible || loading
-                  ? "cursor-not-allowed bg-muted text-muted-foreground"
-                  : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
-              )}
-            >
-              {(startingCloud || loading) && (
+            {/* Three states, and only ONE of them shows a start button.
+
+                A disabled "Start cloud daemon" used to render unconditionally,
+                and for the single most common visitor to this screen — a brand
+                new user — it was permanently greyed out: the signup compute
+                auto-grant is gone, so every new account resolves to
+                NO_SUBSCRIPTION and lands here ineligible. The card's primary
+                control was therefore an inert one, with the two controls that
+                could actually change that (redeem a code, set up billing)
+                demoted to small links beneath it. The button that cannot be
+                clicked was the most prominent thing on the card.
+
+                So when the user cannot start a machine we do not render a
+                start button at all — the coupon and billing actions ARE the
+                primary controls, because they are the whole of what the user
+                can do here. The start button returns, as the primary control,
+                exactly when clicking it would work. */}
+            {loading ? (
+              <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-muted px-4 py-2.5 text-sm font-semibold text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
-              )}
-              {startingCloud
-                ? "Requesting daemon..."
-                : loading
-                  ? "Checking availability..."
-                  : "Start cloud daemon"}
-            </button>
-            {/* Gated on !eligible alone, NOT on `reason` being non-empty: an
-                ineligible user must always get the explanation AND the way out
+                Checking availability...
+              </div>
+            ) : canStartCloud ? (
+              <button
+                type="button"
+                onClick={handleCloud}
+                disabled={startingCloud}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors",
+                  startingCloud
+                    ? "cursor-not-allowed bg-muted text-muted-foreground"
+                    : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
+                )}
+              >
+                {startingCloud && <Loader2 className="h-4 w-4 animate-spin" />}
+                {startingCloud ? "Requesting daemon..." : "Start cloud daemon"}
+              </button>
+            ) : null}
+
+            {/* Gated on !eligible alone, NOT on `reason` being non-empty: a
+                blocked user must always get the explanation AND the way out
                 (billing), even if the server sends back a reason this build
                 does not have copy for. A missing string is not a reason to
                 hide the only escape route on the screen. */}
-            {(!HAS_CLOUD_DAEMONS || !eligible) && (
-              <div className="space-y-1.5">
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {!HAS_CLOUD_DAEMONS
-                    ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
-                    : reason}
-                </p>
-              </div>
+            {!loading && !canStartCloud && (
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {!HAS_CLOUD_DAEMONS
+                  ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
+                  : reason}
+              </p>
             )}
+
             {/* Plans and coupon redemption are shown to EVERY user, not only
-                blocked ones.
-                
-                They were previously gated on `!eligible`, on the theory that
-                someone who can already start a machine has no reason to look
-                at pricing. That is wrong: a new user lands here on the free
-                trial — eligible, so the card offered no way to see what a plan
-                costs or to enter a code they were given. "Where is the pricing
-                button" has one correct answer, which is "always visible". */}
-            {HAS_CLOUD_DAEMONS && (
-              <div className="space-y-2">
+                blocked ones — someone who can already start a machine may
+                still be holding a code, and "where is the pricing button" has
+                one correct answer, which is "always visible".
+
+                What changes with eligibility is their WEIGHT, not their
+                presence: for a user who cannot start a machine these are the
+                only two working controls on the card, so they render as full
+                buttons; for a user who can, they sit under the start button as
+                secondary links. */}
+            {HAS_CLOUD_DAEMONS && !loading && (
+              <div className={cn("space-y-2", !canStartCloud && "pt-0.5")}>
                 <RedeemCouponForm
-                  variant="collapsed"
+                  variant={canStartCloud ? "collapsed" : "button"}
                   size="sm"
                   onRedeemed={() => {
                     void refetchCloudEligibility();
@@ -482,9 +514,14 @@ export function ComputeStep({
                 <button
                   type="button"
                   onClick={goToBilling}
-                  className="flex items-center gap-1 text-xs font-medium text-sky-500 transition-colors hover:text-sky-400"
+                  className={cn(
+                    "transition-colors",
+                    canStartCloud
+                      ? "flex items-center gap-1 text-xs font-medium text-sky-500 hover:text-sky-400"
+                      : "inline-flex w-full items-center justify-center rounded-lg border border-sky-600/40 bg-sky-600/10 px-3 py-2 text-xs font-semibold text-sky-500 hover:bg-sky-600/20",
+                  )}
                 >
-                  View plans &rarr;
+                  {canStartCloud ? <>View plans &rarr;</> : "Set up billing"}
                 </button>
               </div>
             )}

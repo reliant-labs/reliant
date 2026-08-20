@@ -25,7 +25,7 @@
   --accent: 210 40% 96%;            /* Light blue accent */
   --accent-foreground: 217 91% 60%;
   --ring: 217 91% 60%;
-  --border: 214 32% 91%;            /* Light blue-gray border */
+  --border: 214 32% 86%;            /* Light blue-gray border */
 
   /* Config panel input surfaces */
   --config-input-bg: 210 40% 96%;
@@ -59,25 +59,25 @@
 }
 
 .dark[data-color-scheme="professional-blue"] {
-  --background: 222 47% 11%;        /* Deep blue-gray background */
+  --background: 222 47% 11%;        /* Page — the darkest surface */
   --foreground: 210 40% 98%;
-  --card: 222 47% 13%;              /* Slightly lighter blue-gray for cards */
+  --card: 222 47% 17%;              /* Lifted a full step above the page */
   --card-foreground: 210 40% 98%;
-  --popover: 222 47% 15%;           /* Popover/dropdown background - slightly lighter */
+  --popover: 222 47% 22%;           /* Floats above cards */
   --popover-foreground: 210 40% 98%;
-  --surface-modal: 222 47% 13%;     /* Modal background */
-  --muted: 217 33% 17%;             /* Dark blue-gray for muted areas */
+  --surface-modal: 222 47% 22%;     /* Modals sit at popover elevation */
+  --muted: 217 33% 21%;             /* Reads against the lifted card */
   --muted-foreground: 215 20% 65%;
   --primary: 217 91% 70%;           /* Bright blue for dark mode */
   --primary-foreground: 222 47% 11%;
-  --accent: 217 33% 17%;            /* Dark blue accent */
+  --accent: 217 33% 21%;            /* Kept in step with --muted */
   --accent-foreground: 210 40% 98%;
   --ring: 217 91% 70%;
-  --border: 217 33% 24%;            /* Dark blue-gray border */
+  --border: 217 33% 32%;            /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 217 33% 18%;
-  --config-input-border: 217 33% 32%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 217 33% 13%;
+  --config-input-border: 217 33% 38%;
 
   /* Tab colors */
   --tab-active: 217 91% 70%;
@@ -131,7 +131,7 @@
   --accent: 30 20% 97%;             /* Creamy white */
   --accent-foreground: 25 22% 28%;
   --ring: 25 22% 28%;
-  --border: 30 12% 90%;             /* Warm border */
+  --border: 30 12% 85%;             /* Warm border */
 
   /* Config panel input surfaces */
   --config-input-bg: 30 15% 95%;
@@ -165,25 +165,25 @@
 }
 
 .dark[data-color-scheme="refined-neutral"] {
-  --background: 25 20% 14%;         /* Deep warm brown */
+  --background: 25 20% 14%;         /* Page — the darkest surface */
   --foreground: 30 18% 90%;
-  --card: 25 20% 16%;               /* Slightly lighter warm cards */
+  --card: 25 20% 20%;               /* Lifted a full step above the page */
   --card-foreground: 30 18% 90%;
-  --popover: 25 20% 18%;            /* Popover/dropdown background - slightly lighter */
+  --popover: 25 20% 25%;            /* Floats above cards */
   --popover-foreground: 30 18% 90%;
-  --surface-modal: 25 20% 16%;      /* Modal background */
-  --muted: 30 12% 20%;              /* Deep warm gray */
-  --muted-foreground: 30 15% 60%;
+  --surface-modal: 25 20% 25%;      /* Modals sit at popover elevation */
+  --muted: 30 12% 24%;              /* Reads against the lifted card */
+  --muted-foreground: 30 15% 67%;   /* Raised to hold AA on the lifted surfaces */
   --primary: 30 18% 88%;            /* Warm light on dark */
   --primary-foreground: 25 20% 14%;
-  --accent: 30 12% 20%;             /* Deep warm gray */
+  --accent: 30 12% 24%;             /* Kept in step with --muted */
   --accent-foreground: 30 18% 88%;
   --ring: 30 18% 82%;
-  --border: 30 10% 24%;             /* Warm dark border */
+  --border: 30 10% 34%;             /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 30 12% 20%;
-  --config-input-border: 30 10% 32%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 30 12% 16%;
+  --config-input-border: 30 10% 40%;
 
   /* Tab colors */
   --tab-active: 30 18% 88%;
@@ -237,7 +237,7 @@
   --accent: 180 82% 96%;            /* Light teal accent */
   --accent-foreground: 180 82% 32%;
   --ring: 180 88% 42%;
-  --border: 185 12% 89%;            /* Subtle teal border */
+  --border: 185 12% 84%;            /* Subtle teal border */
 
   /* Config panel input surfaces */
   --config-input-bg: 185 14% 95%;
@@ -271,25 +271,25 @@
 }
 
 .dark[data-color-scheme="modern-teal"] {
-  --background: 185 20% 12%;        /* Deep teal-gray background */
+  --background: 185 20% 12%;        /* Page — the darkest surface */
   --foreground: 185 12% 92%;
-  --card: 185 20% 14%;              /* Slightly lighter teal cards */
+  --card: 185 20% 18%;              /* Lifted a full step above the page */
   --card-foreground: 185 12% 92%;
-  --popover: 185 20% 17%;             /* Popover/dropdown background */
+  --popover: 185 20% 24%;           /* Floats above cards */
   --popover-foreground: 185 12% 92%;
-  --surface-modal: 185 20% 14%;     /* Modal background */
-  --muted: 185 14% 22%;             /* Deep teal-gray */
-  --muted-foreground: 185 12% 65%;
+  --surface-modal: 185 20% 24%;     /* Modals sit at popover elevation */
+  --muted: 185 14% 23%;             /* Reads against the lifted card */
+  --muted-foreground: 185 12% 67%;  /* Raised to hold AA on the lifted surfaces */
   --primary: 180 82% 56%;           /* Bright teal on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 185 14% 22%;            /* Deep teal-gray */
+  --accent: 185 14% 23%;            /* Kept in step with --muted */
   --accent-foreground: 185 12% 90%;
   --ring: 180 82% 56%;
-  --border: 185 12% 23%;            /* Dark teal border */
+  --border: 185 12% 32%;            /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 185 14% 18%;
-  --config-input-border: 185 12% 30%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 185 14% 14%;
+  --config-input-border: 185 12% 38%;
 
   /* Tab colors */
   --tab-active: 180 82% 56%;
@@ -342,7 +342,7 @@
   --accent: 215 24% 96%;            /* Light cool slate */
   --accent-foreground: 215 28% 32%;
   --ring: 215 28% 32%;
-  --border: 215 16% 89%;            /* Subtle cool border */
+  --border: 215 16% 84%;            /* Subtle cool border */
 
   /* Config panel input surfaces */
   --config-input-bg: 215 18% 94%;
@@ -376,25 +376,25 @@
 }
 
 .dark[data-color-scheme="slate"] {
-  --background: 215 22% 13%;        /* Deep cool slate background */
+  --background: 215 22% 13%;        /* Page — the darkest surface */
   --foreground: 215 20% 94%;
-  --card: 215 22% 15%;              /* Slightly lighter slate cards */
+  --card: 215 22% 19%;              /* Lifted a full step above the page */
   --card-foreground: 215 20% 94%;
-  --popover: 215 22% 18%;             /* Popover/dropdown background */
+  --popover: 215 22% 25%;           /* Floats above cards */
   --popover-foreground: 215 20% 94%;
-  --surface-modal: 215 22% 15%;     /* Modal background */
-  --muted: 215 18% 22%;             /* Deep cool slate */
-  --muted-foreground: 215 16% 65%;
+  --surface-modal: 215 22% 25%;     /* Modals sit at popover elevation */
+  --muted: 215 18% 24%;             /* Reads against the lifted card */
+  --muted-foreground: 215 16% 67%;  /* Raised to hold AA on the lifted surfaces */
   --primary: 215 82% 62%;           /* Bright slate blue on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 215 18% 22%;            /* Deep cool slate */
+  --accent: 215 18% 24%;            /* Kept in step with --muted */
   --accent-foreground: 215 20% 92%;
   --ring: 215 82% 62%;
-  --border: 215 16% 24%;            /* Dark cool border */
+  --border: 215 16% 33%;            /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 215 18% 18%;
-  --config-input-border: 215 16% 32%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 215 18% 15%;
+  --config-input-border: 215 16% 39%;
 
   /* Tab colors */
   --tab-active: 215 82% 62%;
@@ -447,7 +447,7 @@
   --accent: 158 48% 96%;            /* Light sage accent */
   --accent-foreground: 158 58% 28%;
   --ring: 158 58% 38%;
-  --border: 145 12% 88%;            /* Soft green border */
+  --border: 145 12% 84%;            /* Soft green border */
 
   /* Config panel input surfaces */
   --config-input-bg: 145 12% 94%;
@@ -481,25 +481,25 @@
 }
 
 .dark[data-color-scheme="forest"] {
-  --background: 145 18% 13%;        /* Deep forest background */
+  --background: 145 18% 13%;        /* Page — the darkest surface */
   --foreground: 145 12% 92%;
-  --card: 145 18% 15%;              /* Slightly lighter forest cards */
+  --card: 145 18% 19%;              /* Lifted a full step above the page */
   --card-foreground: 145 12% 92%;
-  --popover: 145 18% 18%;             /* Popover/dropdown background */
+  --popover: 145 18% 25%;           /* Floats above cards */
   --popover-foreground: 145 12% 92%;
-  --surface-modal: 145 18% 15%;     /* Modal background */
-  --muted: 145 14% 22%;             /* Deep sage-gray */
-  --muted-foreground: 145 12% 65%;
+  --surface-modal: 145 18% 25%;     /* Modals sit at popover elevation */
+  --muted: 145 14% 24%;             /* Reads against the lifted card */
+  --muted-foreground: 145 12% 69%;  /* Raised to hold AA on the lifted surfaces */
   --primary: 158 62% 56%;           /* Bright forest on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 145 14% 22%;            /* Deep sage-gray */
+  --accent: 145 14% 24%;            /* Kept in step with --muted */
   --accent-foreground: 145 12% 90%;
   --ring: 158 62% 56%;
-  --border: 145 12% 24%;            /* Dark green border */
+  --border: 145 12% 33%;            /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 145 14% 18%;
-  --config-input-border: 145 12% 30%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 145 14% 15%;
+  --config-input-border: 145 12% 39%;
 
   /* Tab colors */
   --tab-active: 158 62% 56%;
@@ -553,7 +553,7 @@
   --accent: 330 90% 96%;            /* Light pink accent */
   --accent-foreground: 330 85% 45%;
   --ring: 330 85% 55%;
-  --border: 330 15% 90%;            /* Soft pink border */
+  --border: 330 15% 85%;            /* Soft pink border */
 
   /* Config panel input surfaces */
   --config-input-bg: 330 20% 95%;
@@ -587,25 +587,25 @@
 }
 
 .dark[data-color-scheme="vibrant-pink"] {
-  --background: 330 20% 12%;        /* Deep pink-gray background */
+  --background: 330 20% 12%;        /* Page — the darkest surface */
   --foreground: 330 15% 92%;
-  --card: 330 20% 14%;              /* Slightly lighter pink cards */
+  --card: 330 20% 18%;              /* Lifted a full step above the page */
   --card-foreground: 330 15% 92%;
-  --popover: 330 20% 17%;             /* Popover/dropdown background */
+  --popover: 330 20% 24%;           /* Floats above cards */
   --popover-foreground: 330 15% 92%;
-  --surface-modal: 330 20% 14%;     /* Modal background */
-  --muted: 330 18% 20%;             /* Deep pink-gray */
+  --surface-modal: 330 20% 24%;     /* Modals sit at popover elevation */
+  --muted: 330 18% 23%;             /* Reads against the lifted card */
   --muted-foreground: 330 12% 65%;
   --primary: 330 80% 65%;           /* Bright pink on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 330 18% 20%;            /* Deep pink-gray */
+  --accent: 330 18% 23%;            /* Kept in step with --muted */
   --accent-foreground: 330 15% 90%;
   --ring: 330 80% 65%;
-  --border: 330 15% 24%;            /* Dark pink border */
+  --border: 330 15% 32%;            /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 330 20% 18%;
-  --config-input-border: 330 15% 30%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 330 18% 14%;
+  --config-input-border: 330 15% 38%;
 
   /* Tab colors */
   --tab-active: 330 80% 65%;
@@ -659,7 +659,7 @@
   --accent: 25 85% 96%;             /* Light orange accent */
   --accent-foreground: 25 95% 43%;
   --ring: 25 95% 53%;
-  --border: 25 20% 88%;             /* Soft orange border */
+  --border: 25 20% 84%;             /* Soft orange border */
 
   /* Config panel input surfaces */
   --config-input-bg: 25 25% 95%;
@@ -693,25 +693,25 @@
 }
 
 .dark[data-color-scheme="energetic-orange"] {
-  --background: 25 22% 12%;         /* Deep orange-gray background */
+  --background: 25 22% 12%;         /* Page — the darkest surface */
   --foreground: 25 15% 92%;
-  --card: 25 22% 14%;               /* Slightly lighter orange cards */
+  --card: 25 22% 18%;               /* Lifted a full step above the page */
   --card-foreground: 25 15% 92%;
-  --popover: 25 22% 17%;             /* Popover/dropdown background */
+  --popover: 25 22% 24%;            /* Floats above cards */
   --popover-foreground: 25 15% 92%;
-  --surface-modal: 25 22% 14%;      /* Modal background */
-  --muted: 25 20% 20%;              /* Deep orange-gray */
-  --muted-foreground: 25 12% 65%;
+  --surface-modal: 25 22% 24%;      /* Modals sit at popover elevation */
+  --muted: 25 20% 23%;              /* Reads against the lifted card */
+  --muted-foreground: 25 12% 66%;   /* Raised to hold AA on the lifted surfaces */
   --primary: 25 90% 60%;            /* Bright orange on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 25 20% 20%;             /* Deep orange-gray */
+  --accent: 25 20% 23%;             /* Kept in step with --muted */
   --accent-foreground: 25 15% 90%;
   --ring: 25 90% 60%;
-  --border: 25 18% 24%;             /* Dark orange border */
+  --border: 25 18% 32%;             /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 25 20% 20%;
-  --config-input-border: 25 18% 32%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 25 20% 14%;
+  --config-input-border: 25 18% 38%;
 
   /* Tab colors */
   --tab-active: 25 90% 60%;
@@ -765,7 +765,7 @@
   --accent: 0 90% 96%;              /* Light red accent */
   --accent-foreground: 0 84% 50%;
   --ring: 0 84% 60%;
-  --border: 0 18% 90%;              /* Soft red border */
+  --border: 0 18% 85%;              /* Soft red border */
 
   /* Config panel input surfaces */
   --config-input-bg: 0 20% 95%;
@@ -799,25 +799,25 @@
 }
 
 .dark[data-color-scheme="bold-red"] {
-  --background: 0 20% 12%;          /* Deep red-gray background */
+  --background: 0 20% 12%;          /* Page — the darkest surface */
   --foreground: 0 15% 92%;
-  --card: 0 20% 14%;                /* Slightly lighter red cards */
+  --card: 0 20% 18%;                /* Lifted a full step above the page */
   --card-foreground: 0 15% 92%;
-  --popover: 0 20% 17%;             /* Popover/dropdown background */
+  --popover: 0 20% 24%;             /* Floats above cards */
   --popover-foreground: 0 15% 92%;
-  --surface-modal: 0 20% 14%;       /* Modal background */
-  --muted: 0 18% 20%;               /* Deep red-gray */
+  --surface-modal: 0 20% 24%;       /* Modals sit at popover elevation */
+  --muted: 0 18% 23%;               /* Reads against the lifted card */
   --muted-foreground: 0 12% 65%;
   --primary: 0 78% 65%;             /* Bright red on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 0 18% 20%;              /* Deep red-gray */
+  --accent: 0 18% 23%;              /* Kept in step with --muted */
   --accent-foreground: 0 15% 90%;
   --ring: 0 78% 65%;
-  --border: 0 18% 24%;              /* Dark red border */
+  --border: 0 18% 32%;              /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 0 18% 20%;
-  --config-input-border: 0 18% 32%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 0 18% 14%;
+  --config-input-border: 0 18% 38%;
 
   /* Tab colors */
   --tab-active: 0 78% 65%;
@@ -871,7 +871,7 @@
   --accent: 270 80% 96%;            /* Light lavender accent */
   --accent-foreground: 270 85% 50%;
   --ring: 270 85% 60%;
-  --border: 270 15% 90%;            /* Soft purple border */
+  --border: 270 15% 85%;            /* Soft purple border */
 
   /* Config panel input surfaces */
   --config-input-bg: 270 20% 95%;
@@ -905,25 +905,25 @@
 }
 
 .dark[data-color-scheme="purple-classic"] {
-  --background: 270 25% 12%;        /* Deep purple-gray background */
+  --background: 270 25% 12%;        /* Page — the darkest surface */
   --foreground: 270 15% 92%;
-  --card: 270 25% 14%;              /* Slightly lighter purple cards */
+  --card: 270 25% 18%;              /* Lifted a full step above the page */
   --card-foreground: 270 15% 92%;
-  --popover: 270 25% 17%;             /* Popover/dropdown background */
+  --popover: 270 25% 24%;           /* Floats above cards */
   --popover-foreground: 270 15% 92%;
-  --surface-modal: 270 25% 14%;     /* Modal background */
-  --muted: 270 18% 20%;             /* Deep purple-gray */
+  --surface-modal: 270 25% 24%;     /* Modals sit at popover elevation */
+  --muted: 270 18% 23%;             /* Reads against the lifted card */
   --muted-foreground: 270 12% 65%;
   --primary: 270 80% 68%;           /* Bright purple on dark */
   --primary-foreground: 0 0% 100%;
-  --accent: 270 18% 20%;            /* Deep purple-gray */
+  --accent: 270 18% 23%;            /* Kept in step with --muted */
   --accent-foreground: 270 15% 90%;
   --ring: 270 80% 68%;
-  --border: 270 15% 24%;            /* Dark purple border */
+  --border: 270 15% 32%;            /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 270 18% 20%;
-  --config-input-border: 270 15% 32%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 270 18% 14%;
+  --config-input-border: 270 15% 38%;
 
   /* Tab colors */
   --tab-active: 270 80% 68%;
@@ -961,7 +961,7 @@
 */
 :root[data-color-scheme="pure-black"] {
   /* Core colors - True black with white accents */
-  --background: 0 0% 100%;            /* White background in light mode */
+  --background: 0 0% 97%;             /* Off-white page so white cards read as raised */
   --foreground: 0 0% 5%;
   --card: 0 0% 100%;                   /* White cards */
   --card-foreground: 0 0% 5%;
@@ -977,7 +977,7 @@
   --accent: 0 0% 96%;                  /* Light gray accent */
   --accent-foreground: 0 0% 9%;
   --ring: 0 0% 9%;
-  --border: 0 0% 90%;                  /* Light gray border */
+  --border: 0 0% 85%;                  /* Light gray border */
 
   /* Config panel input surfaces */
   --config-input-bg: 0 0% 96%;
@@ -1011,25 +1011,25 @@
 }
 
 .dark[data-color-scheme="pure-black"] {
-  --background: 0 0% 0%;              /* True black background */
+  --background: 0 0% 0%;              /* Stays true black — OLED is the point of this theme */
   --foreground: 0 0% 95%;
-  --card: 0 0% 4%;                    /* Very dark gray cards */
+  --card: 0 0% 10%;                   /* The whole lift happens here, never on the page */
   --card-foreground: 0 0% 95%;
-  --popover: 0 0% 6%;                 /* Popover/dropdown background */
+  --popover: 0 0% 16%;                /* Floats above cards */
   --popover-foreground: 0 0% 95%;
-  --surface-modal: 0 0% 4%;           /* Modal background */
-  --muted: 0 0% 10%;                  /* Dark gray for muted areas */
+  --surface-modal: 0 0% 16%;          /* Modals sit at popover elevation */
+  --muted: 0 0% 15%;                  /* Reads against the lifted card */
   --muted-foreground: 0 0% 65%;
   --primary: 0 0% 100%;               /* Pure white primary */
   --primary-foreground: 0 0% 0%;
-  --accent: 0 0% 10%;                 /* Dark gray accent */
+  --accent: 0 0% 15%;                 /* Kept in step with --muted */
   --accent-foreground: 0 0% 95%;
   --ring: 0 0% 100%;
-  --border: 0 0% 15%;                 /* Dark gray border */
+  --border: 0 0% 30%;                 /* Carries the card edge on its own */
 
-  /* Config panel input surfaces */
-  --config-input-bg: 0 0% 10%;
-  --config-input-border: 0 0% 28%;
+  /* Config panel input surfaces — recessed wells below the card */
+  --config-input-bg: 0 0% 6%;
+  --config-input-border: 0 0% 34%;
 
   /* Tab colors */
   --tab-active: 0 0% 100%;

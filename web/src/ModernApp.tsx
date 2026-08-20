@@ -592,15 +592,13 @@ function App() {
           return;
         }
 
-        // Priority 3: Close any open search modals
-        // Note: Search modals handle their own ESC key, but if they're open
-        // we should not stop streaming. Check all modal states.
-        if (showGlobalSearch || showFindReplace || showQuickFileOpen || showCommandPalette || showChatSearch) {
-          // Modals handle their own close via ESC
-          return;
-        }
-
-        // Priority 4: Find the active chat and pause it
+        // Priority 3: Find the active chat and pause it
+        //
+        // Modals no longer need checking here. An open modal puts the
+        // dispatcher in the `modal` context, where dismissModal shadows this
+        // handler entirely — so if we are running at all, there is no modal up.
+        // The old five-boolean check could only see ModernApp's own modals and
+        // paused the chat behind every other one.
         if (activeChatId) {
           const { pauseChat } =
             useChatStore.getState();
@@ -824,8 +822,22 @@ function App() {
         window.dispatchEvent(new CustomEvent("focus-chat-input"));
         window.dispatchEvent(new CustomEvent("open-slash-menu"));
       },
+      onDismissModal: () => {
+        // Modals that own their Escape (the shared ui/Modal, the command
+        // palette, the search overlays) close themselves on the same keydown.
+        // This entry exists so the `modal` context claims Escape at all and
+        // stopStreaming cannot fire behind them; closing ModernApp's own
+        // modals here covers the ones whose open state we hold.
+        closeAllModals();
+      },
       onDismissSlashMenu: () => {
         window.dispatchEvent(new CustomEvent("dismiss-slash-menu"));
+      },
+      onNextAttentionChat: () => {
+        const { navigateToNextAttention } = useChatNavigationStore.getState();
+        void navigateToNextAttention().then((found) => {
+          if (!found) toast.success("No chats need your attention");
+        });
       },
       onComposerNewline: () => {
         window.dispatchEvent(new CustomEvent("composer-insert-newline"));

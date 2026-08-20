@@ -312,6 +312,16 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     context: 'global',
     handler: 'onSwitchWorktree'
   },
+  nextAttentionChat: {
+    id: 'nextAttentionChat',
+    name: 'Next Chat Needing Attention',
+    description: 'Jump to the next chat waiting on you (approval, error, or unread)',
+    category: 'Chat Navigation',
+    defaultBinding: 'Cmd+K D',
+    defaultWebBinding: 'Cmd+K D',
+    context: 'global',
+    handler: 'onNextAttentionChat'
+  },
   switchProject: {
     id: 'switchProject',
     name: 'Switch Project',
@@ -592,6 +602,17 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     defaultWebBinding: 'Cmd+/',
     context: 'global',
     handler: 'onSlashCommands'
+  },
+  dismissModal: {
+    id: 'dismissModal',
+    name: 'Close Modal',
+    description: 'Close the open dialog or overlay',
+    category: 'Interface',
+    defaultBinding: 'Escape',
+    defaultWebBinding: 'Escape',
+    context: 'modal',
+    handler: 'onDismissModal',
+    allowInInput: true
   },
   dismissSlashMenu: {
     id: 'dismissSlashMenu',

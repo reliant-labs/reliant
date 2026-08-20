@@ -64,6 +64,7 @@ import {
 import {
   DaemonSize,
   DaemonStatus,
+  DaemonType,
   PortAccessMode,
   createEnvironment,
   deleteDaemon,
@@ -121,6 +122,30 @@ const statusDotVariant: Record<WsStatus, StatusDotVariant> = {
 
 function daemonStatus(d: Daemon): WsStatus {
   return statusFromEnum[d.status] ?? "pending";
+}
+
+function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
+  return d.daemonType === DaemonType.EXTERNAL;
+}
+
+// A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
+// name a person chose — it's what the control-plane falls back to when a
+// self-hosted daemon connects without registering one (see
+// control-plane/internal/natsio/daemon_event_consumer.go). Render something
+// readable instead: the hostname if we have one, else a short id-derived tag.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function looksLikeBareUuid(name: string): boolean {
+  return UUID_RE.test(name.trim());
+}
+
+export function daemonDisplayName(d: Pick<Daemon, "id" | "name" | "hostname">): string {
+  const name = d.name?.trim() ?? "";
+  const isPlaceholder = !name || name === d.id || looksLikeBareUuid(name);
+  if (!isPlaceholder) return name;
+  if (d.hostname?.trim()) return d.hostname.trim();
+  const shortId = (d.id || "").slice(0, 8);
+  return shortId ? `Self-hosted machine (${shortId})` : "Self-hosted machine";
 }
 
 // ── Size tiers (plan-gated) ─────────────────────────────────────────────────
@@ -377,9 +402,15 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
     onError: (e) => setActionError(describeError(e, "Failed to delete machine")),
   });
 
+  // The status filter applies globally across both groups (rather than one
+  // dropdown per group) — a user picking "Suspended" wants every suspended
+  // machine, cloud or self-hosted, and a second dropdown for a section that's
+  // often empty would be clutter without a real use case.
   const daemons = (daemonsQ.data ?? []).filter(
     (d) => statusFilter === DaemonStatus.UNSPECIFIED || d.status === statusFilter,
   );
+  const managedDaemons = daemons.filter((d) => !isExternalDaemon(d));
+  const selfHostedDaemons = daemons.filter((d) => isExternalDaemon(d));
 
   return (
     <div className="space-y-4">
@@ -439,63 +470,35 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
           }
         />
       ) : (
-        <Table>
-          <Thead>
-            <Tr>
-              <Th>Name</Th>
-              <Th>Status</Th>
-              <Th>Resources</Th>
-              <Th>Created</Th>
-              <Th className="text-right">Actions</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {daemons.map((d) => {
-              const status = daemonStatus(d);
-              const badge = statusBadge[status];
-              const isSuspended = d.status === DaemonStatus.SUSPENDED;
-              const resources =
-                [d.resources?.cpuRequest, d.resources?.memoryRequest, d.storageSize]
-                  .filter(Boolean)
-                  .join(" · ") || "—";
-              const busy = suspendMut.isPending || resumeMut.isPending;
-              return (
-                <Tr key={d.id}>
-                  <Td>
-                    <button
-                      type="button"
-                      onClick={() => onOpenDetail(d.id)}
-                      className="font-medium text-foreground hover:text-primary hover:underline"
-                    >
-                      {d.name}
-                    </button>
-                  </Td>
-                  <Td>
-                    <StatusDot variant={statusDotVariant[status]} label={badge.label} />
-                  </Td>
-                  <Td className="text-muted-foreground">{resources}</Td>
-                  <Td className="text-muted-foreground">{fmtTimestamp(d.createdAt)}</Td>
-                  <Td className="text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => (isSuspended ? resumeMut.mutate(d.id) : suspendMut.mutate(d.id))}
-                      >
-                        {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-                        {isSuspended ? "Resume" : "Suspend"}
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(d)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </Table>
+        <div className="space-y-6">
+          {managedDaemons.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Cloud machines
+              </h3>
+              <ManagedMachinesTable
+                daemons={managedDaemons}
+                onOpenDetail={onOpenDetail}
+                onDelete={setDeleteTarget}
+                onSuspend={(id) => suspendMut.mutate(id)}
+                onResume={(id) => resumeMut.mutate(id)}
+                busy={suspendMut.isPending || resumeMut.isPending}
+              />
+            </div>
+          )}
+          {selfHostedDaemons.length > 0 && (
+            <div className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Self-hosted machines
+              </h3>
+              <SelfHostedMachinesTable
+                daemons={selfHostedDaemons}
+                onOpenDetail={onOpenDetail}
+                onRemove={setDeleteTarget}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       <CreateEnvironmentModal
@@ -505,23 +508,192 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
         onCreated={() => { setCreateOpen(false); invalidate(); }}
       />
 
-      <Modal open={deleteTarget !== null} onClose={() => setDeleteTarget(null)} title="Delete Machine">
-        <p className="text-sm text-muted-foreground">
-          Are you sure you want to delete <span className="font-semibold text-foreground">{deleteTarget?.name}</span>?
-          This action cannot be undone.
-        </p>
-        <div className="mt-6 flex justify-end gap-3">
-          <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
-          <Button
-            variant="danger"
-            isLoading={deleteMut.isPending}
-            onClick={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
-          >
-            {deleteMut.isPending ? "Deleting…" : "Delete"}
-          </Button>
-        </div>
-      </Modal>
+      <RemoveMachineModal
+        target={deleteTarget}
+        isPending={deleteMut.isPending}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => deleteTarget && deleteMut.mutate(deleteTarget.id)}
+      />
     </div>
+  );
+}
+
+function ManagedMachinesTable({
+  daemons,
+  onOpenDetail,
+  onDelete,
+  onSuspend,
+  onResume,
+  busy,
+}: {
+  daemons: Daemon[];
+  onOpenDetail: (id: string) => void;
+  onDelete: (d: Daemon) => void;
+  onSuspend: (id: string) => void;
+  onResume: (id: string) => void;
+  busy: boolean;
+}) {
+  return (
+    <Table>
+      <Thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Status</Th>
+          <Th>Resources</Th>
+          <Th>Created</Th>
+          <Th className="text-right">Actions</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {daemons.map((d) => {
+          const status = daemonStatus(d);
+          const badge = statusBadge[status];
+          const isSuspended = d.status === DaemonStatus.SUSPENDED;
+          const resources =
+            [d.resources?.cpuRequest, d.resources?.memoryRequest, d.storageSize]
+              .filter(Boolean)
+              .join(" · ") || "—";
+          return (
+            <Tr key={d.id}>
+              <Td>
+                <button
+                  type="button"
+                  onClick={() => onOpenDetail(d.id)}
+                  className="font-medium text-foreground hover:text-primary hover:underline"
+                >
+                  {daemonDisplayName(d)}
+                </button>
+              </Td>
+              <Td>
+                <StatusDot variant={statusDotVariant[status]} label={badge.label} />
+              </Td>
+              <Td className="text-muted-foreground">{resources}</Td>
+              <Td className="text-muted-foreground">{fmtTimestamp(d.createdAt)}</Td>
+              <Td className="text-right">
+                <div className="inline-flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => (isSuspended ? onResume(d.id) : onSuspend(d.id))}
+                  >
+                    {isSuspended ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+                    {isSuspended ? "Resume" : "Suspend"}
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => onDelete(d)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </Td>
+            </Tr>
+          );
+        })}
+      </Tbody>
+    </Table>
+  );
+}
+
+function SelfHostedMachinesTable({
+  daemons,
+  onOpenDetail,
+  onRemove,
+}: {
+  daemons: Daemon[];
+  onOpenDetail: (id: string) => void;
+  onRemove: (d: Daemon) => void;
+}) {
+  return (
+    <Table>
+      <Thead>
+        <Tr>
+          <Th>Name</Th>
+          <Th>Status</Th>
+          <Th>Platform</Th>
+          <Th>Last seen</Th>
+          <Th className="text-right">Actions</Th>
+        </Tr>
+      </Thead>
+      <Tbody>
+        {daemons.map((d) => {
+          const status = daemonStatus(d);
+          const badge = statusBadge[status];
+          const connected = d.status === DaemonStatus.ACTIVE;
+          const lastSeen = connected
+            ? "Connected now"
+            : fmtTimestamp(d.disconnectedAt ?? d.lastHeartbeat);
+          return (
+            <Tr key={d.id}>
+              <Td>
+                <button
+                  type="button"
+                  onClick={() => onOpenDetail(d.id)}
+                  className="font-medium text-foreground hover:text-primary hover:underline"
+                >
+                  {daemonDisplayName(d)}
+                </button>
+              </Td>
+              <Td>
+                <StatusDot variant={statusDotVariant[status]} label={badge.label} />
+              </Td>
+              <Td className="text-muted-foreground">{d.platform || "—"}</Td>
+              <Td className="text-muted-foreground">{lastSeen}</Td>
+              <Td className="text-right">
+                <Button variant="ghost" size="sm" onClick={() => onRemove(d)}>
+                  <Trash2 className="h-4 w-4 text-destructive" /> Remove
+                </Button>
+              </Td>
+            </Tr>
+          );
+        })}
+      </Tbody>
+    </Table>
+  );
+}
+
+// Removing a self-hosted machine's row and deleting a cloud machine are
+// different actions in the user's mental model — one tears down real
+// infrastructure, the other just forgets a laptop that will reappear the
+// next time it connects (UpsertExternalDaemonConnected un-deletes on
+// reconnect). Same modal, type-conditional copy.
+function RemoveMachineModal({
+  target,
+  isPending,
+  onClose,
+  onConfirm,
+}: {
+  target: Daemon | null;
+  isPending: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const external = target ? isExternalDaemon(target) : false;
+  const title = external ? "Forget This Machine" : "Delete Machine";
+  const confirmLabel = external ? "Forget" : "Delete";
+  const confirmingLabel = external ? "Forgetting…" : "Deleting…";
+
+  return (
+    <Modal open={target !== null} onClose={onClose} title={title}>
+      <p className="text-sm text-muted-foreground">
+        {external ? (
+          <>
+            Remove <span className="font-semibold text-foreground">{target && daemonDisplayName(target)}</span> from
+            this list? This only removes the connection record here — it does not affect the actual machine, and it
+            will reappear if that machine reconnects.
+          </>
+        ) : (
+          <>
+            Are you sure you want to delete{" "}
+            <span className="font-semibold text-foreground">{target?.name}</span>? This action cannot be undone.
+          </>
+        )}
+      </p>
+      <div className="mt-6 flex justify-end gap-3">
+        <Button variant="outline" onClick={onClose}>Cancel</Button>
+        <Button variant="danger" isLoading={isPending} onClick={onConfirm}>
+          {isPending ? confirmingLabel : confirmLabel}
+        </Button>
+      </div>
+    </Modal>
   );
 }
 
@@ -709,6 +881,7 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
   const connected = daemon?.status === DaemonStatus.ACTIVE;
   const isSuspended = daemon?.status === DaemonStatus.SUSPENDED;
   const busy = suspendMut.isPending || resumeMut.isPending || deleteMut.isPending;
+  const external = daemon ? isExternalDaemon(daemon) : false;
 
   return (
     <div className="space-y-6">
@@ -730,16 +903,18 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
         <>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex flex-wrap items-center gap-3">
-              <h2 className="text-xl font-semibold text-foreground">{daemon.name}</h2>
+              <h2 className="text-xl font-semibold text-foreground">{daemonDisplayName(daemon)}</h2>
               <Badge label={badge.label} variant={badge.variant} />
               <Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" disabled={busy} onClick={() => (isSuspended ? resumeMut.mutate() : suspendMut.mutate())}>
-                {isSuspended ? <><Play className="h-4 w-4" /> Resume</> : <><Pause className="h-4 w-4" /> Suspend</>}
-              </Button>
+              {!external && (
+                <Button variant="outline" disabled={busy} onClick={() => (isSuspended ? resumeMut.mutate() : suspendMut.mutate())}>
+                  {isSuspended ? <><Play className="h-4 w-4" /> Resume</> : <><Pause className="h-4 w-4" /> Suspend</>}
+                </Button>
+              )}
               <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4" /> Delete
+                <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
               </Button>
             </div>
           </div>
@@ -751,8 +926,17 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
               <CardHeader><CardTitle className="inline-flex items-center gap-2"><Server className="h-4 w-4 text-muted-foreground" /> Overview</CardTitle></CardHeader>
               <CardContent>
                 <dl>
-                  <InfoRow label="Size" value={sizeLabel[daemon.size] ?? "Custom"} />
-                  <InfoRow label="Storage" value={daemon.storageSize} />
+                  {external ? (
+                    <>
+                      <InfoRow label="Hostname" value={daemon.hostname} />
+                      <InfoRow label="Platform" value={daemon.platform} />
+                    </>
+                  ) : (
+                    <>
+                      <InfoRow label="Size" value={sizeLabel[daemon.size] ?? "Custom"} />
+                      <InfoRow label="Storage" value={daemon.storageSize} />
+                    </>
+                  )}
                   <InfoRow label="Created" value={fmtTimestamp(daemon.createdAt)} />
                   <InfoRow label="Updated" value={fmtTimestamp(daemon.updatedAt)} />
                 </dl>
@@ -764,7 +948,7 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
                 <dl>
                   <InfoRow label="Connection" value={<Badge label={connected ? "Connected" : "Disconnected"} variant={connected ? "success" : "neutral"} />} />
                   <InfoRow label="Connected at" value={fmtTimestamp(daemon.connectedAt)} />
-                  <InfoRow label="Idle timeout" value={daemon.idleTimeout || "Not set"} />
+                  {!external && <InfoRow label="Idle timeout" value={daemon.idleTimeout || "Not set"} />}
                   <InfoRow label="Last status" value={daemon.lastStatusMessage} />
                 </dl>
               </CardContent>
@@ -773,18 +957,12 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
 
           <PortAccessPanel daemonId={daemon.id} workspaceBaseDomain={workspaceBaseDomain} />
 
-          <Modal open={deleteOpen} onClose={() => setDeleteOpen(false)} title="Delete Machine">
-            <p className="text-sm text-muted-foreground">
-              Are you sure you want to delete <span className="font-semibold text-foreground">{daemon.name}</span>?
-              This action cannot be undone.
-            </p>
-            <div className="mt-6 flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setDeleteOpen(false)}>Cancel</Button>
-              <Button variant="danger" isLoading={deleteMut.isPending} onClick={() => deleteMut.mutate()}>
-                {deleteMut.isPending ? "Deleting…" : "Delete"}
-              </Button>
-            </div>
-          </Modal>
+          <RemoveMachineModal
+            target={deleteOpen ? daemon : null}
+            isPending={deleteMut.isPending}
+            onClose={() => setDeleteOpen(false)}
+            onConfirm={() => deleteMut.mutate()}
+          />
         </>
       )}
     </div>

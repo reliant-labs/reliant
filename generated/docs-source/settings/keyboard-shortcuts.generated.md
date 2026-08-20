@@ -60,6 +60,7 @@ Where the **Browser** column is blank the shortcut is the same on both.
 | `Cmd+Shift+Up` |  | Extend Selection Up |
 | `Cmd+Shift+Up` |  | Extend Selection Up (Composer) |
 | `Cmd+Shift+Down` |  | Next Chat |
+| `Cmd+K D` |  | Next Chat Needing Attention |
 | `Cmd+Shift+Up` |  | Previous Chat |
 | `Cmd+K B` |  | Switch Branch Chat |
 | `Cmd+E` |  | Switch Chat |
@@ -104,6 +105,7 @@ Where the **Browser** column is blank the shortcut is the same on both.
 
 | Desktop | Browser | Action |
 |---------|---------|--------|
+| `Escape` |  | Close Modal |
 | `Cmd+Alt+B` |  | Toggle Chat Sidebar |
 | `Cmd+B` |  | Toggle Right Sidebar |
 | `Cmd+,` |  | Toggle Settings |

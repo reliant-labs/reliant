@@ -326,6 +326,19 @@ shortcuts:
     binding: Cmd+K B
     handler: onSwitchWorktree
 
+  # Triage key: with a dozen chats running, the question is never "what is the
+  # next chat" but "which one is waiting on me". Cycles only the chats that are
+  # blocked on the user — awaiting approval, errored, or unread — in the same
+  # order the sidebar shows them, so repeated presses walk the queue and wrap.
+  # Cmd+K D ("do next") rather than a bare chord: it is a deliberate triage
+  # move, and the Cmd+K family is where navigation already lives.
+  - id: nextAttentionChat
+    name: Next Chat Needing Attention
+    description: Jump to the next chat waiting on you (approval, error, or unread)
+    category: Chat Navigation
+    binding: Cmd+K D
+    handler: onNextAttentionChat
+
   # ==================================
   # Project Navigation
   # ==================================
@@ -587,6 +600,26 @@ shortcuts:
     category: Chat Control
     binding: Cmd+/
     handler: onSlashCommands
+
+  # Escape must close the modal that is open, not pause the chat behind it.
+  # Same shape as dismissSlashMenu below: registered in the `modal` context so
+  # it SHADOWS stopStreaming while any modal is up, and disappears the moment
+  # the last one closes.
+  #
+  # The regression this fixes: stopStreaming tried to detect open modals itself
+  # by reading five `show*` booleans and bailing out. That could only ever know
+  # about the modals ModernApp happens to own, so every other modal — the shared
+  # ui/Modal, the image preview, the prompt picker — fell through to "pause the
+  # chat". Detecting the modal from the DOM covers all of them at once, and the
+  # `data-modal-open` marker that powers it already existed.
+  - id: dismissModal
+    name: Close Modal
+    description: Close the open dialog or overlay
+    category: Interface
+    binding: Escape
+    context: modal
+    allow_in_input: true
+    handler: onDismissModal
 
   # Escape must close the slash menu rather than stopping the AI response.
   # Registered in the `slash-menu` context so it SHADOWS stopStreaming while the

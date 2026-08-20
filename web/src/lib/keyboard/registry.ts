@@ -8,7 +8,7 @@
  * Resolution is pure and synchronous so it can be unit-tested without a DOM.
  */
 
-import { isSequence, sequencePrefix } from "./chord";
+import { isSequence, sequencePrefix, stripHeldModifiers } from "./chord";
 import { contextRank, isTextEntryContext } from "./contexts";
 
 export interface ResolvedShortcut {
@@ -84,7 +84,10 @@ export class ShortcutRegistry {
     activeContexts: readonly string[],
     pending = "",
   ): ResolveResult {
-    const lookup = pending ? `${pending} ${chord}` : chord;
+    // A modifier still held from the prefix is not part of the second chord —
+    // see stripHeldModifiers for why Cmd+K then Cmd+G must reach `meta+K G`.
+    const completion = pending ? stripHeldModifiers(chord, pending) : chord;
+    const lookup = pending ? `${pending} ${completion}` : chord;
     const candidates = this.byBinding.get(lookup);
 
     if (candidates) {

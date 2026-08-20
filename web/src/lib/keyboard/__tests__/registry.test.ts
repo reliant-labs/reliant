@@ -116,6 +116,26 @@ describe("ShortcutRegistry.resolve", () => {
       const result = registry.resolve("C", ["chat-input", "global"], "meta+K");
       expect(result.kind).toBe("match");
     });
+
+    it("completes when the user keeps Cmd held for the second key", () => {
+      // Cmd+K then Cmd+C. Holding the modifier through the sequence is how
+      // most people type it (and what VS Code accepts), but it arrives as
+      // "meta+C" — which matched nothing, so every Cmd+K binding appeared
+      // dead unless the user released Cmd first.
+      const result = registry.resolve("meta+C", ["global"], "meta+K");
+      expect(result.kind).toBe("match");
+      expect(result.shortcut?.id).toBe("gotoChats");
+    });
+
+    it("does not invent a match from an unrelated held modifier", () => {
+      // Only modifiers carried over FROM the prefix are dropped. Alt was never
+      // part of Cmd+K, so the user meant something else and this stays unbound.
+      expect(registry.resolve("alt+C", ["global"], "meta+K").kind).toBe("none");
+    });
+
+    it("keeps a held prefix modifier from resurrecting an unknown key", () => {
+      expect(registry.resolve("meta+Z", ["global"], "meta+K").kind).toBe("none");
+    });
   });
 
   it("finds shortcuts that shadow each other in the same context", () => {

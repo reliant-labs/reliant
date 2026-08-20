@@ -185,6 +185,53 @@ export function isSequence(binding: string): boolean {
   return binding.includes(" ");
 }
 
+/** Modifier tokens in the canonical order they are serialized in. */
+const MODIFIER_TOKENS = ["ctrl", "meta", "shift", "alt"] as const;
+
+/**
+ * Split a canonical chord into its modifiers and its key.
+ *
+ * Scans in canonical order rather than splitting on "+", so a chord whose key
+ * IS "+" ("meta++") survives the round trip.
+ */
+function splitChord(chord: string): { mods: string[]; key: string } {
+  const mods: string[] = [];
+  let rest = chord;
+
+  for (const mod of MODIFIER_TOKENS) {
+    if (rest.startsWith(`${mod}+`)) {
+      mods.push(mod);
+      rest = rest.slice(mod.length + 1);
+    }
+  }
+
+  return { mods, key: rest };
+}
+
+/**
+ * Drop modifiers the user is still holding down from the sequence prefix.
+ *
+ * `Cmd+K G` gets typed two ways: release Cmd before pressing G, or keep Cmd
+ * held and press G (the muscle memory every VS Code user brings with them).
+ * The held form arrives as `meta+G`, which matches no binding, so the sequence
+ * died silently and the whole Cmd+K family looked broken.
+ *
+ * Once a prefix is armed the next keystroke belongs to us alone, so a modifier
+ * carried over from the prefix is noise rather than intent. Only modifiers that
+ * were part of the prefix are dropped — a Shift the user added themselves is
+ * still theirs, so a future `Cmd+K Shift+X` stays distinct.
+ */
+export function stripHeldModifiers(chord: string, prefix: string): string {
+  const held = new Set(splitChord(prefix).mods);
+  if (held.size === 0) return chord;
+
+  const { mods, key } = splitChord(chord);
+  const kept = mods.filter((mod) => !held.has(mod));
+  if (kept.length === mods.length) return chord;
+
+  return [...kept, key].join("+");
+}
+
 /** The first chord of a canonical sequence — the prefix that opens it. */
 export function sequencePrefix(binding: string): string {
   return binding.split(" ")[0];

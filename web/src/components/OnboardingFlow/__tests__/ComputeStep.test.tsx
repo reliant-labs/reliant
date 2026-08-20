@@ -158,6 +158,15 @@ vi.mock("@/lib/analytics", () => ({
   trackEvent: vi.fn(),
 }));
 
+// "Set up billing" navigates via TanStack Router, which has no router context
+// in this render. Where it SENDS people (including the anonymous-user detour)
+// is covered by useGoToBilling's own tests; here we only care that the control
+// is offered and does not provision a machine.
+const mockGoToBilling = vi.fn();
+vi.mock("@/hooks/useGoToBilling", () => ({
+  useGoToBilling: () => mockGoToBilling,
+}));
+
 // Capabilities flag controls whether the cloud option renders; force it on
 // so the form's "Reliant Cloud" CTA is unambiguously present when we expect
 // the form to be visible.
@@ -331,7 +340,18 @@ describe("ComputeStep loading gate", () => {
 });
 
 describe("ComputeStep cloud eligibility + coupon redemption", () => {
-  it("disables Start cloud daemon and shows the new copy (not the old wallet-credit string) when ineligible", () => {
+  // THE USER'S REPORT: "there's this 'start daemon' button, but it will always
+  // be grayed out because a user never has billing."
+  //
+  // It really was ALWAYS grey for a new account: the signup compute auto-grant
+  // is gone, so every new user resolves to NO_SUBSCRIPTION and lands here
+  // ineligible. The card's most prominent control was one that could never be
+  // clicked, with the two that fix it demoted to links underneath.
+  //
+  // So the contract is now absence, not disabled-ness: when the user cannot
+  // start a machine there is no start button on the screen at all, and the
+  // coupon and billing actions are the card's primary controls.
+  it("omits the start button entirely when ineligible, and promotes coupon + billing instead", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "No compute plan yet",
@@ -343,15 +363,40 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("No compute plan yet")).toBeInTheDocument();
     expect(
       screen.queryByText(/No cloud credits available/i),
     ).not.toBeInTheDocument();
+
+    // The two controls that can actually change the user's state are present.
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),
-    ).toBeInTheDocument();
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", { name: /Set up billing/i }),
+    ).toBeEnabled();
+  });
+
+  // The card must never present a control the user cannot use. Absence of the
+  // start button is the fix for the reported grey button, so it is worth
+  // pinning that NOTHING on the cloud card is disabled in this state — a
+  // future disabled affordance here would recreate the same dead end.
+  it("leaves no disabled control on the card when ineligible", () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    renderComputeStep({ daemons: [], loading: false });
+
+    for (const button of screen.getAllByRole("button")) {
+      expect(button).toBeEnabled();
+    }
   });
 
   it("enables Start cloud daemon when eligible", () => {
@@ -405,7 +450,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     expect(mockRefetchCloudEligibility).toHaveBeenCalled();
   });
 
-  it("redeem failure shows the server's message and the button stays disabled", async () => {
+  it("redeem failure shows the server's message and no start button appears", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "No compute plan yet",
@@ -429,9 +474,11 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       expect(screen.getByText("Unknown coupon code.")).toBeInTheDocument();
     });
     expect(mockRefetchCloudEligibility).not.toHaveBeenCalled();
+    // A failed redemption leaves the user ineligible, so the start button must
+    // not have appeared.
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
-    ).toBeDisabled();
+      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+    ).not.toBeInTheDocument();
   });
   // REGRESSION: the dev bypass (`getIsDev() ? true : cloudEligible`) enabled
   // this button for an unfunded user, so the click ran the whole
@@ -441,7 +488,17 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   //
   // Asserting on the mutation rather than only on `disabled` is the point:
   // `disabled` is a rendering concern, and the bug was that the HANDLER ran.
-  it("clicking Start while ineligible never starts provisioning", async () => {
+  //
+  // The guarantee is now structural rather than a `disabled` attribute: while
+  // the user is ineligible there is no start control in the tree, so there is
+  // no element a stale render, a keyboard activation, or devtools can activate
+  // to reach provisioning. (`handleCloud` keeps its own `if (!eligible)`
+  // guard as defense in depth; it is simply no longer reachable from the UI in
+  // this state, which is the stronger position.)
+  //
+  // Asserting on the MUTATIONS, not just on the absent button, is the point:
+  // the original bug was that the HANDLER ran.
+  it("clicking around while ineligible never starts provisioning", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "Your free trial has ended",
@@ -452,12 +509,16 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     renderComputeStep({ daemons: [], loading: false });
 
-    const start = screen.getByRole("button", { name: /Start cloud daemon/i });
-    expect(start).toBeDisabled();
+    expect(
+      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+    ).not.toBeInTheDocument();
 
-    // Fire the handler directly, bypassing the disabled attribute the way a
-    // stale render or a keyboard activation racing a refetch would.
-    fireEvent.click(start);
+    // Click every control the blocked card does offer. None of them may
+    // provision a machine — the only paths out are the coupon form and
+    // billing navigation.
+    for (const button of screen.getAllByRole("button")) {
+      fireEvent.click(button);
+    }
     await act(async () => {
       await Promise.resolve();
     });
@@ -621,7 +682,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   // An ineligible user must always get BOTH ways out: the billing link and the
   // coupon field. The billing block used to be gated on `reason` being a
   // non-empty string, so an unrecognised reason hid the only escape route.
-  it("ineligible => shows the billing link AND the coupon field, even with no reason text", () => {
+  it("ineligible => shows the billing action AND the coupon field, even with no reason text", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: null, // server sent a reason this build has no copy for
@@ -633,9 +694,11 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
-    ).toBeDisabled();
-    expect(screen.getByRole("button", { name: /View plans/i })).toBeInTheDocument();
+      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Set up billing/i }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),
     ).toBeInTheDocument();

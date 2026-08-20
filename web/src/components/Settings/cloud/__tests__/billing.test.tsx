@@ -30,7 +30,30 @@ const mutation = () => ({
 // is required because `vi.mock`'s factory is hoisted above normal `const`s.
 const usageState = vi.hoisted(() => ({ current: undefined as unknown }))
 
+// Only `redeemCoupon` is replaced; the rest of the service module (notably the
+// `RedeemedCouponKind` re-export and the `reliantAIAvailable` flag) stays real,
+// so the mock cannot drift from the module's actual shape.
+const couponState = vi.hoisted(() => ({ redeem: vi.fn() }))
+
+vi.mock('@/services/controlPlane/reliantAI', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>()
+  return { ...actual, redeemCoupon: (code: string) => couponState.redeem(code) }
+})
+
 vi.mock('@/hooks/useCloudBillingQueries', () => ({
+  // Real object, not a stub: `useRedeemCoupon` (from the OTHER hook module,
+  // which is not mocked) dereferences these keys in its own onSuccess to
+  // invalidate the billing reads. Omitting them makes redemption throw before
+  // the form's success handler ever runs.
+  cloudBillingKeys: {
+    all: ['cloud-billing'],
+    computeSubscription: ['cloud-billing', 'compute-subscription'],
+    walletOverview: ['cloud-billing', 'wallet-overview'],
+    computeUsage: (period: string) => ['cloud-billing', 'compute-usage', period],
+    plans: ['cloud-billing', 'plans'],
+    invoices: ['cloud-billing', 'invoices'],
+    billingEmail: ['cloud-billing', 'billing-email'],
+  },
   useComputeSubscription: () => query(undefined),
   useWalletOverview: () => query(undefined),
   useComputeUsage: () => query(usageState.current),
@@ -44,6 +67,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useUpdateBillingEmail: () => mutation(),
 }))
 
+import { RedeemedCouponKind } from '@/gen/controlplane/v1/public/billing_service_pb'
 import { BillingSection } from '@/components/Settings/cloud/billing'
 
 function renderSection() {
@@ -147,6 +171,98 @@ describe('BillingSection', () => {
       fireEvent.click(screen.getByRole('button', { name: /^usage$/i }))
 
       expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
+    })
+  })
+
+  // The user's report was "not sure if there's a place to add coupon codes?"
+  // — the field existed but only behind a "Have a coupon code?" disclosure
+  // inside a card about usage. These tests pin the fix: the input is on screen
+  // with nothing to click first, and one box handles BOTH grant kinds.
+  describe('coupon redemption', () => {
+    beforeEach(() => {
+      couponState.redeem.mockReset()
+    })
+
+    it('shows the coupon input on the overview tab without clicking a disclosure', () => {
+      renderSection()
+
+      expect(screen.getByLabelText(/coupon code/i)).toBeInTheDocument()
+      expect(
+        screen.getByRole('button', { name: /^redeem$/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: /have a coupon code/i }),
+      ).not.toBeInTheDocument()
+    })
+
+    it('explains that one code covers either credit or machine minutes', () => {
+      renderSection()
+
+      expect(
+        screen.getByText(/add account credit or machine minutes/i),
+      ).toBeInTheDocument()
+    })
+
+    it('reports a wallet-credit redemption in dollars', async () => {
+      couponState.redeem.mockResolvedValue({
+        amountCents: 2500,
+        code: 'WELCOME25',
+        newBalanceCents: 2500,
+        kind: RedeemedCouponKind.WALLET_CREDIT,
+        computeMinutes: 0,
+        newComputeMinutesRemaining: 0,
+      })
+      renderSection()
+
+      fireEvent.change(screen.getByLabelText(/coupon code/i), {
+        target: { value: 'welcome25' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
+
+      expect(
+        await screen.findByText(/added \$25\.00 to your balance/i),
+      ).toBeInTheDocument()
+      expect(couponState.redeem).toHaveBeenCalledWith('welcome25')
+    })
+
+    it('reports a compute-minutes redemption in machine minutes, from the same box', async () => {
+      couponState.redeem.mockResolvedValue({
+        amountCents: 0,
+        code: 'MACHINE120',
+        newBalanceCents: 0,
+        kind: RedeemedCouponKind.COMPUTE_MINUTES,
+        computeMinutes: 120,
+        newComputeMinutesRemaining: 180,
+      })
+      renderSection()
+
+      fireEvent.change(screen.getByLabelText(/coupon code/i), {
+        target: { value: 'MACHINE120' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
+
+      expect(
+        await screen.findByText(/added 120 machine minutes \(2 hours\)/i),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText(/180 machine minutes \(3 hours\) available/i),
+      ).toBeInTheDocument()
+    })
+
+    it("surfaces the server's own message when a code is rejected", async () => {
+      couponState.redeem.mockRejectedValue(
+        new Error('[not_found] That coupon code does not exist.'),
+      )
+      renderSection()
+
+      fireEvent.change(screen.getByLabelText(/coupon code/i), {
+        target: { value: 'nope' },
+      })
+      fireEvent.click(screen.getByRole('button', { name: /^redeem$/i }))
+
+      expect(
+        await screen.findByText('That coupon code does not exist.'),
+      ).toBeInTheDocument()
     })
   })
 })

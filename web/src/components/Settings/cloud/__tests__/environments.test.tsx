@@ -64,6 +64,7 @@ vi.mock('@/services/controlPlane/environments', () => ({
     DISCONNECTED: 5,
   },
   DaemonSize: { UNSPECIFIED: 0, SMALL: 1, MEDIUM: 2, LARGE: 3, XL: 4 },
+  DaemonType: { UNSPECIFIED: 0, MANAGED: 1, EXTERNAL: 2 },
   PortAccessMode: { UNSPECIFIED: 0, PUBLIC: 1, AUTHENTICATED: 2, TOKEN: 3 },
   describeError: (_e: unknown, fallback = 'error') => fallback,
   // environments.tsx calls this at module scope to build its query-key table,
@@ -84,7 +85,7 @@ vi.mock('@/services/controlPlane/environments', () => ({
   revokeDaemonToken: vi.fn(),
 }))
 
-import { EnvironmentsSection } from '@/components/Settings/cloud/environments'
+import { EnvironmentsSection, daemonDisplayName } from '@/components/Settings/cloud/environments'
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -155,5 +156,113 @@ describe('EnvironmentsSection', () => {
         name: /run reliant on your own machine/i,
       }),
     ).toBeInTheDocument()
+  })
+
+  describe('managed vs self-hosted grouping', () => {
+    const managedDaemon = {
+      id: 'dd67e516-d02c-49d0-8210-8749022aba61',
+      name: 'onboarding-daemon',
+      daemonType: 1, // MANAGED
+      status: 2, // ACTIVE
+      resources: { cpuRequest: '2', cpuLimit: '2', memoryRequest: '4Gi', memoryLimit: '4Gi' },
+      storageSize: '20Gi',
+      hostname: '',
+      platform: '',
+      size: 2,
+      idleTimeout: '30m',
+    }
+    const externalDaemon = {
+      id: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+      name: '2a76a273-f04d-4a8a-8391-864ad4e018f1', // UUID fallback name, as seen in prod
+      daemonType: 2, // EXTERNAL
+      status: 2, // ACTIVE
+      resources: undefined,
+      storageSize: '',
+      hostname: '',
+      platform: 'darwin',
+      size: 2, // invented by the backend fallback; must not be shown
+      idleTimeout: '',
+    }
+
+    it('renders managed and self-hosted machines in separate groups', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon, externalDaemon] })
+      renderSection()
+
+      expect(await screen.findByText('Cloud machines')).toBeInTheDocument()
+      expect(screen.getByText('Self-hosted machines')).toBeInTheDocument()
+
+      // Managed row keeps its real name.
+      expect(screen.getByText('onboarding-daemon')).toBeInTheDocument()
+      // External row gets the readable fallback, not the raw UUID.
+      expect(screen.queryByText('2a76a273-f04d-4a8a-8391-864ad4e018f1')).not.toBeInTheDocument()
+      expect(screen.getByText(/self-hosted machine \(2a76a273\)/i)).toBeInTheDocument()
+    })
+
+    it('shows no size/resources column and no Suspend control for self-hosted machines', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon, externalDaemon] })
+      renderSection()
+
+      await screen.findByText('Self-hosted machines')
+
+      // Managed table still has a Resources column and a Suspend action.
+      expect(screen.getByRole('columnheader', { name: /resources/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /suspend/i })).toBeInTheDocument()
+
+      // Self-hosted table shows Platform instead, and only ONE Resources
+      // column exists in the document (the managed table's) — the
+      // self-hosted table does not add a second one.
+      expect(screen.getByRole('columnheader', { name: /platform/i })).toBeInTheDocument()
+      expect(screen.getAllByRole('columnheader', { name: /^resources$/i })).toHaveLength(1)
+      expect(screen.getByText('darwin')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument()
+      // Suspend appears exactly once — on the managed row, not the self-hosted one.
+      expect(screen.getAllByRole('button', { name: /suspend/i })).toHaveLength(1)
+    })
+
+    it('omits an empty group instead of rendering an empty table', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
+      renderSection()
+
+      expect(await screen.findByText('Cloud machines')).toBeInTheDocument()
+      expect(screen.queryByText('Self-hosted machines')).not.toBeInTheDocument()
+    })
+  })
+
+  describe('daemonDisplayName', () => {
+    it('keeps a real, human-chosen name as-is', () => {
+      expect(
+        daemonDisplayName({ id: 'dd67e516-d02c-49d0-8210-8749022aba61', name: 'onboarding-daemon', hostname: '' }),
+      ).toBe('onboarding-daemon')
+    })
+
+    it('falls back to the hostname when the name is a bare UUID', () => {
+      expect(
+        daemonDisplayName({
+          id: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+          name: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+          hostname: "seans-macbook",
+        }),
+      ).toBe('seans-macbook')
+    })
+
+    it('falls back to a short id label when name and hostname are both unusable', () => {
+      expect(
+        daemonDisplayName({
+          id: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+          name: '2a76a273-f04d-4a8a-8391-864ad4e018f1',
+          hostname: '',
+        }),
+      ).toBe('Self-hosted machine (2a76a273)')
+    })
+
+    it('falls back when name equals id but is not UUID-shaped', () => {
+      expect(daemonDisplayName({ id: 'abc123', name: 'abc123', hostname: '' })).toBe(
+        'Self-hosted machine (abc123)',
+      )
+    })
+
+    it('falls back when the name is empty', () => {
+      expect(daemonDisplayName({ id: 'abc123', name: '', hostname: 'my-laptop' })).toBe('my-laptop')
+    })
   })
 })
