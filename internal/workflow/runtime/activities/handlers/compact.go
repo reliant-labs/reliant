@@ -32,6 +32,12 @@ import (
 type GenerateTitleInput struct {
 	ChatID       string `json:"chat_id" reliant:"-"`
 	FirstMessage string `json:"first_message"`
+
+	// UseFallback writes the deterministic truncated-first-message title
+	// instead of calling the LLM. Only GenerateTitleWorkflow sets it, and only
+	// after the LLM attempts are exhausted — a titled-by-truncation chat beats
+	// an untitled one, but it must never be the first thing we try.
+	UseFallback bool `json:"use_fallback,omitempty"`
 }
 
 // GenerateTitleOutput is the output from GenerateTitle activity
@@ -238,15 +244,37 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 		return GenerateTitleOutput{}, nil
 	}
 
-	// Generate title using LLM
-	generatedTitle, err := a.generateTitle(ctx, chat.UserID, input.FirstMessage)
-	if err != nil {
-		// Use fallback to prevent blocking chat creation. Logged at warn because
-		// the activity still reports success, so this is the only signal that a
-		// title is the truncated first message rather than a generated one.
-		logging.Warn("[GenerateTitle] LLM generation failed, using truncated first message",
-			"error", err, "chatID", input.ChatID)
+	// Generate the title, or write the fallback when the workflow has already
+	// spent its LLM attempts.
+	//
+	// A failure here is RETURNED, not swallowed. Swallowing it silently
+	// substituted the truncated first message and reported success, so a total
+	// provider outage was indistinguishable from normal operation: every chat
+	// looked hand-titled and nothing retried. The workflow owns the retry and
+	// the decision to settle for the fallback.
+	var generatedTitle string
+	if input.UseFallback {
 		generatedTitle = generateSimpleTitleFallback(input.FirstMessage)
+		logging.Warn("[GenerateTitle] LLM generation exhausted, writing truncated first message",
+			"chatID", input.ChatID, "title", generatedTitle)
+	} else {
+		generatedTitle, err = a.generateTitle(ctx, chat.UserID, input.FirstMessage)
+		if err != nil {
+			attempt := int32(1)
+			func() {
+				defer func() { _ = recover() }() // safe outside activity context (tests)
+				attempt = activity.GetInfo(ctx).Attempt
+			}()
+			logging.Error("[GenerateTitle] LLM generation failed",
+				"error", err, "chatID", input.ChatID, "attempt", attempt)
+			return GenerateTitleOutput{}, fmt.Errorf("generate title for chat %s: %w", input.ChatID, err)
+		}
+	}
+
+	// A model that returns only whitespace would otherwise persist an empty
+	// title, and the early return above means this activity never runs again.
+	if strings.TrimSpace(generatedTitle) == "" {
+		return GenerateTitleOutput{}, fmt.Errorf("generated title for chat %s was empty", input.ChatID)
 	}
 
 	// 3. Update chat with generated title using RunTx for parallelism
