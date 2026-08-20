@@ -1209,6 +1209,12 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 	if msg.TokenCount != nil {
 		enrichedData.TokenCount = msg.TokenCount
 	}
+	// See the note in SaveMessageToThreadWithID: dropping display_style here
+	// makes a HIDDEN message render until the next reload.
+	if msg.DisplayStyle != nil {
+		style := int32(*msg.DisplayStyle)
+		enrichedData.DisplayStyle = &style
+	}
 
 	// Marshal back to JSON
 	enrichedJSON, err := json.Marshal(enrichedData)
