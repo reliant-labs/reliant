@@ -13,6 +13,13 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.3" description="August 20, 2026">
+### Windows builds again
+
+- **The Windows installer is published again** the v1.7.2 build failed on Windows only. The step that loads the release endpoints is written in shell, and the Windows runner defaults to PowerShell, where those commands do not exist — it reported success while setting nothing, so the build stopped a few steps later when the configuration turned out to be empty. It now runs under bash on every platform. Nothing about the application changed.
+- **Everything from v1.7.2** the app can reach the backend again: it had been built pointing at a hostname that does not exist, and derived a second one that also does not exist. Sign-in and setup no longer stall waiting on a terminal the packaged app does not have. Billing and environments settings were reworked, and chat navigation gained keyboard shortcuts.
+</Update>
+
 <Update label="v1.7.2" description="August 20, 2026">
 ### The desktop app can reach the backend again
 
