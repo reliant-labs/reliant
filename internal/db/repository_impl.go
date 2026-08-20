@@ -360,6 +360,11 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 			UpdatedAt:       now.Format("2006-01-02T15:04:05.999999999Z07:00"),
 			ContentBlocks:   contentBlocks,
 			Attachments:     &attachments,
+			// A HIDDEN message is LLM-context only, and both filters that
+			// enforce that (ListMessages and the timeline) read display_style.
+			// Omitting it here delivers the message with displayStyle
+			// undefined, so it renders live and only disappears on reload.
+			DisplayStyle: displayStyle,
 		}
 
 		updateDataJSON, err := updateData.Marshal()
