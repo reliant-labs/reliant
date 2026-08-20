@@ -13,6 +13,16 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.2" description="August 20, 2026">
+### The desktop app can reach the backend again
+
+- **The app was pointed at a domain that does not exist** every build since the endpoint was last changed shipped with api.reliant.so compiled in — a hostname with no DNS record at all. Nothing could connect, on any machine. It survived because the value lived in a GitHub secret, and a secret cannot be read back, diffed, or reviewed; the existing guard only checked the URL was non-empty and not localhost, and a dead domain passes both. These are public hostnames that ship inside the app, so they now live in a version-controlled file where a change is a reviewable diff.
+- **The daemon gateway address was derived incorrectly for production** the gateway host is worked out from the API host, and the rule assumed the leading part of the name is an environment label — correct for preprod, which becomes gateway-preprod. Production is named for the service instead, so the rule produced gateway-api.reliantapi.com, which also does not exist. Production was the one environment the derivation got wrong, and production is what ships.
+- **A release now refuses to publish an unreachable endpoint** before any platform builds, each endpoint is checked for four things: that it is set, that it is not localhost, that its DNS resolves, and that it answers over HTTPS. The first two were already checked and neither would have caught this. The build now fails in about ten seconds instead of producing signed artifacts that were never going to work.
+- **Sign-in and setup no longer stall without a terminal** several daemon and sign-in paths assumed they could prompt at a terminal. The packaged app has none, so those flows waited on input that could never arrive instead of reporting the problem. They now handle the non-interactive case explicitly, and the app waits for credentials to be ready rather than racing them.
+- **Billing and environments settings, and chat navigation shortcuts** the cloud billing and environments screens have been reworked, along with the compute step in setup and the connect-machine dialog. Chat navigation gains keyboard shortcuts, with the shortcut list and its documentation generated from one source so they cannot disagree.
+</Update>
+
 <Update label="v1.7.1" description="August 19, 2026">
 ### A maintenance build with the v1.7.0 fixes
 
