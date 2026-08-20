@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft sync-endpoints check-endpoints postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
 
 # Default target
 all: deps fmt vet test build
@@ -597,6 +597,14 @@ mint:
 		echo "  nvm use 22 && npm i -g mintlify"; \
 		exit 1; \
 	fi
+
+## sync-endpoints: Regenerate config/endpoints.*.env from control-plane's KCL
+sync-endpoints:
+	@./scripts/sync-endpoints.sh prod
+
+## check-endpoints: Fail if config/endpoints.prod.env has drifted from KCL
+check-endpoints:
+	@CHECK=1 ./scripts/sync-endpoints.sh prod
 
 ## changelog: Show PRs since last release for changelog
 changelog:

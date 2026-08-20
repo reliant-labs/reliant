@@ -160,13 +160,26 @@ jobs:
       - name: Generate docs and shortcuts
         run: make generate
 
+      # Endpoints come from config/endpoints.prod.env, which is a projection of
+      # control-plane's KCL (deploy/kcl/lib/env.k, reliant_web_vite_env) — the
+      # same declaration the DEPLOYED frontend is configured with.
+      #
+      # They used to be GitHub secrets, which was wrong twice over. They are
+      # compiled into a client bundle that ships to users, so they are public
+      # by construction — `strings` on the app reveals every one. And because a
+      # secret cannot be read back or reviewed, VITE_API_URL sat at
+      # `https://api.reliant.so/api` — a domain with NO DNS record — while the
+      # hosted frontend used api.reliantapi.com. Every desktop release baked in
+      # a dead endpoint and nobody could see it, because it was "secret".
+      #
+      # Only genuine secrets stay in `secrets.*` below: the Sentry ingest DSN
+      # (a project write credential) and the Statsig client key.
+      #
+      # The Supabase key here is the PUBLISHABLE one (sb_publishable_ prefix),
+      # designed to ship in a browser bundle and protected by row-level
+      # security. The service key must never appear in this file.
       - name: Create production .env file
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_SENTRY_ENABLED: true
           VITE_SENTRY_TRACES_SAMPLE_RATE: 0.1
           VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: 0.1
           VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE: 1.0
@@ -175,15 +188,11 @@ jobs:
           SENTRY_ENABLED: true
           SENTRY_TRACES_SAMPLE_RATE: 0.1
           STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          cat > .env <<EOF
-          VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-          VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-          VITE_API_URL=${VITE_API_URL}
-          VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
-          VITE_SENTRY_ENABLED=${VITE_SENTRY_ENABLED}
+          set -euo pipefail
+          # Every VITE_* endpoint value, verbatim from the KCL projection.
+          cp config/endpoints.prod.env .env
+          cat >> .env <<EOF
           VITE_SENTRY_TRACES_SAMPLE_RATE=${VITE_SENTRY_TRACES_SAMPLE_RATE}
           VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=${VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE}
           VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=${VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE}
@@ -192,9 +201,26 @@ jobs:
           SENTRY_ENABLED=${SENTRY_ENABLED}
           SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
           STATSIG_CLIENT_KEY=${STATSIG_CLIENT_KEY}
-          SUPABASE_URL=${SUPABASE_URL}
-          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
           EOF
+          # The renderer is useless without these, and a wrong value is
+          # invisible until a user reports "can't connect". Assert rather than
+          # discover it in the wild.
+          for key in VITE_API_URL VITE_GRPC_URL VITE_CONTROL_PLANE_API_URL \
+                     VITE_GATEWAY_URL VITE_AUTH_MODE VITE_SUPABASE_URL \
+                     VITE_SUPABASE_ANON_KEY; do
+            value="$(sed -n "s/^${key}=//p" .env)"
+            if [ -z "$value" ]; then
+              echo "::error::$key missing from .env — config/endpoints.prod.env is incomplete." >&2
+              exit 1
+            fi
+            case "$value" in
+              *localhost*|*127.0.0.1*)
+                echo "::error::$key is $value — a packaged build must not target localhost." >&2
+                exit 1 ;;
+            esac
+          done
+          echo "Renderer endpoints:"
+          grep -E '^VITE_(API|GRPC|CONTROL_PLANE_API|GATEWAY)_URL=|^VITE_AUTH_MODE=' .env
 
       # `build`, not `build:alpha` — the difference is `tsc -b`.
       #
@@ -334,15 +360,26 @@ jobs:
           TARGET_OS: ${{ matrix.target_os }}
           TARGET_ARCH: ${{ matrix.target_arch }}
           VERSION: ${{ needs.prepare.outputs.version }}
-          # Compiled into the binary via -X below. VITE_API_URL is the hosted
-          # endpoint the web build already ships; the vars are overrides for
-          # when the gateway or auth host differ from it.
-          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
-          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
-          RELIANT_AUTH_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          RELIANT_AUTH_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          # Compiled into the binary via -X below, sourced from
+          # config/endpoints.prod.env — the projection of control-plane's KCL.
+          # These are public endpoints that ship inside the binary; as secrets
+          # they were unreadable and unreviewable, which is how ServerURL
+          # stayed pinned to api.reliant.so after that domain stopped
+          # resolving.
+          ENDPOINTS_FILE: config/endpoints.prod.env
         run: |
           set -euo pipefail
+
+          # Load the endpoint projection into the environment.
+          set -a
+          # shellcheck disable=SC1090
+          . "$ENDPOINTS_FILE"
+          set +a
+          RELIANT_SERVER_URL="$VITE_API_URL"
+          RELIANT_GATEWAY_URL="$VITE_GATEWAY_URL"
+          RELIANT_AUTH_URL="$VITE_SUPABASE_URL"
+          RELIANT_AUTH_KEY="$VITE_SUPABASE_ANON_KEY"
+          export RELIANT_SERVER_URL RELIANT_GATEWAY_URL RELIANT_AUTH_URL RELIANT_AUTH_KEY
 
           LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${VERSION#v}"
 
@@ -370,7 +407,7 @@ jobs:
           # guards; fail here rather than ship it.
           case "${RELIANT_SERVER_URL:-}" in
             "")
-              echo "RELIANT_SERVER_URL is empty — the released binary would default to http://localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable." >&2
+              echo "RELIANT_SERVER_URL is empty — the released binary would default to http://localhost:8080. config/endpoints.prod.env is missing VITE_API_URL — run scripts/sync-endpoints.sh prod." >&2
               exit 1 ;;
             *localhost*|*127.0.0.1*)
               echo "RELIANT_SERVER_URL is $RELIANT_SERVER_URL — a released binary must not target localhost." >&2
@@ -497,31 +534,42 @@ jobs:
         env:
           STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          # The daemon's --server target and the renderer's api-server URL.
-          # Both default to VITE_API_URL, the hosted endpoint the web build
-          # already ships; override the vars only if the daemon gateway or
-          # api-server ever split onto their own hostnames.
-          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
-          RELIANT_API_URL: ${{ vars.RELIANT_API_URL || secrets.VITE_API_URL }}
-          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
+          # Endpoints (including the Supabase URL and PUBLISHABLE anon key)
+          # come from config/endpoints.prod.env, a projection of control-plane's
+          # KCL — NOT from secrets. See the note on "Create production .env
+          # file": these ship inside the app and are public by construction,
+          # and hiding them as secrets is how the daemon's --server target
+          # stayed pinned to the dead api.reliant.so for months.
+          #
+          # Path is repo-relative but these steps run with
+          # working-directory: electron, hence the ../ prefix.
+          ENDPOINTS_FILE: ../config/endpoints.prod.env
         run: |
           cat > src/build-config.js <<'SCRIPT'
           module.exports = {
           SCRIPT
           # Use node to safely JSON-encode values (handles special chars in secrets)
           node -e "
+            const fs = require('fs');
+            const endpoints = Object.fromEntries(
+              fs.readFileSync(process.env.ENDPOINTS_FILE, 'utf8')
+                .split('\n')
+                .filter((l) => l.trim() && !l.trim().startsWith('#'))
+                .map((l) => {
+                  const i = l.indexOf('=');
+                  return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+                })
+            );
             const config = {
               STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
               SENTRY_DSN: process.env.SENTRY_DSN || '',
               SENTRY_ENABLED: 'true',
               SENTRY_TRACES_SAMPLE_RATE: '0.1',
-              SUPABASE_URL: process.env.SUPABASE_URL || '',
-              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
-              RELIANT_SERVER_URL: process.env.RELIANT_SERVER_URL || '',
-              RELIANT_API_URL: process.env.RELIANT_API_URL || '',
-              RELIANT_GATEWAY_URL: process.env.RELIANT_GATEWAY_URL || '',
+              SUPABASE_URL: endpoints.VITE_SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: endpoints.VITE_SUPABASE_ANON_KEY || '',
+              RELIANT_SERVER_URL: endpoints.VITE_API_URL || '',
+              RELIANT_API_URL: endpoints.VITE_API_URL || '',
+              RELIANT_GATEWAY_URL: endpoints.VITE_GATEWAY_URL || '',
             };
             const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
             console.log(lines.join('\n'));
@@ -537,7 +585,7 @@ jobs:
             const c = require('./src/build-config.js');
             const url = c.RELIANT_SERVER_URL || '';
             if (!url) {
-              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable.');
+              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. config/endpoints.prod.env is missing VITE_API_URL — run scripts/sync-endpoints.sh prod.');
               process.exit(1);
             }
             if (/localhost|127\.0\.0\.1/.test(url)) {
@@ -696,31 +744,42 @@ jobs:
         env:
           STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          # The daemon's --server target and the renderer's api-server URL.
-          # Both default to VITE_API_URL, the hosted endpoint the web build
-          # already ships; override the vars only if the daemon gateway or
-          # api-server ever split onto their own hostnames.
-          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
-          RELIANT_API_URL: ${{ vars.RELIANT_API_URL || secrets.VITE_API_URL }}
-          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
+          # Endpoints (including the Supabase URL and PUBLISHABLE anon key)
+          # come from config/endpoints.prod.env, a projection of control-plane's
+          # KCL — NOT from secrets. See the note on "Create production .env
+          # file": these ship inside the app and are public by construction,
+          # and hiding them as secrets is how the daemon's --server target
+          # stayed pinned to the dead api.reliant.so for months.
+          #
+          # Path is repo-relative but these steps run with
+          # working-directory: electron, hence the ../ prefix.
+          ENDPOINTS_FILE: ../config/endpoints.prod.env
         run: |
           cat > src/build-config.js <<'SCRIPT'
           module.exports = {
           SCRIPT
           # Use node to safely JSON-encode values (handles special chars in secrets)
           node -e "
+            const fs = require('fs');
+            const endpoints = Object.fromEntries(
+              fs.readFileSync(process.env.ENDPOINTS_FILE, 'utf8')
+                .split('\n')
+                .filter((l) => l.trim() && !l.trim().startsWith('#'))
+                .map((l) => {
+                  const i = l.indexOf('=');
+                  return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+                })
+            );
             const config = {
               STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
               SENTRY_DSN: process.env.SENTRY_DSN || '',
               SENTRY_ENABLED: 'true',
               SENTRY_TRACES_SAMPLE_RATE: '0.1',
-              SUPABASE_URL: process.env.SUPABASE_URL || '',
-              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
-              RELIANT_SERVER_URL: process.env.RELIANT_SERVER_URL || '',
-              RELIANT_API_URL: process.env.RELIANT_API_URL || '',
-              RELIANT_GATEWAY_URL: process.env.RELIANT_GATEWAY_URL || '',
+              SUPABASE_URL: endpoints.VITE_SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: endpoints.VITE_SUPABASE_ANON_KEY || '',
+              RELIANT_SERVER_URL: endpoints.VITE_API_URL || '',
+              RELIANT_API_URL: endpoints.VITE_API_URL || '',
+              RELIANT_GATEWAY_URL: endpoints.VITE_GATEWAY_URL || '',
             };
             const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
             console.log(lines.join('\n'));
@@ -736,7 +795,7 @@ jobs:
             const c = require('./src/build-config.js');
             const url = c.RELIANT_SERVER_URL || '';
             if (!url) {
-              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable.');
+              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. config/endpoints.prod.env is missing VITE_API_URL — run scripts/sync-endpoints.sh prod.');
               process.exit(1);
             }
             if (/localhost|127\.0\.0\.1/.test(url)) {
@@ -881,31 +940,42 @@ jobs:
         env:
           STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
           SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          # The daemon's --server target and the renderer's api-server URL.
-          # Both default to VITE_API_URL, the hosted endpoint the web build
-          # already ships; override the vars only if the daemon gateway or
-          # api-server ever split onto their own hostnames.
-          RELIANT_SERVER_URL: ${{ vars.RELIANT_SERVER_URL || secrets.VITE_API_URL }}
-          RELIANT_API_URL: ${{ vars.RELIANT_API_URL || secrets.VITE_API_URL }}
-          RELIANT_GATEWAY_URL: ${{ vars.RELIANT_GATEWAY_URL }}
+          # Endpoints (including the Supabase URL and PUBLISHABLE anon key)
+          # come from config/endpoints.prod.env, a projection of control-plane's
+          # KCL — NOT from secrets. See the note on "Create production .env
+          # file": these ship inside the app and are public by construction,
+          # and hiding them as secrets is how the daemon's --server target
+          # stayed pinned to the dead api.reliant.so for months.
+          #
+          # Path is repo-relative but these steps run with
+          # working-directory: electron, hence the ../ prefix.
+          ENDPOINTS_FILE: ../config/endpoints.prod.env
         run: |
           cat > src/build-config.js <<'SCRIPT'
           module.exports = {
           SCRIPT
           # Use node to safely JSON-encode values (handles special chars in secrets)
           node -e "
+            const fs = require('fs');
+            const endpoints = Object.fromEntries(
+              fs.readFileSync(process.env.ENDPOINTS_FILE, 'utf8')
+                .split('\n')
+                .filter((l) => l.trim() && !l.trim().startsWith('#'))
+                .map((l) => {
+                  const i = l.indexOf('=');
+                  return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+                })
+            );
             const config = {
               STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || '',
               SENTRY_DSN: process.env.SENTRY_DSN || '',
               SENTRY_ENABLED: 'true',
               SENTRY_TRACES_SAMPLE_RATE: '0.1',
-              SUPABASE_URL: process.env.SUPABASE_URL || '',
-              SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || '',
-              RELIANT_SERVER_URL: process.env.RELIANT_SERVER_URL || '',
-              RELIANT_API_URL: process.env.RELIANT_API_URL || '',
-              RELIANT_GATEWAY_URL: process.env.RELIANT_GATEWAY_URL || '',
+              SUPABASE_URL: endpoints.VITE_SUPABASE_URL || '',
+              SUPABASE_ANON_KEY: endpoints.VITE_SUPABASE_ANON_KEY || '',
+              RELIANT_SERVER_URL: endpoints.VITE_API_URL || '',
+              RELIANT_API_URL: endpoints.VITE_API_URL || '',
+              RELIANT_GATEWAY_URL: endpoints.VITE_GATEWAY_URL || '',
             };
             const lines = Object.entries(config).map(([k,v]) => '  ' + JSON.stringify(k) + ': ' + JSON.stringify(v) + ',');
             console.log(lines.join('\n'));
@@ -921,7 +991,7 @@ jobs:
             const c = require('./src/build-config.js');
             const url = c.RELIANT_SERVER_URL || '';
             if (!url) {
-              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. Set the VITE_API_URL secret or the RELIANT_SERVER_URL variable.');
+              console.error('build-config.js has no RELIANT_SERVER_URL — the packaged app would aim the daemon at localhost:8080. config/endpoints.prod.env is missing VITE_API_URL — run scripts/sync-endpoints.sh prod.');
               process.exit(1);
             }
             if (/localhost|127\.0\.0\.1/.test(url)) {
