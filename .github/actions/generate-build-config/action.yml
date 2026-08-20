@@ -1,0 +1,44 @@
+name: Generate Electron runtime build config
+description: >-
+  Writes electron/src/build-config.js from env vars and validates the
+  compiled-in server/gateway URLs. Shared by the macOS, Linux, and Windows
+  release jobs so the generation logic exists exactly once.
+
+inputs:
+  statsig-client-key:
+    required: false
+    default: ""
+  sentry-dsn:
+    required: false
+    default: ""
+  supabase-url:
+    required: false
+    default: ""
+  supabase-anon-key:
+    required: false
+    default: ""
+  reliant-server-url:
+    required: false
+    default: ""
+  reliant-api-url:
+    required: false
+    default: ""
+  reliant-gateway-url:
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Generate runtime build config
+      working-directory: electron
+      shell: bash
+      env:
+        STATSIG_CLIENT_KEY: ${{ inputs.statsig-client-key }}
+        SENTRY_DSN: ${{ inputs.sentry-dsn }}
+        SUPABASE_URL: ${{ inputs.supabase-url }}
+        SUPABASE_ANON_KEY: ${{ inputs.supabase-anon-key }}
+        RELIANT_SERVER_URL: ${{ inputs.reliant-server-url }}
+        RELIANT_API_URL: ${{ inputs.reliant-api-url }}
+        RELIANT_GATEWAY_URL: ${{ inputs.reliant-gateway-url }}
+      run: node ../.github/scripts/generate-build-config.mjs

@@ -238,7 +238,19 @@ func deriveGatewayURL(server string) string {
 	// "reliantapi.com" (1 dot) -> gateway.reliantapi.com
 	if strings.Count(host, ".") >= 2 {
 		parts := strings.SplitN(host, ".", 2)
-		host = "gateway-" + parts[0] + "." + parts[1]
+		// The leading label is an ENVIRONMENT name (staging, preprod), so the
+		// gateway for it is that same environment's gateway: gateway-staging.
+		// But when the leading label is the SERVICE name `api`, the gateway is
+		// its SIBLING service — gateway.<domain> — not a prefixed form of the
+		// api host. Prefixing there invents gateway-api.<domain>, which does
+		// not exist; that shipped, and the packaged daemon could never reach a
+		// gateway. prod is the only env whose host is named for the service
+		// rather than the environment, which is why it is the exception.
+		if parts[0] == "api" {
+			host = "gateway." + parts[1]
+		} else {
+			host = "gateway-" + parts[0] + "." + parts[1]
+		}
 	} else {
 		host = "gateway." + host
 	}
