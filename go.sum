@@ -533,10 +533,10 @@ github.com/redis/go-redis/extra/redisotel/v9 v9.0.5 h1:EfpWLLCyXw8PSM2/XNJLjI3Pb
 github.com/redis/go-redis/extra/redisotel/v9 v9.0.5/go.mod h1:WZjPDy7VNzn77AAfnAfVjZNvfJTYfPetfZk5yoSTLaQ=
 github.com/redis/go-redis/v9 v9.1.0 h1:137FnGdk+EQdCbye1FW+qOEcY5S+SpY9T0NiuqvtfMY=
 github.com/redis/go-redis/v9 v9.1.0/go.mod h1:urWj3He21Dj5k4TK1y59xH8Uj6ATueP8AH1cY3lZl4c=
-github.com/reliant-labs/forge v0.1.1 h1:rDyNKpSaipiUI/69YtheKlxt+GcCYD1oHblS1cAnYY8=
-github.com/reliant-labs/forge v0.1.1/go.mod h1:HP6Ih0OpUgKFIN4PV6EHmldG+Ef49oRLJNgMjbyZHDQ=
-github.com/reliant-labs/forge/pkg v0.1.1 h1:RkGZKBdplhGfqvFhmVzexUP+ZnEboepoZTyRAk3Ojs0=
-github.com/reliant-labs/forge/pkg v0.1.1/go.mod h1:yVuNEMU2atdN1obN85YE/Qgv9lBY4m4l8JiCwtNxCRM=
+github.com/reliant-labs/forge v0.1.2 h1:DfHapIDHukuDaEWHhyESbTfWxJNJQ1tFrDJUKGBBLTM=
+github.com/reliant-labs/forge v0.1.2/go.mod h1:voNxiGNN3DBfPwthAdKUIV9E1KUXy/Od3NoXpsIXWpk=
+github.com/reliant-labs/forge/pkg v0.1.2 h1:8rvg0r3BBIlJFBrdZa9MK+H5Zo/imRiG2Xino7GnMuE=
+github.com/reliant-labs/forge/pkg v0.1.2/go.mod h1:ny/z3fmpdV/np0gZwvSK7zxfZZVxwdtRNAasdQM5FX8=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
