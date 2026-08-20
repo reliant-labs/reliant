@@ -58,6 +58,10 @@ jobs:
       - name: Load release endpoint config
         # Non-sensitive hostnames, version-controlled and reviewable — see
         # .github/release-config.env for why these aren't secrets.
+        #
+        # shell: bash is REQUIRED — windows-latest defaults to PowerShell,
+        # where `grep` does not exist and $GITHUB_ENV is not a shell variable.
+        shell: bash
         run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - name: Validate release endpoints
@@ -321,6 +325,12 @@ jobs:
           fetch-depth: 1
 
       - name: Load release endpoint config
+        # shell: bash is REQUIRED — windows-latest defaults to PowerShell,
+        # where `grep` does not exist and $GITHUB_ENV is not a shell variable.
+        # The step still reported success there while setting nothing, so the
+        # build-config generator ran with empty endpoints and failed. GitHub
+        # ships bash on the Windows runners, so this works on all three.
+        shell: bash
         run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - name: Setup Go
@@ -457,6 +467,12 @@ jobs:
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Load release endpoint config
+        # shell: bash is REQUIRED — windows-latest defaults to PowerShell,
+        # where `grep` does not exist and $GITHUB_ENV is not a shell variable.
+        # The step still reported success there while setting nothing, so the
+        # build-config generator ran with empty endpoints and failed. GitHub
+        # ships bash on the Windows runners, so this works on all three.
+        shell: bash
         run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - name: Setup Node.js
@@ -615,6 +631,12 @@ jobs:
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Load release endpoint config
+        # shell: bash is REQUIRED — windows-latest defaults to PowerShell,
+        # where `grep` does not exist and $GITHUB_ENV is not a shell variable.
+        # The step still reported success there while setting nothing, so the
+        # build-config generator ran with empty endpoints and failed. GitHub
+        # ships bash on the Windows runners, so this works on all three.
+        shell: bash
         run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - name: Setup Node.js
@@ -759,6 +781,12 @@ jobs:
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Load release endpoint config
+        # shell: bash is REQUIRED — windows-latest defaults to PowerShell,
+        # where `grep` does not exist and $GITHUB_ENV is not a shell variable.
+        # The step still reported success there while setting nothing, so the
+        # build-config generator ran with empty endpoints and failed. GitHub
+        # ships bash on the Windows runners, so this works on all three.
+        shell: bash
         run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
 
       - name: Setup Node.js
