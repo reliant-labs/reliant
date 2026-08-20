@@ -1310,9 +1310,15 @@ async function createWindow(options = {}) {
     } else if (!isReady) {
       log.info("Backend not ready yet, waiting...");
       try {
-        await backendManager.waitForReady();
+        // waitForReady() resolves `false` (does not throw) when the daemon
+        // is idling under --non-interactive awaiting sign-in — that is not
+        // an error, so the catch below is reserved for a genuine failure.
+        const becameReady = await backendManager.waitForReady();
         const finalPort = backendManager.getPort();
-        log.info("Backend now ready, sending port to frontend:", finalPort);
+        log.info(
+          becameReady ? "Backend now ready, sending port to frontend:" : "Backend still awaiting credentials, sending port anyway:",
+          finalPort
+        );
         mainWindow.webContents.send("backend-port", finalPort);
       } catch (error) {
         log.error("Backend failed to become ready:", error);
@@ -1659,11 +1665,13 @@ ipcMain.handle("get-backend-port", async () => {
   if (port && !isReady) {
     log.info("[IPC] Backend has port but not ready, waiting...");
     try {
-      // Optionally, you could use a shorter timeout for reloads if needed
-      await backendManager.waitForReady();
+      // waitForReady() resolves `false` (does not throw) when the daemon is
+      // idling under --non-interactive awaiting sign-in — expected, not an
+      // error. The catch below only fires for a genuine startup failure.
+      const becameReady = await backendManager.waitForReady();
       const finalPort = backendManager.getPort();
       log.info(
-        "[IPC] Backend now ready, returning port:",
+        becameReady ? "[IPC] Backend now ready, returning port:" : "[IPC] Backend still awaiting credentials, returning port anyway:",
         finalPort,
         "type:",
         typeof finalPort
@@ -3989,13 +3997,24 @@ app.whenReady().then(async () => {
   log.info(`[Backend] ✓ BackendManager created in ${Date.now() - backendCreateStart}ms`);
 
   // Start backend in background (don't await yet)
+  //
+  // backendManager.start() resolves with the daemon's port once the process
+  // is spawned successfully — including the "spawned, but idling under
+  // --non-interactive with no credentials yet" case (BackendManager.
+  // waitForReady() resolves `false` rather than throwing for that state; see
+  // its doc comment). Only a genuine startup failure — bad binary, spawn
+  // error, a real timeout that is NOT "awaiting credentials" — rejects here.
+  // So this .catch is reserved for real failures: never signing in is not
+  // one, and must not show "Backend Error".
   const backendStartTime = Date.now();
   log.info("[Backend] Starting backend service in background...");
   const backendStartPromise = backendManager.start().then((port) => {
     log.info(`[Backend] ✓ Backend service started in ${Date.now() - backendStartTime}ms`);
-    log.debug(`[Backend] Backend running and ready on port ${port}`);
+    log.debug(`[Backend] Backend process running on port ${port} (may still be awaiting sign-in)`);
 
-    // Send port to all windows
+    // Send port to all windows regardless of daemon readiness — the
+    // renderer's login page does not depend on the daemon being ready, and
+    // the config-ready handshake only needs a port number to unblock.
     BrowserWindow.getAllWindows().forEach((window) => {
       log.debug("Sending backend port to window:", port);
       window.webContents.send("backend-port", port);

@@ -74,3 +74,17 @@ func envOrDefaultInt(key string, defaultVal int) int {
 	}
 	return defaultVal
 }
+
+// envOrDefaultBool returns the environment variable parsed as a bool, or the
+// default. Used as a flag's default value so an explicit CLI flag still wins
+// over the env var — cobra only applies the default when the flag is not
+// passed on the command line, so the precedence is: explicit flag > env var >
+// this default.
+func envOrDefaultBool(key string, defaultVal bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			return b
+		}
+	}
+	return defaultVal
+}

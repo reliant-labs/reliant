@@ -182,6 +182,20 @@ type DaemonConnectionListener interface {
 	OnDaemonDisconnected(userID, daemonID string)
 }
 
+// DaemonConnectionInfoListener is an optional extension of
+// DaemonConnectionListener for listeners that need the identity the daemon
+// asserted at registration time (name/hostname/platform), not just the ids.
+// ToolsDaemonService type-asserts each registered listener against this
+// interface and calls it alongside OnDaemonConnected when satisfied, so
+// existing listeners (NATSToolBridge, daemonquery.Responder/UserResponder)
+// that only care about ids need no change. daemonevents.Publisher is the
+// only current implementor — it needs this to carry a usable machine name
+// through to the control plane, which OnDaemonConnected's two bare ids
+// cannot express.
+type DaemonConnectionInfoListener interface {
+	OnDaemonConnectedWithInfo(userID, daemonID, name, hostname, platform string)
+}
+
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by NATSToolBridge.
 // This avoids importing the services package from toolexec.
 //
