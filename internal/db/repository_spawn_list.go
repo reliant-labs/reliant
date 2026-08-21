@@ -27,6 +27,41 @@ type SpawnChild struct {
 	ThreadTitle       *string
 }
 
+// SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool call
+// that started it, for one chat.
+//
+// The reconnect snapshot needs this because threads has no
+// spawned_by_tool_call_id column: the field only ever rides the live update
+// payload, so a client that reloads sees none and the background-work pill
+// loses its cancel button. tool_calls.child_workflow_id -> workflows.thread is
+// the durable link the spawn path already writes.
+func (r *Repo) SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+	if r.DB == nil {
+		return nil, fmt.Errorf("repository has no database connection")
+	}
+
+	rows, err := pgdb.New(r.DB.DB(ctx)).ListSpawnToolCallIDsByChildThread(ctx, chatID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list spawn tool call ids: %w", err)
+	}
+
+	// Rows arrive requested_at ASC, and a resumed spawn contributes one row
+	// per resumption for the same thread. Overwriting therefore leaves the
+	// most recent call as the value — the one still executing, and the one a
+	// cancel must address.
+	byThread := make(map[string]string, len(rows))
+	for _, row := range rows {
+		if row.ChildThreadID == "" || row.ToolCallID == "" {
+			continue
+		}
+		byThread[row.ChildThreadID] = row.ToolCallID
+	}
+	return byThread, nil
+}
+
 // ListSpawnChildren returns every spawn call issued BY threadID, in request
 // order. threadID must be the CALLER's own thread — tool_calls.thread_id is
 // always the parent's, so this cannot return another thread's children by

@@ -114,18 +114,28 @@ function SpawnRow({
       </span>
       <span className="ml-auto flex flex-shrink-0 items-center gap-1.5">
         <Elapsed startedAt={spawn.startedAt} />
-        {spawn.toolCallId && (
-          <button
-            type="button"
-            onClick={handleCancel}
-            aria-label={`Cancel background agent ${spawn.title}`}
-            disabled={isCancelling}
-            className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
-            title="Cancel background agent"
-          >
-            <Square className={cn("h-3.5 w-3.5", isCancelling ? "animate-pulse text-warning" : "text-destructive")} />
-          </button>
-        )}
+        {/*
+          Always rendered, never silently absent. cancelToolCall is the only
+          route that stops a spawn, so a row without a tool call id genuinely
+          cannot be cancelled — but hiding the control made a long-running
+          agent look like it had no stop button at all, which is how this was
+          reported. A disabled control that says why is honest; a live one that
+          no-ops would be worse than either.
+        */}
+        <button
+          type="button"
+          onClick={handleCancel}
+          aria-label={`Cancel background agent ${spawn.title}`}
+          disabled={isCancelling || !spawn.toolCallId}
+          className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
+          title={
+            spawn.toolCallId
+              ? "Cancel background agent"
+              : "This agent cannot be cancelled from here — it is still starting up, or its originating tool call is not yet recorded"
+          }
+        >
+          <Square className={cn("h-3.5 w-3.5", isCancelling ? "animate-pulse text-warning" : "text-destructive")} />
+        </button>
       </span>
     </div>
   );

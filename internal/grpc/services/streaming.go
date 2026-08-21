@@ -749,6 +749,10 @@ type threadSnapshotMetadata struct {
 	originNodeID string
 	status       int32
 	completedAt  *time.Time
+	// spawnedByToolCallID is the spawn tool call that started this thread,
+	// recovered from tool_calls.child_workflow_id rather than from the
+	// update payload. It is what the cancel button addresses.
+	spawnedByToolCallID string
 }
 
 // threadMetadata maps thread id -> authoritative thread-table metadata for one chat.
@@ -782,7 +786,46 @@ func (s *StreamingService) threadMetadata(ctx context.Context, chatID string) ma
 		entry.completedAt = row.CompletedAt
 		metadata[row.ID] = entry
 	}
+
+	if len(metadata) == 0 {
+		return metadata
+	}
+
+	for threadID, toolCallID := range s.spawnToolCallIDsByThread(ctx, chatID) {
+		entry, ok := metadata[threadID]
+		if !ok {
+			continue
+		}
+		entry.spawnedByToolCallID = toolCallID
+		metadata[threadID] = entry
+	}
+
 	return metadata
+}
+
+// spawnToolCallIDsByThread maps spawn child thread id -> the tool call that
+// started it, for one chat.
+//
+// The link is tool_calls.child_workflow_id -> workflows.id -> workflows.thread,
+// written by the spawn path at dispatch and already trusted by
+// cancelChildWorkflowForToolCall (which cancels through exactly this join) and
+// by ListSpawnChildrenForThread. Nothing new has to be persisted; the durable
+// fact was always there, it just never reached the snapshot payload.
+//
+// The join runs in SQL rather than in Go: this is the page-load path, and a
+// busy chat holds ~10k tool calls with large input jsonb against ~60 spawns.
+//
+// Returns an empty map on error, matching threadMetadata: reconciliation is an
+// enhancement of the stored payload, so losing it degrades the snapshot to what
+// it was before rather than failing the whole initial sync.
+func (s *StreamingService) spawnToolCallIDsByThread(ctx context.Context, chatID string) map[string]string {
+	byThread, err := s.database.SpawnToolCallIDsByChildThread(ctx, chatID)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to resolve spawn tool call ids for cancel reconciliation",
+			"error", err, "chatID", chatID[:8])
+		return map[string]string{}
+	}
+	return byThread
 }
 
 // withThreadMetadata fills missing identity fields from the threads table.
@@ -840,6 +883,19 @@ func withThreadMetadata(data json.RawMessage, metadata map[string]threadSnapshot
 	if entry.originNodeID != "" {
 		if originNodeID, ok := payload["origin_node_id"].(string); !ok || originNodeID == "" {
 			payload["origin_node_id"] = entry.originNodeID
+			changed = true
+		}
+	}
+	// Without this the ■ button vanishes on reload. Two thread updates are
+	// written per spawn microseconds apart — workflow_status states the tool
+	// call id, thread_status's lifecycle row omits it — and per-entity dedup
+	// keeps only the newer, id-less row. The live stream hides the gap by
+	// carrying the field forward across updates; the snapshot has no history
+	// to carry forward from, so the reloading client sees no id and
+	// BackgroundWorkPill's truthiness guard drops the cancel affordance.
+	if entry.spawnedByToolCallID != "" {
+		if toolCallID, ok := payload["spawned_by_tool_call_id"].(string); !ok || toolCallID == "" {
+			payload["spawned_by_tool_call_id"] = entry.spawnedByToolCallID
 			changed = true
 		}
 	}

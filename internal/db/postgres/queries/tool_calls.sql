@@ -45,6 +45,37 @@ SELECT * FROM tool_calls
 WHERE chat_id = $1
 ORDER BY requested_at ASC;
 
+-- name: ListSpawnToolCallIDsByChildThread :many
+-- The spawn tool call behind each child thread in one chat, for the reconnect
+-- snapshot: it is what the background-work pill's cancel button addresses, and
+-- threads has no spawned_by_tool_call_id column to read it from.
+--
+-- w.thread (not tc.child_workflow_id) is the join key into the thread, for the
+-- same reason ListSpawnChildrenForThread uses it: for a RESUMED spawn,
+-- child_workflow_id names the workflow executing THIS call — a fresh id each
+-- resumption — while w.thread is the pre-existing thread being resumed, which
+-- is the thread the UI actually shows.
+--
+-- A resumed spawn yields SEVERAL rows for one child thread (one per
+-- resumption, observed up to 6). requested_at ASC is load-bearing: the caller
+-- folds these into a map, so ascending order leaves the most recent call as
+-- the surviving value — which is the one still executing and therefore the one
+-- a cancel must address.
+--
+-- Deliberately narrow. The snapshot needs ~1 row per spawn, and a busy chat
+-- holds ~10k tool calls whose input jsonb is large; selecting tool_calls.* and
+-- filtering in Go would haul all of that over the wire on every page load.
+-- Measured on the busiest real chat: 60 rows in 1.9ms via
+-- idx_tool_calls_child_workflow_id, against 10,622 tool calls.
+SELECT
+    w.thread AS child_thread_id,
+    tc.id AS tool_call_id
+FROM tool_calls tc
+JOIN workflows w ON w.id = tc.child_workflow_id
+WHERE tc.chat_id = $1
+  AND tc.child_workflow_id IS NOT NULL
+ORDER BY tc.requested_at ASC;
+
 -- name: ListToolCallsByMessageIDs :many
 SELECT * FROM tool_calls
 WHERE message_id IN (sqlc.slice('message_ids'))
