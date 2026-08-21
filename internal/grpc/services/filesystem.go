@@ -70,11 +70,39 @@ func (s *FileSystemService) resolveBasePath(ctx context.Context, projectID strin
 	return basePath, nil
 }
 
-// validatePath performs security checks to ensure path is within base directory
+// validatePath confines a request to the base directory. Every mutating
+// operation uses it: a write, delete, copy or rename is only ever performed
+// inside the workspace the request named.
 func (s *FileSystemService) validatePath(basePath, requestedPath string) (string, error) {
-	absFullPath, err := filepreview.ValidatePath(basePath, requestedPath)
+	return s.validatePathScoped(basePath, requestedPath, filepreview.ScopeBaseOnly)
+}
+
+// validateReadPath is validatePath for read-only viewer operations.
+//
+// It additionally allows an ABSOLUTE path outside the workspace, so that a user
+// who clicks an absolute path the assistant mentioned actually sees the file
+// instead of a dead tooltip. Relative traversal is still refused here exactly as
+// it is everywhere else.
+//
+// This is sound only because of where this type runs. FileSystemService is the
+// direct-filesystem implementation, and it is mounted ONLY when the server has
+// no daemon router (internal/grpc/server.go) — i.e. desktop/monolith, where the
+// process is on the user's own machine and serves that one user. The user
+// already has a shell and a file manager on that machine, so reading a file
+// they explicitly named grants them nothing they did not already have.
+//
+// In hosted multi-tenant deployments a router is always present, so the
+// FileSystemProxyService is mounted instead and this method is never reached.
+// That service keeps every path confined to the workspace; see fs_proxy.go.
+func (s *FileSystemService) validateReadPath(basePath, requestedPath string) (string, error) {
+	return s.validatePathScoped(basePath, requestedPath, filepreview.ScopeAllowAbsolute)
+}
+
+func (s *FileSystemService) validatePathScoped(basePath, requestedPath string, scope filepreview.PathScope) (string, error) {
+	absFullPath, err := filepreview.ValidatePathScoped(basePath, requestedPath, scope)
 	if err != nil {
-		if err == filepreview.ErrPathOutsideBase {
+		switch err {
+		case filepreview.ErrPathOutsideBase, filepreview.ErrAbsolutePathOutsideBase:
 			return "", connect.NewError(connect.CodePermissionDenied, err)
 		}
 		return "", connect.NewError(connect.CodeInvalidArgument, err)
@@ -284,8 +312,9 @@ func (s *FileSystemService) GetFileContent(
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 
-	// Validate path
-	absFullPath, err := s.validatePath(basePath, requestedPath)
+	// Read-only: an absolute path outside the workspace is allowed here so a
+	// user can open a file they explicitly named. See validateReadPath.
+	absFullPath, err := s.validateReadPath(basePath, requestedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -386,8 +415,8 @@ func (s *FileSystemService) GetFileMetadata(
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 
-	// Validate path
-	absFullPath, err := s.validatePath(basePath, requestedPath)
+	// Read-only: see validateReadPath.
+	absFullPath, err := s.validateReadPath(basePath, requestedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +467,8 @@ func (s *FileSystemService) GetFilePreviewInfo(
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 
-	absFullPath, err := s.validatePath(basePath, requestedPath)
+	// Read-only: see validateReadPath.
+	absFullPath, err := s.validateReadPath(basePath, requestedPath)
 	if err != nil {
 		return nil, err
 	}
@@ -494,7 +524,8 @@ func (s *FileSystemService) GetFilePreview(
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 
-	absFullPath, err := s.validatePath(basePath, requestedPath)
+	// Read-only: see validateReadPath.
+	absFullPath, err := s.validateReadPath(basePath, requestedPath)
 	if err != nil {
 		return nil, err
 	}
