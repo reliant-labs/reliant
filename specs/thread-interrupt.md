@@ -147,6 +147,35 @@ re-checks the mailbox (one indexed SELECT) and reports whether anything landed.
 Both agent loops OR it into their `while`, so the loop takes one more turn, and
 that turn's drain delivers the message.
 
+**`pending_inbox` must stay truthful — it means "a real queued message exists
+and the next turn WILL deliver it", and nothing else.** That is what makes
+another turn safe to take: re-entering `call_llm` ends history with a USER
+message. It is set from the mailbox probe alone.
+
+It was briefly also set from `streamInterrupted`, and that wedged chats
+permanently. A text-only assistant turn has no tool calls, so the turn is
+COMPLETE and the loop must exit and yield; when an interrupt set this flag with
+an EMPTY mailbox, the loop re-entered anyway, the drain delivered nothing,
+history still ended with the assistant message, and the end-of-history guard
+failed the turn — identically on every retry, forever. Measured on live data:
+chat `2b4c8c20` / thread `8c48ab59`, 48 identical failures, mailbox holding one
+already-delivered row.
+
+The interrupt path loses nothing by this. An interrupt is only ever issued
+against a thread that already has something queued (the UI offers the button
+only from the queued strip), so the probe finds that row and returns true
+anyway. The probe runs on a context detached from cancellation, because an
+interrupted turn reaches it with its context already dead and would otherwise
+answer false for the very message the interrupt was issued to deliver.
+
+The residual race — a message queued microseconds AFTER the probe — is not
+closed here and cannot be; every check has an "after". It is closed on the
+enqueue side, and already was: `notifyAgentMessageQueued` rings the doorbell,
+`SendMessage` absorbs an idle thread's queue on the user's next turn, and
+`resolveOrphanedAgentMessages` marks anything that outlives every turn. Such a
+message is late, never lost — whereas assuming "yes" bought that at the price of
+a chat that could not advance at all.
+
 - `agent.yaml`: `... || outputs.pending_inbox == true`
 - `structured-agent.yaml`: added INSIDE the `max_turns` conjunction — a queued
   message earns another turn, it must not buy unbounded ones.

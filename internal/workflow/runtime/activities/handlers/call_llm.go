@@ -245,7 +245,36 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	//
 	// Cheap: one indexed SELECT against the partial index on queued rows, once
 	// per LLM call — negligible next to the call itself.
-	output.PendingInbox = output.GetPendingInbox() || a.hasQueuedAgentMessages(ctx, thread)
+	//
+	// This is now the SOLE source of pending_inbox. It used to be ORed with a
+	// value streamLLMResponse set from streamInterrupted, and that OR is what
+	// made the flag unfalsifiable: once an interrupt set it true, an empty
+	// mailbox could not clear it, so the loop re-entered CallLLM forever on a
+	// thread with nothing to deliver. The flag now means what the loop reads it
+	// to mean — "a real queued message exists and the next turn will deliver
+	// it" — so re-entering ends history with a USER message, and an empty
+	// mailbox exits the loop and yields to the user.
+	//
+	// The probe runs on a context detached from cancellation. An interrupted
+	// turn arrives here with ctx already dead, and the whole point of the
+	// interrupt path is to take one more turn to deliver what the interrupt was
+	// issued for — a probe that returned false merely because the context was
+	// cancelled would strand exactly the message the user just sent. Bounded so
+	// a dead pool cannot hold the unwind open.
+	//
+	// The residual race is a message queued microseconds AFTER this SELECT.
+	// That window cannot be closed here — any check has an after. It is closed
+	// on the other side instead, and was already: the enqueue rings the
+	// doorbell signal (notifyAgentMessageQueued) which wakes a parked thread,
+	// an idle thread's queue is absorbed by the user's next send, and a row
+	// that outlives every turn is marked undeliverable by the reconciler's
+	// resolveOrphanedAgentMessages rather than sitting queued forever. A
+	// missed-by-a-microsecond message is therefore late, never lost — whereas
+	// the old "assume yes" answer traded that for a chat that could not
+	// advance at all.
+	probeCtx, cancelProbe := context.WithTimeout(context.WithoutCancel(ctx), pendingInboxProbeTimeout)
+	output.PendingInbox = a.hasQueuedAgentMessages(probeCtx, thread)
+	cancelProbe()
 
 	logger.Info("[CallLLM] Completed",
 		"chatID", rtx.ChatID,
@@ -327,6 +356,11 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 // interruptedTurnWriteTimeout bounds the detached write of an interrupted
 // turn's partial. Short: one insert on a live pool, with the caller unwinding.
 const interruptedTurnWriteTimeout = 5 * time.Second
+
+// pendingInboxProbeTimeout bounds the detached mailbox probe that decides
+// whether the agent loop takes another turn. Short: one indexed SELECT, and on
+// the interrupt path the caller is already unwinding.
+const pendingInboxProbeTimeout = 5 * time.Second
 
 // hasQueuedAgentMessages reports whether thread's mailbox holds undelivered
 // messages right now.
@@ -908,15 +942,48 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		"toolNames", toolNameDebug,
 	)
 
-	// Defense-in-depth: verify conversation ends with user/tool message.
-	// This catches thread routing mismatches before they hit the API.
+	// An assistant-tailed history means this turn has nothing to send.
+	//
+	// The mailbox drain ran before the history read, so by this point every
+	// queued message is already folded in. If the last message is STILL the
+	// assistant's, there is no new input to respond to — the previous turn
+	// already had the last word. That is a complete turn, not a failure.
+	//
+	// This used to return an error, and that error is what bricked chats. The
+	// retry ladder re-runs CallLLM, the tail is unchanged, and it fails
+	// identically every time: the thread can never advance again, and no user
+	// action recovers it. Yielding instead ends the turn cleanly — the agent
+	// loop sees no tool calls and no pending inbox, exits, and hands control
+	// back to the user, whose next message becomes the new tail. A thread
+	// already carrying this shape heals on its next turn.
+	//
+	// Logged at ERROR because reaching here is still a bug upstream (see
+	// below for the real causes); it must stay greppable rather than being
+	// silently absorbed. What changes is that the chat survives it.
 	if len(history) > 0 {
 		lastMsg := history[len(history)-1]
 		if lastMsg.Role == message.Assistant {
-			return nil, fmt.Errorf(
-				"conversation history ends with assistant message after all transformations (chat=%s, thread=%s, last_msg_id=%s, msg_count=%d) — this usually means the user message was saved to a different thread than CallLLM reads from",
-				chat.ID, thread, lastMsg.ID, len(history),
+			activity.GetLogger(ctx).Error(
+				"[CallLLM] History ends with an assistant message after the mailbox drain — "+
+					"yielding the turn instead of calling the provider. Causes, in order of "+
+					"likelihood: the previous turn produced text with no tool calls and the loop "+
+					"re-entered anyway (a pending_inbox that did not correspond to a real queued "+
+					"message); an interrupted turn persisted a partial assistant message and the "+
+					"mailbox it expected to drain was empty; or, rarely, the user message was "+
+					"written to a different thread than this one.",
+				"chatID", chat.ID,
+				"thread", thread,
+				"lastMsgID", lastMsg.ID,
+				"msgCount", len(history),
 			)
+			return &reliantv1.CallLLMOutput{
+				Message: &reliantv1.MessageOutput{Role: "assistant", Text: ""},
+				// No tool calls and (set by the caller from a real mailbox
+				// probe) no pending inbox: both agent loops exit on this.
+				CompactionThreshold: effectiveCompactionThreshold,
+				Model:               resolvedModelID,
+				MessageId:           streamState.messageID,
+			}, nil
 		}
 	}
 
@@ -1108,7 +1175,28 @@ streamLoop:
 			Role: "assistant",
 			Text: responseText,
 		},
-		PendingInbox:        streamInterrupted,
+		// Deliberately NOT set from streamInterrupted.
+		//
+		// It used to be, and that is the bug that wedged chats. An interrupt
+		// wants one more mailbox-draining turn, but "was interrupted" is not
+		// evidence that anything is queued: interrupting with an empty mailbox
+		// set this true, the loop re-entered CallLLM, the drain delivered
+		// nothing, and history still ended with the partial assistant message.
+		//
+		// pending_inbox now means exactly one thing — a real queued message
+		// exists and the next turn will deliver it — so re-entering CallLLM
+		// genuinely ends history with a USER message. executeCore sets it from
+		// the mailbox probe. The interrupt case is not lost: an interrupt is
+		// only ever issued against a thread that has something queued (see
+		// specs/thread-interrupt.md — the UI offers it only from the queued
+		// strip), so the probe finds that row and returns the same true.
+		//
+		// Interrupt's OWN wake-up does not depend on this flag either: the
+		// enqueue rings the doorbell signal (notifyAgentMessageQueued), and a
+		// row that outlives every turn is swept by the reconciler's
+		// resolveOrphanedAgentMessages. See the probe in executeCore for the
+		// residual microsecond race and why it is closed there, not here.
+		PendingInbox:        false,
 		CompactionThreshold: effectiveCompactionThreshold,
 		Model:               resolvedModelID,
 		MessageId:           streamState.messageID,
