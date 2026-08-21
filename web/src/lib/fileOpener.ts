@@ -6,6 +6,7 @@ import { useMemo } from 'react';
 import { useWorktreeStore, type Worktree } from '../store/worktreeStore';
 import { useViewerStore } from '../store/viewerStore';
 import { useProjectStore } from '../store/projectStore';
+import { isElectron } from './constants';
 import { logger } from './logger';
 import type { ParsedFilePath } from './filePath';
 import type { FileNode } from '../components/FileBrowser';
@@ -25,14 +26,133 @@ export interface PathClassificationResult {
 }
 
 /**
+ * Whether the backend will serve a file that lives outside the workspace.
+ *
+ * Only the desktop app will. There the server runs on the user's own machine
+ * and serves that one user, so reading a file they explicitly named grants
+ * them nothing they did not already have with a shell or Finder — the
+ * read-only viewer RPCs accept an absolute host path
+ * (internal/grpc/services/filesystem.go, validateReadPath).
+ *
+ * A hosted deployment routes filesystem requests through a daemon
+ * (FileSystemProxyService), which keeps every path confined to the workspace.
+ * Marking such a link clickable there would render a button that looks live
+ * and then fails with PermissionDenied, which is worse than saying up front
+ * that it cannot be opened.
+ */
+function canOpenFilesOutsideWorkspace(): boolean {
+  return isElectron();
+}
+
+/** The store state classification needs, so the core stays pure and testable. */
+interface ClassificationContext {
+  activeWorktrees: Worktree[];
+  currentWorktreeId?: string;
+  projectPath?: string;
+}
+
+/**
  * Classify a file path to determine how it should be displayed and handled.
- * Runs at render time for visual styling.
- * 
+ *
+ * This is the single implementation. The hook and the non-hook wrapper below
+ * both delegate here; they differ only in how they read the stores. They were
+ * previously two hand-maintained copies that had already drifted apart (one
+ * checked the worktree root with a second `if`, the other with an `||`), so
+ * any future fix had to be applied twice to take effect.
+ *
  * Classifications:
  * - 'current': Path is in the current/context worktree
  * - 'other-worktree': Path is in a different active worktree
  * - 'project-only': Path is in the project but no worktree match
- * - 'external': Path is outside the project (non-clickable)
+ * - 'external': Path is outside the project
+ */
+function classifyPathWithContext(
+  parsedPath: ParsedFilePath | null,
+  contextWorktreeId: string | undefined,
+  { activeWorktrees, currentWorktreeId, projectPath }: ClassificationContext
+): PathClassificationResult {
+  const unopenable = (tooltipMessage: string): PathClassificationResult => ({
+    classification: 'external',
+    targetWorktreeId: null,
+    matchedWorktree: null,
+    isClickable: false,
+    tooltipMessage,
+  });
+
+  if (!parsedPath) {
+    return unopenable('Invalid file path');
+  }
+
+  const effectiveWorktreeId = contextWorktreeId || currentWorktreeId;
+  const contextWorktree = effectiveWorktreeId
+    ? activeWorktrees.find(w => w.id === effectiveWorktreeId)
+    : activeWorktrees[0]; // Fallback to first active worktree
+
+  // Resolve path to absolute if relative
+  let absolutePath = parsedPath.path;
+  if (!parsedPath.isAbsolute) {
+    if (!contextWorktree?.path) {
+      return unopenable(
+        'Cannot open this file: the path is relative and there is no workspace open to resolve it against.'
+      );
+    }
+    absolutePath = `${contextWorktree.path}/${absolutePath.replace(/^\.\//, '')}`;
+  }
+
+  // Sort by path length descending to match the most specific worktree first
+  const sortedWorktrees = [...activeWorktrees].sort(
+    (a, b) => (b.path?.length || 0) - (a.path?.length || 0)
+  );
+
+  const isWithin = (base: string | undefined): boolean =>
+    !!base && (absolutePath === base || absolutePath.startsWith(base + '/'));
+
+  for (const worktree of sortedWorktrees) {
+    if (isWithin(worktree.path)) {
+      const isCurrent = worktree.id === effectiveWorktreeId;
+      return {
+        classification: isCurrent ? 'current' : 'other-worktree',
+        targetWorktreeId: worktree.id,
+        matchedWorktree: worktree,
+        isClickable: true,
+        tooltipMessage: isCurrent
+          ? `Click to open ${parsedPath.path}`
+          : `Opens in ${worktree.name} workspace`,
+      };
+    }
+  }
+
+  if (isWithin(projectPath)) {
+    return {
+      classification: 'project-only',
+      targetWorktreeId: null,
+      matchedWorktree: null,
+      isClickable: true,
+      tooltipMessage: `Click to open ${parsedPath.path}`,
+    };
+  }
+
+  // Outside the project entirely. The desktop app can still read it, so the
+  // link stays live there; a hosted deployment cannot, and says why rather
+  // than offering a button that would fail on click.
+  if (canOpenFilesOutsideWorkspace()) {
+    return {
+      classification: 'external',
+      targetWorktreeId: null,
+      matchedWorktree: null,
+      isClickable: true,
+      tooltipMessage: `Click to open ${parsedPath.path} (outside this workspace, read-only)`,
+    };
+  }
+
+  return unopenable(
+    `Cannot open ${parsedPath.path}: it is outside this workspace, and files on the host are ` +
+      `only readable in the desktop app. Open it in a project or workspace that contains it.`
+  );
+}
+
+/**
+ * Hook version of path classification. Runs at render time for visual styling.
  */
 export function usePathClassification(
   parsedPath: ParsedFilePath | null,
@@ -48,106 +168,15 @@ export function usePathClassification(
     [allWorktrees]
   );
 
-  return useMemo(() => {
-    // No path = external
-    if (!parsedPath) {
-      return {
-        classification: 'external' as const,
-        targetWorktreeId: null,
-        matchedWorktree: null,
-        isClickable: false,
-        tooltipMessage: 'Invalid file path',
-      };
-    }
-
-    // Determine the effective worktree for context
-    const effectiveWorktreeId = contextWorktreeId || currentWorktree?.id;
-    const contextWorktree = effectiveWorktreeId
-      ? activeWorktrees.find(w => w.id === effectiveWorktreeId)
-      : activeWorktrees[0]; // Fallback to first active worktree
-
-    // Resolve path to absolute if relative
-    let absolutePath = parsedPath.path;
-    if (!parsedPath.isAbsolute) {
-      if (contextWorktree?.path) {
-        const cleanPath = absolutePath.replace(/^\.\//, '');
-        absolutePath = `${contextWorktree.path}/${cleanPath}`;
-      } else {
-        // Cannot resolve relative path without worktree context
-        return {
-          classification: 'external' as const,
-          targetWorktreeId: null,
-          matchedWorktree: null,
-          isClickable: false,
-          tooltipMessage: 'Cannot resolve path - no workspace context',
-        };
-      }
-    }
-
-    // Check if path matches any active worktree
-    // Sort by path length descending to match most specific worktree first
-    const sortedWorktrees = [...activeWorktrees].sort(
-      (a, b) => (b.path?.length || 0) - (a.path?.length || 0)
-    );
-
-    for (const worktree of sortedWorktrees) {
-      if (worktree.path && absolutePath.startsWith(worktree.path + '/')) {
-        const isCurrent = worktree.id === effectiveWorktreeId;
-        return {
-          classification: isCurrent ? 'current' : 'other-worktree',
-          targetWorktreeId: worktree.id,
-          matchedWorktree: worktree,
-          isClickable: true,
-          tooltipMessage: isCurrent
-            ? `Click to open ${parsedPath.path}`
-            : `Opens in ${worktree.name} workspace`,
-        };
-      }
-      // Also check exact match (for the worktree root itself)
-      if (worktree.path && absolutePath === worktree.path) {
-        const isCurrent = worktree.id === effectiveWorktreeId;
-        return {
-          classification: isCurrent ? 'current' : 'other-worktree',
-          targetWorktreeId: worktree.id,
-          matchedWorktree: worktree,
-          isClickable: true,
-          tooltipMessage: isCurrent
-            ? `Click to open ${parsedPath.path}`
-            : `Opens in ${worktree.name} workspace`,
-        };
-      }
-    }
-
-    // Check if path is within project (backend fallback allows this)
-    if (projectPath && absolutePath.startsWith(projectPath + '/')) {
-      return {
-        classification: 'project-only' as const,
-        targetWorktreeId: null,
-        matchedWorktree: null,
-        isClickable: true,
-        tooltipMessage: `Click to open ${parsedPath.path}`,
-      };
-    }
-    // Also check exact match for project root
-    if (projectPath && absolutePath === projectPath) {
-      return {
-        classification: 'project-only' as const,
-        targetWorktreeId: null,
-        matchedWorktree: null,
-        isClickable: true,
-        tooltipMessage: `Click to open ${parsedPath.path}`,
-      };
-    }
-
-    // Path is completely external
-    return {
-      classification: 'external' as const,
-      targetWorktreeId: null,
-      matchedWorktree: null,
-      isClickable: false,
-      tooltipMessage: 'This file is outside the current workspace and cannot be opened',
-    };
-  }, [parsedPath, contextWorktreeId, currentWorktree?.id, activeWorktrees, projectPath]);
+  return useMemo(
+    () =>
+      classifyPathWithContext(parsedPath, contextWorktreeId, {
+        activeWorktrees,
+        currentWorktreeId: currentWorktree?.id,
+        projectPath,
+      }),
+    [parsedPath, contextWorktreeId, currentWorktree?.id, activeWorktrees, projectPath]
+  );
 }
 
 /**
@@ -160,87 +189,12 @@ export function classifyPath(
 ): PathClassificationResult {
   const worktreeState = useWorktreeStore.getState();
   const projectState = useProjectStore.getState();
-  
-  const allWorktrees = worktreeState.worktrees;
-  const currentWorktree = worktreeState.currentWorktree;
-  const projectPath = projectState.currentProject?.path;
-  
-  // Filter out archived worktrees
-  const activeWorktrees = allWorktrees.filter(w => !w.deleted_at);
 
-  // No path = external
-  if (!parsedPath) {
-    return {
-      classification: 'external',
-      targetWorktreeId: null,
-      matchedWorktree: null,
-      isClickable: false,
-      tooltipMessage: 'Invalid file path',
-    };
-  }
-
-  // Determine the effective worktree for context
-  const effectiveWorktreeId = contextWorktreeId || currentWorktree?.id;
-  const contextWorktree = effectiveWorktreeId
-    ? activeWorktrees.find(w => w.id === effectiveWorktreeId)
-    : activeWorktrees[0];
-
-  // Resolve path to absolute if relative
-  let absolutePath = parsedPath.path;
-  if (!parsedPath.isAbsolute) {
-    if (contextWorktree?.path) {
-      const cleanPath = absolutePath.replace(/^\.\//, '');
-      absolutePath = `${contextWorktree.path}/${cleanPath}`;
-    } else {
-      return {
-        classification: 'external',
-        targetWorktreeId: null,
-        matchedWorktree: null,
-        isClickable: false,
-        tooltipMessage: 'Cannot resolve path - no workspace context',
-      };
-    }
-  }
-
-  // Check if path matches any active worktree
-  const sortedWorktrees = [...activeWorktrees].sort(
-    (a, b) => (b.path?.length || 0) - (a.path?.length || 0)
-  );
-
-  for (const worktree of sortedWorktrees) {
-    if (worktree.path && (absolutePath.startsWith(worktree.path + '/') || absolutePath === worktree.path)) {
-      const isCurrent = worktree.id === effectiveWorktreeId;
-      return {
-        classification: isCurrent ? 'current' : 'other-worktree',
-        targetWorktreeId: worktree.id,
-        matchedWorktree: worktree,
-        isClickable: true,
-        tooltipMessage: isCurrent
-          ? `Click to open ${parsedPath.path}`
-          : `Opens in ${worktree.name} workspace`,
-      };
-    }
-  }
-
-  // Check if path is within project
-  if (projectPath && (absolutePath.startsWith(projectPath + '/') || absolutePath === projectPath)) {
-    return {
-      classification: 'project-only',
-      targetWorktreeId: null,
-      matchedWorktree: null,
-      isClickable: true,
-      tooltipMessage: `Click to open ${parsedPath.path}`,
-    };
-  }
-
-  // Path is completely external
-  return {
-    classification: 'external',
-    targetWorktreeId: null,
-    matchedWorktree: null,
-    isClickable: false,
-    tooltipMessage: 'This file is outside the current workspace and cannot be opened',
-  };
+  return classifyPathWithContext(parsedPath, contextWorktreeId, {
+    activeWorktrees: worktreeState.worktrees.filter(w => !w.deleted_at),
+    currentWorktreeId: worktreeState.currentWorktree?.id,
+    projectPath: projectState.currentProject?.path,
+  });
 }
 
 // ============================================================================

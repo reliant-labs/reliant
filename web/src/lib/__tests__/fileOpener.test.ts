@@ -45,6 +45,16 @@ vi.mock('../../store/viewerStore', () => ({
   },
 }));
 
+// Whether files outside the workspace can be opened depends on the runtime:
+// only the desktop backend will serve them. Default to the browser (the more
+// restrictive case) so a test must opt in to desktop behaviour.
+let mockIsElectron = false;
+
+vi.mock('../constants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../constants')>()),
+  isElectron: () => mockIsElectron,
+}));
+
 // Import after mocks are set up
 import { classifyPath } from '../fileOpener';
 import type { ParsedFilePath } from '../filePath';
@@ -85,6 +95,7 @@ describe('classifyPath', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsElectron = false;
     
     // Default mock state
     mockWorktreeState = {
@@ -154,6 +165,10 @@ describe('classifyPath', () => {
       expect(result.isClickable).toBe(true);
     });
 
+    // An external path is still classified 'external' — that drives the muted
+    // styling. Whether it is CLICKABLE now depends on the runtime, because
+    // only the desktop backend will serve a file outside the workspace. Both
+    // cases are covered in the 'external paths' block below.
     it('should classify completely external path as "external"', () => {
       const parsed: ParsedFilePath = {
         fullPath: '/etc/passwd',
@@ -165,7 +180,6 @@ describe('classifyPath', () => {
       
       expect(result.classification).toBe('external');
       expect(result.targetWorktreeId).toBeNull();
-      expect(result.isClickable).toBe(false);
       expect(result.tooltipMessage).toContain('outside');
     });
 
@@ -201,6 +215,55 @@ describe('classifyPath', () => {
     });
   });
 
+  // The user-facing point of this change: a path the assistant mentioned that
+  // lives outside the workspace should open rather than show a dead tooltip.
+  // It can only do that where the backend will serve it.
+  describe('external paths', () => {
+    const outsidePath: ParsedFilePath = {
+      fullPath: '/home/user/notes/todo.md',
+      path: '/home/user/notes/todo.md',
+      isAbsolute: true,
+    };
+
+    it('is clickable in the desktop app, where the backend can read host files', () => {
+      mockIsElectron = true;
+
+      const result = classifyPath(outsidePath);
+
+      expect(result.classification).toBe('external');
+      expect(result.isClickable).toBe(true);
+      expect(result.tooltipMessage).toContain('/home/user/notes/todo.md');
+      expect(result.tooltipMessage).toContain('read-only');
+    });
+
+    it('is not clickable in the browser, and the tooltip says why and what to do', () => {
+      mockIsElectron = false;
+
+      const result = classifyPath(outsidePath);
+
+      expect(result.classification).toBe('external');
+      expect(result.isClickable).toBe(false);
+      // Not just "cannot be opened": name the reason and the way forward.
+      expect(result.tooltipMessage).toContain('outside this workspace');
+      expect(result.tooltipMessage).toContain('desktop app');
+    });
+
+    it('explains an unresolvable relative path rather than calling it external', () => {
+      mockIsElectron = true;
+      mockWorktreeState = { worktrees: [], currentWorktree: null };
+
+      const result = classifyPath({
+        fullPath: 'src/index.ts',
+        path: 'src/index.ts',
+        isAbsolute: false,
+      });
+
+      expect(result.isClickable).toBe(false);
+      expect(result.tooltipMessage).toContain('relative');
+      expect(result.tooltipMessage).toContain('no workspace open');
+    });
+  });
+
   describe('relative paths', () => {
     it('should resolve relative path with valid worktree context', () => {
       const parsed: ParsedFilePath = {
@@ -233,7 +296,11 @@ describe('classifyPath', () => {
       
       expect(result.classification).toBe('external');
       expect(result.isClickable).toBe(false);
-      expect(result.tooltipMessage).toContain('no workspace context');
+      // Wording changed deliberately: the tooltip now names the reason
+      // (a relative path with nothing to resolve it against) instead of the
+      // internal phrase "no workspace context".
+      expect(result.tooltipMessage).toContain('relative');
+      expect(result.tooltipMessage).toContain('no workspace open');
     });
 
     it('should use first active worktree when contextWorktreeId is undefined', () => {
