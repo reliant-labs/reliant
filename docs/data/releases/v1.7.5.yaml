@@ -1,0 +1,11 @@
+version: "v1.7.5"
+date: "2026-08-20"
+title: "Three fixes to things that misbehaved quietly"
+summary: "A stray system message no longer appears in your transcript, non-streaming Claude Code requests no longer fail outright, and chat titles are generated properly instead of quietly settling for the first line of your message. All three were failures you could see but not explain."
+items:
+  - title: "The \"Some of your params have changed\" message stays hidden"
+    description: "Messages that exist only to give the model context are marked hidden and filtered out of the transcript. When one of those arrived as a live update rather than on a page load, the hidden marking was dropped along the way, so the message appeared in your chat until you reloaded — at which point it vanished, which made it look random. The marking now travels with live updates, so a hidden message is hidden the first time and stays that way."
+  - title: "Non-streaming Claude Code requests no longer fail with a decoding error"
+    description: "The Claude Code driver told the server it could accept brotli-compressed responses, but never actually decompressed them. Every non-streaming call therefore tried to read compressed bytes as JSON and failed with `invalid character '\\x03' looking for beginning of value`. The driver now only advertises the compression formats it can genuinely handle, and decompresses the response before reading it."
+  - title: "Chat titles retry instead of silently falling back to your first message"
+    description: "If the model call that names a chat failed, the failure was swallowed and the chat was titled with a truncated copy of whatever you typed first. There was no retry and nothing in the logs, so a provider outage looked exactly like normal operation. The title request is now retried three times with backoff, and only falls back to your first message after those genuinely fail — and that fallback is recorded rather than invisible. Titles that come back empty are also rejected now, instead of being saved permanently."
