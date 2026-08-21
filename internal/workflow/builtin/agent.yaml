@@ -132,6 +132,19 @@ nodes:
     # the response is not in that turn; without this the loop would exit on a
     # thread holding an undelivered message. Looping once more routes back
     # through call_llm, which delivers it.
+    #
+    # pending_inbox means exactly one thing: a real queued message exists, and
+    # the next call_llm will deliver it — so re-entering ends history with a
+    # USER message, which is the only reason another turn is safe to take. It
+    # is set from an actual mailbox probe and nothing else.
+    #
+    # It used to also be set from "the stream was interrupted", and that is
+    # what bricked chats. A text-only turn with no tool calls is COMPLETE and
+    # must yield to the user; when an interrupt set this true with an empty
+    # mailbox, the loop re-entered anyway, the drain delivered nothing, history
+    # still ended with the assistant message, and every retry reproduced it —
+    # permanently. Keep this term truthful: if the mailbox is empty, the loop
+    # must exit and yield.
     while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true
     inline:
       outputs:
