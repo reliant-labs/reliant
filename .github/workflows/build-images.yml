@@ -2,7 +2,7 @@ name: Build & Push Image
 
 on:
   push:
-    branches: [main]
+    branches: [main, ci/reliant-image-gar]
   workflow_dispatch:
     inputs:
       image_tag:
