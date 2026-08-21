@@ -2,6 +2,7 @@
 // This is needed in Electron where the config is injected asynchronously
 
 import { logger } from "./logger";
+import { isPackagedRendererOrigin } from "./protocol";
 
 // Default timeout for waiting for config
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -12,13 +13,15 @@ const POLL_INTERVAL_MS = 100;
  */
 export const isConfigReady = (): boolean => {
   if (typeof window === "undefined") return false;
-  
-  // In development browser mode, config is always "ready" (uses env vars or defaults)
-  if (window.location.protocol !== "file:") {
+
+  // In browser mode (dev server or hosted web), config is always "ready" —
+  // it comes from build-time env vars, not from preload.js.
+  if (!isPackagedRendererOrigin()) {
     return true;
   }
-  
-  // In Electron (file:// protocol), check for RELIANT_CONFIG
+
+  // In the packaged desktop app, preload.js injects RELIANT_CONFIG
+  // asynchronously; until it lands there is no backend URL to dial.
   return !!window.RELIANT_CONFIG?.grpcUrl;
 };
 
@@ -28,8 +31,8 @@ export const isConfigReady = (): boolean => {
  * @returns Promise that resolves when config is ready or rejects on timeout
  */
 export const waitForConfig = async (timeoutMs = DEFAULT_TIMEOUT_MS): Promise<void> => {
-  // If not in Electron, config is immediately available
-  if (typeof window === "undefined" || window.location.protocol !== "file:") {
+  // Outside the packaged app, config is immediately available.
+  if (typeof window === "undefined" || !isPackagedRendererOrigin()) {
     return;
   }
   

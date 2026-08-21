@@ -23,7 +23,11 @@ import {
   StartOAuthSignInRequestSchema,
   SystemService,
 } from "../gen/reliant/v1/system_pb";
-import { buildLocalhostUrl, isSameOriginTransport } from "../lib/protocol";
+import {
+  buildLocalhostUrl,
+  isPackagedRendererOrigin,
+  isSameOriginTransport,
+} from "../lib/protocol";
 import { buildInterceptors } from "./transport";
 
 // Minimal local logger. Avoids depending on `@/lib/logger` to keep the
@@ -54,9 +58,8 @@ const getGRPCBaseURL = (): string | null => {
     }
   }
 
-  // If we're in a file:// protocol (Electron but config not loaded yet),
-  // return null to indicate not ready
-  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+  // Packaged desktop app whose config has not been injected yet: not ready.
+  if (isPackagedRendererOrigin()) {
     return null;
   }
 

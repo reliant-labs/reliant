@@ -5,6 +5,8 @@
  * and documentation.
  */
 
+import { isPackagedRendererOrigin } from "./protocol";
+
 // ============================================================================
 // Environment Detection
 // ============================================================================
@@ -25,9 +27,9 @@ export const getIsDev = (): boolean => {
       }
 
       // Fallback during very early bootstrap before RELIANT_CONFIG is injected:
-      // - file:// means packaged app => production behavior
+      // - the packaged renderer's own scheme means packaged app => production
       // - http(s) in local Electron dev => allow dev behavior
-      if (window.location.protocol === "file:") {
+      if (isPackagedRendererOrigin()) {
         return false;
       }
 
@@ -59,15 +61,19 @@ const DEFAULT_APP_URL = "https://app.reliantlabs.io";
 
 /**
  * True for an origin that only means something on the machine that produced it.
- * A loopback or file:// origin is never a valid public redirect target: handing
- * one to an identity provider sends the user's browser to a port on their own
- * machine that either isn't listening or belongs to an unrelated process.
+ * A loopback origin, or the packaged renderer's own scheme, is never a valid
+ * public redirect target: handing one to an identity provider sends the user's
+ * browser to a port on their own machine that either isn't listening or belongs
+ * to an unrelated process — or, for `app://bundle`, to a scheme that exists
+ * only inside this Electron process and that no browser can resolve at all.
  */
 const isLocalOrigin = (origin: string): boolean => {
   if (!origin || origin === "null") return true;
   try {
     const { protocol, hostname } = new URL(origin);
-    if (protocol === "file:") return true;
+    // `app:` is the packaged renderer's scheme, `file:` its pre-v1.7.0
+    // predecessor. Neither is reachable from outside this process.
+    if (protocol === "file:" || protocol === "app:") return true;
     return (
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||

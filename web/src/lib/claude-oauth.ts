@@ -2,6 +2,13 @@ import * as Sentry from '@sentry/react'
 import { settingsGrpc } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
+import {
+  InsecureContextError,
+  base64UrlEncode,
+  generateCodeChallenge,
+  generateCodeVerifier,
+  randomBytes,
+} from '@/lib/pkce'
 
 const CLAUDE_OAUTH_AUTHORIZE_URL = 'https://claude.ai/oauth/authorize'
 const CLAUDE_OAUTH_CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
@@ -42,37 +49,30 @@ const errorResult = (errorCode: ClaudeOAuthErrorCode, message: string): ClaudeOA
   message,
 })
 
-const base64UrlEncode = (bytes: Uint8Array): string => {
-  let binary = ''
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte)
-  }
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
-
-const randomBytes = (length: number): Uint8Array => {
-  const values = new Uint8Array(length)
-  crypto.getRandomValues(values)
-  return values
-}
-
-const generateCodeVerifier = (): string => base64UrlEncode(randomBytes(64))
-
-const generateCodeChallenge = async (codeVerifier: string): Promise<string> => {
-  const encoded = new TextEncoder().encode(codeVerifier)
-  const digest = await crypto.subtle.digest('SHA-256', encoded)
-  return base64UrlEncode(new Uint8Array(digest))
-}
-
 export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Promise<ClaudeOAuthResult> {
   const statePrefix = options.statePrefix ?? CLAUDE_OAUTH_STATE_PREFIX
   const authorizeUrl = options.authorizeUrl ?? CLAUDE_OAUTH_AUTHORIZE_URL
   const clientId = options.clientId ?? CLAUDE_OAUTH_CLIENT_ID
   const scope = options.scope ?? CLAUDE_OAUTH_DEFAULT_SCOPE
 
-  // Generate PKCE
-  const codeVerifier = generateCodeVerifier()
-  const codeChallenge = await generateCodeChallenge(codeVerifier)
+  // Generate PKCE. This runs BEFORE the browser round trip and must not throw:
+  // on a non-secure origin crypto.subtle is undefined, and the raw TypeError
+  // ("reading 'digest'") escaped the flow entirely instead of reaching the UI.
+  let codeVerifier: string
+  let codeChallenge: string
+  try {
+    codeVerifier = generateCodeVerifier()
+    codeChallenge = await generateCodeChallenge(codeVerifier)
+  } catch (error) {
+    const message =
+      error instanceof InsecureContextError
+        ? error.message
+        : 'Could not generate the PKCE challenge required to sign in.'
+    Sentry.captureException(error, {
+      tags: { component: 'oauth', provider: 'claude', stage: 'pkce' },
+    })
+    return errorResult('pkce_generation_failed', message)
+  }
 
   // Generate state
   const state = statePrefix + base64UrlEncode(randomBytes(24))

@@ -27,7 +27,11 @@ import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { ConnectorService } from "../gen/reliant/v1/connector_pb";
 import { logger } from "../lib/logger";
-import { buildLocalhostUrl, isSameOriginTransport } from "../lib/protocol";
+import {
+  buildLocalhostUrl,
+  isPackagedRendererOrigin,
+  isSameOriginTransport,
+} from "../lib/protocol";
 import {
   buildInterceptors,
   setCurrentBaseURL,
@@ -62,9 +66,10 @@ const getGRPCBaseURL = (): string | null => {
     }
   }
 
-  // If we're in a file:// protocol (Electron but config not loaded yet),
-  // we need to wait for the config - return null to indicate not ready
-  if (typeof window !== "undefined" && window.location.protocol === "file:") {
+  // Packaged desktop app whose config has not been injected yet: return null to
+  // indicate not-ready rather than falling through to the browser defaults
+  // below, which would dial a localhost port nothing is listening on.
+  if (isPackagedRendererOrigin()) {
     logger.warn(
       "[gRPC Client] Electron detected but backend config not yet available"
     );
