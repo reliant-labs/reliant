@@ -17,6 +17,7 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import { logger } from "../lib/logger";
+import { isPackagedRendererOrigin } from "../lib/protocol";
 import { parseBinding } from "../lib/keyboard/chord";
 import { detectPlatform } from "../lib/keyboard/platform";
 import { getReservation, type Reservation } from "../lib/keyboard/reserved";
@@ -183,10 +184,7 @@ export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
     try {
       set({ isLoading: true });
 
-      if (
-        typeof window !== "undefined" &&
-        window.location.protocol === "file:"
-      ) {
+      if (isPackagedRendererOrigin()) {
         // Electron: the gRPC endpoint is injected after the page loads.
         const maxWaitTime = 5000;
         const startTime = Date.now();
