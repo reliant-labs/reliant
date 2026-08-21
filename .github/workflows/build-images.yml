@@ -1,0 +1,190 @@
+name: Build & Push Image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Override image tag (default: sha-<short>)"
+        required: false
+        type: string
+
+concurrency:
+  group: build-images-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  # GAR only. This repo's image is consumed by three prod/preprod
+  # Deployments (reliant-api-server, daemon-gateway, reliant-temporal-worker)
+  # via control-plane's deploy/kcl/{prod,preprod}/main.k. GHCR was the
+  # previous publish target (.github/workflows/docker.yml, removed in #167)
+  # but nothing has pushed there since 2026-08-19 and control-plane's own
+  # `build-images.yml` dropped GHCR as a push target for the same reason
+  # (see its "GAR ONLY" comment) — matching that convention here rather than
+  # reviving a registry this org is migrating off.
+  GAR_NONPROD: "us-central1-docker.pkg.dev/reliant-nonprod-490701/reliant-nonprod"
+  GAR_PROD: "us-central1-docker.pkg.dev/reliant-labs-475814/reliant-prod"
+
+jobs:
+  build-push:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Authenticate to GCP (nonprod)
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER_NONPROD }}
+          service_account: ${{ secrets.WIF_SA_NONPROD }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        # us-docker.pkg.dev: the pull-through Docker Hub mirror the Dockerfile's
+        # `FROM` lines resolve against. us-central1-docker.pkg.dev: the nonprod
+        # GAR push target (GAR_NONPROD, above).
+        run: gcloud auth configure-docker us-docker.pkg.dev,us-central1-docker.pkg.dev --quiet
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.image_tag }}" ]; then
+            echo "custom=true" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.event.inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "custom=false" >> "$GITHUB_OUTPUT"
+            echo "tag=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GAR_NONPROD }}/reliant
+          tags: |
+            type=sha,prefix=sha-
+            type=ref,event=branch
+            type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
+            type=semver,pattern={{version}}
+            type=raw,value=${{ steps.tag.outputs.tag }},enable=${{ steps.tag.outputs.custom }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Stamps internal/version so `reliant version` reports the release
+          # rather than "unknown" (see #166).
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version || github.ref_name }}
+          cache-from: type=gha,scope=reliant
+          cache-to: type=gha,scope=reliant,mode=max
+
+      # ── Prod GAR mirror ──────────────────────────────────────────────
+      # Prod GAR (reliant-labs-475814) is a DIFFERENT GCP project from the
+      # nonprod one used above, so it needs the prod WIF identity. Finish
+      # the nonprod-authenticated build+push first, THEN swap identity with
+      # a second auth@v2 call (replaces the active gcloud credentials for
+      # the rest of the job) and mirror the digest already pushed to
+      # nonprod GAR straight into prod GAR — a registry-to-registry manifest
+      # copy, no rebuild.
+      #
+      # NON-BLOCKING (continue-on-error) — and, right now, EXPECTED TO FAIL.
+      # This needs TWO things this repo does not currently have:
+      #   1. `secrets.WIF_PROVIDER_PROD` / `secrets.WIF_SA_PROD` in THIS repo
+      #      (`gh secret list --repo reliant-labs/reliant` has no PROD WIF
+      #      secrets — only WIF_PROVIDER_NONPROD/WIF_SA_NONPROD).
+      #   2. An IAM binding on `github-actions@reliant-labs-475814...` that
+      #      accepts assertions from `reliant-labs/reliant` (verified via
+      #      `gcloud iam service-accounts get-iam-policy`: today it only
+      #      accepts `reliant-labs/control-plane`).
+      # Provisioning both is an infra/IAM change with real blast radius, so
+      # it is not done here — this step degrades to a loud log message
+      # instead of inventing credentials. Once both exist, drop
+      # continue-on-error so a real mirror failure is caught.
+      - name: Check prod WIF credentials are configured
+        id: prod_wif
+        env:
+          WIF_PROVIDER_PROD: ${{ secrets.WIF_PROVIDER_PROD }}
+          WIF_SA_PROD: ${{ secrets.WIF_SA_PROD }}
+        run: |
+          if [ -n "$WIF_PROVIDER_PROD" ] && [ -n "$WIF_SA_PROD" ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::WIF_PROVIDER_PROD/WIF_SA_PROD are not set on this repo (or the prod GCP project has no IAM binding for reliant-labs/reliant yet) — skipping the prod GAR mirror. The image is pushed to nonprod GAR only. See the workflow comment for exactly what is missing."
+          fi
+
+      - name: Pull image for the prod mirror
+        if: steps.prod_wif.outputs.present == 'true'
+        continue-on-error: true
+        run: docker pull "${{ env.GAR_NONPROD }}/reliant@${{ steps.build.outputs.digest }}"
+
+      - name: Authenticate to GCP (prod)
+        if: steps.prod_wif.outputs.present == 'true'
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER_PROD }}
+          service_account: ${{ secrets.WIF_SA_PROD }}
+
+      - name: Configure Docker for Artifact Registry (prod)
+        if: steps.prod_wif.outputs.present == 'true'
+        continue-on-error: true
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev --quiet
+
+      - name: Mirror digest to prod GAR
+        if: steps.prod_wif.outputs.present == 'true'
+        # Same cross-project constraint as control-plane's mirror: nonprod
+        # and prod GAR share the host us-central1-docker.pkg.dev and docker
+        # keeps one credential per host, so the prod identity active here
+        # cannot READ the nonprod source. Pull it while the nonprod
+        # credential was still live (previous step), then tag and push
+        # locally — `imagetools create` would re-read from the remote and
+        # hit 403.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          SRC="${{ env.GAR_NONPROD }}/reliant@${{ steps.build.outputs.digest }}"
+          TAGS="${{ steps.tag.outputs.tag }}"
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then TAGS="$TAGS latest"; fi
+          for t in $TAGS; do
+            docker tag "$SRC" "${{ env.GAR_PROD }}/reliant:$t"
+            docker push "${{ env.GAR_PROD }}/reliant:$t"
+          done
+
+  summary:
+    name: Build Summary
+    needs: build-push
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Summary
+        run: |
+          echo "## Build Image Summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| reliant | ${{ needs.build-push.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Commit:** \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Tag:** \`sha-$(echo ${{ github.sha }} | cut -c1-7)\`" >> "$GITHUB_STEP_SUMMARY"
