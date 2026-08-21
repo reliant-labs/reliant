@@ -23,7 +23,8 @@ if (!url) {
   if (required) {
     console.error(
       `${name} is empty — a released build must not ship without it. ` +
-        `Set it in .github/release-config.env.`,
+        `Fix it in control-plane deploy/kcl/lib/env.k (reliant_desktop_release_config), ` +
+        `then regenerate: node .github/scripts/sync-release-config.mjs --env prod`,
     );
     process.exit(1);
   }

@@ -298,6 +298,13 @@ const injectReliantConfig = async () => {
         grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: status?.gatewayUrl || '',
+        // controlPlaneURL = the admin-server origin (billing, coupons,
+        // /api/proxy-session). getControlPlaneURL() in web/src/lib/constants.ts
+        // prefers THIS over the build-time VITE_CONTROL_PLANE_API_URL, so
+        // injecting it at runtime lets a config change reach the app without
+        // rebuilding the renderer. It was never set, which is why coupons threw
+        // "Control plane API URL not configured" in the packaged build.
+        controlPlaneURL: status?.controlPlaneUrl || '',
         daemonPort: status?.daemonPort || null,
         isElectron: true,
         platform: info.platform,
@@ -380,6 +387,7 @@ const injectReliantConfig = async () => {
         grpcUrl: rendererApiUrl,
         apiUrl: apiUrl,
         gatewayUrl: backendStatus?.gatewayUrl || '',
+        controlPlaneURL: backendStatus?.controlPlaneUrl || '',
         daemonPort: port,
         isElectron: true,
         platform: appInfo.platform,

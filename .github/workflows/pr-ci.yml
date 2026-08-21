@@ -29,6 +29,25 @@ jobs:
       - name: Reject compiled binaries added by this PR
         run: .githooks/check-binary-files-ci.sh "origin/${{ github.base_ref }}" "${{ github.sha }}"
 
+  # electron/release.config.json is GENERATED from control-plane's KCL
+  # (deploy/kcl/lib/env.k). This validates the committed file so a hand-edit
+  # that empties an endpoint, or points one at localhost, cannot reach a
+  # release — the failure mode that shipped v1.7.5 with no control-plane URL.
+  #
+  # control-plane is private, so a fork cannot render the KCL to diff against.
+  # The script detects that and validates the committed values instead of
+  # failing on something an outside contributor cannot fix; the authoritative
+  # drift comparison runs in control-plane's own CI, where the KCL lives.
+  release-config:
+    name: Release config (generated from KCL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate electron/release.config.json
+        run: node .github/scripts/sync-release-config.mjs --check
+
   backend:
     name: Backend (Go)
     runs-on: ubuntu-latest

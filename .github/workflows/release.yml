@@ -56,13 +56,15 @@ jobs:
         run: echo "ts=$(date +%s)" >> "$GITHUB_OUTPUT"
 
       - name: Load release endpoint config
-        # Non-sensitive hostnames, version-controlled and reviewable — see
-        # .github/release-config.env for why these aren't secrets.
+        # Non-sensitive hostnames, projected from control-plane's KCL into the
+        # generated electron/release.config.json. They are public facts a
+        # packaged binary ships with and a `curl` reveals in seconds, so they
+        # are reviewable in a diff rather than hidden in a secret.
         #
         # shell: bash is REQUIRED — windows-latest defaults to PowerShell,
-        # where `grep` does not exist and $GITHUB_ENV is not a shell variable.
+        # where $GITHUB_ENV is not a shell variable.
         shell: bash
-        run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
+        run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Validate release endpoints
         # Fails fast, once, before any platform build spends minutes on a
@@ -72,6 +74,11 @@ jobs:
           node .github/scripts/validate-endpoint.mjs RELIANT_SERVER_URL "$RELIANT_SERVER_URL" --required
           node .github/scripts/validate-endpoint.mjs RELIANT_API_URL "$RELIANT_API_URL" --required
           node .github/scripts/validate-endpoint.mjs RELIANT_GATEWAY_URL "$RELIANT_GATEWAY_URL" --required
+          # The admin-server origin now travels with the release too, so it
+          # gets the same DNS + reachability check rather than only a
+          # non-empty test — a dead domain passes "non-empty" (that is exactly
+          # how api.reliant.so shipped).
+          node .github/scripts/validate-endpoint.mjs RELIANT_CONTROL_PLANE_URL "$RELIANT_CONTROL_PLANE_URL" --required
 
       - name: Extract version
         id: version
@@ -178,43 +185,56 @@ jobs:
       - name: Generate docs and shortcuts
         run: make generate
 
-      - name: Create production .env file
+      # The renderer's build-time config, from control-plane's KCL.
+      #
+      # THIS REPLACES A HAND-WRITTEN `.env` HEREDOC. That heredoc listed 15
+      # variables; the app reads 22, so the packaged renderer shipped with
+      # VITE_CONTROL_PLANE_API_URL and VITE_GATEWAY_URL simply undefined —
+      # confirmed by grepping the released v1.7.5 .dmg, whose 87 renderer
+      # assets contain `api.reliantapi.com` but neither `admin.reliantapi.com`
+      # nor `gateway.reliantapi.com`. That is what made coupons throw
+      # "Control plane API URL not configured" on the desktop app.
+      #
+      # electron/release.config.json is GENERATED from control-plane's
+      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and it
+      # carries the SAME VITE_* list the hosted app is built with. The step
+      # below verifies it has not drifted, then exports it.
+      #
+      # No .env file is written. `vite build` reads VITE_* straight from the
+      # process environment, so $GITHUB_ENV is sufficient and there is no
+      # generated dotfile to leak into an artifact or fall out of date.
+      - name: Verify release config matches control-plane KCL
+        run: node .github/scripts/sync-release-config.mjs --check
+
+      - name: Export renderer build config
         env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          # Non-sensitive hostname, loaded from .github/release-config.env
-          # above (RELIANT_API_URL), not a secret.
-          VITE_API_URL: ${{ env.RELIANT_API_URL }}
+          # Secrets are NOT in KCL and never in this repo. They are merged in
+          # here, on top of the KCL-sourced public values.
           VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_SENTRY_ENABLED: true
-          VITE_SENTRY_TRACES_SAMPLE_RATE: 0.1
-          VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE: 0.1
-          VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE: 1.0
+          VITE_STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
           VITE_SENTRY_REPLAY_CANVAS: ${{ vars.VITE_SENTRY_REPLAY_CANVAS }}
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
-          SENTRY_ENABLED: true
-          SENTRY_TRACES_SAMPLE_RATE: 0.1
-          STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
-          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          cat > .env <<EOF
-          VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-          VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-          VITE_API_URL=${VITE_API_URL}
-          VITE_SENTRY_DSN=${VITE_SENTRY_DSN}
-          VITE_SENTRY_ENABLED=${VITE_SENTRY_ENABLED}
-          VITE_SENTRY_TRACES_SAMPLE_RATE=${VITE_SENTRY_TRACES_SAMPLE_RATE}
-          VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=${VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE}
-          VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=${VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE}
-          VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}
-          SENTRY_DSN=${SENTRY_DSN}
-          SENTRY_ENABLED=${SENTRY_ENABLED}
-          SENTRY_TRACES_SAMPLE_RATE=${SENTRY_TRACES_SAMPLE_RATE}
-          STATSIG_CLIENT_KEY=${STATSIG_CLIENT_KEY}
-          SUPABASE_URL=${SUPABASE_URL}
-          SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-          EOF
+          set -euo pipefail
+
+          # KCL-sourced public config (endpoints, auth mode, Supabase URL +
+          # publishable key, Sentry enable flags). jq -e fails if `.vite` is
+          # missing rather than exporting an empty set.
+          jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' \
+            electron/release.config.json >> "$GITHUB_ENV"
+
+          # Secret-backed and CI-tunable values layered on top.
+          {
+            echo "VITE_SENTRY_DSN=${VITE_SENTRY_DSN}"
+            echo "VITE_STATSIG_CLIENT_KEY=${VITE_STATSIG_CLIENT_KEY}"
+            echo "VITE_SENTRY_TRACES_SAMPLE_RATE=0.1"
+            echo "VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.1"
+            echo "VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=1.0"
+            echo "VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}"
+          } >> "$GITHUB_ENV"
+
+          echo "Renderer config exported from KCL:"
+          jq -r '.vite | "  VITE_CONTROL_PLANE_API_URL = \(.VITE_CONTROL_PLANE_API_URL)\n  VITE_GATEWAY_URL           = \(.VITE_GATEWAY_URL)"' \
+            electron/release.config.json
 
       # `build`, not `build:alpha` — the difference is `tsc -b`.
       #
@@ -331,7 +351,7 @@ jobs:
         # build-config generator ran with empty endpoints and failed. GitHub
         # ships bash on the Windows runners, so this works on all three.
         shell: bash
-        run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
+        run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Go
         uses: actions/setup-go@v6
@@ -369,8 +389,8 @@ jobs:
           TARGET_ARCH: ${{ matrix.target_arch }}
           VERSION: ${{ needs.prepare.outputs.version }}
           # RELIANT_SERVER_URL / RELIANT_GATEWAY_URL come from
-          # .github/release-config.env, loaded into $GITHUB_ENV above —
-          # non-sensitive hostnames, not secrets.
+          # electron/release.config.json (generated from control-plane's KCL),
+          # loaded into $GITHUB_ENV above — non-sensitive hostnames, not secrets.
           RELIANT_AUTH_URL: ${{ secrets.VITE_SUPABASE_URL }}
           RELIANT_AUTH_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
         run: |
@@ -473,7 +493,7 @@ jobs:
         # build-config generator ran with empty endpoints and failed. GitHub
         # ships bash on the Windows runners, so this works on all three.
         shell: bash
-        run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
+        run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -637,7 +657,7 @@ jobs:
         # build-config generator ran with empty endpoints and failed. GitHub
         # ships bash on the Windows runners, so this works on all three.
         shell: bash
-        run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
+        run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -787,7 +807,7 @@ jobs:
         # build-config generator ran with empty endpoints and failed. GitHub
         # ships bash on the Windows runners, so this works on all three.
         shell: bash
-        run: grep -v '^#' .github/release-config.env | grep -v '^$' >> "$GITHUB_ENV"
+        run: jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

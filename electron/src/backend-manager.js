@@ -75,6 +75,7 @@ class BackendManager {
     this.apiUrl = BackendManager.resolveDaemonServerURL();
     this.rendererApiUrl = process.env.RELIANT_API_URL || this.apiUrl;
     this.gatewayUrl = process.env.RELIANT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+    this.controlPlaneUrl = process.env.RELIANT_CONTROL_PLANE_URL || '';
 
     // Load environment variables on initialization
     this.loadEnvironment();
@@ -122,6 +123,11 @@ class BackendManager {
     this.apiUrl = BackendManager.resolveDaemonServerURL();
     this.rendererApiUrl = process.env.RELIANT_API_URL || this.apiUrl;
     this.gatewayUrl = process.env.RELIANT_GATEWAY_URL || DEFAULT_GATEWAY_URL;
+    // The admin-server origin, surfaced to the renderer as
+    // window.RELIANT_CONFIG.controlPlaneURL. This read has to happen HERE,
+    // after build-config.js has been projected into process.env above —
+    // in a packaged app that file is the only source for it.
+    this.controlPlaneUrl = process.env.RELIANT_CONTROL_PLANE_URL || '';
   }
 
   /**
@@ -1443,6 +1449,7 @@ class BackendManager {
       apiUrl: this.apiUrl,
       rendererApiUrl: this.rendererApiUrl,
       gatewayUrl: this.gatewayUrl,
+      controlPlaneUrl: this.controlPlaneUrl,
       isShuttingDown: this.isShuttingDown,
     };
   }
