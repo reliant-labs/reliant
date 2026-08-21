@@ -183,6 +183,11 @@ type Repository interface {
 	// this cannot return another thread's children), joined to each child's
 	// live workflow/thread state. Backs spawn_status's listing mode.
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*SpawnChild, error)
+	// SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool
+	// call that started it, for one chat. threads has no
+	// spawned_by_tool_call_id column, so the reconnect snapshot recovers the
+	// cancel button's target through this join rather than reading a field.
+	SpawnToolCallIDsByChildThread(ctx context.Context, chatID string) (map[string]string, error)
 
 	// Plans
 	CreatePlan(ctx context.Context, plan *Plan) error

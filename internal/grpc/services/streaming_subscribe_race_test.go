@@ -94,6 +94,12 @@ func (r *snapshotGateRepo) ListThreadsByConversation(context.Context, string) ([
 	return nil, nil
 }
 
+// A spawn's cancel button needs the tool call that started it, which the
+// snapshot recovers via tool_calls.child_workflow_id -> workflows.thread.
+func (r *snapshotGateRepo) SpawnToolCallIDsByChildThread(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+
 func (r *snapshotGateRepo) ListContentBlocksForMessages(context.Context, []string) ([]*db.MessageContentBlock, error) {
 	return nil, nil
 }

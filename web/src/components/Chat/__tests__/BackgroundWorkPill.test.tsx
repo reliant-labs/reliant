@@ -148,6 +148,36 @@ describe("BackgroundWorkPill", () => {
     expect(screen.getByLabelText("Cancel background agent researcher")).toBeTruthy();
   });
 
+  // The reload case. The backend now recovers spawned_by_tool_call_id for the
+  // snapshot (tool_calls.child_workflow_id -> workflows.thread), but a row can
+  // still arrive without one — a spawn caught mid-dispatch, before
+  // child_workflow_id is written. Previously the ■ button was rendered behind
+  // a bare `{spawn.toolCallId && ...}` truthiness guard, so those spawns showed
+  // NO stop control at all and simply looked uncancellable.
+  //
+  // Silently vanishing is the worst option: the spawns most likely to lack an
+  // id are long-running ones, which are exactly the ones a user wants to stop.
+  // Rendering a live button that no-ops would be worse still. So the control
+  // stays visible and is explicitly disabled, saying why.
+  it("keeps a visible but disabled stop control for a spawn with no tool call id", () => {
+    useThreadActivityStore
+      .getState()
+      .setThreads(CHAT_ID, [thread({ thread: "thread-42" })]);
+    const cancelToolCall = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ cancelToolCall });
+
+    renderPill();
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+
+    const stop = screen.getByLabelText("Cancel background agent researcher");
+    expect(stop).toBeDisabled();
+    expect(stop.getAttribute("title")).toContain("cannot be cancelled");
+
+    fireEvent.click(stop);
+    expect(cancelToolCall).not.toHaveBeenCalled();
+  });
+
   it("cancels the originating tool call without selecting the spawn row", () => {
     useThreadActivityStore.getState().setThreads(CHAT_ID, [
       thread({
