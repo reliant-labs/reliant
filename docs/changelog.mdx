@@ -13,6 +13,17 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.6" description="August 21, 2026">
+### Sign-in works again, and a stuck chat can no longer strand itself
+
+- **Signing in no longer lands on a black screen** The packaged app began serving itself over an internal `app://` address instead of a plain file path. Several checks around the app still tested for the old file path to decide "am I the desktop app?", and every one of them silently answered no. Sign-in itself worked — the app just never rendered anything afterwards, with nothing in the console to explain it. Worse, the check that stops a local address being sent to an identity provider stopped recognising the app's own origin. All of those checks now agree on what the packaged app looks like.
+- **The desktop app is built with the addresses it actually needs** The released app was built from a hand-written list of settings that had drifted out of sync with the real ones. Eleven values the app reads were never supplied, so signing in with a coupon failed with "Control plane API URL not configured" and the gateway address was missing entirely. Those values now come from the same declaration the hosted web app uses, so the two cannot disagree, and the build fails outright if any of them is empty or points at localhost rather than shipping quietly broken.
+- **Signing in with Claude Code or Codex fails with a real explanation** Both sign-in flows used a browser cryptography API without checking it existed. On a page served over plain HTTP — a tunnel or a phone on your network — that API is absent, so the flow died with `Cannot read properties of undefined (reading 'digest')` before anything useful happened. The flows now check first and tell you the page needs to be served over HTTPS, instead of failing with a message about an undefined property.
+- **A chat can no longer wedge itself permanently** When a reply was interrupted, the agent recorded that a queued message was waiting even when none was. The conversation would then loop back for a message that did not exist, find the same reply still at the end, and fail — every time, forever. The chat could not be advanced again by any means. The agent now checks whether a message is genuinely queued rather than assuming one is, and a conversation that reaches this state recovers on its next turn instead of staying stuck.
+- **The stop button on background agents survives a refresh** Background agents showed a stop button when they started and lost it after a page reload, which meant the long-running agents most worth stopping were the ones you could not stop. The identifier the button needs was only ever sent live and was missing from the data loaded on refresh. It is now recovered from records that already existed, so agents already running get their stop button back too.
+- **Files outside the current workspace can be opened** Clicking a file path the assistant mentioned did nothing when the file sat outside the current workspace, with a tooltip saying it could not be opened. In the desktop app those files now open. Writes stay confined to the workspace, and a path that tries to climb out of its folder is still refused.
+</Update>
+
 <Update label="v1.7.5" description="August 20, 2026">
 ### Three fixes to things that misbehaved quietly
 
