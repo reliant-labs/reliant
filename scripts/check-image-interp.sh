@@ -46,10 +46,22 @@ for arch in "${ARCHES[@]}"; do
     fail=1; rm -rf "$work"; trap - EXIT; continue
   fi
 
-  if ! crane export --platform "linux/${arch}" "$IMAGE" - 2>/dev/null \
-      | tar -xO usr/local/bin/reliant > "$work/bin" 2>/dev/null || [ ! -s "$work/bin" ]; then
+  # ONE export per arch, to a file. The rootfs is ~200MB, and the earlier
+  # version streamed it TWICE — once for the binary, once to list the loader.
+  # The second stream ended in `grep -q`, which exits on its first match and
+  # closes the pipe; crane then dies on EPIPE, tar sees a truncated stream, and
+  # the listing came back empty. That reported "loader NOT in the image" for
+  # images whose loader was plainly there — a false failure on a correct build.
+  # Exporting once and inspecting the file removes the race entirely.
+  if ! crane export --platform "linux/${arch}" "$IMAGE" "$work/rootfs.tar" 2>/dev/null \
+      || [ ! -s "$work/rootfs.tar" ]; then
     echo "  ${arch}: SKIP (no linux/${arch} published for this image)"
     rm -rf "$work"; trap - EXIT; continue
+  fi
+
+  if ! tar -xOf "$work/rootfs.tar" usr/local/bin/reliant > "$work/bin" 2>/dev/null || [ ! -s "$work/bin" ]; then
+    echo "  ${arch}: FAIL — usr/local/bin/reliant not found in the image." >&2
+    fail=1; rm -rf "$work"; trap - EXIT; continue
   fi
 
   # Read PT_INTERP from the program headers rather than grepping strings: a Go
@@ -90,8 +102,7 @@ PY
       # runs perfectly — which is exactly what it did on the first run of this
       # guard, against a correctly-built image.
       loader="$(basename "$interp")"
-      if crane export --platform "linux/${arch}" "$IMAGE" - 2>/dev/null \
-          | tar -tf - 2>/dev/null | grep -qE "(^|/)${loader}\$"; then
+      if tar -tf "$work/rootfs.tar" 2>/dev/null | grep -qE "(^|/)${loader}\$"; then
         echo "  ${arch}: OK (${interp} — ${loader} present)"
       else
         echo "  ${arch}: FAIL — wants ${interp}, and ${loader} is NOT in the image." >&2
