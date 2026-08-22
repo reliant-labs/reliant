@@ -102,10 +102,25 @@ PY
       # runs perfectly — which is exactly what it did on the first run of this
       # guard, against a correctly-built image.
       loader="$(basename "$interp")"
-      if tar -tf "$work/rootfs.tar" 2>/dev/null | grep -qE "(^|/)${loader}\$"; then
-        echo "  ${arch}: OK (${interp} — ${loader} present)"
+
+      # List once into a file. `tar -tf … | grep -q` exits at the first match
+      # and closes the pipe; against a ~380MB archive tar then takes SIGPIPE,
+      # and under `set -o pipefail` (or simply a truncated read) the match is
+      # lost. Materialising the listing removes the race and lets the failure
+      # path print real evidence instead of a bare assertion.
+      tar -tf "$work/rootfs.tar" > "$work/entries.txt" 2>/dev/null || true
+      entries="$(wc -l < "$work/entries.txt" | tr -d ' ')"
+
+      # -F, not -E: the loader name contains dots, which are regex wildcards.
+      # Fixed-string matching on the trailing path component is both correct
+      # and immune to that.
+      if grep -qxF "$loader" <(sed 's|.*/||' "$work/entries.txt"); then
+        echo "  ${arch}: OK (${interp} — ${loader} present, ${entries} entries scanned)"
       else
         echo "  ${arch}: FAIL — wants ${interp}, and ${loader} is NOT in the image." >&2
+        echo "           scanned ${entries} tar entries; loader-like entries found:" >&2
+        grep -E 'ld-(linux|musl)' "$work/entries.txt" | head -5 | sed 's/^/             /' >&2 || \
+          echo "             (none)" >&2
         fail=1
       fi ;;
   esac
