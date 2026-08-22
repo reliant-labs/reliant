@@ -99,6 +99,21 @@ jobs:
           cache-from: type=gha,scope=reliant
           cache-to: type=gha,scope=reliant,mode=max
 
+      # Reject an image whose binary asks for a loader the image does not
+      # ship. `docker build` cannot catch this: the build succeeds, the
+      # manifest is a valid linux/<arch>, and only exec fails — with
+      # "no such file or directory" naming the BINARY, not the missing
+      # interpreter. It crashlooped three prod deployments after the arm64
+      # leg was built in a musl toolchain against a glibc runtime base.
+      #
+      # Runs BEFORE the prod mirror below, so a bad image is never copied
+      # into the registry prod deploys from.
+      - name: Verify image interpreters
+        run: |
+          curl -sSL "https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz" \
+            | tar -xz -C /usr/local/bin crane
+          ./scripts/check-image-interp.sh "${{ env.GAR_NONPROD }}/reliant@${{ steps.build.outputs.digest }}" amd64 arm64
+
       # ── Prod GAR mirror ──────────────────────────────────────────────
       # Prod GAR (reliant-labs-475814) is a DIFFERENT GCP project from the
       # nonprod one used above, so it needs the prod WIF identity. Finish
