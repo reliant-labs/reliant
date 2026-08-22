@@ -163,7 +163,12 @@ fi
 
 # Create git tag with v prefix
 echo -e "${YELLOW}🏷️  Creating release commit and tag...${NC}"
-git add electron/package.json
+# `npm version` rewrites BOTH package.json and package-lock.json. Staging
+# only the former left the lockfile's version field behind on every release
+# — by v1.7.8 it still read 1.7.4, three releases stale — and left the
+# working tree dirty after a release, which is exactly the state that hides
+# a real uncommitted change.
+git add electron/package.json electron/package-lock.json
 if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     git add "$CHANGELOG_FILE" "$GENERATED_CHANGELOG"
 fi
