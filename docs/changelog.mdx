@@ -13,6 +13,13 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.7" description="August 22, 2026">
+### Deployment plumbing, and a desktop build that runs everywhere it claims to
+
+- **The published container image runs on every architecture it advertises** The image is built for both Intel and ARM, but the ARM build was linked against system libraries the image does not contain. Starting it failed with a message naming the program as missing — even though the program was there — because it was really the loader that was absent. The build now uses a toolchain that matches the image, and a check in the release pipeline reads the compiled program's own requirements and refuses to publish an image that cannot start. That check exists because nothing before it could tell: the build succeeds, the image looks correct, and only running it fails.
+- **Releases reach production without manual steps** The deployment pipeline had never once completed. It advanced through environments in order, but asking it for a single environment caused it to skip the ones before — and skipping those skipped the one you asked for. Production sat behind an environment whose cluster no longer exists, so it could never be reached at all. Deployments were being applied by hand as a result. It now deploys the environment you ask for, and pins every component to the exact build recorded for that release rather than assuming one label fits components built in different places.
+</Update>
+
 <Update label="v1.7.6" description="August 21, 2026">
 ### Sign-in works again, and a stuck chat can no longer strand itself
 
