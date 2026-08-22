@@ -78,13 +78,23 @@ PY
       echo "           Build in a glibc toolchain (golang:*-bookworm), not alpine." >&2
       fail=1 ;;
     *)
-      # Dynamic and non-musl: the loader must exist in the image, or exec dies
-      # with a misleading "no such file or directory" naming the binary.
+      # Dynamic and non-musl: the loader must be reachable, or exec dies with a
+      # misleading "no such file or directory" naming the binary.
+      #
+      # Match on the BASENAME, not the absolute path. Debian is merged-usr: the
+      # real file is /usr/lib/<triplet>/ld-linux-<arch>.so.1 and the path the
+      # binary names (/lib64/ld-linux-x86-64.so.2) is reached through /lib64 ->
+      # /usr/lib64 and /lib -> /usr/lib symlinks, which are directory symlinks
+      # that never appear as tar entries for the loader's literal path. An
+      # exact-path check therefore reports "NOT in the image" for an image that
+      # runs perfectly — which is exactly what it did on the first run of this
+      # guard, against a correctly-built image.
+      loader="$(basename "$interp")"
       if crane export --platform "linux/${arch}" "$IMAGE" - 2>/dev/null \
-          | tar -tf - 2>/dev/null | grep -qF "${interp#/}"; then
-        echo "  ${arch}: OK (${interp} present in image)"
+          | tar -tf - 2>/dev/null | grep -qE "(^|/)${loader}\$"; then
+        echo "  ${arch}: OK (${interp} — ${loader} present)"
       else
-        echo "  ${arch}: FAIL — wants ${interp}, which is NOT in the image." >&2
+        echo "  ${arch}: FAIL — wants ${interp}, and ${loader} is NOT in the image." >&2
         fail=1
       fi ;;
   esac
