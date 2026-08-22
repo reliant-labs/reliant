@@ -1149,11 +1149,18 @@ jobs:
           BASE_URL="https://downloads.reliantlabs.io"
           FILES=()
 
-          # Always purge the auto-update manifests (these are what clients poll)
+          # Always purge the auto-update manifests (these are what clients poll).
+          #
+          # The Windows manifest is `<channel>.yml`, NOT `<channel>-win.yml` —
+          # electron-builder names the Windows feed after the channel alone and
+          # only suffixes the other platforms. Purging `latest-win.yml` hit a
+          # 404 and left the real feed cached: after v1.7.7 published, clients
+          # were still served version 1.7.5 for ~20h (cf-cache-status HIT,
+          # age 72856 against max-age 86400) while origin was already correct.
           if [[ "$CHANNEL" == "latest" ]]; then
-            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest-win.yml")
+            FILES+=("${BASE_URL}/latest-mac.yml" "${BASE_URL}/latest-linux.yml" "${BASE_URL}/latest.yml")
           else
-            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha-win.yml")
+            FILES+=("${BASE_URL}/alpha-mac.yml" "${BASE_URL}/alpha-linux.yml" "${BASE_URL}/alpha.yml")
           fi
 
           # Purge versioned download URLs per platform
@@ -1169,7 +1176,9 @@ jobs:
           fi
           if [[ "$LINUX_RESULT" == "success" ]]; then
             FILES+=(
-              "${BASE_URL}/Reliant-${VERSION_NUM}-linux-x64.AppImage"
+              # x86_64, not x64 — electron-builder uses the GNU arch name for
+              # Linux AppImages while using x64 for mac/win.
+              "${BASE_URL}/Reliant-${VERSION_NUM}-linux-x86_64.AppImage"
               "${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.AppImage"
               "${BASE_URL}/Reliant-${VERSION_NUM}-linux-amd64.deb"
               "${BASE_URL}/Reliant-${VERSION_NUM}-linux-arm64.deb"
@@ -1181,6 +1190,25 @@ jobs:
               "${BASE_URL}/Reliant-${VERSION_NUM}-win-arm64.exe"
               "${BASE_URL}/Reliant-${VERSION_NUM}-win-x64.exe.blockmap"
             )
+          fi
+
+          # Purging a URL that does not exist is accepted by Cloudflare with a
+          # 200, so a misspelled name fails SILENTLY and the real object stays
+          # cached — which is precisely how latest-win.yml went unnoticed. Check
+          # that each URL resolves and fail the step if one does not, so a
+          # rename in electron-builder's output surfaces here instead of as a
+          # stale feed a day later.
+          missing=0
+          for url in "${FILES[@]}"; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 "$url")
+            if [[ "$code" != "200" ]]; then
+              echo "::error::purge target does not exist (HTTP ${code}): ${url}"
+              missing=$((missing + 1))
+            fi
+          done
+          if [[ "$missing" -gt 0 ]]; then
+            echo "::error::${missing} purge target(s) do not exist — the published artifact names have changed. Fix the list in this step; a purge of a non-existent URL is a silent no-op."
+            exit 1
           fi
 
           echo "Purging ${#FILES[@]} URLs from Cloudflare cache..."
