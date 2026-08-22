@@ -13,6 +13,14 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.8" description="August 22, 2026">
+### The app no longer goes blank when a setting is missing
+
+- **A missing setting no longer leaves you looking at a blank window** One piece of configuration is read the moment the app starts. If it was absent, the code that reads it stopped the app before anything was drawn — so instead of an error you got an empty window, with the explanation only visible in a developer console most people never open. The app now starts regardless and only reports the problem if you reach a feature that genuinely needs that setting, where the message says which setting is missing. Nothing is invented to paper over it: a build that is missing the value still says so rather than quietly behaving as though it has one.
+- **Windows gets told about new versions on time** After a release, the file the app checks to discover updates was being cleared for macOS and Linux but not for Windows, because the step that clears it named a file that does not exist. Windows users could keep being told they were up to date for up to a day after a new version shipped. The correct file is now cleared, and the release will stop and report if it is ever asked to clear something that is not there — the previous behaviour reported success while doing nothing.
+- **The end-to-end browser tests actually run** The browser test suite had never passed. Every test was failing for the same reason described above — the app never started, so nothing could be tested — which meant the suite could not report on anything else either. With that fixed the full suite now runs and passes, so a real regression in the interface will be caught before it ships instead of being hidden behind a permanently red result.
+</Update>
+
 <Update label="v1.7.7" description="August 22, 2026">
 ### Deployment plumbing, and a desktop build that runs everywhere it claims to
 
