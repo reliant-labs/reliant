@@ -6,6 +6,11 @@ import { getIsDev } from './constants'
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321'
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
 
+export const MISSING_ANON_KEY_MESSAGE =
+  'VITE_SUPABASE_ANON_KEY is not set in this build, so authentication is unavailable. ' +
+  'Source builds get it from the environment; released builds get it from ' +
+  'electron/release.config.json via the workflow\'s "Export renderer build config" step.'
+
 const isElectron = !!window.electronAPI
 
 // Custom storage adapter for Electron that uses our file-based auth storage
@@ -181,15 +186,70 @@ const getStorage = (): SupportedStorage => {
   return window.localStorage
 }
 
-export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: false,
-    storage: getStorage(),
-    storageKey: 'supabase-auth',
-    flowType: 'pkce',
+/** True when this build carries the config Supabase needs to start. */
+export const isSupabaseConfigured = (): boolean => Boolean(supabaseAnonKey)
+
+let client: SupabaseClient | null = null
+
+/**
+ * Build the real client on first use.
+ *
+ * This is deliberately NOT called at module scope. supabase-js throws
+ * `supabaseKey is required.` from createClient when the key is empty, and this
+ * module is imported transitively from the app entry (authStore ->
+ * AuthInitializer), so a module-scope call turned one missing build variable
+ * into a blank page: React never mounted and `#root` stayed empty, with the
+ * only evidence a console error nobody sees in a packaged app.
+ *
+ * Deferring the construction moves that failure to the first auth call, where
+ * a React error boundary can catch it and show the reason. Everything that
+ * doesn't touch auth keeps working.
+ *
+ * We do NOT substitute a fallback anon key. There is no local Supabase in this
+ * repo to fall back TO — no supabase/config.toml, no compose service, and
+ * scripts/dev.sh sets no VITE_SUPABASE_*, so the pre-existing
+ * `http://127.0.0.1:54321` URL default already points at nothing. Inventing a
+ * credential would make a misconfigured build look healthy while pointing
+ * somewhere useless, which is the exact failure sync-release-config.mjs was
+ * written to prevent ("a packaged app that silently ships pointing at
+ * localhost or at nothing — it builds green and fails on a user's machine").
+ * A released artifact still cannot reach this path: that script fails the
+ * build when vite.VITE_SUPABASE_ANON_KEY is empty.
+ */
+const getClient = (): SupabaseClient => {
+  if (client) return client
+  if (!supabaseAnonKey) throw new Error(MISSING_ANON_KEY_MESSAGE)
+
+  client = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: false,
+      storage: getStorage(),
+      storageKey: 'supabase-auth',
+      flowType: 'pkce',
+    },
+  })
+  return client
+}
+
+/**
+ * Drop-in replacement for the eagerly-created client.
+ *
+ * Callers keep writing `supabase.auth.signInWithPassword(...)`; the proxy
+ * constructs the underlying client on the first property access instead of at
+ * import time. Existing call sites are unchanged.
+ */
+export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
+  get: (_target, property) => {
+    const resolved = getClient()
+    const value = Reflect.get(resolved, property) as unknown
+    // Bind methods to the real client so `this` is never the proxy, which
+    // would re-enter this trap for every internal property access.
+    return typeof value === 'function' ? value.bind(resolved) : value
   },
+  set: (_target, property, value) => Reflect.set(getClient(), property, value),
+  has: (_target, property) => Reflect.has(getClient(), property),
 })
 
 // NOTE: OAuth callback handling is done in authStore.ts to keep all auth logic centralized

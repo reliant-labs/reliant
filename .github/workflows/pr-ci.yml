@@ -318,6 +318,21 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
 
+      # Without this the renderer builds with no VITE_SUPABASE_ANON_KEY, and
+      # supabase-js throws `supabaseKey is required.` — previously at module
+      # load, which left #root empty and timed out every test in the suite on a
+      # blank page. web/src/lib/supabase.ts now defers that failure to first
+      # use, so the app mounts either way; supplying the key here is what lets
+      # the auth-dependent tests actually exercise auth.
+      #
+      # Same mechanism as release.yml's "Export renderer build config". These
+      # are the public KCL-sourced values only — no secrets are layered on
+      # here, because Playwright needs none of them. VITE_SUPABASE_ANON_KEY is
+      # a publishable client-side key that already ships inside every desktop
+      # build and is committed in electron/release.config.json.
+      - name: Export renderer build config
+        run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
+
       - name: Build (alpha)
         working-directory: web
         run: npm run build:alpha
