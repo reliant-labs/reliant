@@ -108,13 +108,19 @@ jobs:
       #
       # Runs BEFORE the prod mirror below, so a bad image is never copied
       # into the registry prod deploys from.
-      # continue-on-error: the CHECK is newer than the invariant it guards, and
-      # a bug in the checker must not block image publication. Its verdict is
-      # still visible in the run, and the musl branch — the one that actually
-      # broke prod — is the part that has been verified against real images.
-      # Flip this to blocking once it has run clean across a few builds.
+      # BLOCKING. A musl-linked binary on this glibc runtime cannot exec, and
+      # nothing before this step can tell: the build succeeds, the manifest is
+      # a valid linux/<arch>, and `crane config` reports the right platform.
+      # Only running it fails — which is how three prod deployments ended up in
+      # CrashLoopBackOff.
+      #
+      # This ran non-blocking for one build while two apparent false failures
+      # were investigated. Both turned out to be expired local GCP credentials
+      # rather than checker bugs: re-run against the same published image with
+      # valid credentials, it reports
+      #   amd64: OK (/lib64/ld-linux-x86-64.so.2 — ld-linux-x86-64.so.2 present)
+      # so the check is trustworthy and is restored to blocking here.
       - name: Verify image interpreters
-        continue-on-error: true
         run: |
           curl -sSL "https://github.com/google/go-containerregistry/releases/download/v0.20.2/go-containerregistry_Linux_x86_64.tar.gz" \
             | tar -xz -C /usr/local/bin crane
