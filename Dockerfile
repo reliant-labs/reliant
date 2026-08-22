@@ -12,11 +12,32 @@
 # deploy time: `user: root` in compose or securityContext in k8s.
 
 # ── Build ────────────────────────────────────────────────────────────────────
-# golang:1.26.2-alpine — pinned by digest, pulled via the GCP Artifact Registry
-# pull-through cache (dodges Docker Hub's per-IP rate limit).
-FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1 AS builder
+# golang:1.26.2-BOOKWORM (glibc), pinned by digest, pulled via the GCP Artifact
+# Registry pull-through cache (dodges Docker Hub's per-IP rate limit).
+#
+# The builder's libc is load-bearing, not incidental. CGO_ENABLED=0 does NOT
+# make this binary static: the forge module pulls kcl-lang.io ->
+# ebitengine/purego, which emits cgo_import_dynamic directives, so the binary
+# is dynamically linked and Go stamps a PT_INTERP chosen from the BUILDER's
+# libc — per target arch.
+#
+# On the previous alpine (musl) builder that produced:
+#   GOARCH=amd64 -> /lib64/ld-linux-x86-64.so.2   (glibc — worked by luck)
+#   GOARCH=arm64 -> /lib/ld-musl-aarch64.so.1     (musl  — BROKEN)
+# and the debian runtime below ships no musl loader, so the arm64 image died
+# with `exec /usr/local/bin/reliant: no such file or directory` — an error
+# naming the BINARY even though the binary is present, because the kernel is
+# reporting the missing INTERPRETER. That crashlooped reliant-api-server,
+# reliant-temporal-worker and daemon-gateway in prod.
+#
+# A glibc builder makes both arches agree with the runtime base. Verified:
+# arm64 now stamps /lib/ld-linux-aarch64.so.1, which the runtime provides at
+# /usr/lib/aarch64-linux-gnu/. scripts/check-image-interp.sh enforces this in
+# CI, because a build-only check cannot see it — the image builds fine and
+# only fails at exec.
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:47ce5636e9936b2c5cbf708925578ef386b4f8872aec74a67bd13a627d242b19 AS builder
 ARG TARGETARCH
-RUN apk add --no-cache git
+RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 # go.work (gitignored, machine-local) bridges this build to the sibling
 # ../forge checkout for local development. That checkout is absent from the
