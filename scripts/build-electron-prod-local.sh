@@ -132,6 +132,38 @@ if ! codesign --verify --deep "$APP" 2>/dev/null; then
   exit 1
 fi
 
+# ── Launcher ──────────────────────────────────────────────────────────
+#
+# Emitted because launching this app from a DEV SHELL silently breaks it, and
+# the failure does not look like an environment problem.
+#
+# BackendManager decides which daemon binary to run from
+# `process.env.NODE_ENV === 'development'` (backend-manager.js) — the ambient
+# environment, NOT whether the app is packaged. A dev shell exports
+# NODE_ENV=development and RELIANT_BACKEND_BIN=<worktree>/dist/reliant, and
+# `open` passes both to the app. The packaged prod build then runs the DEV
+# binary against http://localhost:8090, the local stack is not there, and the
+# UI reports:
+#
+#   Daemon failed to become ready within 30000ms — no runtime record written
+#   [gRPC Client] gRPC client not ready - no backend URL available
+#
+# — with no backend call ever attempted. Launching from Finder or the Dock
+# works, because those inherit a clean environment; only a terminal launch
+# fails, which makes it look intermittent.
+#
+# This wrapper strips the dev vars so the app behaves the same either way.
+LAUNCHER="$PROJECT_ROOT/electron/dist/run-reliant-local.sh"
+cat > "$LAUNCHER" <<LAUNCH
+#!/usr/bin/env bash
+# Launch the local prod build with dev environment variables stripped.
+# See scripts/build-electron-prod-local.sh for why this is necessary.
+exec env -u NODE_ENV -u RELIANT_BACKEND_BIN -u RELIANT_API_URL \\
+         -u RELIANT_SERVER_URL -u RELIANT_GATEWAY_URL -u DISABLE_TLS \\
+     open -a "$APP" "\$@"
+LAUNCH
+chmod +x "$LAUNCHER"
+
 cat <<EOF
 
 ==> Done.
@@ -142,5 +174,11 @@ Configured against PRODUCTION (${RELIANT_API_URL:-?}).
 Runs alongside your installed Reliant: separate appId, separate userData
 (~/Library/Application Support/reliant-local), separate logs.
 
-  open "$APP"
+Launch it with:
+
+  $LAUNCHER
+
+Do NOT use a bare \`open\` from a dev shell: BackendManager keys off
+NODE_ENV, so it would run the DEV binary against localhost and fail with
+"Daemon failed to become ready". Finder/Dock are fine.
 EOF
