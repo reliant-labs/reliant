@@ -1451,6 +1451,17 @@ class BackendManager {
       gatewayUrl: this.gatewayUrl,
       controlPlaneUrl: this.controlPlaneUrl,
       isShuttingDown: this.isShuttingDown,
+      // Whether the daemon is running but has no credentials yet, so it has
+      // NOT registered with the control-plane and cannot appear in
+      // ListDaemons.
+      //
+      // The renderer needs this to tell two states apart that look identical
+      // through ListDaemons alone — "this user has no daemon" and "this
+      // user's daemon is seconds away from registering". Onboarding's compute
+      // step asks the user to CHOOSE their compute, and asking during the
+      // second one produces a question that answers itself moments later.
+      // See web/src/components/OnboardingFlow/steps/ComputeStep.tsx.
+      awaitingCredentials: this.isAwaitingCredentials(),
     };
   }
 

@@ -20,6 +20,7 @@ import {
 } from "@/hooks/useOnboardingQueries";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { useDaemonProvisioning } from "@/hooks/useDaemonProvisioning";
 import type {
   CodeSource,
   ComputeChoice,
@@ -102,6 +103,12 @@ export function ComputeStep({
   const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
   const [error, setError] = useState<string | null>(null);
   const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
+  // A packaged desktop build ships its own daemon, but it has no credentials
+  // until sign-in — so for ~15s after a fresh sign-in ListDaemons correctly
+  // returns EMPTY while a daemon is seconds from registering. Without this,
+  // the step reads that as "no daemon" and asks a question that answers
+  // itself. See useDaemonProvisioning.
+  const localDaemonProvisioning = useDaemonProvisioning();
   const events = useEventBus();
   const hasAdvanced = useRef(false);
   const hasTrackedConnectedRef = useRef(false);
@@ -364,7 +371,7 @@ export function ComputeStep({
   // Visual pattern mirrors DaemonConnectingGate's "connecting" phase
   // (centered spinner in a tinted circle + headline) so the two onboarding
   // wait states feel consistent.
-  if (daemonLoading) {
+  if (daemonLoading || localDaemonProvisioning) {
     return (
       <div
         className="space-y-5 py-6 text-center"
@@ -377,10 +384,14 @@ export function ComputeStep({
         </div>
         <div className="space-y-1">
           <h2 className="text-sm font-medium text-foreground">
-            Checking your workspace…
+            {localDaemonProvisioning
+              ? "Connecting your daemon…"
+              : "Checking your workspace…"}
           </h2>
           <p className="text-xs text-muted-foreground">
-            One moment while we look for an existing daemon.
+            {localDaemonProvisioning
+              ? "This app ships with a daemon — finishing its setup."
+              : "One moment while we look for an existing daemon."}
           </p>
         </div>
       </div>

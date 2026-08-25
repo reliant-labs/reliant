@@ -306,6 +306,11 @@ const injectReliantConfig = async () => {
         // "Control plane API URL not configured" in the packaged build.
         controlPlaneURL: status?.controlPlaneUrl || '',
         daemonPort: status?.daemonPort || null,
+        // The daemon is up but not yet credentialed, so it has not registered
+        // and cannot show up in ListDaemons. Onboarding waits on this rather
+        // than asking the user to pick their compute during the gap. See
+        // BackendManager.getStatus().
+        daemonAwaitingCredentials: Boolean(status?.awaitingCredentials),
         isElectron: true,
         platform: info.platform,
         isDev: !info.isPackaged
