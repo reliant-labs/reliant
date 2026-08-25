@@ -95,12 +95,21 @@ export interface ElectronAPI {
 
   // OAuth
   //
-  // These two were declared here but never implemented in preload.js, so at
-  // runtime they are `undefined` in every build that has ever shipped. They are
-  // typed as optional so a call site cannot assume the main process provides
-  // them — the OAuth redirect target now comes from getAppURL() instead.
-  getOAuthRedirectUrl?: () => Promise<{ success: boolean; redirectUrl?: string; error?: string }>;
-  onOAuthCallback?: (callback: (callbackUrl: string) => void) => void;
+  // Starts the loopback receiver and returns the redirect URI to hand the
+  // provider (RFC 8252). Its PRESENCE is also how web/src/lib/oauth-signin.ts
+  // decides to open consent in the system browser instead of navigating this
+  // window — Google refuses OAuth in an embedded webview.
+  //
+  // Still OPTIONAL, deliberately: builds shipped before this existed do not
+  // provide it, and the renderer falls back to the hosted /auth/callback
+  // rather than throwing. Rejects (never resolves falsy) when the listener
+  // cannot start, so the fallback stays on one code path.
+  //
+  // The code comes back by NAVIGATING this window to /auth/callback, so there
+  // is no callback-event bridge to declare. The previous `onOAuthCallback`
+  // here was never implemented in preload.js — `undefined` in every shipped
+  // build — so the renderer listener that depended on it could never fire.
+  startOAuthRedirect?: () => Promise<{ redirectUri: string }>;
 
   // Auth storage
   authLoad: () => Promise<{ success: boolean; session?: any; error?: string }>;

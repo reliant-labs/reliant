@@ -37,9 +37,11 @@ const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
 const {
   APP_INDEX_URL,
+  APP_ORIGIN,
   registerAppProtocol,
   registerSchemePrivileges,
 } = require("./app-protocol");
+const oauthLoopback = require("./oauth-loopback");
 const { watchRendererHealth } = require("./renderer-health");
 const {
   formatDiagnosticsReport,
@@ -2374,6 +2376,42 @@ ipcMain.handle("toggle-fullscreen", (event) => {
 });
 
 // Auth storage IPC handlers
+
+// Loopback receiver for provider sign-in (Google / GitHub / Apple).
+//
+// The renderer runs the SAME sign-in code as the web app and holds the PKCE
+// verifier; all it needs from the main process is a redirect URI the system
+// browser can reach. See electron/src/oauth-loopback.js for why loopback
+// rather than a custom scheme, and why nothing is exchanged here.
+//
+// The code is delivered back by navigating the window to the app's own
+// /auth/callback route, so it lands in the shared component the browser build
+// uses. Navigating (rather than emitting an event the renderer must be
+// listening for) is deliberate: the previous design declared an
+// `onOAuthCallback` bridge in electron.d.ts that was NEVER implemented, so the
+// renderer's listener could not fire in any build that shipped.
+ipcMain.handle("oauth:start-redirect", async () => {
+  try {
+    const appOrigin = app.isPackaged ? APP_ORIGIN : DEV_URL;
+    const { redirectUri } = await oauthLoopback.startOAuthRedirect(appOrigin, (callbackUrl) => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        log.warn("[IPC] OAuth callback arrived with no window to deliver it to");
+        return;
+      }
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      log.info("[IPC] Delivering OAuth callback into the renderer");
+      mainWindow.loadURL(callbackUrl).catch((error) => {
+        log.error("[IPC] Failed to load OAuth callback route:", error);
+      });
+    });
+    return { success: true, redirectUri };
+  } catch (error) {
+    log.error("[IPC] Failed to start OAuth loopback listener:", error);
+    return { success: false, error: error.message };
+  }
+});
 
 ipcMain.handle("auth:load", async () => {
   try {

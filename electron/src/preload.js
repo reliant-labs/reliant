@@ -51,6 +51,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
 
+  // Provider sign-in (Google / GitHub / Apple).
+  //
+  // Returns the loopback redirect URI to hand the provider. Its PRESENCE is
+  // also the renderer's signal that it should open consent in the system
+  // browser rather than navigating itself — see web/src/lib/oauth-signin.ts.
+  // Rejecting rather than returning a falsy URI keeps the renderer's fallback
+  // (the hosted callback) on one code path.
+  startOAuthRedirect: async () => {
+    const result = await ipcRenderer.invoke('oauth:start-redirect');
+    if (!result?.success) {
+      throw new Error(result?.error || 'Failed to start the OAuth redirect listener');
+    }
+    return { redirectUri: result.redirectUri };
+  },
+
   // Auth storage
   authLoad: () => ipcRenderer.invoke('auth:load'),
   authSave: (session) => ipcRenderer.invoke('auth:save', session),

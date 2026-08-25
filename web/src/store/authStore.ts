@@ -4,7 +4,11 @@ import { supabase } from '@/lib/supabase'
 import { logger } from '@/lib/logger'
 import { getAppURL } from '@/lib/constants'
 import { setSentryUser } from '@/lib/sentry'
-import { devAuthGrpc } from '@/api/grpc-unauth'
+import {
+  startOAuthSignIn,
+  oauthCallbackTransport,
+  type OAuthProvider,
+} from '@/lib/oauth-signin'
 
 const isElectron = !!window.electronAPI
 
@@ -88,89 +92,6 @@ const trackAuthFunnelEvent = async (eventName: string, metadata: Record<string, 
   }
 }
 
-let oauthCallbackListenerRegistered = false
-
-const setupElectronOAuthCallbackListener = (setState: (state: Partial<AuthState>) => void) => {
-  if (!isElectron || !window.electronAPI?.onOAuthCallback || oauthCallbackListenerRegistered) {
-    return
-  }
-
-  oauthCallbackListenerRegistered = true
-
-  window.electronAPI.onOAuthCallback(async (callbackUrl: string) => {
-    logger.info('[AuthStore] OAuth callback received:', callbackUrl)
-    try {
-      // Parse callback URL
-      const url = new URL(callbackUrl)
-
-      // Check for error in URL params
-      const errorParam = url.searchParams.get('error')
-      const errorDescription = url.searchParams.get('error_description')
-      if (errorParam) {
-        logger.error('[AuthStore] OAuth error in callback:', errorParam, errorDescription)
-        if (errorDescription?.includes('already linked') ||
-            errorDescription?.includes('identity already exists') ||
-            errorParam === 'identity_already_exists') {
-          logger.warn('[AuthStore] Identity already exists on another account')
-          setState({ authError: 'This account is already registered. Your current session is intact — your chats and workspaces are safe.' })
-        } else {
-          setState({ authError: errorDescription || errorParam })
-        }
-        throw new Error(errorDescription || errorParam)
-      }
-
-      // Check if it's a PKCE flow (with code parameter)
-      const code = url.searchParams.get('code')
-      logger.info('[AuthStore] OAuth callback params:', {
-        hasCode: !!code,
-        hasHash: !!url.hash,
-        searchParams: url.search
-      })
-
-      if (code) {
-        logger.info('[AuthStore] Exchanging code for session...')
-        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-        if (error) {
-          logger.error('[AuthStore] OAuth code exchange error:', error)
-          logger.error('[AuthStore] Error details:', {
-            code: error.code,
-            message: error.message,
-            status: error.status,
-          })
-          throw error
-        }
-
-        logger.info('[AuthStore] Code exchange successful:', {
-          userId: data.user?.id,
-          email: data.user?.email,
-          identities: data.user?.identities?.map(i => i.provider),
-        })
-
-        // The Supabase GitHub provider is sign-in only (0 scopes) — its
-        // provider_token has no useful scopes and expires in 8h with no
-        // refresh token. Repo access goes through the dedicated
-        // /auth/github/authorize flow, which writes the long-lived token
-        // directly to git_credentials. See ../OnboardingFlow/steps/
-        // GitHubConnectStep.tsx and Settings/GitConnectionsSettings.tsx.
-
-        setState({
-          user: data.user,
-          session: data.session,
-        })
-
-        await trackAuthFunnelEvent('oauth_succeeded', {
-          auth_method: data.user?.app_metadata?.provider || data.user?.identities?.[0]?.provider || 'oauth',
-          oauth_callback_transport: isElectron ? 'localhost' : 'web',
-        })
-      } else {
-        logger.error('[AuthStore] Invalid OAuth callback URL format - no code')
-      }
-    } catch (error) {
-      logger.error('[AuthStore] Failed to handle OAuth callback:', error)
-    }
-  })
-}
 
 // OAuth functionality temporarily removed for API key focus
 
@@ -207,6 +128,49 @@ interface AuthState {
 
   initialize: () => Promise<void>
   refreshSession: () => Promise<void>
+}
+
+/**
+ * Start provider sign-in, with the analytics funnel and error handling that
+ * every provider shares.
+ *
+ * The flow itself lives in lib/oauth-signin.ts so the browser and the desktop
+ * app run the same code; this wrapper exists only so the three store actions
+ * do not each repeat the same funnel events and try/catch. Sign-in COMPLETES
+ * at /auth/callback (OAuthCallback.tsx), which is why the success event here
+ * records a hand-off rather than a session.
+ */
+const runOAuthSignIn = async (
+  set: (state: Partial<AuthState>) => void,
+  provider: OAuthProvider,
+  state?: OAuthRedirectState,
+): Promise<void> => {
+  set({ loading: true })
+  const startedAt = Date.now()
+  const transport = oauthCallbackTransport()
+
+  await trackAuthFunnelEvent('oauth_started', {
+    auth_method: provider,
+    oauth_callback_transport: transport,
+  })
+
+  try {
+    await startOAuthSignIn(provider, state)
+    // Desktop hands consent to the system browser and waits for the loopback
+    // redirect, so the window stays interactive; the browser build is
+    // navigating away and will never read this.
+    set({ loading: false })
+  } catch (error) {
+    await trackAuthFunnelEvent('oauth_failed', {
+      auth_method: provider,
+      oauth_callback_transport: transport,
+      failure_reason: normalizeFailureReason(error),
+      latency_ms: Date.now() - startedAt,
+    })
+    logger.error(`[AuthStore] ${provider} sign-in failed:`, error)
+    set({ loading: false })
+    throw error
+  }
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
@@ -284,219 +248,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     return { user: data.user, session: data.session }
   },
 
+  // Provider sign-in — ONE implementation for every provider and every surface.
+  //
+  // This used to be three near-identical copies, each split down the middle by
+  // an `isElectron` branch: the desktop half called a SERVER RPC
+  // (SystemService/StartOAuthSignIn) that ran the CLI login flow inside the
+  // hosted API pod — opening a browser and listening on 127.0.0.1 THERE, which
+  // is not the user's machine. Against prod it failed closed:
+  //   "auth provider not configured: RELIANT_AUTH_URL must be set"
+  //
+  // Now both surfaces run exactly the same code. startOAuthSignIn() differs
+  // only in where the provider is told to redirect (see lib/oauth-signin.ts),
+  // and the session is established by the SAME /auth/callback route with the
+  // SAME exchangeCodeForSession call in both. Nothing about sign-in depends on
+  // the daemon, so it works whether the daemon is local, remote, or absent —
+  // unlike Claude/Codex OAuth, whose credentials are daemon-scoped by design.
   signInWithGoogle: async () => {
-    set({ loading: true })
-    const startedAt = Date.now()
-    await trackAuthFunnelEvent('oauth_started', {
-      auth_method: 'google',
-      oauth_callback_transport: isElectron ? 'localhost' : 'web',
-    })
-
-    try {
-      if (isElectron) {
-        const oauthSession = await devAuthGrpc.startOAuthSignIn('google')
-        const { data, error } = await supabase.auth.setSession({
-          access_token: oauthSession.accessToken,
-          refresh_token: oauthSession.refreshToken,
-        })
-
-        if (error) {
-          logger.error('[AuthStore] Electron Google session hydration failed:', error)
-          set({ loading: false })
-          throw error
-        }
-
-        set({
-          user: data.user,
-          session: data.session,
-          loading: false,
-        })
-
-        await trackAuthFunnelEvent('oauth_succeeded', {
-          auth_method: 'google',
-          oauth_callback_transport: 'localhost',
-        })
-        return
-      }
-
-      const redirectTo = await getOAuthRedirectUrl()
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
-
-      if (error) {
-        logger.error('[AuthStore] OAuth error:', error)
-        set({ loading: false })
-        throw error
-      }
-
-      if (data?.url) {
-        window.location.href = data.url
-      } else {
-        logger.error('[AuthStore] No OAuth URL returned from Supabase')
-      }
-
-      set({ loading: false })
-    } catch (error) {
-      await trackAuthFunnelEvent('oauth_failed', {
-        auth_method: 'google',
-        oauth_callback_transport: isElectron ? 'localhost' : 'web',
-        failure_reason: normalizeFailureReason(error),
-        latency_ms: Date.now() - startedAt,
-      })
-      logger.error('[AuthStore] Catch block error:', error)
-      set({ loading: false })
-      throw error
-    }
+    await runOAuthSignIn(set, 'google')
   },
 
   signInWithGithub: async (state?: OAuthRedirectState) => {
-    set({ loading: true })
-    const startedAt = Date.now()
-    await trackAuthFunnelEvent('oauth_started', {
-      auth_method: 'github',
-      oauth_callback_transport: isElectron ? 'localhost' : 'web',
-    })
-
-    try {
-      if (isElectron) {
-        const oauthSession = await devAuthGrpc.startOAuthSignIn('github')
-        const { data, error } = await supabase.auth.setSession({
-          access_token: oauthSession.accessToken,
-          refresh_token: oauthSession.refreshToken,
-        })
-
-        if (error) {
-          logger.error('[AuthStore] Electron GitHub session hydration failed:', error)
-          set({ loading: false })
-          throw error
-        }
-
-        // The Supabase GitHub provider is sign-in only (0 scopes). We never
-        // persist the provider_token here — repo access comes from the
-        // dedicated /auth/github/authorize custom flow.
-
-        set({
-          user: data.user,
-          session: data.session,
-          loading: false,
-        })
-
-        await trackAuthFunnelEvent('oauth_succeeded', {
-          auth_method: 'github',
-          oauth_callback_transport: 'localhost',
-        })
-        return
-      }
-
-      const redirectTo = withOAuthState(await getOAuthRedirectUrl(), state ?? {})
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'github',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
-
-      if (error) {
-        logger.error('[AuthStore] OAuth error:', error)
-        set({ loading: false })
-        throw error
-      }
-
-      if (data?.url) {
-        window.location.href = data.url
-      } else {
-        logger.error('[AuthStore] No OAuth URL returned from Supabase')
-      }
-
-      set({ loading: false })
-    } catch (error) {
-      await trackAuthFunnelEvent('oauth_failed', {
-        auth_method: 'github',
-        oauth_callback_transport: isElectron ? 'localhost' : 'web',
-        failure_reason: normalizeFailureReason(error),
-        latency_ms: Date.now() - startedAt,
-      })
-      logger.error('[AuthStore] Catch block error:', error)
-      set({ loading: false })
-      throw error
-    }
+    // The Supabase GitHub provider is sign-in only (0 scopes). We never persist
+    // the provider_token here — repo access comes from the dedicated
+    // /auth/github/authorize custom flow.
+    await runOAuthSignIn(set, 'github', state)
   },
 
   signInWithApple: async () => {
-    set({ loading: true })
-    const startedAt = Date.now()
-    await trackAuthFunnelEvent('oauth_started', {
-      auth_method: 'apple',
-      oauth_callback_transport: isElectron ? 'localhost' : 'web',
-    })
-
-    try {
-      if (isElectron) {
-        const oauthSession = await devAuthGrpc.startOAuthSignIn('apple')
-        const { data, error } = await supabase.auth.setSession({
-          access_token: oauthSession.accessToken,
-          refresh_token: oauthSession.refreshToken,
-        })
-
-        if (error) {
-          logger.error('[AuthStore] Electron Apple session hydration failed:', error)
-          set({ loading: false })
-          throw error
-        }
-
-        set({
-          user: data.user,
-          session: data.session,
-          loading: false,
-        })
-
-        await trackAuthFunnelEvent('oauth_succeeded', {
-          auth_method: 'apple',
-          oauth_callback_transport: 'localhost',
-        })
-        return
-      }
-
-      const redirectTo = await getOAuthRedirectUrl()
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'apple',
-        options: {
-          redirectTo,
-          skipBrowserRedirect: true,
-        },
-      })
-
-      if (error) {
-        logger.error('[AuthStore] OAuth error:', error)
-        set({ loading: false })
-        throw error
-      }
-
-      if (data?.url) {
-        window.location.href = data.url
-      } else {
-        logger.error('[AuthStore] No OAuth URL returned from Supabase')
-      }
-
-      set({ loading: false })
-    } catch (error) {
-      await trackAuthFunnelEvent('oauth_failed', {
-        auth_method: 'apple',
-        oauth_callback_transport: isElectron ? 'localhost' : 'web',
-        failure_reason: normalizeFailureReason(error),
-        latency_ms: Date.now() - startedAt,
-      })
-      logger.error('[AuthStore] Catch block error:', error)
-      set({ loading: false })
-      throw error
-    }
+    await runOAuthSignIn(set, 'apple')
   },
+
 
   signInAnonymously: async () => {
     await trackAuthFunnelEvent('login_attempted', {
@@ -807,9 +588,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   initialize: async () => {
     if (get().initialized) return
-
-    // Always register OAuth callback listener in Electron, including dev mode.
-    setupElectronOAuthCallbackListener(set)
 
     // Restore API key session from localStorage
     const storedApiKey = localStorage.getItem('reliant-api-key')
