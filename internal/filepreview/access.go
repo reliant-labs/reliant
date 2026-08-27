@@ -101,9 +101,14 @@ func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string
 	}
 
 	// "" and "/" both mean "the workspace root itself" in this API, not the
-	// filesystem root. FileSystemProxyService encodes the same contract
-	// (see resolvePath in fs_proxy.go), and the file tree relies on it: it
-	// defaults an unset path to "/" to list the top of the workspace.
+	// filesystem root. The file tree relies on it: it defaults an unset path
+	// to "/" to list the top of the workspace.
+	//
+	// This is the ONLY implementation of that rule. FileSystemProxyService
+	// used to encode a second copy of it by hand (resolvePath in fs_proxy.go)
+	// and, because the copy omitted the withinBase check below, "/" reached
+	// the daemon as the literal filesystem root. It now calls this function,
+	// so the rule and its confinement cannot be separated again.
 	if requestedPath == "" || requestedPath == "/" {
 		return absBasePath, nil
 	}

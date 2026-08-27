@@ -50,6 +50,9 @@ const (
 	// SettingsServiceDeleteSettingProcedure is the fully-qualified name of the SettingsService's
 	// DeleteSetting RPC.
 	SettingsServiceDeleteSettingProcedure = "/reliant.v1.SettingsService/DeleteSetting"
+	// SettingsServiceBatchUpsertSettingsProcedure is the fully-qualified name of the SettingsService's
+	// BatchUpsertSettings RPC.
+	SettingsServiceBatchUpsertSettingsProcedure = "/reliant.v1.SettingsService/BatchUpsertSettings"
 	// SettingsServiceGetShortcutsProcedure is the fully-qualified name of the SettingsService's
 	// GetShortcuts RPC.
 	SettingsServiceGetShortcutsProcedure = "/reliant.v1.SettingsService/GetShortcuts"
@@ -142,6 +145,13 @@ type SettingsServiceClient interface {
 	UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error)
 	// DeleteSetting deletes a setting by key
 	DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error)
+	// BatchUpsertSettings writes many settings in one round trip.
+	//
+	// Each entry is an upsert with the same semantics as CreateSetting (which is
+	// itself an upsert server-side), so callers do not have to know whether a key
+	// already exists. Writers that previously fired one RPC per key — the tour's
+	// three-key save, the tool-call category toggles — now issue one.
+	BatchUpsertSettings(context.Context, *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error)
 	// GetShortcuts retrieves user keyboard shortcuts
 	GetShortcuts(context.Context, *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error)
 	// UpdateShortcuts updates user keyboard shortcuts
@@ -241,6 +251,12 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+SettingsServiceDeleteSettingProcedure,
 			connect.WithSchema(settingsServiceMethods.ByName("DeleteSetting")),
+			connect.WithClientOptions(opts...),
+		),
+		batchUpsertSettings: connect.NewClient[v1.BatchUpsertSettingsRequest, v1.BatchUpsertSettingsResponse](
+			httpClient,
+			baseURL+SettingsServiceBatchUpsertSettingsProcedure,
+			connect.WithSchema(settingsServiceMethods.ByName("BatchUpsertSettings")),
 			connect.WithClientOptions(opts...),
 		),
 		getShortcuts: connect.NewClient[v1.GetShortcutsRequest, v1.GetShortcutsResponse](
@@ -409,6 +425,7 @@ type settingsServiceClient struct {
 	getSetting                  *connect.Client[v1.GetSettingRequest, v1.GetSettingResponse]
 	updateSetting               *connect.Client[v1.UpdateSettingRequest, v1.UpdateSettingResponse]
 	deleteSetting               *connect.Client[v1.DeleteSettingRequest, v1.DeleteSettingResponse]
+	batchUpsertSettings         *connect.Client[v1.BatchUpsertSettingsRequest, v1.BatchUpsertSettingsResponse]
 	getShortcuts                *connect.Client[v1.GetShortcutsRequest, v1.GetShortcutsResponse]
 	updateShortcuts             *connect.Client[v1.UpdateShortcutsRequest, v1.UpdateShortcutsResponse]
 	getPreferences              *connect.Client[v1.GetPreferencesRequest, v1.GetPreferencesResponse]
@@ -460,6 +477,11 @@ func (c *settingsServiceClient) UpdateSetting(ctx context.Context, req *connect.
 // DeleteSetting calls reliant.v1.SettingsService.DeleteSetting.
 func (c *settingsServiceClient) DeleteSetting(ctx context.Context, req *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error) {
 	return c.deleteSetting.CallUnary(ctx, req)
+}
+
+// BatchUpsertSettings calls reliant.v1.SettingsService.BatchUpsertSettings.
+func (c *settingsServiceClient) BatchUpsertSettings(ctx context.Context, req *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error) {
+	return c.batchUpsertSettings.CallUnary(ctx, req)
 }
 
 // GetShortcuts calls reliant.v1.SettingsService.GetShortcuts.
@@ -604,6 +626,13 @@ type SettingsServiceHandler interface {
 	UpdateSetting(context.Context, *connect.Request[v1.UpdateSettingRequest]) (*connect.Response[v1.UpdateSettingResponse], error)
 	// DeleteSetting deletes a setting by key
 	DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error)
+	// BatchUpsertSettings writes many settings in one round trip.
+	//
+	// Each entry is an upsert with the same semantics as CreateSetting (which is
+	// itself an upsert server-side), so callers do not have to know whether a key
+	// already exists. Writers that previously fired one RPC per key — the tour's
+	// three-key save, the tool-call category toggles — now issue one.
+	BatchUpsertSettings(context.Context, *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error)
 	// GetShortcuts retrieves user keyboard shortcuts
 	GetShortcuts(context.Context, *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error)
 	// UpdateShortcuts updates user keyboard shortcuts
@@ -699,6 +728,12 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		SettingsServiceDeleteSettingProcedure,
 		svc.DeleteSetting,
 		connect.WithSchema(settingsServiceMethods.ByName("DeleteSetting")),
+		connect.WithHandlerOptions(opts...),
+	)
+	settingsServiceBatchUpsertSettingsHandler := connect.NewUnaryHandler(
+		SettingsServiceBatchUpsertSettingsProcedure,
+		svc.BatchUpsertSettings,
+		connect.WithSchema(settingsServiceMethods.ByName("BatchUpsertSettings")),
 		connect.WithHandlerOptions(opts...),
 	)
 	settingsServiceGetShortcutsHandler := connect.NewUnaryHandler(
@@ -869,6 +904,8 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 			settingsServiceUpdateSettingHandler.ServeHTTP(w, r)
 		case SettingsServiceDeleteSettingProcedure:
 			settingsServiceDeleteSettingHandler.ServeHTTP(w, r)
+		case SettingsServiceBatchUpsertSettingsProcedure:
+			settingsServiceBatchUpsertSettingsHandler.ServeHTTP(w, r)
 		case SettingsServiceGetShortcutsProcedure:
 			settingsServiceGetShortcutsHandler.ServeHTTP(w, r)
 		case SettingsServiceUpdateShortcutsProcedure:
@@ -948,6 +985,10 @@ func (UnimplementedSettingsServiceHandler) UpdateSetting(context.Context, *conne
 
 func (UnimplementedSettingsServiceHandler) DeleteSetting(context.Context, *connect.Request[v1.DeleteSettingRequest]) (*connect.Response[v1.DeleteSettingResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.DeleteSetting is not implemented"))
+}
+
+func (UnimplementedSettingsServiceHandler) BatchUpsertSettings(context.Context, *connect.Request[v1.BatchUpsertSettingsRequest]) (*connect.Response[v1.BatchUpsertSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.BatchUpsertSettings is not implemented"))
 }
 
 func (UnimplementedSettingsServiceHandler) GetShortcuts(context.Context, *connect.Request[v1.GetShortcutsRequest]) (*connect.Response[v1.GetShortcutsResponse], error) {

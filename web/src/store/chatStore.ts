@@ -73,6 +73,10 @@ export interface ToolExecutionStateUpdate {
   node_id: string;
   sequence_number: number;
   timestamp: string;
+  // True when the client DEDUCED this status rather than being told it — the
+  // only producer is the stream-abort pass, which cancels tools that had not
+  // reported an outcome when their stream ended. See ToolCallState.inferred.
+  inferred?: boolean;
 }
 import { triggerRefetch, type RefetchType } from "../store/refetchStore";
 
@@ -720,6 +724,13 @@ export interface ToolCallState {
     | "denied" // Denied approval
     | "failed"; // Execution failed
   timestamp: string;
+  // True when the client DEDUCED this status rather than being told it. A
+  // stream ending under a tool that never reported an outcome is evidence the
+  // tool stopped, but only evidence: the tool may have been past the point of
+  // no return and gone on to finish, and its result then arrives normally.
+  // An inferred cancel therefore yields to a real outcome, while a cancel the
+  // server reported outranks a completion racing in behind it.
+  inferred?: boolean;
   error?: string;
   // Unified approval state
   approval?: ToolApprovalRequest;
@@ -2640,6 +2651,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                 node_id: "",
                 sequence_number: 0,
                 timestamp: new Date().toISOString(),
+                // Deduced from the stream ending, not reported by the server.
+                // A tool already past the point of no return still finishes,
+                // and that real outcome must be allowed to correct this.
+                inferred: true,
               });
             }
 
@@ -2705,6 +2720,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
               node_id: "",
               sequence_number: 0,
               timestamp: new Date().toISOString(),
+              // Deduced from the stream ending — see the sibling push above.
+              inferred: true,
             });
           }
         }

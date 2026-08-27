@@ -26,7 +26,7 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
       {/* Input display */}
       {hasInput && (
         <div className="border-b border-border/30 last:border-0">
-          <div className="px-2 py-0.5 text-[10px] text-muted-foreground bg-muted/40">
+          <div className="px-2 py-0.5 text-2xs text-muted-foreground bg-muted/40">
             Input
           </div>
           <LightweightCodeViewer
@@ -43,14 +43,14 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
       {/* Result display */}
       {hasResult && (
         <div className={result.is_error ? 'bg-warning/5' : ''}>
-          <div className={`px-2 py-1 text-[10px] ${result.is_error ? 'text-warning' : 'text-muted-foreground'} bg-muted/40 border-b border-border/20 flex items-center justify-between`}>
+          <div className={`px-2 py-1 text-2xs ${result.is_error ? 'text-warning' : 'text-muted-foreground'} bg-muted/40 border-b border-border/20 flex items-center justify-between`}>
             <span>{result.is_error ? 'Warning' : 'Output'}</span>
             {!result.is_error && result.content && (
               <CopyButton content={result.content} className="opacity-100" />
             )}
           </div>
           {result.is_error ? (
-            <div className="px-2 py-1.5 text-[11px] text-warning">
+            <div className="px-2 py-1.5 text-xs text-warning">
               {formatErrorMessage(result.content)}
             </div>
           ) : (

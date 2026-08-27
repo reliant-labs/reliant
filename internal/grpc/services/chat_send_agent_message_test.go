@@ -154,12 +154,12 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 
 	require.Len(t, tc.signals, 1,
 		"queuing a message must wake the workflow; without this it waits for a child to finish")
-	assert.Equal(t, v2.AgentMessageQueuedSignalName, tc.signals[0].name)
+	assert.Equal(t, v2.ThreadWakeSignalName, tc.signals[0].name)
 	assert.Equal(t, fx.chatID, tc.signals[0].workflowID,
 		"a spawn has no execution of its own — the chat's workflow drives every thread")
 
-	sig, ok := tc.signals[0].arg.(v2.AgentMessageQueuedSignal)
-	require.True(t, ok, "signal payload must be an AgentMessageQueuedSignal")
+	sig, ok := tc.signals[0].arg.(v2.ThreadWakeSignal)
+	require.True(t, ok, "signal payload must be an ThreadWakeSignal")
 	assert.Equal(t, fx.childThreadID, sig.Thread,
 		"the payload names which thread's gate should wake")
 }

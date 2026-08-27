@@ -22,6 +22,32 @@ const {
 // harmless for packaged builds (h2 multiplexes anyway), essential for dev.
 app.commandLine.appendSwitch("ignore-connections-limit", "127.0.0.1,localhost");
 
+// Give the dev build its own identity BEFORE anything reads a user path.
+//
+// Every per-user path Electron hands out (userData, logs) is derived from the
+// app name, and the packaged build is named "Reliant" while this source tree is
+// named "reliant". On a case-insensitive filesystem — the macOS default — those
+// are the SAME directory, so a dev run and an installed run share one
+// ~/Library/Application Support/reliant, including auth/reliant-auth.enc.
+//
+// That sharing is silent rather than noisy: safeStorage keys encryption to the
+// user's Keychain, not to the app, so each build decrypts the other's session
+// happily and simply overwrites it. Signing into one app therefore signs you
+// out of the other, and the surviving session's access token then fails to mint
+// a daemon PAT against the other's backend ("cached PAT belongs to a different
+// user" -> HTTP 401), leaving the app authenticated-looking but broken.
+//
+// Must run before the ./logger require below: that module resolves
+// app.getPath('logs') at require time, and setName after the fact would leave
+// logs and userData pointing at two different identities.
+if (!app.isPackaged) {
+  app.setName("reliant-dev");
+}
+// NOTE: locally-packaged test builds (electron-builder.local.js) are separated
+// the same way, but from the build side: that config overrides package.json
+// "name" to "reliant-local" via extraMetadata, which is what Electron actually
+// derives userData from. Nothing is needed here for them.
+
 const net = require("node:net");
 const log = require("./logger");
 const path = require("path");
@@ -37,9 +63,12 @@ const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
 const {
   APP_INDEX_URL,
+  APP_ORIGIN,
   registerAppProtocol,
   registerSchemePrivileges,
 } = require("./app-protocol");
+const oauthLoopback = require("./oauth-loopback");
+const oauthProviderLogin = require("./oauth-provider-login");
 const { watchRendererHealth } = require("./renderer-health");
 const {
   formatDiagnosticsReport,
@@ -49,8 +78,10 @@ const {
 const authStorage = require("./auth-storage");
 const cliInstaller = require("./cli-installer");
 const {
+  buildAuthLoadReply,
   describeAuthPrincipalChange,
   shouldRestartBackendForAuthChange,
+  runAuthWrite,
 } = require("./backend-auth");
 const windowStateClient = require("./window-state-client");
 const Sentry = require("@sentry/electron/main");
@@ -1584,8 +1615,14 @@ async function restartBackendForAuthPrincipalChange(previousSession, nextSession
     nextPrincipal: change.nextPrincipal,
   });
 
+  const restartStart = Date.now();
   await backendManager.stop();
   const port = await backendManager.start();
+  log.info('[Auth] Backend restart complete', {
+    reason,
+    port,
+    durationMs: Date.now() - restartStart,
+  });
 
   BrowserWindow.getAllWindows().forEach((window) => {
     window.webContents.send('backend-port', port);
@@ -1698,6 +1735,17 @@ ipcMain.handle("get-backend-port", async () => {
 
   log.error("[IPC] Unexpected state - no port available");
   return null;
+});
+
+// Whether the daemon currently reports a live stream.
+//
+// A renderer that mounts AFTER the daemon connected would otherwise never
+// learn of it: the `daemon-connected` event is de-duplicated on the stream
+// value, and the renderer reloads as part of the post-sign-in daemon restart.
+// Measured, the UI then waited for the next 5s poll — 4.06s after the daemon
+// was already listable. Asking on mount removes that dependence on timing.
+ipcMain.handle("daemon:is-connected", () => {
+  return backendManager ? backendManager.isDaemonConnected() : false;
 });
 
 ipcMain.handle("get-backend-status", () => {
@@ -2375,10 +2423,98 @@ ipcMain.handle("toggle-fullscreen", (event) => {
 
 // Auth storage IPC handlers
 
+// Loopback receiver for provider sign-in (Google / GitHub / Apple).
+//
+// The renderer runs the SAME sign-in code as the web app and holds the PKCE
+// verifier; all it needs from the main process is a redirect URI the system
+// browser can reach. See electron/src/oauth-loopback.js for why loopback
+// rather than a custom scheme, and why nothing is exchanged here.
+//
+// The code is delivered back by navigating the window to the app's own
+// /auth/callback route, so it lands in the shared component the browser build
+// uses. Navigating (rather than emitting an event the renderer must be
+// listening for) is deliberate: the previous design declared an
+// `onOAuthCallback` bridge in electron.d.ts that was NEVER implemented, so the
+// renderer's listener could not fire in any build that shipped.
+ipcMain.handle("oauth:start-redirect", async () => {
+  try {
+    const appOrigin = app.isPackaged ? APP_ORIGIN : DEV_URL;
+    const { redirectUri } = await oauthLoopback.startOAuthRedirect(appOrigin, (callbackUrl) => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        log.warn("[IPC] OAuth callback arrived with no window to deliver it to");
+        return;
+      }
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+      log.info("[IPC] Delivering OAuth callback into the renderer");
+      mainWindow.loadURL(callbackUrl).catch((error) => {
+        log.error("[IPC] Failed to load OAuth callback route:", error);
+      });
+    });
+    return { success: true, redirectUri };
+  } catch (error) {
+    log.error("[IPC] Failed to start OAuth loopback listener:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+// Provider sign-in (Claude Code / Codex) loopback receiver.
+//
+// Split into START and WAIT deliberately. The previous design routed this
+// through DaemonService/StartOAuthFlow, a single request/response RPC that had
+// to stay open while the user worked through a consent screen in a browser.
+// It died at ~15s: the renderer surfaced "Failed to fetch", and the daemon's
+// listener was torn down with the cancelled request, so the browser's redirect
+// hit a closed port (ERR_CONNECTION_REFUSED). See oauth-provider-login.js for
+// why the receiver has to be local rather than on the daemon.
+//
+// `oauth:provider-login-start` returns as soon as the port is bound, so no
+// deadline spans human time. `oauth:provider-login-wait` is what waits, over
+// plain IPC with nothing in between that could impose one.
+ipcMain.handle("oauth:provider-login-start", async (_event, authorizeUrlTemplate) => {
+  try {
+    const { flowId, redirectUri, authorizeUrl } =
+      await oauthProviderLogin.startProviderLogin(authorizeUrlTemplate);
+
+    // Consent opens in the SYSTEM BROWSER, never in this window: providers
+    // reject embedded webviews, and navigating away would destroy the renderer
+    // that holds the PKCE verifier.
+    await shell.openExternal(authorizeUrl);
+
+    return { success: true, flowId, redirectUri };
+  } catch (error) {
+    log.error("[IPC] Failed to start provider OAuth login:", error);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle("oauth:provider-login-wait", async (_event, flowId) => {
+  try {
+    const result = await oauthProviderLogin.waitForProviderLogin(flowId);
+    return { success: true, ...result };
+  } catch (error) {
+    log.warn("[IPC] Provider OAuth login did not complete:", error.message);
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle("oauth:provider-login-cancel", async (_event, flowId) => {
+  oauthProviderLogin.cancelProviderLogin(flowId);
+  return { success: true };
+});
+
 ipcMain.handle("auth:load", async () => {
   try {
-    const session = authStorage.loadStoredAuth();
-    return { success: true, session };
+    // Report an unreadable blob to the renderer instead of letting it look
+    // like "no session" — see buildAuthLoadReply for why that distinction is
+    // the whole bug. `takeLoadFailure` drains an incident discovered by an
+    // earlier main-process read, which is usually the read that actually finds
+    // and clears the dead blob.
+    return buildAuthLoadReply(
+      authStorage.readStoredAuth(),
+      authStorage.takeLoadFailure(),
+    );
   } catch (error) {
     log.error("[IPC] Failed to load auth:", error);
     return { success: false, error: error.message };
@@ -2389,33 +2525,39 @@ ipcMain.handle("auth:save", async (event, session) => {
   try {
     const previousSession = authStorage.loadStoredAuth();
     const previousUserId = previousSession?.user?.id || "anonymous";
-    const success = authStorage.saveAuth(session);
+    // The restart is started but NOT awaited — see runAuthWrite. The renderer's
+    // Supabase storage adapter awaits this IPC to commit the session, so work
+    // left on this path delays the session itself, and an uncommitted session
+    // means every outbound RPC goes out with no Authorization header.
+    const { success } = runAuthWrite({
+      persist: () => authStorage.saveAuth(session),
+      restart: () => restartBackendForAuthPrincipalChange(previousSession, session, 'auth:save'),
+      reason: 'auth:save',
+      logger: log,
+    });
 
-    let backendRestart = { restarted: false };
-    if (success) {
-      backendRestart = await restartBackendForAuthPrincipalChange(previousSession, session, 'auth:save');
-    }
-
-    // Update Statsig user when auth changes
+    // Update Statsig user when auth changes. Analytics must never gate sign-in.
     if (success && statsigClient && session?.user?.id) {
-      try {
-        await statsigClient.updateUserAsync({ userID: session.user.id });
-        log.info("[Statsig] Updated user ID:", session.user.id);
+      void (async () => {
+        try {
+          await statsigClient.updateUserAsync({ userID: session.user.id });
+          log.info("[Statsig] Updated user ID:", session.user.id);
 
-        if (previousUserId === "anonymous") {
-          await trackStatsigEvent("login_succeeded", {
-            auth_method: getAuthMethodFromSession(session),
-            source: "auth_save",
-          }, {
-            userID: session.user.id,
-          });
+          if (previousUserId === "anonymous") {
+            await trackStatsigEvent("login_succeeded", {
+              auth_method: getAuthMethodFromSession(session),
+              source: "auth_save",
+            }, {
+              userID: session.user.id,
+            });
+          }
+        } catch (err) {
+          log.warn("[Statsig] Failed to update user:", err.message);
         }
-      } catch (err) {
-        log.warn("[Statsig] Failed to update user:", err.message);
-      }
+      })();
     }
 
-    return { success, backendRestarted: backendRestart.restarted === true };
+    return { success };
   } catch (error) {
     log.error("[IPC] Failed to save auth:", error);
     return { success: false, error: error.message };
@@ -2425,33 +2567,41 @@ ipcMain.handle("auth:save", async (event, session) => {
 ipcMain.handle("auth:clear", async () => {
   try {
     const previousSession = authStorage.loadStoredAuth();
-    const success = authStorage.clearAuth();
 
-    let backendRestart = { restarted: false };
-    if (success) {
+    const { success } = runAuthWrite({
+      persist: () => authStorage.clearAuth(),
       // Drop the per-origin daemon.json entry (PAT + owner sub + stable
       // daemon_id) so the next login mints fresh credentials and the server
       // assigns a fresh daemon id. Logout may precede a user switch, so we
       // must not resurrect the prior user's identity. Done regardless of
       // whether the daemon restarts here (on logout it stays warm — see
       // shouldRestartBackendForAuthChange).
-      if (backendManager) {
-        backendManager.clearDaemonCredsForOrigin();
-      }
-      backendRestart = await restartBackendForAuthPrincipalChange(previousSession, null, 'auth:clear');
-    }
+      //
+      // Runs before the restart and synchronously: it is a local file edit, and
+      // the next login's PAT mint must not race a half-cleared credentials file.
+      beforeRestart: () => {
+        if (backendManager) {
+          backendManager.clearDaemonCredsForOrigin();
+        }
+      },
+      restart: () => restartBackendForAuthPrincipalChange(previousSession, null, 'auth:clear'),
+      reason: 'auth:clear',
+      logger: log,
+    });
 
-    // Update Statsig to anonymous when user logs out
+    // Update Statsig to anonymous when user logs out. Not awaited: analytics
+    // must never gate the sign-out path.
     if (success && statsigClient) {
-      try {
-        await statsigClient.updateUserAsync({ userID: 'anonymous' });
-        log.info("[Statsig] Updated user to anonymous (logged out)");
-      } catch (err) {
-        log.warn("[Statsig] Failed to update user:", err.message);
-      }
+      void statsigClient.updateUserAsync({ userID: 'anonymous' })
+        .then(() => {
+          log.info("[Statsig] Updated user to anonymous (logged out)");
+        })
+        .catch((err) => {
+          log.warn("[Statsig] Failed to update user:", err.message);
+        });
     }
 
-    return { success, backendRestarted: backendRestart.restarted === true };
+    return { success };
   } catch (error) {
     log.error("[IPC] Failed to clear auth:", error);
     return { success: false, error: error.message };
@@ -3804,6 +3954,29 @@ function ensureDirectoriesExist() {
   }
 }
 
+// Sentry MUST be initialized before we register our own scheme privileges.
+//
+// Electron does not merge the per-privilege scheme lists across separate
+// registerSchemesAsPrivileged calls — the last call wins for each privilege it
+// names. @sentry/electron works around that by registering `sentry-ipc` during
+// init and then PROXYING protocol.registerSchemesAsPrivileged so that every
+// LATER call gets its scheme appended (see @sentry/electron/main/ipc.js,
+// configureProtocol). A call made BEFORE Sentry init never passes through that
+// proxy, so Sentry's own registration silently clobbers ours.
+//
+// Registering first cost us exactly the privileges Sentry also declares. In the
+// shipped 1.7.8 renderer:
+//   --standard-schemes=app        (survived — Sentry declares no `standard`)
+//   --streaming-schemes=app       (survived — Sentry declares no `stream`)
+//   --secure-schemes=sentry-ipc   (CLOBBERED — `app` dropped)
+//   --cors-schemes=sentry-ipc     (CLOBBERED)
+//   --fetch-schemes=sentry-ipc    (CLOBBERED)
+//
+// Losing `secure` made app:// a non-secure context, which removes crypto.subtle
+// and broke Claude/Codex PKCE sign-in ("not running in a secure context").
+// Ordering Sentry first routes our call through the proxy, so both survive.
+initializeSentry();
+
 // Scheme privileges must be declared before the app is ready, or app:// is
 // treated as an opaque origin and localStorage throws in the renderer.
 registerSchemePrivileges(protocol);
@@ -3934,8 +4107,9 @@ if (process.platform === 'darwin') {
   }
 }
 
-// Initialize Sentry BEFORE app.whenReady() fires (required by Sentry SDK)
-initializeSentry();
+// Sentry is initialized earlier, immediately before registerSchemePrivileges().
+// It must precede that call so our app:// privileges go through Sentry's
+// registerSchemesAsPrivileged proxy instead of being clobbered by it.
 
 // Check for hardware acceleration disable flag (for users with GPU issues causing black screens)
 // Can be enabled via command line: --disable-gpu or environment variable: RELIANT_DISABLE_GPU=1
@@ -3995,6 +4169,29 @@ app.whenReady().then(async () => {
   // which is broken under headless Electron (no TTY).
   backendManager = new BackendManager({ authStorage });
   log.info(`[Backend] ✓ BackendManager created in ${Date.now() - backendCreateStart}ms`);
+
+  // Push a "daemon connected" event to the renderer the instant the daemon's
+  // gateway stream comes up, instead of leaving the UI to discover it on its
+  // next 5s poll.
+  //
+  // The poll cannot be relied on here: React Query's daemon list sets
+  // `refetchIntervalInBackground: false`, and OAuth backgrounds this window
+  // by design when it hands consent to the system browser. Measured on a real
+  // prod sign-in, the daemon was registered and connected within ~1.2s of
+  // each other, while onboarding sat on the daemon step for roughly a minute
+  // waiting for a poll that had stopped.
+  //
+  // This is a TRIGGER, not data: the renderer refetches ListDaemons on
+  // receipt. Registration (queryable) and connection (this event) were 1.1s
+  // apart in that measurement, so treating the event itself as "the daemon is
+  // listable" would race.
+  backendManager.watchDaemonConnection((stream) => {
+    BrowserWindow.getAllWindows().forEach((window) => {
+      if (!window.isDestroyed()) {
+        window.webContents.send("daemon-connected", { stream });
+      }
+    });
+  });
 
   // Start backend in background (don't await yet)
   //

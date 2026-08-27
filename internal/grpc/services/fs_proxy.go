@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -42,28 +43,79 @@ func (s *FileSystemProxyService) getUserID(ctx context.Context) (string, error) 
 	return userID, nil
 }
 
-// resolveProjectPath resolves the absolute filesystem path for a project,
-// optionally scoped to a worktree or chat.
-func (s *FileSystemProxyService) resolveProjectPath(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
-	if projectID == "" {
-		return "", nil
+// requireProjectBase resolves the workspace root a request is scoped to, and
+// refuses the request when there isn't one.
+//
+// Failing closed here is the point. This service is mounted only in hosted,
+// multi-tenant deployments (see internal/grpc/server.go), where the daemon on
+// the far end runs as the user and every path this service emits is executed
+// there with no further scoping. Without a base there is nothing to confine
+// against, so the previous behaviour — forward the caller's raw path — handed
+// the daemon whatever the client asked for, including "/" and "..". A request
+// that names no workspace is refused instead of being run against the
+// daemon's filesystem root or its working directory.
+//
+// Every client reaches these RPCs with a project id (web/src/api/fileSystem.ts
+// returns early when there is no current project), so nothing legitimate
+// depended on the passthrough.
+func (s *FileSystemProxyService) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
+	if strings.TrimSpace(projectID) == "" {
+		return "", connect.NewError(connect.CodeInvalidArgument,
+			errors.New("project_id is required to scope a filesystem request"))
 	}
-	return filepreview.ResolveBasePath(ctx, s.database, projectID, worktreeID, chatID)
+	basePath, err := filepreview.ResolveBasePath(ctx, s.database, projectID, worktreeID, chatID)
+	if err != nil {
+		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+	}
+	if strings.TrimSpace(basePath) == "" {
+		return "", connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("project %q has no workspace path to scope this request to", projectID))
+	}
+	return basePath, nil
 }
 
-// resolvePath resolves a project-scoped path to an absolute path for the daemon.
+// resolvePath turns a client path into the absolute, confined path the daemon
+// will act on.
+//
+// The "" | "/" == workspace root rule and the confinement check are NOT
+// reimplemented here: both come from filepreview.ValidatePathScoped via
+// validateWorkspacePath, the same function the direct FileSystemService uses.
+// ScopeBaseOnly is deliberate — unlike the desktop path, this service serves a
+// user whose files live on a remote daemon, so an absolute path outside the
+// workspace is refused rather than honoured.
+//
+// The returned path is always absolute, so "" and "/" never cross the wire to
+// the daemon.
+//
+// Errors are already typed connect errors — PermissionDenied for an escape,
+// InvalidArgument for a malformed request, NotFound for an unknown project —
+// so callers return them unchanged. Re-wrapping them as NotFound (which every
+// call site used to do) reported a refused traversal as a missing file.
 func (s *FileSystemProxyService) resolvePath(ctx context.Context, projectID string, worktreeID *string, chatID *string, requestedPath string) (string, error) {
-	basePath, err := s.resolveProjectPath(ctx, projectID, worktreeID, chatID)
+	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
 	if err != nil {
 		return "", err
 	}
-	if basePath == "" {
-		return requestedPath, nil
+	return validateWorkspacePath(basePath, requestedPath, filepreview.ScopeBaseOnly)
+}
+
+// projectRelativePrefix reports where resolvedPath sits under basePath, in the
+// project-relative form the response contract uses ("" for the root itself).
+//
+// The request path cannot be used directly for this: it may be absolute (an
+// absolute path inside the workspace is a legal request), and rebasing daemon
+// node paths onto an absolute prefix would break the UI's lazy expansion,
+// which builds a child path as parent + "/" + name.
+func projectRelativePrefix(basePath, resolvedPath string) string {
+	absBase, err := filepath.Abs(basePath)
+	if err != nil {
+		return ""
 	}
-	if requestedPath == "" || requestedPath == "/" {
-		return basePath, nil
+	rel, err := filepath.Rel(absBase, resolvedPath)
+	if err != nil || rel == "." {
+		return ""
 	}
-	return filepath.Join(basePath, requestedPath), nil
+	return strings.Trim(filepath.ToSlash(rel), "/")
 }
 
 // sendCommand is a helper that marshals the request, sends the daemon command,
@@ -95,9 +147,13 @@ func (s *FileSystemProxyService) GetFileTree(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	basePath, err := s.requireProjectBase(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
+	}
+	resolvedPath, err := validateWorkspacePath(basePath, req.Msg.Path, filepreview.ScopeBaseOnly)
+	if err != nil {
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -107,7 +163,9 @@ func (s *FileSystemProxyService) GetFileTree(
 	}
 
 	var cmdResp struct {
-		Nodes []fsProxyFileNode `json:"nodes"`
+		Nodes     []fsProxyFileNode `json:"nodes"`
+		Truncated bool              `json:"truncated"`
+		NodeCount int               `json:"node_count"`
 	}
 	if err := s.sendCommand(ctx, userID, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
@@ -125,14 +183,16 @@ func (s *FileSystemProxyService) GetFileTree(
 	// FileSystemService's contract and what the UI needs to lazily expand a
 	// subdirectory (child path = parent path + "/" + name). Root requests
 	// ("" / "/") need no prefix.
-	if prefix := strings.Trim(req.Msg.Path, "/"); prefix != "" {
+	if prefix := projectRelativePrefix(basePath, resolvedPath); prefix != "" {
 		for _, f := range files {
 			prefixFileNodePaths(f, prefix)
 		}
 	}
 
 	return connect.NewResponse(&reliantv1.GetFileTreeResponse{
-		Files: files,
+		Files:     files,
+		Truncated: cmdResp.Truncated,
+		NodeCount: int32(cmdResp.NodeCount),
 	}), nil
 }
 
@@ -197,7 +257,7 @@ func (s *FileSystemProxyService) GetFileContent(
 
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -231,7 +291,7 @@ func (s *FileSystemProxyService) SaveFileContent(
 
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -265,7 +325,7 @@ func (s *FileSystemProxyService) GetFileMetadata(
 
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -316,7 +376,7 @@ func (s *FileSystemProxyService) GetFilePreviewInfo(
 
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -373,7 +433,7 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	isFolder := req.Msg.Type == reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
@@ -423,7 +483,7 @@ func (s *FileSystemProxyService) DeleteFileOrFolder(
 
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -450,16 +510,16 @@ func (s *FileSystemProxyService) CopyFile(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	basePath, err := s.resolveProjectPath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	// Both endpoints are confined, not merely joined: filepath.Join(base,
+	// "../../etc/passwd") cleans into an escape, so a copy could previously
+	// read from or write to any path on the daemon.
+	sourcePath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.SourcePath)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
-
-	sourcePath := req.Msg.SourcePath
-	destPath := req.Msg.DestinationPath
-	if basePath != "" {
-		sourcePath = filepath.Join(basePath, sourcePath)
-		destPath = filepath.Join(basePath, destPath)
+	destPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.DestinationPath)
+	if err != nil {
+		return nil, err
 	}
 
 	cmdReq := map[string]any{
@@ -497,14 +557,15 @@ func (s *FileSystemProxyService) SearchFiles(
 	}
 	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, searchPath)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
 	opts := map[string]any{
 		"output_mode": "content",
-	}
-	if resolvedPath != "" {
-		opts["base_dir"] = resolvedPath
+		// Always set: resolvedPath is absolute and confined, and leaving
+		// base_dir unset would let the daemon search from its own working
+		// directory instead of the workspace.
+		"base_dir": resolvedPath,
 	}
 	if req.Msg.FilePattern != nil {
 		opts["file_glob"] = *req.Msg.FilePattern
@@ -582,14 +643,16 @@ func (s *FileSystemProxyService) ReplaceInFiles(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	basePath, err := s.resolveProjectPath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	// base_dir is the only thing bounding this walk. Omitting it (which an
+	// empty base used to do) leaves the daemon to fall back to its own working
+	// directory and rewrite files across the whole machine.
+	basePath, err := s.requireProjectBase(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return nil, err
 	}
 
-	opts := map[string]any{}
-	if basePath != "" {
-		opts["base_dir"] = basePath
+	opts := map[string]any{
+		"base_dir": basePath,
 	}
 	if req.Msg.FilePattern != nil {
 		opts["file_glob"] = *req.Msg.FilePattern

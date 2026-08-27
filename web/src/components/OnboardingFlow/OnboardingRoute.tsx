@@ -27,6 +27,26 @@ import {
 import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
 import { GITHUB_CREDENTIAL_QUERY_KEY } from "@/hooks/useGitHubCredential";
 
+/**
+ * Daemons created at or after `userCreatedAtMs` — i.e. ones this user could
+ * plausibly have produced.
+ *
+ * Returns nothing when the user's creation time is unknown. That is the
+ * deliberate choice: the heal is an optimisation for a stranded returning user,
+ * while wrongly firing it silently skips onboarding for a new account. Given no
+ * evidence, do the recoverable thing and let the user onboard.
+ */
+function daemonsPostdating<T extends { createdAt?: { seconds: bigint } }>(
+  daemons: ReadonlyArray<T>,
+  userCreatedAtMs: number | undefined,
+): T[] {
+  if (userCreatedAtMs === undefined) return [];
+  return daemons.filter((d) => {
+    if (!d.createdAt) return false;
+    return Number(d.createdAt.seconds) * 1000 >= userCreatedAtMs;
+  });
+}
+
 export function OnboardingRoute() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -49,10 +69,28 @@ export function OnboardingRoute() {
   //
   // A usable daemon IS the thing onboarding exists to produce, so treat it as
   // proof of completion and record it, which also repairs the flag for good.
+  // The daemon must PREDATE this user, or the heal fires for brand-new accounts.
+  //
+  // The desktop app's bundled daemon re-registers under whoever signs in — the
+  // post-sign-in restart hands it the new principal, and the control-plane row
+  // is reassigned to that owner. Verified in dev: daemon 42906ac5, created
+  // 2026-07-22, was owned by whoever last signed in. So "this user has a usable
+  // daemon" is true within a second of ANY sign-in, including a first-ever one,
+  // and the heal below then wrote onboarding_completed_at for users who had
+  // never seen a single onboarding step.
+  //
+  // A daemon created BEFORE the user's account cannot have been produced by
+  // that user's onboarding, so it is not evidence they completed it. Comparing
+  // against the user's own createdAt keeps the genuine case working — someone
+  // who really did set up a daemon and closed the tab has one created after
+  // their account — while excluding the reassigned bundled daemon.
   const { data: daemons, isLoading: daemonsLoading } = useDaemonList();
   const completeOnboarding = useCompleteOnboarding();
   const alreadySetUp =
-    !daemonsLoading && hasUsableControlPlaneDaemonForOnboarding(daemons ?? []);
+    !daemonsLoading &&
+    hasUsableControlPlaneDaemonForOnboarding(
+      daemonsPostdating(daemons ?? [], currentUser?.createdAtMs),
+    );
   const healingRef = useRef(false);
 
   useEffect(() => {

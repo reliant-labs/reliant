@@ -364,6 +364,46 @@ API endpoint, not by a directory, so per-project processes would buy nothing.
 Dir-scoped servers are started lazily and reaped when idle, so a project you are
 not working in costs nothing.
 
+### Say what a project must contain before the server is worth starting
+
+A tree indexer pays its whole cost — the walk, the open files, the resident
+index — before it can discover it has nothing to do. Add `requiresFiles` so it
+is never started where it has nothing to index:
+
+```json
+{
+  "mcpServers": {
+    "gopls": {
+      "command": "gopls",
+      "args": ["mcp"],
+      "dirScoped": true,
+      "requiresFiles": ["go.mod", "go.work"]
+    }
+  }
+}
+```
+
+Without it, opening a Unity/C# project with zero `.go` files still started a Go
+language server, which indexed a 9.9 GB checkout and reached 28,467 open file
+descriptors and 1.9 GB resident. One per project, and seventeen projects exhaust
+macOS's system-wide file table — for every process on the machine.
+
+- Entries are globs and ANY match satisfies the server, so a server covering
+  several ecosystems lists the marker of each (`["*.csproj", "*.sln"]`).
+- A pattern with no `/` matches by base name at any depth, so `go.mod` also
+  covers a monorepo's `services/api/go.mod`. A pattern containing `/` is matched
+  against the project-relative path (`services/*/go.mod`).
+- Omit it and there is no precondition: the server starts for every project,
+  exactly as before.
+- The check is a bounded, gitignore-aware scan, not a full walk. In a very large
+  tree the scan can hit its bound before reaching a deeply-buried marker, and the
+  server is then not started; keep the marker near the root, or declare nothing.
+
+Reliant also caps how many per-project processes all dir-scoped servers hold at
+once. Past the cap the least recently used one is reaped and respawns on its next
+tool call, so visiting many projects is fine — running an unbounded number of
+indexers at once is not.
+
 Two ways to tell a server WHICH tree, depending on how it expects to be told:
 
 ```json

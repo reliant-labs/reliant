@@ -175,7 +175,7 @@ export function PromptPicker({
             ))}
         </div>
 
-        <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+        <div className="border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
           ↑↓ navigate · ↵ insert · esc close
         </div>
       </div>

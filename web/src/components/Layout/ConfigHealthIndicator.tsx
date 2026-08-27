@@ -143,7 +143,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
           <span
             className={cn(
               "absolute -top-0.5 -right-0.5 flex items-center justify-center",
-              "min-w-[14px] h-[14px] px-0.5 text-[9px] font-bold rounded-full",
+              "min-w-[14px] h-[14px] px-0.5 text-3xs font-bold rounded-full",
               hasErrors
                 ? "bg-destructive text-destructive-foreground"
                 : "bg-yellow-500 text-white"
@@ -218,7 +218,7 @@ export function ConfigHealthIndicator({ className }: ConfigHealthIndicatorProps)
                       ) : (
                         <AlertTriangle className="w-3.5 h-3.5 text-yellow-500 flex-shrink-0" />
                       )}
-                      <span className={cn("text-[10px] font-medium uppercase", getTypeColor(error.type))}>
+                      <span className={cn("text-2xs font-medium uppercase", getTypeColor(error.type))}>
                         {getTypeLabel(error.type)}
                       </span>
                       <span className="text-xs text-muted-foreground truncate">

@@ -12,6 +12,49 @@ import { settingsSync } from "@/services/settingsSync";
 
 // NOTE: OAuth callback handling is done in authStore.initialize() to avoid duplicate listeners
 
+/**
+ * Poll `supabase.auth.getSession()` until it yields an access token.
+ *
+ * This exists because "the auth store has a user" and "an outbound RPC will
+ * carry a bearer token" are two different facts, separated by a session write.
+ * On Electron that write is an IPC round-trip (lib/supabase.ts -> auth:save),
+ * so the gap is real and observable; `api/authProvider.ts` reads the session
+ * per-request and returns null throughout it.
+ *
+ * Polling rather than subscribing to onAuthStateChange: the session is already
+ * committed in the common case, so the first check usually returns immediately,
+ * and a listener would need its own teardown for a wait this short.
+ *
+ * Returns null if no token appears within the budget. Callers treat that as
+ * "try again later", never as a fatal error.
+ */
+async function waitForAccessToken(timeoutMs = 10_000): Promise<string | null> {
+  const startedAt = performance.now();
+  let attempt = 0;
+
+  for (;;) {
+    const {
+      data: { session: currentSession },
+    } = await supabase.auth.getSession();
+
+    const token = currentSession?.access_token ?? null;
+    if (token) {
+      if (attempt > 0) {
+        logger.info("[AuthInitializer] Access token available after", {
+          waitedMs: Math.round(performance.now() - startedAt),
+          attempts: attempt,
+        });
+      }
+      return token;
+    }
+
+    if (performance.now() - startedAt >= timeoutMs) return null;
+
+    attempt += 1;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 interface AuthInitializerProps {
   children: React.ReactNode;
 }
@@ -75,6 +118,27 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
     hasInitializedAuthenticatedStartup.current = true;
 
     const initializeAuthenticatedStartup = async () => {
+      // Wait for a token to actually exist before issuing authenticated RPCs.
+      //
+      // `user` being set is not the same as the session being committed. Under
+      // Electron the session is persisted through an IPC round-trip
+      // (lib/supabase.ts -> auth:save), so there is a window where the store
+      // has a user but supabase.auth.getSession() still returns null. Every RPC
+      // fired in that window goes out with NO Authorization header at all and
+      // comes back "missing authorization token" — which then trips each
+      // caller's retry ladder (settingsSync alone backs off 1s/2s/3s/3s/3s),
+      // turning a sub-second gap into tens of seconds of visible stall.
+      const token = await waitForAccessToken();
+      if (!token) {
+        // Don't burn the one-shot guard on a failed attempt: a later session
+        // commit should still be able to run startup.
+        hasInitializedAuthenticatedStartup.current = false;
+        logger.warn(
+          "[AuthInitializer] No access token available; deferring authenticated startup",
+        );
+        return;
+      }
+
       logger.info("[AuthInitializer] Auth ready, initializing authenticated startup RPCs", {
         userId: user.id,
         email: user.email,
@@ -125,25 +189,26 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
         hasAccessToken: !!session?.access_token,
       });
 
-      // Session is guaranteed available: this effect only fires when
-      // authStore has initialized=true, user!=null, session!=null.
-      // authStore.initialize() already awaited supabase.auth.getSession()
-      // and onAuthStateChange keeps it in sync (including Electron IPC).
-      const delay = window.electronAPI ? 500 : 0;
-
-      setTimeout(async () => {
-        // Double-check session is available from Supabase before prefetch
-        const {
-          data: { session: currentSession },
-        } = await supabase.auth.getSession();
+      // Wait for the token itself rather than sleeping a fixed 500ms on
+      // Electron and hoping the IPC session write has landed. That guess was
+      // both too long (the session is usually ready immediately) and too short
+      // (it wasn't, whenever the main process was busy), and losing the race
+      // meant the entire prefetch fan-out went out unauthenticated.
+      void (async () => {
+        const token = await waitForAccessToken();
         logger.info("[AuthInitializer] Session check before prefetch:", {
-          hasSession: !!currentSession,
-          hasAccessToken: !!currentSession?.access_token,
+          hasAccessToken: !!token,
           hasAuthStoreSession: !!session,
           hasAuthStoreAccessToken: !!session?.access_token,
-          tokenLength: (currentSession?.access_token ?? session?.access_token)?.length,
+          tokenLength: token?.length,
           isElectron: !!window.electronAPI,
         });
+
+        if (!token) {
+          logger.warn("[AuthInitializer] No access token available; skipping prefetch");
+          hasPrefetched.current = false;
+          return;
+        }
 
         const start = performance.now();
 
@@ -181,7 +246,7 @@ export function AuthInitializer({ children }: AuthInitializerProps) {
           });
         };
         void waitForChecklist();
-      }, delay);
+      })();
     }
   }, [initialized, loading, user, session, prefetch, checkApiKeys]);
 

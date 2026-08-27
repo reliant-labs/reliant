@@ -122,7 +122,7 @@ export function InlineParamInput({
         <Tooltip content={`${displayName}: ${getInputDescription(schema) || "No description"}`} placement="top">
           <div
             className={cn(
-              "flex items-center gap-1 rounded-full text-[10px] font-medium h-6 px-2.5",
+              "flex items-center gap-1 rounded-full text-2xs font-medium h-6 px-2.5",
               "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)]",
               "opacity-60 cursor-not-allowed",
               className
@@ -199,7 +199,7 @@ function InlineEnumInput({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -339,7 +339,7 @@ function InlineMultiEnumInput({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -369,21 +369,21 @@ function InlineMultiEnumInput({
         >
           {/* Header with select all/clear */}
           <div className="flex items-center justify-between px-3 py-2 border-b border-border sticky top-0 bg-[var(--chat-dropdown-bg)]">
-            <span className="text-[10px] text-muted-foreground">
+            <span className="text-2xs text-muted-foreground">
               {selectedValues.length} selected
             </span>
             <div className="flex gap-2">
               <button 
                 type="button" 
                 onClick={selectAll} 
-                className="text-[10px] text-primary hover:underline"
+                className="text-2xs text-primary hover:underline"
               >
                 All
               </button>
               <button 
                 type="button" 
                 onClick={clearAll} 
-                className="text-[10px] text-muted-foreground hover:text-foreground"
+                className="text-2xs text-muted-foreground hover:text-foreground"
               >
                 Clear
               </button>
@@ -459,7 +459,7 @@ function InlineBooleanInput({
         onClick={() => canInteract && onChange(!isOn)}
         disabled={!canInteract}
         className={cn(
-          "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+          "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
           canInteract
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
@@ -543,7 +543,7 @@ function InlineStringInput({
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         className={cn(
-          "h-6 px-2 text-[10px] rounded border border-primary bg-background",
+          "h-6 px-2 text-2xs rounded border border-primary bg-background",
           "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
           "min-w-20 max-w-32",
           className
@@ -562,7 +562,7 @@ function InlineStringInput({
         onClick={() => canInteract && setIsEditing(true)}
         disabled={!canInteract}
         className={cn(
-          "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+          "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
           canInteract
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
@@ -652,7 +652,7 @@ function InlineNumberInput({
         max={getInputMax(schema)}
         step={schema.type === "integer" ? 1 : 0.1}
         className={cn(
-          "h-6 px-2 text-[10px] rounded border border-primary bg-background",
+          "h-6 px-2 text-2xs rounded border border-primary bg-background",
           "focus:outline-none focus:ring-1 focus:ring-ring/20 focus:border-ring",
           "w-20",
           className
@@ -673,7 +673,7 @@ function InlineNumberInput({
         onClick={() => canInteract && setIsEditing(true)}
         disabled={!canInteract}
         className={cn(
-          "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+          "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
           canInteract
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",

@@ -35,14 +35,32 @@ func toolsDaemonLogPath(dataDir string) string {
 	return filepath.Join(dataDir, "logs", toolsDaemonLogFilename)
 }
 
-func setupToolsDaemonLogging(dataDir string) {
-	logging.SetupWithRotation(slog.LevelInfo, false, &logging.RotationConfig{
+// setupToolsDaemonLogging routes the daemon's structured logs.
+//
+// The full INFO stream always goes to the rotating file, so `reliant daemon
+// logs` and any post-mortem see exactly what they always did. What changes is
+// stdout: it carries the structured stream only when verbose is set.
+//
+// A person running `reliant daemon start --token` in a terminal is not reading
+// slog output — they want to know whether it worked. Nineteen INFO lines
+// naming a gateway URL, a TLS mode and a data dir bury the one line that
+// answers that. `--verbose` (the existing global flag) brings them back for
+// debugging, and the file keeps them regardless, so nothing is lost.
+func setupToolsDaemonLogging(dataDir string, verboseOutput bool) {
+	rotation := &logging.RotationConfig{
 		Filename:   toolsDaemonLogPath(dataDir),
 		MaxSizeMB:  50,
 		MaxBackups: 3,
 		MaxAgeDays: 30,
 		Compress:   true,
-	})
+	}
+
+	if verboseOutput {
+		logging.SetupWithRotation(slog.LevelInfo, false, rotation)
+		return
+	}
+
+	logging.SetupFileOnly(slog.LevelInfo, rotation)
 }
 
 func newDaemonCmd() *cobra.Command {
@@ -450,11 +468,13 @@ Creates a long-lived access token for the daemon and stores it locally.
 
 After registering, run 'reliant daemon start' to connect.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// Registration mints a credential for a specific server; resolve it
-			// the same way every other command does. resolveServer (not
-			// resolveConnection) because registering is how you get a credential
-			// — requiring one first would be circular.
-			conn, err := resolveServer(cmd)
+			// Registration mints a credential for a specific server.
+			// resolveDaemonServer, not resolveServer: a daemon credential is
+			// per-backend (the store is keyed by origin) and must not be
+			// steered by the api-kind CLI context — see resolveDaemonServer.
+			// Not resolveConnection either, because registering is how you GET
+			// a credential; requiring one first would be circular.
+			conn, err := resolveDaemonServer(cmd)
 			if err != nil {
 				return err
 			}
@@ -563,7 +583,7 @@ Credential resolution order:
 			// reliant.log with the API server: dev-electron can run both processes
 			// against the same data root, and separate lumberjack writers must not
 			// rotate the same file.
-			setupToolsDaemonLogging(dataDir)
+			setupToolsDaemonLogging(dataDir, verbose)
 			defer logging.Close() //nolint:errcheck
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -593,6 +613,7 @@ Credential resolution order:
 						ListenPort: listenPort,
 						DataDir:    dataDir,
 						Name:       daemonName,
+						Verbose:    verbose,
 					},
 				})
 				if err != nil && !errors.Is(err, context.Canceled) {
@@ -603,10 +624,11 @@ Credential resolution order:
 			}
 
 			// --- Client mode: resolve credentials for outbound connection ---
-			// resolveServer, not resolveConnection: the daemon authenticates
-			// with its own PAT, so it must not require a CLI credential to
-			// learn which server/gateway it belongs to.
-			conn, err := resolveServer(cmd)
+			// resolveDaemonServer: the daemon authenticates with its own
+			// daemon-kind PAT, so it neither needs a CLI credential nor should
+			// inherit the api-kind context's server — daemon credentials are
+			// multi-backend and keyed by origin. See resolveDaemonServer.
+			conn, err := resolveDaemonServer(cmd)
 			if err != nil {
 				return err
 			}
@@ -670,6 +692,7 @@ Credential resolution order:
 						DaemonID:   c.DaemonID,
 						ServerMode: false,
 						ListenPort: listenPort,
+						Verbose:    verbose,
 					},
 				})
 			}

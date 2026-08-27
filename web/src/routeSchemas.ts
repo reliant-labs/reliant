@@ -13,6 +13,7 @@
 
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
+import type { LaunchPlan } from "./components/OnboardingFlow/types";
 
 // The guided tour's "active step" lives in the URL as `?tour=<step-id>` —
 // absence means the wizard is not active. Adding this to every search schema
@@ -53,8 +54,70 @@ export const launchPlanSchema = z
       .optional(),
     workflowParams: z.record(z.string(), z.unknown()).optional(),
     daemonProvisioning: z.boolean().optional(),
+    // The compute step resolved itself (the user already had a daemon), so it
+    // is hidden from the progress bar and Back is suppressed on the next step.
+    // See LaunchPlan.computeAutoSkipped.
+    //
+    // This schema is .strict(): the plan round-trips through the URL, so ANY
+    // field added to LaunchPlan must be declared here too or the router throws
+    // `unrecognized_keys` and the onboarding route fails to match.
+    computeAutoSkipped: z.boolean().optional(),
   })
   .strict();
+
+/* ---------------------------------------------------------------------------
+ * Drift guard: launchPlanSchema vs LaunchPlan
+ *
+ * The plan round-trips through the URL and the schema above is `.strict()`, so
+ * a field present on the LaunchPlan interface but absent here does not fail to
+ * compile and does not fail any test — it throws `unrecognized_keys` at
+ * runtime the first time it is written to the URL, taking down /onboarding.
+ * That is exactly how `computeAutoSkipped` shipped.
+ *
+ * Everything below is types only: it erases completely and costs nothing at
+ * runtime, but `tsc -b` (CI runs `npm run typecheck`) fails on drift. It lives
+ * in this source file rather than a test because tsconfig.app.json excludes
+ * `*.test.*`, so a guard written in a test file would never be type-checked.
+ * ------------------------------------------------------------------------ */
+
+type LaunchPlanSearch = z.infer<typeof launchPlanSchema>;
+
+/**
+ * Fails to compile unless `Offenders` is `never`, and names the offending keys
+ * in the error text ("Type '\"foo\"' does not satisfy the constraint 'never'").
+ */
+type AssertNoDrift<_Offenders extends never> = void;
+
+// Key-set equality, checked in both directions.
+//
+// This is the check that catches the real bug, and plain assignability is NOT
+// a substitute for it: TypeScript is structural, so a `Partial<LaunchPlan>`
+// carrying an extra field is still assignable to the schema's inferred type.
+// An assignability-only guard compiles clean against precisely the drift that
+// broke the route. Verified by experiment before writing this.
+export type _NoKeyMissingFromSchema = AssertNoDrift<
+  Exclude<keyof LaunchPlan, keyof LaunchPlanSearch>
+>;
+export type _NoKeyMissingFromLaunchPlan = AssertNoDrift<
+  Exclude<keyof LaunchPlanSearch, keyof LaunchPlan>
+>;
+
+// Value-type agreement on the shared keys. Key-set equality alone would let
+// `foo: string` on one side and `foo: boolean` on the other pass, so each
+// direction is also checked for assignability. The schema is all-optional by
+// design (the plan is filled in step by step), so the comparison is against
+// `Partial<LaunchPlan>`.
+//
+// Asserted against `true` rather than a `void`/`never` pair on purpose:
+// `never` is assignable to everything, so a constraint like `T extends void`
+// is satisfied by `never` and the check silently passes no matter what.
+type AssertTrue<_T extends true> = void;
+export type _SchemaMatchesLaunchPlan = AssertTrue<
+  LaunchPlanSearch extends Partial<LaunchPlan> ? true : false
+>;
+export type _LaunchPlanMatchesSchema = AssertTrue<
+  Partial<LaunchPlan> extends LaunchPlanSearch ? true : false
+>;
 
 export type IndexSearch = z.infer<typeof indexSearchSchema>;
 export const indexSearchSchema = z.object({

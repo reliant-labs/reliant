@@ -155,7 +155,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
               )}
             />
           ))}
-          <span className="text-[11px] text-muted-foreground ml-1.5">
+          <span className="text-xs text-muted-foreground ml-1.5">
             {currentStep + 1} / {totalSteps}
           </span>
         </div>

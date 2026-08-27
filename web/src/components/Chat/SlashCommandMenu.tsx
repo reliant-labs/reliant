@@ -275,14 +275,14 @@ export const SlashCommandMenu = forwardRef<
             {/* Show the key that does the same thing, so the menu teaches the
                 shortcut instead of becoming a substitute for learning it. */}
             {command.shortcut && (
-              <kbd className="mt-0.5 shrink-0 rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
+              <kbd className="mt-0.5 shrink-0 rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
                 {command.shortcut}
               </kbd>
             )}
           </button>
         ))}
       </div>
-      <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
+      <div className="border-t border-border px-3 py-1.5 text-xs text-muted-foreground">
         ↑↓ navigate · ↵ run · esc dismiss
       </div>
     </div>,

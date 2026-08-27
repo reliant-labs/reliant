@@ -52,7 +52,7 @@ function CreatePlanContent({
 
   if (!title && !description && (!tasks || tasks.length === 0)) {
     return (
-      <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+      <div className="px-2 py-1.5 text-xs text-muted-foreground">
         Plan data is being prepared...
       </div>
     );
@@ -68,7 +68,7 @@ function CreatePlanContent({
           </h3>
         )}
         {complexity && (
-          <div className="inline-flex items-center px-1.5 py-0.5 mt-1 rounded-full text-[10px] font-medium bg-info/10 text-info border border-info/30">
+          <div className="inline-flex items-center px-1.5 py-0.5 mt-1 rounded-full text-2xs font-medium bg-info/10 text-info border border-info/30">
             {complexity.charAt(0).toUpperCase() + complexity.slice(1)} Complexity
           </div>
         )}
@@ -76,7 +76,7 @@ function CreatePlanContent({
 
       {/* Description */}
       {description && (
-        <div className="px-2 py-1.5 border-b border-border/30 text-[11px]">
+        <div className="px-2 py-1.5 border-b border-border/30 text-xs">
           <MarkdownRenderer content={description} worktreeId={worktreeId} />
         </div>
       )}
@@ -84,14 +84,14 @@ function CreatePlanContent({
       {/* Tasks List */}
       {tasks && tasks.length > 0 && (
         <div className="px-2 py-1.5">
-          <h4 className="font-medium text-foreground text-[11px] mb-1">
+          <h4 className="font-medium text-foreground text-xs mb-1">
             Tasks ({tasks.length})
           </h4>
           <div className="space-y-1">
             {tasks.map((task, index) => (
               <div key={index} className="flex items-start gap-1.5">
                 <div className="flex-shrink-0 w-3 h-3 mt-0.5 border-2 border-muted-foreground rounded-sm" />
-                <span className="text-[11px] text-foreground leading-relaxed">
+                <span className="text-xs text-foreground leading-relaxed">
                   {typeof task === "string"
                     ? task
                     : task.title || task.description || JSON.stringify(task)}
@@ -122,10 +122,10 @@ function TaskContent({
   }
 
   return (
-    <div className="tool-content-task px-2 py-1.5 text-[11px] text-muted-foreground leading-relaxed">
+    <div className="tool-content-task px-2 py-1.5 text-xs text-muted-foreground leading-relaxed">
       {description && <p>{description}</p>}
       {notes && (
-        <p className={description ? "mt-1 text-[10px]" : ""}>
+        <p className={description ? "mt-1 text-2xs" : ""}>
           {notes}
         </p>
       )}

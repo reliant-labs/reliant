@@ -84,7 +84,7 @@ export function SidebarSection({
           )}
           <span
             className={cn(
-              "text-[11px] font-bold uppercase tracking-[0.06em]",
+              "text-xs font-bold uppercase tracking-[0.06em]",
               variant === "highlighted"
                 ? "text-primary"
                 : "text-muted-foreground/80"
@@ -93,7 +93,7 @@ export function SidebarSection({
             {title}
           </span>
           {count !== undefined && (
-            <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
+            <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 text-2xs text-muted-foreground">
               {count}
             </span>
           )}

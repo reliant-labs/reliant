@@ -14,7 +14,7 @@ import {
   UpdatePresetRequestSchema,
   DeletePresetRequestSchema,
   SetDefaultPresetRequestSchema,
-  GetDefaultPresetRequestSchema,
+  GetDefaultPresetsBatchRequestSchema,
 } from "../gen/reliant/v1/preset_pb";
 
 // ============================================
@@ -101,6 +101,95 @@ function protoPresetToFrontend(proto: ProtoPresetInfo): Preset {
     tag: proto.tag || undefined,
     is_hidden: proto.isHidden || false,
   };
+}
+
+// ============================================
+// Default-preset batching
+// ============================================
+
+/**
+ * Per-tick coalescing of default-preset lookups.
+ *
+ * `getDefaultPresets` is asked per WORKFLOW, and a screen showing N agents
+ * mounts N components that each ask for a different one. singleflight cannot
+ * help there — different args mean different keys — so N components produced N
+ * parallel RPCs. This queue collects every workflow requested during the
+ * current microtask and issues ONE GetDefaultPresetsBatch for the lot.
+ *
+ * A microtask (`Promise.resolve().then`) rather than a timer: React mounts a
+ * subtree's effects synchronously within one commit, so everything on screen
+ * lands in the same window without adding latency to the first caller. Nothing
+ * is cached between windows — these are reads that must stay fresh after a
+ * preset is saved, and the previous per-call behavior had no cache either.
+ */
+interface PendingBatch {
+  workflowNames: Set<string>;
+  resolvers: Array<{
+    workflowName: string;
+    resolve: (value: Record<string, string>) => void;
+  }>;
+}
+
+const pendingDefaultPresetBatches = new Map<string, PendingBatch>();
+
+async function fetchDefaultPresetsBatch(
+  projectId: string,
+  workflowNames: string[],
+): Promise<Record<string, Record<string, string>>> {
+  if (workflowNames.length === 0) return {};
+  try {
+    const client = grpcClient.preset();
+    const request = create(GetDefaultPresetsBatchRequestSchema, {
+      projectId,
+      workflowNames,
+    });
+    const response = await client.getDefaultPresetsBatch(request);
+
+    const result: Record<string, Record<string, string>> = {};
+    for (const [workflowName, entry] of Object.entries(
+      response.presetsByWorkflow || {},
+    )) {
+      result[workflowName] = entry.presets || {};
+    }
+    return result;
+  } catch (error) {
+    // Fail gracefully — the caller's contract is "no defaults", not an error.
+    console.warn("[preset-grpc] Failed to get default presets (batch):", error);
+    return {};
+  }
+}
+
+function queueDefaultPresets(
+  projectId: string,
+  workflowName: string,
+): Promise<Record<string, string>> {
+  let batch = pendingDefaultPresetBatches.get(projectId);
+
+  if (!batch) {
+    batch = { workflowNames: new Set(), resolvers: [] };
+    pendingDefaultPresetBatches.set(projectId, batch);
+
+    // Flush at the end of the current microtask, once every caller in this
+    // tick has enqueued.
+    void Promise.resolve().then(async () => {
+      pendingDefaultPresetBatches.delete(projectId);
+      const flushed = batch!;
+      const byWorkflow = await fetchDefaultPresetsBatch(
+        projectId,
+        [...flushed.workflowNames],
+      );
+      for (const { workflowName: name, resolve } of flushed.resolvers) {
+        // A workflow with no defaults is omitted from the response; that is
+        // the same "{}" the single-workflow RPC returned for it.
+        resolve(byWorkflow[name] ?? {});
+      }
+    });
+  }
+
+  batch.workflowNames.add(workflowName);
+  return new Promise<Record<string, string>>((resolve) => {
+    batch!.resolvers.push({ workflowName, resolve });
+  });
 }
 
 // ============================================
@@ -300,29 +389,35 @@ export const presetGrpc = {
    * Get all default presets for a workflow.
    * Returns a map of group name to preset name.
    * Empty string key "" = top-level/workflow-level inputs.
+   *
+   * Calls made in the same tick are COALESCED into a single
+   * GetDefaultPresetsBatch RPC — see `queueDefaultPresets`. The signature is
+   * unchanged so callers keep asking per-workflow; the batching is invisible
+   * to them.
    */
   async getDefaultPresets(
     projectId: string,
     workflowName: string
   ): Promise<Record<string, string>> {
-    // Use singleflight to deduplicate concurrent calls with the same args
-    // (ChatInput, useWorkflowInputs, and PresetPicker all call this on mount)
-    return singleflight(`getDefaultPresets:${projectId}:${workflowName}`, async () => {
-      try {
-        const client = grpcClient.preset();
-        const request = create(GetDefaultPresetRequestSchema, {
-          projectId,
-          workflowName,
-        });
-        const response = await client.getDefaultPreset(request);
+    // singleflight still collapses IDENTICAL concurrent args (ChatInput,
+    // useWorkflowInputs and PresetPicker all mount asking for the same
+    // workflow). The batch queue below is what collapses DIFFERENT args.
+    return singleflight(`getDefaultPresets:${projectId}:${workflowName}`, () =>
+      queueDefaultPresets(projectId, workflowName),
+    );
+  },
 
-        // Response.presets is the map from proto
-        return response.presets || {};
-      } catch (error) {
-        // Fail gracefully - return empty map
-        console.warn("[preset-grpc] Failed to get default presets:", error);
-        return {};
-      }
-    });
+  /**
+   * Get default presets for many workflows in ONE request.
+   *
+   * Callers that already hold the whole list (the workflow hub) should use
+   * this directly rather than mapping over `getDefaultPresets`, which only
+   * reaches the same place via the coalescing window.
+   */
+  async getDefaultPresetsBatch(
+    projectId: string,
+    workflowNames: string[]
+  ): Promise<Record<string, Record<string, string>>> {
+    return fetchDefaultPresetsBatch(projectId, workflowNames);
   },
 };

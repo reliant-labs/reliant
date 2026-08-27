@@ -359,7 +359,7 @@ export function ToolsSelector({
             <div className="py-2 max-h-80 overflow-y-auto">
               {/* Quick expressions */}
               <div className="px-3 pb-2 border-b border-border/70">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2 flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3" />
                   Quick expressions
                 </div>
@@ -410,7 +410,7 @@ export function ToolsSelector({
                     Add
                   </button>
                 </div>
-                {customError && <p className="text-[11px] text-destructive mt-1">{customError}</p>}
+                {customError && <p className="text-xs text-destructive mt-1">{customError}</p>}
               </div>
 
               {/* Concrete tools by category */}

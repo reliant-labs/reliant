@@ -1820,6 +1820,47 @@ func (s *ToolsDaemonService) GetActiveConnections() int {
 	return len(s.connections)
 }
 
+// HeldDaemonStream is a point-in-time snapshot of one daemon stream this
+// gateway holds. Deliberately not toolexec.DaemonInfo: the flow-health
+// assertion needs connectedAt (a stream too young to have a registry row yet
+// is not evidence about anything) and needs no identity fields at all — the
+// endpoint it feeds is status-only and must not be able to leak a name or a
+// hostname even by accident.
+type HeldDaemonStream struct {
+	DaemonID     string
+	ConnectedAt  time.Time
+	LastActivity time.Time
+}
+
+// HeldDaemonStreams snapshots every daemon stream this gateway currently
+// holds, inbound and outbound alike.
+//
+// This is the gateway's OWN answer to "which daemons do I believe I am
+// serving right now", and it is the scope /flow-health asserts over. Without
+// it the endpoint can only read daemon_attachment, which cannot distinguish a
+// daemon that SHOULD be connected from a row nobody ever cleaned up: rows are
+// deleted on graceful teardown only, so a crashed or rescheduled gateway
+// strands its rows forever (dev, 2026-08-24: a 29-day-old and a 51-day-old
+// orphan pinned /flow-health at 503 permanently). A stream present in this
+// map is the one piece of evidence that someone is still expected to be
+// there.
+//
+// Read under s.mu — the same lock that guards conn.lastActivity, which the
+// receive loop and runSender both write.
+func (s *ToolsDaemonService) HeldDaemonStreams() []HeldDaemonStream {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]HeldDaemonStream, 0, len(s.connections))
+	for _, c := range s.connections {
+		out = append(out, HeldDaemonStream{
+			DaemonID:     c.daemonID,
+			ConnectedAt:  c.connectedAt,
+			LastActivity: c.lastActivity,
+		})
+	}
+	return out
+}
+
 // GetConnectedUsers returns list of connected user IDs (for monitoring)
 func (s *ToolsDaemonService) GetConnectedUsers() []string {
 	s.mu.RLock()

@@ -27,6 +27,14 @@ service SettingsService {
   
   // DeleteSetting deletes a setting by key
   rpc DeleteSetting(DeleteSettingRequest) returns (DeleteSettingResponse) {}
+
+  // BatchUpsertSettings writes many settings in one round trip.
+  //
+  // Each entry is an upsert with the same semantics as CreateSetting (which is
+  // itself an upsert server-side), so callers do not have to know whether a key
+  // already exists. Writers that previously fired one RPC per key — the tour's
+  // three-key save, the tool-call category toggles — now issue one.
+  rpc BatchUpsertSettings(BatchUpsertSettingsRequest) returns (BatchUpsertSettingsResponse) {}
   
   // ============================================
   // Sub-phase 6b: UI Settings (Shortcuts/Preferences)
@@ -267,6 +275,25 @@ message DeleteSettingRequest {
 message DeleteSettingResponse {
   bool success = 1;
   string message = 2;
+}
+
+// SettingWrite is a single key/value to upsert within a batch.
+message SettingWrite {
+  string key = 1;
+  string value = 2;
+  // Defaults to "string" when empty.
+  optional string value_type = 3;
+}
+
+message BatchUpsertSettingsRequest {
+  repeated SettingWrite settings = 1;
+  // Applies to every entry in the batch — a batch is single-scoped so the
+  // handler can emit one refetch rather than one per scope.
+  optional string project_id = 2;
+}
+
+message BatchUpsertSettingsResponse {
+  repeated Setting settings = 1;
 }
 
 // ============================================

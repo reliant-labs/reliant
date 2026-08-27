@@ -1184,6 +1184,159 @@ func (x *GetDefaultPresetResponse) GetPresets() map[string]string {
 	return nil
 }
 
+// GetDefaultPresetsBatchRequest is the request for GetDefaultPresetsBatch.
+type GetDefaultPresetsBatchRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Project ID
+	ProjectId string `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// Workflow names to resolve defaults for. Duplicates are collapsed.
+	WorkflowNames []string `protobuf:"bytes,2,rep,name=workflow_names,json=workflowNames,proto3" json:"workflow_names,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetDefaultPresetsBatchRequest) Reset() {
+	*x = GetDefaultPresetsBatchRequest{}
+	mi := &file_reliant_v1_preset_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDefaultPresetsBatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDefaultPresetsBatchRequest) ProtoMessage() {}
+
+func (x *GetDefaultPresetsBatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_preset_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDefaultPresetsBatchRequest.ProtoReflect.Descriptor instead.
+func (*GetDefaultPresetsBatchRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_preset_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *GetDefaultPresetsBatchRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *GetDefaultPresetsBatchRequest) GetWorkflowNames() []string {
+	if x != nil {
+		return x.WorkflowNames
+	}
+	return nil
+}
+
+// WorkflowDefaultPresets holds one workflow's group-to-preset defaults.
+//
+// A wrapper message is required because proto3 map values may not themselves
+// be maps, and the per-workflow result is a map of group name to preset name.
+type WorkflowDefaultPresets struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Map of group name to default preset name.
+	// Empty string key ("") = top-level/workflow-level inputs.
+	Presets       map[string]string `protobuf:"bytes,1,rep,name=presets,proto3" json:"presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WorkflowDefaultPresets) Reset() {
+	*x = WorkflowDefaultPresets{}
+	mi := &file_reliant_v1_preset_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowDefaultPresets) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowDefaultPresets) ProtoMessage() {}
+
+func (x *WorkflowDefaultPresets) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_preset_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowDefaultPresets.ProtoReflect.Descriptor instead.
+func (*WorkflowDefaultPresets) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_preset_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *WorkflowDefaultPresets) GetPresets() map[string]string {
+	if x != nil {
+		return x.Presets
+	}
+	return nil
+}
+
+// GetDefaultPresetsBatchResponse is the response for GetDefaultPresetsBatch.
+type GetDefaultPresetsBatchResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Keyed by workflow name. A workflow that resolved to no defaults at all is
+	// omitted, matching GetDefaultPreset's "empty map" outcome for the same
+	// input — callers must treat a missing key as "no defaults", not an error.
+	PresetsByWorkflow map[string]*WorkflowDefaultPresets `protobuf:"bytes,1,rep,name=presets_by_workflow,json=presetsByWorkflow,proto3" json:"presets_by_workflow,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *GetDefaultPresetsBatchResponse) Reset() {
+	*x = GetDefaultPresetsBatchResponse{}
+	mi := &file_reliant_v1_preset_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetDefaultPresetsBatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetDefaultPresetsBatchResponse) ProtoMessage() {}
+
+func (x *GetDefaultPresetsBatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_preset_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetDefaultPresetsBatchResponse.ProtoReflect.Descriptor instead.
+func (*GetDefaultPresetsBatchResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_preset_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetDefaultPresetsBatchResponse) GetPresetsByWorkflow() map[string]*WorkflowDefaultPresets {
+	if x != nil {
+		return x.PresetsByWorkflow
+	}
+	return nil
+}
+
 var File_reliant_v1_preset_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_preset_proto_rawDesc = "" +
@@ -1292,7 +1445,21 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\apresets\x18\x01 \x03(\v21.reliant.v1.GetDefaultPresetResponse.PresetsEntryR\apresets\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xe1\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"e\n" +
+	"\x1dGetDefaultPresetsBatchRequest\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12%\n" +
+	"\x0eworkflow_names\x18\x02 \x03(\tR\rworkflowNames\"\x9f\x01\n" +
+	"\x16WorkflowDefaultPresets\x12I\n" +
+	"\apresets\x18\x01 \x03(\v2/.reliant.v1.WorkflowDefaultPresets.PresetsEntryR\apresets\x1a:\n" +
+	"\fPresetsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xfd\x01\n" +
+	"\x1eGetDefaultPresetsBatchResponse\x12q\n" +
+	"\x13presets_by_workflow\x18\x01 \x03(\v2A.reliant.v1.GetDefaultPresetsBatchResponse.PresetsByWorkflowEntryR\x11presetsByWorkflow\x1ah\n" +
+	"\x16PresetsByWorkflowEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x128\n" +
+	"\x05value\x18\x02 \x01(\v2\".reliant.v1.WorkflowDefaultPresetsR\x05value:\x028\x012\xd4\x06\n" +
 	"\rPresetService\x12P\n" +
 	"\vListPresets\x12\x1e.reliant.v1.ListPresetsRequest\x1a\x1f.reliant.v1.ListPresetsResponse\"\x00\x12J\n" +
 	"\tGetPreset\x12\x1c.reliant.v1.GetPresetRequest\x1a\x1d.reliant.v1.GetPresetResponse\"\x00\x12q\n" +
@@ -1301,7 +1468,8 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\fUpdatePreset\x12\x1f.reliant.v1.UpdatePresetRequest\x1a .reliant.v1.UpdatePresetResponse\"\x00\x12S\n" +
 	"\fDeletePreset\x12\x1f.reliant.v1.DeletePresetRequest\x1a .reliant.v1.DeletePresetResponse\"\x00\x12_\n" +
 	"\x10SetDefaultPreset\x12#.reliant.v1.SetDefaultPresetRequest\x1a$.reliant.v1.SetDefaultPresetResponse\"\x00\x12_\n" +
-	"\x10GetDefaultPreset\x12#.reliant.v1.GetDefaultPresetRequest\x1a$.reliant.v1.GetDefaultPresetResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x10GetDefaultPreset\x12#.reliant.v1.GetDefaultPresetRequest\x1a$.reliant.v1.GetDefaultPresetResponse\"\x00\x12q\n" +
+	"\x16GetDefaultPresetsBatch\x12).reliant.v1.GetDefaultPresetsBatchRequest\x1a*.reliant.v1.GetDefaultPresetsBatchResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_preset_proto_rawDescOnce sync.Once
@@ -1315,7 +1483,7 @@ func file_reliant_v1_preset_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_preset_proto_rawDescData
 }
 
-var file_reliant_v1_preset_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_reliant_v1_preset_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_reliant_v1_preset_proto_goTypes = []any{
 	(*PresetInfo)(nil),                     // 0: reliant.v1.PresetInfo
 	(*ListPresetsRequest)(nil),             // 1: reliant.v1.ListPresetsRequest
@@ -1335,48 +1503,58 @@ var file_reliant_v1_preset_proto_goTypes = []any{
 	(*SetDefaultPresetResponse)(nil),       // 15: reliant.v1.SetDefaultPresetResponse
 	(*GetDefaultPresetRequest)(nil),        // 16: reliant.v1.GetDefaultPresetRequest
 	(*GetDefaultPresetResponse)(nil),       // 17: reliant.v1.GetDefaultPresetResponse
-	nil,                                    // 18: reliant.v1.PresetInfo.ParamsEntry
-	nil,                                    // 19: reliant.v1.CreatePresetRequest.ParamsEntry
-	nil,                                    // 20: reliant.v1.UpdatePresetRequest.NewParamsEntry
-	nil,                                    // 21: reliant.v1.GetDefaultPresetResponse.PresetsEntry
-	(*structpb.Value)(nil),                 // 22: google.protobuf.Value
+	(*GetDefaultPresetsBatchRequest)(nil),  // 18: reliant.v1.GetDefaultPresetsBatchRequest
+	(*WorkflowDefaultPresets)(nil),         // 19: reliant.v1.WorkflowDefaultPresets
+	(*GetDefaultPresetsBatchResponse)(nil), // 20: reliant.v1.GetDefaultPresetsBatchResponse
+	nil,                                    // 21: reliant.v1.PresetInfo.ParamsEntry
+	nil,                                    // 22: reliant.v1.CreatePresetRequest.ParamsEntry
+	nil,                                    // 23: reliant.v1.UpdatePresetRequest.NewParamsEntry
+	nil,                                    // 24: reliant.v1.GetDefaultPresetResponse.PresetsEntry
+	nil,                                    // 25: reliant.v1.WorkflowDefaultPresets.PresetsEntry
+	nil,                                    // 26: reliant.v1.GetDefaultPresetsBatchResponse.PresetsByWorkflowEntry
+	(*structpb.Value)(nil),                 // 27: google.protobuf.Value
 }
 var file_reliant_v1_preset_proto_depIdxs = []int32{
-	18, // 0: reliant.v1.PresetInfo.params:type_name -> reliant.v1.PresetInfo.ParamsEntry
+	21, // 0: reliant.v1.PresetInfo.params:type_name -> reliant.v1.PresetInfo.ParamsEntry
 	0,  // 1: reliant.v1.ListPresetsResponse.presets:type_name -> reliant.v1.PresetInfo
 	3,  // 2: reliant.v1.ListPresetsResponse.invalid_presets:type_name -> reliant.v1.InvalidPreset
 	0,  // 3: reliant.v1.GetPresetResponse.preset:type_name -> reliant.v1.PresetInfo
 	0,  // 4: reliant.v1.ListPresetsForWorkflowResponse.presets:type_name -> reliant.v1.PresetInfo
 	3,  // 5: reliant.v1.ListPresetsForWorkflowResponse.invalid_presets:type_name -> reliant.v1.InvalidPreset
-	19, // 6: reliant.v1.CreatePresetRequest.params:type_name -> reliant.v1.CreatePresetRequest.ParamsEntry
+	22, // 6: reliant.v1.CreatePresetRequest.params:type_name -> reliant.v1.CreatePresetRequest.ParamsEntry
 	0,  // 7: reliant.v1.CreatePresetResponse.preset:type_name -> reliant.v1.PresetInfo
-	20, // 8: reliant.v1.UpdatePresetRequest.new_params:type_name -> reliant.v1.UpdatePresetRequest.NewParamsEntry
+	23, // 8: reliant.v1.UpdatePresetRequest.new_params:type_name -> reliant.v1.UpdatePresetRequest.NewParamsEntry
 	0,  // 9: reliant.v1.UpdatePresetResponse.preset:type_name -> reliant.v1.PresetInfo
-	21, // 10: reliant.v1.GetDefaultPresetResponse.presets:type_name -> reliant.v1.GetDefaultPresetResponse.PresetsEntry
-	22, // 11: reliant.v1.PresetInfo.ParamsEntry.value:type_name -> google.protobuf.Value
-	22, // 12: reliant.v1.CreatePresetRequest.ParamsEntry.value:type_name -> google.protobuf.Value
-	22, // 13: reliant.v1.UpdatePresetRequest.NewParamsEntry.value:type_name -> google.protobuf.Value
-	1,  // 14: reliant.v1.PresetService.ListPresets:input_type -> reliant.v1.ListPresetsRequest
-	4,  // 15: reliant.v1.PresetService.GetPreset:input_type -> reliant.v1.GetPresetRequest
-	6,  // 16: reliant.v1.PresetService.ListPresetsForWorkflow:input_type -> reliant.v1.ListPresetsForWorkflowRequest
-	8,  // 17: reliant.v1.PresetService.CreatePreset:input_type -> reliant.v1.CreatePresetRequest
-	10, // 18: reliant.v1.PresetService.UpdatePreset:input_type -> reliant.v1.UpdatePresetRequest
-	12, // 19: reliant.v1.PresetService.DeletePreset:input_type -> reliant.v1.DeletePresetRequest
-	14, // 20: reliant.v1.PresetService.SetDefaultPreset:input_type -> reliant.v1.SetDefaultPresetRequest
-	16, // 21: reliant.v1.PresetService.GetDefaultPreset:input_type -> reliant.v1.GetDefaultPresetRequest
-	2,  // 22: reliant.v1.PresetService.ListPresets:output_type -> reliant.v1.ListPresetsResponse
-	5,  // 23: reliant.v1.PresetService.GetPreset:output_type -> reliant.v1.GetPresetResponse
-	7,  // 24: reliant.v1.PresetService.ListPresetsForWorkflow:output_type -> reliant.v1.ListPresetsForWorkflowResponse
-	9,  // 25: reliant.v1.PresetService.CreatePreset:output_type -> reliant.v1.CreatePresetResponse
-	11, // 26: reliant.v1.PresetService.UpdatePreset:output_type -> reliant.v1.UpdatePresetResponse
-	13, // 27: reliant.v1.PresetService.DeletePreset:output_type -> reliant.v1.DeletePresetResponse
-	15, // 28: reliant.v1.PresetService.SetDefaultPreset:output_type -> reliant.v1.SetDefaultPresetResponse
-	17, // 29: reliant.v1.PresetService.GetDefaultPreset:output_type -> reliant.v1.GetDefaultPresetResponse
-	22, // [22:30] is the sub-list for method output_type
-	14, // [14:22] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	24, // 10: reliant.v1.GetDefaultPresetResponse.presets:type_name -> reliant.v1.GetDefaultPresetResponse.PresetsEntry
+	25, // 11: reliant.v1.WorkflowDefaultPresets.presets:type_name -> reliant.v1.WorkflowDefaultPresets.PresetsEntry
+	26, // 12: reliant.v1.GetDefaultPresetsBatchResponse.presets_by_workflow:type_name -> reliant.v1.GetDefaultPresetsBatchResponse.PresetsByWorkflowEntry
+	27, // 13: reliant.v1.PresetInfo.ParamsEntry.value:type_name -> google.protobuf.Value
+	27, // 14: reliant.v1.CreatePresetRequest.ParamsEntry.value:type_name -> google.protobuf.Value
+	27, // 15: reliant.v1.UpdatePresetRequest.NewParamsEntry.value:type_name -> google.protobuf.Value
+	19, // 16: reliant.v1.GetDefaultPresetsBatchResponse.PresetsByWorkflowEntry.value:type_name -> reliant.v1.WorkflowDefaultPresets
+	1,  // 17: reliant.v1.PresetService.ListPresets:input_type -> reliant.v1.ListPresetsRequest
+	4,  // 18: reliant.v1.PresetService.GetPreset:input_type -> reliant.v1.GetPresetRequest
+	6,  // 19: reliant.v1.PresetService.ListPresetsForWorkflow:input_type -> reliant.v1.ListPresetsForWorkflowRequest
+	8,  // 20: reliant.v1.PresetService.CreatePreset:input_type -> reliant.v1.CreatePresetRequest
+	10, // 21: reliant.v1.PresetService.UpdatePreset:input_type -> reliant.v1.UpdatePresetRequest
+	12, // 22: reliant.v1.PresetService.DeletePreset:input_type -> reliant.v1.DeletePresetRequest
+	14, // 23: reliant.v1.PresetService.SetDefaultPreset:input_type -> reliant.v1.SetDefaultPresetRequest
+	16, // 24: reliant.v1.PresetService.GetDefaultPreset:input_type -> reliant.v1.GetDefaultPresetRequest
+	18, // 25: reliant.v1.PresetService.GetDefaultPresetsBatch:input_type -> reliant.v1.GetDefaultPresetsBatchRequest
+	2,  // 26: reliant.v1.PresetService.ListPresets:output_type -> reliant.v1.ListPresetsResponse
+	5,  // 27: reliant.v1.PresetService.GetPreset:output_type -> reliant.v1.GetPresetResponse
+	7,  // 28: reliant.v1.PresetService.ListPresetsForWorkflow:output_type -> reliant.v1.ListPresetsForWorkflowResponse
+	9,  // 29: reliant.v1.PresetService.CreatePreset:output_type -> reliant.v1.CreatePresetResponse
+	11, // 30: reliant.v1.PresetService.UpdatePreset:output_type -> reliant.v1.UpdatePresetResponse
+	13, // 31: reliant.v1.PresetService.DeletePreset:output_type -> reliant.v1.DeletePresetResponse
+	15, // 32: reliant.v1.PresetService.SetDefaultPreset:output_type -> reliant.v1.SetDefaultPresetResponse
+	17, // 33: reliant.v1.PresetService.GetDefaultPreset:output_type -> reliant.v1.GetDefaultPresetResponse
+	20, // 34: reliant.v1.PresetService.GetDefaultPresetsBatch:output_type -> reliant.v1.GetDefaultPresetsBatchResponse
+	26, // [26:35] is the sub-list for method output_type
+	17, // [17:26] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_preset_proto_init() }
@@ -1392,7 +1570,7 @@ func file_reliant_v1_preset_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_preset_proto_rawDesc), len(file_reliant_v1_preset_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

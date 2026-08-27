@@ -57,7 +57,7 @@ export const ActionNode = memo(({ data, selected }: ActionNodeProps) => {
             <Icon className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className={`text-[10px] font-bold uppercase tracking-wide ${colors.text}`}>{displayName}</div>
+            <div className={`text-2xs font-bold uppercase tracking-wide ${colors.text}`}>{displayName}</div>
             <div className="font-medium text-muted-foreground text-xs leading-tight truncate">{label}</div>
           </div>
         </div>

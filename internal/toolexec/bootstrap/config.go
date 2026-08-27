@@ -49,6 +49,24 @@ type DaemonBootstrapConfig struct {
 	// incoming gateway connections instead of dialing out.
 	ServerMode bool
 	ListenPort int // default 9190
+
+	// Verbose mirrors the CLI's --verbose flag. It selects who the daemon's
+	// stdout is FOR.
+	//
+	// Off (a person ran `reliant daemon start` in a terminal): stdout carries
+	// short human status lines only. The structured log still goes to the
+	// rotating file in DataDir, so nothing is lost.
+	//
+	// On (a supervisor spawned us, or someone is debugging): stdout carries the
+	// full structured log AND the `@@RELIANT_STREAM <state>` machine notices a
+	// parent parses to learn of a connect immediately instead of waiting on its
+	// 250ms stat-poll of daemon-state.json.
+	//
+	// Electron always passes --verbose for exactly that reason (see
+	// electron/src/backend-manager.js buildDaemonArgs). The on-disk record
+	// remains the source of truth in both modes, so a daemon started without
+	// this flag is still fully observable — just one poll interval slower.
+	Verbose bool
 }
 
 // NormalizeGatewayURL maps the gateway address forms an operator can plausibly

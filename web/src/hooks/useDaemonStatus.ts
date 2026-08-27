@@ -1,10 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 import { grpcClient } from "../api/grpc-client";
 import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
-
+import { logger } from "../lib/logger";
 const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
 const POLL_INTERVAL_MS = 5_000;
 
@@ -35,11 +35,70 @@ async function fetchDaemonList(): Promise<DaemonInfo[]> {
   const resp = await grpcClient
     .daemonRegistry()
     .listDaemons(create(ListDaemonsRequestSchema));
+  logger.warn("[DaemonStatus] ListDaemons returned", {
+    atMs: Date.now(),
+    count: resp.daemons.length,
+    statuses: resp.daemons.map((d) => d.status),
+    ids: resp.daemons.map((d) => d.daemonId),
+  });
   return resp.daemons;
 }
 
 export function useDaemonStatus() {
   const queryClient = useQueryClient();
+
+  // Refetch the moment the desktop app reports its daemon connected, rather
+  // than waiting for the next 5s poll.
+  //
+  // The poll alone is not sufficient after sign-in: it sets
+  // `refetchIntervalInBackground: false`, and OAuth backgrounds the window by
+  // design when consent goes to the system browser. Measured on a real prod
+  // sign-in, the daemon connected ~1.2s after the restart while the UI sat on
+  // the onboarding daemon step for roughly a minute, because the poll had
+  // stopped and nothing woke it.
+  //
+  // The event is a trigger, not data — see electron/src/preload.js's
+  // onDaemonConnected. Registration (which makes the daemon listable) was
+  // measured 1.1s BEFORE the connected event, so we refetch rather than
+  // synthesising a daemon from the payload.
+  useEffect(() => {
+    const api = (window as unknown as {
+      electronAPI?: {
+        onDaemonConnected?: (cb: (p: unknown) => void) => () => void;
+        isDaemonConnected?: () => Promise<boolean>;
+      };
+    }).electronAPI;
+    // Ask once on mount, because the event may already have fired.
+    //
+    // The renderer RELOADS after the post-sign-in daemon restart, and the
+    // main-process watcher de-duplicates on the stream value — so a renderer
+    // that mounts after "connected" was published receives no event at all.
+    // Measured: the daemon was listable at 22:20:11.2 while the UI only
+    // learned at 22:20:15.3, on the next poll tick, with zero events
+    // delivered. Asking removes the dependence on having been listening.
+    void (async () => {
+      try {
+        if (!api?.isDaemonConnected) return;
+        if (await api.isDaemonConnected()) {
+          logger.warn("[DaemonStatus] daemon already connected on mount", {
+            atMs: Date.now(),
+          });
+          void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+        }
+      } catch {
+        // A failed probe just falls back to the event + poll.
+      }
+    })();
+
+    if (!api?.onDaemonConnected) return;
+    return api.onDaemonConnected(() => {
+      logger.warn("[DaemonStatus] daemon-connected event -> invalidating", {
+        atMs: Date.now(),
+      });
+      void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+    });
+  }, [queryClient]);
+
   const { data, isLoading } = useQuery<DaemonInfo[]>({
     queryKey: DAEMON_LIST_QUERY_KEY,
     queryFn: fetchDaemonList,

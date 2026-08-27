@@ -146,7 +146,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "" }: ArchivedWorktreesP
                           {worktree.name}
                         </h3>
                         {worktree.is_main && (
-                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          <span className="rounded-full bg-muted px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                             Main
                           </span>
                         )}

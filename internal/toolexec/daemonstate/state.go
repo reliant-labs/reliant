@@ -58,6 +58,26 @@ const (
 	StreamAwaitingCredentials Stream = "awaiting_credentials"
 )
 
+// StreamNoticePrefix marks a line on the daemon's stdout announcing a stream
+// transition, e.g. `@@RELIANT_STREAM connected`.
+//
+// This is the PUSH half of how a supervising Electron learns the daemon is up.
+// The runtime record in daemon-state.json remains the source of truth — a
+// remote daemon has no stdout its supervisor can read, and the file is what
+// `reliant daemon status` reads — but a locally spawned daemon already has an
+// ordered, authenticated pipe to its parent, and announcing on it turns a
+// discovery that cost up to a full poll interval into an immediate one.
+//
+// Measured on the dev stack: Electron's fallback fs.watchFile stats the record
+// every 250ms, so it learned of a connect 146ms after the fact, purely from
+// landing mid-interval. Nothing was slow; the supervisor was simply asking
+// rather than being told.
+//
+// The prefix is deliberately unlikely to occur in ordinary log output, because
+// the reader must never mistake a log line for a notice. Electron mirrors this
+// constant in electron/src/daemon-contract.js.
+const StreamNoticePrefix = "@@RELIANT_STREAM"
+
 // Established reports whether the daemon can currently serve tool calls.
 func (s Stream) Established() bool { return s == StreamConnected }
 

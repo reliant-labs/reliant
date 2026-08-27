@@ -89,7 +89,7 @@ export function AddToChatPopup({
         >
         <Plus className="w-3 h-3 shrink-0" strokeWidth={2.5} />
         <span className="font-medium">Add to Chat</span>
-        <span className="add-to-chat-shortcut text-[10px] font-mono px-1.5 py-0.5 rounded">
+        <span className="add-to-chat-shortcut text-2xs font-mono px-1.5 py-0.5 rounded">
           {shortcut}
         </span>
       </button>

@@ -30,13 +30,13 @@ import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { ColorSchemeSelector } from "../Settings/ColorSchemeSelector";
 import { useUIStore } from "../../store/uiStore";
-import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
+import { settingsSync, SETTINGS_KEYS, type SettingKey } from "../../services/settingsSync";
 import {
   getSpawnDisplayMode,
   setSpawnDisplayMode as saveSpawnDisplayMode,
   type SpawnDisplayMode,
 } from "../Settings/SpawnDisplaySettings";
-import { FONT_SIZE_MAP, applyRootFontSize } from "../../lib/rootFontSize";
+import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import {
   MobileSegmentedRow,
   MobileSelectRow,
@@ -82,6 +82,18 @@ function readPref<T extends string>(key: string, fallback: T): T {
   return settingsSync.getSetting(key as any, fallback) as T;
 }
 
+/**
+ * Persist a preference only when it differs from what is stored — the mobile
+ * twin of the desktop panel's guard. Without it, opening this panel re-saves
+ * every preference, and a stale read becomes the newest record, silently
+ * reverting a user's choice. See settingsSync.setSettingIfChanged.
+ */
+function persistPref(key: SettingKey, value: string): boolean {
+  if (settingsSync.getSetting(key, "") === value) return false;
+  void settingsSync.setSettingIfChanged(key, value).catch(console.error);
+  return true;
+}
+
 export function MobileAppearancePanel() {
   const showHiddenFiles = useUIStore((state) => state.showHiddenFiles);
   const setShowHiddenFiles = useUIStore((state) => state.setShowHiddenFiles);
@@ -90,7 +102,7 @@ export function MobileAppearancePanel() {
   const [font, setFont] = useState<string>("default");
   const [editorFont, setEditorFont] = useState<string>("default");
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
-  const [fontSize, setFontSize] = useState<FontSize>("md");
+  const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
   const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<"inline" | "side">("side");
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
@@ -119,7 +131,7 @@ export function MobileAppearancePanel() {
       const savedEditorFont = readPref(SETTINGS_KEYS.EDITOR_FONT, "default");
       setEditorFont(savedEditorFont);
       setUseCodeFont(savedEditorFont !== "default");
-      setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, "md"));
+      setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
       setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
       setSpawnDisplayMode(getSpawnDisplayMode());
@@ -153,37 +165,37 @@ export function MobileAppearancePanel() {
   useEffect(() => {
     if (!isLoaded) return;
     document.documentElement.dataset.font = font;
-    settingsSync.setSetting(SETTINGS_KEYS.FONT, font).catch(console.error);
-    window.dispatchEvent(new CustomEvent("font-changed"));
+    if (persistPref(SETTINGS_KEYS.FONT, font)) {
+      window.dispatchEvent(new CustomEvent("font-changed"));
+    }
   }, [font, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
     document.documentElement.dataset.editorFont = editorFont;
-    settingsSync.setSetting(SETTINGS_KEYS.EDITOR_FONT, editorFont).catch(console.error);
+    persistPref(SETTINGS_KEYS.EDITOR_FONT, editorFont);
   }, [editorFont, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
     applyRootFontSize(fontSize);
-    settingsSync.setSetting(SETTINGS_KEYS.FONT_SIZE, fontSize).catch(console.error);
-    window.dispatchEvent(new CustomEvent("font-changed"));
+    if (persistPref(SETTINGS_KEYS.FONT_SIZE, fontSize)) {
+      window.dispatchEvent(new CustomEvent("font-changed"));
+    }
   }, [fontSize, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    settingsSync
-      .setSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, workflowViewerDefaultMode)
-      .catch((error) => {
-        console.error("[MobileAppearancePanel] Failed to save workflow viewer default mode:", error);
-      });
-    window.dispatchEvent(new CustomEvent("appearance-updated"));
+    if (persistPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, workflowViewerDefaultMode)) {
+      window.dispatchEvent(new CustomEvent("appearance-updated"));
+    }
   }, [workflowViewerDefaultMode, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    settingsSync.setSetting(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant).catch(console.error);
-    window.dispatchEvent(new CustomEvent("appearance-updated"));
+    if (persistPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant)) {
+      window.dispatchEvent(new CustomEvent("appearance-updated"));
+    }
   }, [chatTimelineVariant, isLoaded]);
 
   useEffect(() => {

@@ -63,6 +63,24 @@ vi.mock("../../../store/tourStore", () => ({
   ),
 }));
 
+// The wizard renders nothing without an authenticated user — onboarding is
+// per-user state, and a signed-out visitor must never see the tour or the
+// checklist (see OnboardingWizard.authGate.test.tsx). These routing tests are
+// about URL gating, so stand up a signed-in user and let the URL decide.
+vi.mock("../../../store/authStore", () => {
+  const authState = { user: { id: "user-1" } };
+  return {
+    useAuthStore: Object.assign(
+      (selector?: any) => (selector ? selector(authState) : authState),
+      {
+        getState: () => authState,
+        setState: vi.fn(),
+        subscribe: vi.fn(() => () => undefined),
+      }
+    ),
+  };
+});
+
 // Checklist store may be called WITH or WITHOUT a selector. Both forms must
 // return an object containing the fields the wizard destructures.
 vi.mock("../../../store/onboardingChecklistStore", () => {

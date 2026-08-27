@@ -27,7 +27,7 @@ export function RightContentPanel({
 
   const renderPanelHeader = () => (
     <div className="flex h-11 items-center justify-between border-b border-border bg-card px-3">
-      <h2 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         Reliant
       </h2>
       <button

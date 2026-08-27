@@ -639,6 +639,32 @@ func executeSaveMessageInline(
 		saveInput.LoopIteration = loopIteration
 	}
 
+	// An assistant message with nothing in it cannot be written — SaveMessage's
+	// validator refuses the row, because a blockless assistant row is durable
+	// poison for the thread. Dispatching the activity anyway buys five failing
+	// attempts, an ERROR per attempt, and (now that activity failures reach the
+	// chat) an error banner the user cannot act on.
+	//
+	// Since call_llm substitutes text for any turn the provider left empty, the
+	// only thing that still arrives here content-free is the deliberate
+	// assistant-tail yield, which HAS nothing to save. Declining the dispatch
+	// says that outright instead of expressing it as a failed write.
+	//
+	// Deliberately not silent: a content-free assistant turn should be
+	// impossible upstream, so it stays greppable at WARN.
+	if strings.EqualFold(saveInput.Role, "assistant") &&
+		saveInput.Content == "" &&
+		len(saveInput.ToolCalls) == 0 &&
+		saveInput.Thinking.Content == "" {
+		logger.Warn("[SaveMessage] Skipping an assistant message with no content, tool calls or thinking — "+
+			"there is no row to write. Expected only for the assistant-tail yield in call_llm; "+
+			"anywhere else it means a turn reached save with nothing in it.",
+			"stepID", nid,
+			"thread", saveInput.Thread,
+		)
+		return nil, nil
+	}
+
 	logger.Info("[SaveMessage] Executing inline SaveMessage",
 		"stepID", nid,
 		"role", saveInput.Role,

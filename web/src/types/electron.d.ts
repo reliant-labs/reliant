@@ -95,15 +95,65 @@ export interface ElectronAPI {
 
   // OAuth
   //
-  // These two were declared here but never implemented in preload.js, so at
-  // runtime they are `undefined` in every build that has ever shipped. They are
-  // typed as optional so a call site cannot assume the main process provides
-  // them — the OAuth redirect target now comes from getAppURL() instead.
-  getOAuthRedirectUrl?: () => Promise<{ success: boolean; redirectUrl?: string; error?: string }>;
-  onOAuthCallback?: (callback: (callbackUrl: string) => void) => void;
+  // Starts the loopback receiver and returns the redirect URI to hand the
+  // provider (RFC 8252). Its PRESENCE is also how web/src/lib/oauth-signin.ts
+  // decides to open consent in the system browser instead of navigating this
+  // window — Google refuses OAuth in an embedded webview.
+  //
+  // Still OPTIONAL, deliberately: builds shipped before this existed do not
+  // provide it, and the renderer falls back to the hosted /auth/callback
+  // rather than throwing. Rejects (never resolves falsy) when the listener
+  // cannot start, so the fallback stays on one code path.
+  //
+  // The code comes back by NAVIGATING this window to /auth/callback, so there
+  // is no callback-event bridge to declare. The previous `onOAuthCallback`
+  // here was never implemented in preload.js — `undefined` in every shipped
+  // build — so the renderer listener that depended on it could never fire.
+  startOAuthRedirect?: () => Promise<{ redirectUri: string }>;
+
+  // Provider sign-in (Claude Code / Codex) through the desktop app's OWN
+  // loopback receiver.
+  //
+  // Two calls rather than one, and the split is the fix rather than an
+  // ergonomic choice: this previously went through DaemonService/StartOAuthFlow,
+  // a request/response RPC held open across a human's consent screen. It failed
+  // at ~15s ("Failed to fetch"), and cancelling it destroyed the daemon's
+  // listener, so the browser's redirect hit a closed port. `start` binds the
+  // port and returns at once; `wait` spans human time over IPC, which nothing
+  // in between can time out.
+  //
+  // Optional like every bridge here: builds predating it fall back to the
+  // daemon RPC rather than throwing (see web/src/lib/oauth-desktop.ts).
+  startProviderOAuth?: (
+    authorizeUrlTemplate: string,
+  ) => Promise<{ flowId: string; redirectUri: string }>;
+  waitForProviderOAuth?: (
+    flowId: string,
+  ) => Promise<{ code: string; state: string; redirectUri: string }>;
+  cancelProviderOAuth?: (flowId: string) => Promise<unknown>;
 
   // Auth storage
-  authLoad: () => Promise<{ success: boolean; session?: any; error?: string }>;
+  authLoad: () => Promise<{
+    success: boolean;
+    session?: any;
+    error?: string;
+    /**
+     * Present when a stored session existed but could not be turned back into
+     * a session — distinct from simply having none. `recoverable: false` means
+     * the OS encryption key that wrote the blob is gone, so no retry will ever
+     * succeed and the user must sign in again.
+     */
+    failure?: {
+      reason:
+        | "decrypt_failed"
+        | "corrupt"
+        | "invalid"
+        | "encryption_unavailable"
+        | "read_failed";
+      cleared: boolean;
+      recoverable: boolean;
+    };
+  }>;
   authSave: (session: any) => Promise<{ success: boolean; error?: string }>;
   authClear: () => Promise<{ success: boolean; error?: string }>;
 

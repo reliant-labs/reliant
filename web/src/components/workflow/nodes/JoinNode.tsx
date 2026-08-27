@@ -55,7 +55,7 @@ export const JoinNode = memo(({ data, selected }: JoinNodeProps) => {
             <GitMerge className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-teal-600">JOIN</div>
+            <div className="text-2xs font-bold uppercase tracking-wide text-teal-600">JOIN</div>
             <div className="font-semibold text-foreground text-sm">{label}</div>
           </div>
         </div>

@@ -282,6 +282,30 @@ func LoadMCPServersFromFile(mcpConfigPath string) map[string]config.MCPServer {
 			mcpServer.Enabled = enabled
 		}
 
+		// Tree-scoping fields. These are hand-parsed like everything above, so a
+		// field added to config.MCPServer and documented for users is silently
+		// dropped until it appears here — which is what had happened to `dir`
+		// and `dirScoped`: both were declared, documented in the reliant-config
+		// skill, and never read out of mcp.json.
+		if dir, ok := serverMap["dir"].(string); ok && dir != "" {
+			mcpServer.Dir = expandWithServerEnv(dir)
+		}
+		if dirScoped, ok := serverMap["dirScoped"].(bool); ok {
+			mcpServer.DirScoped = dirScoped
+		}
+
+		// requiresFiles (optional): what the project must contain before this
+		// server is worth starting. Left nil when absent, which means "no
+		// precondition" — see config.MCPServer.RequiresFiles.
+		if requires, ok := serverMap["requiresFiles"].([]interface{}); ok {
+			mcpServer.RequiresFiles = make([]string, 0, len(requires))
+			for _, pattern := range requires {
+				if s, ok := pattern.(string); ok && strings.TrimSpace(s) != "" {
+					mcpServer.RequiresFiles = append(mcpServer.RequiresFiles, s)
+				}
+			}
+		}
+
 		// Backward-compatible inference: if URL is set and command is empty, treat as HTTP/SSE.
 		if mcpServer.Type == config.MCPStdio && mcpServer.Command == "" && mcpServer.URL != "" {
 			mcpServer.Type = config.MCPSse

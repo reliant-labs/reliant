@@ -132,7 +132,7 @@ export const LoopNode = memo(({ id, data, selected }: LoopNodeProps) => {
               <RefreshCw className={`w-4 h-4 text-white ${executionStatus === 'running' ? 'animate-spin' : ''}`} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-violet-600">LOOP</div>
+              <div className="text-2xs font-bold uppercase tracking-wide text-violet-600">LOOP</div>
               <div className="font-semibold text-foreground text-sm truncate">{label}</div>
             </div>
             {/* Expand button - always visible when expandable */}

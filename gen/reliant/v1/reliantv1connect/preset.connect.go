@@ -58,6 +58,9 @@ const (
 	// PresetServiceGetDefaultPresetProcedure is the fully-qualified name of the PresetService's
 	// GetDefaultPreset RPC.
 	PresetServiceGetDefaultPresetProcedure = "/reliant.v1.PresetService/GetDefaultPreset"
+	// PresetServiceGetDefaultPresetsBatchProcedure is the fully-qualified name of the PresetService's
+	// GetDefaultPresetsBatch RPC.
+	PresetServiceGetDefaultPresetsBatchProcedure = "/reliant.v1.PresetService/GetDefaultPresetsBatch"
 )
 
 // PresetServiceClient is a client for the reliant.v1.PresetService service.
@@ -83,6 +86,13 @@ type PresetServiceClient interface {
 	SetDefaultPreset(context.Context, *connect.Request[v1.SetDefaultPresetRequest]) (*connect.Response[v1.SetDefaultPresetResponse], error)
 	// GetDefaultPreset retrieves the default preset for a workflow tag.
 	GetDefaultPreset(context.Context, *connect.Request[v1.GetDefaultPresetRequest]) (*connect.Response[v1.GetDefaultPresetResponse], error)
+	// GetDefaultPresetsBatch retrieves default presets for many workflows at once.
+	//
+	// The single-workflow GetDefaultPreset is per-agent by nature: a screen
+	// showing N agents asked for N workflows and issued N parallel RPCs. Client
+	// singleflight cannot collapse those — the args differ, so the keys differ.
+	// Batching is the only place the fan-out can actually be removed.
+	GetDefaultPresetsBatch(context.Context, *connect.Request[v1.GetDefaultPresetsBatchRequest]) (*connect.Response[v1.GetDefaultPresetsBatchResponse], error)
 }
 
 // NewPresetServiceClient constructs a client for the reliant.v1.PresetService service. By default,
@@ -144,6 +154,12 @@ func NewPresetServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(presetServiceMethods.ByName("GetDefaultPreset")),
 			connect.WithClientOptions(opts...),
 		),
+		getDefaultPresetsBatch: connect.NewClient[v1.GetDefaultPresetsBatchRequest, v1.GetDefaultPresetsBatchResponse](
+			httpClient,
+			baseURL+PresetServiceGetDefaultPresetsBatchProcedure,
+			connect.WithSchema(presetServiceMethods.ByName("GetDefaultPresetsBatch")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -157,6 +173,7 @@ type presetServiceClient struct {
 	deletePreset           *connect.Client[v1.DeletePresetRequest, v1.DeletePresetResponse]
 	setDefaultPreset       *connect.Client[v1.SetDefaultPresetRequest, v1.SetDefaultPresetResponse]
 	getDefaultPreset       *connect.Client[v1.GetDefaultPresetRequest, v1.GetDefaultPresetResponse]
+	getDefaultPresetsBatch *connect.Client[v1.GetDefaultPresetsBatchRequest, v1.GetDefaultPresetsBatchResponse]
 }
 
 // ListPresets calls reliant.v1.PresetService.ListPresets.
@@ -199,6 +216,11 @@ func (c *presetServiceClient) GetDefaultPreset(ctx context.Context, req *connect
 	return c.getDefaultPreset.CallUnary(ctx, req)
 }
 
+// GetDefaultPresetsBatch calls reliant.v1.PresetService.GetDefaultPresetsBatch.
+func (c *presetServiceClient) GetDefaultPresetsBatch(ctx context.Context, req *connect.Request[v1.GetDefaultPresetsBatchRequest]) (*connect.Response[v1.GetDefaultPresetsBatchResponse], error) {
+	return c.getDefaultPresetsBatch.CallUnary(ctx, req)
+}
+
 // PresetServiceHandler is an implementation of the reliant.v1.PresetService service.
 type PresetServiceHandler interface {
 	// ListPresets returns all presets for a project.
@@ -222,6 +244,13 @@ type PresetServiceHandler interface {
 	SetDefaultPreset(context.Context, *connect.Request[v1.SetDefaultPresetRequest]) (*connect.Response[v1.SetDefaultPresetResponse], error)
 	// GetDefaultPreset retrieves the default preset for a workflow tag.
 	GetDefaultPreset(context.Context, *connect.Request[v1.GetDefaultPresetRequest]) (*connect.Response[v1.GetDefaultPresetResponse], error)
+	// GetDefaultPresetsBatch retrieves default presets for many workflows at once.
+	//
+	// The single-workflow GetDefaultPreset is per-agent by nature: a screen
+	// showing N agents asked for N workflows and issued N parallel RPCs. Client
+	// singleflight cannot collapse those — the args differ, so the keys differ.
+	// Batching is the only place the fan-out can actually be removed.
+	GetDefaultPresetsBatch(context.Context, *connect.Request[v1.GetDefaultPresetsBatchRequest]) (*connect.Response[v1.GetDefaultPresetsBatchResponse], error)
 }
 
 // NewPresetServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -279,6 +308,12 @@ func NewPresetServiceHandler(svc PresetServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(presetServiceMethods.ByName("GetDefaultPreset")),
 		connect.WithHandlerOptions(opts...),
 	)
+	presetServiceGetDefaultPresetsBatchHandler := connect.NewUnaryHandler(
+		PresetServiceGetDefaultPresetsBatchProcedure,
+		svc.GetDefaultPresetsBatch,
+		connect.WithSchema(presetServiceMethods.ByName("GetDefaultPresetsBatch")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.PresetService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PresetServiceListPresetsProcedure:
@@ -297,6 +332,8 @@ func NewPresetServiceHandler(svc PresetServiceHandler, opts ...connect.HandlerOp
 			presetServiceSetDefaultPresetHandler.ServeHTTP(w, r)
 		case PresetServiceGetDefaultPresetProcedure:
 			presetServiceGetDefaultPresetHandler.ServeHTTP(w, r)
+		case PresetServiceGetDefaultPresetsBatchProcedure:
+			presetServiceGetDefaultPresetsBatchHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -336,4 +373,8 @@ func (UnimplementedPresetServiceHandler) SetDefaultPreset(context.Context, *conn
 
 func (UnimplementedPresetServiceHandler) GetDefaultPreset(context.Context, *connect.Request[v1.GetDefaultPresetRequest]) (*connect.Response[v1.GetDefaultPresetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PresetService.GetDefaultPreset is not implemented"))
+}
+
+func (UnimplementedPresetServiceHandler) GetDefaultPresetsBatch(context.Context, *connect.Request[v1.GetDefaultPresetsBatchRequest]) (*connect.Response[v1.GetDefaultPresetsBatchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.PresetService.GetDefaultPresetsBatch is not implemented"))
 }

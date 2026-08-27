@@ -55,6 +55,25 @@ export default tseslint.config([
       'no-useless-escape': 'warn',
       // prefer-const - warn but don't block
       'prefer-const': 'warn',
+      // An arbitrary px font size opts that element out of the Appearance
+      // font-size preference permanently: rem steps resolve against the root
+      // size the preference sets, a px value does not move at all. Use a scale
+      // step (text-3xs … text-4xl) instead. The genuine exceptions are labels
+      // centred inside fixed-size SVG geometry, which overflow if they scale —
+      // those carry an eslint-disable with that reason.
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: 'Literal[value=/text-\\[\\d+px\\]/]',
+          message:
+            'Arbitrary px font size ignores the Appearance font-size preference. Use a scale step (text-3xs, text-2xs, text-xs, text-sm, …) from tailwind.config.js.',
+        },
+        {
+          selector: 'TemplateElement[value.raw=/text-\\[\\d+px\\]/]',
+          message:
+            'Arbitrary px font size ignores the Appearance font-size preference. Use a scale step (text-3xs, text-2xs, text-xs, text-sm, …) from tailwind.config.js.',
+        },
+      ],
     },
   },
 ])

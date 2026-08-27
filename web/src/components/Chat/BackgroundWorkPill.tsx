@@ -49,7 +49,7 @@ function Elapsed({ startedAt }: { startedAt: number | null }) {
   const elapsed = useElapsed(startedAt);
   if (!elapsed) return null;
   return (
-    <span className="text-[10px] tabular-nums text-muted-foreground">{elapsed}</span>
+    <span className="text-2xs tabular-nums text-muted-foreground">{elapsed}</span>
   );
 }
 

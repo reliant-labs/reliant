@@ -846,18 +846,34 @@ func (s *PresetService) GetDefaultPreset(
 
 	userIDStr := auth.MustGetUserID(ctx)
 
-	// Load workflow to get workflow-defined defaults
-	wf, err := s.loadWorkflow(ctx, req.Msg.WorkflowName, req.Msg.ProjectId)
-	if err != nil {
-		// Fail gracefully - return empty map
-		logging.Warn("GetDefaultPreset: workflow not found", "workflowName", req.Msg.WorkflowName, "error", err)
-		return connect.NewResponse(&reliantv1.GetDefaultPresetResponse{
-			Presets: make(map[string]string),
-		}), nil
-	}
+	defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, req.Msg.WorkflowName, nil)
 
-	// Start with workflow-defined defaults from YAML
+	return connect.NewResponse(&reliantv1.GetDefaultPresetResponse{
+		Presets: defaults,
+	}), nil
+}
+
+// resolveDefaultPresets computes one workflow's group-to-preset defaults:
+// workflow-defined defaults from YAML, overlaid with the user's saved
+// overrides. It never fails — an unloadable workflow yields an empty map,
+// matching the graceful-degradation contract both RPCs expose.
+//
+// userOverrides, when non-nil, supplies the already-loaded
+// `preset.defaults.<workflow>` setting values so a batch caller can read every
+// override in one query instead of one GetSetting per workflow. Passing nil
+// makes the function fetch the single setting it needs itself.
+func (s *PresetService) resolveDefaultPresets(
+	ctx context.Context,
+	userID, projectID, workflowName string,
+	userOverrides map[string]string,
+) map[string]string {
 	defaults := make(map[string]string)
+
+	wf, err := s.loadWorkflow(ctx, workflowName, projectID)
+	if err != nil {
+		logging.Warn("resolveDefaultPresets: workflow not found", "workflowName", workflowName, "error", err)
+		return defaults
+	}
 
 	// Workflow-level default (for top-level inputs)
 	if wf.GetPresets().GetDefault() != "" {
@@ -879,19 +895,74 @@ func (s *PresetService) GetDefaultPreset(
 	}
 
 	// Merge user overrides (take precedence over workflow-defined defaults)
-	settingKey := fmt.Sprintf("preset.defaults.%s", req.Msg.WorkflowName)
-	setting, err := s.database.GetSetting(ctx, userIDStr, nil, settingKey)
-	if err == nil && setting.Value != "" {
-		var userDefaults map[string]string
-		if err := json.Unmarshal([]byte(setting.Value), &userDefaults); err == nil {
-			for group, preset := range userDefaults {
+	settingKey := fmt.Sprintf("preset.defaults.%s", workflowName)
+	rawOverride := ""
+	if userOverrides != nil {
+		rawOverride = userOverrides[settingKey]
+	} else if setting, err := s.database.GetSetting(ctx, userID, nil, settingKey); err == nil {
+		rawOverride = setting.Value
+	}
+
+	if rawOverride != "" {
+		var parsed map[string]string
+		if err := json.Unmarshal([]byte(rawOverride), &parsed); err == nil {
+			for group, preset := range parsed {
 				defaults[group] = preset
 			}
 		}
 	}
 
-	return connect.NewResponse(&reliantv1.GetDefaultPresetResponse{
-		Presets: defaults,
+	return defaults
+}
+
+// GetDefaultPresetsBatch resolves default presets for many workflows in one
+// round trip. Behavior per workflow is identical to GetDefaultPreset — both go
+// through resolveDefaultPresets — but the user's overrides are read with a
+// single ListSettingsByKey rather than one GetSetting per workflow, so the
+// query count stays flat as the workflow list grows.
+func (s *PresetService) GetDefaultPresetsBatch(
+	ctx context.Context,
+	req *connect.Request[reliantv1.GetDefaultPresetsBatchRequest],
+) (*connect.Response[reliantv1.GetDefaultPresetsBatchResponse], error) {
+	if req.Msg.ProjectId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	}
+
+	userIDStr := auth.MustGetUserID(ctx)
+
+	// Load every `preset.defaults.*` override the user has, once. A failure
+	// here is not fatal: it only means no overrides are applied, leaving the
+	// workflow-defined defaults, which is the same outcome as a user who has
+	// never set one.
+	userOverrides := make(map[string]string)
+	if settings, err := s.database.ListSettingsByKey(ctx, userIDStr, "preset.defaults.%"); err == nil {
+		for _, setting := range settings {
+			userOverrides[setting.Key] = setting.Value
+		}
+	} else {
+		logging.Warn("GetDefaultPresetsBatch: failed to load preset default overrides", "error", err)
+	}
+
+	presetsByWorkflow := make(map[string]*reliantv1.WorkflowDefaultPresets)
+	seen := make(map[string]bool, len(req.Msg.WorkflowNames))
+
+	for _, workflowName := range req.Msg.WorkflowNames {
+		if workflowName == "" || seen[workflowName] {
+			continue
+		}
+		seen[workflowName] = true
+
+		defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, workflowName, userOverrides)
+		// Omit empty results so the response mirrors the single RPC's
+		// "no defaults" outcome without inventing an entry for it.
+		if len(defaults) == 0 {
+			continue
+		}
+		presetsByWorkflow[workflowName] = &reliantv1.WorkflowDefaultPresets{Presets: defaults}
+	}
+
+	return connect.NewResponse(&reliantv1.GetDefaultPresetsBatchResponse{
+		PresetsByWorkflow: presetsByWorkflow,
 	}), nil
 }
 

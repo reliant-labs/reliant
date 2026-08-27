@@ -20,13 +20,10 @@
 import { useEffect, useRef } from "react";
 import { useLocation } from "@tanstack/react-router";
 import { Workflow } from "lucide-react";
+import { useAuthStore } from "../../store/authStore";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
-import { useChatStore } from "../../store/chatStore";
-import { useProjectStore } from "../../store/projectStore";
-import { useChatList } from "../../hooks/chat-queries";
-import { useChatParamsStore } from "../../store/chatParamsStore";
 import { trackEvent } from "../../lib/analytics";
 import { useSurface } from "../../lib/surfaceContext";
 
@@ -339,31 +336,19 @@ export function OnboardingWizard() {
   // /onboarding itself we suppress the floater entirely.
   const isOnboardingRoute = location.pathname.startsWith("/onboarding");
 
-  // Defer the tour while NewChatView's "What are you building?" starter-picker
-  // modal is up. That modal portals to document.body on the empty-state
-  // (no chats yet, no workflow picked) and renders on top of any spotlight
-  // the wizard would otherwise show. Mirror the exact conditions used by
-  // NewChatView's `lockChatInput` so we hide for the same lifetime — once
-  // the user picks a card, `tempNewChatWorkflow` is set, the modal closes,
-  // and the wizard's spotlight takes over. The wizard's URL state
-  // (`?tour=<step>`) is preserved across this gate, so the tour resumes
-  // automatically; nothing in tourStore needs to change.
-  //
-  // Scope: only the routes where NewChatView mounts (`/`, `/project/$id`).
-  // On `/workflow`, `/settings`, etc. NewChatView is unmounted, so its
-  // portal isn't on screen and we mustn't accidentally block tour steps
-  // that target those pages.
-  const projectId = useProjectStore((state) => state.currentProject?.id);
-  const { data: chatsList, isSuccess: chatsQuerySucceeded } =
-    useChatList(projectId);
-  const chatsLoaded =
-    useChatStore((state) => state.hasLoaded) && chatsQuerySucceeded;
-  const chatsCount = chatsList?.length ?? 0;
-  const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
-  const newChatViewMounted =
-    location.pathname === "/" || location.pathname.startsWith("/project/");
-  const starterPickerModalBlocking =
-    newChatViewMounted && chatsLoaded && chatsCount === 0 && !hasPickedStarter;
+  // Onboarding is per-USER state, so none of it may render to a signed-out
+  // visitor. Route alone is not that gate: the sign-in screen is reachable
+  // at more than one path, and a forced sign-out (see the 401 handler in
+  // api/transport.ts) drops the user there without unmounting this wizard —
+  // which is how the Setup Guide ended up painted over the login screen.
+  const user = useAuthStore((state) => state.user);
+
+  // NOTE: the wizard used to defer itself while NewChatView's blocking
+  // "What are you building?" dialog could be on screen, which meant waiting
+  // on the chat-list query before the tour could start — a visible lag for
+  // exactly the brand-new user the tour is for. That dialog is gone (the
+  // starter cards render inline now and never paint over a spotlight), so
+  // there is nothing left to defer for.
 
   // Load state on mount. Pure data fetch — no navigation.
   useEffect(() => {
@@ -382,26 +367,22 @@ export function OnboardingWizard() {
   const tourStartRef = useRef<number | null>(null);
   const stepStartRef = useRef<number | null>(null);
   useEffect(() => {
-    // Don't fire tour_started until the wizard actually renders — i.e. not
-    // while the starter-picker modal is still gating us. Otherwise the event
-    // marks a tour the user never visually saw.
-    if (isWizardActive && currentStepId && !starterPickerModalBlocking) {
+    if (isWizardActive && currentStepId) {
       tourStartRef.current = Date.now();
       stepStartRef.current = Date.now();
       trackEvent("tour_started", { totalSteps: ONBOARDING_STEPS.length });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isWizardActive, starterPickerModalBlocking]);
+  }, [isWizardActive]);
 
   // tour_step_viewed fires on every step transition (including the first).
   // stepStartRef resets so subsequent step_completed / step_skipped events get
   // a fresh per-step duration.
   useEffect(() => {
     if (!isWizardActive || !currentStepId) return;
-    if (starterPickerModalBlocking) return;
     stepStartRef.current = Date.now();
     trackEvent("tour_step_viewed", { stepId: currentStepId });
-  }, [isWizardActive, currentStepId, starterPickerModalBlocking]);
+  }, [isWizardActive, currentStepId]);
 
   // Set up checklist detection after checklist state is ready
   useEffect(() => {
@@ -419,15 +400,11 @@ export function OnboardingWizard() {
   // still get the *setup* flow at /onboarding, which is a different system.
   if (surface !== "desktop") return null;
 
+  // Signed out — neither the tour nor the checklist belongs on screen.
+  if (!user) return null;
+
   // Not ready yet
   if (!isInitialized) return null;
-
-  // Defer Phase 1 while the starter-picker modal is up. We render nothing
-  // (not Phase 2/3 either) so the post-tour checklist doesn't flash while
-  // the user is mid-decision on the starter cards. The `?tour=<step>` URL
-  // is preserved across this branch, so the wizard resumes the same step
-  // as soon as the modal closes.
-  if (starterPickerModalBlocking) return null;
 
   // Phase 1: Guided tour is active
   if (isWizardActive && currentStepId) {

@@ -108,7 +108,7 @@ export function InlinePresetPicker({
           onClick={handleTriggerClick}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+            "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -126,7 +126,7 @@ export function InlinePresetPicker({
           ) : valueIsTemplate ? (
             <>
               <Code2 className="w-3 h-3 flex-shrink-0" />
-              <span className="inline-flex items-center rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide bg-violet-500/20 border border-violet-500/30 flex-shrink-0">
+              <span className="inline-flex items-center rounded px-1 py-0.5 text-3xs font-semibold uppercase tracking-wide bg-violet-500/20 border border-violet-500/30 flex-shrink-0">
                 Expr
               </span>
               <span className="truncate max-w-28">{value}</span>
@@ -154,9 +154,9 @@ export function InlinePresetPicker({
           <div className="text-xs font-medium text-foreground mb-1">
             Replace expression?
           </div>
-          <div className="text-[11px] text-muted-foreground mb-2">
+          <div className="text-xs text-muted-foreground mb-2">
             This preset is set by an expression:
-            <div className="mt-1 text-[10px] break-all bg-muted/50 rounded px-1.5 py-1 text-foreground">
+            <div className="mt-1 text-2xs break-all bg-muted/50 rounded px-1.5 py-1 text-foreground">
               {value}
             </div>
             Replacing overwrites it with a fixed preset.
@@ -165,7 +165,7 @@ export function InlinePresetPicker({
             <button
               type="button"
               onClick={() => setShowReplaceConfirm(false)}
-              className="px-2 py-1 text-[10px] rounded border border-border hover:bg-accent"
+              className="px-2 py-1 text-2xs rounded border border-border hover:bg-accent"
             >
               Cancel
             </button>
@@ -175,7 +175,7 @@ export function InlinePresetPicker({
                 setShowReplaceConfirm(false);
                 setIsOpen(true);
               }}
-              className="px-2 py-1 text-[10px] rounded bg-primary text-primary-foreground hover:bg-primary/90"
+              className="px-2 py-1 text-2xs rounded bg-primary text-primary-foreground hover:bg-primary/90"
             >
               Replace
             </button>
@@ -194,7 +194,7 @@ export function InlinePresetPicker({
           <div className="py-1">
             {/* Header showing which group this preset applies to */}
             {groupLabel && (
-              <div className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground border-b border-border/50">
+              <div className="px-3 py-1.5 text-2xs font-semibold text-muted-foreground border-b border-border/50">
                 {groupLabel} Preset
               </div>
             )}
@@ -216,7 +216,7 @@ export function InlinePresetPicker({
             {/* User Presets */}
             {userPresets.length > 0 && (
               <>
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+                <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
                   User
                 </div>
                 {userPresets.map((preset) => (
@@ -233,7 +233,7 @@ export function InlinePresetPicker({
             {/* Builtin Presets */}
             {builtinPresets.length > 0 && (
               <>
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+                <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
                   Built-in
                 </div>
                 {builtinPresets.map((preset) => (
@@ -250,7 +250,7 @@ export function InlinePresetPicker({
             {/* Project Presets */}
             {projectPresets.length > 0 && (
               <>
-                <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+                <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
                   Project
                 </div>
                 {projectPresets.map((preset) => (
@@ -292,7 +292,7 @@ function PresetOption({ preset, isSelected, onSelect }: PresetOptionProps) {
             <span className="font-medium truncate">{preset.name}</span>
           </div>
           {preset.description && (
-            <div className="text-[10px] text-muted-foreground mt-0.5 ml-4.5 line-clamp-1">
+            <div className="text-2xs text-muted-foreground mt-0.5 ml-4.5 line-clamp-1">
               {preset.description}
             </div>
           )}

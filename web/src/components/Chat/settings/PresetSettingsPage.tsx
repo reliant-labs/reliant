@@ -46,7 +46,7 @@ export function PresetSettingsPage({
         <button
           onClick={() => handleSelect(null)}
           className={cn(
-            "w-full px-4 py-2.5 text-left text-[13px] transition-colors flex items-center justify-between",
+            "w-full px-4 py-2.5 text-left text-sm transition-colors flex items-center justify-between",
             !selectedPreset ? "bg-accent" : "hover:bg-accent/50"
           )}
         >
@@ -107,7 +107,7 @@ function PresetGroup({
 }) {
   return (
     <>
-      <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
+      <div className="px-4 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-t border-border/30">
         {label}
       </div>
       {presets.map((preset) => (
@@ -115,7 +115,7 @@ function PresetGroup({
           key={preset.name}
           onClick={() => onSelect(preset)}
           className={cn(
-            "w-full px-4 py-2.5 text-left text-[13px] transition-colors",
+            "w-full px-4 py-2.5 text-left text-sm transition-colors",
             selectedPreset === preset.name ? "bg-accent" : "hover:bg-accent/50"
           )}
         >
@@ -126,7 +126,7 @@ function PresetGroup({
                 <span className="font-medium truncate">{preset.name}</span>
               </div>
               {preset.description && (
-                <div className="text-[11px] text-muted-foreground mt-0.5 ml-[18px] line-clamp-1">
+                <div className="text-xs text-muted-foreground mt-0.5 ml-[18px] line-clamp-1">
                   {preset.description}
                 </div>
               )}

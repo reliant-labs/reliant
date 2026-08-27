@@ -101,7 +101,7 @@ export function ModelDropdown({
             {providers.map((provider) => (
               <div key={provider}>
                 {providers.length > 1 && (
-                  <div className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {provider}
                   </div>
                 )}
@@ -136,7 +136,7 @@ export function ModelDropdown({
                 <p className="text-sm text-muted-foreground">No models configured</p>
                 <p className="text-xs text-muted-foreground/70">
                   Add API keys in Settings → Providers, or type a model tag like{' '}
-                  <code className="bg-muted px-1 rounded font-mono text-[11px]">flagship</code>{' '}
+                  <code className="bg-muted px-1 rounded font-mono text-xs">flagship</code>{' '}
                   directly using the CEL mode toggle
                 </p>
               </div>

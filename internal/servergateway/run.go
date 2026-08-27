@@ -10,11 +10,14 @@ package servergateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -110,6 +113,22 @@ func Run(ctx context.Context, opts Options) error {
 		"db_driver", opts.DatabaseDriver,
 		"nats_url", opts.NATSURL,
 	)
+
+	// pprof, off unless PPROF_ADDR names an address.
+	//
+	// The gateway had no profiler at all, and that is what turned a memory
+	// question into guesswork: dev's gateway holds ~1.06 GB of anonymous
+	// memory at rest while prod's holds 18 MB — the same binary, the same
+	// role, 60x apart — and there was no way to ask the process what it was
+	// holding. Every other answer available (cgroup memory.stat, container
+	// logs, the deployment spec) says how MUCH, never WHAT.
+	//
+	// Off by default because this serves a debug surface with no auth: it
+	// binds only when the operator sets the address, and the address is
+	// theirs to keep on loopback or a cluster-internal port. control-plane's
+	// AppConfig already projects PPROF_ADDR for its own binaries; the gateway
+	// simply never read it, so the knob existed on one side of the wire only.
+	startPprofServer(os.Getenv("PPROF_ADDR"))
 
 	// Database
 	dbDriver, err := db.ParseDatabaseDriver(opts.DatabaseDriver)
@@ -347,8 +366,11 @@ func Run(ctx context.Context, opts Options) error {
 	// /flow-health: the APP-FLOW assertion (daemon-connected invariant). The
 	// gateway OWNS the attachment registry, so it asserts internally and
 	// exposes a STATUS-ONLY 200/503 — no per-daemon detail — that `forge
-	// smoke` curls. See flowhealth.go.
-	healthMux.HandleFunc("/flow-health", flowHealthHandler(repo))
+	// smoke` curls. It takes BOTH the registry (repo) and this process's live
+	// connection map (toolsDaemonService): the registry alone cannot tell a
+	// daemon that should be connected from a row nobody ever cleaned up. See
+	// flowhealth.go.
+	healthMux.HandleFunc("/flow-health", flowHealthHandler(repo, toolsDaemonService))
 
 	healthAddr := fmt.Sprintf("%s:%d", opts.BindAddress, opts.HealthPort)
 	healthServer := &http.Server{
@@ -406,4 +428,35 @@ func Run(ctx context.Context, opts Options) error {
 
 	logging.Info("Daemon-gateway shut down gracefully")
 	return nil
+}
+
+// startPprofServer serves net/http/pprof on addr, or does nothing when addr is
+// empty.
+//
+// Its own mux, not http.DefaultServeMux's handlers on a shared listener: the
+// profiler must not be reachable from any port the gateway already serves
+// traffic on. Failure to listen is logged and never fatal — a debug surface
+// that cannot bind must not take the gateway down with it.
+func startPprofServer(addr string) {
+	if strings.TrimSpace(addr) == "" {
+		return
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/debug/pprof/", pprof.Index)
+	mux.HandleFunc("/debug/pprof/cmdline", pprof.Cmdline)
+	mux.HandleFunc("/debug/pprof/profile", pprof.Profile)
+	mux.HandleFunc("/debug/pprof/symbol", pprof.Symbol)
+	mux.HandleFunc("/debug/pprof/trace", pprof.Trace)
+
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	logging.Info("pprof server starting", "addr", addr)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logging.Warn("pprof server stopped", "addr", addr, "error", err)
+		}
+	}()
 }

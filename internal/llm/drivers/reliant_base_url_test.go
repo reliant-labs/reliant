@@ -11,7 +11,30 @@ func TestResolveReliantBaseURL_DefaultWhenUnset(t *testing.T) {
 
 	resolved := ResolveReliantBaseURL("rlnt_managed_key")
 
-	assert.Equal(t, reliantDefaultBaseURL, resolved)
+	assert.Equal(t, reliantNeutralBaseURL, resolved)
+}
+
+// The fallback must be a LOCAL admin-server, never a hosted hostname.
+//
+// It used to be https://api.reliant.dev/v1, which does not resolve — the
+// domain is NXDOMAIN. Every managed-Reliant CallLLM in a process that had not
+// been given RELIANT_API_BASE_URL died with "dial tcp: lookup api.reliant.dev:
+// no such host" instead of failing in a way that named the missing config.
+//
+// A hosted default would also break internal/builddefaults' OSS-clean
+// contract, which this package is downstream of: an un-injected build must
+// point a self-hoster at their own stack, never silently at Reliant's. Hosted
+// values come from control-plane's KCL, which sets this variable explicitly on
+// every workload that needs it (deploy/kcl/lib/env.k for the cloud envs,
+// deploy/kcl/dev/main.k for the local stack).
+func TestResolveReliantBaseURL_FallbackIsNeutralNotHosted(t *testing.T) {
+	t.Setenv("RELIANT_API_BASE_URL", "")
+
+	resolved := ResolveReliantBaseURL("rlnt_managed_key")
+
+	assert.True(t, isLocalLiteLLMBaseURL(resolved),
+		"fallback %q must be loopback; a hosted default breaks the OSS-clean contract", resolved)
+	assert.NotContains(t, resolved, "reliant.dev", "reliant.dev does not resolve")
 }
 
 func TestResolveReliantBaseURL_UsesConfiguredRemoteURLForManagedKey(t *testing.T) {
@@ -65,7 +88,10 @@ func TestResolveReliantAPIKey_PreservesManualKeyOffLoopback(t *testing.T) {
 }
 
 func TestResolveReliantAPIKey_PreservesManagedKeyForRemoteBaseURL(t *testing.T) {
-	resolvedKey, headers := ResolveReliantAPIKey("rlnt_managed_key", "https://api.reliant.dev/v1")
+	// Any non-loopback origin exercises this branch; example.com is a reserved
+	// documentation domain, so the fixture cannot be mistaken for a real
+	// endpoint the way the old api.reliant.dev value was.
+	resolvedKey, headers := ResolveReliantAPIKey("rlnt_managed_key", "https://proxy.example.com/v1")
 
 	assert.Equal(t, "rlnt_managed_key", resolvedKey)
 	assert.Nil(t, headers)

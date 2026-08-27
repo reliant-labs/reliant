@@ -68,7 +68,7 @@ export function FloatingWorkflowSidebar({
     }))
   }
 
-  const categoryButtonClass = 'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground'
+  const categoryButtonClass = 'flex w-full items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground'
   const nodeButtonClass = 'group flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/70'
   const iconClass = 'flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg shadow-sm shadow-black/10 ring-1 ring-white/10'
 

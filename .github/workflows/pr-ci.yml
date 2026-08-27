@@ -404,13 +404,18 @@ jobs:
         working-directory: electron
         run: npm ci || npm install
 
-      - name: Build web (alpha)
-        working-directory: electron
-        run: npm run build:web:alpha
-
+      # One target, not a hand-assembled pair of steps.
+      #
+      # This used to be `npm run build:web:alpha` followed by a bare
+      # `npx electron-builder`, which packaged whatever `web/dist` happened to
+      # contain with NO release config exported — so the PR artifact was built
+      # against undefined VITE_* endpoints and could not surface the class of
+      # defect that shipped v1.7.5. dist:pr routes through
+      # electron/scripts/with-release-config.mjs like every other build target,
+      # so the PR build exercises the same config path a release does.
       - name: Build electron app (no publish)
         working-directory: electron
         env:
           # Ensure CI doesn't require signing/notarization credentials
           CI: true
-        run: npx electron-builder --config electron-builder.pr.js --dir --publish=never
+        run: npm run dist:pr

@@ -1,6 +1,5 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
 import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only — also subscribed via selector below
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -65,24 +64,16 @@ export function NewChatView({
   // initial `loadChats` to complete (`hasLoaded`, set on both success and
   // failure) so we don't flash the cards while chats are still loading.
   //
-  // The blocking full-screen picker (`lockChatInput`) is still reserved for the
-  // genuine first-run empty state: a project with zero chats where the user
-  // hasn't picked a starter yet. Returning users get the cards inline, never a
-  // modal. The post-tour modal variant is mounted separately in ModernApp and
-  // is not affected by this gate.
+  // They are always INLINE. A first-run user used to get the same cards as a
+  // blocking full-screen dialog portalled to document.body, which asked the
+  // question this screen already asks and — because it painted over any
+  // spotlight — forced the post-onboarding tour to wait behind it.
   const chatsListProjectId = useProjectStore((state) => state.currentProject?.id);
-  const { data: chatsList, isSuccess: chatsQuerySucceeded } =
-    useChatList(chatsListProjectId);
-  const chatsCount = chatsList?.length ?? 0;
-  // hasLoaded (Zustand) still gates the first-run experience; combine with the
-  // list query having resolved so we never flash the empty state pre-fetch.
-  const chatsLoaded =
+  const { isSuccess: chatsQuerySucceeded } = useChatList(chatsListProjectId);
+  // hasLoaded (Zustand) combined with the list query having resolved, so we
+  // never flash the cards pre-fetch.
+  const showInlineCards =
     useChatStore((state) => state.hasLoaded) && chatsQuerySucceeded;
-  const hasNoChatsInProject = chatsLoaded && chatsCount === 0;
-  const hasPickedStarter = useChatParamsStore((s) => Boolean(s.tempNewChatWorkflow));
-  const lockChatInput = hasNoChatsInProject && !hasPickedStarter;
-  // Show inline cards whenever we aren't showing the blocking first-run modal.
-  const showInlineCards = chatsLoaded && !lockChatInput;
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
@@ -114,16 +105,6 @@ export function NewChatView({
       return () => clearTimeout(timer);
     }
   }, [isFocused]);
-
-  // Lock body scroll while the starter-picker modal is open.
-  useEffect(() => {
-    if (!lockChatInput) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [lockChatInput]);
 
   // NOTE: We intentionally do NOT clear tempNewChatParams on mount.
   // ChatInput's workflow-change effect handles clearing when the workflow changes.
@@ -340,7 +321,7 @@ export function NewChatView({
                               <div className="font-medium">
                                 {mainWorktree?.branch || currentProject?.default_branch || "main"}
                               </div>
-                              <div className="text-[11px] opacity-60">Main workspace</div>
+                              <div className="text-xs opacity-60">Main workspace</div>
                             </div>
                             {selectedWorkspaceId === mainWorktree?.id && (
                               <Check className="w-3 h-3 text-primary flex-shrink-0" />
@@ -494,28 +475,6 @@ export function NewChatView({
         isOpen={showConnectDaemonModal}
         onClose={() => setShowConnectDaemonModal(false)}
       />
-
-      {lockChatInput &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="starter-picker-title"
-          >
-            <div
-              className="absolute inset-0 bg-black/80 backdrop-blur-xl"
-              aria-hidden="true"
-            />
-            <div className="relative w-full max-w-5xl max-h-[calc(100vh-80px)] overflow-y-auto rounded-2xl border border-white/10 bg-[hsl(var(--surface-modal))] px-6 py-8 sm:px-10 sm:py-10 elevation-5 animate-in fade-in-0 zoom-in-95 duration-300">
-              <h2 id="starter-picker-title" className="sr-only">
-                Pick a starting point
-              </h2>
-              <WorkflowStarterCards />
-            </div>
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

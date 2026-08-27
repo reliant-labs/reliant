@@ -230,7 +230,7 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
             </div>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-violet-700 dark:text-violet-200 truncate">{label}</div>
-              <div className="text-[10px] text-violet-500 dark:text-violet-400 truncate" title={subWorkflowName}>
+              <div className="text-2xs text-violet-500 dark:text-violet-400 truncate" title={subWorkflowName}>
                 {normalizeWorkflowRef(subWorkflowName)}
               </div>
             </div>
@@ -282,22 +282,22 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
         {(stepWhile || stepItems || (isParallel && (stepKey || stepOnFailure))) && (
           <div className="px-3 py-1.5 bg-violet-50/70 dark:bg-violet-900/50 border-t border-violet-200 dark:border-violet-700 space-y-1">
             {stepItems && (
-              <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepItems}>
+              <div className="text-2xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepItems}>
                 items: {stepItems}
               </div>
             )}
             {stepWhile && (
-              <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepWhile}>
+              <div className="text-2xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepWhile}>
                 while: {stepWhile}
               </div>
             )}
             {isParallel && stepKey && (
-              <div className="text-[10px] text-violet-600 dark:text-violet-400 font-mono truncate" title={stepKey}>
+              <div className="text-2xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepKey}>
                 key: {stepKey}
               </div>
             )}
             {isParallel && stepOnFailure && (
-              <div className="text-[10px] text-violet-600 dark:text-violet-400 truncate">
+              <div className="text-2xs text-violet-600 dark:text-violet-400 truncate">
                 on_failure: {stepOnFailure}
               </div>
             )}

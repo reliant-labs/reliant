@@ -77,7 +77,7 @@ export function AgentSelector({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1.5 rounded transition-colors text-[10px] font-medium h-6",
+            "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -116,7 +116,7 @@ export function AgentSelector({
           <div className="py-1 max-h-96 overflow-y-auto rounded-md">
               {/* General Agent Option (default) */}
               <div
-                className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30"
+                className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30"
               >
                 Agent
               </div>
@@ -131,7 +131,7 @@ export function AgentSelector({
                   <div className="flex items-center gap-2">
                     <Users className="w-3 h-3 opacity-50 flex-shrink-0" />
                     <span>General</span>
-                    <span className="text-[9px] text-primary opacity-70">(default)</span>
+                    <span className="text-3xs text-primary opacity-70">(default)</span>
                   </div>
                   {isGeneralAgent && <Check className="w-3 h-3 text-primary flex-shrink-0" />}
                 </div>
@@ -141,7 +141,7 @@ export function AgentSelector({
               {workflows.filter((w) => w.is_valid && !w.is_hidden).length > 0 && (
                 <>
                   <div
-                    className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground border-t border-border/30 bg-muted/30"
+                    className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-border/30 bg-muted/30"
                   >
                     Workflows
                   </div>
@@ -163,11 +163,11 @@ export function AgentSelector({
                               <span className="font-semibold">{workflow.name}</span>
                             </div>
                             {workflow.description && typeof workflow.description === 'string' && (
-                              <div className="text-[10px] opacity-70 ml-5">
+                              <div className="text-2xs opacity-70 ml-5">
                                 {workflow.description}
                               </div>
                             )}
-                            <div className="text-[10px] opacity-70 ml-5">
+                            <div className="text-2xs opacity-70 ml-5">
                               {workflow.step_count} steps
                             </div>
                           </div>

@@ -35,7 +35,7 @@ export function SidebarHeader({
     >
       {/* Title (e.g. project name) on the left */}
       {title ? (
-        <div className="mr-3 min-w-0 flex-1 truncate text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+        <div className="mr-3 min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
           {title}
         </div>
       ) : searchInput ? (

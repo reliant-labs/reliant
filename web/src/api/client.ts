@@ -624,6 +624,13 @@ export const api = {
       return settingsGrpc.updateSetting(key, value, valueType, projectId);
     },
 
+    batchUpsertSettings: async (
+      settings: Array<{ key: string; value: string; valueType?: string }>,
+      projectId?: string
+    ) => {
+      return settingsGrpc.batchUpsertSettings(settings, projectId);
+    },
+
     deleteSetting: async (key: string, projectId?: string) => {
       return settingsGrpc.deleteSetting(key, projectId);
     },

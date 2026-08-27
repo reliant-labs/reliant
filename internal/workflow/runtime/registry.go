@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -1022,44 +1023,94 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 // extractChatID attempts to extract chat_id from various input formats.
 // Returns empty string if chat_id is not found.
 func extractChatID(input interface{}) string {
+	return extractInputString(input, "chat_id", "ChatID")
+}
+
+// extractInputString pulls a named string out of an activity input, whether
+// that input is a bare map, a flat struct, or the v3 types.ActivityInput shape
+// that carries the identifiers one level down inside its RuntimeContext.
+//
+// The one-level descent is what makes activity failures visible at all. Every
+// v3 activity is dispatched as ActivityInput{Runtime, Node}, and chat_id and
+// thread live on Runtime — so a top-level-only scan answered "" for all of
+// them, writeErrorEvent bailed out with "no chat_id in input", and NOT ONE
+// activity error ever reached the chat. Measured over a day of worker logs: 26
+// error events attempted, 26 skipped, 0 written — while
+// web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
+// states and all, and never rendered once.
+//
+// That is how a chat can stop dead with nothing on screen: the failure is real,
+// the transport is real, the renderer is real, and the id that connects them is
+// one struct deeper than the lookup went.
+//
+// Depth is capped at one level. The identifiers are exactly one hop away by
+// contract; an unbounded walk would start guessing at unrelated nested structs
+// and answer with whatever it found first.
+func extractInputString(input interface{}, jsonName, goName string) string {
+	return extractInputStringAtDepth(input, jsonName, goName, 1)
+}
+
+func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth int) string {
 	if input == nil {
 		return ""
 	}
 
-	// Try to extract from map[string]interface{}
 	if inputMap, ok := input.(map[string]interface{}); ok {
-		if chatID, ok := inputMap["chat_id"].(string); ok {
-			return chatID
+		if v, ok := inputMap[jsonName].(string); ok && v != "" {
+			return v
 		}
 	}
 
-	// Try reflection for struct fields
 	val := reflect.ValueOf(input)
 	if val.Kind() == reflect.Ptr {
+		if val.IsNil() {
+			return ""
+		}
 		val = val.Elem()
 	}
+	if val.Kind() != reflect.Struct {
+		return ""
+	}
 
-	if val.Kind() == reflect.Struct {
-		// Try to find ChatID or chat_id field
-		for i := 0; i < val.NumField(); i++ {
-			field := val.Type().Field(i)
-
-			// Check json tag for chat_id
-			if jsonTag := field.Tag.Get("json"); jsonTag != "" {
-				tagName := strings.Split(jsonTag, ",")[0]
-				if tagName == "chat_id" {
-					if chatIDVal := val.Field(i); chatIDVal.Kind() == reflect.String {
-						return chatIDVal.String()
-					}
+	// Own fields first: a nested struct must never shadow the input's own
+	// answer, whichever order the fields happen to be declared in.
+	for i := 0; i < val.NumField(); i++ {
+		field := val.Type().Field(i)
+		fieldVal := val.Field(i)
+		if fieldVal.Kind() != reflect.String {
+			continue
+		}
+		if jsonTag := field.Tag.Get("json"); jsonTag != "" {
+			if strings.Split(jsonTag, ",")[0] == jsonName {
+				if v := fieldVal.String(); v != "" {
+					return v
 				}
 			}
-
-			// Check field name (ChatID or chat_id)
-			if field.Name == "ChatID" || field.Name == "chat_id" {
-				if chatIDVal := val.Field(i); chatIDVal.Kind() == reflect.String {
-					return chatIDVal.String()
-				}
+		}
+		if field.Name == goName || field.Name == jsonName {
+			if v := fieldVal.String(); v != "" {
+				return v
 			}
+		}
+	}
+
+	if depth <= 0 {
+		return ""
+	}
+
+	for i := 0; i < val.NumField(); i++ {
+		fieldVal := val.Field(i)
+		if fieldVal.Kind() == reflect.Ptr {
+			if fieldVal.IsNil() {
+				continue
+			}
+			fieldVal = fieldVal.Elem()
+		}
+		if fieldVal.Kind() != reflect.Struct || !fieldVal.CanInterface() {
+			continue
+		}
+		if v := extractInputStringAtDepth(fieldVal.Interface(), jsonName, goName, depth-1); v != "" {
+			return v
 		}
 	}
 
@@ -1081,47 +1132,7 @@ func extractChatID(input interface{}) string {
 // rather than guessing a thread — guessing is what produced the wrong-thread
 // render to begin with.
 func extractThread(input interface{}) string {
-	if input == nil {
-		return ""
-	}
-
-	if inputMap, ok := input.(map[string]interface{}); ok {
-		if thread, ok := inputMap["thread"].(string); ok {
-			return thread
-		}
-	}
-
-	val := reflect.ValueOf(input)
-	if val.Kind() == reflect.Ptr {
-		if val.IsNil() {
-			return ""
-		}
-		val = val.Elem()
-	}
-
-	if val.Kind() != reflect.Struct {
-		return ""
-	}
-
-	for i := 0; i < val.NumField(); i++ {
-		field := val.Type().Field(i)
-
-		if jsonTag := field.Tag.Get("json"); jsonTag != "" {
-			if strings.Split(jsonTag, ",")[0] == "thread" {
-				if threadVal := val.Field(i); threadVal.Kind() == reflect.String {
-					return threadVal.String()
-				}
-			}
-		}
-
-		if field.Name == "Thread" {
-			if threadVal := val.Field(i); threadVal.Kind() == reflect.String {
-				return threadVal.String()
-			}
-		}
-	}
-
-	return ""
+	return extractInputString(input, "thread", "Thread")
 }
 
 // activityInputInfo holds common fields extracted from activity inputs for tracking.
@@ -1150,6 +1161,14 @@ func extractActivityInputInfo(input interface{}) activityInputInfo {
 	if err := json.Unmarshal(jsonBytes, &m); err != nil {
 		return info
 	}
+
+	// A v3 activity input marshals as {"runtime": {...}, "node": {...}}, so the
+	// identifiers this reads are one object down. Without the descent every v3
+	// activity reported an empty step_id and workflow_id, which is why the
+	// per-step audit trail is empty: writeStepExecution skips a row it cannot
+	// key, so step_executions has ZERO rows for chats the new runtime ran. A
+	// stopped chat then has no durable record of which step it stopped on.
+	m = withNestedInputKeys(m)
 
 	if chatID, exists := m["chat_id"]; exists {
 		if chatIDStr, ok := chatID.(string); ok {
@@ -1182,6 +1201,58 @@ func extractActivityInputInfo(input interface{}) activityInputInfo {
 		}
 	}
 	return info
+}
+
+// withNestedInputKeys returns m with the scalar keys of its one-level-nested
+// objects folded in, so a caller reading well-known identifiers finds them
+// whether the input is flat or wrapped.
+//
+// A key already present at the top level always wins, and among nested objects
+// the first one carrying a key wins — the input's own answer is never
+// overwritten by something found deeper. Only strings and numbers are lifted;
+// nested objects and arrays stay where they are rather than colliding with a
+// same-named field one level up.
+func withNestedInputKeys(m map[string]interface{}) map[string]interface{} {
+	// Sorted so that two nested objects offering the same key resolve the same
+	// way on every call — map iteration order would make the winner a coin flip
+	// and the resulting logs unreproducible.
+	outerKeys := make([]string, 0, len(m))
+	for k := range m {
+		outerKeys = append(outerKeys, k)
+	}
+	sort.Strings(outerKeys)
+
+	var merged map[string]interface{}
+	for _, ok := range outerKeys {
+		nested, isObj := m[ok].(map[string]interface{})
+		if !isObj {
+			continue
+		}
+		for k, nv := range nested {
+			switch nv.(type) {
+			case string, float64, bool:
+			default:
+				continue
+			}
+			if _, exists := m[k]; exists {
+				continue
+			}
+			if merged == nil {
+				merged = make(map[string]interface{}, len(m)+len(nested))
+				for mk, mv := range m {
+					merged[mk] = mv
+				}
+			}
+			if _, exists := merged[k]; exists {
+				continue
+			}
+			merged[k] = nv
+		}
+	}
+	if merged == nil {
+		return m
+	}
+	return merged
 }
 
 // toMapInterface converts an interface to map[string]interface{} if possible.

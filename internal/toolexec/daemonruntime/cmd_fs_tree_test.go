@@ -40,7 +40,7 @@ func findNode(nodes []*fsFileNode, name string) *fsFileNode {
 // getTree drives the real fs.get_tree handler end-to-end (JSON in, JSON out),
 // exercising the request depth→remaining-depth mapping and the serialized node
 // shape the proxy consumes.
-func getTree(t *testing.T, path string, showHidden bool, depth int) []*fsFileNode {
+func getTreeResponse(t *testing.T, path string, showHidden bool, depth int) fsGetTreeResponse {
 	t.Helper()
 	payload, err := json.Marshal(fsGetTreeRequest{Path: path, ShowHidden: showHidden, Depth: depth})
 	if err != nil {
@@ -50,13 +50,16 @@ func getTree(t *testing.T, path string, showHidden bool, depth int) []*fsFileNod
 	if err != nil {
 		t.Fatalf("handleFSGetTree: %v", err)
 	}
-	var resp struct {
-		Nodes []*fsFileNode `json:"nodes"`
-	}
+	var resp fsGetTreeResponse
 	if err := json.Unmarshal(out, &resp); err != nil {
 		t.Fatalf("unmarshal tree: %v", err)
 	}
-	return resp.Nodes
+	return resp
+}
+
+func getTree(t *testing.T, path string, showHidden bool, depth int) []*fsFileNode {
+	t.Helper()
+	return getTreeResponse(t, path, showHidden, depth).Nodes
 }
 
 // The tree is now served from a live filesystem walk, not the git index. A file
@@ -98,8 +101,9 @@ func TestHandleFSGetTree_LiveWalkReflectsFilesystem(t *testing.T) {
 }
 
 // depth=1 must return only immediate children (no grandchildren) with
-// has_children set on non-empty directories; depth=0 must return the full
-// recursive tree (back-compat with existing callers).
+// has_children set on non-empty directories; depth=0 must take the server
+// default (2 levels) rather than recursing without bound; depth=-1 goes as
+// deep as the node budget allows.
 func TestHandleFSGetTree_Depth(t *testing.T) {
 	root := t.TempDir()
 	writeFileT(t, filepath.Join(root, "top.txt"), "a")
@@ -143,8 +147,27 @@ func TestHandleFSGetTree_Depth(t *testing.T) {
 		t.Errorf("pkg/sub must have has_children=true at the depth-2 boundary")
 	}
 
-	// depth = 0: full recursive tree.
-	full := getTree(t, root, false, 0)
+	// depth = 0: the server default, which is 2 — NOT unlimited. This is the
+	// defect that crashed the app: an unbounded walk was the value a caller got
+	// by saying nothing at all.
+	def := getTree(t, root, false, 0)
+	dpkg := findNode(def, "pkg")
+	if dpkg == nil {
+		t.Fatalf("pkg missing at default depth: %+v", def)
+	}
+	dsub := findNode(dpkg.Children, "sub")
+	if dsub == nil {
+		t.Fatalf("default depth should include pkg/sub: %+v", dpkg.Children)
+	}
+	if len(dsub.Children) != 0 {
+		t.Errorf("depth 0 must NOT recurse past the default depth: %+v", dsub.Children)
+	}
+	if !dsub.HasChildren {
+		t.Errorf("pkg/sub must carry has_children at the default-depth boundary")
+	}
+
+	// depth = -1: as deep as the node budget allows.
+	full := getTree(t, root, false, -1)
 	fpkg := findNode(full, "pkg")
 	if fpkg == nil {
 		t.Fatalf("pkg missing in full tree: %+v", full)
@@ -154,7 +177,51 @@ func TestHandleFSGetTree_Depth(t *testing.T) {
 		t.Fatalf("pkg/sub missing in full tree: %+v", fpkg.Children)
 	}
 	if deep := findNode(fsub.Children, "deep.txt"); deep == nil {
-		t.Errorf("depth 0 must recurse fully to pkg/sub/deep.txt: %+v", fsub.Children)
+		t.Errorf("depth -1 must recurse to pkg/sub/deep.txt: %+v", fsub.Children)
+	}
+}
+
+// The response carries the walk's node count and, when the budget bites, says
+// so — a caller must be able to tell a whole tree from a prefix.
+func TestHandleFSGetTree_ReportsNodeCountAndTruncation(t *testing.T) {
+	root := t.TempDir()
+	writeFileT(t, filepath.Join(root, "a.txt"), "a")
+	writeFileT(t, filepath.Join(root, "b.txt"), "b")
+
+	resp := getTreeResponse(t, root, false, 1)
+	if resp.Truncated {
+		t.Errorf("a two-file tree must not report truncation: %+v", resp)
+	}
+	if resp.NodeCount != 2 {
+		t.Errorf("node_count = %d, want 2", resp.NodeCount)
+	}
+}
+
+// A .gitignore'd directory must not appear in the tree. This is the Unity case:
+// the project's own ignore rules already excluded the 8.2 GB build cache that
+// the walk was recursing into.
+func TestHandleFSGetTree_HonorsGitignore(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	root := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	writeFileT(t, filepath.Join(root, ".gitignore"), "[Ll]ibrary/\ngenerated.txt\n")
+	writeFileT(t, filepath.Join(root, "Assets", "keep.cs"), "cs")
+	writeFileT(t, filepath.Join(root, "Cache", "huge.bin"), "bin")
+	writeFileT(t, filepath.Join(root, "generated.txt"), "gen")
+
+	nodes := getTree(t, root, true, 1)
+
+	if n := findNode(nodes, "Cache"); n == nil {
+		t.Errorf("a directory NOT covered by any rule must still be listed: %+v", nodes)
+	}
+	if n := findNode(nodes, "generated.txt"); n != nil {
+		t.Errorf("gitignored file leaked into the tree: %+v", n)
+	}
+	if n := findNode(nodes, "Assets"); n == nil {
+		t.Errorf("tracked directory missing from tree: %+v", nodes)
 	}
 }
 
@@ -179,7 +246,7 @@ func TestHandleFSGetTree_EmbeddedRepoRecursion(t *testing.T) {
 	writeFileT(t, filepath.Join(nested, "setup.py"), "py")
 	writeFileT(t, filepath.Join(nested, "doc", "ranger.1"), "man")
 
-	nodes := getTree(t, root, false, 0)
+	nodes := getTree(t, root, false, -1)
 
 	ranger := findNode(nodes, "ranger")
 	if ranger == nil {

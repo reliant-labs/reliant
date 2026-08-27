@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/workflow/mailboxsignal"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
 // ChatWorkflowLookup resolves a chat id to the Temporal workflow id driving
@@ -25,11 +25,11 @@ import (
 // the default identity a chat's workflow is created with.
 type ChatWorkflowLookup func(ctx context.Context, chatID string) (workflowID string, ok bool)
 
-// AgentMessageNotifier rings the mailbox doorbell on the workflow that owns a
-// chat, so a thread parked waiting on its background spawns wakes up and
-// drains a queued message instead of sleeping until a sub-agent finishes.
+// AgentMessageNotifier rings the thread-wake doorbell on the workflow that
+// owns a chat, so a thread parked waiting on its background spawns wakes up
+// and drains a queued message instead of sleeping until a sub-agent finishes.
 //
-// This is the tools-side counterpart to ChatService.notifyAgentMessageQueued.
+// This is the tools-side counterpart to ChatService.notifyThreadWake.
 // spawn_send runs inside the ExecuteTools activity — outside the workflow — so
 // it cannot signal directly and reaches this through the narrow
 // tools.AgentMessageNotifier interface.
@@ -72,8 +72,8 @@ func (n *AgentMessageNotifier) NotifyAgentMessageQueued(ctx context.Context, cha
 		}
 	}
 
-	if err := n.client.SignalWorkflow(ctx, workflowID, "", mailboxsignal.SignalName,
-		mailboxsignal.Signal{Thread: toThreadID}); err != nil {
+	if err := n.client.SignalWorkflow(ctx, workflowID, "", threadwake.SignalName,
+		threadwake.Signal{Thread: toThreadID, Reason: threadwake.ReasonMailbox}); err != nil {
 		logging.Warn("Could not notify workflow of queued agent message; it will be delivered at the next loop boundary",
 			"error", err, "chatID", chatID, "threadID", toThreadID, "workflowID", workflowID)
 		return

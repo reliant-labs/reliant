@@ -145,7 +145,29 @@ nodes:
     # still ended with the assistant message, and every retry reproduced it —
     # permanently. Keep this term truthful: if the mailbox is empty, the loop
     # must exit and yield.
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true
+    #
+    # `aborted` is the fourth term, and it is the OTHER half of that story. A
+    # turn whose stream was cut short produces zero tool calls, which is
+    # indistinguishable here from "the model is done" — so the loop exited and
+    # an agent killed mid-work reported as complete (chat 7da3935c, thread
+    # 5e3fe370: cancelled 1.75s in with two edits applied, reported to its
+    # parent as "produced no text response"). Re-entering resumes the work.
+    #
+    # This does NOT reintroduce the wedge above. The distinction is where the
+    # bit comes from: pending_inbox was a CLAIM ABOUT THE MAILBOX that an
+    # interrupt could set true while the mailbox was empty, so the next turn
+    # had nothing to deliver and history still ended with the assistant — the
+    # same state, forever. `aborted` is a fact about THE TURN THAT JUST RAN,
+    # recomputed from its own stream every iteration, so the next turn either
+    # streams to completion (aborted=false, loop exits) or is itself aborted
+    # (which is real, ongoing trouble worth another turn). Nothing can hold it
+    # true across a healthy turn.
+    #
+    # The assistant-tail guard in call_llm is the backstop either way: if a
+    # re-entered turn finds history still ending with the assistant, it yields
+    # instead of calling the provider, which bounds this term even under a
+    # provider that aborts every attempt.
+    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true || outputs.aborted == true
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -156,6 +178,8 @@ nodes:
         # (or a replayed shape where the node output is absent) must evaluate
         # to false, not blow up the whole output evaluation.
         pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
+        # Guarded like its siblings for the same reason.
+        aborted: "{{has(nodes.call_llm) && has(nodes.call_llm.aborted) ? nodes.call_llm.aborted : false}}"
 
       entry: [call_llm]
 

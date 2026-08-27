@@ -19,3 +19,15 @@ void _localMatchesCloud;
 
 export const onboardingService = hasControlPlane ? cloud : local;
 export type { OnboardingUser } from "./types";
+
+/**
+ * Forget any cached current-user record. Sign-out calls this so the next user
+ * is never answered with the previous user's `onboardingCompleted`.
+ *
+ * Exported as a standalone function rather than reached through
+ * `onboardingService` so callers that only need to invalidate — authStore —
+ * don't pull in the whole service surface.
+ */
+export function resetUserCache(): void {
+  onboardingService.resetUserCache();
+}

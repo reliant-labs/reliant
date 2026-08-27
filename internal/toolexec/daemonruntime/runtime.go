@@ -464,6 +464,66 @@ func (d *daemonClient) recordStream(s daemonstate.Stream, detail string) {
 	if err := daemonstate.SetStream(d.bootCfg.DataDir, s, detail); err != nil {
 		logging.Warn(logPrefix+" Failed to record daemon stream state", "error", err, "stream", string(s))
 	}
+
+	// Announce the transition on stdout as well as recording it.
+	//
+	// A supervising Electron watches the runtime record by stat-polling it
+	// every 250ms, so it learns of a connect up to a full interval late — 146ms
+	// after the fact in a measured dev sign-in — for news the daemon already
+	// had. When the daemon was spawned as a child there is an ordered pipe
+	// straight to the supervisor, so telling it costs one line and removes the
+	// wait entirely.
+	//
+	// The file stays authoritative and the poll stays as the fallback: a daemon
+	// running on another machine has no stdout its supervisor can read, and
+	// anything not spawned by Electron has no reader at all. This is a fast
+	// path, never the only path — which is also why a failed write above does
+	// not suppress it.
+	//
+	// Written directly to stdout rather than through logging so it cannot be
+	// reformatted, level-filtered, or routed to a file by a logger change.
+	//
+	// Only in verbose mode. The notice is machine output for a supervising
+	// parent — Electron passes --verbose on every spawn precisely so this path
+	// stays on — and printing `@@RELIANT_STREAM connecting` at a human running
+	// the daemon in a terminal is noise they cannot act on. Suppressing it
+	// costs a supervisor that somehow ran without the flag nothing but latency:
+	// the stat-poll fallback still sees the transition in the on-disk record,
+	// which stays authoritative in both modes.
+	if d.bootCfg.Verbose {
+		fmt.Printf("%s %s\n", daemonstate.StreamNoticePrefix, string(s))
+	}
+
+	d.announceStatus(s, detail)
+}
+
+// announceStatus prints the short, human-readable half of a stream transition:
+// one line a person running `reliant daemon start` in a terminal can act on.
+//
+// Deliberately NOT the structured log. In non-verbose mode the slog stream goes
+// to the rotating file only (see commands.setupToolsDaemonLogging), leaving
+// stdout for these. In verbose mode the structured lines are already on stdout
+// and say the same thing with more detail, so these would be duplication —
+// hence the early return.
+func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string) {
+	if d.bootCfg.Verbose {
+		return
+	}
+
+	switch s {
+	case daemonstate.StreamConnected:
+		fmt.Printf("\n  ✓ Daemon connected — you can head back to Reliant and start working.\n\n")
+		fmt.Printf("    Press Ctrl+C to disconnect.\n\n")
+	case daemonstate.StreamAwaitingCredentials:
+		fmt.Printf("  … Waiting for sign-in to finish.\n")
+	case daemonstate.StreamDisconnected:
+		// Only worth a line when it carries a reason; a bare disconnect is
+		// immediately followed by a reconnect attempt, and narrating both
+		// halves of a retry loop is the noise this whole change removes.
+		if detail != "" {
+			fmt.Printf("  ! Disconnected: %s\n    Reconnecting…\n", detail)
+		}
+	}
 }
 
 // isFatalError returns true for errors that should not be retried (e.g. auth failures).
@@ -473,7 +533,12 @@ func isFatalError(err error) bool {
 	}
 	code := connect.CodeOf(err)
 	switch code {
-	case connect.CodeUnauthenticated, connect.CodePermissionDenied:
+	case connect.CodePermissionDenied:
+		// Authenticated and refused: the gateway knows who this is and says no.
+		// Redialing cannot change that answer, so stop.
+		//
+		// Unauthenticated is deliberately NOT here — see the comment on the
+		// retry path in run(). The two look alike and recover differently.
 		return true
 	case connect.CodeUnimplemented:
 		// Server doesn't have the ConnectDaemon endpoint — wrong URL.
@@ -522,12 +587,48 @@ func (d *daemonClient) run(ctx context.Context) error {
 				}
 				return fmt.Errorf("daemon connection failed (not retrying): %w", err)
 			}
-			logging.Error(logPrefix+" Session ended; reconnecting",
-				"error", err,
-				"code", connect.CodeOf(err).String(),
-				"delay", delay,
-				"grpc_url", d.bootCfg.GRPCURL,
-			)
+			if connect.CodeOf(err) == connect.CodeUnauthenticated {
+				// Credentials the gateway would not accept. This USED to be
+				// fatal, and that is what cost a full working day.
+				//
+				// On 2026-08-24 a dev-k8s deploy repointed the gateway at a
+				// different database, so the daemon's PAT was looked up where
+				// it had never been written and came back "invalid token". The
+				// daemon declared the error fatal, stopped, and logged nothing
+				// for the next 10 hours while the app showed "no machine is
+				// connected". Restoring the gateway did not help: nothing was
+				// left running to notice. Only killing the process — so its
+				// supervisor respawned it — brought the daemon back.
+				//
+				// Unauthenticated is RECOVERABLE and this process cannot
+				// recover it alone: the PAT is minted by the supervisor
+				// (Electron's ensureDaemonCreds), and the gateway may simply be
+				// misconfigured or mid-rollout. All of those get fixed AROUND a
+				// running daemon, so the daemon's job is to still be trying
+				// when they are. Retrying costs one connect per backoff
+				// interval, capped at ReconnectMaxDelay (15s).
+				//
+				// PermissionDenied stays fatal: there the identity was accepted
+				// and the answer was still no, which redialing cannot change.
+				logging.Error(logPrefix+" Rejected: credentials not accepted — retrying. "+
+					"Causes, in order of likelihood: the daemon's PAT is stale and the "+
+					"supervisor has not re-minted it yet; the gateway is validating against a "+
+					"DIFFERENT database than the one the PAT was minted into (compare the "+
+					"gateway's DATABASE_URL with the minting service's); or this identity's "+
+					"token was revoked.",
+					"error", err,
+					"code", connect.CodeOf(err).String(),
+					"delay", delay,
+					"grpc_url", d.bootCfg.GRPCURL,
+				)
+			} else {
+				logging.Error(logPrefix+" Session ended; reconnecting",
+					"error", err,
+					"code", connect.CodeOf(err).String(),
+					"delay", delay,
+					"grpc_url", d.bootCfg.GRPCURL,
+				)
+			}
 		}
 
 		// Reset backoff after a session that lasted long enough to be considered
@@ -558,6 +659,40 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	logging.Info(logPrefix+" Connecting to gateway", "url", baseURL)
 
 	stream := d.gatewayClient.ConnectDaemon(ctx)
+
+	// Cancelling ctx does NOT unblock the stream.Receive() below, so shutdown
+	// has to close the read side by hand.
+	//
+	// Receive bottoms out in http2's transportResponseBody.Read, which is a
+	// sync.Cond wait on the stream's pipe. That cond is woken by exactly two
+	// things: bytes arriving from the peer, or the body being closed. A
+	// cancelled context is neither. connect checks ctx.Err() once, *before*
+	// entering the read (duplex_http_call.go:236), which is no help to a read
+	// that is already parked — and a daemon parked at awaiting_credentials is
+	// always already parked, because an idle gateway has nothing to say.
+	//
+	// Measured 2026-08-26 with the real binary against a silent gateway:
+	// SIGTERM to exit was 10.004s WITHOUT this close and 6.8ms with it. The
+	// 10s is not the teardown finishing — it is daemonShutdownGrace giving up
+	// and force-exiting (exit code 1), because against a peer that never
+	// speaks the receive has no upper bound at all. The dev-stack log shows
+	// both shapes: a 4.54s exit-0 when the transport eventually noticed, and
+	// a 10.005s exit-1 when it did not.
+	//
+	// Scoped to this session: the goroutine exits with runSession, so a
+	// reconnecting daemon does not accumulate one per session.
+	sessionOver := make(chan struct{})
+	defer close(sessionOver)
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Non-blocking, and safe against the send half: CloseResponse
+			// touches only the response body, never the marshaler or request
+			// pipe that runSender is writing into.
+			_ = stream.CloseResponse()
+		case <-sessionOver:
+		}
+	}()
 
 	// --- Registration: send directly before starting the sender goroutine ---
 	// daemon_id and user_id are no longer self-asserted; the gateway derives
@@ -604,6 +739,17 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	for {
 		msg, err := stream.Receive()
 		if err != nil {
+			// A cancelled daemon closed its own read side to get here (see the
+			// CloseResponse goroutine above), so Receive reports a closed body
+			// rather than a cancellation. Report what actually happened:
+			// otherwise every ordinary shutdown logs "Session ended;
+			// reconnecting" with a torn-stream error and records the stream
+			// DISCONNECTED on its way out, which reads as a fault in the logs
+			// and in `reliant daemon status`. run() and Start() both key off
+			// context.Canceled to stay quiet.
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return ctxErr
+			}
 			return fmt.Errorf("daemon stream receive: %w", err)
 		}
 		if msg == nil {

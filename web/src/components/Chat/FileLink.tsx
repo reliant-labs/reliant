@@ -120,7 +120,7 @@ function FileLinkComponent({
 
   // Get worktree badge for other-worktree classification
   const worktreeBadge = classification === 'other-worktree' && matchedWorktree ? (
-    <span className="text-[9px] px-1 py-0.5 bg-muted rounded text-muted-foreground font-medium ml-1">
+    <span className="text-3xs px-1 py-0.5 bg-muted rounded text-muted-foreground font-medium ml-1">
       {matchedWorktree.name}
     </span>
   ) : null;

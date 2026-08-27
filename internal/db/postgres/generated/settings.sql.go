@@ -11,11 +11,55 @@ import (
 	"time"
 )
 
+const createProjectSetting = `-- name: CreateProjectSetting :exec
+INSERT INTO settings (
+    id, user_id, project_id, key, value, value_type,
+    created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id, project_id, key)
+DO UPDATE SET
+    value = EXCLUDED.value,
+    value_type = EXCLUDED.value_type,
+    updated_at = EXCLUDED.updated_at
+`
+
+type CreateProjectSettingParams struct {
+	ID        string         `json:"id"`
+	UserID    string         `json:"user_id"`
+	ProjectID sql.NullString `json:"project_id"`
+	Key       string         `json:"key"`
+	Value     string         `json:"value"`
+	ValueType string         `json:"value_type"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+// The project-scoped counterpart. project_id is NOT NULL here, so the table's
+// own UNIQUE (user_id, project_id, key) constraint is a usable conflict target.
+func (q *Queries) CreateProjectSetting(ctx context.Context, arg CreateProjectSettingParams) error {
+	_, err := q.db.ExecContext(ctx, createProjectSetting,
+		arg.ID,
+		arg.UserID,
+		arg.ProjectID,
+		arg.Key,
+		arg.Value,
+		arg.ValueType,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
 const createSetting = `-- name: CreateSetting :exec
 INSERT INTO settings (
     id, user_id, project_id, key, value, value_type,
     created_at, updated_at
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id, key) WHERE project_id IS NULL
+DO UPDATE SET
+    value = EXCLUDED.value,
+    value_type = EXCLUDED.value_type,
+    updated_at = EXCLUDED.updated_at
 `
 
 type CreateSettingParams struct {
@@ -29,6 +73,18 @@ type CreateSettingParams struct {
 	UpdatedAt time.Time      `json:"updated_at"`
 }
 
+// Upsert, not a plain insert. A setting is identified by (user_id, project_id,
+// key), so writing the same key twice must REPLACE the value rather than add a
+// second row.
+//
+// The table's UNIQUE (user_id, project_id, key) constraint does not achieve
+// that on its own: project_id is NULL for every user-level setting, and in SQL
+// NULL is never equal to NULL, so the constraint simply does not apply to the
+// rows we write most. Every save appended a duplicate, and ListSettings
+// (ORDER BY key) then returned them in an arbitrary order, letting a stale
+// value overwrite the current one on load. Hence the accompanying partial
+// unique index on (user_id, key) WHERE project_id IS NULL, which is what this
+// ON CONFLICT target resolves against.
 func (q *Queries) CreateSetting(ctx context.Context, arg CreateSettingParams) error {
 	_, err := q.db.ExecContext(ctx, createSetting,
 		arg.ID,

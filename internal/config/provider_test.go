@@ -112,3 +112,41 @@ func TestStoredConfigProvider_MissingStoredRecordReturnsDefaultConfig(t *testing
 	require.Empty(t, cfg.GlobalMemoryMD)
 	require.Empty(t, cfg.ProjectMemoryMD)
 }
+
+// The provider path re-implements mcp.json parsing by hand, so it drops any
+// field it was not taught. dirScoped and dir were both declared, documented and
+// never read here; requiresFiles must not repeat that.
+func TestParseMCPServersFromJSON_ParsesTreeScopingFields(t *testing.T) {
+	raw := `{
+  "mcpServers": {
+    "gopls": {
+      "command": "gopls",
+      "args": ["mcp"],
+      "dir": "/srv/monorepo",
+      "dirScoped": true,
+      "requiresFiles": ["go.mod", ""]
+    },
+    "plain": { "command": "some-tool" }
+  }
+}`
+
+	servers := parseMCPServersFromJSON(raw)
+	gopls, ok := servers["gopls"]
+	if !ok {
+		t.Fatalf("expected gopls server, got %#v", servers)
+	}
+	if !gopls.DirScoped {
+		t.Error("dirScoped was dropped: every project would share one index")
+	}
+	if gopls.Dir != "/srv/monorepo" {
+		t.Errorf("dir was dropped: got %q", gopls.Dir)
+	}
+	if len(gopls.RequiresFiles) != 1 || gopls.RequiresFiles[0] != "go.mod" {
+		t.Errorf("requiresFiles not parsed (blanks dropped): %#v", gopls.RequiresFiles)
+	}
+
+	plain := servers["plain"]
+	if plain.DirScoped || plain.Dir != "" || len(plain.RequiresFiles) != 0 {
+		t.Errorf("a server declaring none of these must get none of them: %#v", plain)
+	}
+}

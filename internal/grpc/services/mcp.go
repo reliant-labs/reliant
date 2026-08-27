@@ -79,15 +79,22 @@ type MCPConfigFile struct {
 	MCPServers map[string]MCPServerConfig `json:"mcpServers"`
 }
 
-// MCPServerConfig represents a server config in .mcp.json format
+// MCPServerConfig represents a server config in .mcp.json format.
+//
+// It mirrors config.MCPServer for the settings round trip, so a field missing
+// here is a field a user loses the moment they save through the UI. Dir,
+// DirScoped and RequiresFiles are carried for exactly that reason.
 type MCPServerConfig struct {
-	Command string            `json:"command"`
-	Args    []string          `json:"args,omitempty"`
-	Env     map[string]string `json:"env,omitempty"`
-	Type    string            `json:"type,omitempty"`
-	URL     string            `json:"url,omitempty"`
-	Headers map[string]string `json:"headers,omitempty"`
-	Enabled *bool             `json:"enabled,omitempty"`
+	Command       string            `json:"command"`
+	Args          []string          `json:"args,omitempty"`
+	Env           map[string]string `json:"env,omitempty"`
+	Type          string            `json:"type,omitempty"`
+	URL           string            `json:"url,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Enabled       *bool             `json:"enabled,omitempty"`
+	Dir           string            `json:"dir,omitempty"`
+	DirScoped     bool              `json:"dirScoped,omitempty"`
+	RequiresFiles []string          `json:"requiresFiles,omitempty"`
 }
 
 func (c MCPServerConfig) IsEnabled() bool {
@@ -568,6 +575,11 @@ func protoConfigToInternal(cfg *reliantv1.MCPServerConfig) config.MCPServer {
 		})
 	}
 
+	// NOTE: this converter's source is the PROTO MCPServerConfig, which has no
+	// dir/dirScoped/requiresFiles fields. Adding them there is a schema change
+	// (proto + regeneration) and is deliberately not done here; the file-backed
+	// and stored-JSON paths (configloader.LoadMCPServersFromFile,
+	// config.parseMCPServersFromJSON) do carry them.
 	server := config.MCPServer{
 		Command: expandWithEnv(cfg.Command),
 		Args:    make([]string, 0, len(cfg.Args)),
@@ -609,12 +621,15 @@ func scopedConfigToInternal(cfg MCPServerConfig) config.MCPServer {
 	}
 
 	server := config.MCPServer{
-		Command: expandWithEnv(cfg.Command),
-		Args:    make([]string, 0, len(cfg.Args)),
-		Type:    serverType,
-		URL:     expandWithEnv(cfg.URL),
-		Headers: make(map[string]string, len(cfg.Headers)),
-		Enabled: cfg.IsEnabled(),
+		Command:       expandWithEnv(cfg.Command),
+		Args:          make([]string, 0, len(cfg.Args)),
+		Type:          serverType,
+		URL:           expandWithEnv(cfg.URL),
+		Headers:       make(map[string]string, len(cfg.Headers)),
+		Enabled:       cfg.IsEnabled(),
+		Dir:           cfg.Dir,
+		DirScoped:     cfg.DirScoped,
+		RequiresFiles: cfg.RequiresFiles,
 	}
 	for _, arg := range cfg.Args {
 		server.Args = append(server.Args, expandWithEnv(arg))

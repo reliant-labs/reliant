@@ -297,7 +297,7 @@ export function RepoSelector({ onSelect, oauthReturnTo, analyticsPhase }: RepoSe
                   {repo.fullName}
                 </span>
                 {repo.private && (
-                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] font-medium bg-muted text-muted-foreground">
+                  <span className="inline-flex items-center gap-0.5 rounded px-1.5 py-0.5 text-2xs font-medium bg-muted text-muted-foreground">
                     <Lock className="w-2.5 h-2.5" />
                     Private
                   </span>

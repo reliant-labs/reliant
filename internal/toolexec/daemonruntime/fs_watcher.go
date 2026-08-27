@@ -12,30 +12,11 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/filetree"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 const fileTreePollInterval = 5 * time.Second
-
-// fileTreeSkipDirs are directories never traversed during file tree hashing.
-// This is critical for performance — node_modules alone can have 10,000+ subdirs.
-var fileTreeSkipDirs = map[string]bool{
-	".git":             true,
-	"node_modules":     true,
-	"dist":             true,
-	"build":            true,
-	"__pycache__":      true,
-	".reliant":         true,
-	"vendor":           true,
-	"bower_components": true,
-	"jspm_packages":    true,
-	".next":            true,
-	".nuxt":            true,
-	"target":           true, // Rust/Java
-	"coverage":         true,
-	"tmp":              true,
-	"temp":             true,
-}
 
 // runFileTreeWatcher polls the filesystem and sends a FileSystemChanged
 // message when the file tree hash changes. Sleeps between polls (not
@@ -111,24 +92,24 @@ func hashGitFileTree(ctx context.Context, projectPath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// hashWalkDir walks the directory tree, hashing path+modtime+size for each entry.
-// Skips well-known noisy directories. Yields every 1000 files to avoid hogging CPU.
+// hashWalkDir walks the directory tree, hashing path+modtime+size for each
+// entry. It runs on the poll timer for projects that are NOT git repositories,
+// so it has to stay cheap on every pass: it skips the canonical noise
+// directories and stops at the shared node budget.
+//
+// Without that budget this was a fully unbounded walk of an arbitrary tree
+// repeated every five seconds — the same shape of defect as the file-tree RPC,
+// just quieter. A truncated walk still produces a stable, sensitive hash: it
+// covers a deterministic prefix of the tree, so edits within that prefix are
+// still detected. The truncation is logged once per poll so a project that
+// outgrew the budget is visible rather than silently half-watched.
+//
+// Yields every 1000 entries to avoid hogging the goroutine.
 func hashWalkDir(ctx context.Context, projectPath string) (string, error) {
 	h := sha256.New()
 	count := 0
 
-	err := filepath.WalkDir(projectPath, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil // skip unreadable entries
-		}
-
-		name := d.Name()
-
-		// Skip noisy directories entirely — never descend
-		if d.IsDir() && fileTreeSkipDirs[name] {
-			return filepath.SkipDir
-		}
-
+	truncated, err := filetree.WalkHashable(projectPath, filetree.MaxTreeNodes, func(path string, d fs.DirEntry) error {
 		// Yield periodically to avoid hogging the goroutine
 		count++
 		if count%1000 == 0 {
@@ -155,6 +136,10 @@ func hashWalkDir(ctx context.Context, projectPath string) (string, error) {
 	})
 	if err != nil {
 		return "", err
+	}
+	if truncated {
+		logging.Debug(logPrefix+" File tree hash truncated by node budget",
+			"projectPath", projectPath, "maxNodes", filetree.MaxTreeNodes)
 	}
 
 	return hex.EncodeToString(h.Sum(nil)), nil

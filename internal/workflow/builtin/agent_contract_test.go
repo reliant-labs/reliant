@@ -23,7 +23,15 @@ const (
 	// message landed in the mailbox while the last response was streaming.
 	// Without it the loop exits holding an undelivered message (call_llm
 	// delivers BEFORE reading history, so a mid-turn arrival misses that turn).
-	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true`
+	//
+	// The aborted term keeps it alive when the last turn was cut short rather
+	// than finished. A cancelled stream returns zero tool calls, which is
+	// indistinguishable here from "the model is done" — without this the loop
+	// exits mid-task and the thread is reported as complete (chat 7da3935c,
+	// thread 5e3fe370, killed mid-edit and reported to its parent as a
+	// success). Unlike pending_inbox it cannot wedge: it is recomputed from
+	// each turn's own stream, so a healthy turn clears it.
+	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true || outputs.aborted == true`
 	edgeCallLLMToApproval      = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
 	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
 	edgeCallLLMToAskQuestion   = `(nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask`

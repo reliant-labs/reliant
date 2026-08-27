@@ -94,11 +94,14 @@ export const ContextUsageIndicator = memo(function ContextUsageIndicator({
           />
         </svg>
 
-        {/* Center text showing percentage */}
+        {/* Center text showing percentage. px, not a scale step: it is centred
+            inside a fixed-size SVG ring and must not grow with the font-size
+            preference or it overflows the circle. */}
         <span
           className={cn(
             "absolute inset-0 flex items-center justify-center font-medium",
             textClass,
+            // eslint-disable-next-line no-restricted-syntax
             "text-[7px]"
           )}
         >

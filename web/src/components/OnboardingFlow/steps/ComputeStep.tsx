@@ -20,6 +20,7 @@ import {
 } from "@/hooks/useOnboardingQueries";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { useBundledDaemonPending } from "@/hooks/useBundledDaemonPending";
 import type {
   CodeSource,
   ComputeChoice,
@@ -102,6 +103,17 @@ export function ComputeStep({
   const [showLocal, setShowLocal] = useState(plan.compute === "local_daemon");
   const [error, setError] = useState<string | null>(null);
   const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
+  // A packaged desktop build ships its own daemon, but it does not REGISTER
+  // until after sign-in — measured at ~1.2s post-restart on prod, though the
+  // renderer only learns of it when the daemon-connected event lands. Until
+  // then ListDaemons legitimately returns empty, and asking the user to pick
+  // their compute during that window is asking a question that answers
+  // itself. `awaitingBundledDaemon` is true only in the desktop app, only
+  // before a daemon has appeared, and only until the event or the budget
+  // resolves it.
+  const awaitingBundledDaemon = useBundledDaemonPending(
+    hasUsableDaemonForOnboarding(daemons),
+  );
   const events = useEventBus();
   const hasAdvanced = useRef(false);
   const hasTrackedConnectedRef = useRef(false);
@@ -294,7 +306,14 @@ export function ComputeStep({
     setShowLocal(true);
   };
 
-  const commitLocalAndAdvance = async (daemonPreconnected: boolean) => {
+  // `autoSkipped` distinguishes "the user chose local" from "we found a
+  // daemon and advanced without asking". The latter must not leave a step in
+  // the progress bar or a Back button pointing at a question that was never
+  // put to them — see LaunchPlan.computeAutoSkipped.
+  const commitLocalAndAdvance = async (
+    daemonPreconnected: boolean,
+    autoSkipped = false,
+  ) => {
     if (hasAdvanced.current) return;
     hasAdvanced.current = true;
     await updatePlan({
@@ -302,6 +321,7 @@ export function ComputeStep({
       daemonProvisioning: false,
       localPath: undefined,
       projectName: undefined,
+      computeAutoSkipped: autoSkipped || undefined,
     });
     trackEvent("onboarding_compute_selected", {
       compute: "local",
@@ -344,7 +364,7 @@ export function ComputeStep({
       hasTrackedConnectedRef.current = true;
       trackEvent("onboarding_daemon_connected");
     }
-    void commitLocalAndAdvance(Boolean(activeDaemon));
+    void commitLocalAndAdvance(Boolean(activeDaemon), true);
     // commitLocalAndAdvance closes over updatePlan / onNext / activeDaemon,
     // but the hasAdvanced ref guards against re-entry,
     // so we intentionally narrow the dep list to the trigger conditions.
@@ -364,7 +384,7 @@ export function ComputeStep({
   // Visual pattern mirrors DaemonConnectingGate's "connecting" phase
   // (centered spinner in a tinted circle + headline) so the two onboarding
   // wait states feel consistent.
-  if (daemonLoading) {
+  if (daemonLoading || awaitingBundledDaemon) {
     return (
       <div
         className="space-y-5 py-6 text-center"
@@ -377,10 +397,14 @@ export function ComputeStep({
         </div>
         <div className="space-y-1">
           <h2 className="text-sm font-medium text-foreground">
-            Checking your workspace…
+            {awaitingBundledDaemon
+              ? "Connecting your daemon…"
+              : "Checking your workspace…"}
           </h2>
           <p className="text-xs text-muted-foreground">
-            One moment while we look for an existing daemon.
+            {awaitingBundledDaemon
+              ? "This app ships with a daemon — finishing its setup."
+              : "One moment while we look for an existing daemon."}
           </p>
         </div>
       </div>
@@ -419,7 +443,7 @@ export function ComputeStep({
                   <span className="text-sm font-semibold text-foreground">
                     Reliant Cloud
                   </span>
-                  <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+                  <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary">
                     Fastest
                   </span>
                 </div>

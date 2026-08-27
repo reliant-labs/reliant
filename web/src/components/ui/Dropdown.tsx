@@ -208,7 +208,7 @@ export function Dropdown({
           "bg-background text-foreground border-border",
           !disabled && "cursor-pointer hover:border-primary/50",
         ],
-        compact ? "px-1.5 py-0.5 text-[10px] h-6" : "px-2 py-1 text-xs h-7",
+        compact ? "px-1.5 py-0.5 text-2xs h-6" : "px-2 py-1 text-xs h-7",
         disabled && "opacity-60 cursor-not-allowed",
         triggerClassName
       )}

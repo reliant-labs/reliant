@@ -130,7 +130,7 @@ func mapFinishReason(reason string) message.FinishReason {
 	case "tool_calls":
 		return message.FinishReasonToolUse
 	case "content_filter":
-		return message.FinishReasonError
+		return message.FinishReasonRefusal
 	default:
 		logging.Warn("OpenRouter unknown finish reason, treating as unknown", "finish_reason", reason)
 		return message.FinishReasonUnknown

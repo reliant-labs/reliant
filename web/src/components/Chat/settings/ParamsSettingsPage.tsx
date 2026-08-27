@@ -133,7 +133,7 @@ export function ParamsSettingsPage({
           </div>
           <div className="min-w-0">
             <h3 className="text-sm font-semibold leading-none">Settings</h3>
-            <p className="mt-1 text-[11px] text-muted-foreground">
+            <p className="mt-1 text-xs text-muted-foreground">
               Tune workflow parameters for this chat
             </p>
           </div>
@@ -165,14 +165,14 @@ export function ParamsSettingsPage({
                     <ChevronRight className="h-3.5 w-3.5" />
                   )}
                   <span className="flex-1 truncate">{paramGroup.label}</span>
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs font-semibold text-primary">
                     {paramGroup.params.length}
                   </span>
                 </button>
               ) : (
                 <div className="mb-2 flex items-center justify-between px-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <span>{paramGroup.label}</span>
-                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] text-primary">
+                  <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-2xs text-primary">
                     {paramGroup.params.length}
                   </span>
                 </div>

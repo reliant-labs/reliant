@@ -145,6 +145,63 @@ func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *Rotati
 	slog.SetDefault(slog.New(handler))
 }
 
+// SetupFileOnly configures logging to write to the rotating file ONLY, leaving
+// stdout free for a process to print human-readable output of its own.
+//
+// This is SetupWithRotation minus the os.Stdout leg of the MultiWriter. The
+// tools daemon uses it for a non-verbose foreground run: a person watching that
+// terminal wants "connected" or an error, not the structured stream, while the
+// file must keep every line so `reliant daemon logs` and post-mortems are
+// unaffected.
+//
+// Falls back to the normal stdout logger when no file can be opened. Silently
+// discarding logs because a directory was unwritable would turn a broken log
+// path into a daemon that appears to run with no output at all.
+func SetupFileOnly(defaultLevel slog.Level, config *RotationConfig) {
+	if config == nil || config.Filename == "" {
+		Setup(defaultLevel)
+		return
+	}
+
+	logDir := filepath.Dir(config.Filename)
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		slog.Warn("Failed to create log directory, logging to stdout", "dir", logDir, "error", err)
+		Setup(defaultLevel)
+		return
+	}
+
+	maxSize := config.MaxSizeMB
+	if maxSize <= 0 {
+		maxSize = 50
+	}
+	maxBackups := config.MaxBackups
+	if maxBackups <= 0 {
+		maxBackups = 3
+	}
+	maxAge := config.MaxAgeDays
+	if maxAge <= 0 {
+		maxAge = 30
+	}
+
+	activeLogger = &lumberjack.Logger{
+		Filename:   config.Filename,
+		MaxSize:    maxSize,
+		MaxBackups: maxBackups,
+		MaxAge:     maxAge,
+		Compress:   config.Compress,
+		LocalTime:  true,
+	}
+
+	DefaultOutput = activeLogger
+
+	var handler slog.Handler = slog.NewTextHandler(activeLogger, &slog.HandlerOptions{
+		Level: defaultLevel,
+	})
+	handler = newSentryHandler(handler)
+	handler = newMetricsHandler(handler)
+	slog.SetDefault(slog.New(handler))
+}
+
 // Close closes the active log file (should be called on shutdown)
 func Close() error {
 	if activeLogger != nil {

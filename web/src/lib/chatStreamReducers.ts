@@ -112,9 +112,28 @@ export function applyToolCallStateUpdates(
     if (
       prev &&
       TERMINAL_TOOL_STATUSES.has(prev.status) &&
+      !prev.inferred &&
       mappedStatus === "completed"
     ) {
       continue; // don't overwrite a terminal state with a stale completion
+    }
+
+    // An INFERRED cancel is the client's deduction, not a reported fact: the
+    // abort pass cancels every tool that had not yet reported an outcome when
+    // its stream ended. A tool already past the point of no return finishes
+    // anyway, and its real outcome arrives here afterwards — so the deduction
+    // must yield to it, or the card reads "cancelled" beside the result the
+    // tool actually produced, with nothing left to correct it (this Map has no
+    // TTL and is never reconciled against the durable rows).
+    //
+    // Only a real outcome may override it. Another inferred cancel, or a
+    // non-terminal status arriving late, changes nothing.
+    if (
+      prev?.inferred &&
+      TERMINAL_TOOL_STATUSES.has(prev.status) &&
+      !SETTLED_TOOL_STATUSES.has(mappedStatus)
+    ) {
+      continue;
     }
 
     if (
@@ -132,6 +151,9 @@ export function applyToolCallStateUpdates(
       toolName: update.tool_name,
       status: mappedStatus,
       timestamp: update.timestamp,
+      // Carried explicitly rather than spread from `prev`: a status that was
+      // once inferred and is now reported must stop being provisional.
+      inferred: update.inferred === true,
     });
   }
   return next;

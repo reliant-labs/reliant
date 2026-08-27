@@ -138,7 +138,7 @@ export function CodeContextChip({
         <div
           className={cn(
             'h-5 px-1.5 rounded-full flex items-center justify-center',
-            'text-white text-[10px] font-bold leading-none',
+            'text-white text-2xs font-bold leading-none',
             'transition-opacity group-hover/badge:opacity-0',
             getLanguageColor(language)
           )}

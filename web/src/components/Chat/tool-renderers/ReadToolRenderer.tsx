@@ -63,7 +63,7 @@ function ExecutingView({ toolName, input }: { toolName: string; input: Record<st
 
   return (
     <div className="tool-content-read">
-      <div className="px-2 py-1.5 text-[11px] text-muted-foreground italic">
+      <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
         {displayText}
       </div>
     </div>
@@ -78,7 +78,7 @@ function ToolInputBlock({ input }: { input: Record<string, unknown> | string }) 
 
   return (
     <div className="border-b border-border/30">
-      <div className="px-2 py-0.5 text-[10px] text-muted-foreground bg-muted/40">
+      <div className="px-2 py-0.5 text-2xs text-muted-foreground bg-muted/40">
         Input
       </div>
       <LightweightCodeViewer
@@ -200,19 +200,19 @@ function GrepOutput({
     const filePaths = lines.slice(1).filter(line => line.trim().length > 0);
     
     if (filePaths.length === 0) {
-      return <div className="px-2 py-1.5 text-[11px] text-muted-foreground">No matches found</div>;
+      return <div className="px-2 py-1.5 text-xs text-muted-foreground">No matches found</div>;
     }
     
     return (
       <div className="tool-content-grep">
-        <div className="px-2 py-1 text-[10px] text-muted-foreground border-b border-border/30">
+        <div className="px-2 py-1 text-2xs text-muted-foreground border-b border-border/30">
           {lines[0]}
         </div>
         <div className="px-2 py-1.5 space-y-0.5 max-h-[200px] overflow-y-auto">
           {filePaths.map((filePath, idx) => {
             const parsed = parseFilePath(filePath);
             if (!parsed) {
-              return <div key={idx} className="text-[11px] font-mono">{filePath}</div>;
+              return <div key={idx} className="text-xs font-mono">{filePath}</div>;
             }
             return (
               <div key={idx}>
@@ -220,7 +220,7 @@ function GrepOutput({
                   path={filePath}
                   showIcon={true}
                   worktreeId={worktreeId}
-                  className="text-[11px]"
+                  className="text-xs"
                 >
                   {filePath}
                 </FileLink>
@@ -265,15 +265,15 @@ function GrepOutput({
                   path={filePath}
                   showIcon={true}
                   worktreeId={worktreeId}
-                  className="text-[11px] font-medium"
+                  className="text-xs font-medium"
                 />
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-2xs text-muted-foreground">
                   ({matches.length} match{matches.length !== 1 ? 'es' : ''})
                 </span>
               </div>
               <div className="px-2 py-1 space-y-0.5">
                 {matches.slice(0, 5).map((match, mIdx) => (
-                  <div key={mIdx} className="text-[11px] font-mono flex items-start gap-1">
+                  <div key={mIdx} className="text-xs font-mono flex items-start gap-1">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -291,7 +291,7 @@ function GrepOutput({
                   </div>
                 ))}
                 {matches.length > 5 && (
-                  <div className="text-[10px] text-muted-foreground italic">
+                  <div className="text-2xs text-muted-foreground italic">
                     ... {matches.length - 5} more
                   </div>
                 )}
@@ -340,14 +340,14 @@ function GlobOutput({ content, worktreeId }: { content: string; worktreeId?: str
 
   return (
     <div className="tool-content-glob">
-      <div className="px-2 py-1 text-[10px] text-muted-foreground border-b border-border/30">
+      <div className="px-2 py-1 text-2xs text-muted-foreground border-b border-border/30">
         Found {filePaths.length} file{filePaths.length !== 1 ? 's' : ''}
       </div>
       <div className="px-2 py-1.5 space-y-0.5 max-h-[200px] overflow-y-auto">
         {filePaths.map((filePath, idx) => {
           const parsed = parseFilePath(filePath);
           if (!parsed) {
-            return <div key={idx} className="text-[11px] font-mono">{filePath}</div>;
+            return <div key={idx} className="text-xs font-mono">{filePath}</div>;
           }
           return (
             <div key={idx}>
@@ -355,7 +355,7 @@ function GlobOutput({ content, worktreeId }: { content: string; worktreeId?: str
                 path={filePath}
                 showIcon={true}
                 worktreeId={worktreeId}
-                className="text-[11px]"
+                className="text-xs"
               />
             </div>
           );
@@ -375,7 +375,7 @@ function FileListOutput({ content, worktreeId }: { content: string; worktreeId?:
         {lines.map((line, idx) => {
           const parsed = parseFilePath(line);
           if (!parsed) {
-            return <div key={idx} className="text-[11px] font-mono">{line}</div>;
+            return <div key={idx} className="text-xs font-mono">{line}</div>;
           }
           return (
             <div key={idx}>
@@ -383,7 +383,7 @@ function FileListOutput({ content, worktreeId }: { content: string; worktreeId?:
                 path={line}
                 showIcon={true}
                 worktreeId={worktreeId}
-                className="text-[11px]"
+                className="text-xs"
               />
             </div>
           );
@@ -464,14 +464,14 @@ function WebsearchOutput({ content }: { content: string }) {
 
   return (
     <div className="tool-content-websearch">
-      <div className="px-2 py-1 text-[10px] text-muted-foreground border-b border-border/30">
+      <div className="px-2 py-1 text-2xs text-muted-foreground border-b border-border/30">
         {queryText && <span>Searched: <span className="font-medium text-foreground">"{queryText}"</span> - </span>}
         {resultCount} result{resultCount !== '1' ? 's' : ''}
       </div>
       <div className="divide-y divide-border/20">
         {results.map((result, idx) => (
           <div key={idx} className="px-2 py-1.5">
-            <div className="text-[11px] font-medium">
+            <div className="text-xs font-medium">
               {result.url ? (
                 <a 
                   href={result.url}
@@ -487,12 +487,12 @@ function WebsearchOutput({ content }: { content: string }) {
               )}
             </div>
             {result.url && (
-              <div className="text-[9px] text-muted-foreground truncate">
+              <div className="text-3xs text-muted-foreground truncate">
                 {result.url}
               </div>
             )}
             {result.description && (
-              <div className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">
+              <div className="text-2xs text-muted-foreground mt-0.5 line-clamp-2">
                 {result.description}
               </div>
             )}

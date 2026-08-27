@@ -36,7 +36,7 @@ export function WorkflowInfoMessage({ info }: WorkflowInfoMessageProps) {
       >
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {getIcon()}
-          <span className="text-[11px] font-medium truncate">{headerLabel}</span>
+          <span className="text-xs font-medium truncate">{headerLabel}</span>
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
@@ -49,7 +49,7 @@ export function WorkflowInfoMessage({ info }: WorkflowInfoMessageProps) {
       </div>
 
       {isExpanded && (
-        <div className="px-2 py-1.5 border-t border-border/30 bg-background text-[11px] text-foreground whitespace-pre-wrap">
+        <div className="px-2 py-1.5 border-t border-border/30 bg-background text-xs text-foreground whitespace-pre-wrap">
           {detailsText}
         </div>
       )}

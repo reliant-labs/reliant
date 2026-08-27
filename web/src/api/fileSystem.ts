@@ -10,6 +10,7 @@ import { triggerGitStatusRefresh } from "../store/gitStatusStore";
 export type { SearchResult, SearchMatch, SearchFilesResult, ReplaceResult, ReplaceInFilesResult, FilePreviewInfo, FileViewerKindValue } from "./filesystem-grpc";
 
 export interface FileSystemAPI {
+  /** See {@link getFileTree} for `depth` semantics — it defaults to one level, NOT the whole tree. */
   getFileTree: (path?: string, showHidden?: boolean, worktreeId?: string, depth?: number) => Promise<FileNode[]>;
   getFileContent: (path: string, worktreeId?: string) => Promise<string>;
   saveFileContent: (path: string, content: string, worktreeId?: string) => Promise<void>;
@@ -34,15 +35,54 @@ export interface FileMetadata {
 
 
 /**
- * Fetches the file tree structure from the API
- * @param path - Optional path to start from (default: root)
+ * Depth requested when a caller does not say otherwise: the immediate children
+ * of `path` and nothing below them. Deliberately the *safest* value, not the
+ * most useful one — a caller that wants more levels must say how many.
+ */
+export const FILE_TREE_DEPTH_DEFAULT = 1;
+
+/**
+ * Sentinel for "walk as deep as the server's budget allows".
+ *
+ * This is NOT unbounded. The server caps every walk at `filetree.MaxTreeNodes`
+ * (50,000 nodes) and skips both the canonical noise directories and anything
+ * `.gitignore` excludes, then reports `truncated` when it stops early. Those
+ * bounds are what make a whole-project walk affordable at all: a 106k-file
+ * Unity project comes back as ~8.3k nodes because the 8.2 GB gitignored
+ * `Library/` is never entered.
+ *
+ * Historical note, because the naming is a trap: depth `0` used to mean
+ * "recurse forever" AND was the default, which is how a single Cmd+P walked a
+ * whole game repo and exhausted the host file table (ENFILE), taking down both
+ * Docker Desktop and the app. Depth `0` now means "server default depth", and
+ * no value produces an unbounded walk.
+ */
+export const FILE_TREE_DEPTH_MAX = -1;
+
+/**
+ * Depth `0` defers to the server's default (currently 2 levels). Kept as a
+ * named constant so callers never hand-write the magic number that used to
+ * mean "unlimited".
+ */
+export const FILE_TREE_DEPTH_SERVER_DEFAULT = 0;
+
+/**
+ * Fetches the file tree structure from the API.
+ *
+ * @param path - Optional path to start from (default: the project/worktree root)
  * @param showHidden - Optional flag to show hidden files (default: false)
  * @param worktreeId - Optional worktree ID to scope the file tree
- * @param depth - Levels of children to return below `path`: 0 = unlimited (full
- *   recursive tree, back-compat default), N = N levels (1 = immediate children)
+ * @param depth - How many levels of children to return below `path`:
+ *   - `N > 0` walks N levels (1 = immediate children only). Directories at the
+ *     boundary come back with `hasChildren` set and `children` undefined, so
+ *     callers can lazily fetch deeper levels.
+ *   - `FILE_TREE_DEPTH_MAX` (-1) walks as deep as the server's node budget
+ *     allows. Bounded, not unbounded — see the constant's docs.
+ *   - `FILE_TREE_DEPTH_SERVER_DEFAULT` (0) defers to the server default.
+ *   Defaults to {@link FILE_TREE_DEPTH_DEFAULT} (1).
  * @returns Promise resolving to an array of FileNode
  */
-export async function getFileTree(path: string = "/", showHidden: boolean = false, worktreeId?: string, depth: number = 0): Promise<FileNode[]> {
+export async function getFileTree(path: string = "/", showHidden: boolean = false, worktreeId?: string, depth: number = FILE_TREE_DEPTH_DEFAULT): Promise<FileNode[]> {
   const currentProject = useProjectStore.getState().currentProject;
   if (!currentProject) {
     return [];
@@ -296,8 +336,9 @@ export async function copyDirectoryRecursive(sourcePath: string, destinationPath
       throw new Error("No current project selected");
     }
 
-    // Get the file tree for the source directory
-    const sourceTree = await getFileTree(sourcePath, false, worktreeId);
+    // Immediate children only — this function walks the subtree itself, so
+    // fetching deeper levels here would just re-fetch what the recursion covers.
+    const sourceTree = await getFileTree(sourcePath, false, worktreeId, FILE_TREE_DEPTH_DEFAULT);
     
     // Copy each item in the directory
     for (const item of sourceTree) {

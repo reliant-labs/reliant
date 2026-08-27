@@ -70,6 +70,18 @@ vi.mock("../../../store/chatStore", () => ({
   },
 }));
 
+// projectStore is dynamically imported when the tour ends, to decide which
+// chat route to land the user on.
+const projectStoreMocks = vi.hoisted(() => ({
+  currentProject: { id: "project-1" } as { id: string } | null,
+}));
+
+vi.mock("../../../store/projectStore", () => ({
+  useProjectStore: {
+    getState: () => ({ currentProject: projectStoreMocks.currentProject }),
+  },
+}));
+
 // apiKeySetupStore is dynamically imported by useTourNavigation; ensure the
 // dynamic import resolves without touching real RPCs.
 vi.mock("../../../store/apiKeySetupStore", () => ({
@@ -184,6 +196,7 @@ describe("useTourNavigation", () => {
     tourStoreMocks.skipStep.mockClear();
     tourStoreMocks.markRemainingSkipped.mockClear();
     tourStoreMocks.markTourCompleted.mockClear();
+    projectStoreMocks.currentProject = { id: "project-1" };
   });
 
   afterEach(() => {
@@ -461,6 +474,47 @@ describe("useTourNavigation", () => {
       expect(tourStoreMocks.markTourCompleted).toHaveBeenCalled();
       expect(router.state.location.search.tour).toBeUndefined();
     });
+
+    it("finishing from the workflow screen returns the user to their project chat", async () => {
+      const useTourNavigation = await loadHook();
+      if (!useTourNavigation) {
+        expect.fail("useTourNavigation hook not implemented yet");
+        return;
+      }
+      // The tour's last spotlight steps live on the workflow builder, so this
+      // is where a user actually clicks "Finish".
+      const { result, router } = renderHookWithRouter(
+        () => useTourNavigation(),
+        ["/workflow/builtin%3A%2F%2Fget-it-right?tour=completion"]
+      );
+      await waitFor(() => expect(result.current).toBeDefined());
+      await act(async () => {
+        await result.current.completeAndAdvance();
+      });
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe("/project/project-1")
+      );
+      // Tour is over, not restarted.
+      expect(router.state.location.search.tour).toBeUndefined();
+    });
+
+    it("finishing with no project selected lands on the home route", async () => {
+      projectStoreMocks.currentProject = null;
+      const useTourNavigation = await loadHook();
+      if (!useTourNavigation) {
+        expect.fail("useTourNavigation hook not implemented yet");
+        return;
+      }
+      const { result, router } = renderHookWithRouter(
+        () => useTourNavigation(),
+        ["/workflow?tour=completion"]
+      );
+      await waitFor(() => expect(result.current).toBeDefined());
+      await act(async () => {
+        await result.current.completeAndAdvance();
+      });
+      await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+    });
   });
 
   describe("skipAll", () => {
@@ -484,6 +538,25 @@ describe("useTourNavigation", () => {
       expect(tourStoreMocks.markRemainingSkipped).toHaveBeenCalledTimes(1);
       expect(tourStoreMocks.markTourCompleted).toHaveBeenCalledTimes(1);
       expect(router.state.location.search.tour).toBeUndefined();
+    });
+
+    it("skipping from the workflow screen also returns the user to their chat", async () => {
+      const useTourNavigation = await loadHook();
+      if (!useTourNavigation) {
+        expect.fail("useTourNavigation hook not implemented yet");
+        return;
+      }
+      const { result, router } = renderHookWithRouter(
+        () => useTourNavigation(),
+        ["/workflow?tour=workflow-hub"]
+      );
+      await waitFor(() => expect(result.current).toBeDefined());
+      await act(async () => {
+        await result.current.skipAll();
+      });
+      await waitFor(() =>
+        expect(router.state.location.pathname).toBe("/project/project-1")
+      );
     });
   });
 });

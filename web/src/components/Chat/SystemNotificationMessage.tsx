@@ -74,7 +74,7 @@ export function SystemNotificationMessage({ message }: SystemNotificationMessage
             <div className="text-xs leading-tight text-foreground">
               {content}
             </div>
-            <div className="text-[10px] leading-tight text-muted-foreground flex-shrink-0">
+            <div className="text-2xs leading-tight text-muted-foreground flex-shrink-0">
               {formatTimestamp(message.createdAt || '')}
             </div>
           </div>

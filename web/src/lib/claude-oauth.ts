@@ -2,6 +2,7 @@ import * as Sentry from '@sentry/react'
 import { settingsGrpc } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
+import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
 import {
   InsecureContextError,
   base64UrlEncode,
@@ -93,12 +94,17 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
   const authorizeURLTemplate = url.toString().replace(encodeURIComponent('{redirect_uri}'), '{redirect_uri}')
 
   try {
-    // In Electron the daemon handles the localhost callback; in web mode
-    // the user runs `reliant auth serve` which exposes an HTTP endpoint.
+    // Desktop runs the callback receiver ITSELF (see lib/oauth-desktop.ts).
+    // It used to delegate to the daemon over one RPC held open across the
+    // user's browser round trip, which failed at ~15s and took the listener
+    // down with it. The daemon RPC remains only as the fallback for builds
+    // whose main process predates the local receiver.
     const isElectron = !!window.electronAPI
 
     const oauthResp = isElectron
-      ? await startOAuthViaDaemon(authorizeURLTemplate, options.signal)
+      ? supportsLocalProviderOAuth()
+        ? await startOAuthViaDesktop(authorizeURLTemplate, options.signal)
+        : await startOAuthViaDaemon(authorizeURLTemplate, options.signal)
       : await startOAuthViaLocalServer(authorizeURLTemplate, options.signal)
 
     // Validate state

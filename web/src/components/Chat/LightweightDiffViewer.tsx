@@ -60,6 +60,12 @@ const getFromHighlightCache = (key: string): string | undefined => {
 
 // Virtualization threshold - use virtual scrolling for diffs larger than this
 const VIRTUALIZATION_THRESHOLD = 100;
+// Fixed px, and deliberately not tied to the Appearance font-size preference:
+// the virtualizer converts scrollTop into a line index by dividing by this
+// value, so a line height that changed with the preference would desync the
+// windowing math from what is actually painted. Making this viewer scale means
+// measuring the real line box and feeding that to the virtualizer — a separate
+// change from the UI-wide font-size work.
 const LINE_HEIGHT = 16;
 const OVERSCAN = 10; // Render extra lines above/below viewport for smooth scrolling
 

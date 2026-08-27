@@ -270,4 +270,16 @@ func TestIsLazyStartServer(t *testing.T) {
 	if isLazyStartServer("some-user-server", config.MCPServer{Type: config.MCPStdio}) {
 		t.Fatal("arbitrary user server should not be lazy-start")
 	}
+
+	// A dir-scoped server is a tree indexer by declaration, and its SHARED
+	// client is the one entry no tool call ever routes to — every call resolves
+	// through the project's own client. Starting it eagerly held an indexer
+	// resident in whatever directory the daemon happened to be in, for the
+	// daemon's lifetime, for nothing.
+	if !isLazyStartServer("gopls", config.MCPServer{Type: config.MCPStdio, DirScoped: true}) {
+		t.Fatal("a dir-scoped stdio server should be lazy-start")
+	}
+	if isLazyStartServer("gopls", config.MCPServer{Type: config.MCPHTTP, DirScoped: true}) {
+		t.Fatal("lazy start is about a heavyweight subprocess; a non-stdio server has none")
+	}
 }

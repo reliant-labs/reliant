@@ -155,8 +155,8 @@ export function SearchableDropdown({
                 ? "px-1 h-6 justify-center w-6"
                 : "px-1.5 h-7 justify-center"
               : compact
-              ? "px-1.5 h-6 text-[10px] gap-1"
-              : "px-2 h-7 gap-1 text-[10px]"),
+              ? "px-1.5 h-6 text-2xs gap-1"
+              : "px-2 h-7 gap-1 text-2xs"),
             disabled && "opacity-50 cursor-not-allowed",
             !disabled && variant === "button" && "cursor-pointer hover:bg-[var(--chat-button-hover)]",
             !disabled && variant === "form" && "cursor-pointer hover:border-ring/40",
@@ -198,7 +198,7 @@ export function SearchableDropdown({
             <>
               <div className="flex items-center gap-1 flex-1 min-w-0">
                 {selectedOption?.icon}
-                <span className="font-medium text-[10px] truncate">
+                <span className="font-medium text-2xs truncate">
                   {selectedOption?.label || placeholder}
                 </span>
               </div>
@@ -322,7 +322,7 @@ export function SearchableDropdown({
                     <div key={groupName}>
                       {groupBy && groupName && (
                         <div className={cn(
-                          "px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide border-b border-border/20 bg-muted/30 text-muted-foreground"
+                          "px-2.5 py-1.5 text-2xs font-bold uppercase tracking-wide border-b border-border/20 bg-muted/30 text-muted-foreground"
                         )}
                         >
                           {groupName}
@@ -370,7 +370,7 @@ export function SearchableDropdown({
                                   </div>
                                   {option.description && (
                                     <div className={cn(
-                                      "text-[10px] leading-snug mt-0.5 line-clamp-2",
+                                      "text-2xs leading-snug mt-0.5 line-clamp-2",
                                       variant === "form"
                                         ? isSelected
                                           ? "text-primary/60"

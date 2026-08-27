@@ -22,17 +22,17 @@ function LoadToolRendererComponent({ ctx }: ToolContentProps) {
     <div className="tool-content-load-tool">
       <div className="px-2 py-1.5 flex items-center gap-2">
         <Wrench className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
-        <span className="text-[11px] font-medium text-foreground truncate">
+        <span className="text-xs font-medium text-foreground truncate">
           {toolName || 'Loading tool...'}
         </span>
         {result && (
           isError ? (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-warning/10 text-warning border border-warning/20">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-warning/10 text-warning border border-warning/20">
               {isDenied ? <XCircle className="w-2.5 h-2.5" /> : <AlertCircle className="w-2.5 h-2.5" />}
               {isDenied ? 'denied' : 'warning'}
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-success/10 text-success border border-success/20">
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-3xs font-medium bg-success/10 text-success border border-success/20">
               <CheckCircle className="w-2.5 h-2.5" />
               loaded
             </span>
@@ -41,7 +41,7 @@ function LoadToolRendererComponent({ ctx }: ToolContentProps) {
       </div>
       {/* Show denial/warning reason if present */}
       {isError && resultContent && (
-        <div data-testid="load-tool-warning-reason" className="px-2 pb-1.5 text-[10px] text-[hsl(var(--warning)/0.8)] truncate">
+        <div data-testid="load-tool-warning-reason" className="px-2 pb-1.5 text-2xs text-[hsl(var(--warning)/0.8)] truncate">
           {resultContent}
         </div>
       )}

@@ -151,7 +151,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
           <div className="min-w-0 space-y-1">
             <div className="flex items-center gap-2">
               <span className="text-base font-semibold text-foreground">Start something new</span>
-              <span className="rounded bg-primary/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-primary">
+              <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary">
                 Fastest
               </span>
             </div>

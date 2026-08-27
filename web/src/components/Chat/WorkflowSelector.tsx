@@ -181,7 +181,7 @@ export function WorkflowSelector({
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1.5 rounded-full transition-colors text-[10px] font-medium h-6",
+            "flex items-center gap-1.5 rounded-full transition-colors text-2xs font-medium h-6",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",
@@ -227,7 +227,7 @@ export function WorkflowSelector({
                 {/* Built-in Workflows Section */}
                 {builtinWorkflows.length > 0 && (
                   <>
-                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-b border-border/30">
+                    <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-b border-border/30">
                       Built-in Workflows
                     </div>
                     {builtinWorkflows.map((workflow) => {
@@ -262,7 +262,7 @@ export function WorkflowSelector({
                               )}
                             </div>
                             {workflow.description && typeof workflow.description === 'string' && (
-                              <div className="text-[10px] text-muted-foreground truncate">
+                              <div className="text-2xs text-muted-foreground truncate">
                                 {workflow.description}
                               </div>
                             )}
@@ -279,7 +279,7 @@ export function WorkflowSelector({
                     {builtinWorkflows.length > 0 && (
                       <div className="border-t border-border/30 my-1" />
                     )}
-                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-b border-border/30">
+                    <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground bg-muted/30 border-b border-border/30">
                       Custom Workflows
                     </div>
                     {customWorkflows.map((workflow) => {
@@ -314,7 +314,7 @@ export function WorkflowSelector({
                               )}
                             </div>
                             {workflow.description && typeof workflow.description === 'string' && (
-                              <div className="text-[10px] text-muted-foreground truncate">
+                              <div className="text-2xs text-muted-foreground truncate">
                                 {workflow.description}
                               </div>
                             )}

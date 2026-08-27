@@ -120,3 +120,45 @@ export async function navigateAfterOnboarding(): Promise<void> {
   ]);
   void router.navigate({ to: "/", search: { tour: ONBOARDING_STEPS[0].id } });
 }
+
+/**
+ * Where to send the user when the guided tour ENDS.
+ *
+ * Distinct from {@link navigateAfterOnboarding}, which STARTS the tour by
+ * putting `?tour=<first-step>` back in the URL — calling that on finish would
+ * restart the tour the user just completed.
+ *
+ * The tour's last steps spotlight the workflow builder, so simply clearing the
+ * `?tour` param left the user sitting on `/workflow/...`. Clearing the active
+ * chat (which the finish path already did) only makes sense if we also land
+ * them somewhere a chat can be started.
+ *
+ * Prefers the current project's route, matching CompletionStep's
+ * "Let's get started" button, and falls back to `/` when no project is
+ * selected — where ModernApp renders the picker.
+ *
+ * Returns navigate options rather than navigating, so the tour hook can drive
+ * the router it is actually mounted under while non-React callers use the
+ * global one. Both share this single definition of the destination.
+ */
+export function chatRouteAfterTour(
+  projectId: string | undefined,
+):
+  | { to: "/project/$projectId"; params: { projectId: string }; search: Record<string, never> }
+  | { to: "/"; search: Record<string, never> } {
+  if (projectId) {
+    return { to: "/project/$projectId", params: { projectId }, search: {} };
+  }
+  return { to: "/", search: {} };
+}
+
+/** Navigate to {@link chatRouteAfterTour} using the app's global router. */
+export async function navigateToChatAfterTour(): Promise<void> {
+  const [{ router }, { useProjectStore }] = await Promise.all([
+    import("@/routes"),
+    import("@/store/projectStore"),
+  ]);
+
+  const projectId = useProjectStore.getState().currentProject?.id;
+  void router.navigate(chatRouteAfterTour(projectId) as never);
+}

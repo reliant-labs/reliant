@@ -128,7 +128,7 @@ export function SettingsNavigation({
           return (
             <div key={group.label}>
               {!isCollapsed && (
-                <div className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
+                <div className="px-3 pb-1 pt-3 text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground/70">
                   {group.label}
                 </div>
               )}

@@ -1262,11 +1262,11 @@ function WorkflowBuilderInner({
         <div className="rounded-2xl border border-border/80 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur-sm">
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Steps</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Steps</div>
               <div className="text-lg font-semibold leading-none text-foreground">{nodes.length}</div>
             </div>
             <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">Edges</div>
+              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Edges</div>
               <div className="text-lg font-semibold leading-none text-foreground">{edges.length}</div>
             </div>
           </div>

@@ -19,7 +19,7 @@ func TestMapFinishReason(t *testing.T) {
 		{"stop", message.FinishReasonEndTurn},
 		{"length", message.FinishReasonMaxTokens},
 		{"tool_calls", message.FinishReasonToolUse},
-		{"content_filter", message.FinishReasonError},
+		{"content_filter", message.FinishReasonRefusal},
 		{"something_unknown", message.FinishReasonUnknown},
 		{"", message.FinishReasonUnknown},
 	}

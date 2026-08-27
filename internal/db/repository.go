@@ -340,6 +340,12 @@ type Repository interface {
 	// the row doesn't exist.
 	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
+	// DeleteStaleDaemonAttachments GCs attachment rows whose lease has not
+	// been renewed for olderThan. Rows are deleted on graceful teardown only,
+	// so a crashed/rescheduled gateway strands its rows forever; this is the
+	// TTL that bounds the leak. Driven by daemonstate.Derivation, the single
+	// writer to the table.
+	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	// ListFreshDaemonAttachmentsForUser returns the full attachment rows
@@ -347,9 +353,10 @@ type Repository interface {
 	// id-only view.
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*DaemonAttachment, error)
 	ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error)
-	// ListAllDaemonAttachments returns every live attachment row (any source).
-	// Used by the gateway's /flow-health endpoint to assert the connection
-	// registry has no stale (dead-stream) attachments.
+	// ListAllDaemonAttachments returns every attachment row (any source).
+	// Used by the gateway's /flow-health endpoint, which cross-checks the
+	// rows against the streams it actually holds — the rows alone cannot say
+	// whether a daemon is still expected to be there.
 	ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error)
 	UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error
 

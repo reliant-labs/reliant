@@ -42,6 +42,14 @@ service PresetService {
 
   // GetDefaultPreset retrieves the default preset for a workflow tag.
   rpc GetDefaultPreset(GetDefaultPresetRequest) returns (GetDefaultPresetResponse) {}
+
+  // GetDefaultPresetsBatch retrieves default presets for many workflows at once.
+  //
+  // The single-workflow GetDefaultPreset is per-agent by nature: a screen
+  // showing N agents asked for N workflows and issued N parallel RPCs. Client
+  // singleflight cannot collapse those — the args differ, so the keys differ.
+  // Batching is the only place the fan-out can actually be removed.
+  rpc GetDefaultPresetsBatch(GetDefaultPresetsBatchRequest) returns (GetDefaultPresetsBatchResponse) {}
 }
 
 // PresetInfo represents a workflow preset.
@@ -268,4 +276,31 @@ message GetDefaultPresetResponse {
   // Empty string key ("") = top-level/workflow-level inputs.
   // Example: {"": "general", "Proposer": "researcher", "Critic": "careful"}
   map<string, string> presets = 1;
+}
+
+// GetDefaultPresetsBatchRequest is the request for GetDefaultPresetsBatch.
+message GetDefaultPresetsBatchRequest {
+  // Project ID
+  string project_id = 1;
+
+  // Workflow names to resolve defaults for. Duplicates are collapsed.
+  repeated string workflow_names = 2;
+}
+
+// WorkflowDefaultPresets holds one workflow's group-to-preset defaults.
+//
+// A wrapper message is required because proto3 map values may not themselves
+// be maps, and the per-workflow result is a map of group name to preset name.
+message WorkflowDefaultPresets {
+  // Map of group name to default preset name.
+  // Empty string key ("") = top-level/workflow-level inputs.
+  map<string, string> presets = 1;
+}
+
+// GetDefaultPresetsBatchResponse is the response for GetDefaultPresetsBatch.
+message GetDefaultPresetsBatchResponse {
+  // Keyed by workflow name. A workflow that resolved to no defaults at all is
+  // omitted, matching GetDefaultPreset's "empty map" outcome for the same
+  // input — callers must treat a missing key as "no defaults", not an error.
+  map<string, WorkflowDefaultPresets> presets_by_workflow = 1;
 }

@@ -249,6 +249,10 @@ func (o *OpenaiClient) finishReason(reason string) message.FinishReason {
 		return message.FinishReasonMaxTokens
 	case "tool_calls":
 		return message.FinishReasonToolUse
+	case "content_filter":
+		// The OpenAI-shaped spelling of a provider refusal. Like Anthropic's
+		// "refusal" it can arrive with no content at all.
+		return message.FinishReasonRefusal
 	default:
 		return message.FinishReasonUnknown
 	}

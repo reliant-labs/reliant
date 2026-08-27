@@ -48,7 +48,7 @@ function RepoRow({ repo, onClone }: { repo: GitRepo; onClone: (repo: GitRepo) =>
             {repo.fullName}
           </span>
           {repo.private && (
-            <span className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-inset ring-border">
+            <span className="flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium text-muted-foreground ring-1 ring-inset ring-border">
               <Lock className="h-2.5 w-2.5" />
               Private
             </span>

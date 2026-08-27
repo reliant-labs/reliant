@@ -117,6 +117,37 @@ Or build directly with `go install`:
 go install github.com/reliant-labs/reliant/cmd/reliant@latest
 ```
 
+Either way the binary targets Reliant's hosted platform by default, so it works
+with no flags and no environment:
+
+```bash
+reliant daemon start --token
+```
+
+### Pointing at your own stack
+
+Self-hosting, or running against a local dev stack? Override the server, and the
+gateway when it isn't on the same host:
+
+```bash
+reliant daemon start --server http://localhost:8080 --gateway http://localhost:29190
+```
+
+Or set them once in your shell:
+
+```bash
+export RELIANT_SERVER_URL=http://localhost:8080
+export RELIANT_GATEWAY_URL=http://localhost:29190
+```
+
+<Note>
+The gateway is a **separate process** from the API server — it is the only one
+that serves the daemon's connection stream. On a cloud host the daemon derives
+the gateway from the server automatically; on localhost it cannot guess the
+port, so set `--gateway` (or `RELIANT_GATEWAY_URL`) explicitly. Without it the
+daemon dials the API server and fails with a 404.
+</Note>
+
 > See [CONTRIBUTING.md](https://github.com/reliant-labs/reliant/blob/main/CONTRIBUTING.md) for the full development setup guide.
 
 ## Post-Installation

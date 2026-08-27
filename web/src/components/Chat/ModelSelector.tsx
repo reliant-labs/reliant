@@ -132,7 +132,7 @@ function ModelSelectorComponent({
     return (
       <div
         className={`chat-button flex items-center text-sm bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] rounded border-2 border-[var(--chat-border)] font-semibold ${
-          compact ? "px-1.5 h-6 text-[10px]" : "px-3 py-1.5 w-full"
+          compact ? "px-1.5 h-6 text-2xs" : "px-3 py-1.5 w-full"
         }`}
         style={{ minHeight: compact ? "24px" : "auto" }}
       >

@@ -884,7 +884,7 @@ function ToolExecutionComponent({
               {formatToolCallDisplay(toolCall.name, resolvedWaitTarget.displayInput)}
             </span>
             <span className={cn(
-              "px-1.5 py-0.5 rounded text-[11px] font-medium shrink-0",
+              "px-1.5 py-0.5 rounded text-xs font-medium shrink-0",
               toolResult?.is_error ? "bg-warning/10 text-warning"
                 : hasFailed ? "bg-warning/10 text-warning"
                 : isCancelled ? "bg-muted text-muted-foreground"
@@ -901,7 +901,7 @@ function ToolExecutionComponent({
             {hasFileOpenAffordance && (
               <button
                 onClick={openPrimaryFile}
-                className="rounded px-1.5 py-0.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10"
+                className="rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                 title="Open file"
                 aria-label="Open file"
                 type="button"
@@ -951,7 +951,7 @@ function ToolExecutionComponent({
         {shouldShowApprovalUI && (
           <div className="px-2 py-2 border-t border-warning/20 bg-warning/5">
             {showRichContent && toolCall.input && <ToolContentArea ctx={renderContext} />}
-            <p className="text-[11px] font-medium text-warning mb-1.5">Approval required</p>
+            <p className="text-xs font-medium text-warning mb-1.5">Approval required</p>
             <div className={cn("flex gap-2", surface !== "desktop" && "flex-col")}>
               <button
                 onClick={handleApprove} aria-label="Approve tool execution"

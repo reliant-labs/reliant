@@ -276,5 +276,84 @@ func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
 	assert.True(t, sawCancelled, "UI must still be told the stream stopped")
 }
 
+// A cut-short turn must SAY it was cut short.
+//
+// The turn above returns zero tool calls, and the agent loop's while-condition
+// tests exactly that — so without a distinguishing bit, "the stream died
+// mid-flight" and "the model finished and had nothing left to do" are the same
+// turn as far as the loop can tell. It exited, the thread was marked completed,
+// and a spawned agent killed mid-edit was reported to its parent as a clean
+// success whose whole result was "Agent completed but produced no text
+// response" (chat 7da3935c-97ec-4843-af78-c3807fe336cb, thread 5e3fe370 —
+// cancelled 1.75s in with two edits already applied).
+//
+// Aborted is that bit. agent.yaml reads it as `outputs.aborted` and takes
+// another turn instead of declaring the agent done.
+func TestCallLLM_CancelledStreamReportsAborted(t *testing.T) {
+	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
+	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
+		return driver, nil
+	})
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
+	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+	activityInstance := NewCallLLMActivity(h.Repo(), &captureHub{}, nil, &staticConfigProvider{}, resolver, nil)
+
+	input := callLLMInput(chat.ID, chat.ID, "mock-model")
+	runCancelled := func(actCtx context.Context, input ActivityInput) (*CallLLMOutput, error) {
+		cancelCtx, cancel := context.WithCancel(actCtx)
+		defer cancel()
+		go func() {
+			<-driver.ready
+			cancel()
+		}()
+		return activityInstance.Execute(cancelCtx, input)
+	}
+
+	h.env.RegisterActivity(runCancelled)
+	val, err := h.env.ExecuteActivity(runCancelled, input)
+	require.NoError(t, err)
+
+	var output CallLLMOutput
+	require.NoError(t, val.Get(&output))
+
+	assert.True(t, output.Aborted,
+		"a turn whose stream was cancelled must report aborted, or the agent loop reads "+
+			"its zero tool calls as a clean finish and abandons the work mid-task")
+	assert.Empty(t, output.ToolCalls,
+		"precondition: this is exactly the shape that is ambiguous without the flag")
+}
+
+// The healthy path must NOT set aborted, or the loop would never exit — this
+// is the property that keeps the new term from becoming a wedge the way
+// pending_inbox once did.
+func TestCallLLM_CompletedStreamDoesNotReportAborted(t *testing.T) {
+	resolver := mockLLMDriverResolver()
+
+	h := NewIdempotencyTestHelper(t)
+	defer h.Cleanup()
+
+	ctx := context.Background()
+	project := h.CreateTestProject(ctx, "project-"+uuid.NewString(), "user-"+uuid.NewString())
+	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, project.UserID)
+	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+	activityInstance := NewCallLLMActivity(h.Repo(), &captureHub{}, nil, &staticConfigProvider{}, resolver, nil)
+
+	var output CallLLMOutput
+	require.NoError(t, h.ExecuteActivity(activityInstance.Execute,
+		callLLMInput(chat.ID, chat.ID, "mock-model"), &output))
+
+	assert.False(t, output.Aborted,
+		"a turn that streamed to completion is finished; reporting it aborted would keep "+
+			"the loop running forever")
+}
+
 // Compile-time check that the test hub satisfies the interface.
 var _ streaming.StreamingHub = (*captureHub)(nil)

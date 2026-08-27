@@ -233,7 +233,7 @@ export function ChatSettingsPopover({
           <div>
             {/* Header */}
             <div className="flex items-center px-3 py-2.5 border-b border-border/50 gap-2">
-              <h3 className="text-[13px] font-semibold text-foreground flex-1">
+              <h3 className="text-sm font-semibold text-foreground flex-1">
                 Chat Settings
               </h3>
               <button
@@ -248,7 +248,7 @@ export function ChatSettingsPopover({
             {modelKey && (
               <button
                 onClick={() => setCurrentPage("model")}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-foreground hover:bg-muted/50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors text-left"
               >
                 <div className="flex items-center gap-2.5">
                   <Box className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -274,7 +274,7 @@ export function ChatSettingsPopover({
             {presets && presets.length > 0 && (
               <button
                 onClick={() => setCurrentPage("preset")}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-foreground hover:bg-muted/50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors text-left"
               >
                 <div className="flex items-center gap-2.5">
                   <LayoutGrid className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -293,7 +293,7 @@ export function ChatSettingsPopover({
                 <div className="h-px bg-border/50 mx-0 my-1" />
 
                 {/* Mode section */}
-                <div className="px-4 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <div className="px-4 pt-2 pb-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70">
                   Execution Mode
                 </div>
                 <div className="px-4 pb-2.5 flex gap-1.5">
@@ -328,14 +328,14 @@ export function ChatSettingsPopover({
                 )}
                 <button
                   onClick={() => setCurrentPage("params")}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-[13px] text-foreground hover:bg-muted/50 transition-colors text-left"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors text-left"
                 >
                   <div className="flex items-center gap-2.5">
                     <Settings2 className="w-4 h-4 text-muted-foreground shrink-0" />
                     <span className="font-medium">More Settings</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
-                    <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-muted text-[10px] font-semibold">
+                    <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-muted text-2xs font-semibold">
                       {extraParamCount}
                     </span>
                     <ChevronRight className="w-3 h-3 text-muted-foreground/70" />

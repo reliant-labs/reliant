@@ -434,7 +434,7 @@ export function SelfHostedDaemonConnect({
             1. Generate an access token
           </span>
           {pat && (
-            <span className="text-[10px] uppercase tracking-wider text-emerald-500">
+            <span className="text-2xs uppercase tracking-wider text-emerald-500">
               Ready
             </span>
           )}
@@ -479,7 +479,7 @@ export function SelfHostedDaemonConnect({
           </button>
         )}
         {pat && (
-          <p className="text-[11px] text-yellow-600 dark:text-yellow-400">
+          <p className="text-xs text-yellow-600 dark:text-yellow-400">
             The token is shown once. Copy it now.
           </p>
         )}
@@ -498,7 +498,7 @@ export function SelfHostedDaemonConnect({
         */}
         {isElectron && cliInstalled === false && (
           <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
-            <p className="flex items-start gap-2 text-[11px] text-amber-700 dark:text-amber-300">
+            <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
               <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
               <span>
                 The <code className="font-mono">reliant</code> command is not on
@@ -523,7 +523,7 @@ export function SelfHostedDaemonConnect({
         )}
 
         {isElectron && cliInstalled === true && cliPath && (
-          <p className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
+          <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
             <Check className="h-3 w-3" />
             <span>
               <code className="font-mono">reliant</code> CLI installed at{" "}
@@ -536,13 +536,13 @@ export function SelfHostedDaemonConnect({
           {daemonStartCommand()}
         </code>
         {daemonStartCommandNeedsEditing() && (
-          <p className="text-[11px] text-yellow-600 dark:text-yellow-400">
+          <p className="text-xs text-yellow-600 dark:text-yellow-400">
             Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway address
             before running this. It is a separate process from the API server,
             so the daemon cannot infer it on localhost.
           </p>
         )}
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           The command will prompt you to paste the token.
           {isElectron && cliInstalled === false && (
             <>

@@ -73,10 +73,33 @@ func (a *FetchThreadResultActivity) Execute(ctx context.Context, input FetchThre
 		}, nil
 	}
 
-	content := result.Content
-	if content == "" {
-		content = "Agent completed but produced no text response"
+	// An agent whose last assistant message carried no text has not reported.
+	//
+	// This is the shape a truncated run leaves behind: the thread's final
+	// assistant message is tool-call-only (block_type=tool_use, content NULL),
+	// so joinTextBlocks returns "" — the agent was still working when it
+	// stopped. Saying "completed but produced no text response" with
+	// IsError:false told the parent the child had finished cleanly and simply
+	// had nothing to say, which is how a spawn killed mid-edit was reported as
+	// a success whose result was that sentence (chat
+	// 7da3935c-97ec-4843-af78-c3807fe336cb, thread 5e3fe370).
+	//
+	// The `!result.Found` branch above already treats "no assistant message"
+	// as an error; "an assistant message with nothing in it" is the same
+	// answer to the same question — the parent cannot act on either — so it
+	// reports the same way. The wording says what the parent can actually do
+	// about it, since this text IS the tool result the parent reads.
+	if result.Content == "" {
+		return FetchThreadResultOutput{
+			Content: "Agent stopped without reporting a result. Its last action was a tool " +
+				"call, so it was still working — this usually means the run was cut short " +
+				"rather than finished. Check the thread for the work it completed, and " +
+				"re-spawn or resume it if the task is unfinished.",
+			IsError: true,
+		}, nil
 	}
+
+	content := result.Content
 
 	if result.Warning != "" {
 		content = fmt.Sprintf("[WORKFLOW_WARNING] %s\n\nLast response before warning:\n%s", result.Warning, content)

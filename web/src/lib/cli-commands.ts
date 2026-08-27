@@ -67,21 +67,28 @@ export const GATEWAY_URL_PLACEHOLDER = "<your-daemon-gateway-url>";
  * True when the daemon needs explicit env-var overrides to dial the same
  * backend the web frontend uses.
  *
- * A build is treated as "managed" (CLI defaults already correct, emit a bare
- * command) ONLY when the deploy pipeline opts in by setting
- * VITE_CLI_DEFAULTS_BAKED=true at build time. That flag means the `reliant`
- * CLI binary shipped alongside this build was compiled with matching server /
- * gateway / admin / auth defaults.
+ * VITE_CLI_DEFAULTS_BAKED IS THE ONLY INPUT, and it comes from exactly one
+ * place: control-plane's deploy/kcl/lib/env.k (reliant_web_vite_env), which
+ * sets it for prod and withholds it from every other environment. It means the
+ * `reliant` binary shipped alongside this build was compiled with matching
+ * server / gateway / auth defaults baked into internal/builddefaults via
+ * -X ldflags, so the command needs no overrides.
  *
- * Everything else — `vite dev`, OSS self-hosted builds, any build without the
- * opt-in flag — is non-managed: the user gets explicit env overrides so the
- * daemon dials the right hosts. This is the neutral/self-host default; no
- * hosted hostname is hardcoded here.
+ * Everything without the flag — OSS self-hosted builds, a local dev stack,
+ * preprod — is non-managed and gets explicit overrides so the daemon dials the
+ * right hosts. No hosted hostname is hardcoded here.
+ *
+ * DO NOT ADD A SECOND CONDITION. This used to short-circuit on
+ * `import.meta.env.DEV` before reading the flag, which made Vite's dev/prod
+ * mode a competing authority over KCL's. `forge env up prod --target
+ * reliant-web` serves the PROD KCL env through `npm run dev`, so that surface
+ * rendered prod's hostnames and prod's publishable key behind five
+ * RELIANT_*= overrides — for a binary that already knew all of them. Whether
+ * the CLI is baked is a fact about the RELEASE, which only KCL knows; it is
+ * not observable from the renderer's build mode.
  */
 function isNonProd(): boolean {
-  if (import.meta.env.DEV) return true;
-  if (import.meta.env.VITE_CLI_DEFAULTS_BAKED === "true") return false;
-  return true;
+  return import.meta.env.VITE_CLI_DEFAULTS_BAKED !== "true";
 }
 
 // ---------------------------------------------------------------------------
@@ -89,22 +96,35 @@ function isNonProd(): boolean {
 // ---------------------------------------------------------------------------
 
 /**
- * Returns a shell env-var prefix string the user can paste verbatim, e.g.:
- *   RELIANT_SERVER_URL=… RELIANT_GATEWAY_URL=… RELIANT_API_BASE_URL=… \
- *   RELIANT_AUTH_URL=… RELIANT_AUTH_KEY=…
+ * Returns a shell env-var prefix the user can paste verbatim in front of
+ * `reliant daemon start`, e.g.:
+ *   RELIANT_SERVER_URL=… RELIANT_GATEWAY_URL=…
  *
- * Returns "" in production (CLI defaults already correct).
+ * Returns "" when the CLI's defaults are baked (see isNonProd).
  *
- * Mapping of daemon env vars → Vite-injected build vars:
+ * THESE ARE THE ONLY TWO VARIABLES THE DAEMON READS:
  *
- *   RELIANT_SERVER_URL    ← VITE_API_URL || VITE_GRPC_URL  (root.go:36)
- *   RELIANT_GATEWAY_URL   ← RELIANT_CONFIG.gatewayUrl || VITE_GATEWAY_URL (root.go:37)
- *   RELIANT_API_BASE_URL  ← VITE_CONTROL_PLANE_API_URL     (admin-server LLM proxy; internal/llm/drivers/reliant_base_url.go)
- *   RELIANT_AUTH_URL      ← VITE_SUPABASE_URL              (internal/auth/oauth.go:27)
- *   RELIANT_AUTH_KEY      ← VITE_SUPABASE_ANON_KEY         (oauth.go:31)
+ *   RELIANT_SERVER_URL   ← VITE_API_URL || VITE_GRPC_URL
+ *   RELIANT_GATEWAY_URL  ← RELIANT_CONFIG.gatewayUrl || VITE_GATEWAY_URL
  *
- * Only keys with a populated value are emitted. Order matches the daemon's
- * own config-loading order for readability.
+ * both via cmd/reliant/commands/connection.go, and they are the same two
+ * electron/src/backend-manager.js puts in the daemon's environment when it
+ * spawns one itself.
+ *
+ * Three variables used to be emitted here and are deliberately gone. Putting a
+ * variable in a copy-pasteable command asserts that it matters; when it does
+ * not, the reader has no way to tell, and it spreads:
+ *
+ *   RELIANT_API_BASE_URL  the managed-LLM proxy origin, read only by
+ *                         ResolveReliantBaseURL — whose callers all sit in the
+ *                         api-server and the temporal worker, never the
+ *                         daemon. Cloud envs get it from KCL on those
+ *                         workloads (deploy/kcl/lib/env.k).
+ *   RELIANT_AUTH_URL      OAuth provider config, read by internal/auth/oauth.go
+ *   RELIANT_AUTH_KEY      for the interactive login flow. `daemon start
+ *                         --token` takes a PAT on stdin and never runs it.
+ *
+ * Only keys with a populated value are emitted.
  */
 function envPrefix(): string {
   if (!isNonProd()) return "";
@@ -124,21 +144,6 @@ function envPrefix(): string {
     parts.push(`RELIANT_GATEWAY_URL=${gateway}`);
   } else if (needsExplicitGateway(server)) {
     parts.push(`RELIANT_GATEWAY_URL=${GATEWAY_URL_PLACEHOLDER}`);
-  }
-
-  const adminURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
-  if (adminURL) {
-    parts.push(`RELIANT_API_BASE_URL=${adminURL}`);
-  }
-
-  const authURL = import.meta.env.VITE_SUPABASE_URL;
-  if (authURL) {
-    parts.push(`RELIANT_AUTH_URL=${authURL}`);
-  }
-
-  const authKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  if (authKey) {
-    parts.push(`RELIANT_AUTH_KEY=${authKey}`);
   }
 
   return parts.length > 0 ? parts.join(" ") + " " : "";
@@ -162,9 +167,21 @@ export function daemonStartCommandNeedsEditing(): boolean {
   return daemonStartCommand().includes(GATEWAY_URL_PLACEHOLDER);
 }
 
-/** `reliant auth serve` with env overrides when needed. */
+/**
+ * `reliant auth serve` — always bare, in every environment.
+ *
+ * The command reads NO environment variables. It starts an HTTP server on
+ * localhost and hands whatever authorize-URL template it is POSTed to
+ * oauthcallback.Run; the token exchange happens over the authenticated backend
+ * gRPC, not here (cmd/reliant/commands/auth_serve.go). It exists only to bridge
+ * the localhost-callback gap for browser users.
+ *
+ * It previously carried the same five-variable prefix as `daemon start`, none
+ * of which it could act on — including the Supabase publishable key, pasted at
+ * a shell for no reason at all.
+ */
 export function authServeCommand(): string {
-  return `${envPrefix()}reliant auth serve`;
+  return "reliant auth serve";
 }
 
 /**

@@ -162,6 +162,54 @@ func resolveServer(cmd *cobra.Command) (*connection, error) {
 	return conn, nil
 }
 
+// resolveDaemonServer resolves the backend for the DAEMON commands
+// (`daemon start`, `daemon register`).
+//
+// It is resolveServer WITHOUT the context's server:
+//
+//	--server flag > RELIANT_SERVER_URL > compiled-in default > neutral fallback
+//
+// WHY THE CONTEXT IS EXCLUDED. A CLI context and a daemon credential are
+// different things that happen to both hold an `rlnt_pat_` string:
+//
+//   - A context pairs a server with an API-KIND token for user API calls made
+//     by this CLI (`project list`, `workflow watch`). Exactly one is active at
+//     a time, which is what `current_context` means.
+//   - A daemon credential is a DAEMON-KIND PAT for one backend, and the daemon
+//     credential store is deliberately MULTI-BACKEND — a map keyed by origin
+//     (endpointKey, internal/auth/daemon_file.go). One machine is expected to
+//     run daemons against prod and a dev stack at the same time.
+//
+// Reading the context here collapsed the second model into the first. Contexts
+// are usually auto-created rather than chosen — `auth token create` bootstraps
+// one named "default" pointing at whatever server it just talked to — so a
+// developer who once minted a token against a dev stack had a `default` context
+// pinning localhost, and a PROD-baked binary silently connected there. The
+// daemon then dialed the api-server for ToolsDaemonService, which only the
+// gateway serves, and failed with a 404 that named a context the user never
+// deliberately set.
+//
+// The daemon's own credential lookup already keys on the RESOLVED server
+// (ReadDaemonCredentials(conn.ServerURL)), so excluding the context here is
+// what lets one machine hold credentials for several backends and pick between
+// them with --server, instead of one global context silently choosing for all
+// of them.
+//
+// The gateway still resolves normally: --gateway > RELIANT_GATEWAY_URL >
+// compiled-in default > derived from the server.
+func resolveDaemonServer(cmd *cobra.Command) (*connection, error) {
+	server, serverFlagSet := persistentFlag(cmd, flagServer)
+	conn := &connection{ServerURL: server, ServerSource: sourceDefault}
+	if serverFlagSet {
+		conn.ServerSource = sourceFlag
+	} else if os.Getenv(envServerURL) != "" {
+		conn.ServerSource = sourceEnv
+	}
+
+	conn.GatewayURL, conn.GatewaySource = resolveGateway(cmd, conn)
+	return conn, nil
+}
+
 // resolveConnection resolves the server (see resolveServer) plus the bearer
 // token: the resolved context's rlnt_pat_ token, else the legacy auth-file JWT.
 // With no contexts configured this reduces exactly to the legacy behavior
