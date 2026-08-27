@@ -164,7 +164,7 @@ export function GitConnectionsSettings() {
                 <p className="text-xs text-muted-foreground">
                   Scopes: {scopes || "(none)"}
                 </p>
-                <p className="mt-1 text-[11px] text-muted-foreground">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Private org repos can still require org OAuth approval or SSO authorization.
                 </p>
               </div>
@@ -274,7 +274,7 @@ export function GitConnectionsSettings() {
                 placeholder="ghp_..."
                 className="w-full rounded border border-border bg-background px-3 py-2 font-mono text-xs"
               />
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Generate at{" "}
                 <a
                   href="https://github.com/settings/tokens/new?scopes=repo&description=Reliant"

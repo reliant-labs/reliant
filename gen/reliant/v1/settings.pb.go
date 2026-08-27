@@ -385,7 +385,7 @@ func (x PollCopilotDeviceAuthResponse_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PollCopilotDeviceAuthResponse_Status.Descriptor instead.
 func (PollCopilotDeviceAuthResponse_Status) EnumDescriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{42, 0}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{45, 0}
 }
 
 // Setting represents a user setting
@@ -1163,6 +1163,166 @@ func (x *DeleteSettingResponse) GetMessage() string {
 	return ""
 }
 
+// SettingWrite is a single key/value to upsert within a batch.
+type SettingWrite struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value string                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// Defaults to "string" when empty.
+	ValueType     *string `protobuf:"bytes,3,opt,name=value_type,json=valueType,proto3,oneof" json:"value_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SettingWrite) Reset() {
+	*x = SettingWrite{}
+	mi := &file_reliant_v1_settings_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SettingWrite) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SettingWrite) ProtoMessage() {}
+
+func (x *SettingWrite) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_settings_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SettingWrite.ProtoReflect.Descriptor instead.
+func (*SettingWrite) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SettingWrite) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *SettingWrite) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *SettingWrite) GetValueType() string {
+	if x != nil && x.ValueType != nil {
+		return *x.ValueType
+	}
+	return ""
+}
+
+type BatchUpsertSettingsRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Settings []*SettingWrite        `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty"`
+	// Applies to every entry in the batch — a batch is single-scoped so the
+	// handler can emit one refetch rather than one per scope.
+	ProjectId     *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchUpsertSettingsRequest) Reset() {
+	*x = BatchUpsertSettingsRequest{}
+	mi := &file_reliant_v1_settings_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchUpsertSettingsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchUpsertSettingsRequest) ProtoMessage() {}
+
+func (x *BatchUpsertSettingsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_settings_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchUpsertSettingsRequest.ProtoReflect.Descriptor instead.
+func (*BatchUpsertSettingsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BatchUpsertSettingsRequest) GetSettings() []*SettingWrite {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
+func (x *BatchUpsertSettingsRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
+}
+
+type BatchUpsertSettingsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Settings      []*Setting             `protobuf:"bytes,1,rep,name=settings,proto3" json:"settings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchUpsertSettingsResponse) Reset() {
+	*x = BatchUpsertSettingsResponse{}
+	mi := &file_reliant_v1_settings_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchUpsertSettingsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchUpsertSettingsResponse) ProtoMessage() {}
+
+func (x *BatchUpsertSettingsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_settings_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchUpsertSettingsResponse.ProtoReflect.Descriptor instead.
+func (*BatchUpsertSettingsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *BatchUpsertSettingsResponse) GetSettings() []*Setting {
+	if x != nil {
+		return x.Settings
+	}
+	return nil
+}
+
 type GetShortcutsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -1171,7 +1331,7 @@ type GetShortcutsRequest struct {
 
 func (x *GetShortcutsRequest) Reset() {
 	*x = GetShortcutsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[13]
+	mi := &file_reliant_v1_settings_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1183,7 +1343,7 @@ func (x *GetShortcutsRequest) String() string {
 func (*GetShortcutsRequest) ProtoMessage() {}
 
 func (x *GetShortcutsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[13]
+	mi := &file_reliant_v1_settings_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1196,7 +1356,7 @@ func (x *GetShortcutsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetShortcutsRequest.ProtoReflect.Descriptor instead.
 func (*GetShortcutsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{16}
 }
 
 type GetShortcutsResponse struct {
@@ -1208,7 +1368,7 @@ type GetShortcutsResponse struct {
 
 func (x *GetShortcutsResponse) Reset() {
 	*x = GetShortcutsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[14]
+	mi := &file_reliant_v1_settings_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1380,7 @@ func (x *GetShortcutsResponse) String() string {
 func (*GetShortcutsResponse) ProtoMessage() {}
 
 func (x *GetShortcutsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[14]
+	mi := &file_reliant_v1_settings_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1393,7 @@ func (x *GetShortcutsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetShortcutsResponse.ProtoReflect.Descriptor instead.
 func (*GetShortcutsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetShortcutsResponse) GetShortcuts() string {
@@ -1252,7 +1412,7 @@ type UpdateShortcutsRequest struct {
 
 func (x *UpdateShortcutsRequest) Reset() {
 	*x = UpdateShortcutsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[15]
+	mi := &file_reliant_v1_settings_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1264,7 +1424,7 @@ func (x *UpdateShortcutsRequest) String() string {
 func (*UpdateShortcutsRequest) ProtoMessage() {}
 
 func (x *UpdateShortcutsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[15]
+	mi := &file_reliant_v1_settings_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1277,7 +1437,7 @@ func (x *UpdateShortcutsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateShortcutsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateShortcutsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *UpdateShortcutsRequest) GetShortcuts() string {
@@ -1297,7 +1457,7 @@ type UpdateShortcutsResponse struct {
 
 func (x *UpdateShortcutsResponse) Reset() {
 	*x = UpdateShortcutsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[16]
+	mi := &file_reliant_v1_settings_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1309,7 +1469,7 @@ func (x *UpdateShortcutsResponse) String() string {
 func (*UpdateShortcutsResponse) ProtoMessage() {}
 
 func (x *UpdateShortcutsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[16]
+	mi := &file_reliant_v1_settings_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1322,7 +1482,7 @@ func (x *UpdateShortcutsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateShortcutsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateShortcutsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *UpdateShortcutsResponse) GetSuccess() bool {
@@ -1347,7 +1507,7 @@ type GetPreferencesRequest struct {
 
 func (x *GetPreferencesRequest) Reset() {
 	*x = GetPreferencesRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[17]
+	mi := &file_reliant_v1_settings_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1359,7 +1519,7 @@ func (x *GetPreferencesRequest) String() string {
 func (*GetPreferencesRequest) ProtoMessage() {}
 
 func (x *GetPreferencesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[17]
+	mi := &file_reliant_v1_settings_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1372,7 +1532,7 @@ func (x *GetPreferencesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPreferencesRequest.ProtoReflect.Descriptor instead.
 func (*GetPreferencesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{20}
 }
 
 type GetPreferencesResponse struct {
@@ -1409,7 +1569,7 @@ type GetPreferencesResponse struct {
 
 func (x *GetPreferencesResponse) Reset() {
 	*x = GetPreferencesResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[18]
+	mi := &file_reliant_v1_settings_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1421,7 +1581,7 @@ func (x *GetPreferencesResponse) String() string {
 func (*GetPreferencesResponse) ProtoMessage() {}
 
 func (x *GetPreferencesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[18]
+	mi := &file_reliant_v1_settings_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1434,7 +1594,7 @@ func (x *GetPreferencesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPreferencesResponse.ProtoReflect.Descriptor instead.
 func (*GetPreferencesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetPreferencesResponse) GetStreamingEnabled() bool {
@@ -1572,7 +1732,7 @@ type UpdatePreferencesRequest struct {
 
 func (x *UpdatePreferencesRequest) Reset() {
 	*x = UpdatePreferencesRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[19]
+	mi := &file_reliant_v1_settings_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1584,7 +1744,7 @@ func (x *UpdatePreferencesRequest) String() string {
 func (*UpdatePreferencesRequest) ProtoMessage() {}
 
 func (x *UpdatePreferencesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[19]
+	mi := &file_reliant_v1_settings_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1597,7 +1757,7 @@ func (x *UpdatePreferencesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePreferencesRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePreferencesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdatePreferencesRequest) GetStreamingEnabled() bool {
@@ -1701,7 +1861,7 @@ type UpdatePreferencesResponse struct {
 
 func (x *UpdatePreferencesResponse) Reset() {
 	*x = UpdatePreferencesResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[20]
+	mi := &file_reliant_v1_settings_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1713,7 +1873,7 @@ func (x *UpdatePreferencesResponse) String() string {
 func (*UpdatePreferencesResponse) ProtoMessage() {}
 
 func (x *UpdatePreferencesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[20]
+	mi := &file_reliant_v1_settings_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1726,7 +1886,7 @@ func (x *UpdatePreferencesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePreferencesResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePreferencesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdatePreferencesResponse) GetSuccess() bool {
@@ -1757,7 +1917,7 @@ type SetHiddenItemRequest struct {
 
 func (x *SetHiddenItemRequest) Reset() {
 	*x = SetHiddenItemRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[21]
+	mi := &file_reliant_v1_settings_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1769,7 +1929,7 @@ func (x *SetHiddenItemRequest) String() string {
 func (*SetHiddenItemRequest) ProtoMessage() {}
 
 func (x *SetHiddenItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[21]
+	mi := &file_reliant_v1_settings_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1782,7 +1942,7 @@ func (x *SetHiddenItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetHiddenItemRequest.ProtoReflect.Descriptor instead.
 func (*SetHiddenItemRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetHiddenItemRequest) GetItemType() HiddenItemType {
@@ -1816,7 +1976,7 @@ type SetHiddenItemResponse struct {
 
 func (x *SetHiddenItemResponse) Reset() {
 	*x = SetHiddenItemResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[22]
+	mi := &file_reliant_v1_settings_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1828,7 +1988,7 @@ func (x *SetHiddenItemResponse) String() string {
 func (*SetHiddenItemResponse) ProtoMessage() {}
 
 func (x *SetHiddenItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[22]
+	mi := &file_reliant_v1_settings_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1841,7 +2001,7 @@ func (x *SetHiddenItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetHiddenItemResponse.ProtoReflect.Descriptor instead.
 func (*SetHiddenItemResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetHiddenItemResponse) GetSuccess() bool {
@@ -1866,7 +2026,7 @@ type GetPromptsRequest struct {
 
 func (x *GetPromptsRequest) Reset() {
 	*x = GetPromptsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[23]
+	mi := &file_reliant_v1_settings_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1878,7 +2038,7 @@ func (x *GetPromptsRequest) String() string {
 func (*GetPromptsRequest) ProtoMessage() {}
 
 func (x *GetPromptsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[23]
+	mi := &file_reliant_v1_settings_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1891,7 +2051,7 @@ func (x *GetPromptsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPromptsRequest.ProtoReflect.Descriptor instead.
 func (*GetPromptsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{26}
 }
 
 type GetPromptsResponse struct {
@@ -1903,7 +2063,7 @@ type GetPromptsResponse struct {
 
 func (x *GetPromptsResponse) Reset() {
 	*x = GetPromptsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[24]
+	mi := &file_reliant_v1_settings_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1915,7 +2075,7 @@ func (x *GetPromptsResponse) String() string {
 func (*GetPromptsResponse) ProtoMessage() {}
 
 func (x *GetPromptsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[24]
+	mi := &file_reliant_v1_settings_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1928,7 +2088,7 @@ func (x *GetPromptsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPromptsResponse.ProtoReflect.Descriptor instead.
 func (*GetPromptsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *GetPromptsResponse) GetPrompts() []*UserPrompt {
@@ -1947,7 +2107,7 @@ type SavePromptsRequest struct {
 
 func (x *SavePromptsRequest) Reset() {
 	*x = SavePromptsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[25]
+	mi := &file_reliant_v1_settings_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1959,7 +2119,7 @@ func (x *SavePromptsRequest) String() string {
 func (*SavePromptsRequest) ProtoMessage() {}
 
 func (x *SavePromptsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[25]
+	mi := &file_reliant_v1_settings_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1972,7 +2132,7 @@ func (x *SavePromptsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavePromptsRequest.ProtoReflect.Descriptor instead.
 func (*SavePromptsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *SavePromptsRequest) GetPrompts() []*UserPrompt {
@@ -1993,7 +2153,7 @@ type SavePromptsResponse struct {
 
 func (x *SavePromptsResponse) Reset() {
 	*x = SavePromptsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[26]
+	mi := &file_reliant_v1_settings_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2005,7 +2165,7 @@ func (x *SavePromptsResponse) String() string {
 func (*SavePromptsResponse) ProtoMessage() {}
 
 func (x *SavePromptsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[26]
+	mi := &file_reliant_v1_settings_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2018,7 +2178,7 @@ func (x *SavePromptsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SavePromptsResponse.ProtoReflect.Descriptor instead.
 func (*SavePromptsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *SavePromptsResponse) GetSuccess() bool {
@@ -2050,7 +2210,7 @@ type GetProviderStatusesRequest struct {
 
 func (x *GetProviderStatusesRequest) Reset() {
 	*x = GetProviderStatusesRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[27]
+	mi := &file_reliant_v1_settings_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2062,7 +2222,7 @@ func (x *GetProviderStatusesRequest) String() string {
 func (*GetProviderStatusesRequest) ProtoMessage() {}
 
 func (x *GetProviderStatusesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[27]
+	mi := &file_reliant_v1_settings_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2075,7 +2235,7 @@ func (x *GetProviderStatusesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProviderStatusesRequest.ProtoReflect.Descriptor instead.
 func (*GetProviderStatusesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{30}
 }
 
 type GetProviderStatusesResponse struct {
@@ -2087,7 +2247,7 @@ type GetProviderStatusesResponse struct {
 
 func (x *GetProviderStatusesResponse) Reset() {
 	*x = GetProviderStatusesResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[28]
+	mi := &file_reliant_v1_settings_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2099,7 +2259,7 @@ func (x *GetProviderStatusesResponse) String() string {
 func (*GetProviderStatusesResponse) ProtoMessage() {}
 
 func (x *GetProviderStatusesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[28]
+	mi := &file_reliant_v1_settings_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2112,7 +2272,7 @@ func (x *GetProviderStatusesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProviderStatusesResponse.ProtoReflect.Descriptor instead.
 func (*GetProviderStatusesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetProviderStatusesResponse) GetProviders() []*ProviderStatus {
@@ -2132,7 +2292,7 @@ type UpdateProviderAPIKeyRequest struct {
 
 func (x *UpdateProviderAPIKeyRequest) Reset() {
 	*x = UpdateProviderAPIKeyRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[29]
+	mi := &file_reliant_v1_settings_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2144,7 +2304,7 @@ func (x *UpdateProviderAPIKeyRequest) String() string {
 func (*UpdateProviderAPIKeyRequest) ProtoMessage() {}
 
 func (x *UpdateProviderAPIKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[29]
+	mi := &file_reliant_v1_settings_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2157,7 +2317,7 @@ func (x *UpdateProviderAPIKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProviderAPIKeyRequest.ProtoReflect.Descriptor instead.
 func (*UpdateProviderAPIKeyRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *UpdateProviderAPIKeyRequest) GetProvider() string {
@@ -2184,7 +2344,7 @@ type UpdateProviderAPIKeyResponse struct {
 
 func (x *UpdateProviderAPIKeyResponse) Reset() {
 	*x = UpdateProviderAPIKeyResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[30]
+	mi := &file_reliant_v1_settings_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2196,7 +2356,7 @@ func (x *UpdateProviderAPIKeyResponse) String() string {
 func (*UpdateProviderAPIKeyResponse) ProtoMessage() {}
 
 func (x *UpdateProviderAPIKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[30]
+	mi := &file_reliant_v1_settings_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2209,7 +2369,7 @@ func (x *UpdateProviderAPIKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateProviderAPIKeyResponse.ProtoReflect.Descriptor instead.
 func (*UpdateProviderAPIKeyResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *UpdateProviderAPIKeyResponse) GetSuccess() bool {
@@ -2236,7 +2396,7 @@ type ValidateProviderAPIKeyRequest struct {
 
 func (x *ValidateProviderAPIKeyRequest) Reset() {
 	*x = ValidateProviderAPIKeyRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[31]
+	mi := &file_reliant_v1_settings_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2248,7 +2408,7 @@ func (x *ValidateProviderAPIKeyRequest) String() string {
 func (*ValidateProviderAPIKeyRequest) ProtoMessage() {}
 
 func (x *ValidateProviderAPIKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[31]
+	mi := &file_reliant_v1_settings_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2261,7 +2421,7 @@ func (x *ValidateProviderAPIKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateProviderAPIKeyRequest.ProtoReflect.Descriptor instead.
 func (*ValidateProviderAPIKeyRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ValidateProviderAPIKeyRequest) GetProvider() string {
@@ -2288,7 +2448,7 @@ type ValidateProviderAPIKeyResponse struct {
 
 func (x *ValidateProviderAPIKeyResponse) Reset() {
 	*x = ValidateProviderAPIKeyResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[32]
+	mi := &file_reliant_v1_settings_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2300,7 +2460,7 @@ func (x *ValidateProviderAPIKeyResponse) String() string {
 func (*ValidateProviderAPIKeyResponse) ProtoMessage() {}
 
 func (x *ValidateProviderAPIKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[32]
+	mi := &file_reliant_v1_settings_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2313,7 +2473,7 @@ func (x *ValidateProviderAPIKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateProviderAPIKeyResponse.ProtoReflect.Descriptor instead.
 func (*ValidateProviderAPIKeyResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ValidateProviderAPIKeyResponse) GetValid() bool {
@@ -2339,7 +2499,7 @@ type SyncReliantProviderRequest struct {
 
 func (x *SyncReliantProviderRequest) Reset() {
 	*x = SyncReliantProviderRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[33]
+	mi := &file_reliant_v1_settings_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2351,7 +2511,7 @@ func (x *SyncReliantProviderRequest) String() string {
 func (*SyncReliantProviderRequest) ProtoMessage() {}
 
 func (x *SyncReliantProviderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[33]
+	mi := &file_reliant_v1_settings_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2364,7 +2524,7 @@ func (x *SyncReliantProviderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncReliantProviderRequest.ProtoReflect.Descriptor instead.
 func (*SyncReliantProviderRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{33}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SyncReliantProviderRequest) GetForceRotate() bool {
@@ -2389,7 +2549,7 @@ type SyncReliantProviderResponse struct {
 
 func (x *SyncReliantProviderResponse) Reset() {
 	*x = SyncReliantProviderResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[34]
+	mi := &file_reliant_v1_settings_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2401,7 +2561,7 @@ func (x *SyncReliantProviderResponse) String() string {
 func (*SyncReliantProviderResponse) ProtoMessage() {}
 
 func (x *SyncReliantProviderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[34]
+	mi := &file_reliant_v1_settings_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2414,7 +2574,7 @@ func (x *SyncReliantProviderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SyncReliantProviderResponse.ProtoReflect.Descriptor instead.
 func (*SyncReliantProviderResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{34}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SyncReliantProviderResponse) GetSuccess() bool {
@@ -2477,7 +2637,7 @@ type CompleteCodexOAuthRequest struct {
 
 func (x *CompleteCodexOAuthRequest) Reset() {
 	*x = CompleteCodexOAuthRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[35]
+	mi := &file_reliant_v1_settings_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2489,7 +2649,7 @@ func (x *CompleteCodexOAuthRequest) String() string {
 func (*CompleteCodexOAuthRequest) ProtoMessage() {}
 
 func (x *CompleteCodexOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[35]
+	mi := &file_reliant_v1_settings_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2502,7 +2662,7 @@ func (x *CompleteCodexOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteCodexOAuthRequest.ProtoReflect.Descriptor instead.
 func (*CompleteCodexOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{35}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *CompleteCodexOAuthRequest) GetCode() string {
@@ -2536,7 +2696,7 @@ type CompleteCodexOAuthResponse struct {
 
 func (x *CompleteCodexOAuthResponse) Reset() {
 	*x = CompleteCodexOAuthResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[36]
+	mi := &file_reliant_v1_settings_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2548,7 +2708,7 @@ func (x *CompleteCodexOAuthResponse) String() string {
 func (*CompleteCodexOAuthResponse) ProtoMessage() {}
 
 func (x *CompleteCodexOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[36]
+	mi := &file_reliant_v1_settings_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2561,7 +2721,7 @@ func (x *CompleteCodexOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteCodexOAuthResponse.ProtoReflect.Descriptor instead.
 func (*CompleteCodexOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{36}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *CompleteCodexOAuthResponse) GetSuccess() bool {
@@ -2590,7 +2750,7 @@ type CompleteClaudeOAuthRequest struct {
 
 func (x *CompleteClaudeOAuthRequest) Reset() {
 	*x = CompleteClaudeOAuthRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[37]
+	mi := &file_reliant_v1_settings_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2602,7 +2762,7 @@ func (x *CompleteClaudeOAuthRequest) String() string {
 func (*CompleteClaudeOAuthRequest) ProtoMessage() {}
 
 func (x *CompleteClaudeOAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[37]
+	mi := &file_reliant_v1_settings_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2615,7 +2775,7 @@ func (x *CompleteClaudeOAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteClaudeOAuthRequest.ProtoReflect.Descriptor instead.
 func (*CompleteClaudeOAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{37}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *CompleteClaudeOAuthRequest) GetCode() string {
@@ -2656,7 +2816,7 @@ type CompleteClaudeOAuthResponse struct {
 
 func (x *CompleteClaudeOAuthResponse) Reset() {
 	*x = CompleteClaudeOAuthResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[38]
+	mi := &file_reliant_v1_settings_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2668,7 +2828,7 @@ func (x *CompleteClaudeOAuthResponse) String() string {
 func (*CompleteClaudeOAuthResponse) ProtoMessage() {}
 
 func (x *CompleteClaudeOAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[38]
+	mi := &file_reliant_v1_settings_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2681,7 +2841,7 @@ func (x *CompleteClaudeOAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteClaudeOAuthResponse.ProtoReflect.Descriptor instead.
 func (*CompleteClaudeOAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{38}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *CompleteClaudeOAuthResponse) GetSuccess() bool {
@@ -2706,7 +2866,7 @@ type StartCopilotDeviceAuthRequest struct {
 
 func (x *StartCopilotDeviceAuthRequest) Reset() {
 	*x = StartCopilotDeviceAuthRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[39]
+	mi := &file_reliant_v1_settings_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2718,7 +2878,7 @@ func (x *StartCopilotDeviceAuthRequest) String() string {
 func (*StartCopilotDeviceAuthRequest) ProtoMessage() {}
 
 func (x *StartCopilotDeviceAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[39]
+	mi := &file_reliant_v1_settings_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2731,7 +2891,7 @@ func (x *StartCopilotDeviceAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartCopilotDeviceAuthRequest.ProtoReflect.Descriptor instead.
 func (*StartCopilotDeviceAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{39}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{42}
 }
 
 type StartCopilotDeviceAuthResponse struct {
@@ -2747,7 +2907,7 @@ type StartCopilotDeviceAuthResponse struct {
 
 func (x *StartCopilotDeviceAuthResponse) Reset() {
 	*x = StartCopilotDeviceAuthResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[40]
+	mi := &file_reliant_v1_settings_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2759,7 +2919,7 @@ func (x *StartCopilotDeviceAuthResponse) String() string {
 func (*StartCopilotDeviceAuthResponse) ProtoMessage() {}
 
 func (x *StartCopilotDeviceAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[40]
+	mi := &file_reliant_v1_settings_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2772,7 +2932,7 @@ func (x *StartCopilotDeviceAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartCopilotDeviceAuthResponse.ProtoReflect.Descriptor instead.
 func (*StartCopilotDeviceAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{40}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *StartCopilotDeviceAuthResponse) GetDeviceCode() string {
@@ -2821,7 +2981,7 @@ type PollCopilotDeviceAuthRequest struct {
 
 func (x *PollCopilotDeviceAuthRequest) Reset() {
 	*x = PollCopilotDeviceAuthRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[41]
+	mi := &file_reliant_v1_settings_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2833,7 +2993,7 @@ func (x *PollCopilotDeviceAuthRequest) String() string {
 func (*PollCopilotDeviceAuthRequest) ProtoMessage() {}
 
 func (x *PollCopilotDeviceAuthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[41]
+	mi := &file_reliant_v1_settings_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2846,7 +3006,7 @@ func (x *PollCopilotDeviceAuthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollCopilotDeviceAuthRequest.ProtoReflect.Descriptor instead.
 func (*PollCopilotDeviceAuthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *PollCopilotDeviceAuthRequest) GetDeviceCode() string {
@@ -2873,7 +3033,7 @@ type PollCopilotDeviceAuthResponse struct {
 
 func (x *PollCopilotDeviceAuthResponse) Reset() {
 	*x = PollCopilotDeviceAuthResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[42]
+	mi := &file_reliant_v1_settings_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2885,7 +3045,7 @@ func (x *PollCopilotDeviceAuthResponse) String() string {
 func (*PollCopilotDeviceAuthResponse) ProtoMessage() {}
 
 func (x *PollCopilotDeviceAuthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[42]
+	mi := &file_reliant_v1_settings_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2898,7 +3058,7 @@ func (x *PollCopilotDeviceAuthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PollCopilotDeviceAuthResponse.ProtoReflect.Descriptor instead.
 func (*PollCopilotDeviceAuthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *PollCopilotDeviceAuthResponse) GetStatus() PollCopilotDeviceAuthResponse_Status {
@@ -2931,7 +3091,7 @@ type InstallSkillRequest struct {
 
 func (x *InstallSkillRequest) Reset() {
 	*x = InstallSkillRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[43]
+	mi := &file_reliant_v1_settings_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2943,7 +3103,7 @@ func (x *InstallSkillRequest) String() string {
 func (*InstallSkillRequest) ProtoMessage() {}
 
 func (x *InstallSkillRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[43]
+	mi := &file_reliant_v1_settings_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2956,7 +3116,7 @@ func (x *InstallSkillRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallSkillRequest.ProtoReflect.Descriptor instead.
 func (*InstallSkillRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *InstallSkillRequest) GetProjectId() string {
@@ -3036,7 +3196,7 @@ type SkillInstallResult struct {
 
 func (x *SkillInstallResult) Reset() {
 	*x = SkillInstallResult{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[44]
+	mi := &file_reliant_v1_settings_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3048,7 +3208,7 @@ func (x *SkillInstallResult) String() string {
 func (*SkillInstallResult) ProtoMessage() {}
 
 func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[44]
+	mi := &file_reliant_v1_settings_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3061,7 +3221,7 @@ func (x *SkillInstallResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillInstallResult.ProtoReflect.Descriptor instead.
 func (*SkillInstallResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *SkillInstallResult) GetSource() string {
@@ -3166,7 +3326,7 @@ type InstallSkillResponse struct {
 
 func (x *InstallSkillResponse) Reset() {
 	*x = InstallSkillResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[45]
+	mi := &file_reliant_v1_settings_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3178,7 +3338,7 @@ func (x *InstallSkillResponse) String() string {
 func (*InstallSkillResponse) ProtoMessage() {}
 
 func (x *InstallSkillResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[45]
+	mi := &file_reliant_v1_settings_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3191,7 +3351,7 @@ func (x *InstallSkillResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstallSkillResponse.ProtoReflect.Descriptor instead.
 func (*InstallSkillResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{45}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *InstallSkillResponse) GetSuccess() bool {
@@ -3232,7 +3392,7 @@ type InstalledSkill struct {
 
 func (x *InstalledSkill) Reset() {
 	*x = InstalledSkill{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[46]
+	mi := &file_reliant_v1_settings_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3244,7 +3404,7 @@ func (x *InstalledSkill) String() string {
 func (*InstalledSkill) ProtoMessage() {}
 
 func (x *InstalledSkill) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[46]
+	mi := &file_reliant_v1_settings_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3257,7 +3417,7 @@ func (x *InstalledSkill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InstalledSkill.ProtoReflect.Descriptor instead.
 func (*InstalledSkill) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{46}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *InstalledSkill) GetSkillId() string {
@@ -3334,7 +3494,7 @@ type ListInstalledSkillsRequest struct {
 
 func (x *ListInstalledSkillsRequest) Reset() {
 	*x = ListInstalledSkillsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[47]
+	mi := &file_reliant_v1_settings_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3346,7 +3506,7 @@ func (x *ListInstalledSkillsRequest) String() string {
 func (*ListInstalledSkillsRequest) ProtoMessage() {}
 
 func (x *ListInstalledSkillsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[47]
+	mi := &file_reliant_v1_settings_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3359,7 +3519,7 @@ func (x *ListInstalledSkillsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstalledSkillsRequest.ProtoReflect.Descriptor instead.
 func (*ListInstalledSkillsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{47}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ListInstalledSkillsRequest) GetProjectId() string {
@@ -3394,7 +3554,7 @@ type SkillDiscoveryDiagnostic struct {
 
 func (x *SkillDiscoveryDiagnostic) Reset() {
 	*x = SkillDiscoveryDiagnostic{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[48]
+	mi := &file_reliant_v1_settings_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3406,7 +3566,7 @@ func (x *SkillDiscoveryDiagnostic) String() string {
 func (*SkillDiscoveryDiagnostic) ProtoMessage() {}
 
 func (x *SkillDiscoveryDiagnostic) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[48]
+	mi := &file_reliant_v1_settings_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3419,7 +3579,7 @@ func (x *SkillDiscoveryDiagnostic) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillDiscoveryDiagnostic.ProtoReflect.Descriptor instead.
 func (*SkillDiscoveryDiagnostic) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{48}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SkillDiscoveryDiagnostic) GetPath() string {
@@ -3455,7 +3615,7 @@ type ListInstalledSkillsResponse struct {
 
 func (x *ListInstalledSkillsResponse) Reset() {
 	*x = ListInstalledSkillsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[49]
+	mi := &file_reliant_v1_settings_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3467,7 +3627,7 @@ func (x *ListInstalledSkillsResponse) String() string {
 func (*ListInstalledSkillsResponse) ProtoMessage() {}
 
 func (x *ListInstalledSkillsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[49]
+	mi := &file_reliant_v1_settings_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3480,7 +3640,7 @@ func (x *ListInstalledSkillsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListInstalledSkillsResponse.ProtoReflect.Descriptor instead.
 func (*ListInstalledSkillsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{49}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListInstalledSkillsResponse) GetSkills() []*InstalledSkill {
@@ -3521,7 +3681,7 @@ type GetInstalledSkillDefinitionRequest struct {
 
 func (x *GetInstalledSkillDefinitionRequest) Reset() {
 	*x = GetInstalledSkillDefinitionRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[50]
+	mi := &file_reliant_v1_settings_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3533,7 +3693,7 @@ func (x *GetInstalledSkillDefinitionRequest) String() string {
 func (*GetInstalledSkillDefinitionRequest) ProtoMessage() {}
 
 func (x *GetInstalledSkillDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[50]
+	mi := &file_reliant_v1_settings_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3546,7 +3706,7 @@ func (x *GetInstalledSkillDefinitionRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetInstalledSkillDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*GetInstalledSkillDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{50}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *GetInstalledSkillDefinitionRequest) GetProjectId() string {
@@ -3574,7 +3734,7 @@ type SkillAsset struct {
 
 func (x *SkillAsset) Reset() {
 	*x = SkillAsset{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[51]
+	mi := &file_reliant_v1_settings_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3586,7 +3746,7 @@ func (x *SkillAsset) String() string {
 func (*SkillAsset) ProtoMessage() {}
 
 func (x *SkillAsset) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[51]
+	mi := &file_reliant_v1_settings_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3599,7 +3759,7 @@ func (x *SkillAsset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkillAsset.ProtoReflect.Descriptor instead.
 func (*SkillAsset) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{51}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *SkillAsset) GetPath() string {
@@ -3635,7 +3795,7 @@ type GetInstalledSkillDefinitionResponse struct {
 
 func (x *GetInstalledSkillDefinitionResponse) Reset() {
 	*x = GetInstalledSkillDefinitionResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[52]
+	mi := &file_reliant_v1_settings_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3647,7 +3807,7 @@ func (x *GetInstalledSkillDefinitionResponse) String() string {
 func (*GetInstalledSkillDefinitionResponse) ProtoMessage() {}
 
 func (x *GetInstalledSkillDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[52]
+	mi := &file_reliant_v1_settings_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3660,7 +3820,7 @@ func (x *GetInstalledSkillDefinitionResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetInstalledSkillDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*GetInstalledSkillDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{52}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *GetInstalledSkillDefinitionResponse) GetSkillId() string {
@@ -3702,7 +3862,7 @@ type SetSkillEnabledRequest struct {
 
 func (x *SetSkillEnabledRequest) Reset() {
 	*x = SetSkillEnabledRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[53]
+	mi := &file_reliant_v1_settings_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3714,7 +3874,7 @@ func (x *SetSkillEnabledRequest) String() string {
 func (*SetSkillEnabledRequest) ProtoMessage() {}
 
 func (x *SetSkillEnabledRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[53]
+	mi := &file_reliant_v1_settings_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3727,7 +3887,7 @@ func (x *SetSkillEnabledRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSkillEnabledRequest.ProtoReflect.Descriptor instead.
 func (*SetSkillEnabledRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{53}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *SetSkillEnabledRequest) GetProjectId() string {
@@ -3763,7 +3923,7 @@ type SetSkillEnabledResponse struct {
 
 func (x *SetSkillEnabledResponse) Reset() {
 	*x = SetSkillEnabledResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[54]
+	mi := &file_reliant_v1_settings_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3775,7 +3935,7 @@ func (x *SetSkillEnabledResponse) String() string {
 func (*SetSkillEnabledResponse) ProtoMessage() {}
 
 func (x *SetSkillEnabledResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[54]
+	mi := &file_reliant_v1_settings_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3788,7 +3948,7 @@ func (x *SetSkillEnabledResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSkillEnabledResponse.ProtoReflect.Descriptor instead.
 func (*SetSkillEnabledResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{54}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *SetSkillEnabledResponse) GetSuccess() bool {
@@ -3834,7 +3994,7 @@ type RecommendedSkill struct {
 
 func (x *RecommendedSkill) Reset() {
 	*x = RecommendedSkill{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[55]
+	mi := &file_reliant_v1_settings_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3846,7 +4006,7 @@ func (x *RecommendedSkill) String() string {
 func (*RecommendedSkill) ProtoMessage() {}
 
 func (x *RecommendedSkill) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[55]
+	mi := &file_reliant_v1_settings_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3859,7 +4019,7 @@ func (x *RecommendedSkill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecommendedSkill.ProtoReflect.Descriptor instead.
 func (*RecommendedSkill) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{55}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *RecommendedSkill) GetId() string {
@@ -3922,7 +4082,7 @@ type ListRecommendedSkillsRequest struct {
 
 func (x *ListRecommendedSkillsRequest) Reset() {
 	*x = ListRecommendedSkillsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[56]
+	mi := &file_reliant_v1_settings_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3934,7 +4094,7 @@ func (x *ListRecommendedSkillsRequest) String() string {
 func (*ListRecommendedSkillsRequest) ProtoMessage() {}
 
 func (x *ListRecommendedSkillsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[56]
+	mi := &file_reliant_v1_settings_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3947,7 +4107,7 @@ func (x *ListRecommendedSkillsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRecommendedSkillsRequest.ProtoReflect.Descriptor instead.
 func (*ListRecommendedSkillsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{56}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ListRecommendedSkillsRequest) GetProjectId() string {
@@ -3982,7 +4142,7 @@ type ListRecommendedSkillsResponse struct {
 
 func (x *ListRecommendedSkillsResponse) Reset() {
 	*x = ListRecommendedSkillsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[57]
+	mi := &file_reliant_v1_settings_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3994,7 +4154,7 @@ func (x *ListRecommendedSkillsResponse) String() string {
 func (*ListRecommendedSkillsResponse) ProtoMessage() {}
 
 func (x *ListRecommendedSkillsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[57]
+	mi := &file_reliant_v1_settings_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4007,7 +4167,7 @@ func (x *ListRecommendedSkillsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRecommendedSkillsResponse.ProtoReflect.Descriptor instead.
 func (*ListRecommendedSkillsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{57}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ListRecommendedSkillsResponse) GetRecommended() []*RecommendedSkill {
@@ -4041,7 +4201,7 @@ type DeleteGlobalSkillRequest struct {
 
 func (x *DeleteGlobalSkillRequest) Reset() {
 	*x = DeleteGlobalSkillRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[58]
+	mi := &file_reliant_v1_settings_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4053,7 +4213,7 @@ func (x *DeleteGlobalSkillRequest) String() string {
 func (*DeleteGlobalSkillRequest) ProtoMessage() {}
 
 func (x *DeleteGlobalSkillRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[58]
+	mi := &file_reliant_v1_settings_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4066,7 +4226,7 @@ func (x *DeleteGlobalSkillRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGlobalSkillRequest.ProtoReflect.Descriptor instead.
 func (*DeleteGlobalSkillRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{58}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *DeleteGlobalSkillRequest) GetProjectId() string {
@@ -4093,7 +4253,7 @@ type DeleteGlobalSkillResponse struct {
 
 func (x *DeleteGlobalSkillResponse) Reset() {
 	*x = DeleteGlobalSkillResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[59]
+	mi := &file_reliant_v1_settings_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4105,7 +4265,7 @@ func (x *DeleteGlobalSkillResponse) String() string {
 func (*DeleteGlobalSkillResponse) ProtoMessage() {}
 
 func (x *DeleteGlobalSkillResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[59]
+	mi := &file_reliant_v1_settings_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4118,7 +4278,7 @@ func (x *DeleteGlobalSkillResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGlobalSkillResponse.ProtoReflect.Descriptor instead.
 func (*DeleteGlobalSkillResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{59}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *DeleteGlobalSkillResponse) GetSuccess() bool {
@@ -4143,7 +4303,7 @@ type GetPrivacySettingsRequest struct {
 
 func (x *GetPrivacySettingsRequest) Reset() {
 	*x = GetPrivacySettingsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[60]
+	mi := &file_reliant_v1_settings_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4155,7 +4315,7 @@ func (x *GetPrivacySettingsRequest) String() string {
 func (*GetPrivacySettingsRequest) ProtoMessage() {}
 
 func (x *GetPrivacySettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[60]
+	mi := &file_reliant_v1_settings_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4168,7 +4328,7 @@ func (x *GetPrivacySettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPrivacySettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetPrivacySettingsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{60}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{63}
 }
 
 type GetPrivacySettingsResponse struct {
@@ -4181,7 +4341,7 @@ type GetPrivacySettingsResponse struct {
 
 func (x *GetPrivacySettingsResponse) Reset() {
 	*x = GetPrivacySettingsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[61]
+	mi := &file_reliant_v1_settings_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4193,7 +4353,7 @@ func (x *GetPrivacySettingsResponse) String() string {
 func (*GetPrivacySettingsResponse) ProtoMessage() {}
 
 func (x *GetPrivacySettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[61]
+	mi := &file_reliant_v1_settings_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4206,7 +4366,7 @@ func (x *GetPrivacySettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPrivacySettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetPrivacySettingsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{61}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *GetPrivacySettingsResponse) GetAnalyticsEnabled() bool {
@@ -4233,7 +4393,7 @@ type UpdatePrivacySettingsRequest struct {
 
 func (x *UpdatePrivacySettingsRequest) Reset() {
 	*x = UpdatePrivacySettingsRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[62]
+	mi := &file_reliant_v1_settings_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4245,7 +4405,7 @@ func (x *UpdatePrivacySettingsRequest) String() string {
 func (*UpdatePrivacySettingsRequest) ProtoMessage() {}
 
 func (x *UpdatePrivacySettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[62]
+	mi := &file_reliant_v1_settings_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4258,7 +4418,7 @@ func (x *UpdatePrivacySettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePrivacySettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePrivacySettingsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{62}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *UpdatePrivacySettingsRequest) GetAnalyticsEnabled() bool {
@@ -4288,7 +4448,7 @@ type UpdatePrivacySettingsResponse struct {
 
 func (x *UpdatePrivacySettingsResponse) Reset() {
 	*x = UpdatePrivacySettingsResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[63]
+	mi := &file_reliant_v1_settings_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4300,7 +4460,7 @@ func (x *UpdatePrivacySettingsResponse) String() string {
 func (*UpdatePrivacySettingsResponse) ProtoMessage() {}
 
 func (x *UpdatePrivacySettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[63]
+	mi := &file_reliant_v1_settings_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4313,7 +4473,7 @@ func (x *UpdatePrivacySettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePrivacySettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePrivacySettingsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{63}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *UpdatePrivacySettingsResponse) GetSuccess() bool {
@@ -4369,7 +4529,7 @@ type ConfigError struct {
 
 func (x *ConfigError) Reset() {
 	*x = ConfigError{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[64]
+	mi := &file_reliant_v1_settings_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4381,7 +4541,7 @@ func (x *ConfigError) String() string {
 func (*ConfigError) ProtoMessage() {}
 
 func (x *ConfigError) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[64]
+	mi := &file_reliant_v1_settings_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4394,7 +4554,7 @@ func (x *ConfigError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfigError.ProtoReflect.Descriptor instead.
 func (*ConfigError) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{64}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ConfigError) GetType() string {
@@ -4444,7 +4604,7 @@ type GetConfigHealthRequest struct {
 
 func (x *GetConfigHealthRequest) Reset() {
 	*x = GetConfigHealthRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[65]
+	mi := &file_reliant_v1_settings_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4456,7 +4616,7 @@ func (x *GetConfigHealthRequest) String() string {
 func (*GetConfigHealthRequest) ProtoMessage() {}
 
 func (x *GetConfigHealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[65]
+	mi := &file_reliant_v1_settings_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4469,7 +4629,7 @@ func (x *GetConfigHealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigHealthRequest.ProtoReflect.Descriptor instead.
 func (*GetConfigHealthRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{65}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *GetConfigHealthRequest) GetProjectId() string {
@@ -4499,7 +4659,7 @@ type GetConfigHealthResponse struct {
 
 func (x *GetConfigHealthResponse) Reset() {
 	*x = GetConfigHealthResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[66]
+	mi := &file_reliant_v1_settings_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4511,7 +4671,7 @@ func (x *GetConfigHealthResponse) String() string {
 func (*GetConfigHealthResponse) ProtoMessage() {}
 
 func (x *GetConfigHealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[66]
+	mi := &file_reliant_v1_settings_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4524,7 +4684,7 @@ func (x *GetConfigHealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetConfigHealthResponse.ProtoReflect.Descriptor instead.
 func (*GetConfigHealthResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{66}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *GetConfigHealthResponse) GetErrors() []*ConfigError {
@@ -4558,7 +4718,7 @@ type TrackPageVisitedRequest struct {
 
 func (x *TrackPageVisitedRequest) Reset() {
 	*x = TrackPageVisitedRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[67]
+	mi := &file_reliant_v1_settings_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4570,7 +4730,7 @@ func (x *TrackPageVisitedRequest) String() string {
 func (*TrackPageVisitedRequest) ProtoMessage() {}
 
 func (x *TrackPageVisitedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[67]
+	mi := &file_reliant_v1_settings_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4583,7 +4743,7 @@ func (x *TrackPageVisitedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrackPageVisitedRequest.ProtoReflect.Descriptor instead.
 func (*TrackPageVisitedRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{67}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *TrackPageVisitedRequest) GetPageName() string {
@@ -4609,7 +4769,7 @@ type TrackPageVisitedResponse struct {
 
 func (x *TrackPageVisitedResponse) Reset() {
 	*x = TrackPageVisitedResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[68]
+	mi := &file_reliant_v1_settings_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4621,7 +4781,7 @@ func (x *TrackPageVisitedResponse) String() string {
 func (*TrackPageVisitedResponse) ProtoMessage() {}
 
 func (x *TrackPageVisitedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[68]
+	mi := &file_reliant_v1_settings_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4634,7 +4794,7 @@ func (x *TrackPageVisitedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrackPageVisitedResponse.ProtoReflect.Descriptor instead.
 func (*TrackPageVisitedResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{68}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *TrackPageVisitedResponse) GetSuccess() bool {
@@ -4658,7 +4818,7 @@ type TrackOnboardingEventRequest struct {
 
 func (x *TrackOnboardingEventRequest) Reset() {
 	*x = TrackOnboardingEventRequest{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[69]
+	mi := &file_reliant_v1_settings_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4670,7 +4830,7 @@ func (x *TrackOnboardingEventRequest) String() string {
 func (*TrackOnboardingEventRequest) ProtoMessage() {}
 
 func (x *TrackOnboardingEventRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[69]
+	mi := &file_reliant_v1_settings_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4683,7 +4843,7 @@ func (x *TrackOnboardingEventRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrackOnboardingEventRequest.ProtoReflect.Descriptor instead.
 func (*TrackOnboardingEventRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{69}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *TrackOnboardingEventRequest) GetEventType() string {
@@ -4737,7 +4897,7 @@ type TrackOnboardingEventResponse struct {
 
 func (x *TrackOnboardingEventResponse) Reset() {
 	*x = TrackOnboardingEventResponse{}
-	mi := &file_reliant_v1_settings_proto_msgTypes[70]
+	mi := &file_reliant_v1_settings_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4749,7 +4909,7 @@ func (x *TrackOnboardingEventResponse) String() string {
 func (*TrackOnboardingEventResponse) ProtoMessage() {}
 
 func (x *TrackOnboardingEventResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_settings_proto_msgTypes[70]
+	mi := &file_reliant_v1_settings_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4762,7 +4922,7 @@ func (x *TrackOnboardingEventResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrackOnboardingEventResponse.ProtoReflect.Descriptor instead.
 func (*TrackOnboardingEventResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{70}
+	return file_reliant_v1_settings_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *TrackOnboardingEventResponse) GetSuccess() bool {
@@ -4857,7 +5017,20 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\v_project_id\"K\n" +
 	"\x15DeleteSettingResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x15\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"i\n" +
+	"\fSettingWrite\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\"\n" +
+	"\n" +
+	"value_type\x18\x03 \x01(\tH\x00R\tvalueType\x88\x01\x01B\r\n" +
+	"\v_value_type\"\x85\x01\n" +
+	"\x1aBatchUpsertSettingsRequest\x124\n" +
+	"\bsettings\x18\x01 \x03(\v2\x18.reliant.v1.SettingWriteR\bsettings\x12\"\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tH\x00R\tprojectId\x88\x01\x01B\r\n" +
+	"\v_project_id\"N\n" +
+	"\x1bBatchUpsertSettingsResponse\x12/\n" +
+	"\bsettings\x18\x01 \x03(\v2\x13.reliant.v1.SettingR\bsettings\"\x15\n" +
 	"\x13GetShortcutsRequest\"4\n" +
 	"\x14GetShortcutsResponse\x12\x1c\n" +
 	"\tshortcuts\x18\x01 \x01(\tR\tshortcuts\"6\n" +
@@ -5207,14 +5380,15 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x0fSkillSourceType\x12!\n" +
 	"\x1dSKILL_SOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17SKILL_SOURCE_TYPE_LOCAL\x10\x01\x12\x19\n" +
-	"\x15SKILL_SOURCE_TYPE_GIT\x10\x022\x87\x18\n" +
+	"\x15SKILL_SOURCE_TYPE_GIT\x10\x022\xf1\x18\n" +
 	"\x0fSettingsService\x12V\n" +
 	"\rCreateSetting\x12 .reliant.v1.CreateSettingRequest\x1a!.reliant.v1.CreateSettingResponse\"\x00\x12S\n" +
 	"\fListSettings\x12\x1f.reliant.v1.ListSettingsRequest\x1a .reliant.v1.ListSettingsResponse\"\x00\x12M\n" +
 	"\n" +
 	"GetSetting\x12\x1d.reliant.v1.GetSettingRequest\x1a\x1e.reliant.v1.GetSettingResponse\"\x00\x12V\n" +
 	"\rUpdateSetting\x12 .reliant.v1.UpdateSettingRequest\x1a!.reliant.v1.UpdateSettingResponse\"\x00\x12V\n" +
-	"\rDeleteSetting\x12 .reliant.v1.DeleteSettingRequest\x1a!.reliant.v1.DeleteSettingResponse\"\x00\x12S\n" +
+	"\rDeleteSetting\x12 .reliant.v1.DeleteSettingRequest\x1a!.reliant.v1.DeleteSettingResponse\"\x00\x12h\n" +
+	"\x13BatchUpsertSettings\x12&.reliant.v1.BatchUpsertSettingsRequest\x1a'.reliant.v1.BatchUpsertSettingsResponse\"\x00\x12S\n" +
 	"\fGetShortcuts\x12\x1f.reliant.v1.GetShortcutsRequest\x1a .reliant.v1.GetShortcutsResponse\"\x00\x12\\\n" +
 	"\x0fUpdateShortcuts\x12\".reliant.v1.UpdateShortcutsRequest\x1a#.reliant.v1.UpdateShortcutsResponse\"\x00\x12Y\n" +
 	"\x0eGetPreferences\x12!.reliant.v1.GetPreferencesRequest\x1a\".reliant.v1.GetPreferencesResponse\"\x00\x12b\n" +
@@ -5256,7 +5430,7 @@ func file_reliant_v1_settings_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_settings_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
-var file_reliant_v1_settings_proto_msgTypes = make([]protoimpl.MessageInfo, 74)
+var file_reliant_v1_settings_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
 var file_reliant_v1_settings_proto_goTypes = []any{
 	(ConfigSeverity)(0),                         // 0: reliant.v1.ConfigSeverity
 	(HiddenItemType)(0),                         // 1: reliant.v1.HiddenItemType
@@ -5278,170 +5452,177 @@ var file_reliant_v1_settings_proto_goTypes = []any{
 	(*UpdateSettingResponse)(nil),               // 17: reliant.v1.UpdateSettingResponse
 	(*DeleteSettingRequest)(nil),                // 18: reliant.v1.DeleteSettingRequest
 	(*DeleteSettingResponse)(nil),               // 19: reliant.v1.DeleteSettingResponse
-	(*GetShortcutsRequest)(nil),                 // 20: reliant.v1.GetShortcutsRequest
-	(*GetShortcutsResponse)(nil),                // 21: reliant.v1.GetShortcutsResponse
-	(*UpdateShortcutsRequest)(nil),              // 22: reliant.v1.UpdateShortcutsRequest
-	(*UpdateShortcutsResponse)(nil),             // 23: reliant.v1.UpdateShortcutsResponse
-	(*GetPreferencesRequest)(nil),               // 24: reliant.v1.GetPreferencesRequest
-	(*GetPreferencesResponse)(nil),              // 25: reliant.v1.GetPreferencesResponse
-	(*UpdatePreferencesRequest)(nil),            // 26: reliant.v1.UpdatePreferencesRequest
-	(*UpdatePreferencesResponse)(nil),           // 27: reliant.v1.UpdatePreferencesResponse
-	(*SetHiddenItemRequest)(nil),                // 28: reliant.v1.SetHiddenItemRequest
-	(*SetHiddenItemResponse)(nil),               // 29: reliant.v1.SetHiddenItemResponse
-	(*GetPromptsRequest)(nil),                   // 30: reliant.v1.GetPromptsRequest
-	(*GetPromptsResponse)(nil),                  // 31: reliant.v1.GetPromptsResponse
-	(*SavePromptsRequest)(nil),                  // 32: reliant.v1.SavePromptsRequest
-	(*SavePromptsResponse)(nil),                 // 33: reliant.v1.SavePromptsResponse
-	(*GetProviderStatusesRequest)(nil),          // 34: reliant.v1.GetProviderStatusesRequest
-	(*GetProviderStatusesResponse)(nil),         // 35: reliant.v1.GetProviderStatusesResponse
-	(*UpdateProviderAPIKeyRequest)(nil),         // 36: reliant.v1.UpdateProviderAPIKeyRequest
-	(*UpdateProviderAPIKeyResponse)(nil),        // 37: reliant.v1.UpdateProviderAPIKeyResponse
-	(*ValidateProviderAPIKeyRequest)(nil),       // 38: reliant.v1.ValidateProviderAPIKeyRequest
-	(*ValidateProviderAPIKeyResponse)(nil),      // 39: reliant.v1.ValidateProviderAPIKeyResponse
-	(*SyncReliantProviderRequest)(nil),          // 40: reliant.v1.SyncReliantProviderRequest
-	(*SyncReliantProviderResponse)(nil),         // 41: reliant.v1.SyncReliantProviderResponse
-	(*CompleteCodexOAuthRequest)(nil),           // 42: reliant.v1.CompleteCodexOAuthRequest
-	(*CompleteCodexOAuthResponse)(nil),          // 43: reliant.v1.CompleteCodexOAuthResponse
-	(*CompleteClaudeOAuthRequest)(nil),          // 44: reliant.v1.CompleteClaudeOAuthRequest
-	(*CompleteClaudeOAuthResponse)(nil),         // 45: reliant.v1.CompleteClaudeOAuthResponse
-	(*StartCopilotDeviceAuthRequest)(nil),       // 46: reliant.v1.StartCopilotDeviceAuthRequest
-	(*StartCopilotDeviceAuthResponse)(nil),      // 47: reliant.v1.StartCopilotDeviceAuthResponse
-	(*PollCopilotDeviceAuthRequest)(nil),        // 48: reliant.v1.PollCopilotDeviceAuthRequest
-	(*PollCopilotDeviceAuthResponse)(nil),       // 49: reliant.v1.PollCopilotDeviceAuthResponse
-	(*InstallSkillRequest)(nil),                 // 50: reliant.v1.InstallSkillRequest
-	(*SkillInstallResult)(nil),                  // 51: reliant.v1.SkillInstallResult
-	(*InstallSkillResponse)(nil),                // 52: reliant.v1.InstallSkillResponse
-	(*InstalledSkill)(nil),                      // 53: reliant.v1.InstalledSkill
-	(*ListInstalledSkillsRequest)(nil),          // 54: reliant.v1.ListInstalledSkillsRequest
-	(*SkillDiscoveryDiagnostic)(nil),            // 55: reliant.v1.SkillDiscoveryDiagnostic
-	(*ListInstalledSkillsResponse)(nil),         // 56: reliant.v1.ListInstalledSkillsResponse
-	(*GetInstalledSkillDefinitionRequest)(nil),  // 57: reliant.v1.GetInstalledSkillDefinitionRequest
-	(*SkillAsset)(nil),                          // 58: reliant.v1.SkillAsset
-	(*GetInstalledSkillDefinitionResponse)(nil), // 59: reliant.v1.GetInstalledSkillDefinitionResponse
-	(*SetSkillEnabledRequest)(nil),              // 60: reliant.v1.SetSkillEnabledRequest
-	(*SetSkillEnabledResponse)(nil),             // 61: reliant.v1.SetSkillEnabledResponse
-	(*RecommendedSkill)(nil),                    // 62: reliant.v1.RecommendedSkill
-	(*ListRecommendedSkillsRequest)(nil),        // 63: reliant.v1.ListRecommendedSkillsRequest
-	(*ListRecommendedSkillsResponse)(nil),       // 64: reliant.v1.ListRecommendedSkillsResponse
-	(*DeleteGlobalSkillRequest)(nil),            // 65: reliant.v1.DeleteGlobalSkillRequest
-	(*DeleteGlobalSkillResponse)(nil),           // 66: reliant.v1.DeleteGlobalSkillResponse
-	(*GetPrivacySettingsRequest)(nil),           // 67: reliant.v1.GetPrivacySettingsRequest
-	(*GetPrivacySettingsResponse)(nil),          // 68: reliant.v1.GetPrivacySettingsResponse
-	(*UpdatePrivacySettingsRequest)(nil),        // 69: reliant.v1.UpdatePrivacySettingsRequest
-	(*UpdatePrivacySettingsResponse)(nil),       // 70: reliant.v1.UpdatePrivacySettingsResponse
-	(*ConfigError)(nil),                         // 71: reliant.v1.ConfigError
-	(*GetConfigHealthRequest)(nil),              // 72: reliant.v1.GetConfigHealthRequest
-	(*GetConfigHealthResponse)(nil),             // 73: reliant.v1.GetConfigHealthResponse
-	(*TrackPageVisitedRequest)(nil),             // 74: reliant.v1.TrackPageVisitedRequest
-	(*TrackPageVisitedResponse)(nil),            // 75: reliant.v1.TrackPageVisitedResponse
-	(*TrackOnboardingEventRequest)(nil),         // 76: reliant.v1.TrackOnboardingEventRequest
-	(*TrackOnboardingEventResponse)(nil),        // 77: reliant.v1.TrackOnboardingEventResponse
-	nil,                                         // 78: reliant.v1.GetPreferencesResponse.AdditionalEntry
-	nil,                                         // 79: reliant.v1.UpdatePreferencesRequest.AdditionalEntry
-	nil,                                         // 80: reliant.v1.ConfigError.DetailsEntry
-	(ConfigScope)(0),                            // 81: reliant.v1.ConfigScope
+	(*SettingWrite)(nil),                        // 20: reliant.v1.SettingWrite
+	(*BatchUpsertSettingsRequest)(nil),          // 21: reliant.v1.BatchUpsertSettingsRequest
+	(*BatchUpsertSettingsResponse)(nil),         // 22: reliant.v1.BatchUpsertSettingsResponse
+	(*GetShortcutsRequest)(nil),                 // 23: reliant.v1.GetShortcutsRequest
+	(*GetShortcutsResponse)(nil),                // 24: reliant.v1.GetShortcutsResponse
+	(*UpdateShortcutsRequest)(nil),              // 25: reliant.v1.UpdateShortcutsRequest
+	(*UpdateShortcutsResponse)(nil),             // 26: reliant.v1.UpdateShortcutsResponse
+	(*GetPreferencesRequest)(nil),               // 27: reliant.v1.GetPreferencesRequest
+	(*GetPreferencesResponse)(nil),              // 28: reliant.v1.GetPreferencesResponse
+	(*UpdatePreferencesRequest)(nil),            // 29: reliant.v1.UpdatePreferencesRequest
+	(*UpdatePreferencesResponse)(nil),           // 30: reliant.v1.UpdatePreferencesResponse
+	(*SetHiddenItemRequest)(nil),                // 31: reliant.v1.SetHiddenItemRequest
+	(*SetHiddenItemResponse)(nil),               // 32: reliant.v1.SetHiddenItemResponse
+	(*GetPromptsRequest)(nil),                   // 33: reliant.v1.GetPromptsRequest
+	(*GetPromptsResponse)(nil),                  // 34: reliant.v1.GetPromptsResponse
+	(*SavePromptsRequest)(nil),                  // 35: reliant.v1.SavePromptsRequest
+	(*SavePromptsResponse)(nil),                 // 36: reliant.v1.SavePromptsResponse
+	(*GetProviderStatusesRequest)(nil),          // 37: reliant.v1.GetProviderStatusesRequest
+	(*GetProviderStatusesResponse)(nil),         // 38: reliant.v1.GetProviderStatusesResponse
+	(*UpdateProviderAPIKeyRequest)(nil),         // 39: reliant.v1.UpdateProviderAPIKeyRequest
+	(*UpdateProviderAPIKeyResponse)(nil),        // 40: reliant.v1.UpdateProviderAPIKeyResponse
+	(*ValidateProviderAPIKeyRequest)(nil),       // 41: reliant.v1.ValidateProviderAPIKeyRequest
+	(*ValidateProviderAPIKeyResponse)(nil),      // 42: reliant.v1.ValidateProviderAPIKeyResponse
+	(*SyncReliantProviderRequest)(nil),          // 43: reliant.v1.SyncReliantProviderRequest
+	(*SyncReliantProviderResponse)(nil),         // 44: reliant.v1.SyncReliantProviderResponse
+	(*CompleteCodexOAuthRequest)(nil),           // 45: reliant.v1.CompleteCodexOAuthRequest
+	(*CompleteCodexOAuthResponse)(nil),          // 46: reliant.v1.CompleteCodexOAuthResponse
+	(*CompleteClaudeOAuthRequest)(nil),          // 47: reliant.v1.CompleteClaudeOAuthRequest
+	(*CompleteClaudeOAuthResponse)(nil),         // 48: reliant.v1.CompleteClaudeOAuthResponse
+	(*StartCopilotDeviceAuthRequest)(nil),       // 49: reliant.v1.StartCopilotDeviceAuthRequest
+	(*StartCopilotDeviceAuthResponse)(nil),      // 50: reliant.v1.StartCopilotDeviceAuthResponse
+	(*PollCopilotDeviceAuthRequest)(nil),        // 51: reliant.v1.PollCopilotDeviceAuthRequest
+	(*PollCopilotDeviceAuthResponse)(nil),       // 52: reliant.v1.PollCopilotDeviceAuthResponse
+	(*InstallSkillRequest)(nil),                 // 53: reliant.v1.InstallSkillRequest
+	(*SkillInstallResult)(nil),                  // 54: reliant.v1.SkillInstallResult
+	(*InstallSkillResponse)(nil),                // 55: reliant.v1.InstallSkillResponse
+	(*InstalledSkill)(nil),                      // 56: reliant.v1.InstalledSkill
+	(*ListInstalledSkillsRequest)(nil),          // 57: reliant.v1.ListInstalledSkillsRequest
+	(*SkillDiscoveryDiagnostic)(nil),            // 58: reliant.v1.SkillDiscoveryDiagnostic
+	(*ListInstalledSkillsResponse)(nil),         // 59: reliant.v1.ListInstalledSkillsResponse
+	(*GetInstalledSkillDefinitionRequest)(nil),  // 60: reliant.v1.GetInstalledSkillDefinitionRequest
+	(*SkillAsset)(nil),                          // 61: reliant.v1.SkillAsset
+	(*GetInstalledSkillDefinitionResponse)(nil), // 62: reliant.v1.GetInstalledSkillDefinitionResponse
+	(*SetSkillEnabledRequest)(nil),              // 63: reliant.v1.SetSkillEnabledRequest
+	(*SetSkillEnabledResponse)(nil),             // 64: reliant.v1.SetSkillEnabledResponse
+	(*RecommendedSkill)(nil),                    // 65: reliant.v1.RecommendedSkill
+	(*ListRecommendedSkillsRequest)(nil),        // 66: reliant.v1.ListRecommendedSkillsRequest
+	(*ListRecommendedSkillsResponse)(nil),       // 67: reliant.v1.ListRecommendedSkillsResponse
+	(*DeleteGlobalSkillRequest)(nil),            // 68: reliant.v1.DeleteGlobalSkillRequest
+	(*DeleteGlobalSkillResponse)(nil),           // 69: reliant.v1.DeleteGlobalSkillResponse
+	(*GetPrivacySettingsRequest)(nil),           // 70: reliant.v1.GetPrivacySettingsRequest
+	(*GetPrivacySettingsResponse)(nil),          // 71: reliant.v1.GetPrivacySettingsResponse
+	(*UpdatePrivacySettingsRequest)(nil),        // 72: reliant.v1.UpdatePrivacySettingsRequest
+	(*UpdatePrivacySettingsResponse)(nil),       // 73: reliant.v1.UpdatePrivacySettingsResponse
+	(*ConfigError)(nil),                         // 74: reliant.v1.ConfigError
+	(*GetConfigHealthRequest)(nil),              // 75: reliant.v1.GetConfigHealthRequest
+	(*GetConfigHealthResponse)(nil),             // 76: reliant.v1.GetConfigHealthResponse
+	(*TrackPageVisitedRequest)(nil),             // 77: reliant.v1.TrackPageVisitedRequest
+	(*TrackPageVisitedResponse)(nil),            // 78: reliant.v1.TrackPageVisitedResponse
+	(*TrackOnboardingEventRequest)(nil),         // 79: reliant.v1.TrackOnboardingEventRequest
+	(*TrackOnboardingEventResponse)(nil),        // 80: reliant.v1.TrackOnboardingEventResponse
+	nil,                                         // 81: reliant.v1.GetPreferencesResponse.AdditionalEntry
+	nil,                                         // 82: reliant.v1.UpdatePreferencesRequest.AdditionalEntry
+	nil,                                         // 83: reliant.v1.ConfigError.DetailsEntry
+	(ConfigScope)(0),                            // 84: reliant.v1.ConfigScope
 }
 var file_reliant_v1_settings_proto_depIdxs = []int32{
 	7,  // 0: reliant.v1.CreateSettingResponse.setting:type_name -> reliant.v1.Setting
 	7,  // 1: reliant.v1.ListSettingsResponse.settings:type_name -> reliant.v1.Setting
 	7,  // 2: reliant.v1.GetSettingResponse.setting:type_name -> reliant.v1.Setting
 	7,  // 3: reliant.v1.UpdateSettingResponse.setting:type_name -> reliant.v1.Setting
-	78, // 4: reliant.v1.GetPreferencesResponse.additional:type_name -> reliant.v1.GetPreferencesResponse.AdditionalEntry
-	81, // 5: reliant.v1.GetPreferencesResponse.default_mcp_scope:type_name -> reliant.v1.ConfigScope
-	81, // 6: reliant.v1.GetPreferencesResponse.default_workflow_scope:type_name -> reliant.v1.ConfigScope
-	79, // 7: reliant.v1.UpdatePreferencesRequest.additional:type_name -> reliant.v1.UpdatePreferencesRequest.AdditionalEntry
-	81, // 8: reliant.v1.UpdatePreferencesRequest.default_mcp_scope:type_name -> reliant.v1.ConfigScope
-	81, // 9: reliant.v1.UpdatePreferencesRequest.default_workflow_scope:type_name -> reliant.v1.ConfigScope
-	1,  // 10: reliant.v1.SetHiddenItemRequest.item_type:type_name -> reliant.v1.HiddenItemType
-	8,  // 11: reliant.v1.GetPromptsResponse.prompts:type_name -> reliant.v1.UserPrompt
-	8,  // 12: reliant.v1.SavePromptsRequest.prompts:type_name -> reliant.v1.UserPrompt
-	8,  // 13: reliant.v1.SavePromptsResponse.prompts:type_name -> reliant.v1.UserPrompt
-	9,  // 14: reliant.v1.GetProviderStatusesResponse.providers:type_name -> reliant.v1.ProviderStatus
-	9,  // 15: reliant.v1.SyncReliantProviderResponse.provider:type_name -> reliant.v1.ProviderStatus
-	6,  // 16: reliant.v1.PollCopilotDeviceAuthResponse.status:type_name -> reliant.v1.PollCopilotDeviceAuthResponse.Status
-	2,  // 17: reliant.v1.InstallSkillRequest.scope:type_name -> reliant.v1.SkillScope
-	3,  // 18: reliant.v1.InstallSkillRequest.conflict_policy:type_name -> reliant.v1.SkillConflictPolicy
-	5,  // 19: reliant.v1.SkillInstallResult.source_type:type_name -> reliant.v1.SkillSourceType
-	2,  // 20: reliant.v1.SkillInstallResult.scope:type_name -> reliant.v1.SkillScope
-	3,  // 21: reliant.v1.SkillInstallResult.conflict_policy:type_name -> reliant.v1.SkillConflictPolicy
-	51, // 22: reliant.v1.InstallSkillResponse.result:type_name -> reliant.v1.SkillInstallResult
-	2,  // 23: reliant.v1.InstalledSkill.scope:type_name -> reliant.v1.SkillScope
-	4,  // 24: reliant.v1.InstalledSkill.format:type_name -> reliant.v1.SkillFormat
-	2,  // 25: reliant.v1.SkillDiscoveryDiagnostic.scope:type_name -> reliant.v1.SkillScope
-	53, // 26: reliant.v1.ListInstalledSkillsResponse.skills:type_name -> reliant.v1.InstalledSkill
-	55, // 27: reliant.v1.ListInstalledSkillsResponse.diagnostics:type_name -> reliant.v1.SkillDiscoveryDiagnostic
-	58, // 28: reliant.v1.GetInstalledSkillDefinitionResponse.assets:type_name -> reliant.v1.SkillAsset
-	62, // 29: reliant.v1.ListRecommendedSkillsResponse.recommended:type_name -> reliant.v1.RecommendedSkill
-	0,  // 30: reliant.v1.ConfigError.severity:type_name -> reliant.v1.ConfigSeverity
-	80, // 31: reliant.v1.ConfigError.details:type_name -> reliant.v1.ConfigError.DetailsEntry
-	71, // 32: reliant.v1.GetConfigHealthResponse.errors:type_name -> reliant.v1.ConfigError
-	10, // 33: reliant.v1.SettingsService.CreateSetting:input_type -> reliant.v1.CreateSettingRequest
-	12, // 34: reliant.v1.SettingsService.ListSettings:input_type -> reliant.v1.ListSettingsRequest
-	14, // 35: reliant.v1.SettingsService.GetSetting:input_type -> reliant.v1.GetSettingRequest
-	16, // 36: reliant.v1.SettingsService.UpdateSetting:input_type -> reliant.v1.UpdateSettingRequest
-	18, // 37: reliant.v1.SettingsService.DeleteSetting:input_type -> reliant.v1.DeleteSettingRequest
-	20, // 38: reliant.v1.SettingsService.GetShortcuts:input_type -> reliant.v1.GetShortcutsRequest
-	22, // 39: reliant.v1.SettingsService.UpdateShortcuts:input_type -> reliant.v1.UpdateShortcutsRequest
-	24, // 40: reliant.v1.SettingsService.GetPreferences:input_type -> reliant.v1.GetPreferencesRequest
-	26, // 41: reliant.v1.SettingsService.UpdatePreferences:input_type -> reliant.v1.UpdatePreferencesRequest
-	28, // 42: reliant.v1.SettingsService.SetHiddenItem:input_type -> reliant.v1.SetHiddenItemRequest
-	30, // 43: reliant.v1.SettingsService.GetPrompts:input_type -> reliant.v1.GetPromptsRequest
-	32, // 44: reliant.v1.SettingsService.SavePrompts:input_type -> reliant.v1.SavePromptsRequest
-	34, // 45: reliant.v1.SettingsService.GetProviderStatuses:input_type -> reliant.v1.GetProviderStatusesRequest
-	36, // 46: reliant.v1.SettingsService.UpdateProviderAPIKey:input_type -> reliant.v1.UpdateProviderAPIKeyRequest
-	38, // 47: reliant.v1.SettingsService.ValidateProviderAPIKey:input_type -> reliant.v1.ValidateProviderAPIKeyRequest
-	40, // 48: reliant.v1.SettingsService.SyncReliantProvider:input_type -> reliant.v1.SyncReliantProviderRequest
-	42, // 49: reliant.v1.SettingsService.CompleteCodexOAuth:input_type -> reliant.v1.CompleteCodexOAuthRequest
-	44, // 50: reliant.v1.SettingsService.CompleteClaudeOAuth:input_type -> reliant.v1.CompleteClaudeOAuthRequest
-	46, // 51: reliant.v1.SettingsService.StartCopilotDeviceAuth:input_type -> reliant.v1.StartCopilotDeviceAuthRequest
-	48, // 52: reliant.v1.SettingsService.PollCopilotDeviceAuth:input_type -> reliant.v1.PollCopilotDeviceAuthRequest
-	67, // 53: reliant.v1.SettingsService.GetPrivacySettings:input_type -> reliant.v1.GetPrivacySettingsRequest
-	69, // 54: reliant.v1.SettingsService.UpdatePrivacySettings:input_type -> reliant.v1.UpdatePrivacySettingsRequest
-	74, // 55: reliant.v1.SettingsService.TrackPageVisited:input_type -> reliant.v1.TrackPageVisitedRequest
-	76, // 56: reliant.v1.SettingsService.TrackOnboardingEvent:input_type -> reliant.v1.TrackOnboardingEventRequest
-	50, // 57: reliant.v1.SettingsService.InstallSkill:input_type -> reliant.v1.InstallSkillRequest
-	54, // 58: reliant.v1.SettingsService.ListInstalledSkills:input_type -> reliant.v1.ListInstalledSkillsRequest
-	57, // 59: reliant.v1.SettingsService.GetInstalledSkillDefinition:input_type -> reliant.v1.GetInstalledSkillDefinitionRequest
-	60, // 60: reliant.v1.SettingsService.SetSkillEnabled:input_type -> reliant.v1.SetSkillEnabledRequest
-	63, // 61: reliant.v1.SettingsService.ListRecommendedSkills:input_type -> reliant.v1.ListRecommendedSkillsRequest
-	65, // 62: reliant.v1.SettingsService.DeleteGlobalSkill:input_type -> reliant.v1.DeleteGlobalSkillRequest
-	72, // 63: reliant.v1.SettingsService.GetConfigHealth:input_type -> reliant.v1.GetConfigHealthRequest
-	11, // 64: reliant.v1.SettingsService.CreateSetting:output_type -> reliant.v1.CreateSettingResponse
-	13, // 65: reliant.v1.SettingsService.ListSettings:output_type -> reliant.v1.ListSettingsResponse
-	15, // 66: reliant.v1.SettingsService.GetSetting:output_type -> reliant.v1.GetSettingResponse
-	17, // 67: reliant.v1.SettingsService.UpdateSetting:output_type -> reliant.v1.UpdateSettingResponse
-	19, // 68: reliant.v1.SettingsService.DeleteSetting:output_type -> reliant.v1.DeleteSettingResponse
-	21, // 69: reliant.v1.SettingsService.GetShortcuts:output_type -> reliant.v1.GetShortcutsResponse
-	23, // 70: reliant.v1.SettingsService.UpdateShortcuts:output_type -> reliant.v1.UpdateShortcutsResponse
-	25, // 71: reliant.v1.SettingsService.GetPreferences:output_type -> reliant.v1.GetPreferencesResponse
-	27, // 72: reliant.v1.SettingsService.UpdatePreferences:output_type -> reliant.v1.UpdatePreferencesResponse
-	29, // 73: reliant.v1.SettingsService.SetHiddenItem:output_type -> reliant.v1.SetHiddenItemResponse
-	31, // 74: reliant.v1.SettingsService.GetPrompts:output_type -> reliant.v1.GetPromptsResponse
-	33, // 75: reliant.v1.SettingsService.SavePrompts:output_type -> reliant.v1.SavePromptsResponse
-	35, // 76: reliant.v1.SettingsService.GetProviderStatuses:output_type -> reliant.v1.GetProviderStatusesResponse
-	37, // 77: reliant.v1.SettingsService.UpdateProviderAPIKey:output_type -> reliant.v1.UpdateProviderAPIKeyResponse
-	39, // 78: reliant.v1.SettingsService.ValidateProviderAPIKey:output_type -> reliant.v1.ValidateProviderAPIKeyResponse
-	41, // 79: reliant.v1.SettingsService.SyncReliantProvider:output_type -> reliant.v1.SyncReliantProviderResponse
-	43, // 80: reliant.v1.SettingsService.CompleteCodexOAuth:output_type -> reliant.v1.CompleteCodexOAuthResponse
-	45, // 81: reliant.v1.SettingsService.CompleteClaudeOAuth:output_type -> reliant.v1.CompleteClaudeOAuthResponse
-	47, // 82: reliant.v1.SettingsService.StartCopilotDeviceAuth:output_type -> reliant.v1.StartCopilotDeviceAuthResponse
-	49, // 83: reliant.v1.SettingsService.PollCopilotDeviceAuth:output_type -> reliant.v1.PollCopilotDeviceAuthResponse
-	68, // 84: reliant.v1.SettingsService.GetPrivacySettings:output_type -> reliant.v1.GetPrivacySettingsResponse
-	70, // 85: reliant.v1.SettingsService.UpdatePrivacySettings:output_type -> reliant.v1.UpdatePrivacySettingsResponse
-	75, // 86: reliant.v1.SettingsService.TrackPageVisited:output_type -> reliant.v1.TrackPageVisitedResponse
-	77, // 87: reliant.v1.SettingsService.TrackOnboardingEvent:output_type -> reliant.v1.TrackOnboardingEventResponse
-	52, // 88: reliant.v1.SettingsService.InstallSkill:output_type -> reliant.v1.InstallSkillResponse
-	56, // 89: reliant.v1.SettingsService.ListInstalledSkills:output_type -> reliant.v1.ListInstalledSkillsResponse
-	59, // 90: reliant.v1.SettingsService.GetInstalledSkillDefinition:output_type -> reliant.v1.GetInstalledSkillDefinitionResponse
-	61, // 91: reliant.v1.SettingsService.SetSkillEnabled:output_type -> reliant.v1.SetSkillEnabledResponse
-	64, // 92: reliant.v1.SettingsService.ListRecommendedSkills:output_type -> reliant.v1.ListRecommendedSkillsResponse
-	66, // 93: reliant.v1.SettingsService.DeleteGlobalSkill:output_type -> reliant.v1.DeleteGlobalSkillResponse
-	73, // 94: reliant.v1.SettingsService.GetConfigHealth:output_type -> reliant.v1.GetConfigHealthResponse
-	64, // [64:95] is the sub-list for method output_type
-	33, // [33:64] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	20, // 4: reliant.v1.BatchUpsertSettingsRequest.settings:type_name -> reliant.v1.SettingWrite
+	7,  // 5: reliant.v1.BatchUpsertSettingsResponse.settings:type_name -> reliant.v1.Setting
+	81, // 6: reliant.v1.GetPreferencesResponse.additional:type_name -> reliant.v1.GetPreferencesResponse.AdditionalEntry
+	84, // 7: reliant.v1.GetPreferencesResponse.default_mcp_scope:type_name -> reliant.v1.ConfigScope
+	84, // 8: reliant.v1.GetPreferencesResponse.default_workflow_scope:type_name -> reliant.v1.ConfigScope
+	82, // 9: reliant.v1.UpdatePreferencesRequest.additional:type_name -> reliant.v1.UpdatePreferencesRequest.AdditionalEntry
+	84, // 10: reliant.v1.UpdatePreferencesRequest.default_mcp_scope:type_name -> reliant.v1.ConfigScope
+	84, // 11: reliant.v1.UpdatePreferencesRequest.default_workflow_scope:type_name -> reliant.v1.ConfigScope
+	1,  // 12: reliant.v1.SetHiddenItemRequest.item_type:type_name -> reliant.v1.HiddenItemType
+	8,  // 13: reliant.v1.GetPromptsResponse.prompts:type_name -> reliant.v1.UserPrompt
+	8,  // 14: reliant.v1.SavePromptsRequest.prompts:type_name -> reliant.v1.UserPrompt
+	8,  // 15: reliant.v1.SavePromptsResponse.prompts:type_name -> reliant.v1.UserPrompt
+	9,  // 16: reliant.v1.GetProviderStatusesResponse.providers:type_name -> reliant.v1.ProviderStatus
+	9,  // 17: reliant.v1.SyncReliantProviderResponse.provider:type_name -> reliant.v1.ProviderStatus
+	6,  // 18: reliant.v1.PollCopilotDeviceAuthResponse.status:type_name -> reliant.v1.PollCopilotDeviceAuthResponse.Status
+	2,  // 19: reliant.v1.InstallSkillRequest.scope:type_name -> reliant.v1.SkillScope
+	3,  // 20: reliant.v1.InstallSkillRequest.conflict_policy:type_name -> reliant.v1.SkillConflictPolicy
+	5,  // 21: reliant.v1.SkillInstallResult.source_type:type_name -> reliant.v1.SkillSourceType
+	2,  // 22: reliant.v1.SkillInstallResult.scope:type_name -> reliant.v1.SkillScope
+	3,  // 23: reliant.v1.SkillInstallResult.conflict_policy:type_name -> reliant.v1.SkillConflictPolicy
+	54, // 24: reliant.v1.InstallSkillResponse.result:type_name -> reliant.v1.SkillInstallResult
+	2,  // 25: reliant.v1.InstalledSkill.scope:type_name -> reliant.v1.SkillScope
+	4,  // 26: reliant.v1.InstalledSkill.format:type_name -> reliant.v1.SkillFormat
+	2,  // 27: reliant.v1.SkillDiscoveryDiagnostic.scope:type_name -> reliant.v1.SkillScope
+	56, // 28: reliant.v1.ListInstalledSkillsResponse.skills:type_name -> reliant.v1.InstalledSkill
+	58, // 29: reliant.v1.ListInstalledSkillsResponse.diagnostics:type_name -> reliant.v1.SkillDiscoveryDiagnostic
+	61, // 30: reliant.v1.GetInstalledSkillDefinitionResponse.assets:type_name -> reliant.v1.SkillAsset
+	65, // 31: reliant.v1.ListRecommendedSkillsResponse.recommended:type_name -> reliant.v1.RecommendedSkill
+	0,  // 32: reliant.v1.ConfigError.severity:type_name -> reliant.v1.ConfigSeverity
+	83, // 33: reliant.v1.ConfigError.details:type_name -> reliant.v1.ConfigError.DetailsEntry
+	74, // 34: reliant.v1.GetConfigHealthResponse.errors:type_name -> reliant.v1.ConfigError
+	10, // 35: reliant.v1.SettingsService.CreateSetting:input_type -> reliant.v1.CreateSettingRequest
+	12, // 36: reliant.v1.SettingsService.ListSettings:input_type -> reliant.v1.ListSettingsRequest
+	14, // 37: reliant.v1.SettingsService.GetSetting:input_type -> reliant.v1.GetSettingRequest
+	16, // 38: reliant.v1.SettingsService.UpdateSetting:input_type -> reliant.v1.UpdateSettingRequest
+	18, // 39: reliant.v1.SettingsService.DeleteSetting:input_type -> reliant.v1.DeleteSettingRequest
+	21, // 40: reliant.v1.SettingsService.BatchUpsertSettings:input_type -> reliant.v1.BatchUpsertSettingsRequest
+	23, // 41: reliant.v1.SettingsService.GetShortcuts:input_type -> reliant.v1.GetShortcutsRequest
+	25, // 42: reliant.v1.SettingsService.UpdateShortcuts:input_type -> reliant.v1.UpdateShortcutsRequest
+	27, // 43: reliant.v1.SettingsService.GetPreferences:input_type -> reliant.v1.GetPreferencesRequest
+	29, // 44: reliant.v1.SettingsService.UpdatePreferences:input_type -> reliant.v1.UpdatePreferencesRequest
+	31, // 45: reliant.v1.SettingsService.SetHiddenItem:input_type -> reliant.v1.SetHiddenItemRequest
+	33, // 46: reliant.v1.SettingsService.GetPrompts:input_type -> reliant.v1.GetPromptsRequest
+	35, // 47: reliant.v1.SettingsService.SavePrompts:input_type -> reliant.v1.SavePromptsRequest
+	37, // 48: reliant.v1.SettingsService.GetProviderStatuses:input_type -> reliant.v1.GetProviderStatusesRequest
+	39, // 49: reliant.v1.SettingsService.UpdateProviderAPIKey:input_type -> reliant.v1.UpdateProviderAPIKeyRequest
+	41, // 50: reliant.v1.SettingsService.ValidateProviderAPIKey:input_type -> reliant.v1.ValidateProviderAPIKeyRequest
+	43, // 51: reliant.v1.SettingsService.SyncReliantProvider:input_type -> reliant.v1.SyncReliantProviderRequest
+	45, // 52: reliant.v1.SettingsService.CompleteCodexOAuth:input_type -> reliant.v1.CompleteCodexOAuthRequest
+	47, // 53: reliant.v1.SettingsService.CompleteClaudeOAuth:input_type -> reliant.v1.CompleteClaudeOAuthRequest
+	49, // 54: reliant.v1.SettingsService.StartCopilotDeviceAuth:input_type -> reliant.v1.StartCopilotDeviceAuthRequest
+	51, // 55: reliant.v1.SettingsService.PollCopilotDeviceAuth:input_type -> reliant.v1.PollCopilotDeviceAuthRequest
+	70, // 56: reliant.v1.SettingsService.GetPrivacySettings:input_type -> reliant.v1.GetPrivacySettingsRequest
+	72, // 57: reliant.v1.SettingsService.UpdatePrivacySettings:input_type -> reliant.v1.UpdatePrivacySettingsRequest
+	77, // 58: reliant.v1.SettingsService.TrackPageVisited:input_type -> reliant.v1.TrackPageVisitedRequest
+	79, // 59: reliant.v1.SettingsService.TrackOnboardingEvent:input_type -> reliant.v1.TrackOnboardingEventRequest
+	53, // 60: reliant.v1.SettingsService.InstallSkill:input_type -> reliant.v1.InstallSkillRequest
+	57, // 61: reliant.v1.SettingsService.ListInstalledSkills:input_type -> reliant.v1.ListInstalledSkillsRequest
+	60, // 62: reliant.v1.SettingsService.GetInstalledSkillDefinition:input_type -> reliant.v1.GetInstalledSkillDefinitionRequest
+	63, // 63: reliant.v1.SettingsService.SetSkillEnabled:input_type -> reliant.v1.SetSkillEnabledRequest
+	66, // 64: reliant.v1.SettingsService.ListRecommendedSkills:input_type -> reliant.v1.ListRecommendedSkillsRequest
+	68, // 65: reliant.v1.SettingsService.DeleteGlobalSkill:input_type -> reliant.v1.DeleteGlobalSkillRequest
+	75, // 66: reliant.v1.SettingsService.GetConfigHealth:input_type -> reliant.v1.GetConfigHealthRequest
+	11, // 67: reliant.v1.SettingsService.CreateSetting:output_type -> reliant.v1.CreateSettingResponse
+	13, // 68: reliant.v1.SettingsService.ListSettings:output_type -> reliant.v1.ListSettingsResponse
+	15, // 69: reliant.v1.SettingsService.GetSetting:output_type -> reliant.v1.GetSettingResponse
+	17, // 70: reliant.v1.SettingsService.UpdateSetting:output_type -> reliant.v1.UpdateSettingResponse
+	19, // 71: reliant.v1.SettingsService.DeleteSetting:output_type -> reliant.v1.DeleteSettingResponse
+	22, // 72: reliant.v1.SettingsService.BatchUpsertSettings:output_type -> reliant.v1.BatchUpsertSettingsResponse
+	24, // 73: reliant.v1.SettingsService.GetShortcuts:output_type -> reliant.v1.GetShortcutsResponse
+	26, // 74: reliant.v1.SettingsService.UpdateShortcuts:output_type -> reliant.v1.UpdateShortcutsResponse
+	28, // 75: reliant.v1.SettingsService.GetPreferences:output_type -> reliant.v1.GetPreferencesResponse
+	30, // 76: reliant.v1.SettingsService.UpdatePreferences:output_type -> reliant.v1.UpdatePreferencesResponse
+	32, // 77: reliant.v1.SettingsService.SetHiddenItem:output_type -> reliant.v1.SetHiddenItemResponse
+	34, // 78: reliant.v1.SettingsService.GetPrompts:output_type -> reliant.v1.GetPromptsResponse
+	36, // 79: reliant.v1.SettingsService.SavePrompts:output_type -> reliant.v1.SavePromptsResponse
+	38, // 80: reliant.v1.SettingsService.GetProviderStatuses:output_type -> reliant.v1.GetProviderStatusesResponse
+	40, // 81: reliant.v1.SettingsService.UpdateProviderAPIKey:output_type -> reliant.v1.UpdateProviderAPIKeyResponse
+	42, // 82: reliant.v1.SettingsService.ValidateProviderAPIKey:output_type -> reliant.v1.ValidateProviderAPIKeyResponse
+	44, // 83: reliant.v1.SettingsService.SyncReliantProvider:output_type -> reliant.v1.SyncReliantProviderResponse
+	46, // 84: reliant.v1.SettingsService.CompleteCodexOAuth:output_type -> reliant.v1.CompleteCodexOAuthResponse
+	48, // 85: reliant.v1.SettingsService.CompleteClaudeOAuth:output_type -> reliant.v1.CompleteClaudeOAuthResponse
+	50, // 86: reliant.v1.SettingsService.StartCopilotDeviceAuth:output_type -> reliant.v1.StartCopilotDeviceAuthResponse
+	52, // 87: reliant.v1.SettingsService.PollCopilotDeviceAuth:output_type -> reliant.v1.PollCopilotDeviceAuthResponse
+	71, // 88: reliant.v1.SettingsService.GetPrivacySettings:output_type -> reliant.v1.GetPrivacySettingsResponse
+	73, // 89: reliant.v1.SettingsService.UpdatePrivacySettings:output_type -> reliant.v1.UpdatePrivacySettingsResponse
+	78, // 90: reliant.v1.SettingsService.TrackPageVisited:output_type -> reliant.v1.TrackPageVisitedResponse
+	80, // 91: reliant.v1.SettingsService.TrackOnboardingEvent:output_type -> reliant.v1.TrackOnboardingEventResponse
+	55, // 92: reliant.v1.SettingsService.InstallSkill:output_type -> reliant.v1.InstallSkillResponse
+	59, // 93: reliant.v1.SettingsService.ListInstalledSkills:output_type -> reliant.v1.ListInstalledSkillsResponse
+	62, // 94: reliant.v1.SettingsService.GetInstalledSkillDefinition:output_type -> reliant.v1.GetInstalledSkillDefinitionResponse
+	64, // 95: reliant.v1.SettingsService.SetSkillEnabled:output_type -> reliant.v1.SetSkillEnabledResponse
+	67, // 96: reliant.v1.SettingsService.ListRecommendedSkills:output_type -> reliant.v1.ListRecommendedSkillsResponse
+	69, // 97: reliant.v1.SettingsService.DeleteGlobalSkill:output_type -> reliant.v1.DeleteGlobalSkillResponse
+	76, // 98: reliant.v1.SettingsService.GetConfigHealth:output_type -> reliant.v1.GetConfigHealthResponse
+	67, // [67:99] is the sub-list for method output_type
+	35, // [35:67] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_settings_proto_init() }
@@ -5458,22 +5639,24 @@ func file_reliant_v1_settings_proto_init() {
 	file_reliant_v1_settings_proto_msgTypes[7].OneofWrappers = []any{}
 	file_reliant_v1_settings_proto_msgTypes[9].OneofWrappers = []any{}
 	file_reliant_v1_settings_proto_msgTypes[11].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[19].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[43].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[44].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[13].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[14].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[22].OneofWrappers = []any{}
 	file_reliant_v1_settings_proto_msgTypes[46].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[55].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[62].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[47].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[49].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[58].OneofWrappers = []any{}
 	file_reliant_v1_settings_proto_msgTypes[65].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[67].OneofWrappers = []any{}
-	file_reliant_v1_settings_proto_msgTypes[69].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[68].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[70].OneofWrappers = []any{}
+	file_reliant_v1_settings_proto_msgTypes[72].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_settings_proto_rawDesc), len(file_reliant_v1_settings_proto_rawDesc)),
 			NumEnums:      7,
-			NumMessages:   74,
+			NumMessages:   77,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

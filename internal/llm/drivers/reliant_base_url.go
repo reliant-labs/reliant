@@ -10,7 +10,25 @@ import (
 )
 
 const (
-	reliantDefaultBaseURL          = "https://api.reliant.dev/v1"
+	// reliantNeutralBaseURL is the fallback when RELIANT_API_BASE_URL is unset:
+	// a LOCAL admin-server on the port control-plane's KCL pins for it
+	// (deploy/kcl/lib/ports.k ADMIN_SERVER_PORT = 8090).
+	//
+	// Loopback, and NOT the hosted admin-server — unlike
+	// internal/builddefaults, whose defaults are now the hosted endpoints so a
+	// `go install` CLI works out of the box. The difference is who reads this:
+	// builddefaults configures the CLI/daemon a USER runs, while this is read
+	// by the api-server and temporal worker, which are SERVER workloads that
+	// KCL always configures explicitly (RELIANT_API_BASE_URL in
+	// deploy/kcl/lib/env.k for the cloud envs, deploy/kcl/dev/main.k for the
+	// local stack). A server process reaching this fallback is misconfigured,
+	// and pointing it at Reliant's production LLM proxy would hide that.
+	//
+	// This was https://api.reliant.dev/v1, a domain that does not resolve, so
+	// a process missing the variable failed with "dial tcp: lookup
+	// api.reliant.dev: no such host" rather than anything that named the real
+	// problem. Loopback at least fails against something the operator controls.
+	reliantNeutralBaseURL          = "http://localhost:8090/v1"
 	reliantLocalLiteLLMMasterKey   = "sk-reliant-litellm-dev"
 	reliantManagedKeyForwardHeader = "X-Reliant-Managed-Key"
 )
@@ -18,7 +36,7 @@ const (
 func ResolveReliantBaseURL(_ string) string {
 	configuredBaseURL := strings.TrimSpace(os.Getenv("RELIANT_API_BASE_URL"))
 	if configuredBaseURL == "" {
-		return reliantDefaultBaseURL
+		return reliantNeutralBaseURL
 	}
 
 	return configuredBaseURL

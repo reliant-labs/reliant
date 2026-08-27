@@ -45,7 +45,7 @@ export function CodeBlock({ language, children, className }: CodeBlockProps) {
             )}
           </button>
           {language && (
-            <span className="pointer-events-none flex items-center rounded bg-black/5 dark:bg-white/10 px-1.5 py-0.5 text-[11px] text-muted-foreground font-mono">
+            <span className="pointer-events-none flex items-center rounded bg-black/5 dark:bg-white/10 px-1.5 py-0.5 text-xs text-muted-foreground font-mono">
               {language}
             </span>
           )}

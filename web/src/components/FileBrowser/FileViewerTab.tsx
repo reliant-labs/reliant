@@ -1060,7 +1060,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <span className="text-xs text-muted-foreground font-mono truncate">{displayPath}</span>
             {previewInfo && !isTextPreview && (
-              <span className="text-[11px] px-2 py-0.5 rounded-full border border-border bg-background text-muted-foreground">
+              <span className="text-xs px-2 py-0.5 rounded-full border border-border bg-background text-muted-foreground">
                 {getPreviewKindLabel(previewInfo.viewerKind)}
               </span>
             )}

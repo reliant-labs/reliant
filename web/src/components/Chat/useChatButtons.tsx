@@ -90,7 +90,7 @@ export function useChatButtons({
         }
       >
         <span className={compact ? "" : "inline-flex items-center gap-1"}>
-          {!compact && <span className="text-[10px]">{isDiscussMode ? "End Discuss" : "Discuss"}</span>}
+          {!compact && <span className="text-2xs">{isDiscussMode ? "End Discuss" : "Discuss"}</span>}
           <MessageCircle className={compact ? "w-3 h-3" : "w-3 h-3"} />
         </span>
       </ChatButton>

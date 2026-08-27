@@ -98,6 +98,7 @@
     "monaco-editor": "^0.55.1",
     "playwright": "^1.55.0",
     "playwright-mcp": "^0.0.12",
+    "rollup-plugin-visualizer": "^7.1.1",
     "stylelint": "^17.9.1",
     "stylelint-config-standard": "^40.0.0",
     "terser": "^5.44.0",

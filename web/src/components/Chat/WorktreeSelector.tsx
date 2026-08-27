@@ -110,7 +110,7 @@ export function WorktreeSelector({
         onClick={() => canSelectWorktree && setIsOpen(!isOpen)}
         disabled={!canSelectWorktree}
         className={cn(
-          "flex items-center gap-1.5 rounded transition-colors text-[10px] font-medium h-6",
+          "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6",
           canSelectWorktree
             ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
             : "cursor-default opacity-60",
@@ -150,7 +150,7 @@ export function WorktreeSelector({
               <div className="flex items-start justify-between gap-2">
                 <div className="flex-1">
                   <div className="font-semibold mb-1">{mainWorktree?.branch || currentProject?.default_branch || 'main'}</div>
-                  <div className="leading-snug text-[11px] opacity-80">Main workspace</div>
+                  <div className="leading-snug text-xs opacity-80">Main workspace</div>
                 </div>
                 {selectedWorktreeId === mainWorktree?.id && (
                   <Check className="w-3 h-3 text-primary flex-shrink-0 mt-0.5" />

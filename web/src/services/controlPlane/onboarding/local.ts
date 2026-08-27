@@ -41,6 +41,13 @@ export async function getCurrentUser(): Promise<OnboardingUser | null> {
   return { onboardingCompleted: readCompleted() };
 }
 
+/**
+ * No-op: the local implementation holds no in-memory user cache — it reads
+ * localStorage on every call. Present so this module stays structurally
+ * identical to `cloud.ts` (see the parity check in ./index.ts).
+ */
+export function resetUserCache(): void {}
+
 export async function completeOnboarding(
   _data: Record<string, unknown>,
 ): Promise<void> {

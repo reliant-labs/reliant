@@ -1035,7 +1035,7 @@ function UsageTab() {
                             height: `${Math.max(heightPct, minutes > 0 ? 2 : 0)}%`,
                           }}
                         />
-                        <span className="text-[10px] text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           {formatDayLabel(entry.day)}
                         </span>
                       </div>

@@ -4,14 +4,13 @@ import { cn } from "../../lib/utils";
 import { ColorSchemeSelector } from "./ColorSchemeSelector";
 import { useEditorStore } from "../../store/editorStore";
 import { useUIStore } from "../../store/uiStore";
-import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
+import { settingsSync, SETTINGS_KEYS, type SettingKey } from "../../services/settingsSync";
 import { Toggle } from "../ui/Toggle";
-import { LanguageServerSettingsCompact } from "./LanguageServerSettings";
 import { ToolCallSettingsCompact } from "./ToolCallSettings";
 import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type SpawnDisplayMode } from "./SpawnDisplaySettings";
 
 import "./settings-range.css";
-import { FONT_SIZE_MAP, applyRootFontSize } from "../../lib/rootFontSize";
+import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
 type ChatTimelineVariant = "compact" | "card" | "minimal";
@@ -33,6 +32,24 @@ const FONT_SIZE_LABELS: Record<FontSize, string> = {
 
 function readPref<T extends string>(key: string, fallback: T): T {
   return settingsSync.getSetting(key as any, fallback) as T;
+}
+
+/**
+ * Persist a preference, but only when it actually differs from what is stored.
+ *
+ * Every preference below lives in a `useState` seeded from storage on mount and
+ * written back by an effect keyed on that same state, so merely OPENING this
+ * panel re-saved values the user never touched. A mount that read a STALE value
+ * re-persisted it with a fresh timestamp, making the stale value the newest
+ * record — which is how a chosen font size silently reverted. It showed up in
+ * the database as a perfect md/lg/md/lg alternation, one pair per visit here.
+ *
+ * Returns whether a write happened so the caller can skip its change event too.
+ */
+function persistPref(key: SettingKey, value: string): boolean {
+  if (settingsSync.getSetting(key, "") === value) return false;
+  void settingsSync.setSettingIfChanged(key, value).catch(console.error);
+  return true;
 }
 
 // Note: Using shared Toggle component from ui/
@@ -130,7 +147,7 @@ export function AppearanceSettings() {
   // Whether the user wants a distinct monospace font for code, vs. letting the
   // editor follow the app font. Derived from a non-default persisted EDITOR_FONT.
   const [useCodeFont, setUseCodeFont] = useState<boolean>(false);
-  const [fontSize, setFontSize] = useState<FontSize>("md");
+  const [fontSize, setFontSize] = useState<FontSize>(DEFAULT_FONT_SIZE as FontSize);
   const [chatTimelineVariant, setChatTimelineVariant] = useState<ChatTimelineVariant>("compact");
   const [workflowViewerDefaultMode, setWorkflowViewerDefaultMode] = useState<'inline' | 'side'>('side');
   const [spawnDisplayMode, setSpawnDisplayMode] = useState<SpawnDisplayMode>("preview");
@@ -158,7 +175,7 @@ export function AppearanceSettings() {
       const savedEditorFont = readPref(SETTINGS_KEYS.EDITOR_FONT, "default");
       setEditorFont(savedEditorFont);
       setUseCodeFont(savedEditorFont !== "default");
-      setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, "md"));
+      setFontSize(readPref(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE) as FontSize);
       setChatTimelineVariant(readPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, "compact"));
       setWorkflowViewerDefaultMode(readPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, "side"));
       setSpawnDisplayMode(getSpawnDisplayMode());
@@ -213,54 +230,45 @@ export function AppearanceSettings() {
   useEffect(() => {
     if (!isLoaded) return;
     document.documentElement.dataset.font = font;
-    // Sync to database
-    settingsSync.setSetting(SETTINGS_KEYS.FONT, font).catch(console.error);
-    // Force re-render by dispatching a custom event
-    window.dispatchEvent(new CustomEvent("font-changed"));
+    if (persistPref(SETTINGS_KEYS.FONT, font)) {
+      window.dispatchEvent(new CustomEvent("font-changed"));
+    }
   }, [font, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
     document.documentElement.dataset.chatFont = chatFont;
-    // Sync to database
-    settingsSync.setSetting(SETTINGS_KEYS.CHAT_FONT, chatFont).catch(console.error);
-    // Force re-render by dispatching a custom event
-    window.dispatchEvent(new CustomEvent("font-changed"));
+    if (persistPref(SETTINGS_KEYS.CHAT_FONT, chatFont)) {
+      window.dispatchEvent(new CustomEvent("font-changed"));
+    }
   }, [chatFont, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
     document.documentElement.dataset.editorFont = editorFont;
-    // Sync to database
-    settingsSync.setSetting(SETTINGS_KEYS.EDITOR_FONT, editorFont).catch(console.error);
+    persistPref(SETTINGS_KEYS.EDITOR_FONT, editorFont);
   }, [editorFont, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
     applyRootFontSize(fontSize);
-    // Sync to database
-    settingsSync.setSetting(SETTINGS_KEYS.FONT_SIZE, fontSize).catch(console.error);
-    // Force re-render by dispatching a custom event
-    window.dispatchEvent(new CustomEvent("font-changed"));
+    if (persistPref(SETTINGS_KEYS.FONT_SIZE, fontSize)) {
+      window.dispatchEvent(new CustomEvent("font-changed"));
+    }
   }, [fontSize, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    // Sync workflow viewer default mode to database
-    // Use .catch() to prevent errors from breaking the app
-    settingsSync.setSetting(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, workflowViewerDefaultMode)
-      .catch((error) => {
-        // Log but don't throw - settings sync failures shouldn't break the app
-        console.error('[AppearanceSettings] Failed to save workflow viewer default mode:', error);
-      });
-    // Dispatch event for components that need to react to this change
-    window.dispatchEvent(new CustomEvent('appearance-updated'));
+    if (persistPref(SETTINGS_KEYS.WORKFLOW_VIEWER_DEFAULT_MODE, workflowViewerDefaultMode)) {
+      window.dispatchEvent(new CustomEvent('appearance-updated'));
+    }
   }, [workflowViewerDefaultMode, isLoaded]);
 
   useEffect(() => {
     if (!isLoaded) return;
-    settingsSync.setSetting(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant).catch(console.error);
-    window.dispatchEvent(new CustomEvent('appearance-updated'));
+    if (persistPref(SETTINGS_KEYS.CHAT_TIMELINE_VARIANT, chatTimelineVariant)) {
+      window.dispatchEvent(new CustomEvent('appearance-updated'));
+    }
   }, [chatTimelineVariant, isLoaded]);
 
   useEffect(() => {
@@ -813,15 +821,24 @@ function MonacoEditorSettings() {
         </div>
       </div>
 
-      {/* Language Servers */}
+      {/* Language Servers
+          Removed rather than left presenting toggles the product does not act
+          on: the panel here wrote to editorStore.languageServers, which had no
+          consumer anywhere outside the panel itself — no client ever launched
+          a language server from it. Reliant's real language-server support is
+          an MCP server (Settings -> MCP, or `.reliant/mcp.json` with
+          `dirScoped` + `requiresFiles`), so the honest pointer is below rather
+          than a second, fake control surface. */}
       <div className="space-y-4">
         <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
           Language Servers
         </h4>
         <p className="text-xs text-muted-foreground">
-          Enable language servers for Go to Definition, hover info, and autocomplete in non-TypeScript languages.
+          Language servers run as MCP servers. Add one under Settings &rarr; MCP
+          (or in <code>.reliant/mcp.json</code>) with <code>dirScoped: true</code> so each
+          project gets its own index, and <code>requiresFiles</code> so it only starts
+          in projects it can actually serve.
         </p>
-        <LanguageServerSettingsCompact />
       </div>
     </div>
   );

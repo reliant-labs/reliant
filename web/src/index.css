@@ -252,7 +252,10 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 14px;                /* Comfortable reading size */
+    /* Inherit the root size the Appearance preference sets on <html>. A px
+       value here overrides it for everything that inherits, which pinned all
+       unclassed text at 14px no matter which of the five steps was chosen. */
+    font-size: 1rem;
     line-height: 1.6;               /* Better readability */
     font-weight: 400;
     letter-spacing: -0.011em;

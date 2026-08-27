@@ -91,15 +91,15 @@ export function EventSequence({ events }: { events: SimulatedEvent[] }) {
           <div className="flex-1 min-w-0 pb-2.5">
             <div className="flex items-center gap-1.5">
               {event.node ? (
-                <span className="text-[10px] px-1 py-0.5 rounded bg-muted font-mono text-muted-foreground">
+                <span className="text-2xs px-1 py-0.5 rounded bg-muted font-mono text-muted-foreground">
                   {event.node}
                 </span>
               ) : (
-                <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                   Event
                 </span>
               )}
-              <span className="text-[10px] text-muted-foreground/50">#{idx + 1}</span>
+              <span className="text-2xs text-muted-foreground/50">#{idx + 1}</span>
             </div>
             <div className="text-xs mt-0.5 break-all">
               <EventData event={event} />
@@ -220,7 +220,7 @@ export function InputsView({ inputsJson }: { inputsJson: string | undefined }) {
   if (formatted.split('\n').length <= 5) {
     return (
       <div>
-        <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1">
+        <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
           Inputs
         </div>
         <pre className="text-xs font-mono bg-muted/50 rounded px-2 py-1.5 overflow-x-auto whitespace-pre">
@@ -234,7 +234,7 @@ export function InputsView({ inputsJson }: { inputsJson: string | undefined }) {
     <div>
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center gap-1 text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1 hover:text-foreground transition-colors"
+        className="flex items-center gap-1 text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1 hover:text-foreground transition-colors"
       >
         {isExpanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
         Inputs
@@ -374,7 +374,7 @@ export function ScenarioDetailView({ scenario, projectId }: { scenario: Scenario
         <div className="space-y-4">
           {/* Events */}
           <div>
-            <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+            <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
               Events ({scenario.events?.length ?? 0})
             </div>
             <EventSequence events={scenario.events ?? []} />
@@ -383,7 +383,7 @@ export function ScenarioDetailView({ scenario, projectId }: { scenario: Scenario
           {/* Expectations */}
           {scenario.expect && (
             <div>
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
                 Expectations
               </div>
               <ExpectationsView expect={scenario.expect} />

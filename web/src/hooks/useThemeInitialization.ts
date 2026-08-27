@@ -10,7 +10,7 @@
 import { useEffect } from "react";
 import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import { logger } from "../lib/logger";
-import { applyRootFontSize } from "../lib/rootFontSize";
+import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
 
 
 const COLOR_SCHEME_MAP: Record<string, string> = {
@@ -76,10 +76,12 @@ export function useThemeInitialization() {
       logger.debug("[Theme] Applied color scheme from database:", colorScheme);
       
       // Apply font settings
-      const font = settingsSync.getSetting(SETTINGS_KEYS.FONT, "system");
+      // "default" (bundled Inter), matching every other read site — see the
+      // note in lib/theme.ts.
+      const font = settingsSync.getSetting(SETTINGS_KEYS.FONT, "default");
       const chatFont = settingsSync.getSetting(SETTINGS_KEYS.CHAT_FONT, "default");
       const editorFont = settingsSync.getSetting(SETTINGS_KEYS.EDITOR_FONT, "default");
-      const fontSize = settingsSync.getSetting(SETTINGS_KEYS.FONT_SIZE, "md");
+      const fontSize = settingsSync.getSetting(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE);
       
       document.documentElement.dataset.font = font;
       document.documentElement.dataset.chatFont = chatFont;

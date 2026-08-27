@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
 // These tests pin spec §6.1's loop-lifetime rule in isolation: the loop must
@@ -170,7 +172,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_WakesOnQueuedAgentMessa
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{ToolCallID: "tc1", ParentThread: "thread-a", ChildThread: "child-1"})
 
 	env.RegisterDelayedCallback(func() {
-		tracker.notifyAgentMessageQueued("thread-a")
+		tracker.notifyThreadWake("thread-a")
 	}, 5*time.Second)
 
 	env.ExecuteWorkflow(awaitLiveDetachedSpawnsWorkflow("thread-a", tracker))
@@ -198,7 +200,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_IgnoresOtherThreadsMail
 	// A message for someone else, then the child finishes. Only the
 	// completion should be reported as the reason to re-enter.
 	env.RegisterDelayedCallback(func() {
-		tracker.notifyAgentMessageQueued("thread-b")
+		tracker.notifyThreadWake("thread-b")
 	}, 5*time.Second)
 	env.RegisterDelayedCallback(func() {
 		tracker.completeDetachedSpawn("tc1", "thread-a")
@@ -211,7 +213,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_IgnoresOtherThreadsMail
 	var reenter bool
 	s.NoError(env.GetWorkflowResult(&reenter))
 	s.True(reenter)
-	s.Equal(0, tracker.agentMessageWakeCount("thread-a"),
+	s.Equal(0, tracker.threadWakeCount("thread-a"),
 		"another thread's mailbox must not register against this one")
 }
 
@@ -221,7 +223,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_IgnoresOtherThreadsMail
 func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_QueuedMessageAloneDoesNotBlock() {
 	env := s.NewTestWorkflowEnvironment()
 	tracker := &ChildWorkflowTracker{}
-	tracker.notifyAgentMessageQueued("thread-a")
+	tracker.notifyThreadWake("thread-a")
 
 	env.ExecuteWorkflow(awaitLiveDetachedSpawnsWorkflow("thread-a", tracker))
 
@@ -233,7 +235,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_QueuedMessageAloneDoesN
 }
 
 // parkedThreadWorkflow wires the REAL signal handler to the REAL wait gate,
-// the way DynamicWorkflow does: setupAgentMessageQueuedHandler feeds the
+// the way DynamicWorkflow does: setupThreadWakeHandler feeds the
 // tracker, awaitLiveDetachedSpawns reads it.
 //
 // The tests above drive the tracker directly, which proves the gate's
@@ -243,7 +245,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_QueuedMessageAloneDoesN
 // registers.
 func parkedThreadWorkflow(thread string, tracker *ChildWorkflowTracker) func(workflow.Context) (bool, error) {
 	return func(ctx workflow.Context) (bool, error) {
-		setupAgentMessageQueuedHandler(ctx, tracker, "test-workflow")
+		setupThreadWakeHandler(ctx, tracker, "test-workflow")
 		e := &InlineLoopExecutor{
 			ctx:          ctx,
 			loopID:       "agent_loop",
@@ -257,7 +259,7 @@ func parkedThreadWorkflow(thread string, tracker *ChildWorkflowTracker) func(wor
 
 // TestParkedThread_WokenByRealSignal is the full-path regression: a parent
 // parked on a sub-agent that NEVER finishes is woken by an actual
-// AgentMessageQueuedSignal delivered through Temporal's signal machinery.
+// ThreadWakeSignal delivered through Temporal's signal machinery.
 //
 // This is the exact production shape of the bug. The child stays live for the
 // whole test, so under the old behavior the workflow would block until the
@@ -268,7 +270,7 @@ func (s *SpawnLifetimeSuite) TestParkedThread_WokenByRealSignal() {
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{ToolCallID: "tc1", ParentThread: "thread-a", ChildThread: "child-1"})
 
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(AgentMessageQueuedSignalName, AgentMessageQueuedSignal{Thread: "thread-a"})
+		env.SignalWorkflow(ThreadWakeSignalName, ThreadWakeSignal{Thread: "thread-a"})
 	}, 5*time.Second)
 
 	env.ExecuteWorkflow(parkedThreadWorkflow("thread-a", tracker))
@@ -278,9 +280,76 @@ func (s *SpawnLifetimeSuite) TestParkedThread_WokenByRealSignal() {
 	var reenter bool
 	s.NoError(env.GetWorkflowResult(&reenter))
 	s.True(reenter,
-		"a real agent_message_queued signal must wake a parent parked on a still-running sub-agent")
+		"a real thread_wake signal must wake a parent parked on a still-running sub-agent")
 	s.True(tracker.hasLiveDetachedSpawns("thread-a"),
 		"the child never finished; waking to read the message must not abandon it")
+}
+
+// TestParkedThread_WokenByUserMessageSignal is the regression for chat
+// 7da3935c-97ec-4843-af78-c3807fe336cb: a user message sent to the ROOT thread
+// while that thread was parked on one live spawn.
+//
+// This is the same gate as the mailbox case but a different sender, and the
+// distinction is the whole point of the fix. A user message is NOT a mailbox
+// row — it is saved to `messages` and picked up when CallLLM re-reads history
+// — so nothing in that path queued anything for the drain to find, and before
+// this signal existed no wake reason in the predicate could describe it. The
+// root thread therefore sat unresponsive with the user's message already
+// durable in the database, which reads to a user as "the root chat is blocked
+// on its sub-agent".
+//
+// The child NEVER completes here, so the only thing that can end this wait is
+// the user-message wake.
+func (s *SpawnLifetimeSuite) TestParkedThread_WokenByUserMessageSignal() {
+	env := s.NewTestWorkflowEnvironment()
+	tracker := &ChildWorkflowTracker{}
+	tracker.registerDetachedSpawn(&detachedSpawnRecord{ToolCallID: "tc1", ParentThread: "thread-a", ChildThread: "child-1"})
+
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(ThreadWakeSignalName, ThreadWakeSignal{
+			Thread: "thread-a",
+			Reason: threadwake.ReasonUserMessage,
+		})
+	}, 5*time.Second)
+
+	env.ExecuteWorkflow(parkedThreadWorkflow("thread-a", tracker))
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+	var reenter bool
+	s.NoError(env.GetWorkflowResult(&reenter))
+	s.True(reenter,
+		"a user message saved to a parked thread must wake it; the turn that follows is what re-reads history")
+	s.True(tracker.hasLiveDetachedSpawns("thread-a"),
+		"the child never finished; waking to read the user's message must not abandon it")
+}
+
+// The user-message sender is thread-scoped exactly like the mailbox one. A
+// user replying to a SUB-AGENT must not wake the parent: the parent has no new
+// input, and re-entering its loop would spend a turn on nothing.
+func (s *SpawnLifetimeSuite) TestParkedThread_UserMessageForSubThreadDoesNotWakeParent() {
+	env := s.NewTestWorkflowEnvironment()
+	tracker := &ChildWorkflowTracker{}
+	tracker.registerDetachedSpawn(&detachedSpawnRecord{ToolCallID: "tc1", ParentThread: "thread-a", ChildThread: "child-1"})
+
+	env.RegisterDelayedCallback(func() {
+		env.SignalWorkflow(ThreadWakeSignalName, ThreadWakeSignal{
+			Thread: "child-1",
+			Reason: threadwake.ReasonUserMessage,
+		})
+	}, 5*time.Second)
+	// Only this releases thread-a, proving the sub-thread's wake did not.
+	env.RegisterDelayedCallback(func() {
+		tracker.completeDetachedSpawn("tc1", "thread-a")
+	}, 10*time.Second)
+
+	env.ExecuteWorkflow(parkedThreadWorkflow("thread-a", tracker))
+
+	s.True(env.IsWorkflowCompleted())
+	s.NoError(env.GetWorkflowError())
+	s.Equal(1, tracker.threadWakeCount("child-1"), "the wake must land on the sub-thread it named")
+	s.Equal(0, tracker.threadWakeCount("thread-a"),
+		"a user message to a sub-agent must not wake its parent")
 }
 
 // The signal must be thread-addressed end to end: a real signal naming a
@@ -291,7 +360,7 @@ func (s *SpawnLifetimeSuite) TestParkedThread_RealSignalForOtherThreadDoesNotWak
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{ToolCallID: "tc1", ParentThread: "thread-a", ChildThread: "child-1"})
 
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(AgentMessageQueuedSignalName, AgentMessageQueuedSignal{Thread: "thread-b"})
+		env.SignalWorkflow(ThreadWakeSignalName, ThreadWakeSignal{Thread: "thread-b"})
 	}, 5*time.Second)
 	// Only this releases thread-a, proving the sibling's signal did not.
 	env.RegisterDelayedCallback(func() {
@@ -302,8 +371,8 @@ func (s *SpawnLifetimeSuite) TestParkedThread_RealSignalForOtherThreadDoesNotWak
 
 	s.True(env.IsWorkflowCompleted())
 	s.NoError(env.GetWorkflowError())
-	s.Equal(1, tracker.agentMessageWakeCount("thread-b"), "the signal must land on the thread it named")
-	s.Equal(0, tracker.agentMessageWakeCount("thread-a"))
+	s.Equal(1, tracker.threadWakeCount("thread-b"), "the signal must land on the thread it named")
+	s.Equal(0, tracker.threadWakeCount("thread-a"))
 }
 
 // TestAwaitLiveDetachedSpawns_IgnoresOtherThreads: a background spawn

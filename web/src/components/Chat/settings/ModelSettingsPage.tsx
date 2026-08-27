@@ -247,7 +247,7 @@ export function ModelSettingsPage({
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
-        <h3 className="text-[13px] font-semibold text-foreground flex-1">
+        <h3 className="text-sm font-semibold text-foreground flex-1">
           Model
         </h3>
         <button
@@ -312,15 +312,15 @@ export function ModelSettingsPage({
                 )}
               >
                 <div className="flex flex-col gap-px">
-                  <span className="text-[13px] font-semibold text-foreground capitalize">
+                  <span className="text-sm font-semibold text-foreground capitalize">
                     {tag}
                   </span>
-                  <span className="text-[11px] text-muted-foreground/70">
+                  <span className="text-xs text-muted-foreground/70">
                     {tagDescriptions[tag]}
                   </span>
                 </div>
                 {resolved && (
-                  <div className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
                     <span
                       className="w-1.5 h-1.5 rounded-full inline-block shrink-0"
                       style={{
@@ -358,7 +358,7 @@ export function ModelSettingsPage({
           <div className="p-1 max-h-60 overflow-y-auto">
             {providers.map((provider) => (
               <div key={provider}>
-                <div className="px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                <div className="px-2.5 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70">
                   {provider}
                 </div>
                 {groupedModels[provider].map((model) => {
@@ -385,18 +385,18 @@ export function ModelSettingsPage({
                             ),
                           }}
                         />
-                        <span className="text-[13px] font-medium text-foreground">
+                        <span className="text-sm font-medium text-foreground">
                           {model.name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/70">
+                      <div className="flex items-center gap-1.5 text-2xs text-muted-foreground/70">
                         {model.canReason && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-[9px] font-semibold uppercase tracking-tight bg-primary/15 text-primary">
+                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-primary/15 text-primary">
                             reasoning
                           </span>
                         )}
                         {model.capabilities?.includes("fast") && (
-                          <span className="inline-flex px-1 py-px rounded-sm text-[9px] font-semibold uppercase tracking-tight bg-sky-400/15 text-sky-400">
+                          <span className="inline-flex px-1 py-px rounded-sm text-3xs font-semibold uppercase tracking-tight bg-sky-400/15 text-sky-400">
                             fast
                           </span>
                         )}
@@ -419,7 +419,7 @@ export function ModelSettingsPage({
 
       {/* Overrides section */}
       <div className="border-t border-border/50 px-3.5 py-2.5">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
+        <div className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground/70 mb-2">
           Overrides
         </div>
 
@@ -428,7 +428,7 @@ export function ModelSettingsPage({
           <span className="text-xs text-muted-foreground font-medium">
             Thinking
             {modelDefaultThinking && (
-              <span className="text-[10px] text-muted-foreground/70 font-normal">
+              <span className="text-2xs text-muted-foreground/70 font-normal">
                 {" "}
                 · default: {modelDefaultThinking}
               </span>
@@ -470,7 +470,7 @@ export function ModelSettingsPage({
               }}
               className="w-20 h-1 appearance-none bg-border rounded cursor-pointer accent-primary"
             />
-            <span className="text-[11px] text-muted-foreground min-w-7 text-right">
+            <span className="text-xs text-muted-foreground min-w-7 text-right">
               {currentTemperature !== undefined
                 ? currentTemperature.toFixed(1)
                 : "1.0"}

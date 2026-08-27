@@ -170,3 +170,57 @@ func TestLoadMCPServersFromFile_ParsesTypeAndURL(t *testing.T) {
 		t.Fatalf("expected url to be parsed, got %q", s.URL)
 	}
 }
+
+// mcp.json is parsed field by hand, so a field added to config.MCPServer is
+// silently dropped until it is added here. Both dirScoped and dir had been
+// declared and documented for users while never being read out of the file,
+// which made the whole feature inert from a config file; requiresFiles would
+// have inherited exactly that.
+func TestLoadMCPServersFromFile_ParsesTreeScopingFields(t *testing.T) {
+	dir := t.TempDir()
+	mcpPath := filepath.Join(dir, config.MCPConfigFileName)
+
+	cfg := `{
+  "mcpServers": {
+    "gopls": {
+      "command": "gopls",
+      "args": ["mcp"],
+      "dirScoped": true,
+      "requiresFiles": ["go.mod", "go.work", "  "]
+    },
+    "pinned": {
+      "command": "gopls",
+      "args": ["mcp"],
+      "dir": "/srv/monorepo"
+    },
+    "plain": {
+      "command": "some-tool"
+    }
+  }
+}`
+	if err := os.WriteFile(mcpPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write mcp: %v", err)
+	}
+
+	servers := LoadMCPServersFromFile(mcpPath)
+
+	gopls, ok := servers["gopls"]
+	if !ok {
+		t.Fatalf("expected gopls server")
+	}
+	if !gopls.DirScoped {
+		t.Error("dirScoped was dropped: every project would share one index")
+	}
+	if len(gopls.RequiresFiles) != 2 || gopls.RequiresFiles[0] != "go.mod" || gopls.RequiresFiles[1] != "go.work" {
+		t.Errorf("requiresFiles not parsed (blanks dropped): %#v", gopls.RequiresFiles)
+	}
+
+	if got := servers["pinned"].Dir; got != "/srv/monorepo" {
+		t.Errorf("dir was dropped: got %q", got)
+	}
+
+	plain := servers["plain"]
+	if plain.DirScoped || len(plain.RequiresFiles) != 0 || plain.Dir != "" {
+		t.Errorf("a server declaring none of these must get none of them: %#v", plain)
+	}
+}

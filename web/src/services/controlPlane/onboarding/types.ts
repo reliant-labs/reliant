@@ -10,4 +10,12 @@ export interface OnboardingUser {
   id?: string;
   email?: string;
   name?: string;
+  /**
+   * When this account was created, epoch milliseconds.
+   *
+   * Used to tell "a daemon this user set up" from "the bundled desktop daemon
+   * that re-registered under them at sign-in" — see OnboardingRoute. Undefined
+   * when the server did not supply it, or in local mode.
+   */
+  createdAtMs?: number;
 }

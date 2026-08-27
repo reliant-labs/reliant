@@ -352,7 +352,7 @@ export function PresetPicker({
             <>
               <Code2 className="w-4 h-4 flex-shrink-0 text-violet-500" />
               <span className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
                   Expression
                 </span>
                 <span className="truncate font-mono text-xs text-muted-foreground">
@@ -392,7 +392,7 @@ export function PresetPicker({
             </div>
             <div className="text-xs text-muted-foreground mb-3">
               This preset is set by an expression:
-              <div className="mt-1 font-mono text-[11px] break-all bg-muted/50 rounded px-2 py-1 text-foreground">
+              <div className="mt-1 font-mono text-xs break-all bg-muted/50 rounded px-2 py-1 text-foreground">
                 {value}
               </div>
               Replacing it will overwrite the expression with a fixed preset.

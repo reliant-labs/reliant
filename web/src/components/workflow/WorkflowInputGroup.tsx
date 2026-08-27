@@ -425,7 +425,7 @@ export function WorkflowInputGroup({
           </div>
           <div className="cpv2-pgh-right">
             {selectedPreset && <span className="cpv2-pgh-preset">{selectedPreset}</span>}
-            <span className="text-[10px] text-muted-foreground">{group.inputs.length} params</span>
+            <span className="text-2xs text-muted-foreground">{group.inputs.length} params</span>
             {groupIsDirty && (
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500" title="Modified" />
             )}

@@ -81,7 +81,7 @@ export function SequenceHint({ pending }: SequenceHintProps) {
     >
       <div className="rounded-lg border border-border bg-popover/95 shadow-lg backdrop-blur">
         <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-          <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[11px]">
+          <kbd className="rounded border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-xs">
             {formatBinding(pending, isMac)}
           </kbd>
           <span className="text-xs text-muted-foreground">
@@ -92,7 +92,7 @@ export function SequenceHint({ pending }: SequenceHintProps) {
         <div className="grid max-h-56 grid-cols-2 gap-x-6 gap-y-0.5 overflow-y-auto px-3 py-2 sm:grid-cols-3">
           {Object.entries(grouped).map(([category, items]) => (
             <div key={category} className="min-w-0">
-              <div className="truncate pb-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+              <div className="truncate pb-0.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground/70">
                 {category}
               </div>
               {items.map((entry) => (
@@ -100,7 +100,7 @@ export function SequenceHint({ pending }: SequenceHintProps) {
                   key={`${category}-${entry.key}`}
                   className="flex items-baseline gap-2 py-px"
                 >
-                  <kbd className="min-w-[1.25rem] shrink-0 rounded border border-border/60 bg-muted px-1 text-center font-mono text-[11px]">
+                  <kbd className="min-w-[1.25rem] shrink-0 rounded border border-border/60 bg-muted px-1 text-center font-mono text-xs">
                     {entry.key}
                   </kbd>
                   <span className="truncate text-xs text-foreground/90">

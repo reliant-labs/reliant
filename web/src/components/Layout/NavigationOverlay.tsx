@@ -127,7 +127,7 @@ export function NavigationOverlay({ onClose }: NavigationOverlayProps) {
                       {item.shortcut.split(' ').map((key, idx) => (
                         <kbd
                           key={idx}
-                          className="px-1.5 py-0.5 text-[10px] font-mono bg-muted/40 border border-border/40 rounded text-muted-foreground/80 group-hover:text-primary group-hover:border-primary/50 transition-colors"
+                          className="px-1.5 py-0.5 text-2xs font-mono bg-muted/40 border border-border/40 rounded text-muted-foreground/80 group-hover:text-primary group-hover:border-primary/50 transition-colors"
                         >
                           {key}
                         </kbd>

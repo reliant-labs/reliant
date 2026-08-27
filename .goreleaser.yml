@@ -1,5 +1,39 @@
 version: 2
 project_name: reliant
+
+# ── Where the four builddefaults values come from ──────────────────────────
+#
+# The `-X …/internal/builddefaults.*` flags below compile the hosted endpoints
+# into the binary so a released `reliant` needs no RELIANT_*= prefix in front of
+# `daemon start`. They read FOUR environment variables, and there is exactly one
+# legitimate source for them:
+#
+#   control-plane/deploy/kcl/lib/env.k   (reliant_desktop_release_config)
+#     -> control-plane/deploy/kcl/desktop_release.k
+#     -> .github/scripts/sync-release-config.mjs
+#     -> electron/release.config.json    (generated, committed, drift-gated)
+#
+# Export them the same way .github/workflows/release.yml does before invoking
+# goreleaser — one jq over the generated file, no hand-written values:
+#
+#   jq -er '.main | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
+#
+# DO NOT WRITE A HOSTNAME IN THIS FILE. A literal here is a second declaration
+# that drifts silently from KCL, which is the exact defect that shipped v1.7.5
+# with no control-plane URL. If you find yourself wanting to hardcode one,
+# the config is missing upstream — fix it in KCL.
+#
+# WHY envOrDefault WITH AN EMPTY DEFAULT, rather than omitting the flags.
+# Empty is the OSS-clean state: internal/builddefaults.Value treats an empty
+# compiled-in default as absent and falls through to the env var, then to
+# NeutralServerURL (localhost). So a `goreleaser build` run by a contributor
+# with none of these set produces a self-host binary pointed at their own
+# stack — never silently at Reliant's hosted control plane. Injecting the
+# hosted values is an explicit opt-in performed by the release pipeline.
+#
+# These flags were absent entirely, so every artifact goreleaser produces —
+# the Homebrew formula, AUR, deb, rpm — would have resolved to
+# http://localhost:8080 on a user's machine.
 builds:
   - env:
       - CGO_ENABLED=0
@@ -19,6 +53,10 @@ builds:
         -X github.com/reliant-labs/reliant/internal/version.Commit={{.Commit}}
         -X github.com/reliant-labs/reliant/internal/version.Date={{.Date}}
         -X github.com/reliant-labs/reliant/internal/version.Branch={{.Branch}}
+        -X github.com/reliant-labs/reliant/internal/builddefaults.ServerURL={{ envOrDefault "RELIANT_SERVER_URL" "" }}
+        -X github.com/reliant-labs/reliant/internal/builddefaults.GatewayURL={{ envOrDefault "RELIANT_GATEWAY_URL" "" }}
+        -X github.com/reliant-labs/reliant/internal/builddefaults.AuthURL={{ envOrDefault "SUPABASE_URL" "" }}
+        -X github.com/reliant-labs/reliant/internal/builddefaults.AuthKey={{ envOrDefault "SUPABASE_ANON_KEY" "" }}
     main: ./cmd/reliant/
 
 archives:

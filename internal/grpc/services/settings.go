@@ -308,6 +308,66 @@ func (s *SettingsService) UpdateSetting(ctx context.Context, req *connect.Reques
 	}), nil
 }
 
+// BatchUpsertSettings writes many settings in one round trip.
+//
+// Each entry goes through CreateSetting, which is an upsert server-side (see
+// the ON CONFLICT note in queries/settings.sql), so a batch does not have to
+// know which keys already exist. One refetch is emitted for the whole batch
+// rather than one per key — the fan-out this RPC exists to remove would
+// otherwise just reappear on the event side.
+func (s *SettingsService) BatchUpsertSettings(ctx context.Context, req *connect.Request[reliantv1.BatchUpsertSettingsRequest]) (*connect.Response[reliantv1.BatchUpsertSettingsResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	var projectID *string
+	if req.Msg.ProjectId != nil {
+		projectID = req.Msg.ProjectId
+	}
+
+	for _, write := range req.Msg.Settings {
+		if write.GetKey() == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("key is required for every setting in a batch"))
+		}
+	}
+
+	now := time.Now().UTC()
+	written := make([]*reliantv1.Setting, 0, len(req.Msg.Settings))
+
+	for _, write := range req.Msg.Settings {
+		valueType := "string"
+		if write.ValueType != nil && *write.ValueType != "" {
+			valueType = *write.ValueType
+		}
+
+		setting := &db.Setting{
+			ID:        uuid.New().String(),
+			UserID:    userID,
+			ProjectID: projectID,
+			Key:       write.GetKey(),
+			Value:     write.GetValue(),
+			ValueType: valueType,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+
+		if err := s.database.CreateSetting(ctx, setting); err != nil {
+			logging.Error("Failed to upsert setting in batch", "error", err, "key", write.GetKey())
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to upsert setting %q", write.GetKey()))
+		}
+
+		written = append(written, settingToProto(setting))
+	}
+
+	if len(written) > 0 {
+		if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
+			logging.Warn("Failed to emit config_health refetch after BatchUpsertSettings", "error", err)
+		}
+	}
+
+	return connect.NewResponse(&reliantv1.BatchUpsertSettingsResponse{
+		Settings: written,
+	}), nil
+}
+
 // DeleteSetting deletes a setting by key
 func (s *SettingsService) DeleteSetting(ctx context.Context, req *connect.Request[reliantv1.DeleteSettingRequest]) (*connect.Response[reliantv1.DeleteSettingResponse], error) {
 	userID := auth.MustGetUserID(ctx)

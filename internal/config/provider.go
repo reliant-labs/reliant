@@ -257,6 +257,22 @@ func parseMCPServersFromJSON(raw string) map[string]MCPServer {
 		if enabled, ok := cfgMap["enabled"].(bool); ok {
 			server.Enabled = enabled
 		}
+		// Tree-scoping fields, hand-parsed like everything above: a field added
+		// to MCPServer is silently dropped on this path until it appears here.
+		if dir, ok := cfgMap["dir"].(string); ok && dir != "" {
+			server.Dir = dir
+		}
+		if dirScoped, ok := cfgMap["dirScoped"].(bool); ok {
+			server.DirScoped = dirScoped
+		}
+		if requires, ok := cfgMap["requiresFiles"].([]interface{}); ok {
+			server.RequiresFiles = make([]string, 0, len(requires))
+			for _, pattern := range requires {
+				if s, ok := pattern.(string); ok && strings.TrimSpace(s) != "" {
+					server.RequiresFiles = append(server.RequiresFiles, s)
+				}
+			}
+		}
 		servers[name] = server
 	}
 	if len(servers) == 0 {

@@ -52,7 +52,7 @@ export const RunNode = memo(({ data, selected }: RunNodeProps) => {
             <Terminal className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-600">RUN</div>
+            <div className="text-2xs font-bold uppercase tracking-wide text-indigo-600">RUN</div>
             <div className="font-semibold text-foreground text-sm leading-tight truncate">{label}</div>
           </div>
         </div>

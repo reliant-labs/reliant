@@ -53,6 +53,15 @@ func (c *absorbTestTemporalClient) ExecuteWorkflow(
 	return &fakeWorkflowRun{id: options.ID, runID: "run-" + options.ID}, nil
 }
 
+// Sending to a live thread rings the thread-wake doorbell, so this fake must
+// accept a signal. These tests are about what SendMessage persists, not about
+// the wake — see chat_send_thread_wake_test.go for that — so it is dropped.
+func (c *absorbTestTemporalClient) SignalWorkflow(
+	_ context.Context, _, _ string, _ string, _ interface{},
+) error {
+	return nil
+}
+
 type assertNotFound struct{}
 
 func (assertNotFound) Error() string { return "workflow not found" }

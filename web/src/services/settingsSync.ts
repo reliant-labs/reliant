@@ -10,7 +10,7 @@ import type { Setting } from "../api/settings-grpc";
 import { api } from "../api/client";
 import { waitForConfig } from "../lib/configReady";
 import { logger } from "../lib/logger";
-import { applyRootFontSize } from "../lib/rootFontSize";
+import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../lib/rootFontSize";
 
 // Setting key prefixes for organization
 export const SETTINGS_KEYS = {
@@ -189,6 +189,25 @@ export class SettingsSyncService {
   }
 
   /**
+   * Write a setting only if it differs from what is already stored.
+   *
+   * Returns whether a write was issued, so callers can skip the
+   * "something changed" event too.
+   *
+   * The settings panels seed a `useState` from storage on mount and write it
+   * back from an effect keyed on that state, so simply OPENING a panel
+   * re-saved every preference the user had not touched. When the value read at
+   * mount was stale, re-saving it gave the stale value the newest timestamp
+   * and it won the next load — a chosen font size would silently revert.
+   * Comparing first makes those effects idempotent.
+   */
+  async setSettingIfChanged(key: SettingKey, value: string): Promise<boolean> {
+    if (this.getSetting(key, "") === value) return false;
+    await this.setSetting(key, value);
+    return true;
+  }
+
+  /**
    * Get a setting value (reads from localStorage)
    */
   getSetting(key: SettingKey, defaultValue: string = ""): string {
@@ -248,24 +267,21 @@ export class SettingsSyncService {
    * Uses optimistic create-first approach to avoid 404 errors on GET
    */
   private async syncToDatabase(key: string, value: string): Promise<void> {
+    // Routed through upsertStringSetting so appearance writes get the same
+    // per-tick coalescing and signed-out gating as every other setting write.
+    // Opening a settings panel writes several keys at once; each used to be
+    // its own upsert RPC.
+    //
+    // The write is still an upsert server-side (see the ON CONFLICT note in
+    // queries/settings.sql), which is what fixed the duplicate-row bug where a
+    // stale row could win the next load and revert a chosen font size.
+    //
+    // Imported lazily: settingsPersistence imports this module, so a static
+    // import here would be a cycle.
     try {
-      // Try to create first (optimistic approach)
-      try {
-        await api.settings.createSetting(key, value, "string");
-        logger.debug(`[SettingsSync] Created setting in database: ${key} = ${value}`);
-        return;
-      } catch (createError: unknown) {
-        // If conflict/duplicate, update instead
-        // gRPC errors have a 'code' property
-        const errorCode = (createError as { code?: number })?.code;
-        // ALREADY_EXISTS = 6, INVALID_ARGUMENT = 3
-        if (errorCode === 6 || errorCode === 3) {
-          await api.settings.updateSetting(key, value, "string");
-          logger.debug(`[SettingsSync] Updated setting in database: ${key} = ${value}`);
-        } else {
-          throw createError;
-        }
-      }
+      const { upsertStringSetting } = await import("../lib/settingsPersistence");
+      await upsertStringSetting(key, value);
+      logger.debug(`[SettingsSync] Persisted setting: ${key} = ${value}`);
     } catch (error) {
       logger.error(`[SettingsSync] ❌ Failed to sync ${key} to database:`, error);
       // Don't throw - localStorage update succeeded, DB sync is best-effort
@@ -401,7 +417,7 @@ export class SettingsSyncService {
     const font = this.getSetting(SETTINGS_KEYS.FONT, "default");
     const chatFont = this.getSetting(SETTINGS_KEYS.CHAT_FONT, "default");
     const editorFont = this.getSetting(SETTINGS_KEYS.EDITOR_FONT, "default");
-    const fontSize = this.getSetting(SETTINGS_KEYS.FONT_SIZE, "md");
+    const fontSize = this.getSetting(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE);
 
     logger.info(`[SettingsSync] Applying fonts: font="${font}", chatFont="${chatFont}", editorFont="${editorFont}", fontSize="${fontSize}"`);
 

@@ -84,7 +84,7 @@ export function DaemonWaitState({
   // The backend's own words, kept visually distinct from ours. It's the only
   // part of this that is ground truth, and it's often the only actionable part.
   const reason = state.reason ? (
-    <p className="max-w-md break-words rounded border border-border/50 bg-muted/40 px-2 py-1 font-mono text-[11px] leading-relaxed text-muted-foreground">
+    <p className="max-w-md break-words rounded border border-border/50 bg-muted/40 px-2 py-1 font-mono text-xs leading-relaxed text-muted-foreground">
       {state.reason}
     </p>
   ) : null;
@@ -128,7 +128,7 @@ export function DaemonWaitState({
           <span className="text-xs text-muted-foreground">{state.detail}</span>
         )}
         {state.reason && (
-          <span className="font-mono text-[11px] text-muted-foreground">{state.reason}</span>
+          <span className="font-mono text-xs text-muted-foreground">{state.reason}</span>
         )}
         <span className="ml-auto">{actions}</span>
       </div>

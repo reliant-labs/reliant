@@ -2,6 +2,17 @@
    Config Panel v2 — Scoped design tokens and primitives
    Matches prototype: dev/config-panel-redesign.html
    All styles scoped under .config-panel-v2 to avoid global theme changes
+
+   Font sizes here are rem, never px. rem resolves against the root size the
+   Appearance font-size preference sets on <html>, so this panel tracks the
+   user's choice; a px value would pin it to one size at every setting, which
+   is what it used to do.
+
+   The values are expressed as (px / 14), 14px being the root at the `md` step —
+   so 0.7857rem is "11px at md" and scales from there. Every step was raised one
+   notch from the panel's original sizes, which ran 9-13px and read as far too
+   small next to the rest of the UI. The bulk of the panel (labels, inputs, field
+   text) now sits at 0.9286rem ≈ 13.9px at the default `lg`.
    ========================================================================== */
 
 .config-panel-v2 {
@@ -151,7 +162,7 @@
 }
 
 .cpv2-panel-title {
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 600;
   color: hsl(var(--foreground));
   line-height: 1.25;
@@ -180,7 +191,7 @@
 }
 
 .cpv2-panel-subtitle {
-  font-size: 10px;
+  font-size: 0.7857rem;
   color: hsl(var(--muted-foreground) / 0.75);
   line-height: 1.25;
   overflow: hidden;
@@ -260,7 +271,7 @@
   background: none;
   border: none;
   padding: 8px 12px;
-  font-size: 11px;
+  font-size: 0.8571rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -303,7 +314,7 @@
 }
 
 .cpv2-section-label {
-  font-size: 10px;
+  font-size: 0.7857rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -329,7 +340,7 @@
   display: flex;
   align-items: flex-start;
   gap: 8px;
-  font-size: 13px;
+  font-size: 1rem;
   color: hsl(var(--muted-foreground));
   line-height: 1.5;
 }
@@ -342,7 +353,7 @@
 .config-panel-v2 input:not([type="range"]):not([type="checkbox"]),
 .config-panel-v2 textarea,
 .config-panel-v2 select {
-  font-size: 12px;
+  font-size: 0.9286rem;
   border-radius: var(--cpv2-radius-sm);
   background-color: hsl(var(--config-input-bg));
   border-color: hsl(var(--config-input-border));
@@ -363,7 +374,7 @@
   background: none;
   border: none;
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: 1rem;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
   cursor: pointer;
@@ -388,7 +399,7 @@
 
 /* --- Field hint --- */
 .cpv2-field-hint {
-  font-size: 12px;
+  font-size: 0.9286rem;
   color: hsl(var(--muted-foreground));
   margin-top: 4px;
   line-height: 1.4;
@@ -407,7 +418,7 @@
   border: 1px solid hsl(var(--config-input-border));
   border-radius: var(--cpv2-radius-sm);
   color: hsl(var(--foreground));
-  font-size: 12px;
+  font-size: 0.9286rem;
   outline: none;
   transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
 }
@@ -423,7 +434,7 @@
   border: 1px solid hsl(var(--config-input-border));
   border-radius: var(--cpv2-radius-sm);
   color: hsl(var(--foreground));
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   line-height: 1.5;
   resize: vertical;
@@ -442,7 +453,7 @@
   border: 1px solid hsl(var(--config-input-border));
   border-radius: var(--cpv2-radius-sm);
   color: hsl(var(--foreground));
-  font-size: 12px;
+  font-size: 0.9286rem;
   outline: none;
   cursor: pointer;
   appearance: none;
@@ -460,7 +471,7 @@
   border: 1px solid hsl(var(--border));
   border-radius: var(--cpv2-radius-sm);
   color: hsl(var(--foreground));
-  font-size: 11px;
+  font-size: 0.8571rem;
   font-weight: 500;
   outline: none;
   cursor: pointer;
@@ -478,7 +489,7 @@
   border: 1px solid hsl(var(--config-input-border));
   border-radius: var(--cpv2-radius-sm);
   color: hsl(var(--foreground));
-  font-size: 12px;
+  font-size: 0.9286rem;
   outline: none;
   text-align: right;
   transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);
@@ -494,13 +505,13 @@
 }
 
 .cpv2-fi-label {
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
 }
 
 .cpv2-fi-hint {
-  font-size: 10px;
+  font-size: 0.7857rem;
   color: hsl(var(--muted-foreground) / 0.6);
   font-weight: 400;
 }
@@ -514,20 +525,20 @@
 }
 
 .cpv2-field-label span {
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
 }
 
 .cpv2-field-default {
-  font-size: 10px;
+  font-size: 0.7857rem;
   color: hsl(var(--muted-foreground) / 0.6);
   font-weight: 400;
 }
 
 /* --- CEL toggle button --- */
 .cpv2-cel-toggle {
-  font-size: 9px;
+  font-size: 0.7143rem;
   font-weight: 700;
   letter-spacing: 0.3px;
   padding: 1px 5px;
@@ -559,7 +570,7 @@
 }
 
 .cpv2-slider-val {
-  font-size: 11px;
+  font-size: 0.8571rem;
   color: hsl(var(--muted-foreground));
   min-width: 28px;
   text-align: right;
@@ -580,7 +591,7 @@
   height: 22px;
   padding: 0 8px;
   border-radius: 11px;
-  font-size: 11px;
+  font-size: 0.8571rem;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--cpv2-transition);
@@ -597,7 +608,7 @@
 .cpv2-tag.dashed { border-style: dashed; }
 
 .cpv2-tag-x {
-  font-size: 10px;
+  font-size: 0.7857rem;
   opacity: 0.5;
   margin-left: 2px;
   cursor: pointer;
@@ -644,18 +655,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 0.8571rem;
   flex-shrink: 0;
 }
 
 .cpv2-dr-label {
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-weight: 500;
   color: hsl(var(--foreground));
 }
 
 .cpv2-dr-sublabel {
-  font-size: 10px;
+  font-size: 0.7857rem;
   color: hsl(var(--muted-foreground));
 }
 
@@ -663,7 +674,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 0.8571rem;
   color: hsl(var(--muted-foreground));
 }
 .cpv2-dr-right svg { width: 12px; height: 12px; }
@@ -681,7 +692,7 @@
   border: 1px solid hsl(var(--border));
   background: transparent;
   color: hsl(var(--muted-foreground));
-  font-size: 11px;
+  font-size: 0.8571rem;
   font-weight: 500;
   text-align: center;
   cursor: pointer;
@@ -714,7 +725,7 @@
 .cpv2-card-field-label {
   display: block;
   margin-bottom: 4px;
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-weight: 500;
   color: hsl(var(--muted-foreground));
 }
@@ -724,7 +735,7 @@
 .cpv2-card-field-textarea {
   width: 100%;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 0.9286rem;
   border: 1px solid hsl(var(--config-input-border));
   border-radius: var(--cpv2-radius-sm);
   background: hsl(var(--config-input-bg));
@@ -776,7 +787,7 @@
 }
 
 .cpv2-card-title {
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-weight: 600;
   color: hsl(var(--foreground));
 }
@@ -784,7 +795,7 @@
 .cpv2-card-actions { display: flex; gap: 2px; }
 
 .cpv2-card-sub {
-  font-size: 11px;
+  font-size: 0.8571rem;
   color: hsl(var(--muted-foreground));
   line-height: 1.4;
 }
@@ -801,7 +812,7 @@
   border-radius: var(--cpv2-radius-sm);
   background: transparent;
   color: hsl(var(--muted-foreground));
-  font-size: 11px;
+  font-size: 0.8571rem;
   font-weight: 500;
   cursor: pointer;
   transition: all var(--cpv2-transition);
@@ -844,7 +855,7 @@
 .cpv2-param-group-header.collapsed .cpv2-pgh-chevron { transform: rotate(-90deg); }
 
 .cpv2-pgh-label {
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-weight: 600;
   color: hsl(var(--foreground));
 }
@@ -856,7 +867,7 @@
 }
 
 .cpv2-pgh-preset {
-  font-size: 10px;
+  font-size: 0.7857rem;
   color: var(--cpv2-accent);
   font-weight: 500;
   padding: 2px 6px;
@@ -880,7 +891,7 @@
   border: 1px solid hsl(var(--config-input-border));
   border-radius: var(--cpv2-radius-sm);
   color: var(--cpv2-accent);
-  font-size: 12px;
+  font-size: 0.9286rem;
   font-family: 'SF Mono', Menlo, Consolas, monospace;
   outline: none;
   transition: border-color var(--cpv2-transition), box-shadow var(--cpv2-transition);

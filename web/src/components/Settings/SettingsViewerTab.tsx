@@ -144,7 +144,7 @@ export function SettingsViewerTab({ section, onSectionChange }: SettingsViewerTa
             {!isCollapsed && (
               <div className="min-w-0">
                 <h1 className="truncate text-sm font-semibold text-foreground">Settings</h1>
-                <p className="truncate text-[11px] text-muted-foreground">Configure Reliant</p>
+                <p className="truncate text-xs text-muted-foreground">Configure Reliant</p>
               </div>
             )}
           </div>

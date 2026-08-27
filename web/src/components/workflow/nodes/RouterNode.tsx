@@ -103,7 +103,7 @@ export const RouterNode = memo(({ id: _id, data, selected }: RouterNodeProps) =>
           <GitFork className="w-4 h-4 text-white" />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="text-[10px] font-bold uppercase tracking-wide text-amber-600">
+          <div className="text-2xs font-bold uppercase tracking-wide text-amber-600">
             ROUTER{isNodeMode ? ' · NODES' : ''}
           </div>
           <div className="font-semibold text-foreground text-sm leading-tight truncate">

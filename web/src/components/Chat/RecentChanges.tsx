@@ -1224,7 +1224,7 @@ function RepoChangesPanel({
                     {file.path.split('/').pop()}
                   </span>
                   {file.path.includes('/') && (
-                    <span className="text-[10px] text-muted-foreground truncate flex-1 min-w-0">
+                    <span className="text-2xs text-muted-foreground truncate flex-1 min-w-0">
                       {file.path.substring(0, file.path.lastIndexOf('/'))}
                     </span>
                   )}
@@ -1544,7 +1544,7 @@ function RepoChangesPanel({
             <div className="mb-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div className="min-w-0">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+                  <div className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
                     Working Tree
                   </div>
                   <div className="truncate text-xs text-muted-foreground">
@@ -1555,7 +1555,7 @@ function RepoChangesPanel({
                   {data?.total_files || 0} files
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center text-[11px]">
+              <div className="grid grid-cols-3 gap-2 text-center text-xs">
                 <div className="rounded-md bg-muted/40 px-2 py-1.5">
                   <div className="font-semibold text-foreground">{stagedFiles.length}</div>
                   <div className="text-muted-foreground">Staged</div>

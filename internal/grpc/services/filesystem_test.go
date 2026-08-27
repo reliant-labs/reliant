@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"unicode/utf8"
@@ -140,9 +141,10 @@ func TestFileSystemService_GetFileContent_RejectsNonPDFBinaryFiles(t *testing.T)
 	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
 }
 
-// GetFileTree serves a live, depth-limited walk: files report real sizes,
-// depth=1 returns only immediate children with has_children set on non-empty
-// directories, and depth=0 returns the full recursive tree (back-compat).
+// GetFileTree serves a live, bounded walk: files report real sizes, depth=1
+// returns only immediate children with has_children set on non-empty
+// directories, depth=0 takes the server default rather than recursing without
+// bound, and depth=-1 goes as deep as the node budget allows.
 func TestFileSystemService_GetFileTree_DepthAndLiveWalk(t *testing.T) {
 	svc, projectPath := setupTestFileSystemService(t)
 
@@ -152,15 +154,16 @@ func TestFileSystemService_GetFileTree_DepthAndLiveWalk(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "pkg", "sub", "deep.txt"), []byte("c"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(projectPath, "empty"), 0o755))
 
-	getTree := func(depth int32) []*reliantv1.FileNode {
+	getResp := func(depth int32) *reliantv1.GetFileTreeResponse {
 		resp, err := svc.GetFileTree(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 			ProjectId:  "test-project",
 			ShowHidden: false,
 			Depth:      depth,
 		}))
 		require.NoError(t, err)
-		return resp.Msg.Files
+		return resp.Msg
 	}
+	getTree := func(depth int32) []*reliantv1.FileNode { return getResp(depth).Files }
 	find := func(nodes []*reliantv1.FileNode, name string) *reliantv1.FileNode {
 		for _, n := range nodes {
 			if n.Name == name {
@@ -183,11 +186,69 @@ func TestFileSystemService_GetFileTree_DepthAndLiveWalk(t *testing.T) {
 	require.NotNil(t, empty)
 	assert.False(t, empty.GetHasChildren(), "empty dir must not carry has_children")
 
-	// depth 0: full recursive tree.
-	full := getTree(0)
+	// depth 0: the server default (2 levels) — NOT unlimited. An unbounded walk
+	// is the value a caller used to get by saying nothing, and it is what
+	// exhausted the system file table on a large project.
+	def := getResp(0)
+	dpkg := find(def.Files, "pkg")
+	require.NotNil(t, dpkg)
+	dsub := find(dpkg.Children, "sub")
+	require.NotNil(t, dsub, "the default depth reaches two levels")
+	assert.Empty(t, dsub.Children, "depth 0 must not recurse past the default depth")
+	assert.True(t, dsub.GetHasChildren(), "pkg/sub carries has_children at the default boundary")
+	assert.False(t, def.Truncated, "a five-node tree is nowhere near the node budget")
+	assert.Equal(t, int32(5), def.NodeCount, "node_count covers every level: keep.txt, empty, pkg, pkg/inner.txt, pkg/sub")
+
+	// depth -1: as deep as the node budget allows.
+	full := getTree(-1)
 	fpkg := find(full, "pkg")
 	require.NotNil(t, fpkg)
 	fsub := find(fpkg.Children, "sub")
 	require.NotNil(t, fsub)
-	assert.NotNil(t, find(fsub.Children, "deep.txt"), "depth 0 must recurse fully")
+	assert.NotNil(t, find(fsub.Children, "deep.txt"), "depth -1 must recurse to the leaf")
+}
+
+// The tree drops what the project's own .gitignore drops. This is the case that
+// crashed the app: a Unity checkout where git tracks 2,904 of 106,637 files and
+// the 8.2 GB build cache is ignored, yet the walk recursed into all of it.
+func TestFileSystemService_GetFileTree_HonorsGitignoreAndSkipSet(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	svc, projectPath := setupTestFileSystemService(t)
+
+	cmd := exec.Command("git", "init", "-q")
+	cmd.Dir = projectPath
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git init: %s", out)
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, ".gitignore"), []byte("[Ll]ibrary/\nbuild.log\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectPath, "Library", "ScriptAssemblies"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectPath, "node_modules", "pkg"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "build.log"), []byte("noise"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(projectPath, "Assets"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(projectPath, "Assets", "Player.cs"), []byte("cs"), 0o644))
+
+	// show_hidden mirrors the real client, which always asks for hidden files
+	// and filters them itself — so it must not be a way out of the bounds.
+	resp, err := svc.GetFileTree(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+		ProjectId:  "test-project",
+		ShowHidden: true,
+		Depth:      -1,
+	}))
+	require.NoError(t, err)
+
+	find := func(name string) *reliantv1.FileNode {
+		for _, n := range resp.Msg.Files {
+			if n.Name == name {
+				return n
+			}
+		}
+		return nil
+	}
+	assert.Nil(t, find("Library"), "gitignored/skipped Unity cache must not appear")
+	assert.Nil(t, find("node_modules"), "skip set must hold")
+	assert.Nil(t, find("build.log"), "gitignored file must not appear")
+	assert.Nil(t, find(".git"), ".git must not appear")
+	assert.NotNil(t, find("Assets"), "tracked sources must still appear")
 }

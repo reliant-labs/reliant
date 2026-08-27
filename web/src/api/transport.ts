@@ -460,63 +460,139 @@ function releaseSignOutGuard(delayMs = SIGN_OUT_RETRY_MS) {
     _signOutInFlight = false;
   }, delayMs);
 }
+
+const AUTH_HEADER = "Authorization";
+
+// Tear down the session after the backend refuses a credential we DID present.
+// Split out of the interceptor so the "never presented one" path can't reach
+// it by accident, and so the retry path can still fall into it when a freshly
+// resolved token is itself rejected.
+async function signOutOnRejectedToken(
+  req: { service: { typeName: string }; method: { name: string } },
+  error: ConnectError,
+): Promise<void> {
+  if (_signOutInFlight) return;
+
+  // Deliberately `hasSession()` rather than `getToken()`: this only needs to
+  // know whether a session is believed active, and a burst of 401s must not
+  // stampede the provider's refresh path.
+  const hasSession = await getAuthTokenProvider().hasSession();
+  if (!hasSession) return;
+
+  _signOutInFlight = true;
+  logger.warn(
+    "[gRPC Client] 401 with active session — token rejected by backend; signing out",
+    {
+      service: req.service.typeName,
+      method: req.method.name,
+      message: error.message,
+    },
+  );
+  Sentry.captureMessage("Auto sign-out on 401 with active session", {
+    level: "warning",
+    tags: {
+      grpc_service: req.service.typeName,
+      grpc_method: req.method.name,
+    },
+  });
+
+  try {
+    const { useAuthStore } = await import("../store/authStore");
+    await useAuthStore.getState().signOut();
+  } catch (signOutErr) {
+    logger.error("[gRPC Client] Auto sign-out failed", signOutErr);
+  }
+
+  // Hard redirect clears React Query caches and any in-flight retries that
+  // would otherwise keep firing 401s against the dead session.
+  if (
+    typeof window !== "undefined" &&
+    !window.location.pathname.startsWith("/auth")
+  ) {
+    window.location.href = "/auth";
+    // If the navigation lands, this page (and timer) are gone. If something
+    // cancels it, the guard re-arms so we neither spin nor wedge.
+    releaseSignOutGuard();
+  } else {
+    _signOutInFlight = false;
+  }
+}
+
+// A 401 proves our SESSION is bad only if we actually presented a credential.
+//
+// When no Authorization header made it onto the request, the server's auth
+// interceptor rejects it before any handler runs and reports exactly
+// "missing authorization token" (internal/grpc/interceptors/auth.go:182 — the
+// empty-header branch; a token that is expired or malformed takes a different
+// branch and says "invalid or expired token"). So a bare 401 on a tokenless
+// request is a CLIENT-side attach miss, not a backend rejection, and tearing
+// down the session over it signs out a user whose credentials are fine.
+//
+// That miss is real and transient. Measured 2026-08-26: three ListDaemons went
+// out with no token at 16:10:45–52 while the session was live and 25 seconds
+// before any sign-out — `getToken()` resolved null (Supabase mid-refresh /
+// daemon restart) while `hasSession()` still said true, which is precisely the
+// window the old handler read as proof of a bad token.
+//
+// Retrying is safe here *because* no token was sent: the request was refused
+// at the auth interceptor before reaching a handler, so even a mutation like
+// UpdateSetting had no server-side effect that a retry could duplicate.
 const unauthInterceptor: Interceptor = (next) => async (req) => {
   try {
     return await next(req);
   } catch (error) {
     if (
       !(error instanceof ConnectError) ||
-      error.code !== Code.Unauthenticated ||
-      _signOutInFlight
+      error.code !== Code.Unauthenticated
     ) {
       throw error;
     }
 
-    // Deliberately `hasSession()` rather than `getToken()`: this only needs to
-    // know whether a session is believed active, and a burst of 401s must not
-    // stampede the provider's refresh path.
-    const hasSession = await getAuthTokenProvider().hasSession();
-    if (!hasSession) throw error;
+    const presented = req.header.get(AUTH_HEADER);
 
-    _signOutInFlight = true;
-    logger.warn(
-      "[gRPC Client] 401 with active session — token rejected by backend; signing out",
-      {
-        service: req.service.typeName,
-        method: req.method.name,
-        message: error.message,
-      },
-    );
-    Sentry.captureMessage("Auto sign-out on 401 with active session", {
-      level: "warning",
-      tags: {
-        grpc_service: req.service.typeName,
-        grpc_method: req.method.name,
-      },
+    // Warn, not info: the pre-existing "Auth token set for request" line is
+    // info-level and `createLogFunction` no-ops info in packaged builds, so
+    // whether a token was attached was invisible in exactly the production
+    // logs where these incidents get reported. This fires only on a 401, so
+    // it costs nothing on the happy path.
+    logger.warn("[gRPC Client] 401 received", {
+      service: req.service.typeName,
+      method: req.method.name,
+      tokenAttached: !!presented,
+      tokenLength: presented?.length ?? 0,
+      message: error.message,
     });
 
+    if (presented) {
+      await signOutOnRejectedToken(req, error);
+      throw error;
+    }
+
+    // Nothing was presented. Re-resolve through the provider and retry once;
+    // if the token is still unavailable there is nothing to retry with.
+    const refreshed = await getAuthTokenProvider()
+      .getToken()
+      .catch(() => null);
+    if (!refreshed || req.stream) throw error;
+
+    logger.warn(
+      "[gRPC Client] retrying tokenless request with a freshly resolved token",
+      { service: req.service.typeName, method: req.method.name },
+    );
+    req.header.set(AUTH_HEADER, `Bearer ${refreshed}`);
     try {
-      const { useAuthStore } = await import("../store/authStore");
-      await useAuthStore.getState().signOut();
-    } catch (signOutErr) {
-      logger.error("[gRPC Client] Auto sign-out failed", signOutErr);
+      return await next(req);
+    } catch (retryError) {
+      // The retry DID present a credential, so a 401 now is a genuine
+      // rejection and must still sign the user out.
+      if (
+        retryError instanceof ConnectError &&
+        retryError.code === Code.Unauthenticated
+      ) {
+        await signOutOnRejectedToken(req, retryError);
+      }
+      throw retryError;
     }
-
-    // Hard redirect clears React Query caches and any in-flight retries that
-    // would otherwise keep firing 401s against the dead session.
-    if (
-      typeof window !== "undefined" &&
-      !window.location.pathname.startsWith("/auth")
-    ) {
-      window.location.href = "/auth";
-      // If the navigation lands, this page (and timer) are gone. If something
-      // cancels it, the guard re-arms so we neither spin nor wedge.
-      releaseSignOutGuard();
-    } else {
-      _signOutInFlight = false;
-    }
-
-    throw error;
   }
 };
 

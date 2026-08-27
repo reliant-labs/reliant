@@ -5,6 +5,7 @@ package daemonstate
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -23,6 +24,20 @@ type fakeRepo struct {
 	mu      sync.Mutex
 	rows    map[string]*db.DaemonAttachment
 	deletes []string
+
+	// reapClock, when non-zero, ARMS DeleteStaleDaemonAttachments to mirror
+	// the SQL (delete rows whose lease predates reapClock-olderThan).
+	// Unarmed by default: the consumer runs a TTL sweep the moment it
+	// starts, and the lifecycle tests below pin their fixtures to a fixed
+	// date that is months in the past by wall-clock — an armed sweep would
+	// race in and delete the very rows they are asserting on. The SQL
+	// semantics are covered against real Postgres in internal/db
+	// (TestDeleteStaleDaemonAttachments); what these tests own is that the
+	// consumer asks for the sweep at all, with the right TTL.
+	reapClock   time.Time
+	reapCalls   int
+	lastReapTTL time.Duration
+	reapErr     error
 }
 
 func newFakeRepo() *fakeRepo {
@@ -57,6 +72,35 @@ func (f *fakeRepo) DeleteDaemonAttachment(_ context.Context, daemonID string) er
 	delete(f.rows, daemonID)
 	f.deletes = append(f.deletes, daemonID)
 	return nil
+}
+
+func (f *fakeRepo) DeleteStaleDaemonAttachments(_ context.Context, olderThan time.Duration) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reapCalls++
+	f.lastReapTTL = olderThan
+	if f.reapErr != nil {
+		return 0, f.reapErr
+	}
+	if f.reapClock.IsZero() {
+		return 0, nil // unarmed — see reapClock
+	}
+	cutoff := f.reapClock.Add(-olderThan)
+	var n int64
+	for id, row := range f.rows {
+		if row.LastStreamActivity.Before(cutoff) {
+			delete(f.rows, id)
+			f.deletes = append(f.deletes, id)
+			n++
+		}
+	}
+	return n, nil
+}
+
+func (f *fakeRepo) reapStats() (calls int, ttl time.Duration) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.reapCalls, f.lastReapTTL
 }
 
 func (f *fakeRepo) snapshot(daemonID string) (*db.DaemonAttachment, bool) {
@@ -180,6 +224,99 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 	}
 	if repo.deleteCount() != 1 {
 		t.Errorf("expected 1 delete, got %d", repo.deleteCount())
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Start returned err: %v", err)
+	}
+}
+
+// TestDerivation_ReapsExpiredAttachmentsOnStart covers the GC for the leak
+// that has no other cure: DeleteDaemonAttachment runs on graceful teardown
+// only, so a gateway that crashes or is rescheduled strands every row it
+// owned and nothing left alive knows to clean them up. Dev's registry carried
+// two such orphans (29 and 51 days) which pinned /flow-health at 503 for the
+// whole environment.
+//
+// The sweep must run at START, not one interval later: a fresh gateway is
+// exactly the moment a dead predecessor's rows are lying around.
+func TestDerivation_ReapsExpiredAttachmentsOnStart(t *testing.T) {
+	nc := startTestNATS(t)
+	repo := newFakeRepo()
+
+	now := time.Date(2026, 8, 24, 15, 0, 0, 0, time.UTC)
+	repo.reapClock = now
+	// Seeded before Start so the immediate sweep has something to rule on.
+	repo.rows["live"] = &db.DaemonAttachment{DaemonID: "live", UserID: "u", LastStreamActivity: now.Add(-5 * time.Second)}
+	repo.rows["recent"] = &db.DaemonAttachment{DaemonID: "recent", UserID: "u", LastStreamActivity: now.Add(-AttachmentTTL + time.Minute)}
+	repo.rows["orphan-29d"] = &db.DaemonAttachment{DaemonID: "orphan-29d", UserID: "u", LastStreamActivity: now.Add(-29 * 24 * time.Hour)}
+	repo.rows["orphan-51d"] = &db.DaemonAttachment{DaemonID: "orphan-51d", UserID: "u", LastStreamActivity: now.Add(-51 * 24 * time.Hour)}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	d := NewDerivation(nc, repo)
+	done := make(chan error, 1)
+	go func() { done <- d.Start(ctx) }()
+
+	if !waitFor(t, time.Second, func() bool {
+		_, ok := repo.snapshot("orphan-51d")
+		return !ok
+	}) {
+		t.Fatal("51-day-old orphan survived the reap")
+	}
+	if _, ok := repo.snapshot("orphan-29d"); ok {
+		t.Error("29-day-old orphan survived the reap")
+	}
+	// A row still inside the TTL is a lease that may yet be renewed — the
+	// reaper must not touch it, or a NATS hiccup would evict a live daemon.
+	if _, ok := repo.snapshot("recent"); !ok {
+		t.Error("reaper deleted a row still inside the TTL")
+	}
+	if _, ok := repo.snapshot("live"); !ok {
+		t.Error("reaper deleted a live daemon's lease")
+	}
+
+	calls, ttl := repo.reapStats()
+	if calls < 1 {
+		t.Errorf("expected at least one sweep on start, got %d", calls)
+	}
+	if ttl != AttachmentTTL {
+		t.Errorf("sweep TTL = %v, want %v", ttl, AttachmentTTL)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Start returned err: %v", err)
+	}
+}
+
+// TestDerivation_ReapFailureIsNotFatal keeps the GC from being able to take
+// the consumer down: a failing DELETE is a logged warning, and lifecycle
+// events keep flowing.
+func TestDerivation_ReapFailureIsNotFatal(t *testing.T) {
+	nc := startTestNATS(t)
+	repo := newFakeRepo()
+	repo.reapErr = errors.New("db down")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	d := NewDerivation(nc, repo)
+	done := make(chan error, 1)
+	go func() { done <- d.Start(ctx) }()
+
+	if !waitFor(t, 500*time.Millisecond, func() bool { return nc.NumSubscriptions() > 0 }) {
+		t.Fatal("subscription did not register")
+	}
+	t0 := time.Date(2026, 8, 24, 15, 0, 0, 0, time.UTC)
+	publishEvent(t, nc, Event{DaemonID: "d-9", UserID: "u-9", Type: EventConnected, At: t0})
+	if !waitFor(t, 500*time.Millisecond, func() bool {
+		_, ok := repo.snapshot("d-9")
+		return ok
+	}) {
+		t.Fatal("consumer stopped processing events after a reap failure")
 	}
 
 	cancel()

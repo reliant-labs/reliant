@@ -146,7 +146,84 @@ describe('production renders a bare command', () => {
       VITE_CLI_DEFAULTS_BAKED: undefined,
       VITE_API_URL: 'https://preprod.reliantapi.com',
     });
+    const { daemonStartCommand } = await load();
+    expect(daemonStartCommand()).toContain('RELIANT_SERVER_URL=');
+  });
+
+  it('honours the baked flag even when Vite reports DEV', async () => {
+    // `forge env up prod --target reliant-web` serves the PROD KCL env
+    // (control-plane deploy/kcl/prod/main.k -> reliant_web_vite_env("prod"))
+    // through `npm run dev`, so import.meta.env.DEV is true while every
+    // VITE_* value is prod's. isNonProd() used to check DEV FIRST and return
+    // early, so that surface printed the prod hostnames AND the prod
+    // publishable key behind five RELIANT_*= overrides.
+    //
+    // KCL is the single authority on whether a build's CLI is baked: it sets
+    // the flag for prod and withholds it everywhere else. A second, local
+    // authority that can contradict it is the bug.
+    setEnv({
+      DEV: true,
+      VITE_CLI_DEFAULTS_BAKED: 'true',
+      VITE_API_URL: 'https://api.reliantapi.com',
+      VITE_GATEWAY_URL: 'https://gateway.reliantapi.com',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod',
+    });
+    const { daemonStartCommand } = await load();
+    expect(daemonStartCommand()).toBe('reliant daemon start --token');
+    expect(daemonStartCommand()).not.toContain('sb_publishable');
+  });
+
+  it('still emits overrides in dev when KCL withheld the flag', async () => {
+    // The other half of the same rule: a genuine local dev stack gets no flag
+    // from KCL, so it must keep its overrides. Removing the DEV check must not
+    // silently bare-render a command for an unbaked binary.
+    setEnv({
+      DEV: true,
+      VITE_CLI_DEFAULTS_BAKED: undefined,
+      VITE_API_URL: 'http://localhost:3091',
+      VITE_GATEWAY_URL: 'http://localhost:29190',
+    });
+    const { daemonStartCommand } = await load();
+    expect(daemonStartCommand()).toContain('RELIANT_SERVER_URL=http://localhost:3091');
+    expect(daemonStartCommand()).toContain('RELIANT_GATEWAY_URL=http://localhost:29190');
+  });
+});
+
+describe('only variables the target binary actually reads are emitted', () => {
+  // A copy-pasteable command must not carry a variable its binary ignores:
+  // the reader reasonably concludes it matters, and it becomes cargo cult the
+  // moment someone pastes it somewhere else.
+  it('never emits RELIANT_API_BASE_URL for daemon start', async () => {
+    // RELIANT_API_BASE_URL is read ONLY by ResolveReliantBaseURL, whose sole
+    // caller chain (BuildAvailableDrivers -> catalog.ListModels /
+    // model_selection / llm_request / compact, confirmed with gopls
+    // call_hierarchy) lives in the api-server and the temporal worker. The
+    // daemon never reads it — electron/src/backend-manager.js passes only
+    // RELIANT_SERVER_URL and RELIANT_GATEWAY_URL into the spawned daemon.
+    // In cloud envs control-plane's KCL sets it on those SERVER workloads
+    // (deploy/kcl/lib/env.k), which is where it belongs.
+    setEnv({
+      VITE_CLI_DEFAULTS_BAKED: undefined,
+      VITE_CONTROL_PLANE_API_URL: 'https://admin.reliantapi.com',
+    });
+    const { daemonStartCommand } = await load();
+    expect(daemonStartCommand()).not.toContain('RELIANT_API_BASE_URL');
+  });
+
+  it('renders auth serve bare in every environment', async () => {
+    // `reliant auth serve` reads NO environment variables at all: it starts a
+    // localhost HTTP server and hands the authorize-URL template it is POSTed
+    // to oauthcallback.Run. Token exchange happens over the authenticated
+    // backend gRPC, not here. Every override on this command was noise, and
+    // one of them pasted the publishable key at a shell for no reason.
+    setEnv({
+      VITE_CLI_DEFAULTS_BAKED: undefined,
+      VITE_API_URL: 'http://localhost:3091',
+      VITE_GATEWAY_URL: 'http://localhost:29190',
+      VITE_SUPABASE_URL: 'https://dash.reliantlabs.io',
+      VITE_SUPABASE_ANON_KEY: 'sb_publishable_example',
+    });
     const { authServeCommand } = await load();
-    expect(authServeCommand()).toContain('RELIANT_SERVER_URL=');
+    expect(authServeCommand()).toBe('reliant auth serve');
   });
 });

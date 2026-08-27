@@ -102,7 +102,7 @@ export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps)
                 {daemonStartCommand()}
               </code>
               {daemonStartCommandNeedsEditing() && (
-                <p className="text-[11px] text-yellow-600 dark:text-yellow-400">
+                <p className="text-xs text-yellow-600 dark:text-yellow-400">
                   Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway
                   address before running this. It is a separate process from the
                   API server, so the daemon cannot infer it on localhost.

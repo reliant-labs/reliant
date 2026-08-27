@@ -5,6 +5,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
 )
@@ -44,8 +45,11 @@ func TestDirScopedServer_EachProjectGetsItsOwnClient(t *testing.T) {
 		DirScoped: true,
 	}
 
-	a, okA := m.dirClientFor(server, projA)
-	b, okB := m.dirClientFor(server, projB)
+	a, okA, errA := m.dirClientFor(server, projA)
+	b, okB, errB := m.dirClientFor(server, projB)
+	if errA != nil || errB != nil {
+		t.Fatalf("a server with no declared precondition must resolve (a=%v b=%v)", errA, errB)
+	}
 	if !okA || !okB {
 		t.Fatalf("a dir-scoped server must resolve a per-project client (a=%v b=%v)", okA, okB)
 	}
@@ -77,7 +81,7 @@ func TestNonDirScopedServer_StillShared(t *testing.T) {
 	m.serverConfigs["plain"] = config.MCPServer{
 		Command: "x", Type: config.MCPStdio, Enabled: true,
 	}
-	if _, ok := m.dirClientFor("plain", t.TempDir()); ok {
+	if _, ok, _ := m.dirClientFor("plain", t.TempDir()); ok {
 		t.Error("a server that did not declare dirScoped must route to the shared client")
 	}
 }
@@ -90,10 +94,10 @@ func TestDirClientFor_RequiresRegistrationAndPath(t *testing.T) {
 	m.serverConfigs["lsp"] = config.MCPServer{
 		Command: "x", Type: config.MCPStdio, Enabled: true, DirScoped: true,
 	}
-	if _, ok := m.dirClientFor("lsp", ""); ok {
+	if _, ok, _ := m.dirClientFor("lsp", ""); ok {
 		t.Error("an empty project path has no tree to scope to; must not create a dir client")
 	}
-	if _, ok := m.dirClientFor("unknown", t.TempDir()); ok {
+	if _, ok, _ := m.dirClientFor("unknown", t.TempDir()); ok {
 		t.Error("an unregistered server must not create a dir client")
 	}
 }
@@ -156,3 +160,190 @@ func keysOf(m map[string]config.MCPServer) []string {
 }
 
 var _ = context.Background
+
+// ---------------------------------------------------------------------------
+// Concurrency ceiling
+// ---------------------------------------------------------------------------
+
+// blockingClient parks inside a tool call until released, so a test can hold a
+// dir client genuinely mid-call while eviction runs.
+type blockingClient struct {
+	fakeManagerClient
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingClient) CallTool(name string, arguments map[string]interface{}) (*ToolResult, error) {
+	_ = name
+	_ = arguments
+	select {
+	case b.entered <- struct{}{}:
+	default:
+	}
+	<-b.release
+	return &ToolResult{}, nil
+}
+
+// dirScopedManager returns a manager with one registered dir-scoped server and
+// no declared precondition, so these tests exercise the ceiling alone.
+func dirScopedManager(t *testing.T) *Manager {
+	t.Helper()
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+	m.clientFactory = func(_ string, _ config.MCPServer) (Client, error) {
+		return &fakeManagerClient{}, nil
+	}
+	m.serverConfigs["lsp"] = config.MCPServer{
+		Command: "lsp-bin", Type: config.MCPStdio, Enabled: true, DirScoped: true,
+	}
+	return m
+}
+
+// openProjects resolves a dir client for n fresh projects and returns their
+// keys, then stamps a strictly increasing last-use order so LRU is decidable
+// rather than dependent on how fast the loop ran.
+func openProjects(t *testing.T, m *Manager, n int) []string {
+	t.Helper()
+	keys := make([]string, 0, n)
+	for i := 0; i < n; i++ {
+		project := t.TempDir()
+		if _, ok, err := m.dirClientFor("lsp", project); !ok || err != nil {
+			t.Fatalf("project %d did not get a client: ok=%v err=%v", i, ok, err)
+		}
+		keys = append(keys, dirClientKey("lsp", normalizeProjectPath(project)))
+	}
+	base := time.Now().Add(-time.Hour)
+	m.mu.Lock()
+	for i, key := range keys {
+		m.dirClientLastUse[key] = base.Add(time.Duration(i) * time.Minute)
+	}
+	m.mu.Unlock()
+	return keys
+}
+
+func (m *Manager) hasDirClient(key string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, ok := m.dirClients[key]
+	return ok
+}
+
+func (m *Manager) dirClientCount() int {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return len(m.dirClients)
+}
+
+// Dir scoping deliberately spawns one process per project, and nothing bounded
+// the count: the idle reaper only reclaims after five quiet minutes, which a
+// session that keeps touching projects never reaches. Measured, that is how ~17
+// language servers at 28,467 descriptors each exhausted a 491,520-entry
+// system-wide file table and took the machine's other processes with it.
+func TestDirClients_LRUEvictsAtTheCeiling(t *testing.T) {
+	m := dirScopedManager(t)
+
+	keys := openProjects(t, m, maxDirScopedClients)
+
+	overflow := t.TempDir()
+	if _, ok, err := m.dirClientFor("lsp", overflow); !ok || err != nil {
+		t.Fatalf("the overflowing project must still get its own client: ok=%v err=%v", ok, err)
+	}
+	overflowKey := dirClientKey("lsp", normalizeProjectPath(overflow))
+
+	if got := m.dirClientCount(); got != maxDirScopedClients {
+		t.Fatalf("dir clients must stay at the ceiling: got %d want %d", got, maxDirScopedClients)
+	}
+	if m.hasDirClient(keys[0]) {
+		t.Error("the least recently used client survived the ceiling")
+	}
+	for _, key := range keys[1:] {
+		if !m.hasDirClient(key) {
+			t.Errorf("a more recently used client was evicted: %s", key)
+		}
+	}
+	if !m.hasDirClient(overflowKey) {
+		t.Error("the project that triggered eviction lost its own client")
+	}
+}
+
+// The ceiling must never cost a caller its in-flight tool call. The least
+// recently used client is skipped while it is mid-call, and the next-oldest idle
+// one goes instead — a bound worth breaching for the seconds a call takes.
+func TestDirClients_LRUNeverEvictsAClientMidCall(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	busyProject := t.TempDir()
+	blocking := &blockingClient{entered: make(chan struct{}, 1), release: make(chan struct{})}
+	m.clientFactory = func(_ string, cfg config.MCPServer) (Client, error) {
+		if cfg.Dir == normalizeProjectPath(busyProject) {
+			return blocking, nil
+		}
+		return &fakeManagerClient{}, nil
+	}
+	m.serverConfigs["lsp"] = config.MCPServer{
+		Command: "lsp-bin", Type: config.MCPStdio, Enabled: true, DirScoped: true,
+	}
+
+	busyClient, ok, err := m.dirClientFor("lsp", busyProject)
+	if !ok || err != nil {
+		t.Fatalf("busy project did not get a client: ok=%v err=%v", ok, err)
+	}
+	busyKey := dirClientKey("lsp", normalizeProjectPath(busyProject))
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if _, err := busyClient.CallTool("slow", nil); err != nil {
+			t.Errorf("the in-flight call failed: %v", err)
+		}
+	}()
+	<-blocking.entered
+	defer func() {
+		close(blocking.release)
+		<-done
+	}()
+
+	keys := openProjects(t, m, maxDirScopedClients-1)
+
+	// Make the BUSY client the least recently used, so LRU order alone would
+	// pick it and only the busy check saves it.
+	m.mu.Lock()
+	m.dirClientLastUse[busyKey] = time.Now().Add(-2 * time.Hour)
+	m.mu.Unlock()
+
+	if _, ok, err := m.dirClientFor("lsp", t.TempDir()); !ok || err != nil {
+		t.Fatalf("the overflowing project must still get its own client: ok=%v err=%v", ok, err)
+	}
+
+	if !m.hasDirClient(busyKey) {
+		t.Fatal("a client with a tool call in flight was evicted")
+	}
+	if m.hasDirClient(keys[0]) {
+		t.Error("the oldest IDLE client should have been evicted instead")
+	}
+}
+
+// A dir-scoped server's real processes are its per-project clients. Removing or
+// disabling the server used to tear down only the shared client and leave every
+// project's indexer running with nothing left to route to it.
+func TestRemoveServer_ClosesDirScopedClients(t *testing.T) {
+	m := dirScopedManager(t)
+	m.clients["lsp"] = &fakeManagerClient{}
+
+	project := t.TempDir()
+	client, ok, err := m.dirClientFor("lsp", project)
+	if !ok || err != nil {
+		t.Fatalf("project did not get a client: ok=%v err=%v", ok, err)
+	}
+
+	if err := m.RemoveServer("lsp"); err != nil {
+		t.Fatalf("RemoveServer: %v", err)
+	}
+	if m.dirClientCount() != 0 {
+		t.Error("removing a server must drop its per-project clients")
+	}
+	if lc, isLazy := client.(*lazyClient); isLazy && lc.IsConnected() {
+		t.Error("removing a server must close its per-project clients, not orphan them")
+	}
+}

@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/filepreview"
+	"github.com/reliant-labs/reliant/internal/filetree"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/pdfutil"
 )
@@ -87,11 +88,22 @@ type fsReadBinaryFileResponse struct {
 	Data string `json:"data"` // base64-encoded
 }
 
-func handleFSReadBinaryFile(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSReadBinaryFile(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsReadBinaryFileRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Re-resolve through the kernel immediately before use, closing the window
+	// between the dispatch-time check and this open during which a symlink
+	// could have been swapped in. req.Path is replaced so every later use in
+	// this handler operates on the verified path. A no-op for unconfined
+	// callers.
+	resolved, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	req.Path = resolved
 
 	info, err := os.Stat(req.Path)
 	if err != nil {
@@ -127,11 +139,20 @@ type fsPDFPageCountResponse struct {
 	PageCount int `json:"page_count"`
 }
 
-func handleFSPDFPageCount(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSPDFPageCount(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsPDFPageCountRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Re-resolve through the kernel immediately before use; a no-op for
+	// unconfined callers. req.Path is replaced so every later use in this
+	// handler operates on the verified path.
+	resolved, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	req.Path = resolved
 
 	data, err := os.ReadFile(req.Path)
 	if err != nil {
@@ -157,11 +178,20 @@ type fsReadPDFPagesResponse struct {
 	Data string `json:"data"` // base64-encoded PDF bytes
 }
 
-func handleFSReadPDFPages(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSReadPDFPages(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsReadPDFPagesRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Re-resolve through the kernel immediately before use; a no-op for
+	// unconfined callers. req.Path is replaced so every later use in this
+	// handler operates on the verified path.
+	resolved, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	req.Path = resolved
 
 	data, err := os.ReadFile(req.Path)
 	if err != nil {
@@ -304,11 +334,23 @@ type fsStatRequest struct {
 	Path string `json:"path"`
 }
 
-func handleFSStat(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSStat(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsStatRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+
+	// Re-resolve through the kernel immediately before the stat; a no-op for
+	// unconfined callers. Without this a confined caller could probe for the
+	// existence, size, and mtime of any file on the machine — the Exists:false
+	// answer below is exactly the oracle that makes an ungated stat useful to
+	// an attacker. A path that is in bounds but absent still resolves, so the
+	// Exists:false contract is unchanged for those.
+	resolved, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	req.Path = resolved
 
 	info, err := os.Stat(req.Path)
 	if err != nil {
@@ -796,13 +838,22 @@ type fsMkdirRequest struct {
 	Path string `json:"path"`
 }
 
-func handleFSMkdir(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSMkdir(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsMkdirRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	if err := os.MkdirAll(req.Path, 0755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", req.Path, err)
+
+	// Resolved with allowMissing, since mkdir is by definition a create; the
+	// check then applies to the parent, which is where an escaping symlink
+	// would have to be. A no-op for unconfined callers.
+	path, err := daemonpolicy.ResolveDir(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.MkdirAll(path, 0755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", path, err)
 	}
 	return json.Marshal(struct{}{})
 }
@@ -815,13 +866,24 @@ type fsDeleteRequest struct {
 	Path string `json:"path"`
 }
 
-func handleFSDelete(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSDelete(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsDeleteRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-	if err := os.RemoveAll(req.Path); err != nil && !os.IsNotExist(err) {
-		return nil, fmt.Errorf("delete %s: %w", req.Path, err)
+
+	// Re-resolve through the kernel immediately before the removal — this is
+	// the most destructive fs command, and os.RemoveAll follows a directory
+	// symlink's target when it recurses. A target that no longer exists still
+	// resolves, so the tolerated-missing behavior below is unchanged. A no-op
+	// for unconfined callers.
+	path, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := os.RemoveAll(path); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("delete %s: %w", path, err)
 	}
 	return json.Marshal(struct{}{})
 }
@@ -834,8 +896,9 @@ type fsGetTreeRequest struct {
 	Path       string `json:"path"`
 	ShowHidden bool   `json:"show_hidden"`
 	// Depth bounds how many levels of children to include below Path:
-	//   0 = unlimited (full recursive tree — back-compat default)
-	//   N = N levels of descendants (1 = immediate children only)
+	//   0  = the daemon default (filetree.DefaultTreeDepth) — NOT unlimited
+	//   N  = N levels of descendants (1 = immediate children only)
+	//   -1 = as deep as the node budget allows
 	Depth int `json:"depth"`
 }
 
@@ -852,110 +915,42 @@ type fsFileNode struct {
 	HasChildren bool `json:"has_children"`
 }
 
-// skipDirs contains directory names that are always skipped during tree walks.
-var skipDirs = map[string]bool{
-	"node_modules": true,
-	"dist":         true,
-	"__pycache__":  true,
-	".git":         true,
+type fsGetTreeResponse struct {
+	Nodes []*fsFileNode `json:"nodes"`
+	// Truncated is true when the node budget stopped the walk early, so Nodes
+	// is a prefix of the tree rather than the whole of it.
+	Truncated bool `json:"truncated"`
+	// NodeCount is how many nodes the walk produced, at every level.
+	NodeCount int `json:"node_count"`
 }
 
-// treeUnlimited is the remaining-depth sentinel meaning "recurse without bound".
-const treeUnlimited = -1
-
-// includeTreeEntry reports whether a directory entry should appear in the tree,
-// applying the always-skipped noise dirs and the show_hidden dotfile rule. It is
-// the single predicate shared by the walk and the has_children probe so the
-// chevron hint always matches what an expand would actually reveal.
-func includeTreeEntry(name string, isDir, showHidden bool) bool {
-	if isDir && skipDirs[name] {
-		return false
-	}
-	if !showHidden && strings.HasPrefix(name, ".") {
-		return false
-	}
-	return true
-}
-
-// dirHasVisibleChildren reports whether dir contains at least one entry that
-// would be shown in the tree (respecting show_hidden), short-circuiting on the
-// first match. Used to set the has_children hint at the depth boundary without
-// walking the subtree.
-func dirHasVisibleChildren(dir string, showHidden bool) bool {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if includeTreeEntry(e.Name(), e.IsDir(), showHidden) {
-			return true
-		}
-	}
-	return false
-}
-
-// buildFileTree performs a live, depth-limited walk of fsPath. remainingDepth
-// caps how many more levels of children to descend: treeUnlimited (-1) recurses
-// fully; N>0 descends N levels. Sizes and mtimes come from a live Lstat of each
-// entry (os.ReadDir's DirEntry.Info), so the tree reflects filesystem truth.
-// Directory nodes at the boundary carry HasChildren instead of eagerly-loaded
-// Children, powering VS Code-style lazy expansion.
-func buildFileTree(fsPath string, relativePath string, showHidden bool, remainingDepth int) ([]*fsFileNode, error) {
-	entries, err := os.ReadDir(fsPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var nodes []*fsFileNode
-	for _, entry := range entries {
-		name := entry.Name()
-		if !includeTreeEntry(name, entry.IsDir(), showHidden) {
-			continue
-		}
-
-		entryPath := filepath.Join(fsPath, name)
-		relPath := filepath.Join(relativePath, name)
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
+// toFSFileNodes maps the shared walker's transport-neutral nodes onto the JSON
+// shape the proxy consumes. The walk itself lives in internal/filetree, shared
+// with the server's GetFileTree, so the two can no longer drift apart.
+func toFSFileNodes(nodes []*filetree.Node) []*fsFileNode {
+	out := make([]*fsFileNode, 0, len(nodes))
+	for _, n := range nodes {
 		node := &fsFileNode{
-			Name:     name,
-			Path:     relPath,
-			Modified: info.ModTime().Format(time.RFC3339),
+			Name:        n.Name,
+			Path:        n.Path,
+			Modified:    n.ModTime.Format(time.RFC3339),
+			HasChildren: n.HasChildren,
 		}
-
-		if entry.IsDir() {
+		if n.IsDir {
 			node.Type = "directory"
-			// Descend when unlimited or more than one level remains; otherwise
-			// this is the boundary — record whether a chevron is warranted.
-			if remainingDepth == treeUnlimited || remainingDepth > 1 {
-				childDepth := remainingDepth
-				if remainingDepth > 0 {
-					childDepth = remainingDepth - 1
-				}
-				children, err := buildFileTree(entryPath, relPath, showHidden, childDepth)
-				if err == nil {
-					node.Children = children
-				}
-				node.HasChildren = len(node.Children) > 0
-			} else {
-				node.HasChildren = dirHasVisibleChildren(entryPath, showHidden)
+			if len(n.Children) > 0 {
+				node.Children = toFSFileNodes(n.Children)
 			}
 		} else {
 			node.Type = "file"
-			node.Size = info.Size()
+			node.Size = n.Size
 		}
-
-		nodes = append(nodes, node)
+		out = append(out, node)
 	}
-
-	return nodes, nil
+	return out
 }
 
-func handleFSGetTree(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSGetTree(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsGetTreeRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -963,36 +958,53 @@ func handleFSGetTree(_ context.Context, payload []byte) ([]byte, error) {
 
 	basePath := req.Path
 	if basePath == "" {
-		var cwdErr error
-		basePath, cwdErr = os.Getwd()
-		if cwdErr != nil {
-			return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+		// For a confined caller an absent path means the allowed directory,
+		// NOT the daemon's cwd — the daemon is never chdir'd into the grant,
+		// so falling back to cwd would walk outside it.
+		if daemonpolicy.FromContext(ctx) == nil {
+			var cwdErr error
+			basePath, cwdErr = os.Getwd()
+			if cwdErr != nil {
+				return nil, fmt.Errorf("failed to resolve working directory: %w", cwdErr)
+			}
 		}
 	}
-
-	// Serve from a live, depth-limited filesystem walk (VS Code style) rather
-	// than the git index: this reads filesystem truth, so manually-removed files
-	// (rm, not `git rm`) disappear and every node reports its real size. A nested
-	// checkout is just another directory here — the walk recurses into it and
-	// lists its contents (preserving the old embedded-repo behavior) while
-	// skipping only the .git dir itself. Depth 0 keeps the full-tree contract.
-	depth := treeUnlimited
-	if req.Depth > 0 {
-		depth = req.Depth
+	// The dispatch-time payload check is a fast reject, not the boundary: it
+	// infers intent from argument names, and a directory that was in bounds
+	// when it ran can be a symlink out by the time the walk opens it. Resolving
+	// here, immediately before the walk, is what actually confines it — as
+	// every sibling fs command does. A no-op for unconfined callers.
+	resolved, err := daemonpolicy.ResolveDir(ctx, basePath)
+	if err != nil {
+		return nil, err
 	}
+	basePath = resolved
 
-	nodes, err := buildFileTree(basePath, "", req.ShowHidden, depth)
+	// Serve from a live, bounded filesystem walk (VS Code style) rather than
+	// the git index: this reads filesystem truth, so manually-removed files
+	// (rm, not `git rm`) disappear and every node reports its real size. A
+	// nested checkout is just another directory here — the walk recurses into
+	// it and lists its contents (preserving the old embedded-repo behavior)
+	// while skipping only the .git dir itself.
+	//
+	// The walk is bounded by depth, by the canonical skip set, by the
+	// repository's own .gitignore, and finally by a hard node budget. Depth 0
+	// takes the default rather than recursing without limit: an unbounded walk
+	// of a large real-world project exhausted the system file table.
+	result, err := filetree.Walk(filetree.Options{
+		Root:       basePath,
+		ShowHidden: req.ShowHidden,
+		Depth:      req.Depth,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("read dir %s: %w", basePath, err)
 	}
 
-	resp := struct {
-		Nodes []*fsFileNode `json:"nodes"`
-	}{Nodes: nodes}
-	if resp.Nodes == nil {
-		resp.Nodes = []*fsFileNode{}
-	}
-	return json.Marshal(resp)
+	return json.Marshal(fsGetTreeResponse{
+		Nodes:     toFSFileNodes(result.Nodes),
+		Truncated: result.Truncated,
+		NodeCount: result.NodeCount,
+	})
 }
 
 // isGitRepo checks if a path is a git repository.
@@ -1023,7 +1035,7 @@ type fsPreviewInfoResponse struct {
 	IsEditable bool   `json:"is_editable"`
 }
 
-func handleFSPreviewInfo(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSPreviewInfo(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsPreviewInfoRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -1031,6 +1043,19 @@ func handleFSPreviewInfo(_ context.Context, payload []byte) ([]byte, error) {
 	if req.Path == "" {
 		return nil, fmt.Errorf("path is required")
 	}
+
+	// The dispatch-time payload check is a fast reject, not the boundary: it
+	// infers intent from argument names, and a file that was in bounds when it
+	// ran can be a symlink out by the time this opens it. Resolving here,
+	// immediately before the stat and the read, is what actually confines it —
+	// as every sibling fs command does. req.Path is replaced so every later
+	// use in this handler operates on the verified path. A no-op for
+	// unconfined callers.
+	resolved, err := daemonpolicy.ResolveFile(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+	req.Path = resolved
 
 	info, err := os.Stat(req.Path)
 	if err != nil {
@@ -1081,7 +1106,7 @@ type fsCopyRequest struct {
 	Destination string `json:"destination"`
 }
 
-func handleFSCopy(_ context.Context, payload []byte) ([]byte, error) {
+func handleFSCopy(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsCopyRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -1089,6 +1114,22 @@ func handleFSCopy(_ context.Context, payload []byte) ([]byte, error) {
 	if req.Source == "" || req.Destination == "" {
 		return nil, fmt.Errorf("source and destination are required")
 	}
+
+	// Both ends are resolved through the kernel immediately before use, and
+	// req is updated so every later use operates on the verified paths. The
+	// destination goes through ResolveDir because a copy creates it: the check
+	// then applies to its parent, which is where an escaping symlink would
+	// have to be. A no-op for unconfined callers.
+	resolvedSrc, err := daemonpolicy.ResolveFile(ctx, req.Source)
+	if err != nil {
+		return nil, err
+	}
+	req.Source = resolvedSrc
+	resolvedDst, err := daemonpolicy.ResolveDir(ctx, req.Destination)
+	if err != nil {
+		return nil, err
+	}
+	req.Destination = resolvedDst
 
 	// Check source exists and is a file
 	srcInfo, err := os.Stat(req.Source)

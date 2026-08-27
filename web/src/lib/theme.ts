@@ -1,7 +1,7 @@
 // Simple theme manager - only font settings remain
 import { SETTINGS_KEYS } from "../services/settingsSync";
 
-import { FONT_SIZE_MAP, applyRootFontSize } from "./rootFontSize";
+import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "./rootFontSize";
 
 function safeGet(key: string, fallback: string): string {
   try {
@@ -12,10 +12,13 @@ function safeGet(key: string, fallback: string): string {
 }
 
 export function loadFont() {
-  const font = safeGet(SETTINGS_KEYS.FONT, "system");
+  // "default" (bundled Inter), matching every other read site. This path was
+  // left on "system" when the default typeface changed, so which face a new
+  // user saw depended on which code path applied settings first.
+  const font = safeGet(SETTINGS_KEYS.FONT, "default");
   const chatFont = safeGet(SETTINGS_KEYS.CHAT_FONT, "mono");
   const editorFont = safeGet(SETTINGS_KEYS.EDITOR_FONT, "mono");
-  const fontSize = safeGet(SETTINGS_KEYS.FONT_SIZE, "md");
+  const fontSize = safeGet(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE);
 
   document.documentElement.dataset.font = font;
   document.documentElement.dataset.chatFont = chatFont;

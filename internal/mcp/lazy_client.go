@@ -215,6 +215,35 @@ func (c *lazyClient) idleShutdown() {
 	}
 }
 
+// busy reports whether the client is mid-call or mid-spawn. The manager's LRU
+// eviction uses it to skip a client that is actively serving someone, so the
+// ceiling never costs a caller its in-flight tool call.
+//
+// It is safe to call while the manager holds its own lock: nothing here takes
+// m.mu, and no lazyClient path holds c.mu across a spawn.
+func (c *lazyClient) busy() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.starting || c.inFlight > 0
+}
+
+// reapNow tears the delegate subprocess down immediately, exactly as the idle
+// timer would, and leaves the wrapper usable — a later tool call transparently
+// respawns it.
+//
+// The manager uses it for LRU eviction so an evicted dir client is
+// indistinguishable from one the idle reaper took: same teardown, same onReap
+// callback, same "the next call just works" behaviour. Close() would be wrong
+// here, because a caller that resolved the client a moment earlier would get a
+// permanent "client is closed" rather than a respawn.
+//
+// Must be called with the manager's lock released: it runs onReap, which takes
+// it. It is a no-op while a call is in flight, which is the second of the two
+// guards against evicting a live client.
+func (c *lazyClient) reapNow() {
+	c.idleShutdown()
+}
+
 func (c *lazyClient) cacheManifest(tools []Tool) {
 	c.mu.Lock()
 	c.manifest = tools

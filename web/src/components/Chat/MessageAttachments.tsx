@@ -108,7 +108,7 @@ export function MessageAttachments({
             >
               {isLoading && (
                 <div
-                  className={`flex items-center justify-center ${CHAT_THREAD_ATTACHMENT_PREVIEW_SIZE_CLASS} text-[9px] text-muted-foreground`}
+                  className={`flex items-center justify-center ${CHAT_THREAD_ATTACHMENT_PREVIEW_SIZE_CLASS} text-3xs text-muted-foreground`}
                   aria-label="Loading image attachment"
                 >
                   <span className="animate-pulse">•</span>
@@ -123,7 +123,7 @@ export function MessageAttachments({
               )}
               {hasError && (
                 <div
-                  className={`flex items-center justify-center ${CHAT_THREAD_ATTACHMENT_PREVIEW_SIZE_CLASS} text-[9px] text-red-500`}
+                  className={`flex items-center justify-center ${CHAT_THREAD_ATTACHMENT_PREVIEW_SIZE_CLASS} text-3xs text-red-500`}
                   title="Failed to load image"
                   aria-label="Failed to load image attachment"
                 >

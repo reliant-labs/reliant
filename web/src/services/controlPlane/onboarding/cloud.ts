@@ -24,6 +24,9 @@ export async function getCurrentUser(): Promise<OnboardingUser | null> {
       id: res.user.id,
       email: res.user.email,
       name: res.user.name,
+      createdAtMs: res.user.createdAt
+        ? Number(res.user.createdAt.seconds) * 1000
+        : undefined,
     };
   })().finally(() => {
     setTimeout(() => {
@@ -31,6 +34,18 @@ export async function getCurrentUser(): Promise<OnboardingUser | null> {
     }, USER_CACHE_TTL_MS);
   });
   return _userPromise;
+}
+
+/**
+ * Forget the cached current user.
+ *
+ * Called on sign-out. `_userPromise` is module state keyed on nothing, so it
+ * would otherwise answer the NEXT user with the previous user's record for up
+ * to USER_CACHE_TTL_MS — including `onboardingCompleted`, which decides whether
+ * a new account is onboarded at all.
+ */
+export function resetUserCache(): void {
+  _userPromise = null;
 }
 
 export async function completeOnboarding(

@@ -106,7 +106,7 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
       <div className="m-2 rounded-[10px] border border-border bg-card/95 p-3 shadow-sm">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div>
-            <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
+            <div className="text-xs font-bold uppercase tracking-[0.06em] text-muted-foreground/80">
               Task Progress
             </div>
             <div className="text-xs text-muted-foreground">
@@ -120,7 +120,7 @@ function TasksPanelComponent({ chatId: propChatId }: TasksPanelProps) {
         <div className="h-2 w-full rounded-full bg-muted">
           <div className="h-2 rounded-full bg-success transition-all" style={{ width: `${stats.percent}%` }} />
         </div>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[11px]">
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
           <div className="rounded-md bg-muted/40 px-2 py-1.5">
             <div className="font-semibold text-foreground">{stats.inProgress}</div>
             <div className="text-muted-foreground">Active</div>

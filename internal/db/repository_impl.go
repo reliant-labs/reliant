@@ -1366,6 +1366,44 @@ func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) erro
 	return nil
 }
 
+// DeleteStaleDaemonAttachments removes attachment rows whose reachability
+// lease (last_stream_activity) has not been renewed for olderThan, and
+// returns how many were deleted.
+//
+// This is the GC for a leak that is structural, not incidental:
+// DeleteDaemonAttachment runs only on graceful teardown, so a gateway that
+// crashes, is rescheduled, or is redeployed strands every row it owned with
+// nothing left in the world that knows to clean it up. Dev's registry on
+// 2026-08-24 still carried 0c9cff04 (29 days stale) and 81dc53c1 (a workspace
+// pod deleted 51 days earlier); both had permanently pinned /flow-health at
+// 503. Nothing in the in-memory sweeper can fix this — it reaps connections
+// this PROCESS holds, and the orphans' processes are long gone.
+//
+// Safe across replicas without any coordination: a live stream renews its
+// lease on every inbound heartbeat (15s), so a row untouched for olderThan
+// cannot belong to a live stream on ANY gateway. The DELETE re-evaluates
+// last_stream_activity at execution time, so a concurrent reconnect (whose
+// upsert sets the lease to now) is never raced away.
+func (r *Repo) DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error) {
+	if olderThan <= 0 {
+		return 0, fmt.Errorf("stale threshold must be positive")
+	}
+	cutoff := time.Now().UTC().Add(-olderThan)
+	query := `DELETE FROM daemon_attachment WHERE last_stream_activity < ?`
+	query = r.bindQuery(query)
+	res, err := r.DB.ExecContext(ctx, query, cutoff)
+	if err != nil {
+		return 0, fmt.Errorf("deleting stale daemon attachments: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		// Row count is advisory (logging only); a driver that can't report
+		// it must not turn a successful GC into a failure.
+		return 0, nil
+	}
+	return n, nil
+}
+
 func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error) {
 	if userID == "" {
 		return false, fmt.Errorf("user ID cannot be empty")

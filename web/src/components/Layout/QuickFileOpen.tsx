@@ -6,7 +6,7 @@ import { cn } from "../../lib/utils";
 import { useProjectStore } from "../../store/projectStore";
 import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { getFileTree } from "../../api/fileSystem";
+import { getFileTree, FILE_TREE_DEPTH_MAX } from "../../api/fileSystem";
 import type { FileNode } from "../FileBrowser";
 import { focusChatInput } from "../../hooks/useFocusManager";
 
@@ -14,6 +14,88 @@ export interface QuickFileOpenRef {
   open: () => void;
   close: () => void;
   isOpen: () => boolean;
+}
+
+/**
+ * The picker asks for the deepest walk the server will give it.
+ *
+ * A fixed depth is the wrong bound for a fuzzy file picker: a file's usefulness
+ * has nothing to do with how many directories it sits under, so any cutoff
+ * silently makes deep source files unfindable (this repo's own components live
+ * at level 5). The bound that actually matters is the server's, and it is now a
+ * real one — gitignore exclusion plus the canonical skip set plus a 50k node
+ * budget. In practice a 106k-file Unity project walks to ~8.3k nodes and this
+ * repo to ~3.8k, because the gitignored bulk is never entered.
+ *
+ * This is still a tree walk serving a flat-list need. The picker stays honest
+ * about what it did not see (`isTruncated`) until a flat file-list RPC replaces
+ * it.
+ */
+const QUICK_OPEN_TREE_DEPTH = FILE_TREE_DEPTH_MAX;
+
+/**
+ * Hard cap on how many candidate files the picker holds in renderer memory.
+ *
+ * The server already bounds the walk, so this is a second, renderer-side bound
+ * for a different reason: every candidate is fuzzy-scored twice on every
+ * keystroke with an object allocated per file, and that scan is neither
+ * debounced nor virtualized. 20k keeps a keystroke cheap while sitting well
+ * above what real projects produce (see the node counts above), so a normal
+ * project is never truncated here.
+ *
+ * Deliberately NOT raised to the server's 50k budget: that would trade a
+ * user-visible jank on every keystroke for completeness the flat-list RPC
+ * should deliver properly instead.
+ */
+const QUICK_OPEN_MAX_CANDIDATES = 20000;
+
+/** How many matches the dropdown renders at once. */
+const QUICK_OPEN_MAX_RESULTS = 20;
+
+/**
+ * Collects files out of a (possibly depth-limited) tree into a flat, bounded
+ * list.
+ *
+ * Iterative on purpose: this walks whatever the API hands back, and a recursive
+ * version can blow the stack on a pathologically deep tree. Stops as soon as
+ * `limit` files have been collected.
+ *
+ * `truncated` is derived purely from what we received — no backend flag — and is
+ * true when either the cap was hit or the walk ran into a directory the
+ * depth-limited request never descended into (`hasChildren` with no `children`).
+ */
+export function collectFiles(
+  nodes: FileNode[],
+  limit: number = QUICK_OPEN_MAX_CANDIDATES
+): { files: FileNode[]; truncated: boolean } {
+  const files: FileNode[] = [];
+  let truncated = false;
+
+  // Reverse-push so popping yields the original (already sorted) order.
+  const stack: FileNode[] = [];
+  for (let i = nodes.length - 1; i >= 0; i--) stack.push(nodes[i]);
+
+  while (stack.length > 0) {
+    const node = stack.pop()!;
+
+    if (node.type === "file") {
+      if (files.length >= limit) {
+        truncated = true;
+        break;
+      }
+      files.push(node);
+      continue;
+    }
+
+    if (node.children && node.children.length > 0) {
+      for (let i = node.children.length - 1; i >= 0; i--) stack.push(node.children[i]);
+    } else if (node.hasChildren) {
+      // A directory at the depth boundary: its contents are not candidates.
+      truncated = true;
+    }
+  }
+
+  return { files, truncated };
 }
 
 interface QuickFileOpenProps {
@@ -37,6 +119,9 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [allFiles, setAllFiles] = useState<FileNode[]>([]);
+  // True when the candidate set is only part of the project — either the tree
+  // request stopped at QUICK_OPEN_TREE_DEPTH or the candidate cap was hit.
+  const [isTruncated, setIsTruncated] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -46,35 +131,26 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
   // Use the global active worktree (from worktreeStore) as the single source of truth
   const effectiveWorktreeId = useActiveWorktreeId();
 
-  // Flatten file tree helper (stable - no deps)
-  const flattenFileTree = useCallback((nodes: FileNode[], accumulator: FileNode[] = []): FileNode[] => {
-    for (const node of nodes) {
-      if (node.type === "file") {
-        accumulator.push(node);
-      }
-      if (node.children) {
-        flattenFileTree(node.children, accumulator);
-      }
-    }
-    return accumulator;
-  }, []);
-
-  // Load file tree when opened
+  // Load file tree when opened. Bounded on both ends: an explicit depth so the
+  // backend never walks the whole project, and a candidate cap so a large
+  // response still can't balloon renderer memory.
   const loadFileTree = useCallback(async () => {
     if (!currentProject) return;
-    
+
     setIsLoading(true);
     try {
-      const tree = await getFileTree("/", false, effectiveWorktreeId);
-      const files = flattenFileTree(tree);
+      const tree = await getFileTree("/", false, effectiveWorktreeId, QUICK_OPEN_TREE_DEPTH);
+      const { files, truncated } = collectFiles(tree, QUICK_OPEN_MAX_CANDIDATES);
       setAllFiles(files);
-      setResults(files.slice(0, 20)); // Show first 20 by default
+      setIsTruncated(truncated);
+      setResults(files.slice(0, QUICK_OPEN_MAX_RESULTS));
     } catch (error) {
       console.error("Failed to load file tree:", error);
+      setIsTruncated(false);
     } finally {
       setIsLoading(false);
     }
-  }, [currentProject, effectiveWorktreeId, flattenFileTree]);
+  }, [currentProject, effectiveWorktreeId]);
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
@@ -141,7 +217,7 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
   // Filter and sort files based on query
   useEffect(() => {
     if (!query.trim()) {
-      setResults(allFiles.slice(0, 20));
+      setResults(allFiles.slice(0, QUICK_OPEN_MAX_RESULTS));
       setHighlightedIndex(0);
       return;
     }
@@ -159,7 +235,7 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
       })
       .filter((item): item is { file: FileNode; score: number } => item !== null)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 20);
+      .slice(0, QUICK_OPEN_MAX_RESULTS);
 
     setResults(scored.map(({ file }) => file));
     setHighlightedIndex(0);
@@ -310,6 +386,16 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
                   </div>
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Partial-index notice. Without this a file that exists but sits
+              outside the bounded walk reads as a bug in the picker. */}
+          {isTruncated && !isLoading && (
+            <div className="px-4 py-2 border-t border-border/50">
+              <p className="text-xs text-muted-foreground font-mono" data-testid="quick-open-truncated">
+                Searching {allFiles.length.toLocaleString()} files — this project is large enough that some are not listed.
+              </p>
             </div>
           )}
         </div>

@@ -119,8 +119,13 @@ message GetFileTreeRequest {
   optional string worktree_id = 4; // Optional worktree to scope the tree
   optional string chat_id = 5; // Optional chat to resolve worktree from
   // depth bounds how many levels of children are returned below `path`:
-  //   0 = unlimited (full recursive tree — back-compat default)
-  //   N = N levels of descendants (e.g. 1 = immediate children only)
+  //   0  = the server default (2 levels) — NOT unlimited
+  //   N  = N levels of descendants (e.g. 1 = immediate children only)
+  //   -1 = as deep as the server's node budget allows
+  // No value asks for a truly unbounded walk. Every tree is additionally
+  // capped by a hard node budget, and by the server's skip set and the
+  // repository's .gitignore rules; a tree cut short by the budget comes back
+  // with truncated = true.
   // Directory nodes at the depth boundary carry has_children instead of
   // eagerly-included children, enabling VS Code-style lazy loading.
   int32 depth = 6;
@@ -128,6 +133,11 @@ message GetFileTreeRequest {
 
 message GetFileTreeResponse {
   repeated FileNode files = 1;
+  // truncated is true when the node budget stopped the walk early, so `files`
+  // is a prefix of the tree rather than the whole of it.
+  bool truncated = 2;
+  // node_count is how many nodes the walk produced, at every level.
+  int32 node_count = 3;
 }
 
 // ============================================

@@ -3,6 +3,7 @@ package daemonruntime
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +12,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/filetree"
 )
 
 // ---------------------------------------------------------------------------
@@ -87,7 +90,8 @@ func TestHashWalkDir_SkipsIgnoredDirs(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "a.txt"), "root file")
 
 	// Create empty skipped directories first so the parent dir modtime is set.
-	for name := range fileTreeSkipDirs {
+	skipped := filetree.SkipDirNames()
+	for _, name := range skipped {
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
 	}
 
@@ -96,7 +100,7 @@ func TestHashWalkDir_SkipsIgnoredDirs(t *testing.T) {
 	require.NoError(t, err)
 
 	// Add files inside every skipped directory — hash should NOT change.
-	for name := range fileTreeSkipDirs {
+	for _, name := range skipped {
 		writeFile(t, filepath.Join(dir, name, "junk.txt"), "should be skipped")
 	}
 
@@ -213,11 +217,15 @@ func TestHashFileTree_NonGitRepo(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// fileTreeSkipDirs map
+// canonical skip set
 // ---------------------------------------------------------------------------
 
-func TestFileTreeSkipDirs_ContainsExpectedEntries(t *testing.T) {
-	expected := []string{
+// The watcher no longer owns a skip list. It shares the canonical one with the
+// file-tree walk, which is the whole point: the two lists had drifted, and the
+// weaker of them guarded the unbounded walk. Every name the watcher's own list
+// used to carry must still be honoured.
+func TestHashWalkDir_UsesCanonicalSkipSet(t *testing.T) {
+	legacy := []string{
 		"node_modules",
 		".git",
 		"dist",
@@ -234,9 +242,34 @@ func TestFileTreeSkipDirs_ContainsExpectedEntries(t *testing.T) {
 		"tmp",
 		"temp",
 	}
-	for _, name := range expected {
-		assert.True(t, fileTreeSkipDirs[name], "%q should be in fileTreeSkipDirs", name)
+	for _, name := range legacy {
+		assert.True(t, filetree.IsSkippedDir(name), "%q must still be skipped", name)
 	}
+}
+
+// A budget-truncated walk still hashes: the poller must degrade to watching a
+// bounded prefix of a huge non-git project rather than walking it whole every
+// five seconds.
+func TestHashWalkDir_BoundedByNodeBudget(t *testing.T) {
+	dir := t.TempDir()
+	for i := 0; i < 64; i++ {
+		writeFile(t, filepath.Join(dir, fmt.Sprintf("f%03d.txt", i)), "x")
+	}
+
+	h, err := hashWalkDir(context.Background(), dir)
+	require.NoError(t, err)
+	assert.Len(t, h, 64)
+
+	// Truncation is enforced inside the shared walker; prove the walker itself
+	// stops at the budget rather than trusting the hash to reveal it.
+	count := 0
+	truncated, err := filetree.WalkHashable(dir, 10, func(string, fs.DirEntry) error {
+		count++
+		return nil
+	})
+	require.NoError(t, err)
+	assert.True(t, truncated, "walk over 65 entries with a budget of 10 must truncate")
+	assert.Equal(t, 10, count, "walk must stop exactly at the budget")
 }
 
 // ---------------------------------------------------------------------------

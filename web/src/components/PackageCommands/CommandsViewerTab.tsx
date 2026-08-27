@@ -1153,14 +1153,14 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
               )} />
               <span className={cn(
                 "font-medium text-green-600 dark:text-green-400 uppercase tracking-wider",
-                responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
               )}>
                 {responsiveCtx.isCompact ? "Run" : "Running"}
               </span>
               <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
               <span className={cn(
                 "text-green-600 dark:text-green-400 ml-auto",
-                responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
               )}>
                 {runningProcesses.length}{!responsiveCtx.isCompact && (runningProcesses.length === 1 ? ' process' : ' processes')}
               </span>
@@ -1205,13 +1205,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
               )} />
               <span className={cn(
                 "font-medium text-muted-foreground uppercase tracking-wider",
-                responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
               )}>
                 Recent
               </span>
               <span className={cn(
                 "text-muted-foreground ml-auto",
-                responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                responsiveCtx.isCompact ? "text-2xs" : "text-xs"
               )}>
                 {recentProcesses.length}{!responsiveCtx.isCompact && (recentProcesses.length === 1 ? ' process' : ' processes')}
               </span>
@@ -1264,13 +1264,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                 )} />
                 <span className={cn(
                   "font-medium text-muted-foreground uppercase tracking-wider",
-                  responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                  responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                 )}>
                   {responsiveCtx.isCompact ? "Favs" : "Favorites"}
                 </span>
                 <span className={cn(
                   "text-muted-foreground ml-auto",
-                  responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                  responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                 )}>
                   {filteredFavorites.length}{!responsiveCtx.isCompact && (filteredFavorites.length === 1 ? ' command' : ' commands')}
                 </span>
@@ -1332,13 +1332,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                 <span className="text-muted-foreground">{packageTypeIcons[type]}</span>
                 <span className={cn(
                   "font-medium text-muted-foreground uppercase tracking-wider",
-                  responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                  responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                 )}>
                   {type}
                 </span>
                 <span className={cn(
                   "text-muted-foreground ml-auto",
-                  responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                  responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                 )}>
                   {typeCommands.length}{!responsiveCtx.isCompact && (typeCommands.length === 1 ? ' command' : ' commands')}
                 </span>
@@ -1399,13 +1399,13 @@ export function CommandsViewerTab({ worktreeId, processId: initialProcessId }: C
                           <Layers className="w-3 h-3 text-muted-foreground/70" />
                           <span className={cn(
                             "font-medium text-muted-foreground",
-                            responsiveCtx.isCompact ? "text-[10px]" : "text-xs"
+                            responsiveCtx.isCompact ? "text-2xs" : "text-xs"
                           )}>
                             {displayName === '.' ? '(root)' : `${displayName}/`}
                           </span>
                           <span className={cn(
                             "text-muted-foreground/60 ml-auto",
-                            responsiveCtx.isCompact ? "text-[9px]" : "text-[10px]"
+                            responsiveCtx.isCompact ? "text-3xs" : "text-2xs"
                           )}>
                             {filteredCmds.length}
                           </span>
@@ -1591,7 +1591,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           <span className={cn("truncate", isCompact ? "text-sm" : "text-sm")}>{command.name}</span>
           {/* Show directory path badge in favorites */}
           {showPath && command.relative_path && (
-            <span className="text-[10px] text-muted-foreground bg-muted/70 border border-border/50 px-1.5 py-0.5 rounded flex-shrink-0">
+            <span className="text-2xs text-muted-foreground bg-muted/70 border border-border/50 px-1.5 py-0.5 rounded flex-shrink-0">
               {command.relative_path}
             </span>
           )}
@@ -1651,7 +1651,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
         
         {!isCompact && (
           <code className={cn(
-            "text-[10px] text-muted-foreground/70 truncate max-w-[100px]",
+            "text-2xs text-muted-foreground/70 truncate max-w-[100px]",
             (runningProcess || recentProcess) ? "hidden" : "hidden group-hover:block"
           )}>
             {command.command}
@@ -1793,7 +1793,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           {relativePath && (
             <span className={cn(
               "text-muted-foreground bg-muted/70 border border-border/50 rounded flex-shrink-0",
-              isCompact ? "text-[9px] px-1 py-0.5" : "text-[10px] px-1.5 py-0.5"
+              isCompact ? "text-3xs px-1 py-0.5" : "text-2xs px-1.5 py-0.5"
             )}>
               {relativePath}
             </span>
@@ -1801,7 +1801,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           {showWorktree && worktreeName && (
             <span className={cn(
               "rounded bg-accent/50 text-foreground/70 truncate",
-              isCompact ? "text-[10px] px-1 py-0.5 max-w-[60px]" : "text-xs px-1.5 py-0.5 max-w-[80px]"
+              isCompact ? "text-2xs px-1 py-0.5 max-w-[60px]" : "text-xs px-1.5 py-0.5 max-w-[80px]"
             )} title={worktreeName}>
               {worktreeName}
             </span>
@@ -1809,7 +1809,7 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
           <span className={cn(
             "rounded flex-shrink-0",
             config.text, config.bg,
-            isCompact ? "text-[10px] px-1 py-0.5" : "text-xs px-1.5 py-0.5"
+            isCompact ? "text-2xs px-1 py-0.5" : "text-xs px-1.5 py-0.5"
           )}>
             {isCompact ? config.shortLabel : config.label}
           </span>

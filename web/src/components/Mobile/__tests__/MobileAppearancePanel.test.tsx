@@ -9,11 +9,18 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  DEFAULT_FONT_SIZE,
+  MOBILE_FONT_SIZE_MAP,
+} from "../../../lib/rootFontSize";
 
 const MOBILE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 const mocks = vi.hoisted(() => ({
   setSetting: vi.fn().mockResolvedValue(undefined),
+  // Mirrors the real guard: only writes when the value actually differs, so a
+  // panel mount does not re-save preferences the user never touched.
+  setSettingIfChanged: vi.fn().mockResolvedValue(true),
   getSetting: vi.fn((_key: string, fallback: unknown) => fallback),
 }));
 
@@ -21,6 +28,7 @@ vi.mock("../../../services/settingsSync", () => ({
   settingsSync: {
     getSetting: mocks.getSetting,
     setSetting: mocks.setSetting,
+    setSettingIfChanged: mocks.setSettingIfChanged,
     isInitialized: vi.fn().mockReturnValue(true),
   },
   SETTINGS_KEYS: {
@@ -55,9 +63,21 @@ describe("MobileAppearancePanel", () => {
   it("shows the font-size preference step, not a resolved pixel value", async () => {
     render(<MobileAppearancePanel />);
     await screen.findByText(/^theme$/i);
-    // Default preference is "md" -> label "Medium", not e.g. "16px" (the
-    // resolved mobile pixel value from MOBILE_FONT_SIZE_MAP).
-    expect(screen.getByText("Medium")).toBeInTheDocument();
+    // The panel shows the STEP's label ("Large" for the `lg` default), never
+    // the resolved pixel value — 17px on mobile, per MOBILE_FONT_SIZE_MAP.
+    // Derived from DEFAULT_FONT_SIZE so changing the default updates this in
+    // one place instead of failing here.
+    const labels: Record<string, string> = {
+      xs: "Extra Small",
+      sm: "Small",
+      md: "Medium",
+      lg: "Large",
+      xl: "Extra Large",
+    };
+    expect(screen.getByText(labels[DEFAULT_FONT_SIZE])).toBeInTheDocument();
+    expect(
+      screen.queryByText(MOBILE_FONT_SIZE_MAP[DEFAULT_FONT_SIZE]),
+    ).not.toBeInTheDocument();
   });
 
   it("writes the theme through the same THEME settingsSync key desktop uses", async () => {

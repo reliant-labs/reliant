@@ -333,7 +333,10 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           data-testid="chat-input"
           data-context="chat-input"
           placeholder={placeholder || defaultPlaceholder}
-          className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-sm chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          // text-base, not text-sm: this is the app's primary input, and it was
+          // rendering a step below body text. It scales with the Appearance
+          // font-size preference like everything else.
+          className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50"
           style={{
             color: "var(--chat-input-text)",
             maxHeight: 200,

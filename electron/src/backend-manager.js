@@ -7,8 +7,12 @@ const dotenv = require('dotenv');
 const daemonCreds = require('./daemon-creds');
 const {
   DAEMON_NON_INTERACTIVE_FLAG,
+  DAEMON_VERBOSE_FLAG,
   DAEMON_STATE_STREAM_FIELD,
   DAEMON_STREAM_AWAITING_CREDENTIALS,
+  DAEMON_STATE_CONNECTED_AT_FIELD,
+  DAEMON_STATE_PID_FIELD,
+  DAEMON_STREAM_NOTICE_PREFIX,
 } = require('./daemon-contract');
 
 // Default API URL — NEUTRAL (localhost) for the OSS build.
@@ -50,6 +54,19 @@ class BackendManager {
     this.devBinaryPath = null; // Resolved dev-mode binary path (set by resolveDevBinary / getBinaryPath)
     this.devProcessSearchPattern = null; // Pattern used by orphan cleanup to grep ps output in dev mode
     this.lastDaemonState = null; // Last runtime record checkHealth() read (see daemon-state.json)
+
+    // Whether this process has already swept for orphaned daemons.
+    //
+    // The sweep exists for daemons left behind by a PREVIOUS app run — a crash,
+    // a force-quit, a failed update. That is a cold-start condition: once we
+    // have started and cleanly stopped our own daemon in this process, there is
+    // no earlier run left to have orphaned anything, and re-running the sweep
+    // costs ~93ms of blocking `ps aux` (measured) on the sign-in restart path
+    // for a question whose answer we already know.
+    //
+    // Set only after a sweep completes, and cleared by an UNCLEAN exit (see
+    // handleCrash), because a daemon that died badly may have left children.
+    this.hasSweptOrphans = false;
 
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
@@ -178,6 +195,23 @@ class BackendManager {
     // daemon-contract.js.
     args.push(DAEMON_NON_INTERACTIVE_FLAG);
 
+    // --verbose selects MACHINE output on the daemon's stdout, which is what
+    // this parent needs.
+    //
+    // Without it the daemon assumes a human is watching the terminal: it sends
+    // its structured log to the rotating file only and prints a few short
+    // status lines instead — and it SUPPRESSES the `@@RELIANT_STREAM <state>`
+    // notices, because they are unreadable noise to a person. Those notices are
+    // the push path that tells us a connect happened the moment it does.
+    //
+    // Dropping this flag does not break the app: watchDaemonConnection also
+    // stat-polls daemon-state.json every 250ms, and that record stays
+    // authoritative. It just makes every connect up to a poll interval later
+    // (146ms in a measured dev sign-in) for news the daemon already had.
+    // backend-manager-daemon-stream-notice.test.js pins the flag so that
+    // regression fails a test rather than quietly costing latency.
+    args.push(DAEMON_VERBOSE_FLAG);
+
     // Pass hosted API URL
     args.push('--server', this.apiUrl);
 
@@ -224,6 +258,194 @@ class BackendManager {
       return JSON.parse(raw);
     } catch (error) {
       return null;
+    }
+  }
+
+  /**
+   * Watch the daemon's runtime record and invoke `onConnected` the moment it
+   * reports a live stream.
+   *
+   * WHY A WATCHER AND NOT A POLL. The renderer's daemon list is a 5s
+   * React Query poll with `refetchIntervalInBackground: false`, so it STOPS
+   * while the window is backgrounded — which is exactly what OAuth does when
+   * it hands consent to the system browser. Measured on a real prod sign-in:
+   * the daemon registered at 02:20:11.2 and reported connected at 02:20:12.4,
+   * but onboarding sat on the daemon step for roughly a minute, because
+   * nothing told the renderer to look again.
+   *
+   * The daemon publishes `stream: "connected"` to daemon-state.json on the
+   * LOCAL filesystem the instant its gateway stream is up, so a file watch
+   * turns a ≤60s wait into a sub-second one with no new RPC, no streaming
+   * endpoint, and no extra network traffic. The 1.1s gap measured between
+   * "registered" (queryable via ListDaemons) and "connected" (this event) is
+   * why the renderer still refetches on the event rather than trusting it as
+   * data — the event is a TRIGGER, not a source of truth.
+   *
+   * fs.watchFile (stat polling) rather than fs.watch: the file is rewritten
+   * by a separate process, and fs.watch's rename/atomic-replace semantics
+   * differ per platform, which is precisely the kind of thing that works on
+   * one developer's macOS and silently never fires on Windows.
+   */
+  watchDaemonConnection(onConnected) {
+    const statePath = path.join(this.daemonDataDir(), 'daemon-state.json');
+    this.stopWatchingDaemonConnection();
+
+    // Dedupe on the IDENTITY of the connection, not on the stream string.
+    //
+    // Keying on `stream` alone silently drops the event that matters most.
+    // The post-sign-in restart takes the daemon connected → awaiting_credentials
+    // → connected, and that middle state is routinely shorter than the 250ms
+    // stat interval below, so the watcher observes "connected" both times,
+    // concludes nothing changed, and never announces the NEW daemon. Measured:
+    // a restart whose intermediate state lasted 80ms produced exactly one event
+    // — the one for the daemon that had already gone away.
+    //
+    // `connected_at` is restamped on every re-establishment and `pid` changes
+    // on every respawn, so together they change whenever there is genuinely a
+    // new connection to report, and stay put across the repeated writes the
+    // daemon makes to the same record (session counts, heartbeats).
+    // Held on the instance, not in a closure, because the stdout push path
+    // (handleDaemonStreamNotice) dedupes against the same value. Two paths
+    // reporting the same connection must produce ONE event.
+    this._onDaemonConnected = onConnected;
+    const check = () => {
+      const state = this.readDaemonState();
+      const stream = state ? state[DAEMON_STATE_STREAM_FIELD] : null;
+      const identity = state
+        ? `${stream}|${state[DAEMON_STATE_CONNECTED_AT_FIELD] || ''}|${
+            state[DAEMON_STATE_PID_FIELD] || ''
+          }`
+        : null;
+      if (identity === this._lastStreamIdentity) return;
+      this._lastStreamIdentity = identity;
+      // Anything that is not "awaiting credentials" means the daemon has a
+      // credential and has reached the gateway. Matching on the negative
+      // rather than a literal "connected" keeps this working if the daemon
+      // gains further stream states later.
+      if (stream && stream !== DAEMON_STREAM_AWAITING_CREDENTIALS) {
+        log.info('[BackendManager] Daemon reported connected; notifying renderer', {
+          atMs: Date.now(),
+          stream,
+        });
+        onConnected(stream);
+      }
+    };
+
+    // 250ms is well inside a human's perception of "instant" and costs one
+    // stat() — cheap next to the 5s network poll it replaces.
+    fs.watchFile(statePath, { interval: 250 }, check);
+    this._daemonStateWatchPath = statePath;
+    // Fire once immediately: the daemon may already be connected by the time
+    // a listener attaches, and a watcher that only reports future changes
+    // would miss it and wait forever.
+    check();
+  }
+
+  /**
+   * Whether the daemon currently reports a live stream.
+   *
+   * Exists because an EVENT alone is not sufficient here. The renderer
+   * RELOADS after the post-sign-in daemon restart, and watchDaemonConnection
+   * de-duplicates on the stream value — so the "connected" event fires at the
+   * outgoing renderer, and the freshly-mounted one that actually needs it
+   * never receives anything. Measured: the daemon was listable at
+   * 22:20:11.233 but the UI only learned at 22:20:15.289, on the next 5s
+   * poll tick, with zero event deliveries in between.
+   *
+   * A renderer therefore ASKS on mount rather than relying on having been
+   * listening at the right moment. The event stays as the fast path for a
+   * renderer that is already up; this closes the reload gap.
+   */
+  isDaemonConnected() {
+    const state = this.readDaemonState();
+    const stream = state ? state[DAEMON_STATE_STREAM_FIELD] : null;
+    return Boolean(stream && stream !== DAEMON_STREAM_AWAITING_CREDENTIALS);
+  }
+
+  /**
+   * Parse a chunk of the daemon's stdout: surface stream notices immediately,
+   * log the rest.
+   *
+   * Chunks are NOT lines. A pipe delivers whatever has been written when the
+   * reader wakes, so a notice can arrive split across two chunks, or share a
+   * chunk with several log lines. Buffering the tail until a newline is what
+   * makes the prefix match reliable — matching on raw chunks drops any notice
+   * unlucky enough to straddle a boundary, which would show up as an
+   * occasional, unreproducible return of the slow path.
+   */
+  consumeDaemonStdout(chunk) {
+    this._stdoutTail = (this._stdoutTail || '') + chunk;
+    const lines = this._stdoutTail.split('\n');
+    // Last element is the partial line (empty when the chunk ended cleanly).
+    this._stdoutTail = lines.pop() ?? '';
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+
+      if (trimmed.startsWith(DAEMON_STREAM_NOTICE_PREFIX)) {
+        const stream = trimmed.slice(DAEMON_STREAM_NOTICE_PREFIX.length).trim();
+        this.handleDaemonStreamNotice(stream);
+        continue;
+      }
+
+      // Every mode: dev no longer inherits the daemon's stdout fd (see the
+      // stdio comment in start()), so this is the only path that surfaces it.
+      log.info(`[Daemon]: ${trimmed}`);
+    }
+  }
+
+  /**
+   * A stream transition the daemon announced on stdout.
+   *
+   * Routed through the SAME callback and the same dedupe as the file watcher,
+   * so the push path and the poll path cannot disagree or double-fire: whichever
+   * observes a given connection first reports it, and the other sees the
+   * identity unchanged and stays quiet.
+   *
+   * Deliberately does NOT synthesise a daemon for the renderer. Registration
+   * (which makes the daemon listable via ListDaemons) and the connect notice
+   * were measured 1.1s apart on prod, so the notice is a REFETCH TRIGGER, not
+   * data — same contract the IPC event has always had.
+   */
+  handleDaemonStreamNotice(stream) {
+    if (!stream || stream === DAEMON_STREAM_AWAITING_CREDENTIALS) return;
+    if (!this._onDaemonConnected) return;
+
+    // Build the SAME identity the file watcher builds, by reading the record
+    // the daemon wrote immediately before printing this notice.
+    //
+    // The two paths must produce comparable strings or they do not dedupe
+    // against each other, and every connection is announced twice — once by
+    // whichever path is faster and again by the other. That is not harmful
+    // (the renderer treats the event as a refetch trigger, and React Query
+    // coalesces), but it doubles the RPCs and makes the logs lie about what
+    // happened.
+    //
+    // If the record is not readable yet — the notice can win the race against
+    // the rename — fall back to a process-keyed identity. That degrades to at
+    // most one duplicate for that connection, never to a missed one.
+    const state = this.readDaemonState();
+    const identity =
+      state && state[DAEMON_STATE_STREAM_FIELD] === stream
+        ? `${stream}|${state[DAEMON_STATE_CONNECTED_AT_FIELD] || ''}|${
+            state[DAEMON_STATE_PID_FIELD] || ''
+          }`
+        : `${stream}||${this.process ? this.process.pid : ''}`;
+    if (identity === this._lastStreamIdentity) return;
+    this._lastStreamIdentity = identity;
+
+    log.info('[BackendManager] Daemon announced stream on stdout; notifying renderer', {
+      atMs: Date.now(),
+      stream,
+    });
+    this._onDaemonConnected(stream);
+  }
+
+  stopWatchingDaemonConnection() {
+    if (this._daemonStateWatchPath) {
+      fs.unwatchFile(this._daemonStateWatchPath);
+      this._daemonStateWatchPath = null;
     }
   }
 
@@ -986,9 +1208,26 @@ class BackendManager {
     const startTime = Date.now();
     log.info('[BackendManager] start() called');
 
-    // Clean up any orphaned processes from previous runs before starting
-    // This prevents "app can't be opened" errors after failed updates
-    await this.cleanupOrphanedProcesses();
+    // Clean up any orphaned processes from previous runs before starting.
+    // This prevents "app can't be opened" errors after failed updates.
+    //
+    // Cold start only. The sweep's whole purpose is daemons abandoned by an
+    // EARLIER app run, so it answers a cold-start question; on a restart we
+    // just watched our own daemon exit, in this process, and no previous run
+    // can have appeared in the meantime. Re-sweeping there spends ~93ms of
+    // blocking `ps aux` (measured, and it blocks the event loop) on the
+    // sign-in path to rediscover nothing.
+    //
+    // Skipping it also REMOVES risk rather than adding it: every sweep is
+    // another chance to misclassify a sibling dev stack's healthy daemon,
+    // which is a regression that has happened before (see the comment on
+    // cleanupOrphanedProcesses).
+    if (!this.hasSweptOrphans) {
+      await this.cleanupOrphanedProcesses();
+      this.hasSweptOrphans = true;
+    } else {
+      log.info('[BackendManager] Skipping orphan sweep (already swept this session)');
+    }
 
     // Check if external backend is already running (dev mode with Air)
     if (process.env.RELIANT_EXTERNAL_BACKEND) {
@@ -1178,11 +1417,24 @@ class BackendManager {
           : path.join(app.getPath('userData'), 'data');  // Prod: shared app data
       }
 
-      // Spawn daemon process
-      // In development, inherit stdout/stderr so we can see output directly
-      // In production, pipe them so we can capture them
-      // CRITICAL: Always pipe stdin (index 0) so the daemon can detect when the parent process dies (Suicide Pact pattern)
-      const stdio = this.isDevelopment ? ['pipe', 'inherit', 'inherit'] : ['pipe', 'pipe', 'pipe'];
+      // Spawn daemon process.
+      //
+      // Pipe ALL THREE in every mode. stdout is read unconditionally below —
+      // it carries the stream notice, which is the push path that reports
+      // readiness without waiting on the 250ms stat poll. `inherit` makes Node
+      // set child.stdout/child.stderr to null, so inheriting in dev threw
+      // "Cannot read properties of null (reading 'on')" immediately after
+      // spawn: the daemon was already running, but the error aborted start()
+      // before the readiness wiring, orphaning it and surfacing 30s later as
+      // "Daemon failed to become ready — no runtime record written".
+      //
+      // Dev used to rely on the inherited fd to show daemon output. It no
+      // longer can, so consumeDaemonStdout and the stderr handler log in every
+      // mode instead — same output, one path, and it lands in the forge log.
+      //
+      // CRITICAL: stdin (index 0) must stay piped so the daemon can detect when
+      // the parent process dies (Suicide Pact pattern).
+      const stdio = ['pipe', 'pipe', 'pipe'];
 
       log.info('[BackendManager] Spawning daemon:', binaryPath.command, binaryPath.args.join(' '));
 
@@ -1214,24 +1466,25 @@ class BackendManager {
         this.stdinStream = this.process.stdin;
       }
 
-      // Only set up stream handlers in production mode
-      if (!this.isDevelopment) {
-        // Log output for debugging
-        this.process.stdout.on('data', (data) => {
-          const output = data.toString().trim();
-          // Always log backend stdout
-          if (output) {
-            log.info(`[Daemon]: ${output}`);
-          }
-        });
+      // Read the daemon's stdout in EVERY mode.
+      //
+      // This used to be production-only, purely to avoid duplicating log lines
+      // in dev. It now also carries the stream notice (see
+      // consumeDaemonStdout), which is the push path that tells us the daemon
+      // is up without waiting on the 250ms stat poll — and dev is where the
+      // sign-in restart is exercised most, so skipping it there would leave the
+      // fast path untested by everyday use.
+      this.process.stdout.on('data', (data) => {
+        this.consumeDaemonStdout(data.toString());
+      });
 
-        this.process.stderr.on('data', (data) => {
-          const output = data.toString().trim();
-          if (output) {
-            log.error(`[Daemon Error]: ${output}`);
-          }
-        });
-      }
+      this.process.stderr.on('data', (data) => {
+        const output = data.toString().trim();
+        // Every mode, same reason as stdout: dev no longer inherits this fd.
+        if (output) {
+          log.error(`[Daemon Error]: ${output}`);
+        }
+      });
 
       this.process.on('error', (error) => {
         log.error('Failed to start daemon process:', error);
@@ -1246,6 +1499,10 @@ class BackendManager {
         // Auto-restart on crash if not intentionally shutting down
         if (!this.isShuttingDown && !this.intentionalShutdown && code !== 0) {
           log.error('Daemon crashed unexpectedly, attempting restart...');
+          // A daemon that died badly may have left children behind — the exact
+          // condition the orphan sweep exists for. Re-arm it so the restart
+          // that follows sweeps, even though this process already has once.
+          this.hasSweptOrphans = false;
           this.handleCrash();
         } else if (code === 0) {
           // Reset restart attempts on clean exit

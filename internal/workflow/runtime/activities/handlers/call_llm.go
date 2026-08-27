@@ -37,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -58,6 +59,11 @@ type streamProcessingState struct {
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
 	upstreamProxymanID string // Provider response header x-proxyman-id (if available)
+
+	// finishReason is why the provider stopped. It is read for exactly one
+	// decision — what to say when the turn came back with nothing in it — so
+	// it only has to be right for the reasons that can produce no content.
+	finishReason message.FinishReason
 
 	// Delta identity: pre-allocated assistant message id (from
 	// RuntimeContext.AssistantMessageID) and the per-message monotonically
@@ -265,7 +271,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	// The residual race is a message queued microseconds AFTER this SELECT.
 	// That window cannot be closed here — any check has an after. It is closed
 	// on the other side instead, and was already: the enqueue rings the
-	// doorbell signal (notifyAgentMessageQueued) which wakes a parked thread,
+	// doorbell signal (notifyThreadWake) which wakes a parked thread,
 	// an idle thread's queue is absorbed by the user's next send, and a row
 	// that outlives every turn is marked undeliverable by the reconciler's
 	// resolveOrphanedAgentMessages rather than sitting queued forever. A
@@ -356,6 +362,162 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 // interruptedTurnWriteTimeout bounds the detached write of an interrupted
 // turn's partial. Short: one insert on a live pool, with the caller unwinding.
 const interruptedTurnWriteTimeout = 5 * time.Second
+
+// contentFreeTurnExplanation reports whether a finished turn came back with
+// nothing in it, and what to say about it. Split out from streamLLMResponse so
+// the decision is testable on its own: it is the single guard between a
+// content-free provider response and a chat that stops with nothing to show.
+func contentFreeTurnExplanation(
+	interrupted bool,
+	responseText string,
+	thinkingText string,
+	toolCallCount int,
+	reason message.FinishReason,
+) (string, bool) {
+	if interrupted {
+		return "", false
+	}
+	if responseText != "" || thinkingText != "" || toolCallCount > 0 {
+		return "", false
+	}
+	return contentFreeTurnText(reason), true
+}
+
+// heartbeatKilledStream reports whether ctx was cancelled by a heartbeat RPC
+// that merely failed locally, rather than by a real instruction to stop.
+//
+// Deliberately mirrors runtime.spuriousHeartbeatCancel rather than calling it:
+// that one is unexported and lives in the package that IMPORTS this one, so
+// sharing it directly would invert the dependency. The two must agree — if
+// this says "spurious" and the wrapper disagrees, the turn fails without being
+// retried — so the classification is kept identical and narrow: a cause that
+// is a genuine cancel, pause, or reset is NOT spurious; anything else the SDK
+// cancelled us with is.
+//
+// Worker shutdown is intentionally absent here. It is handled by the wrapper's
+// own workerStopped branch (which rewrites the error to a retryable
+// WorkerShutdown), and both branches lead to a retry, so a shutdown that
+// reaches this path still ends up doing the right thing.
+//
+// NOTE for whoever builds out-of-band activity cancellation (the "option B"
+// per-activity CancelFunc registry in specs/fast-cancel-design-findings.md):
+// such a cancel is indistinguishable from a blown heartbeat unless it carries a
+// distinguishing cause, and it must be taught to BOTH this function and
+// runtime.spuriousHeartbeatCancel. Teaching only one is worse than teaching
+// neither — the two would disagree, and the turn would fail here without the
+// wrapper converting it to a retry. The interrupt fast path in
+// threads.InterruptThread does not reach this code today: it cancels tool_calls
+// and daemon processes, and CallLLM holds neither, so its cancels arrive via
+// Temporal like any other.
+func heartbeatKilledStream(ctx context.Context) bool {
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		return false
+	}
+	cause := context.Cause(ctx)
+	if cause == nil || errors.Is(cause, context.Canceled) {
+		// No distinguishing cause recorded — treat as a real cancellation so a
+		// genuine pause or interrupt is never mistaken for infrastructure
+		// noise and retried against the user's intent.
+		return false
+	}
+	if temporal.IsCanceledError(cause) ||
+		errors.Is(cause, activity.ErrActivityPaused) ||
+		errors.Is(cause, activity.ErrActivityReset) {
+		return false
+	}
+	return true
+}
+
+// reportContentFreeTurn puts the content-free turn on screen as an error.
+//
+// Best-effort by construction: the turn is over either way, and a chat that
+// stops without explanation is the failure being fixed — it must not be traded
+// for a turn that fails because the explanation could not be written. Emitted
+// on a context detached from cancellation for the same reason the interrupted
+// turn's write is.
+func (a *CallLLMActivity) reportContentFreeTurn(
+	ctx context.Context,
+	chatID string,
+	thread string,
+	rtx RuntimeContext,
+	reason message.FinishReason,
+	explanation string,
+) {
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), contentFreeTurnReportTimeout)
+	defer cancel()
+
+	if _, err := WriteWorkflowError(writeCtx, a.repo, WorkflowErrorInput{
+		ChatID:     chatID,
+		WorkflowID: rtx.WorkflowID,
+		// WorkflowName is deliberately unset: WriteWorkflowError does not put it
+		// in the payload, and RuntimeContext does not carry it, so naming one
+		// here would be a guess nothing reads.
+		ErrorType:    "provider_empty_response",
+		ErrorSummary: contentFreeTurnSummary(reason),
+		ErrorMessage: fmt.Sprintf(
+			"The provider ended this turn with no text, no reasoning and no tool calls (finish reason: %s). "+
+				"Nothing was produced, so nothing was written to the transcript.\n\n%s",
+			reason, explanation,
+		),
+		Thread: thread,
+	}); err != nil {
+		// The log is the last line of defense for the very thing this function
+		// exists to prevent, so it is loud.
+		logging.Error("[CallLLM] Could not report a content-free turn to the chat — "+
+			"the run has stopped and the user has no indication why",
+			"chatID", chatID, "thread", thread, "finishReason", string(reason), "error", err)
+	}
+}
+
+// contentFreeTurnReportTimeout bounds the detached write of the error that
+// explains a content-free turn. Short: one insert, with the turn already over.
+const contentFreeTurnReportTimeout = 5 * time.Second
+
+// contentFreeTurnSummary is the one-line headline WorkflowErrorMessage shows
+// collapsed; contentFreeTurnText is the detail behind it.
+func contentFreeTurnSummary(reason message.FinishReason) string {
+	switch reason {
+	case message.FinishReasonRefusal:
+		return "The model declined this request and returned no response"
+	case message.FinishReasonMaxTokens:
+		return "The model hit its output limit before producing anything"
+	case message.FinishReasonPauseTurn:
+		return "The model paused this turn before producing anything, and the run stopped there"
+	default:
+		return "The model returned an empty response"
+	}
+}
+
+// contentFreeTurnText is what the assistant says when the provider answered
+// with nothing at all. It is a normal assistant message — the turn is over and
+// the loop is about to yield — so it is written for the user, not for a log.
+//
+// The refusal case is the one that actually happens: Anthropic's stop_reason
+// "refusal" (and the OpenAI-shaped "content_filter") stops generation without
+// emitting the model's own explanation, so there is nothing to relay and the
+// message has to supply the context itself.
+func contentFreeTurnText(reason message.FinishReason) string {
+	switch reason {
+	case message.FinishReasonRefusal:
+		return "I wasn't able to answer that — the model's safety system stopped this turn and returned no explanation with it.\n\n" +
+			"This usually responds to rephrasing. Requests that ask for access to an account or system, or that carry " +
+			"credentials inline, are the common trigger; stating what you're trying to accomplish and why you're " +
+			"authorized to do it generally gets a normal answer."
+	case message.FinishReasonMaxTokens:
+		return "This turn hit the model's output limit before producing anything. Try narrowing the request, or continue and I'll work in smaller steps."
+	case message.FinishReasonPauseTurn:
+		// pause_turn is the model stopping part-way expecting to be resumed,
+		// not finishing. Nothing resumes it here yet, so the honest thing to
+		// say is that the turn stopped short — not that it ended.
+		return "The model paused part-way through this turn — it stopped expecting to carry on rather than finishing — and it hadn't produced anything yet.\n\n" +
+			"Paused turns aren't picked back up automatically, so this one stopped here. Sending your message again starts the turn over, which normally gets through."
+	default:
+		return fmt.Sprintf(
+			"The model returned an empty response for this turn (finish reason: %s), so there is nothing to show. Sending your message again usually works.",
+			reason,
+		)
+	}
+}
 
 // pendingInboxProbeTimeout bounds the detached mailbox probe that decides
 // whether the agent loop takes another turn. Short: one indexed SELECT, and on
@@ -1126,6 +1288,46 @@ streamLoop:
 		return nil, streamErr
 	}
 
+	// A heartbeat RPC that merely timed out is NOT an instruction to stop.
+	//
+	// The SDK gives each heartbeat a deadline equal to the throttle interval,
+	// floored at minRPCTimeout=1s, and cancels the activity context on ANY
+	// retryable heartbeat error — context.DeadlineExceeded converts to
+	// codes.Unknown, which is in that set. So one slow round trip to the
+	// Temporal server kills a healthy stream, and it arrives here looking
+	// exactly like a user interrupt: streamCtx.Done() with "context canceled".
+	//
+	// ActivityWrapper.spuriousHeartbeatCancel exists precisely to absorb this
+	// and convert it to a retry, but it only runs when the activity returns an
+	// ERROR. Treating the cancel as an interrupt returns success, so the guard
+	// was skipped, the turn settled with zero tool calls, and the agent loop
+	// read that as "the model is done". That is how chat 7da3935c's sub-agent
+	// was killed 1.75s into a stream — two edits in — and reported to its
+	// parent as a clean finish. Three activities across two unrelated chats
+	// were cancelled inside 2.6s that afternoon, which is the signature of a
+	// briefly slow server rather than anything those turns did.
+	//
+	// Failing here hands the decision back to the wrapper, which recognises the
+	// spurious cancel and returns a retryable HeartbeatCancel — so the turn is
+	// re-dispatched and the work continues, instead of being silently dropped.
+	//
+	// A REAL cancel is unaffected: it carries a CanceledError cause (or
+	// ErrActivityPaused / ErrActivityReset), which spuriousHeartbeatCancel
+	// explicitly excludes, so pause and thread-interrupt keep their existing
+	// persist-the-partial-and-drain behavior on the path above.
+	if streamInterrupted && heartbeatKilledStream(ctx) {
+		activity.GetLogger(ctx).Warn(
+			"[CallLLM] Stream cancelled by a failed heartbeat RPC, not by a real interrupt — "+
+				"failing the turn so it is retried rather than reported as a completed turn",
+			"chatID", chat.ID,
+			"thread", thread,
+			"cause", context.Cause(ctx),
+			"responseChars", len(strings.Join(streamState.textParts, "")),
+			"toolCalls", len(streamState.toolCalls),
+		)
+		return nil, fmt.Errorf("heartbeat RPC cancelled the LLM stream: %w", context.Cause(ctx))
+	}
+
 	// Combine all text parts
 	responseText := strings.Join(streamState.textParts, "")
 
@@ -1148,6 +1350,44 @@ streamLoop:
 	)
 
 	toolCalls := streamState.toolCalls
+
+	// A completed turn that produced NOTHING must not pass for a normal turn.
+	//
+	// No text, no thinking, no tool calls means SaveMessage refuses the row —
+	// correctly, since a blockless assistant row poisons every later turn of
+	// the thread — the step executor logs that refusal and carries on, the
+	// agent loop sees no tool calls and exits, and the workflow reports
+	// success. Every link behaves as designed and the user is left with a chat
+	// that stopped mid-task: nothing on screen, nothing in the transcript, no
+	// error anywhere they can see.
+	//
+	// Measured: chat 58cc003f "Website Review And Analysis", one tool round in.
+	// The provider answered the next turn with stop_reason "refusal" and zero
+	// content blocks, and the chat died silently at 23:27:31.
+	//
+	// So say so, as an error. It goes to chat_updates in the shape
+	// WorkflowErrorMessage.tsx renders — a headline from error_summary and the
+	// detail one click away — which is the surface that already exists for
+	// "this run hit something you should know about". A fabricated assistant
+	// message would be the wrong surface twice over: the model did not say it,
+	// and saying it would put words in the provider's history for every
+	// following turn.
+	//
+	// The explanation still reaches ResponseText, because a spawned agent's
+	// response_text IS the tool result its parent reads — an empty one tells
+	// the parent nothing, and the parent has no other way to learn the child
+	// was refused.
+	//
+	// Interrupts are excluded deliberately. A stream the user cancelled before
+	// it produced anything is a turn they chose not to have, and
+	// persistInterruptedTurn already declines to write a row for it; reporting
+	// it as an error would flag the user's own cancel as a failure.
+	contentFreeExplanation, contentFree := contentFreeTurnExplanation(
+		streamInterrupted, responseText, thinkingText, len(toolCalls), streamState.finishReason,
+	)
+	if contentFree {
+		a.reportContentFreeTurn(ctx, chat.ID, thread, rtx, streamState.finishReason, contentFreeExplanation)
+	}
 
 	// Attach spawn presets to spawn tool calls for preset validation in ExecuteTools.
 	// Tool-level permission enforcement is handled by execute_tools using the permission
@@ -1175,6 +1415,28 @@ streamLoop:
 			Role: "assistant",
 			Text: responseText,
 		},
+		// Aborted says this turn was cut short rather than finished.
+		//
+		// A cancelled stream yields zero tool calls, which the agent loop's
+		// while-condition cannot distinguish from "the model is done" — so the
+		// loop exited and a spawn killed mid-edit reported to its parent as a
+		// clean completion (chat 7da3935c, thread 5e3fe370). This is the bit
+		// that tells them apart.
+		//
+		// Unlike the pending_inbox bug described below, this CANNOT wedge the
+		// loop: it is recomputed from each turn's own streamInterrupted, so the
+		// first turn that streams to completion sets it false and the loop
+		// exits normally. It is not an OR against a sticky value, and no
+		// caller can set it — there is exactly one writer, right here.
+		//
+		// Set for a user/thread interrupt too, and that is deliberate rather
+		// than incidental: an interrupt is already specified to "persist that
+		// partial assistant message and run one more mailbox-draining turn"
+		// (see the streamErr handling above). Re-entering is what that turn IS.
+		// pending_inbox happened to deliver it before, but only when something
+		// was actually queued; making it follow from the abort itself is what
+		// makes the guarantee hold when the mailbox is empty.
+		Aborted: streamInterrupted,
 		// Deliberately NOT set from streamInterrupted.
 		//
 		// It used to be, and that is the bug that wedged chats. An interrupt
@@ -1192,7 +1454,7 @@ streamLoop:
 		// strip), so the probe finds that row and returns the same true.
 		//
 		// Interrupt's OWN wake-up does not depend on this flag either: the
-		// enqueue rings the doorbell signal (notifyAgentMessageQueued), and a
+		// enqueue rings the doorbell signal (notifyThreadWake), and a
 		// row that outlives every turn is swept by the reconciler's
 		// resolveOrphanedAgentMessages. See the probe in executeCore for the
 		// residual microsecond race and why it is closed there, not here.
@@ -1201,6 +1463,16 @@ streamLoop:
 		Model:               resolvedModelID,
 		MessageId:           streamState.messageID,
 		LastStreamSeq:       streamState.streamSeq,
+	}
+
+	// The explanation goes to ResponseText and NOT to Message.Text. That split
+	// is the whole point: ResponseText is what a parent reads back from a
+	// spawned agent, while Message.Text is what gets persisted as something the
+	// assistant said. Nothing was said, so nothing is persisted — the empty
+	// Message.Text also means the inline save_message declines the write rather
+	// than failing it.
+	if contentFree {
+		output.ResponseText = contentFreeExplanation
 	}
 
 	// When a response_tool is configured, the LLM returns structured data as a
@@ -2012,6 +2284,8 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 
 	state.upstreamRequestID = strings.TrimSpace(event.Response.UpstreamRequestID)
 	state.upstreamProxymanID = strings.TrimSpace(event.Response.UpstreamProxymanID)
+
+	state.finishReason = event.Response.FinishReason
 
 	// CRITICAL: Extract complete tool calls with full inputs from the final response
 	// This is done here instead of EventToolUseStart because Input is empty at that point

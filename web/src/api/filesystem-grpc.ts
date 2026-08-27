@@ -222,12 +222,17 @@ export const filesystemGrpc = {
     showHidden: boolean = false,
     worktreeId?: string,
     chatId?: string,
-    depth: number = 0
+    depth: number = 1
   ): Promise<FileNode[]> {
     // Always fetch with showHidden=true so all callers share one in-flight request.
     // Callers that want hidden files filtered get the result filtered client-side.
+    // NOTE: this means the server walk always includes dot-directories no matter
+    // what the caller asked for, which inflates every walk. Fixing it belongs
+    // with the flat file-list RPC, not here.
     // depth is part of the key so a depth-2 root fetch and a depth-1 subdir fetch
-    // never collide (0 = full recursive tree — back-compat default).
+    // never collide. Depth 0 defers to the server default (2); -1 walks as deep
+    // as the server's node budget allows. Neither is unbounded — the default
+    // here is 1 so a caller that forgets gets the cheapest useful answer.
     const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}:${depth}`;
 
     let promise = pendingFileTreeRequests.get(cacheKey);

@@ -39,7 +39,7 @@ function ToolErrorBanner({ result }: { result?: ToolResultData }) {
   }
 
   return (
-    <div className="px-2 py-1.5 text-[11px] text-warning bg-warning/5 border-t border-border/50">
+    <div className="px-2 py-1.5 text-xs text-warning bg-warning/5 border-t border-border/50">
       {result.content}
     </div>
   );
@@ -218,7 +218,7 @@ function FileToolRendererComponent({ ctx }: ToolContentProps) {
             return (
               <div key={index} className={index > 0 ? 'mt-2' : ''}>
                 {editFilePath && (
-                  <div className="px-2 py-0.5 text-[10px] text-muted-foreground font-mono bg-muted/30 border-b border-border/30 truncate">
+                  <div className="px-2 py-0.5 text-2xs text-muted-foreground font-mono bg-muted/30 border-b border-border/30 truncate">
                     {editFilePath}
                   </div>
                 )}

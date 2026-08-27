@@ -14,6 +14,7 @@ import (
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropicwire"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -390,22 +391,11 @@ func (b *baseClient) toolChoice(toolName string) anthropic.ToolChoiceUnionParam 
 }
 
 func (b *baseClient) finishReason(reason string) message.FinishReason {
-	var result message.FinishReason
-	switch reason {
-	case "end_turn":
-		result = message.FinishReasonEndTurn
-	case "max_tokens":
-		result = message.FinishReasonMaxTokens
-	case "tool_use":
-		result = message.FinishReasonToolUse
-	case "stop_sequence":
-		result = message.FinishReasonEndTurn
-	default:
-		logging.Warn("Anthropic: Unknown finish reason", "reason", reason)
-		result = message.FinishReasonUnknown
-	}
-
-	return result
+	// The table lives in anthropicwire because Claude-on-Vertex reads the same
+	// stop_reason vocabulary from a different package, and the two hand-kept
+	// copies drifted. Delegating is what keeps them from drifting again;
+	// anthropicwire also logs anything it does not recognise.
+	return anthropicwire.FinishReason(anthropicwire.SourceAnthropic, reason)
 }
 
 // toolCalls extracts tool calls from the message and returns them along with any validation error.

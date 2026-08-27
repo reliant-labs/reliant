@@ -36,7 +36,7 @@ export function SidebarEmptyState({
       container: "py-4 px-3",
       icon: "w-5 h-5 mb-2",
       title: "text-xs",
-      description: "text-[10px] mt-0.5",
+      description: "text-2xs mt-0.5",
     },
     md: {
       container: "py-6 px-4",

@@ -35,7 +35,7 @@ export function WelcomeStep({ stepNumber, totalSteps }: StepProps) {
       icon={<ReliantIcon className="w-12 h-12" />}
     >
       <div className="space-y-4">
-        <p className="text-[15px] leading-relaxed text-muted-foreground">
+        <p className="text-base leading-relaxed text-muted-foreground">
           Reliant orchestrates AI agents to build, test, and review your code —
           all configurable through declarative YAML workflows.
         </p>

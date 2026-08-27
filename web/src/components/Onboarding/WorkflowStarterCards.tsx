@@ -284,7 +284,7 @@ function SecondaryCard({
         aria-hidden="true"
       />
       {option.featured && (
-        <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+        <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
           <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/60" />
           Recommended
         </span>
@@ -304,7 +304,7 @@ function SecondaryCard({
           <h3
             className={cn(
               "font-semibold leading-tight tracking-tight text-foreground",
-              option.featured ? "text-base pr-32" : "text-[15px]",
+              option.featured ? "text-base pr-32" : "text-base",
             )}
           >
             {option.label}

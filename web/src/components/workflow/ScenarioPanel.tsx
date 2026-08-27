@@ -196,7 +196,7 @@ function ScenarioItem({
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm truncate">{scenario.name}</span>
             {isProjectScenario && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
                 file
               </span>
             )}
@@ -260,7 +260,7 @@ function ScenarioItem({
           {/* Last run result */}
           {result && (
             <div className="mt-3 pt-3 border-t border-border">
-              <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
                 Last Run Result
               </div>
               <ExecutionDetails result={result} />

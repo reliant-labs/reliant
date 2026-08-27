@@ -41,7 +41,22 @@ try {
   process.exit(1);
 }
 
-const endpoints = release.main || {};
+// Prefer what the caller already resolved; fall back to the committed file.
+//
+// with-release-config.mjs renders control-plane's KCL LIVE and exports the
+// result before invoking anything, so when this runs under a build target its
+// environment already carries the authoritative values. Reading the JSON
+// unconditionally would silently re-introduce the cache as the authority for
+// the main-process endpoints — verified: with a changed gateway_url in the KCL,
+// the wrapper exported the new value while this script still wrote the old one
+// into build-config.js.
+//
+// Standalone runs (no wrapper) keep working: nothing sets these, so every key
+// falls through to the file exactly as before.
+const fileEndpoints = release.main || {};
+const endpoints = Object.fromEntries(
+  Object.keys(fileEndpoints).map((key) => [key, process.env[key] || fileEndpoints[key]]),
+);
 
 const config = {
   STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || "",

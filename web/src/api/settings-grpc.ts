@@ -20,6 +20,7 @@ import {
   GetSettingRequestSchema,
   UpdateSettingRequestSchema,
   DeleteSettingRequestSchema,
+  BatchUpsertSettingsRequestSchema,
   // Sub-phase 6b: UI Settings
   GetShortcutsRequestSchema,
   UpdateShortcutsRequestSchema,
@@ -227,6 +228,30 @@ export const settingsGrpc = {
     const response = await client.updateSetting(request);
     if (!response.setting) throw new Error("No setting in response");
     return protoSettingToFrontend(response.setting);
+  },
+
+  /**
+   * Upsert many settings in ONE request.
+   *
+   * Server-side each entry has CreateSetting's upsert semantics, so callers do
+   * not need to know which keys already exist.
+   */
+  async batchUpsertSettings(
+    settings: Array<{ key: string; value: string; valueType?: string }>,
+    projectId?: string
+  ): Promise<Setting[]> {
+    if (settings.length === 0) return [];
+    const client = grpcClient.settings();
+    const request = create(BatchUpsertSettingsRequestSchema, {
+      settings: settings.map((s) => ({
+        key: s.key,
+        value: s.value,
+        valueType: s.valueType ?? "string",
+      })),
+      projectId,
+    });
+    const response = await client.batchUpsertSettings(request);
+    return response.settings.map(protoSettingToFrontend);
   },
 
   async deleteSetting(

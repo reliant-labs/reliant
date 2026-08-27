@@ -29,6 +29,17 @@ const DAEMON_NON_INTERACTIVE_FLAG = '--non-interactive';
 // instead of argv.
 const DAEMON_NON_INTERACTIVE_ENV_VAR = 'RELIANT_DAEMON_NON_INTERACTIVE';
 
+// The daemon's global --verbose flag, which selects who its stdout is FOR.
+//
+// Unset, the daemon assumes a HUMAN is watching: the structured log goes to the
+// rotating file only, stdout gets a few short status lines, and the
+// `@@RELIANT_STREAM` notices below are suppressed as unreadable noise.
+//
+// Set, stdout carries the full structured log AND those notices — machine
+// output, which is what a supervising parent needs. Electron always passes it
+// for that reason; see backend-manager.js buildDaemonArgs.
+const DAEMON_VERBOSE_FLAG = '--verbose';
+
 // daemon-state.json's `stream` field name (see internal/toolexec/daemonstate
 // State.Stream / json tag "stream").
 const DAEMON_STATE_STREAM_FIELD = 'stream';
@@ -38,9 +49,39 @@ const DAEMON_STATE_STREAM_FIELD = 'stream';
 // attempting interactive registration.
 const DAEMON_STREAM_AWAITING_CREDENTIALS = 'awaiting_credentials';
 
+// Fields that identify WHICH connection the record describes, as opposed to
+// what state it is in. `connected_at` is restamped every time the gateway
+// stream is re-established, and `pid` changes whenever the daemon respawns.
+//
+// A watcher must key on these, not on `stream` alone: the post-sign-in restart
+// takes the daemon from connected → (briefly) awaiting_credentials → connected,
+// and the intermediate state can be shorter than the watcher's stat interval.
+// Deduping on the string then sees "connected" both times, concludes nothing
+// changed, and never reports the NEW connection. See watchDaemonConnection.
+const DAEMON_STATE_CONNECTED_AT_FIELD = 'connected_at';
+const DAEMON_STATE_PID_FIELD = 'pid';
+
+// Prefix the daemon prints on stdout when its stream state changes, e.g.
+// `@@RELIANT_STREAM connected`.
+//
+// MIRRORS daemonstate.StreamNoticePrefix (internal/toolexec/daemonstate/
+// state.go), which is the source of truth. backend-manager-daemon-stream-
+// notice.test.js asserts the two agree by reading the Go constant, so a rename
+// on either side fails the Electron suite rather than silently degrading to the
+// slower path.
+//
+// This is the PUSH path for "the daemon is up". The stat-poll on
+// daemon-state.json remains as the fallback — see watchDaemonConnection — and
+// stays authoritative: a daemon on another machine has no stdout we can read.
+const DAEMON_STREAM_NOTICE_PREFIX = '@@RELIANT_STREAM';
+
 module.exports = {
   DAEMON_NON_INTERACTIVE_FLAG,
   DAEMON_NON_INTERACTIVE_ENV_VAR,
+  DAEMON_VERBOSE_FLAG,
   DAEMON_STATE_STREAM_FIELD,
   DAEMON_STREAM_AWAITING_CREDENTIALS,
+  DAEMON_STATE_CONNECTED_AT_FIELD,
+  DAEMON_STATE_PID_FIELD,
+  DAEMON_STREAM_NOTICE_PREFIX,
 };

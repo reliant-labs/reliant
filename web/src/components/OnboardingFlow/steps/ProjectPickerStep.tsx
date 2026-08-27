@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FolderOpen, GitBranch, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -30,10 +30,37 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
   // whether the daemon came online. For local daemons ComputeStep already
   // gates on activeDaemon, so we skip the gate.
   const [showDaemonGate, setShowDaemonGate] = useState(false);
+  // `isLoading` is false before the first fetch has even started, so it can't
+  // by itself distinguish "no projects" from "haven't looked yet". This flips
+  // when the initial load settles — success or failure — and is what the
+  // auto-open below waits on.
+  const [projectsSettled, setProjectsSettled] = useState(false);
+  const autoOpenedRef = useRef(false);
 
   useEffect(() => {
-    void loadProjects();
+    let cancelled = false;
+    void loadProjects()
+      .finally(() => {
+        if (!cancelled) setProjectsSettled(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [loadProjects]);
+
+  // A fresh install reaches this step with nothing to pick, and creating a
+  // project is the only way forward — so open the create modal rather than
+  // printing a message asking the user to click the button themselves.
+  // Guarded by a ref so dismissing it leaves the user on the (empty) list
+  // instead of a modal that immediately comes back.
+  useEffect(() => {
+    if (autoOpenedRef.current) return;
+    if (!projectsSettled || isLoading) return;
+    if (projects.length > 0) return;
+    autoOpenedRef.current = true;
+    setIsCreateModalOpen(true);
+  }, [projectsSettled, isLoading, projects.length]);
 
   const sortedProjects = useMemo(() => {
     return [...projects].sort(
@@ -165,6 +192,10 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
         </div>
       </button>
 
+      {/* Only worth a section header and a bordered box when there is
+          something in it — for a first-time user the create modal is already
+          open over the top of this. */}
+      {(isLoading || sortedProjects.length > 0) && (
       <div className="space-y-2">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-medium text-foreground">Your projects</h3>
@@ -172,12 +203,6 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
         </div>
 
         <div className="max-h-64 overflow-y-auto rounded-lg border border-border/40">
-          {!isLoading && sortedProjects.length === 0 && (
-            <div className="px-4 py-6 text-center text-xs text-muted-foreground">
-              No existing projects. Create one above to continue.
-            </div>
-          )}
-
           {sortedProjects.map((project) => (
             <button
               key={project.id}
@@ -208,6 +233,7 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
           ))}
         </div>
       </div>
+      )}
 
       {error && <p className="text-center text-xs text-destructive">{error}</p>}
 

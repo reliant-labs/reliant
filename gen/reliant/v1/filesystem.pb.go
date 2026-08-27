@@ -426,9 +426,14 @@ type GetFileTreeRequest struct {
 	ChatId     *string                `protobuf:"bytes,5,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`             // Optional chat to resolve worktree from
 	// depth bounds how many levels of children are returned below `path`:
 	//
-	//	0 = unlimited (full recursive tree — back-compat default)
-	//	N = N levels of descendants (e.g. 1 = immediate children only)
+	//	0  = the server default (2 levels) — NOT unlimited
+	//	N  = N levels of descendants (e.g. 1 = immediate children only)
+	//	-1 = as deep as the server's node budget allows
 	//
+	// No value asks for a truly unbounded walk. Every tree is additionally
+	// capped by a hard node budget, and by the server's skip set and the
+	// repository's .gitignore rules; a tree cut short by the budget comes back
+	// with truncated = true.
 	// Directory nodes at the depth boundary carry has_children instead of
 	// eagerly-included children, enabling VS Code-style lazy loading.
 	Depth         int32 `protobuf:"varint,6,opt,name=depth,proto3" json:"depth,omitempty"`
@@ -509,8 +514,13 @@ func (x *GetFileTreeRequest) GetDepth() int32 {
 }
 
 type GetFileTreeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Files         []*FileNode            `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Files []*FileNode            `protobuf:"bytes,1,rep,name=files,proto3" json:"files,omitempty"`
+	// truncated is true when the node budget stopped the walk early, so `files`
+	// is a prefix of the tree rather than the whole of it.
+	Truncated bool `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// node_count is how many nodes the walk produced, at every level.
+	NodeCount     int32 `protobuf:"varint,3,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -550,6 +560,20 @@ func (x *GetFileTreeResponse) GetFiles() []*FileNode {
 		return x.Files
 	}
 	return nil
+}
+
+func (x *GetFileTreeResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *GetFileTreeResponse) GetNodeCount() int32 {
+	if x != nil {
+		return x.NodeCount
+	}
+	return 0
 }
 
 type GetFileContentRequest struct {
@@ -2366,9 +2390,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x05depth\x18\x06 \x01(\x05R\x05depthB\x0e\n" +
 	"\f_worktree_idB\n" +
 	"\n" +
-	"\b_chat_id\"A\n" +
+	"\b_chat_id\"~\n" +
 	"\x13GetFileTreeResponse\x12*\n" +
-	"\x05files\x18\x01 \x03(\v2\x14.reliant.v1.FileNodeR\x05files\"\xaa\x01\n" +
+	"\x05files\x18\x01 \x03(\v2\x14.reliant.v1.FileNodeR\x05files\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x1d\n" +
+	"\n" +
+	"node_count\x18\x03 \x01(\x05R\tnodeCount\"\xaa\x01\n" +
 	"\x15GetFileContentRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +

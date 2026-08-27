@@ -118,6 +118,18 @@ export function useTourNavigation(): TourNavigation {
     [navigate],
   );
 
+  // Ending the tour (finish OR skip) must also LAND the user somewhere they
+  // can chat. exitTour only strips `?tour=`, preserving the pathname, so a
+  // tour whose last steps live on /workflow/... left the user stranded there.
+  const goToChatAfterTour = useCallback(async () => {
+    const [{ chatRouteAfterTour }, { useProjectStore }] = await Promise.all([
+      import("../OnboardingFlow/useOnboardingComplete"),
+      import("../../store/projectStore"),
+    ]);
+    const projectId = useProjectStore.getState().currentProject?.id;
+    await navigate(chatRouteAfterTour(projectId) as never);
+  }, [navigate]);
+
   const exitTour = useCallback(() => {
     // See goToStep: `to` is omitted so the router over-narrows the reducer
     // return to `never`; the route-agnostic "strip the tour param" contract
@@ -144,9 +156,10 @@ export function useTourNavigation(): TourNavigation {
       // on a fresh new-chat view after finishing the tour, then prompt for an
       // API key if we still don't have one.
       useChatStore.getState().clearCurrentChat();
+      await goToChatAfterTour();
       void promptApiKeyIfNeededAfterTour();
     }
-  }, [currentStepId, goToStep, exitTour]);
+  }, [currentStepId, goToStep, exitTour, goToChatAfterTour]);
 
   const goBack = useCallback(() => {
     if (!currentStepId) return;
@@ -169,8 +182,11 @@ export function useTourNavigation(): TourNavigation {
     await store.markTourCompleted();
     exitTour();
     useChatStore.getState().clearCurrentChat();
+    // Skipping ends the tour just as finishing does, and leaves the user on
+    // whatever page the abandoned step had them on — same landing fix.
+    await goToChatAfterTour();
     void promptApiKeyIfNeededAfterTour();
-  }, [exitTour]);
+  }, [exitTour, goToChatAfterTour]);
 
   return {
     currentStepId,

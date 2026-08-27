@@ -284,7 +284,7 @@ const ChatItem = memo(function ChatItem({
         {!inGroup && workspaceBranch && (
           <div className="flex items-center gap-1 mt-0.5">
             <GitBranch className="w-2.5 h-2.5 text-muted-foreground/60" />
-            <span className="text-[10px] text-muted-foreground/60 truncate max-w-[120px]">
+            <span className="text-2xs text-muted-foreground/60 truncate max-w-[120px]">
               {workspaceBranch}
             </span>
           </div>
@@ -483,7 +483,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
             <div className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
               <div
                 className={cn(
-                  "min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wide",
+                  "min-w-0 flex-1 truncate text-xs font-semibold uppercase tracking-wide",
                   hasActiveChat ? "text-primary" : "text-muted-foreground"
                 )}
               >
@@ -506,7 +506,7 @@ const WorktreeGroupComponent = memo(function WorktreeGroupComponent({
           {chatCount > 0 && (
             <span
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                "rounded-full px-1.5 py-0.5 text-2xs font-medium",
                 hasActiveChat ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
               )}
             >
@@ -1485,7 +1485,7 @@ function SidebarComponent({
       <div className="bg-card px-3 pb-2 pt-3">
         <div className="mb-2 flex items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center px-2">
-            <div className="min-w-0 flex-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="min-w-0 flex-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Chats
             </div>
           </div>
@@ -1517,7 +1517,7 @@ function SidebarComponent({
             contentClassName="min-w-[190px]"
           >
             <div className="py-1">
-              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                 List
               </div>
               <button
@@ -1553,7 +1553,7 @@ function SidebarComponent({
                 {chatListTab === "archived" && <Check className="h-3.5 w-3.5 text-primary" />}
               </button>
               <div className="my-1 h-px bg-border/60" />
-              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Sort by
               </div>
               {SORT_OPTIONS.map((option) => (
@@ -1609,7 +1609,7 @@ function SidebarComponent({
             contentClassName="min-w-[220px]"
           >
             <div className="py-1">
-              <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
                 View
               </div>
               <button

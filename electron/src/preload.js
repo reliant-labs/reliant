@@ -51,6 +51,85 @@ contextBridge.exposeInMainWorld('electronAPI', {
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
   installUpdate: () => ipcRenderer.invoke('install-update'),
 
+  // Ask whether the daemon is connected RIGHT NOW.
+  //
+  // Pairs with onDaemonConnected: the event is the fast path for a renderer
+  // that is already listening, and this is how a renderer that mounted late
+  // (the post-sign-in reload) finds out without waiting for a poll.
+  isDaemonConnected: () => ipcRenderer.invoke('daemon:is-connected'),
+
+  // Fires when the local daemon's gateway stream comes up.
+  //
+  // Consumers should treat this as a REFETCH TRIGGER, not as data: the daemon
+  // becomes listable via ListDaemons at registration, which was measured 1.1s
+  // before the connected event. Acting on the event alone would race.
+  onDaemonConnected: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on('daemon-connected', listener);
+    return () => ipcRenderer.removeListener('daemon-connected', listener);
+  },
+
+  // Start the RFC 8252 loopback listener and return the redirect_uri the
+  // provider should send the code to.
+  //
+  // This line is the whole desktop OAuth flow. main.js has handled
+  // `oauth:start-redirect` and oauth-loopback.js has had the listener, but
+  // this exposure was never written — so `window.electronAPI.startOAuthRedirect`
+  // was `undefined` in EVERY build, packaged and dev alike. The renderer's
+  // `bridge?.startOAuthRedirect` guard then skipped silently (its warn is
+  // inside the branch it never entered), fell back to the hosted callback, and
+  // `opensExternally()` — reading the same absent key — stayed false, so
+  // Electron navigated ITSELF to the provider. navigation-policy.js
+  // externalized that to the system browser, the code landed in a browser tab,
+  // and the renderer holding the PKCE verifier was stranded on the old route.
+  // Sign-in could not complete on the desktop app at all.
+  //
+  // electron.d.ts declares this `startOAuthRedirect?:` — OPTIONAL, so the
+  // compiler could never catch its absence. That is the same trap that made
+  // `onOAuthCallback` inert before it (see main.js's handler comment); the
+  // optional marker is load-bearing for old shipped builds, so the guard
+  // against a third occurrence has to be a test, not a type.
+  //
+  // Rejects rather than resolving falsy when the listener cannot start: the
+  // renderer's fallback lives in one catch block, and a falsy resolve would
+  // route past it (electron.d.ts states this contract).
+  startOAuthRedirect: async () => {
+    const result = await ipcRenderer.invoke('oauth:start-redirect');
+    if (!result?.success || !result.redirectUri) {
+      throw new Error(result?.error || 'OAuth loopback listener failed to start');
+    }
+    return { redirectUri: result.redirectUri };
+  },
+
+  // Provider sign-in (Claude Code / Codex).
+  //
+  // Two calls, not one, and that split IS the fix. This used to be a single
+  // DaemonService/StartOAuthFlow RPC that stayed open across the user's whole
+  // browser round trip; it failed at ~15s with "Failed to fetch", and tearing
+  // down the request tore down the listener, so the redirect landed on a
+  // closed port. Start binds the port and returns immediately; wait spans
+  // human time over IPC, where no proxy or gateway can time it out.
+  //
+  // Optional in electron.d.ts like every bridge here, so the renderer keeps a
+  // working fallback on builds that predate it.
+  startProviderOAuth: async (authorizeUrlTemplate) => {
+    const result = await ipcRenderer.invoke('oauth:provider-login-start', authorizeUrlTemplate);
+    if (!result?.success) {
+      throw new Error(result?.error || 'Could not start the sign-in listener');
+    }
+    return { flowId: result.flowId, redirectUri: result.redirectUri };
+  },
+
+  waitForProviderOAuth: async (flowId) => {
+    const result = await ipcRenderer.invoke('oauth:provider-login-wait', flowId);
+    if (!result?.success) {
+      throw new Error(result?.error || 'Sign-in did not complete');
+    }
+    return { code: result.code, state: result.state, redirectUri: result.redirectUri };
+  },
+
+  cancelProviderOAuth: (flowId) => ipcRenderer.invoke('oauth:provider-login-cancel', flowId),
+
   // Auth storage
   authLoad: () => ipcRenderer.invoke('auth:load'),
   authSave: (session) => ipcRenderer.invoke('auth:save', session),
@@ -259,7 +338,7 @@ const log = (level, ...args) => {
 
 // Inject global configuration for the web app
 const injectReliantConfig = async () => {
-  log('info', 'injectReliantConfig called');
+  log('warn', '[Preload] injectReliantConfig called', { atMs: Date.now() });
 
   try {
     log('info', 'Getting daemon status via IPC...');

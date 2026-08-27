@@ -21,6 +21,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/cache"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropicwire"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -655,18 +656,16 @@ func (c *VertexAIClient) convertClaudeResponse(resp *claudeResponse) *llm.Driver
 	return response
 }
 
-// convertClaudeFinishReason converts Claude finish reason to internal format
+// convertClaudeFinishReason converts Claude finish reason to internal format.
+//
+// Claude on Vertex is the same model behind the same Anthropic message API, so
+// it emits the same stop_reason vocabulary as the direct Anthropic driver.
+// Keeping a second copy of that table here is what let the two diverge —
+// "stop_sequence" was mapped in anthropic/base.go and missing here, so an
+// identical wire value produced EndTurn on one path and Unknown on the other.
+// There is now one table, in anthropicwire, and both drivers call it.
 func (c *VertexAIClient) convertClaudeFinishReason(reason string) message.FinishReason {
-	switch reason {
-	case "end_turn":
-		return message.FinishReasonEndTurn
-	case "max_tokens":
-		return message.FinishReasonMaxTokens
-	case "tool_use":
-		return message.FinishReasonToolUse
-	default:
-		return message.FinishReasonUnknown
-	}
+	return anthropicwire.FinishReason(anthropicwire.SourceVertexAI, reason)
 }
 
 // validateClaudeKey validates Claude configuration via Vertex AI

@@ -124,7 +124,7 @@ export function DetectedPortsChip() {
         <div className="min-w-[16rem] py-1">
           {canManageAccess && (
             <div className="border-b border-border px-3 pb-2 pt-1">
-              <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              <div className="mb-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 Default access for new ports
               </div>
               <div className="flex overflow-hidden rounded border border-border">
@@ -136,7 +136,7 @@ export function DetectedPortsChip() {
                   }}
                   title="Only you (and your org) can open a detected port unless you make it public."
                   className={
-                    "flex flex-1 items-center justify-center gap-1 px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 " +
+                    "flex flex-1 items-center justify-center gap-1 px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
                     (!isPublicDefault
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground")
@@ -153,7 +153,7 @@ export function DetectedPortsChip() {
                   }}
                   title="Anyone with the link can open every detected port on this workspace."
                   className={
-                    "flex flex-1 items-center justify-center gap-1 border-l border-border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 " +
+                    "flex flex-1 items-center justify-center gap-1 border-l border-border px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 " +
                     (isPublicDefault
                       ? "bg-primary/10 text-primary"
                       : "text-muted-foreground hover:bg-accent hover:text-foreground")
@@ -164,13 +164,13 @@ export function DetectedPortsChip() {
                 </button>
               </div>
               {isPublicDefault && (
-                <p className="mt-1.5 text-[10px] leading-tight text-amber-600 dark:text-amber-500">
+                <p className="mt-1.5 text-2xs leading-tight text-amber-600 dark:text-amber-500">
                   Every listening port is reachable by anyone with its URL unless you set it private.
                 </p>
               )}
             </div>
           )}
-          <div className="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          <div className="px-3 py-1 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
             Detected ports
           </div>
           {ports.map((port) => {
@@ -201,7 +201,7 @@ export function DetectedPortsChip() {
                         : "Only you can open this port. Click to make it public."
                     }
                     className={
-                      "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-medium transition-colors disabled:opacity-50 " +
+                      "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-2xs font-medium transition-colors disabled:opacity-50 " +
                       (isPublic
                         ? "bg-primary/10 text-primary hover:bg-primary/20"
                         : "text-muted-foreground hover:bg-accent hover:text-foreground")

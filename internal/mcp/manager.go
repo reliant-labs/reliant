@@ -27,16 +27,59 @@ const (
 
 	// chromeDevtoolsServerName is the logical name of the built-in browser MCP.
 	chromeDevtoolsServerName = "chrome-devtools"
+
+	// maxDirScopedClients is the ceiling on how many per-project processes all
+	// dir-scoped servers may hold AT ONCE, across every server and project.
+	//
+	// Dir scoping deliberately spawns one process per project, and until this
+	// constant existed nothing bounded that count — the idle reaper
+	// (lazyIdleTimeout) reclaims a process after five minutes of quiet, but a
+	// session that keeps touching projects never gets there. Measured on the
+	// incident that motivated it: ONE Go language server held 28,467 open file
+	// descriptors and 1.9 GB resident, and macOS's system-wide file table is
+	// 491,520 entries — so ~17 concurrent instances exhaust it for every
+	// process on the machine, which is exactly what happened.
+	//
+	// Four caps that worst case near 114k descriptors (~23% of the table) with
+	// room left for Docker, the desktop app and Spotlight. It is a bound on
+	// SIMULTANEOUSLY ACTIVE projects, not on how many a session may visit: the
+	// fifth project evicts the least recently used one, whose next tool call
+	// transparently respawns it. A human driving more than four projects inside
+	// one five-minute window is rare; a runaway indexer taking down the machine
+	// is not recoverable.
+	//
+	// The cap bounds the MULTIPLIER only. A single process being 1.9 GB is the
+	// other half of the same incident, and that is what RequiresFiles (a server
+	// never starts where it has nothing to index) addresses.
+	maxDirScopedClients = 4
 )
 
 // isLazyStartServer reports whether a server should be started on first tool
-// use rather than eagerly at session/daemon startup. Currently limited to the
-// built-in chrome-devtools MCP, whose node + headless Chrome subprocess holds a
-// large resident set that most sessions never exercise. Kept name-scoped (not a
-// config.MCPServer field) so the persisted MCP config schema is unchanged and
+// use rather than eagerly at session/daemon startup.
+//
+// Two kinds of server qualify, both for the same reason — a heavyweight
+// subprocess that most sessions never exercise:
+//
+//   - the built-in chrome-devtools MCP, whose node + headless Chrome holds a
+//     large resident set;
+//   - any server that declares dirScoped, which is by definition a tree
+//     indexer. Its per-project clients (dirClientFor) were always lazy; this
+//     covers the SHARED client that AddServer registers, which for a dir-scoped
+//     server is the one entry no tool call ever routes to — every call resolves
+//     through the project's own client. All the shared entry is needed for is
+//     tool discovery, and lazyClient serves that from a throwaway
+//     spawn→tools/list→exit probe with no resident process. Before this, opening
+//     a project eagerly started an indexer in whatever directory the daemon
+//     happened to be in, and left it resident for the daemon's lifetime.
+//
+// The dir-scoped arm is driven by CONFIG rather than a server name, matching
+// where dirScoped itself is declared; chrome-devtools stays name-scoped so
 // user-defined servers keep their existing eager-start behavior.
 func isLazyStartServer(name string, cfg config.MCPServer) bool {
-	return name == chromeDevtoolsServerName && cfg.Type == config.MCPStdio
+	if cfg.Type != config.MCPStdio {
+		return false
+	}
+	return name == chromeDevtoolsServerName || isDirScopedServer(cfg)
 }
 
 // systemChromePaths are on-disk locations a system Chrome/Chromium may live.
@@ -99,7 +142,22 @@ type Manager struct {
 	// The shared `clients` entry for such a server remains the one bound to
 	// whichever project loaded it first; every project resolves through here
 	// instead, so no caller silently reads another project's index.
+	//
+	// Bounded by maxDirScopedClients: one process per project is correct, but
+	// unbounded processes per daemon is how a session exhausts the machine's
+	// file table. Entries leave by two doors that look the same from outside —
+	// the idle reaper, and LRU eviction at the ceiling.
 	dirClients map[string]Client
+
+	// dirClientLastUse records when each dirClients entry was last resolved for
+	// a tool call, which is what LRU eviction orders by.
+	dirClientLastUse map[string]time.Time
+
+	// preconditions caches, per (server, project), whether the project contains
+	// the files the server declared it needs (config.MCPServer.RequiresFiles).
+	// Verdicts expire after preconditionTTL and are dropped outright when the
+	// project is reloaded — see precondition.go for why neither alone is enough.
+	preconditions map[string]preconditionVerdict
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -138,6 +196,8 @@ func NewManager() *Manager {
 		serverConfigs:       make(map[string]config.MCPServer),
 		sessionClients:      make(map[string]Client),
 		dirClients:          make(map[string]Client),
+		dirClientLastUse:    make(map[string]time.Time),
+		preconditions:       make(map[string]preconditionVerdict),
 		clientFactory:       NewClient,
 		healthChecks:        make(map[string]*healthStatus),
 		healthCheckInterval: 30 * time.Second,
@@ -364,7 +424,7 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 }
 
 // RemoveServer removes and closes an MCP server connection, along with any
-// per-session clients spawned from it.
+// per-session and per-project clients spawned from it.
 func (m *Manager) RemoveServer(name string) error {
 	m.mu.Lock()
 	client, exists := m.clients[name]
@@ -380,6 +440,24 @@ func (m *Manager) RemoveServer(name string) error {
 			delete(m.sessionClients, key)
 		}
 	}
+	// A dir-scoped server's real processes live here, one per project, and they
+	// outlived the server that owned them until this loop existed: removing or
+	// disabling the server tore down the shared client and left every project's
+	// indexer running with nothing left to route to it.
+	dirPrefix := name + dirKeySeparator
+	var dirClients []Client
+	for key, dc := range m.dirClients {
+		if strings.HasPrefix(key, dirPrefix) {
+			dirClients = append(dirClients, dc)
+			delete(m.dirClients, key)
+			delete(m.dirClientLastUse, key)
+		}
+	}
+	for key := range m.preconditions {
+		if strings.HasPrefix(key, dirPrefix) {
+			delete(m.preconditions, key)
+		}
+	}
 	delete(m.nextRetryAt, name)
 	m.untrackProjectServer(name)
 	m.mu.Unlock()
@@ -387,6 +465,12 @@ func (m *Manager) RemoveServer(name string) error {
 	for _, sc := range sessionClients {
 		if err := sc.Close(); err != nil {
 			logging.Warn("Failed to close session-scoped MCP client", "server", name, "error", err)
+		}
+	}
+
+	for _, dc := range dirClients {
+		if err := dc.Close(); err != nil {
+			logging.Warn("Failed to close dir-scoped MCP client", "server", name, "error", err)
 		}
 	}
 
@@ -502,13 +586,21 @@ func (m *Manager) sessionClientFor(serverName, session string) (Client, bool) {
 // client: an empty project path, an unregistered server, or a server that is not
 // dir-scoped (see dirscope.go — nearly all of them).
 //
+// A non-nil error is the third outcome: the server IS dir-scoped but must not
+// serve this project, because the project does not contain the files the server
+// declared it needs (config.MCPServer.RequiresFiles). That cannot be reported as
+// ok=false — falling through to the shared client would hand this project
+// answers indexed from whichever project loaded the server first, which is the
+// exact wrong-tree defect dir scoping exists to prevent. Refusing loudly is the
+// only correct answer.
+//
 // Dir clients are always lazy, for the same reason session clients are: a
 // language server holds a real index, and a long-lived daemon must not carry one
 // per project it has ever served. The reap callback evicts the map entry.
-func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool) {
+func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool, error) {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
-		return nil, false
+		return nil, false, nil
 	}
 	key := dirClientKey(serverName, projectPath)
 
@@ -518,10 +610,16 @@ func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool) {
 	m.mu.RUnlock()
 
 	if exists {
-		return client, true
+		m.touchDirClient(key)
+		return client, true, nil
 	}
 	if !registered || !isDirScopedServer(cfg) {
-		return nil, false
+		return nil, false, nil
+	}
+	if !m.projectMeetsPrecondition(serverName, cfg, projectPath) {
+		return nil, false, fmt.Errorf(
+			"MCP server %q is not available in this project: it requires %v, and none was found",
+			serverName, requiredFilePatterns(cfg))
 	}
 
 	// Bind the config to THIS project before spawning: Dir is what the process
@@ -532,8 +630,9 @@ func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool) {
 
 	m.mu.Lock()
 	if client, exists := m.dirClients[key]; exists {
+		m.dirClientLastUse[key] = time.Now()
 		m.mu.Unlock()
-		return client, true
+		return client, true, nil
 	}
 	// Constructed with the LOGICAL server name so logs, handshake and ServerInfo
 	// read as the server, not as the composite key.
@@ -542,14 +641,84 @@ func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool) {
 	})
 	lc.onReap = func() { m.evictDirClient(key, lc) }
 	m.dirClients[key] = lc
+	m.dirClientLastUse[key] = time.Now()
+	evictedKey, evicted := m.evictLRUDirClientLocked()
 	m.mu.Unlock()
+
+	// Reaped with m.mu released: reapNow reaches the manager back through onReap.
+	if evicted != nil {
+		logging.Info("Reaping least-recently-used dir-scoped MCP client at the ceiling",
+			"evicted", evictedKey,
+			"limit", maxDirScopedClients,
+			"reason", "one tree-indexing process per project is correct; unbounded processes per daemon exhausts the machine's file table")
+		evicted.reapNow()
+	}
 
 	logging.Info("Created dir-scoped MCP client",
 		"server", serverName,
 		"projectPath", projectPath,
 		"dir", scoped.Dir,
 		"reason", "server answers are scoped to the tree it was started in; projects must not share one process")
-	return lc, true
+	return lc, true, nil
+}
+
+// touchDirClient records that a dir client was just resolved for a tool call,
+// which is what keeps it out of the LRU victim seat.
+func (m *Manager) touchDirClient(key string) {
+	m.mu.Lock()
+	if _, ok := m.dirClients[key]; ok {
+		m.dirClientLastUse[key] = time.Now()
+	}
+	m.mu.Unlock()
+}
+
+// evictLRUDirClientLocked drops the least recently used dir client when the map
+// is over maxDirScopedClients, and returns it for the caller to reap once m.mu
+// is released. It returns nil when nothing needs evicting.
+//
+// The returned client is reaped rather than closed, so eviction is
+// indistinguishable from an idle reap to everything else: the map entry is gone,
+// the subprocess is gone, and the wrapper a caller may still be holding stays
+// usable and respawns on its next call rather than failing with "closed".
+//
+// A client with a tool call in flight is never chosen. Two independent guards
+// enforce it — the busy() filter here, and lazyClient.idleShutdown's own refusal
+// to tear down while inFlight > 0 — because tearing a live call's subprocess out
+// from under it is a visible failure, and the ceiling is worth breaching for the
+// seconds it takes a call to finish. If every client is busy, nothing is evicted
+// and the next resolve tries again.
+//
+// m.mu must be held.
+func (m *Manager) evictLRUDirClientLocked() (string, *lazyClient) {
+	if len(m.dirClients) <= maxDirScopedClients {
+		return "", nil
+	}
+
+	var (
+		victimKey string
+		victim    *lazyClient
+		victimAt  time.Time
+	)
+	for key, client := range m.dirClients {
+		lc, ok := client.(*lazyClient)
+		if !ok || lc.busy() {
+			continue
+		}
+		at := m.dirClientLastUse[key]
+		if victim == nil || at.Before(victimAt) {
+			victimKey, victim, victimAt = key, lc, at
+		}
+	}
+	if victim == nil {
+		logging.Warn("Dir-scoped MCP clients over the ceiling but all are mid-call; deferring eviction",
+			"count", len(m.dirClients),
+			"limit", maxDirScopedClients)
+		return "", nil
+	}
+
+	delete(m.dirClients, victimKey)
+	delete(m.dirClientLastUse, victimKey)
+	return victimKey, victim
 }
 
 // evictDirClient drops a dir client once its subprocess has been reaped for
@@ -559,6 +728,7 @@ func (m *Manager) evictDirClient(key string, client Client) {
 	m.mu.Lock()
 	if current, ok := m.dirClients[key]; ok && current == client {
 		delete(m.dirClients, key)
+		delete(m.dirClientLastUse, key)
 	}
 	m.mu.Unlock()
 }
@@ -644,14 +814,23 @@ func (m *Manager) Close() error {
 	// Cancel context to stop health monitoring first
 	m.cancel()
 
-	// Get all clients, including every session's private client.
+	// Get all clients, including every session's and every project's private
+	// client. Dir clients are the heaviest thing the manager owns — one indexer
+	// process per project — and were missing from this sweep, so shutting the
+	// manager down left them running.
 	m.mu.Lock()
 	clients := m.clients
 	for key, client := range m.sessionClients {
 		clients[key] = client
 	}
+	for key, client := range m.dirClients {
+		clients[key] = client
+	}
 	m.clients = make(map[string]Client)
 	m.sessionClients = make(map[string]Client)
+	m.dirClients = make(map[string]Client)
+	m.dirClientLastUse = make(map[string]time.Time)
+	m.preconditions = make(map[string]preconditionVerdict)
 	m.projectServers = make(map[string]map[string]bool)
 	m.mu.Unlock()
 
@@ -947,6 +1126,11 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		return result
 	}
 
+	// Project load is the moment the tree most plausibly changed under us, and
+	// the moment a user who just ran `go mod init` expects the tool to appear.
+	// Re-decide from scratch rather than serving a verdict from before.
+	m.forgetPreconditions(normalizedProjectPath)
+
 	// Prefer provider-backed config resolution when available.
 	servers := m.loadProjectServersFromConfig(ctx, normalizedProjectPath)
 	if len(servers) == 0 {
@@ -972,6 +1156,16 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 					logging.Warn("Failed to stop disabled MCP server", "name", name, "error", err)
 				}
 			}
+			continue
+		}
+
+		// A server that declared what a project must contain before it is worth
+		// starting gets asked here, BEFORE the spawn and before the project is
+		// associated with an already-running shared client. Skipped exactly like
+		// a disabled server — neither loaded nor failed — because refusing to
+		// start something that had nothing to do is not a failure. A server that
+		// declared nothing always passes, which is every server today.
+		if !m.projectMeetsPrecondition(name, serverCfg, normalizedProjectPath) {
 			continue
 		}
 
@@ -1107,7 +1301,13 @@ func (m *Manager) ProjectCallTool(session, projectPath, serverName, toolName str
 	if err := m.ensureInitialized(); err != nil {
 		return nil, fmt.Errorf("failed to initialize MCP servers: %w", err)
 	}
-	if dirClient, ok := m.dirClientFor(serverName, projectPath); ok {
+	dirClient, ok, err := m.dirClientFor(serverName, projectPath)
+	if err != nil {
+		// The server is dir-scoped but declined this project. Surfacing the
+		// refusal is the point: the shared client belongs to another tree.
+		return nil, err
+	}
+	if ok {
 		// Private and lazily (re)spawned, so the shared server's health gate does
 		// not describe it; a failure surfaces as the call's own error.
 		return dirClient.CallTool(toolName, arguments)

@@ -62,6 +62,44 @@ type MCPServer struct {
 	// tree-scoped is a fact about the servers a user installs, and reliant
 	// cannot know the set.
 	DirScoped bool `yaml:"dirScoped,omitempty" json:"dirScoped,omitempty"`
+
+	// RequiresFiles declares what must already EXIST in a project before this
+	// server is worth starting for it. Empty or absent means no precondition:
+	// the server starts for every project, exactly as it did before this field
+	// existed.
+	//
+	// It exists because a tree-indexing server pays its entire cost BEFORE it
+	// can discover it has nothing to do. Measured: opening a Unity/C# project
+	// with zero .go files and no go.mod still spawned a Go language server,
+	// which indexed the 9.9 GB checkout and grew to 28,467 open file
+	// descriptors and 1.9 GB resident. One such process per project, and
+	// roughly seventeen projects exhausts macOS's 491,520-entry system-wide
+	// file table — which is what happened, taking Docker's backend, the desktop
+	// app and Spotlight down with it.
+	//
+	// Reliant already self-gates exactly this way for one built-in server: the
+	// browser MCP is advertised only on images that actually ship Chrome, "so
+	// it never spawns an MCP that would immediately fail" (internal/mcp,
+	// detectSystemChrome). This is that rule made declarable. Declared in
+	// CONFIG rather than matched on a server name in reliant's source for the
+	// same reason DirScoped is: which servers need which markers is a fact
+	// about the servers a USER installs, and reliant cannot know the set.
+	//
+	//	"requiresFiles": ["go.mod", "go.work"]  // a Go language server
+	//	"requiresFiles": ["*.csproj", "*.sln"]  // a C# one
+	//
+	// Entries are globs, and ANY match satisfies the precondition — a server
+	// that serves several ecosystems lists the marker of each. A pattern with
+	// no "/" matches by BASE NAME anywhere the scan reaches, so "go.mod" also
+	// satisfies a monorepo whose only module is services/api/go.mod; a pattern
+	// containing "/" is matched against the project-relative path instead.
+	// Directory-shaped markers (`*.xcodeproj`) match too.
+	//
+	// The check is a bounded, gitignore-aware scan, NOT a full-tree walk — the
+	// whole point is to prevent one, so it must not perform one. See
+	// internal/mcp/precondition.go for the bound and for what a scan that hits
+	// that bound without finding a marker means.
+	RequiresFiles []string `yaml:"requiresFiles,omitempty" json:"requiresFiles,omitempty"`
 }
 
 // Data defines storage configuration.

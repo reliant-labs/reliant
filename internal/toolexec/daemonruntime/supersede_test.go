@@ -45,3 +45,40 @@ func TestOrdinaryStreamLossStillReconnects(t *testing.T) {
 		})
 	}
 }
+
+// Credentials the gateway would not accept must NOT be terminal.
+//
+// This was fatal until 2026-08-24, and the failure it produced was total: a
+// dev-k8s deploy repointed the gateway at a different database, so the
+// daemon's PAT was looked up where it had never been written and came back
+// "invalid daemon auth token: invalid token". The daemon stopped and logged
+// nothing for 10 hours while the app reported "no machine is connected".
+// Repairing the gateway changed nothing — no daemon was left running to
+// notice. Only killing the process, so its supervisor respawned it, recovered.
+//
+// Every cause of Unauthenticated is repaired AROUND a running daemon (the
+// supervisor re-mints the PAT, the operator fixes the gateway's config, a
+// rollout finishes), so the daemon has to still be trying when that happens.
+func TestUnauthenticatedReconnects(t *testing.T) {
+	unauth := connect.NewError(connect.CodeUnauthenticated,
+		errors.New("invalid daemon auth token: invalid token"))
+
+	require.False(t, isFatalError(unauth),
+		"a daemon that stops on Unauthenticated cannot recover when its PAT is re-minted — "+
+			"it is not running to retry, and nothing restarts it")
+
+	// The session loop wraps before classifying; the real error arrived as
+	// "daemon stream receive: unauthenticated: invalid daemon auth token".
+	wrapped := fmt.Errorf("daemon stream receive: %w", unauth)
+	require.False(t, isFatalError(wrapped))
+}
+
+// PermissionDenied stays terminal, and the distinction is the point:
+// Unauthenticated means the credentials were not accepted (fixable around the
+// daemon), PermissionDenied means they were accepted and the answer was still
+// no (redialing cannot change it).
+func TestPermissionDeniedStillTerminal(t *testing.T) {
+	denied := connect.NewError(connect.CodePermissionDenied, errors.New("not allowed"))
+	require.True(t, isFatalError(denied))
+	require.True(t, isFatalError(fmt.Errorf("daemon stream receive: %w", denied)))
+}

@@ -1748,7 +1748,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {threadBorderColor && (
                     <div className="px-3 py-0.5">
                       <span
-                        className="text-[10px] font-medium"
+                        className="text-2xs font-medium"
                         style={{ color: threadBorderColor }}
                       >
                         {threadDisplayName}
@@ -1759,7 +1759,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                   {/* Discuss mode hint */}
                   {isDiscussMode && (
                     <div className="px-3 py-1">
-                      <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                      <span className="text-xs text-blue-600 dark:text-blue-400">
                         Discussion mode — messages won't resume the workflow
                       </span>
                     </div>
@@ -1900,7 +1900,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                           <div className="relative">
                             <button
                               className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-[10px] font-medium h-6 px-2.5",
+                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
                                 settingsPage === 'model'
                                   ? "bg-primary/20 text-primary hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"

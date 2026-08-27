@@ -297,8 +297,32 @@ export const createScenarioClient = (): Client<typeof ScenarioService> => {
   return createClient(ScenarioService, getTransport());
 };
 
+// DaemonRegistryService is served by RELIANT's api-server, never by
+// admin-server — even though admin-server answers the same path.
+//
+// THIS IS NOT A PREFERENCE, IT IS A CORRECTNESS REQUIREMENT. Both hosts
+// respond to `/reliant.v1.DaemonRegistryService/*` with HTTP 200, from
+// DIFFERENT DATABASES:
+//
+//   api.reliantapi.com    -> {"daemons":[{... "status":"DAEMON_STATUS_ACTIVE"}]}
+//   admin.reliantapi.com  -> {}
+//
+// control-plane's adapter (internal/daemonregistry/adapter.go) TRANSLATES
+// these RPCs into `controlplane.v1.DaemonService/*`, which reads
+// `controlplane.daemons` — a table that exists only in control-plane's own
+// database and never receives a self-hosted daemon's registration. A daemon
+// started by the desktop app registers into RELIANT's `daemons` +
+// `daemon_attachment` tables, so admin-server's answer is structurally always
+// empty for it. GetDaemon/ResolveDaemon/ResumeDaemon 404 there for the same
+// reason.
+//
+// This only ever manifested in a packaged build. In dev the renderer is
+// same-origin, getControlPlaneTransport() returns null, and the Vite proxy
+// sends `/reliant.v1.*` to reliant-api — the correct backend by accident. So
+// the bug was invisible until prod, where it read as "you have no daemon" and
+// sent a user who HAD a working daemon into onboarding's compute step.
 export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryService> => {
-  return createClient(DaemonRegistryService, getControlPlaneTransport() ?? getTransport());
+  return createClient(DaemonRegistryService, getTransport());
 };
 
 export const createDaemonTokenClient = (): Client<typeof DaemonTokenService> => {

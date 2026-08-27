@@ -122,7 +122,22 @@ type Querier interface {
 	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
 	CreatePreset(ctx context.Context, arg CreatePresetParams) (Preset, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) error
+	// The project-scoped counterpart. project_id is NOT NULL here, so the table's
+	// own UNIQUE (user_id, project_id, key) constraint is a usable conflict target.
+	CreateProjectSetting(ctx context.Context, arg CreateProjectSettingParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
+	// Upsert, not a plain insert. A setting is identified by (user_id, project_id,
+	// key), so writing the same key twice must REPLACE the value rather than add a
+	// second row.
+	//
+	// The table's UNIQUE (user_id, project_id, key) constraint does not achieve
+	// that on its own: project_id is NULL for every user-level setting, and in SQL
+	// NULL is never equal to NULL, so the constraint simply does not apply to the
+	// rows we write most. Every save appended a duplicate, and ListSettings
+	// (ORDER BY key) then returned them in an arbitrary order, letting a stale
+	// value overwrite the current one on load. Hence the accompanying partial
+	// unique index on (user_id, key) WHERE project_id IS NULL, which is what this
+	// ON CONFLICT target resolves against.
 	CreateSetting(ctx context.Context, arg CreateSettingParams) error
 	CreateStepExecution(ctx context.Context, arg CreateStepExecutionParams) (StepExecution, error)
 	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)

@@ -111,7 +111,7 @@ export function CodeContextPill({ context, worktreeId, className }: CodeContextP
       <span
         className={cn(
           "h-4 px-1.5 rounded flex items-center justify-center",
-          "text-white text-[9px] font-bold leading-none",
+          "text-white text-3xs font-bold leading-none",
           getLanguageColor(language)
         )}
       >

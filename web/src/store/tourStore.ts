@@ -45,6 +45,12 @@ interface TourState {
   markRemainingSkipped: () => void;
   /** Mark the tour as completed (sets flag + analytics + persists). */
   markTourCompleted: () => Promise<void>;
+  /**
+   * Queue a coalesced background save. Returns immediately — callers on a UI
+   * path (step transitions) must not block on settings RPCs. Terminal
+   * transitions still call `saveTourState()` directly so the write is awaited.
+   */
+  scheduleSave: () => void;
   /** Reset all per-step progress so the tour can be restarted from scratch. */
   resetTourProgress: () => Promise<void>;
   saveTourState: () => Promise<void>;
@@ -52,6 +58,33 @@ interface TourState {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// ─── Coalesced background persistence ────────────────────────────────────────
+// A step transition used to AWAIT the full save before the UI advanced, and a
+// save is three settings RPCs (completed flag, completed set, skipped set).
+// Measured 2026-08-26 21:45:58: three UpdateSetting calls sat in flight at 1s
+// each behind a backend stalled ~19s on mcp.ensure_loaded, so every Next click
+// paid that latency before the next step painted — the "crazy slow" the user
+// hit stepping between 3 and 4, and it multiplied each time they went back.
+//
+// The step sets are recomputed whole on every save, so a save in flight is
+// worth nothing once another transition has happened: collapse rapid
+// transitions into one trailing write instead of N×3 RPCs. In-memory state
+// still updates synchronously, which is what the UI actually renders from.
+const SAVE_DEBOUNCE_MS = 400;
+let _saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function cancelPendingSave(): void {
+  if (_saveTimer !== null) {
+    clearTimeout(_saveTimer);
+    _saveTimer = null;
+  }
+}
+
+/** Test-only: drop any scheduled save so state can't leak across cases. */
+export function __resetTourSaveScheduler(): void {
+  cancelPendingSave();
+}
 
 async function detectHasCode(): Promise<boolean> {
   try {
@@ -118,12 +151,16 @@ export const useTourStore = create<TourState>((set, get) => ({
     });
   },
 
+  // Per-step progress persists optimistically: the in-memory set is the
+  // authority the UI renders from, and the write is a background detail. If
+  // it loses a race with the tab closing, the user re-sees one tour step —
+  // far cheaper than making every Next click wait on three RPCs.
   completeStep: async (stepId: OnboardingStepId) => {
     const newCompleted = new Set(get().completedSteps);
     newCompleted.add(stepId);
     set({ completedSteps: newCompleted });
     trackEvent('tour_step_completed', { step_id: stepId });
-    await get().saveTourState();
+    get().scheduleSave();
   },
 
   skipStep: async (stepId: OnboardingStepId) => {
@@ -131,7 +168,15 @@ export const useTourStore = create<TourState>((set, get) => ({
     newSkipped.add(stepId);
     set({ skippedSteps: newSkipped });
     trackEvent('tour_step_skipped', { step_id: stepId });
-    await get().saveTourState();
+    get().scheduleSave();
+  },
+
+  scheduleSave: () => {
+    cancelPendingSave();
+    _saveTimer = setTimeout(() => {
+      _saveTimer = null;
+      void get().saveTourState();
+    }, SAVE_DEBOUNCE_MS);
   },
 
   markRemainingSkipped: () => {
@@ -206,6 +251,10 @@ export const useTourStore = create<TourState>((set, get) => ({
   },
 
   saveTourState: async () => {
+    // An explicit save supersedes anything queued — otherwise a trailing
+    // debounce could fire after a terminal write with the same (or staler)
+    // snapshot and spend three more RPCs saying nothing new.
+    cancelPendingSave();
     const state = get();
     try {
       // These three keys are independent — persist them concurrently instead of

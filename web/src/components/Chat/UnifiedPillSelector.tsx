@@ -166,7 +166,7 @@ export function UnifiedPillSelector({
               }}
               disabled={!canSelectWorktree}
               className={cn(
-                "flex items-center gap-1.5 rounded transition-colors text-[10px] font-medium h-6",
+                "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6",
                 canSelectWorktree
                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                   : "cursor-default opacity-60",
@@ -216,7 +216,7 @@ export function UnifiedPillSelector({
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <div className="font-semibold mb-1">{currentProject?.default_branch || "main"}</div>
-                        <div className="leading-snug text-[11px] opacity-80">
+                        <div className="leading-snug text-xs opacity-80">
                           Main branch context
                         </div>
                       </div>
@@ -250,13 +250,13 @@ export function UnifiedPillSelector({
                             <div className="font-semibold mb-1 truncate">
                               {worktree.branch}
                             </div>
-                            <div className="leading-snug text-[11px] opacity-80 truncate">
+                            <div className="leading-snug text-xs opacity-80 truncate">
                               {worktree.name}
                             </div>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span
-                              className={`px-1.5 py-0.5 rounded text-[10px] capitalize ${
+                              className={`px-1.5 py-0.5 rounded text-2xs capitalize ${
                                 worktree.status === WorktreeStatus.ACTIVE
                                   ? "bg-success/10 text-success"
                                   : worktree.status === WorktreeStatus.COMPLETED

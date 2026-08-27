@@ -281,7 +281,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
       {workflowFailed && (
         <div
           className={cn(
-            "flex items-center gap-1.5 px-2 py-1 border-b border-border/10 text-[10px]",
+            "flex items-center gap-1.5 px-2 py-1 border-b border-border/10 text-2xs",
             isCancelledChild ? "text-muted-foreground" : "text-warning",
           )}
         >
@@ -297,7 +297,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
           {summaries.map((s) => (
             <div key={s.id} className="px-2 py-1 border-b border-border/10 last:border-0">
               {s.textSnippet && (
-                <p className="text-[11px] text-foreground/70 leading-snug break-words whitespace-pre-wrap mb-0.5">
+                <p className="text-xs text-foreground/70 leading-snug break-words whitespace-pre-wrap mb-0.5">
                   {s.textSnippet}
                 </p>
               )}
@@ -307,7 +307,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
                     <div
                       key={i}
                       className={cn(
-                        "flex items-center gap-1.5 text-[10px] font-mono py-0.5",
+                        "flex items-center gap-1.5 text-2xs font-mono py-0.5",
                         tc.failed ? "text-warning" : tc.completed ? "text-muted-foreground" : "text-primary",
                       )}
                     >
@@ -338,7 +338,7 @@ function SpawnPreview({ ctx }: ToolContentProps) {
         // back to ctx.isCompleted/hasFailed in that case, so this still
         // resolves to "Starting…" rather than getting stuck.
         (isPending || !isDone) && (
-          <div className="px-2 py-1.5 text-[10px] text-muted-foreground italic">
+          <div className="px-2 py-1.5 text-2xs text-muted-foreground italic">
             Starting…
           </div>
         )
@@ -387,7 +387,7 @@ function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: strin
         onClick={(e) => e.stopPropagation()}
         placeholder="Message this agent…"
         disabled={sending}
-        className="flex-1 min-w-0 bg-transparent text-[11px] text-foreground placeholder:text-muted-foreground/60 outline-none disabled:opacity-50"
+        className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 outline-none disabled:opacity-50"
       />
       <button
         type="button"

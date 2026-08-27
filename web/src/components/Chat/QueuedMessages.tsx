@@ -256,7 +256,7 @@ export function QueuedMessages({
               disabled={interrupting}
               onClick={() => void handleInterrupt()}
               className={cn(
-                "flex h-6 items-center gap-1 rounded-full px-2 text-[10px] font-medium transition-colors",
+                "flex h-6 items-center gap-1 rounded-full px-2 text-2xs font-medium transition-colors",
                 "text-muted-foreground hover:bg-accent hover:text-foreground",
                 interrupting && "cursor-default opacity-60 hover:bg-transparent",
               )}
@@ -316,12 +316,12 @@ export function QueuedMessages({
                   type="button"
                   onClick={() => toggleExpanded(message.id)}
                   aria-expanded={isExpanded}
-                  className="mt-0.5 text-[10px] font-medium text-muted-foreground/90 underline-offset-2 hover:text-foreground hover:underline"
+                  className="mt-0.5 text-2xs font-medium text-muted-foreground/90 underline-offset-2 hover:text-foreground hover:underline"
                 >
                   {isExpanded ? "Show less" : "Show more"}
                 </button>
               )}
-              <span className="flex items-center gap-1 text-[10px] text-muted-foreground/80">
+              <span className="flex items-center gap-1 text-2xs text-muted-foreground/80">
                 {formatQueuedAge(message.created_at, now)} · waiting for the
                 agent's next turn
                 {message.attachments.length > 0 && (

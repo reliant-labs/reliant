@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -656,6 +657,16 @@ func (s *ChatService) SendMessage(
 					runID = outcome.RunID
 				}
 
+				// Wake the target thread, for the same reason the running
+				// branch does. Resuming is NOT sufficient on its own:
+				// broadcastResume clears the pause gate, but a thread parked
+				// in awaitLiveDetachedSpawns is blocked on a different Await
+				// whose predicate never looks at the pause epoch. That is
+				// exactly what happened on chat 7da3935c — the 21:37:46
+				// resume woke the spawn's loop and left the root thread
+				// parked with the user's message unread.
+				s.notifyThreadWake(ctx, chat, targetThread, threadwake.ReasonUserMessage)
+
 				// Return with updated workflow_status so frontend knows we resumed
 				workflowStatus := fmt.Sprintf("%d", db.Active())
 				go s.trackMessageSent(ctx, userID, chat, savedMessageID, targetThread, userContent, len(req.Msg.Attachments))
@@ -746,6 +757,23 @@ func (s *ChatService) SendMessage(
 				runID := ""
 				if chat.RunID != nil {
 					runID = *chat.RunID
+				}
+
+				// Wake the target thread. A running workflow is not
+				// necessarily a running LOOP: a thread that has fanned work
+				// out to background spawns is parked in
+				// awaitLiveDetachedSpawns, and that gate cannot see a row
+				// appear in `messages`. Without this the message waits for a
+				// sub-agent to finish for unrelated reasons — which on chat
+				// 7da3935c meant the root thread ignored the user while its
+				// one live spawn ran, the exact "blocked on the spawned chat"
+				// this fixes.
+				//
+				// A thread whose loop IS spinning needs no help (it re-reads
+				// history every turn) and is unharmed: the wake counter it
+				// never reads simply advances.
+				if savedMsg != nil {
+					s.notifyThreadWake(ctx, chat, targetThread, threadwake.ReasonUserMessage)
 				}
 
 				workflowStatus := fmt.Sprintf("%d", db.Active())
@@ -1204,7 +1232,7 @@ func (s *ChatService) SendAgentMessage(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
 	}
 
-	s.notifyAgentMessageQueued(ctx, chat, req.Msg.ThreadId)
+	s.notifyThreadWake(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox)
 
 	// The receipt is deliberately as honest as spawn_send's: queued does not
 	// mean read, and does not mean acted on.
@@ -1214,24 +1242,39 @@ func (s *ChatService) SendAgentMessage(
 	}), nil
 }
 
-// notifyAgentMessageQueued rings the mailbox doorbell on the workflow that
-// owns the recipient thread, so a thread parked waiting on its background
-// spawns wakes up and drains rather than sleeping until a sub-agent finishes.
+// notifyThreadWake rings the thread-wake doorbell on the workflow that owns
+// the recipient thread, so a thread parked waiting on its background spawns
+// wakes up and takes a turn rather than sleeping until a sub-agent finishes.
 //
-// Without this the enqueue above is silent, and delivery depends entirely on
-// the recipient reaching a loop-step boundary for some other reason. When the
-// recipient is a parent blocked in awaitLiveDetachedSpawns — the ordinary
-// state of a main thread that has fanned work out to sub-agents — no such
-// boundary is scheduled, so "it will be read at that agent's next turn" was a
-// promise with no turn behind it.
+// Two callers, one per reason:
 //
-// Deliberately best-effort. The row is already durably queued, and the drain
-// reads it from the database, so a signal that cannot be delivered costs a
-// late delivery (the pre-existing behavior), not a lost message. Failing the
-// RPC here would be strictly worse: it would report failure for a message
-// that IS queued and WILL be read at the next boundary.
-func (s *ChatService) notifyAgentMessageQueued(ctx context.Context, chat *db.Chat, threadID string) {
-	if s.tempClient == nil {
+//   - SendAgentMessage, after queuing a row into agent_messages. Without this
+//     the enqueue is silent and delivery depends on the recipient reaching a
+//     loop-step boundary for some other reason.
+//   - SendMessage, after saving a user message to a thread whose run is live.
+//     A spinning loop re-reads history every turn and needs no help; a PARKED
+//     one never takes another turn, and nothing else in that path can release
+//     it.
+//
+// When the recipient is a parent blocked in awaitLiveDetachedSpawns — the
+// ordinary state of a main thread that has fanned work out to sub-agents — no
+// boundary is scheduled either way, so "it will be read at that agent's next
+// turn" was a promise with no turn behind it.
+//
+// threadID is load-bearing and must be the ACTUAL recipient. Every thread in a
+// chat is driven by one Temporal execution, so the workflow this signals is
+// always the chat's; the payload's thread is the only thing that selects which
+// gate wakes. Passing the root thread for a message aimed at a sub-thread
+// would wake the parent for input that is not its own.
+//
+// Deliberately best-effort. Whatever prompted the wake is already durable —
+// the mailbox row, or the saved message — and the woken turn reads it from the
+// database, so a signal that cannot be delivered costs a late pickup (the
+// pre-existing behavior), not lost input. Failing the RPC here would be
+// strictly worse: it would report failure for a message that IS saved and WILL
+// be read at the next boundary.
+func (s *ChatService) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID string, reason threadwake.Reason) {
+	if s.tempClient == nil || threadID == "" {
 		return
 	}
 	// Signal the chat's own workflow. A spawn is not a Temporal execution of
@@ -1244,15 +1287,16 @@ func (s *ChatService) notifyAgentMessageQueued(ctx context.Context, chat *db.Cha
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
 		workflowID = *chat.WorkflowID
 	}
-	if err := s.tempClient.SignalWorkflow(ctx, workflowID, "", v2.AgentMessageQueuedSignalName, v2.AgentMessageQueuedSignal{
+	if err := s.tempClient.SignalWorkflow(ctx, workflowID, "", v2.ThreadWakeSignalName, v2.ThreadWakeSignal{
 		Thread: threadID,
+		Reason: reason,
 	}); err != nil {
-		logging.Warn("Could not notify workflow of queued agent message; it will be delivered at the next loop boundary",
-			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID)
+		logging.Warn("Could not wake thread; its input will be picked up at the next loop boundary",
+			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))
 		return
 	}
-	logging.Info("Notified workflow of queued agent message",
-		"chatID", chat.ID, "threadID", threadID, "workflowID", workflowID)
+	logging.Info("Woke thread",
+		"chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))
 }
 
 // ListQueuedAgentMessages returns the entries currently sitting in a

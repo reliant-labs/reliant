@@ -59,7 +59,7 @@ const CollapsibleDiffViewer = memo(function CollapsibleDiffViewer({
           <button
             onClick={() => setIsExpanded(!isExpanded)}
             className={cn(
-              "flex items-center gap-1 px-2 py-1 text-[11px] font-medium w-full",
+              "flex items-center gap-1 px-2 py-1 text-xs font-medium w-full",
               "bg-muted/80 hover:bg-muted transition-colors",
               "text-muted-foreground hover:text-foreground justify-center"
             )}
@@ -414,11 +414,11 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
 
               {/* Collapsible command section */}
               <details className="border border-border rounded mt-1">
-                <summary className="px-1.5 py-1 text-[11px] text-muted-foreground hover:bg-muted cursor-pointer bg-card transition-colors">
+                <summary className="px-1.5 py-1 text-xs text-muted-foreground hover:bg-muted cursor-pointer bg-card transition-colors">
                   View shell command
                 </summary>
                 <div className="bg-muted p-1.5 border-t border-border max-w-full">
-                  <pre className="text-[11px] font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all">
+                  <pre className="text-xs font-mono text-muted-foreground overflow-x-auto whitespace-pre-wrap break-all">
                     <span className="text-muted-foreground">$ </span>
                     {command}
                   </pre>
@@ -528,8 +528,8 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
           <CollapsibleDiffViewer>
             <div className="p-1.5 max-w-full overflow-hidden" style={{ backgroundColor: 'var(--code-bg)' }}>
               <div className="flex items-start gap-1.5">
-                <span className="select-none flex-shrink-0 font-mono text-[11px]" style={{ color: 'var(--code-accent)' }}>$</span>
-                <div className="font-mono text-[11px] overflow-x-auto flex-1">
+                <span className="select-none flex-shrink-0 font-mono text-xs" style={{ color: 'var(--code-accent)' }}>$</span>
+                <div className="font-mono text-xs overflow-x-auto flex-1">
                   <code className="block whitespace-pre-wrap break-all" style={{ color: 'var(--code-fg)' }}>
                     {formatCommand(command)}
                   </code>

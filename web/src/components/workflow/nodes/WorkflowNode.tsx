@@ -86,7 +86,7 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
             <Bot className="w-4 h-4 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-wide text-purple-600">AGENT</div>
+            <div className="text-2xs font-bold uppercase tracking-wide text-purple-600">AGENT</div>
             <div className="font-semibold text-foreground text-sm leading-tight truncate">{label}</div>
           </div>
           {/* Expand button for inline workflows */}
@@ -118,7 +118,7 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
             </div>
             {(isBuiltin || isUserWorkflow) && (
               <div className="text-xs">
-                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
+                <span className="px-1.5 py-0.5 rounded text-2xs font-medium bg-muted text-muted-foreground">
                   {isBuiltin ? 'builtin' : 'saved workflow'}
                 </span>
               </div>

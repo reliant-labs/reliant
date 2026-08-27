@@ -60,6 +60,67 @@ const removePkceValue = (key: string): void => {
   }
 };
 
+/**
+ * Fires when the stored session existed but could not be read back, and the
+ * failure is permanent (the OS encryption key that wrote it is gone).
+ *
+ * Why this is not just a log line: Supabase's storage contract has no way to
+ * say "unreadable" — `getItem` returns a string or null, and null means "no
+ * session". So an unreadable blob is indistinguishable from a signed-out user
+ * to `getSession()`, which is exactly how the app ended up half-authenticated:
+ * the in-memory auth store still held a session from a prior
+ * `onAuthStateChange`, so the UI stayed signed IN, while `getToken()` resolved
+ * null and every RPC went out with no Authorization header. Escalating out of
+ * band is the only way to turn that invisible degradation into a real,
+ * actionable auth state.
+ */
+type AuthStorageUnreadableHandler = (detail: { reason: string }) => void
+
+let onStorageUnreadable: AuthStorageUnreadableHandler | null = null
+
+// One escalation per app run. The adapter is read on every getSession(), and a
+// burst of concurrent RPCs would otherwise each report the same dead blob.
+let reportedUnreadable = false
+
+// The failure, held until a handler exists to receive it.
+//
+// This is NOT belt-and-braces: `createClient` below reads storage during its
+// own initialization (auth-js `_initialize` → `_recoverAndRefresh`), and that
+// read happens at MODULE LOAD — strictly before authStore.initialize() can
+// register a handler. That first read is precisely the one that discovers a
+// dead blob, so firing and forgetting would drop the real incident on the
+// floor every time and only ever escalate on some later, incidental read.
+let pendingUnreadable: { reason: string } | null = null
+
+/** Registered once by authStore during initialize(). */
+export const setAuthStorageUnreadableHandler = (
+  handler: AuthStorageUnreadableHandler | null,
+): void => {
+  onStorageUnreadable = handler
+
+  // Replay a failure that was detected before anyone was listening.
+  if (handler && pendingUnreadable) {
+    const detail = pendingUnreadable
+    pendingUnreadable = null
+    handler(detail)
+  }
+}
+
+/** Records the failure, delivering it now or as soon as a handler appears. */
+const reportUnreadableStorage = (detail: { reason: string }): void => {
+  if (onStorageUnreadable) {
+    onStorageUnreadable(detail)
+    return
+  }
+  pendingUnreadable = detail
+}
+
+/** Test seam — resets the once-per-run latch. */
+export const __resetAuthStorageUnreadableForTests = (): void => {
+  reportedUnreadable = false
+  pendingUnreadable = null
+}
+
 const electronStorage: SupportedStorage = {
   getItem: async (key: string) => {
     try {
@@ -70,6 +131,22 @@ const electronStorage: SupportedStorage = {
 
       // For session data, load from file
       const result = await window.electronAPI!.authLoad()
+
+      // An unrecoverable read means a session WAS stored and is now
+      // permanently unreadable. Returning null here (which we still must do —
+      // there is genuinely no session to hand back) would leave the app
+      // running against a session it can never authenticate, so escalate it
+      // as a real auth state instead of degrading silently.
+      const failure = result?.failure
+      if (failure && !failure.recoverable && !reportedUnreadable) {
+        reportedUnreadable = true
+        console.error(
+          '[ElectronStorage] Stored session is permanently unreadable; re-authentication required',
+          failure,
+        )
+        reportUnreadableStorage({ reason: failure.reason })
+      }
+
       if (result?.success && result?.session) {
         return JSON.stringify(result.session)
       }

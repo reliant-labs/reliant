@@ -701,7 +701,7 @@ function ChatMessageComponent({
       {timestampText && (
         <time
           dateTime={message.createdAt}
-          className="px-1 text-[11px] leading-none text-muted-foreground"
+          className="px-1 text-xs leading-none text-muted-foreground"
           title={fullTimestampText}
         >
           {timestampText}
@@ -757,7 +757,7 @@ function ChatMessageComponent({
     <div
       className={cn(
         "message-actions mt-1 flex w-max items-center gap-1 whitespace-nowrap",
-        "rounded-md px-1 py-0.5 text-[11px] font-medium",
+        "rounded-md px-1 py-0.5 text-xs font-medium",
         "opacity-60 transition-opacity duration-150",
         "hover:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100"
       )}
@@ -833,7 +833,7 @@ function ChatMessageComponent({
           "rounded-md text-popover-foreground",
           "bg-[hsl(var(--popover))] dark:bg-[hsl(0_0%_14%)]",
           "border border-foreground/15 shadow-lg shadow-black/50",
-          "px-1 py-0.5 text-[11px] font-medium",
+          "px-1 py-0.5 text-xs font-medium",
           "pointer-events-none opacity-0 transition-opacity duration-150",
           "group-hover:opacity-100",
           "group-focus-within:opacity-100"
@@ -988,7 +988,7 @@ function ChatMessageComponent({
                       Also renders when expanded so a long message can be closed
                       without scrolling back to find the top of the bubble. */}
                   {!pinned && (isOverflowing || isExpanded) && (
-                    <div className="flex items-center gap-1 pt-0.5 text-[11px] font-medium text-muted-foreground/80">
+                    <div className="flex items-center gap-1 pt-0.5 text-xs font-medium text-muted-foreground/80">
                       <ChevronDown
                         className={cn(
                           "h-3 w-3 transition-transform duration-200",

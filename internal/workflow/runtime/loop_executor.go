@@ -320,7 +320,7 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	}
 
 	startCompletions := e.childTracker.detachedCompletionCount(thread)
-	startMessageWakes := e.childTracker.agentMessageWakeCount(thread)
+	startWakes := e.childTracker.threadWakeCount(thread)
 	threadInterrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, thread)
 	startInterruptEpoch := threadInterrupt.Epoch()
 	if err := workflow.Await(e.ctx, func() bool {
@@ -331,7 +331,7 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 		return e.pauseCtrl.IsCancelled() ||
 			threadInterrupt.InterruptedSince(startInterruptEpoch) ||
 			e.childTracker.detachedCompletionCount(thread) > startCompletions ||
-			e.childTracker.agentMessageWakeCount(thread) > startMessageWakes ||
+			e.childTracker.threadWakeCount(thread) > startWakes ||
 			!e.childTracker.hasLiveDetachedSpawns(thread)
 	}); err != nil {
 		// Workflow cancellation while waiting — let the normal cancellation
@@ -344,11 +344,14 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	// the last live spawn was reaped with nothing new delivered must NOT
 	// re-enter the loop, or a run with zero remaining work spins forever.
 	//
-	// A queued message is the other reason re-entering is right: the loop
-	// body drains the mailbox at its top, so returning true here is what
-	// turns the doorbell into an actual delivery. Without this disjunct the
-	// message stays queued until a child finishes — 28 minutes, on the chat
-	// that motivated it.
+	// A wake notification is the other reason re-entering is right: the turn
+	// the loop then takes drains the mailbox at its top AND re-reads history,
+	// so returning true here is what turns the doorbell into an actual
+	// delivery — for a queued mailbox row and for a user message alike.
+	// Without this disjunct the input waits until a child finishes: 28
+	// minutes on the chat that motivated the mailbox sender, and forever on
+	// the root thread of chat 7da3935c, whose only live spawn was the thing
+	// the user was writing in about.
 	//
 	// This cannot spin. Both counters are monotonic and are compared against
 	// the value snapshotted before the Await, so each notification satisfies
@@ -365,7 +368,7 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawns() bool {
 	}
 	return threadInterrupt.InterruptedSince(startInterruptEpoch) ||
 		e.childTracker.detachedCompletionCount(thread) > startCompletions ||
-		e.childTracker.agentMessageWakeCount(thread) > startMessageWakes
+		e.childTracker.threadWakeCount(thread) > startWakes
 }
 
 func (e *InlineLoopExecutor) inputPolicy() core.InputPolicy {

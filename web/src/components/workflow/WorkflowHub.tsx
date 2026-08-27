@@ -225,7 +225,7 @@ function WorkflowCard({
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium text-foreground">{displayName}</h3>
             {isHidden && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-500 font-medium uppercase flex items-center gap-1">
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-500 font-medium uppercase flex items-center gap-1">
                 <EyeOff className="w-2.5 h-2.5" />
                 Hidden
               </span>
@@ -239,7 +239,7 @@ function WorkflowCard({
           {/* Badges row */}
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className={cn(
-              "text-[10px] px-2 py-0.5 rounded-full font-medium",
+              "text-2xs px-2 py-0.5 rounded-full font-medium",
               isBuiltin ? "bg-blue-500/10 text-blue-600" :
               isProject ? "bg-emerald-500/10 text-emerald-600" :
               "bg-violet-500/10 text-violet-600"
@@ -248,7 +248,7 @@ function WorkflowCard({
             </span>
 
             {presetDisplay && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+              <span className="text-2xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                 Preset: {presetDisplay}
               </span>
             )}
@@ -378,7 +378,7 @@ function PresetCard({ preset, isHidden, onClick, onEdit, onDelete, onCopy, onTog
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium text-foreground">{safeName}</h3>
             {isHidden && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-500 font-medium uppercase flex items-center gap-1">
+              <span className="text-2xs px-1.5 py-0.5 rounded bg-zinc-500/10 text-zinc-500 font-medium uppercase flex items-center gap-1">
                 <EyeOff className="w-2.5 h-2.5" />
                 Hidden
               </span>
@@ -392,7 +392,7 @@ function PresetCard({ preset, isHidden, onClick, onEdit, onDelete, onCopy, onTog
           {/* Badges row */}
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className={cn(
-              "text-[10px] px-2 py-0.5 rounded-full font-medium",
+              "text-2xs px-2 py-0.5 rounded-full font-medium",
               isBuiltin ? "bg-blue-500/10 text-blue-600" :
               isProject ? "bg-emerald-500/10 text-emerald-600" :
               "bg-violet-500/10 text-violet-600"
@@ -401,7 +401,7 @@ function PresetCard({ preset, isHidden, onClick, onEdit, onDelete, onCopy, onTog
             </span>
 
             {safeTag && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium font-mono">
+              <span className="text-2xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium font-mono">
                 {safeTag}
               </span>
             )}
@@ -505,7 +505,7 @@ function InvalidItemCard({ name, source, path, errors, type }: InvalidItemCardPr
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium text-foreground">{name}</h3>
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium uppercase">
+            <span className="text-2xs px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium uppercase">
               Invalid
             </span>
           </div>
@@ -532,7 +532,7 @@ function InvalidItemCard({ name, source, path, errors, type }: InvalidItemCardPr
           {/* Source badge */}
           <div className="mt-2">
             <span className={cn(
-              "text-[10px] px-2 py-0.5 rounded-full font-medium",
+              "text-2xs px-2 py-0.5 rounded-full font-medium",
               isBuiltin ? "bg-blue-500/10 text-blue-600" :
               isProject ? "bg-emerald-500/10 text-emerald-600" :
               "bg-violet-500/10 text-violet-600"
@@ -1500,15 +1500,15 @@ function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetViewModal
                     {Array.isArray(value) ? (
                       <div className="flex flex-wrap gap-1.5">
                         {value.map((item: any, i: number) => (
-                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-muted text-muted-foreground">
                             {formatValueForDisplay(item)}
                           </span>
                         ))}
                       </div>
                     ) : typeof value === 'object' && value !== null ? (
-                      <pre className="whitespace-pre-wrap text-[10px] bg-background/50 p-2 rounded border border-border/50">{JSON.stringify(unwrapProtoValue(value as any) ?? value, null, 2)}</pre>
+                      <pre className="whitespace-pre-wrap text-2xs bg-background/50 p-2 rounded border border-border/50">{JSON.stringify(unwrapProtoValue(value as any) ?? value, null, 2)}</pre>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-muted text-muted-foreground">
                         {formatValueForDisplay(value)}
                       </span>
                     )}
@@ -1603,21 +1603,14 @@ export function WorkflowHub({
   const refreshPresetDefaults = useCallback(async () => {
     if (!projectId || existingWorkflows.length === 0) return
 
-    const defaults: Record<string, Record<string, string>> = {}
-
-    // Fetch default presets for all workflows from the backend API.
-    // The backend returns merged system + user defaults.
-    await Promise.all(
-      existingWorkflows.map(async (workflow) => {
-        try {
-          const groupDefaults = await presetGrpc.getDefaultPresets(projectId, workflow.name)
-          if (Object.keys(groupDefaults).length > 0) {
-            defaults[workflow.name] = groupDefaults
-          }
-        } catch {
-          // Ignore errors - workflow may not support presets
-        }
-      })
+    // ONE request for every workflow on screen. This used to map over the
+    // workflow list issuing a GetDefaultPreset each, which is the fan-out the
+    // user saw as "dozens of parallel calls, one per agent".
+    // The backend returns merged system + user defaults, and omits workflows
+    // that have none.
+    const defaults = await presetGrpc.getDefaultPresetsBatch(
+      projectId,
+      existingWorkflows.map((workflow) => workflow.name),
     )
 
     setPresetDefaults(defaults)

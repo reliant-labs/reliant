@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Loader2, ChevronDown, ChevronRight } from "lucide-react";
 import { useModels } from "../../store/globalDataStore";
-import { api } from "../../api/client";
+import {
+  readSetting,
+  upsertStringSetting,
+  deleteSettingIfExists,
+} from "../../lib/settingsPersistence";
 import { cn } from "../../lib/utils";
 
 // ---------------------------------------------------------------------------
@@ -49,10 +53,12 @@ export async function loadTagModelConfigs(): Promise<
 > {
   const result: Record<string, TagModelConfig> = {};
   try {
+    // readSetting serves from the cache ListSettings already populated, so
+    // this reads all N tags without N GetSetting round trips.
     const settled = await Promise.allSettled(
       PREFERENCE_TAGS.map(async (tag) => {
-        const setting = await api.settings.getSetting(tagSettingsKey(tag));
-        return { tag, value: setting?.value };
+        const read = await readSetting(tagSettingsKey(tag));
+        return { tag, value: read.status === "found" ? read.value : undefined };
       })
     );
     for (const r of settled) {
@@ -84,14 +90,11 @@ export async function saveTagConfig(tag: string, config: TagModelConfig) {
     config.compaction_threshold === undefined;
 
   if (isEmpty) {
-    try { await api.settings.deleteSetting(key); } catch { /* ok */ }
+    await deleteSettingIfExists(key);
   } else {
-    const json = JSON.stringify(config);
-    try {
-      await api.settings.updateSetting(key, json, "string");
-    } catch {
-      await api.settings.createSetting(key, json, "string");
-    }
+    // Coalesced + auth-gated like every other setting write. Saving the
+    // preferences panel touches several tags at once.
+    await upsertStringSetting(key, JSON.stringify(config));
   }
 }
 
@@ -270,7 +273,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                       {tag}
                     </span>
                     {hasOverrides && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                      <span className="text-2xs px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
                         customized
                       </span>
                     )}
@@ -398,7 +401,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                           onClick={() =>
                             handleFieldChange(tag, "temperature", undefined)
                           }
-                          className="text-[10px] text-muted-foreground hover:text-foreground px-1"
+                          className="text-2xs text-muted-foreground hover:text-foreground px-1"
                         >
                           ×
                         </button>
@@ -428,7 +431,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                         step={5000}
                         className="w-24 px-2.5 py-1.5 border border-input bg-background rounded-md text-xs text-right"
                       />
-                      <span className="text-[10px] text-muted-foreground">
+                      <span className="text-2xs text-muted-foreground">
                         tokens
                       </span>
                       {config.compaction_threshold !== undefined && (
@@ -440,7 +443,7 @@ export function ModelPreferences({ providers }: ModelPreferencesProps) {
                               undefined
                             )
                           }
-                          className="text-[10px] text-muted-foreground hover:text-foreground px-1"
+                          className="text-2xs text-muted-foreground hover:text-foreground px-1"
                         >
                           ×
                         </button>

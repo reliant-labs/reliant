@@ -22,7 +22,31 @@ func NewSettingStore(q pgdb.Querier, db pgdb.DBTX, bind func(string) string) cor
 	return &settingStore{q: q, db: db, bind: bind}
 }
 
+// CreateSetting writes a setting, replacing any existing value for the same
+// (user, project, key).
+//
+// Two queries rather than one because the conflict target differs. A
+// user-level setting has project_id NULL, which the table's
+// UNIQUE (user_id, project_id, key) cannot match — NULL is never equal to
+// NULL — so it resolves against the partial index added in
+// 20260826000000_settings_dedupe_and_unique_key.sql. A project-scoped setting
+// has a non-NULL project_id and uses the table constraint directly. Postgres
+// requires the ON CONFLICT target to name an index that actually covers the
+// row, so a single statement cannot serve both.
 func (s *settingStore) CreateSetting(ctx context.Context, setting *core.Setting) error {
+	if setting.ProjectID != nil {
+		return s.q.CreateProjectSetting(ctx, pgdb.CreateProjectSettingParams{
+			ID:        setting.ID,
+			UserID:    setting.UserID,
+			ProjectID: settingPtrToNullString(setting.ProjectID),
+			Key:       setting.Key,
+			Value:     setting.Value,
+			ValueType: setting.ValueType,
+			CreatedAt: setting.CreatedAt,
+			UpdatedAt: setting.UpdatedAt,
+		})
+	}
+
 	return s.q.CreateSetting(ctx, pgdb.CreateSettingParams{
 		ID:        setting.ID,
 		UserID:    setting.UserID,

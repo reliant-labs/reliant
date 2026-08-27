@@ -5041,6 +5041,30 @@ type CallLLMOutput struct {
 	// streaming completes precisely so it covers the streaming window, which is
 	// where a user watching a long answer actually types.
 	PendingInbox bool `protobuf:"varint,14,opt,name=pending_inbox,json=pendingInbox,proto3" json:"pending_inbox,omitempty"`
+	// Aborted reports that this turn was cut short by something OTHER than the
+	// model deciding it was done — the stream was cancelled mid-flight, so the
+	// turn's tool calls (and text) are whatever had arrived by then rather than
+	// what the model intended to emit.
+	//
+	// This exists because an agent loop cannot otherwise tell the two apart. Its
+	// while-condition tests tool_calls, and a cancelled turn yields zero of them,
+	// which is byte-for-byte identical to "the model finished and had nothing
+	// left to do". So the loop exited, the thread was marked completed, and a
+	// spawned agent killed mid-edit reported to its parent as a clean finish
+	// whose result was the placeholder "Agent completed but produced no text
+	// response" (observed on chat 7da3935c-97ec-4843-af78-c3807fe336cb, thread
+	// 5e3fe370: stream cancelled 1.75s in, two edits already applied, loop exited
+	// on the very next evaluation).
+	//
+	// Deliberately NOT set for a user/thread interrupt. An interrupt is a turn
+	// the user chose to stop, and the interrupt path already does the right
+	// thing: persist the partial and take one more mailbox-draining turn. Only
+	// an involuntary abort sets this.
+	//
+	// Agent loops read it as `nodes.call_llm.aborted` and keep looping, which
+	// sends the turn back through CallLLM to finish the work rather than
+	// reporting a truncated run as complete.
+	Aborted bool `protobuf:"varint,15,opt,name=aborted,proto3" json:"aborted,omitempty"`
 	// MessageID is the pre-allocated assistant message id this call streamed
 	// under (delta identity protocol). Echoed back from
 	// RuntimeContext.AssistantMessageID so the workflow can carry it into the
@@ -5164,6 +5188,13 @@ func (x *CallLLMOutput) GetModel() string {
 func (x *CallLLMOutput) GetPendingInbox() bool {
 	if x != nil {
 		return x.PendingInbox
+	}
+	return false
+}
+
+func (x *CallLLMOutput) GetAborted() bool {
+	if x != nil {
+		return x.Aborted
 	}
 	return false
 }
@@ -6947,7 +6978,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04text\x18\x03 \x01(\tR\x04text\"H\n" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xe3\x04\n" +
+	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xfd\x04\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -6963,7 +6994,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x14compaction_threshold\x18\n" +
 	" \x01(\x05R\x13compactionThreshold\x12\x14\n" +
 	"\x05model\x18\v \x01(\tR\x05model\x12#\n" +
-	"\rpending_inbox\x18\x0e \x01(\bR\fpendingInbox\x12\x1d\n" +
+	"\rpending_inbox\x18\x0e \x01(\bR\fpendingInbox\x12\x18\n" +
+	"\aaborted\x18\x0f \x01(\bR\aaborted\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\f \x01(\tR\tmessageId\x12&\n" +
 	"\x0flast_stream_seq\x18\r \x01(\x03R\rlastStreamSeq\"\xa1\x02\n" +

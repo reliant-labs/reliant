@@ -40,6 +40,17 @@ export interface LaunchPlan {
   modelProvider: ModelProvider;
   workflowParams?: Record<string, unknown>;
   daemonProvisioning?: boolean;
+  /**
+   * The compute step resolved itself — the user already had a usable daemon,
+   * so it auto-advanced without ever asking a question.
+   *
+   * Recorded because a step the user never saw must not behave as one they
+   * did: it is hidden from the progress bar (showing "1 Daemon" implies a
+   * choice they were never offered), and Back is suppressed on the step after
+   * it. Back would otherwise clear `compute`, re-derive the compute step, and
+   * immediately auto-skip forward again — a button that visibly does nothing.
+   */
+  computeAutoSkipped?: boolean;
 }
 
 export interface StepConfig {

@@ -36,7 +36,7 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { SurfaceProvider } from "../../lib/surfaceContext";
-import { applyRootFontSize } from "../../lib/rootFontSize";
+import { applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 
 export function MobileLayout({ children }: { children: ReactNode }) {
@@ -45,7 +45,7 @@ export function MobileLayout({ children }: { children: ReactNode }) {
   // type scale would only apply to hard navigations. Re-applying on mount (and
   // restoring on unmount) keeps desktop unaffected when navigating back out.
   useEffect(() => {
-    const stored = settingsSync.getSetting(SETTINGS_KEYS.FONT_SIZE, "md");
+    const stored = settingsSync.getSetting(SETTINGS_KEYS.FONT_SIZE, DEFAULT_FONT_SIZE);
     applyRootFontSize(stored);
     return () => {
       // Runs after the route has already left /m/*, so this resolves the

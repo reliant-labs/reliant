@@ -16,9 +16,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 	workflow_constants "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
-	"github.com/reliant-labs/reliant/internal/workflow/mailboxsignal"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -173,30 +173,39 @@ type ChildWorkflowTracker struct {
 	// int and workflow.AwaitWithTimeout instead.
 	detachedCompletions map[string]int
 
-	// agentMessageWakes counts, per RECIPIENT thread, how many "something is
-	// waiting in your mailbox" notifications have arrived since the tracker
-	// was created. Incremented by setupAgentMessageQueuedHandler from the
-	// AgentMessageQueuedSignalName signal.
+	// threadWakes counts, per RECIPIENT thread, how many "there is something
+	// for you to react to" notifications have arrived since the tracker was
+	// created. Incremented by setupThreadWakeHandler from the
+	// ThreadWakeSignalName signal.
 	//
 	// This exists because the loop-exit gate used to watch child completions
-	// and nothing else, which made a queued message undeliverable for as long
-	// as every child kept running. Delivery happens only in CallLLM, which
-	// drains the thread's mailbox before it reads history; a thread parked
-	// in awaitLiveDetachedSpawns never reaches another CallLLM, so a
-	// message queued into a parent that is waiting on its sub-agents sat at
-	// status=queued until an unrelated child happened to finish and wake the
-	// gate for its own reasons. Observed on chat
-	// 0f80b069-c77e-41a5-a86d-403ab3eb9410: a human "continue" queued at
-	// 01:30:45 was delivered at 01:59:02, 28 minutes later and 303ms after a
-	// sub-agent completed — every delivery in that chat lands within a second
-	// of a child completion, because that was the only thing that could wake
-	// the parent.
+	// and nothing else, which made new input undeliverable for as long as
+	// every child kept running. A thread parked in awaitLiveDetachedSpawns
+	// never reaches another CallLLM, and CallLLM is where BOTH kinds of input
+	// are picked up — it drains the thread's mailbox and then reads history.
+	// So anything queued for a parked parent sat there until an unrelated
+	// child happened to finish and wake the gate for its own reasons.
+	//
+	// Observed twice, once per sender:
+	//   - mailbox: chat 0f80b069-c77e-41a5-a86d-403ab3eb9410, a human
+	//     "continue" queued at 01:30:45 and delivered at 01:59:02 — 28
+	//     minutes later and 303ms after a sub-agent completed.
+	//   - user message: chat 7da3935c-97ec-4843-af78-c3807fe336cb, a message
+	//     saved to the ROOT thread at 21:37:45 while that thread was parked
+	//     on one live spawn. Nothing in the user-send path could wake this
+	//     gate at all, so the root chat read as "blocked on its sub-agent".
+	//
+	// Deliberately counts wakes without distinguishing the reason: the gate's
+	// response to either is the same (stop parking, take a turn), and the
+	// turn itself is what works out whether there is a mailbox row, a new
+	// history message, or both. Keeping one counter is what makes those two
+	// senders genuinely interchangeable here rather than two near-copies.
 	//
 	// Counted rather than a bool so a notification that arrives while the
 	// gate is between its snapshot and its Await is not lost: the gate
 	// compares against the value it observed, exactly as it does for
 	// completions.
-	agentMessageWakes map[string]int
+	threadWakes map[string]int
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -250,27 +259,28 @@ func (t *ChildWorkflowTracker) detachedCompletionCount(thread string) int {
 	return t.detachedCompletions[thread]
 }
 
-// notifyAgentMessageQueued records that a message was queued into thread's
-// mailbox and that a parked loop for thread should wake to drain it.
+// notifyThreadWake records that there is something new for thread to react to
+// — a queued mailbox row, or a user message saved to its history — and that a
+// parked loop for thread should wake and take a turn.
 //
-// Note this is a WAKE notification, not the message itself: the row is
-// already durable in agent_messages, and the actual delivery is done by
-// CallLLM reading the DB before it assembles history. Losing a notification
-// therefore degrades to "delivered at the next CallLLM that happens for
-// another reason" rather than losing the message.
-func (t *ChildWorkflowTracker) notifyAgentMessageQueued(thread string) {
-	if t.agentMessageWakes == nil {
-		t.agentMessageWakes = make(map[string]int)
+// Note this is a WAKE notification, not the content itself: whatever prompted
+// it is already durable (agent_messages, or messages), and the actual delivery
+// is done by CallLLM, which drains the mailbox and then reads history. Losing
+// a notification therefore degrades to "picked up at the next CallLLM that
+// happens for another reason" rather than losing anything.
+func (t *ChildWorkflowTracker) notifyThreadWake(thread string) {
+	if t.threadWakes == nil {
+		t.threadWakes = make(map[string]int)
 	}
-	t.agentMessageWakes[thread]++
+	t.threadWakes[thread]++
 }
 
-// agentMessageWakeCount returns how many mailbox notifications thread has
-// received so far. Monotonically increasing for the life of the workflow
-// execution, and read the same way detachedCompletionCount is: snapshot
-// before blocking, compare against the live value to detect a new arrival.
-func (t *ChildWorkflowTracker) agentMessageWakeCount(thread string) int {
-	return t.agentMessageWakes[thread]
+// threadWakeCount returns how many wake notifications thread has received so
+// far. Monotonically increasing for the life of the workflow execution, and
+// read the same way detachedCompletionCount is: snapshot before blocking,
+// compare against the live value to detect a new arrival.
+func (t *ChildWorkflowTracker) threadWakeCount(thread string) int {
+	return t.threadWakes[thread]
 }
 
 // listLiveDetachedSpawns returns every background spawn currently in flight,
@@ -919,7 +929,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// wakes to drain a queued message instead of waiting for a child to
 	// finish. Registered unconditionally: an execution that never receives
 	// the signal just leaves the channel empty.
-	setupAgentMessageQueuedHandler(ctx, childTracker, workflowID)
+	setupThreadWakeHandler(ctx, childTracker, workflowID)
 
 	// STEP 8.6: Create shared PauseController for all executors
 	pauseCtrl := &PauseController{
@@ -2180,52 +2190,57 @@ func setupCancelThreadHandler(ctx workflow.Context, cancelled map[string]bool, w
 	})
 }
 
-// AgentMessageQueuedSignalName is the signal a client sends after writing a
-// row into agent_messages, to wake a thread that is parked waiting on its
-// background spawns so it drains the mailbox instead of sleeping until an
-// unrelated child finishes.
+// ThreadWakeSignalName is the signal a client sends to wake a thread that is
+// parked waiting on its background spawns, so it takes a turn instead of
+// sleeping until an unrelated child finishes. Two senders ring it: a mailbox
+// row queued into agent_messages, and a user message saved to a live thread's
+// history.
 //
 // The signal is a doorbell, not a delivery mechanism: it carries only the
-// recipient thread, and the message body is read from the database by
-// DrainAgentMessagesActivity as it always was. That keeps the durable row the
-// single source of truth, and makes a dropped or duplicated signal harmless —
-// a duplicate finds an empty queue, and a drop falls back to the old
-// next-boundary behavior rather than losing the message.
+// recipient thread and a diagnostic reason. Whatever prompted it is read from
+// the database by the woken turn — DrainAgentMessagesActivity for a mailbox
+// row, LoadCurrentMessages for history — exactly as it always was. That keeps
+// the durable row the single source of truth, and makes a dropped or
+// duplicated signal harmless: a duplicate finds nothing new to do, and a drop
+// falls back to the old next-boundary behavior rather than losing anything.
 //
-// Aliased from mailboxsignal so senders that cannot import this package (it
+// Aliased from threadwake so senders that cannot import this package (it
 // imports internal/llm/tools, so a tools-side sender would cycle) still use
 // the identical name and payload.
-const AgentMessageQueuedSignalName = mailboxsignal.SignalName
+const ThreadWakeSignalName = threadwake.SignalName
 
-// AgentMessageQueuedSignal names the thread whose mailbox just gained a row.
-type AgentMessageQueuedSignal = mailboxsignal.Signal
+// ThreadWakeSignal names the thread to wake, and why.
+type ThreadWakeSignal = threadwake.Signal
 
-// setupAgentMessageQueuedHandler records mailbox notifications so a parked
-// loop-exit gate can wake and drain.
+// setupThreadWakeHandler records wake notifications so a parked loop-exit gate
+// can wake and take a turn.
 //
 // Writing the tracker's plain map from this goroutine is safe for the same
 // reason setupCancelThreadHandler's map write is: Temporal workflow
 // goroutines are cooperatively scheduled on a single thread, so there is no
 // parallel access to guard against.
-func setupAgentMessageQueuedHandler(ctx workflow.Context, childTracker *ChildWorkflowTracker, workflowID string) {
+func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTracker, workflowID string) {
 	logger := workflow.GetLogger(ctx)
-	ch := workflow.GetSignalChannel(ctx, AgentMessageQueuedSignalName)
+	ch := workflow.GetSignalChannel(ctx, ThreadWakeSignalName)
 
 	workflow.Go(ctx, func(gCtx workflow.Context) {
 		for {
 			if gCtx.Err() != nil {
 				return
 			}
-			var sig AgentMessageQueuedSignal
+			var sig ThreadWakeSignal
 			if !ch.Receive(gCtx, &sig) {
 				return
 			}
+			// A signal with no thread names no gate. Counting it against
+			// the empty string would be a wake nothing is waiting on, so
+			// drop it rather than inventing a recipient.
 			if sig.Thread == "" {
 				continue
 			}
-			childTracker.notifyAgentMessageQueued(sig.Thread)
-			logger.Info("[AgentMailbox] Queued-message notification received",
-				"workflowID", workflowID, "thread", sig.Thread)
+			childTracker.notifyThreadWake(sig.Thread)
+			logger.Info("[ThreadWake] Wake notification received",
+				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason))
 		}
 	})
 }

@@ -31,6 +31,30 @@ const (
 	FinishReasonError            FinishReason = "error"
 	FinishReasonPermissionDenied FinishReason = "permission_denied"
 
+	// FinishReasonRefusal is the provider declining to produce the turn:
+	// Anthropic's stop_reason "refusal", OpenAI-shaped "content_filter". It is
+	// a COMPLETE turn, not an error — the provider answered, and the answer was
+	// no. It is also the one finish reason that routinely arrives with zero
+	// content blocks, which is why call_llm keys its content-free-turn
+	// substitution on it.
+	FinishReasonRefusal FinishReason = "refusal"
+
+	// FinishReasonPauseTurn is the provider pausing mid-turn: Anthropic's
+	// stop_reason "pause_turn", emitted when a server-side sampling loop hits
+	// its iteration limit and the model expects the same conversation handed
+	// back so it can carry on.
+	//
+	// It is NOT an end of turn. The model did not finish and did not choose to
+	// stop; it was suspended. Calling it EndTurn would tell the runtime the
+	// answer is complete when it is a fragment.
+	//
+	// Recognition only, today: nothing acts on this beyond saying so when the
+	// paused turn came back empty. Continuing a paused turn means re-sending
+	// the assistant turn verbatim — trailing server-tool blocks included, which
+	// this package does not model — so it is a deliberate gap, not an
+	// oversight. See contentFreeTurnText in the call_llm handler.
+	FinishReasonPauseTurn FinishReason = "pause_turn"
+
 	// Should never happen
 	FinishReasonUnknown FinishReason = "unknown"
 )

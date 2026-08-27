@@ -21,9 +21,25 @@ export function OnboardingPage() {
   // Current step is derived purely from plan state. No URL `step` param,
   // no sessionStorage flags, no useEffect to sync. See ./stepConfig.ts.
   const actualStep = deriveStep(plan);
-  const steps = getStepsForPlan(plan);
+  const allSteps = getStepsForPlan(plan);
+
+  // A compute step that auto-skipped is hidden from the flow entirely.
+  //
+  // The user was never asked anything: they already had a running daemon, so
+  // the step resolved itself and advanced. Showing "1 Daemon" in the progress
+  // bar implies a choice they never made, and numbers every later step from a
+  // question that did not happen.
+  const steps = plan.computeAutoSkipped
+    ? allSteps.filter(id => id !== 'compute')
+    : allSteps;
+
   const safeIndex = Math.max(0, steps.indexOf(actualStep));
   const StepComponent = STEP_COMPONENTS[actualStep];
+
+  // Back is suppressed on the first VISIBLE step, which after an auto-skip is
+  // the model step. Without this the button renders and does nothing you can
+  // see: BACK_CLEARS['model'] clears `compute`, derivation returns to the
+  // compute step, and its auto-skip effect immediately advances again.
   const isFirst = safeIndex === 0;
   const progressSteps = steps.map(id => ({ id, label: STEP_LABELS[id] }));
 

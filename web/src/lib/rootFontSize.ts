@@ -22,6 +22,17 @@
 
 import { surfaceForPath } from "./surface";
 
+/**
+ * The step a user gets before they have chosen one.
+ *
+ * Exported and referenced everywhere rather than spelled as a literal at each
+ * read site. There are seven of those, and when the default typeface moved the
+ * same sprawl left two of them behind on the old value — so which font you got
+ * depended on which code path won the race. A single constant makes that class
+ * of drift impossible.
+ */
+export const DEFAULT_FONT_SIZE = "lg";
+
 export const FONT_SIZE_MAP: Record<string, string> = {
   xs: "12px",
   sm: "13px",
@@ -49,7 +60,7 @@ export const MOBILE_FONT_SIZE_MAP: Record<string, string> = {
 export function rootFontSizeFor(fontSize: string, pathname: string): string {
   const map =
     surfaceForPath(pathname) === "mobile" ? MOBILE_FONT_SIZE_MAP : FONT_SIZE_MAP;
-  return map[fontSize] ?? map.md;
+  return map[fontSize] ?? map[DEFAULT_FONT_SIZE];
 }
 
 /**

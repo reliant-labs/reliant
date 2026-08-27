@@ -29,7 +29,7 @@ function SkillToolRendererComponent({ ctx }: ToolContentProps) {
   // Fallback: show result if present
   if (result?.content) {
     return (
-      <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+      <div className="px-2 py-1.5 text-xs text-muted-foreground">
         {result.content}
       </div>
     );
@@ -54,10 +54,10 @@ function LoadActionContent({
       {/* Skill name + action */}
       <div className="px-2 py-1.5 border-b border-border/30 bg-muted/20 flex items-center gap-2">
         <BookMarked className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-        <span className="text-[11px] font-medium text-foreground truncate">
+        <span className="text-xs font-medium text-foreground truncate">
           {skillName || 'Loading skill...'}
         </span>
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium bg-primary/10 text-primary border border-primary/20">
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-3xs font-medium bg-primary/10 text-primary border border-primary/20">
           load
         </span>
       </div>
@@ -67,7 +67,7 @@ function LoadActionContent({
         <div>
           <button
             onClick={() => setShowBody(!showBody)}
-            className="w-full flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
+            className="w-full flex items-center gap-1 px-2 py-1 text-2xs text-muted-foreground hover:text-foreground hover:bg-muted/30 transition-colors"
           >
             {showBody ? (
               <ChevronDown className="w-3 h-3" />
@@ -77,7 +77,7 @@ function LoadActionContent({
             <span>Skill content</span>
           </button>
           {showBody && (
-            <div className="px-2 py-1.5 border-t border-border/30 text-[11px] max-h-[300px] overflow-y-auto">
+            <div className="px-2 py-1.5 border-t border-border/30 text-xs max-h-[300px] overflow-y-auto">
               <MarkdownRenderer content={result} worktreeId={worktreeId} />
             </div>
           )}
@@ -107,7 +107,7 @@ function ListActionContent({ result }: { result?: string }) {
   } catch {
     // Not JSON — show as text
     return (
-      <div className="px-2 py-1.5 text-[11px] text-muted-foreground whitespace-pre-wrap">
+      <div className="px-2 py-1.5 text-xs text-muted-foreground whitespace-pre-wrap">
         {result}
       </div>
     );
@@ -115,7 +115,7 @@ function ListActionContent({ result }: { result?: string }) {
 
   if (skills.length === 0) {
     return (
-      <div className="px-2 py-1.5 text-[11px] text-muted-foreground">
+      <div className="px-2 py-1.5 text-xs text-muted-foreground">
         No skills available
       </div>
     );
@@ -123,12 +123,12 @@ function ListActionContent({ result }: { result?: string }) {
 
   return (
     <div className="tool-content-skill-list">
-      <div className="px-2 py-1 text-[10px] text-muted-foreground bg-muted/30 border-b border-border/30">
+      <div className="px-2 py-1 text-2xs text-muted-foreground bg-muted/30 border-b border-border/30">
         Available Skills ({skills.length})
       </div>
       <div className="px-2 py-1.5 space-y-0.5">
         {skills.map((skill, i) => (
-          <div key={i} className="flex items-center gap-1.5 text-[11px]">
+          <div key={i} className="flex items-center gap-1.5 text-xs">
             <BookMarked className="w-3 h-3 text-muted-foreground flex-shrink-0" />
             <span className="text-foreground">{skill}</span>
           </div>
@@ -144,11 +144,11 @@ function SearchActionContent({ query, result }: { query: string; result?: string
   return (
     <div className="tool-content-skill-search">
       {query && (
-        <div className="px-2 py-1 text-[10px] text-muted-foreground bg-muted/30 border-b border-border/30">
+        <div className="px-2 py-1 text-2xs text-muted-foreground bg-muted/30 border-b border-border/30">
           Search: &quot;{query}&quot;
         </div>
       )}
-      <div className="px-2 py-1.5 text-[11px] text-muted-foreground whitespace-pre-wrap">
+      <div className="px-2 py-1.5 text-xs text-muted-foreground whitespace-pre-wrap">
         {result}
       </div>
     </div>

@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
+	"github.com/reliant-labs/reliant/internal/filetree"
 	"github.com/reliant-labs/reliant/internal/localfs"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -99,10 +101,22 @@ func (s *FileSystemService) validateReadPath(basePath, requestedPath string) (st
 }
 
 func (s *FileSystemService) validatePathScoped(basePath, requestedPath string, scope filepreview.PathScope) (string, error) {
+	return validateWorkspacePath(basePath, requestedPath, scope)
+}
+
+// validateWorkspacePath is the single place this package turns the shared path
+// contract into transport errors.
+//
+// The contract itself is filepreview.ValidatePathScoped and lives there alone:
+// "" and "/" name the workspace root, a relative path is joined onto the base
+// and must stay beneath it, and an absolute path means the location it names.
+// Both implementations in this package — FileSystemService (direct) and
+// FileSystemProxyService (daemon-routed) — resolve through this function, so
+// neither can drift from that rule or report it with a different code.
+func validateWorkspacePath(basePath, requestedPath string, scope filepreview.PathScope) (string, error) {
 	absFullPath, err := filepreview.ValidatePathScoped(basePath, requestedPath, scope)
 	if err != nil {
-		switch err {
-		case filepreview.ErrPathOutsideBase, filepreview.ErrAbsolutePathOutsideBase:
+		if errors.Is(err, filepreview.ErrPathOutsideBase) || errors.Is(err, filepreview.ErrAbsolutePathOutsideBase) {
 			return "", connect.NewError(connect.CodePermissionDenied, err)
 		}
 		return "", connect.NewError(connect.CodeInvalidArgument, err)
@@ -110,106 +124,31 @@ func (s *FileSystemService) validatePathScoped(basePath, requestedPath string, s
 	return absFullPath, nil
 }
 
-// treeUnlimited is the remaining-depth sentinel meaning "recurse without bound".
-const treeUnlimited = -1
-
-// treeSkipDirs are directory names never shown in the file tree.
-var treeSkipDirs = map[string]bool{
-	"node_modules": true,
-	"dist":         true,
-	"__pycache__":  true,
-	".git":         true,
-}
-
-// treeIncludeEntry reports whether a directory entry should appear in the tree,
-// applying the always-skipped noise dirs and the show_hidden dotfile rule. The
-// same predicate backs the walk and the has_children probe so the expand
-// chevron always matches what an expand would actually reveal.
-func treeIncludeEntry(name string, isDir, showHidden bool) bool {
-	if isDir && treeSkipDirs[name] {
-		return false
+// toFileNodes maps the shared walker's transport-neutral nodes onto the proto
+// shape this service returns. The walk itself lives in internal/filetree so the
+// server and the daemon cannot drift apart again.
+func toFileNodes(nodes []*filetree.Node) []*reliantv1.FileNode {
+	if len(nodes) == 0 {
+		return nil
 	}
-	if !showHidden && strings.HasPrefix(name, ".") {
-		return false
-	}
-	return true
-}
-
-// dirHasVisibleChildren reports whether dir holds at least one entry that would
-// be shown in the tree (respecting show_hidden), short-circuiting on the first
-// match. Used to set the has_children hint at the depth boundary without walking
-// the subtree.
-func (s *FileSystemService) dirHasVisibleChildren(dir string, showHidden bool) bool {
-	entries, err := s.fs.ReadDir(dir)
-	if err != nil {
-		return false
-	}
-	for _, e := range entries {
-		if treeIncludeEntry(e.Name(), e.IsDir(), showHidden) {
-			return true
-		}
-	}
-	return false
-}
-
-// buildFileTree performs a live, depth-limited walk of a directory. remainingDepth
-// caps how many more levels of children to descend: treeUnlimited (-1) recurses
-// fully; N>0 descends N levels (1 = immediate children only). Sizes/mtimes come
-// from a live stat of each entry. Directory nodes at the boundary carry
-// HasChildren instead of eagerly-loaded Children, powering lazy expansion.
-func (s *FileSystemService) buildFileTree(fsPath string, relativePath string, showHidden bool, remainingDepth int) ([]*reliantv1.FileNode, error) {
-	entries, err := s.fs.ReadDir(fsPath)
-	if err != nil {
-		return nil, err
-	}
-
-	var nodes []*reliantv1.FileNode
-	for _, entry := range entries {
-		name := entry.Name()
-		if !treeIncludeEntry(name, entry.IsDir(), showHidden) {
-			continue
-		}
-
-		entryPath := filepath.Join(fsPath, name)
-		relPath := filepath.Join(relativePath, name)
-
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-
+	out := make([]*reliantv1.FileNode, 0, len(nodes))
+	for _, n := range nodes {
 		node := &reliantv1.FileNode{
-			Name:     name,
-			Path:     relPath,
-			Modified: proto.String(info.ModTime().Format(time.RFC3339)),
+			Name:        n.Name,
+			Path:        n.Path,
+			Modified:    proto.String(n.ModTime.Format(time.RFC3339)),
+			HasChildren: n.HasChildren,
 		}
-
-		if entry.IsDir() {
+		if n.IsDir {
 			node.Type = reliantv1.FileNodeType_FILE_NODE_TYPE_DIRECTORY
-			// Descend when unlimited or more than one level remains; otherwise
-			// this is the boundary — record whether a chevron is warranted.
-			if remainingDepth == treeUnlimited || remainingDepth > 1 {
-				childDepth := remainingDepth
-				if remainingDepth > 0 {
-					childDepth = remainingDepth - 1
-				}
-				children, err := s.buildFileTree(entryPath, relPath, showHidden, childDepth)
-				if err == nil {
-					node.Children = children
-				}
-				node.HasChildren = len(node.Children) > 0
-			} else {
-				node.HasChildren = s.dirHasVisibleChildren(entryPath, showHidden)
-			}
+			node.Children = toFileNodes(n.Children)
 		} else {
 			node.Type = reliantv1.FileNodeType_FILE_NODE_TYPE_FILE
-			node.Size = proto.Int64(info.Size())
+			node.Size = proto.Int64(n.Size)
 		}
-
-		nodes = append(nodes, node)
+		out = append(out, node)
 	}
-
-	return nodes, nil
+	return out
 }
 
 // isBinaryFile checks if a file is binary using the canonical preview classifier.
@@ -273,21 +212,29 @@ func (s *FileSystemService) GetFileTree(
 		return nil, err
 	}
 
-	// Build file tree from a live, depth-limited walk. Depth 0 keeps the full
-	// recursive tree (back-compat); N returns N levels of children below path.
-	depth := treeUnlimited
-	if req.Msg.Depth > 0 {
-		depth = int(req.Msg.Depth)
-	}
-
-	files, err := s.buildFileTree(absFullPath, requestedPath, req.Msg.ShowHidden, depth)
+	// Build the tree from a bounded walk. depth 0 is the server default (2
+	// levels), N returns N levels of children below path, and -1 goes as deep
+	// as the node budget allows — nothing asks for an unbounded walk.
+	result, err := filetree.Walk(filetree.Options{
+		Root:       absFullPath,
+		RelBase:    requestedPath,
+		ShowHidden: req.Msg.ShowHidden,
+		Depth:      int(req.Msg.Depth),
+		FS:         s.fs,
+	})
 	if err != nil {
 		logging.Error("Failed to read directory", "error", err, "path", absFullPath)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
+	if result.Truncated {
+		logging.Warn("File tree truncated by node budget",
+			"path", absFullPath, "nodeCount", result.NodeCount, "maxNodes", filetree.MaxTreeNodes)
+	}
 
 	return connect.NewResponse(&reliantv1.GetFileTreeResponse{
-		Files: files,
+		Files:     toFileNodes(result.Nodes),
+		Truncated: result.Truncated,
+		NodeCount: int32(result.NodeCount),
 	}), nil
 }
 

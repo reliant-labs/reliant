@@ -52,16 +52,30 @@ function stepSavedMessage(step: StepExecution, allSteps: StepExecution[]): boole
  * Internal workflow activities that shouldn't be shown to users.
  * These are workflow plumbing - status updates, fork management, etc.
  * Everything else (including user-defined activities) will be shown.
+ *
+ * Names must match `step_executions.activity_name` EXACTLY, which is the
+ * Temporal registration name (see ActivityRegistry.RegisterWithWorker) — e.g.
+ * "CallLLM", not "V2_CallLLM". This list previously carried a "V2_" prefix
+ * that no activity has ever been recorded under, so every entry silently
+ * matched nothing: a "Call Llm" indicator rendered in the timeline for every
+ * turn, alongside the assistant message that same step had just saved.
+ *
+ * It only showed transiently — a streaming step is written before its
+ * "-save" counterpart exists, so stepSavedMessage() cannot yet see the message
+ * and falls through to here. A refresh reloaded both rows and the block
+ * vanished, which is what made it look like a render race rather than a
+ * never-matching filter.
  */
 const INTERNAL_ACTIVITIES = new Set([
-  "V2_WorkflowStatus",   // Internal workflow state management
-  "V2_WorkflowError",    // Internal error handling
-  "V2_Cleanup",          // Internal cleanup
-  "V2_FetchThreadResult", // Internal thread fetching
-  "V2_FailStep",         // Internal failure handling
-  "V2_SaveMessage",      // Produces messages (filtered separately)
-  "V2_CallLLM",          // Produces messages (filtered separately)
-  "V2_Approval",         // Approvals rendered inline by ToolExecution
+  "WorkflowStatus",     // Internal workflow state management
+  "WorkflowError",      // Internal error handling
+  "Cleanup",            // Internal cleanup
+  "FetchThreadResult",  // Internal thread fetching
+  "FailStep",           // Internal failure handling
+  "SaveMessage",        // Produces messages (rendered as the message itself)
+  "CallLLM",            // Produces messages (rendered as the message itself)
+  "Approval",           // Approvals rendered inline by ToolExecution
+  "ExecuteTools",       // Tool calls rendered inline by ToolExecution
 ]);
 
 /**

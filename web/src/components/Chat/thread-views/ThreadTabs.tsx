@@ -108,7 +108,11 @@ function MiniContextIndicator({ usage, color }: { usage: ContextUsageData; color
             className="transition-all duration-300"
           />
         </svg>
+        {/* px, not a scale step: this label is centred inside a fixed-size SVG
+            ring, so it must not grow with the font-size preference or it
+            overflows the circle. */}
         <span
+          // eslint-disable-next-line no-restricted-syntax
           className="absolute inset-0 flex items-center justify-center font-medium text-[6px]"
           style={{ color: color || "hsl(var(--primary))" }}
         >
@@ -172,7 +176,7 @@ export const ThreadTabs = memo(function ThreadTabs({
           {/* Activity indicator for "All" - shows when any thread is active */}
           {isAnyActive && <ActivityPulse />}
           <span>All</span>
-          <span className="text-[10px] opacity-70 tabular-nums">{totalMessages}</span>
+          <span className="text-2xs opacity-70 tabular-nums">{totalMessages}</span>
         </button>
       )}
 
@@ -224,7 +228,7 @@ export const ThreadTabs = memo(function ThreadTabs({
             </span>
             
             {/* Message count */}
-            <span className="text-[10px] opacity-60 tabular-nums">
+            <span className="text-2xs opacity-60 tabular-nums">
               {thread.messageCount}
             </span>
             

@@ -1,49 +1,85 @@
 // Package builddefaults centralizes the runtime-config defaults the reliant
 // binary falls back to when no environment override is present.
 //
-// OSS-clean contract
-// ------------------
-// The OSS binary must ship NO Reliant-hosted-specific config. A build with no
-// env and no compiled-in default resolves to a NEUTRAL localhost default — a
-// self-hoster's binary points at their own local stack, never silently at
-// Reliant's hosted control plane. The commercial RC opts INTO the hosted
-// endpoints by injecting the compiled-in `var` defaults below at build time
-// via linker flags, e.g.
+// Hosted-by-default contract
+// --------------------------
+// The source defaults ARE Reliant's hosted endpoints, so a binary built
+// straight from this repo — `go install github.com/reliant-labs/reliant/cmd/reliant@latest`,
+// `go build ./cmd/reliant`, `make build` — works out of the box against the
+// hosted platform with no flags and no environment.
 //
-//	go build -ldflags "\
-//	  -X github.com/reliant-labs/reliant/internal/builddefaults.ServerURL=https://reliantapi.com \
-//	  -X github.com/reliant-labs/reliant/internal/builddefaults.AuthURL=https://<project>.supabase.co \
-//	  -X github.com/reliant-labs/reliant/internal/builddefaults.AuthKey=<publishable-anon-key>"
+// Pointing at a different backend is an explicit, one-value act:
 //
-// Precedence (see Value): explicit env var > compiled-in default (-X) > neutral
-// fallback. This mirrors the web model — the OSS source is config-agnostic; the
-// closed control-plane / commercial build supplies the hosted values.
+//	reliant daemon start --server https://my-stack.example.com
+//	RELIANT_SERVER_URL=http://localhost:8080 reliant daemon start
+//
+// Both outrank everything here (see Value).
+//
+// THIS REVERSES THE EARLIER "OSS-clean" CONTRACT, deliberately. That contract
+// left these vars empty so an un-injected build fell through to
+// http://localhost:8080, on the reasoning that a self-hoster's binary must
+// never silently point at Reliant's control plane. The cost landed on the
+// common case instead: `go install` is documented as a supported install path
+// (docs/getting-started/installation.mdx), and it produced a binary that dialed
+// a localhost port nothing was listening on, failing with an error that never
+// mentioned the hosted platform existed. Secrecy was never the argument —
+// these hostnames are already committed in this public repo in
+// electron/release.config.json.
+//
+// Precedence (see Value): explicit env var > compiled-in -X override > the
+// source default below.
+//
+// WHERE THESE VALUES COME FROM. They are a PROJECTION of control-plane's
+// deploy/kcl/lib/env.k (reliant_endpoints), the single declaration that also
+// produces the hosted SPA's build env, the packaged desktop app's renderer and
+// main-process config, and the -X flags in .github/workflows/release.yml. Go
+// cannot import KCL, so this is a hand-synced copy — and
+// TestSourceDefaultsMatchGeneratedReleaseConfig pins it against the generated,
+// drift-gated electron/release.config.json so the two cannot diverge silently.
+// To change an endpoint: edit the KCL, regenerate that file, then update these.
 //
 // forge:exclude-contract
 //
 // ServerURL/GatewayURL/AuthURL/AuthKey must remain package-level string vars:
 // `-ldflags -X` can only write one of those. Behind a getter or in a struct the
-// linker flag silently does nothing, the commercial build falls through to the
-// neutral localhost default, and a shipped RC points at nothing — with no build
-// error to catch it. Value() is the accessor; the vars are the injection site.
+// linker flag silently does nothing and a release build ships whatever is
+// written here — with no build error to catch it. Value() is the accessor; the
+// vars are the injection site. (A non-empty initializer does NOT block -X;
+// the linker overwrites it, which is how preprod builds retarget these.)
 package builddefaults
 
 import "os"
 
-// NeutralServerURL is the OSS fallback when neither RELIANT_SERVER_URL nor a
-// compiled-in ServerURL is set. A localhost default keeps an un-injected OSS
-// build pointed at a local self-hosted stack instead of Reliant's hosted API.
+// NeutralServerURL is the loopback default a caller can pass to Value as an
+// explicit self-host fallback. It is NO LONGER what an un-injected build
+// resolves to — ServerURL below carries the hosted endpoint — but it remains
+// the canonical "your own local stack" address for callers that want it.
 const NeutralServerURL = "http://localhost:8080"
 
+// The hosted defaults, projected from control-plane's KCL (see package doc).
+// A release build overwrites them via -X to retarget an environment (preprod);
+// prod injects the same values these already carry.
 var (
-	// ServerURL, GatewayURL, AuthURL, AuthKey are the build-time-injectable
-	// hosted defaults. They are empty in the OSS source and set via -X ldflags
-	// only for commercial RCs (see package doc). Empty here → Value falls
-	// through to the env var or the neutral fallback.
-	ServerURL  string
-	GatewayURL string
-	AuthURL    string
-	AuthKey    string
+	// ServerURL is the hosted API server: the daemon's --server target and the
+	// origin daemon credentials are keyed by.
+	ServerURL = "https://api.reliantapi.com"
+
+	// GatewayURL is the daemon-gateway, a DIFFERENT process from the API
+	// server: ToolsDaemonService (the daemon's bidi stream) is hosted only by
+	// the gateway, so a daemon pointed at the API server gets a 404 on connect.
+	//
+	// Declared explicitly and never derived. deriveGatewayURL prefixes the
+	// server's leading label, which for prod's `api.` host would invent
+	// `gateway-api.reliantapi.com` — a host that does not exist. That shipped
+	// once; see cmd/reliant/commands/connection.go.
+	GatewayURL = "https://gateway.reliantapi.com"
+
+	// AuthURL and AuthKey are the OAuth provider origin and its PUBLIC
+	// publishable key (sb_publishable_*) — the browser-facing anon identity,
+	// not a service-role secret, and already public in this repo. Without them
+	// a `go install` build cannot complete an interactive login.
+	AuthURL = "https://dash.reliantlabs.io"
+	AuthKey = "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod"
 )
 
 func Value(envKey, compiledDefault, fallback string) string {
