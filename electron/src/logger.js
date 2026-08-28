@@ -33,7 +33,19 @@ function getLogPaths() {
 
   let logDir, logPath;
   
-  if (app.isPackaged) {
+  // RELIANT_LOG_DIR wins everywhere it is set. `forge env up` points it at
+  // control-plane/.forge/logs/<env>/ so the desktop app's main-process log
+  // lands beside admin-server, reliant-api-server and the temporal worker —
+  // one directory to grep instead of four scattered ones.
+  //
+  // Honoured in packaged builds too: a packaged app run against a dev stack is
+  // exactly when you most want its log in the same place as everything else,
+  // and a user who never sets the variable still gets the OS logs directory.
+  const configuredDir = process.env.RELIANT_LOG_DIR;
+  if (configuredDir) {
+    logDir = path.resolve(configuredDir);
+    logPath = path.join(logDir, 'reliant-electron-main.log');
+  } else if (app.isPackaged) {
     // Production: use Electron's cross-platform logs directory
     // macOS: ~/Library/Logs/reliant/
     // Windows: %APPDATA%\reliant\logs\ (inside userData)
@@ -42,11 +54,8 @@ function getLogPaths() {
     logDir = app.getPath('logs');
     logPath = path.join(logDir, 'main.log');
   } else {
-    // Development: use workspace-specific path (matches backend behavior)
-    // Each workspace/worktree gets its own logs
-    // Note: process.cwd() is the electron/ directory, so we need to go up to project root
-    // logger.js is in electron/src/, so __dirname is electron/src/
-    // Going up two levels: ../.. gets us to project root
+    // Development fallback for a bare `npm run dev:electron` with no stack.
+    // Note: logger.js is in electron/src/, so ../.. is the project root.
     const projectRoot = path.join(__dirname, '..', '..');
     logDir = path.join(projectRoot, '.reliant', 'logs');
     logPath = path.join(logDir, 'main.log');
@@ -145,7 +154,23 @@ if (app && app.getPath) {
       fsSync.mkdirSync(logDir, { recursive: true });
     }
 
+    // Recreate the directory on every resolve, not just at startup.
+    //
+    // electron-log resolves the path per write and does NOT recreate a missing
+    // parent, so a directory removed while the app is running (a cleanup
+    // script, a stale-log sweep) breaks logging permanently for that session.
+    // Observed: 11,058 consecutive "Can't write to …/main.log" errors after
+    // the log dir was deleted underneath a live app — every one of which was
+    // itself logged, which is its own problem.
     log.transports.file.resolvePathFn = () => {
+      try {
+        if (!fsSync.existsSync(logDir)) {
+          fsSync.mkdirSync(logDir, { recursive: true });
+        }
+      } catch {
+        // Fall through: electron-log reports the write failure itself, and
+        // throwing from a path resolver would be worse than a missing line.
+      }
       return logPath;
     };
 

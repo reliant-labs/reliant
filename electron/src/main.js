@@ -50,6 +50,7 @@ if (!app.isPackaged) {
 
 const net = require("node:net");
 const log = require("./logger");
+const { handleUncaughtException } = require("./uncaught-exception");
 const path = require("path");
 const fs = require("fs");
 const BackendManager = require("./backend-manager");
@@ -4408,8 +4409,13 @@ app.on("will-quit", (event) => {
 
 // Handle uncaught exceptions
 process.on("uncaughtException", (error) => {
-  log.error("Uncaught exception:", error);
-  gracefulShutdown(1);
+  handleUncaughtException(error, {
+    disableConsoleTransport: () => {
+      log.transports.console.level = false;
+    },
+    logError: (err) => log.error("Uncaught exception:", err),
+    shutdown: () => gracefulShutdown(1),
+  });
 });
 
 process.on("unhandledRejection", (reason, promise) => {

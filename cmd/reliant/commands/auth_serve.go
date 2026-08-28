@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -16,6 +17,40 @@ import (
 )
 
 const defaultAuthServePort = 19284
+
+// hostedWebOrigin is the production reliant web app's origin — the same
+// hosted address as web/src/lib/constants.ts's DEFAULT_APP_URL and
+// electron/release.config.json's VITE_APP_URL. There is no shared Go constant
+// for it (builddefaults only carries the API/gateway/auth-provider origins),
+// so it is declared here alongside the local dev origins the web app runs on.
+const hostedWebOrigin = "https://app.reliantlabs.io"
+
+// allowedOrigins is the CORS/CSRF allowlist for this localhost helper, whose
+// only legitimate caller is the reliant web app. RELIANT_WEB_ORIGIN
+// (comma-separated) extends it — needed because the web dev server's port is
+// dynamically allocated per worktree (see .dev-ports.sh FRONTEND_PORT) and
+// won't always be one of the defaults below.
+var allowedOrigins = buildAllowedOrigins()
+
+func buildAllowedOrigins() map[string]bool {
+	origins := []string{
+		hostedWebOrigin,
+		"http://localhost:5173", // vite dev default (web/README.md)
+		"http://localhost:3000", // common dev port (web/src/routes.tsx, scripts/dev.sh)
+	}
+	if extra := os.Getenv("RELIANT_WEB_ORIGIN"); extra != "" {
+		for _, o := range strings.Split(extra, ",") {
+			if o = strings.TrimSpace(o); o != "" {
+				origins = append(origins, o)
+			}
+		}
+	}
+	set := make(map[string]bool, len(origins))
+	for _, o := range origins {
+		set[o] = true
+	}
+	return set
+}
 
 func newAuthServeCmd() *cobra.Command {
 	var port int
@@ -67,6 +102,11 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 	mux.HandleFunc("POST /oauth/start", func(w http.ResponseWriter, r *http.Request) {
 		setCORS(w, r)
 
+		if origin := r.Header.Get("Origin"); origin != "" && !allowedOrigins[origin] {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "origin not allowed"})
+			return
+		}
+
 		var req struct {
 			AuthorizeURLTemplate string `json:"authorize_url_template"`
 		}
@@ -114,11 +154,9 @@ func runAuthServe(cmd *cobra.Command, port int) error {
 }
 
 func setCORS(w http.ResponseWriter, r *http.Request) {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		origin = "*"
+	if origin := r.Header.Get("Origin"); origin != "" && allowedOrigins[origin] {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 	}
-	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }

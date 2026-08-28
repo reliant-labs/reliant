@@ -44,6 +44,19 @@ func NewWorkflowService(database db.Repository, daemonRouter toolexec.DaemonRout
 	}
 }
 
+// projectBelongsToUser verifies the authenticated user owns the given project,
+// returning a Connect error if not (or if the project doesn't exist).
+func (s *WorkflowService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
+			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		}
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+	}
+	return nil
+}
+
 // ============================================================================
 // RPC Implementations
 // ============================================================================
@@ -59,6 +72,11 @@ func (s *WorkflowService) ListWorkflows(
 ) (*connect.Response[reliantv1.ListWorkflowsResponse], error) {
 	if req.Msg.ProjectId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	}
+
+	userID := auth.MustGetUserID(ctx)
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
 	}
 
 	// Track workflows by slug - more specific sources override less specific
@@ -154,7 +172,6 @@ func (s *WorkflowService) ListWorkflows(
 	// 3. Load user's workflows from database (user-owned, available across all projects).
 	// Default listing is chat-safe and only returns runnable drafts. Management UIs such as
 	// the Workflow Hub can opt into the full draft list with include_hidden=true.
-	userID := auth.MustGetUserID(ctx)
 	var dbDrafts []*db.WorkflowDraft
 	if req.Msg.IncludeHidden {
 		dbDrafts, err = s.database.ListWorkflowDraftsByUser(ctx, userID)
@@ -391,6 +408,10 @@ func (s *WorkflowService) SaveWorkflow(
 
 	// Get user ID from auth context
 	userID := auth.MustGetUserID(ctx)
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
 
 	// Check if this is an update to existing user workflow
 	// Prefer ID-based lookup when draft_id is provided (allows renames)
@@ -969,6 +990,9 @@ func (s *WorkflowService) GetWorkflow(
 
 	// Try to load from project files first (if project_id provided)
 	if req.Msg.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
+		}
 		projectWf, yamlContent, err := loadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
 		if err == nil && projectWf != nil {
 			return connect.NewResponse(&reliantv1.GetWorkflowResponse{

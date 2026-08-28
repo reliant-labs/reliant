@@ -24,9 +24,12 @@ func NewDBBackgroundProcessProvider(database db.Repository, router toolexec.Daem
 	return &DBBackgroundProcessProvider{database: database, router: router}
 }
 
-// ListProcesses queries the DB for background processes.
-func (p *DBBackgroundProcessProvider) ListProcesses(ctx context.Context, worktreeID, sessionID, chatID string) ([]BackgroundProcessInfo, error) {
-	filters := db.BackgroundProcessFilters{}
+// ListProcesses queries the DB for background processes owned by userID.
+func (p *DBBackgroundProcessProvider) ListProcesses(ctx context.Context, userID, worktreeID, sessionID, chatID string) ([]BackgroundProcessInfo, error) {
+	// Scope every listing to the owner. The background_processes table is
+	// multi-tenant; without this filter a client could enumerate every user's
+	// processes by omitting the worktree/chat filters.
+	filters := db.BackgroundProcessFilters{UserID: userID}
 
 	if worktreeID != "" {
 		filters.WorktreeID = &worktreeID
@@ -165,6 +168,7 @@ func dbProcessToInfo(proc *db.BackgroundProcess) BackgroundProcessInfo {
 		EndTime:    proc.EndedAt,
 		ExitCode:   proc.ExitCode,
 		WorkingDir: proc.WorkingDir,
+		UserID:     proc.UserID,
 	}
 	if proc.WorktreeID != nil {
 		info.WorktreeID = *proc.WorktreeID

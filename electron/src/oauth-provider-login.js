@@ -274,12 +274,23 @@ function cancelProviderLogin(flowId, reason = 'cancelled') {
   return true;
 }
 
+function escapeHTML(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function page(title, body) {
+  const t = escapeHTML(title);
+  const b = escapeHTML(body);
   return (
-    `<!doctype html><meta charset="utf-8"><title>${title}</title>` +
+    `<!doctype html><meta charset="utf-8"><title>${t}</title>` +
     `<style>body{font:14px -apple-system,system-ui,sans-serif;` +
     `display:grid;place-items:center;height:100vh;margin:0;color:#333}</style>` +
-    `<div style="text-align:center"><h2>${title}</h2><p>${body}</p></div>`
+    `<div style="text-align:center"><h2>${t}</h2><p>${b}</p></div>`
   );
 }
 

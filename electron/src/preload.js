@@ -397,7 +397,7 @@ const injectReliantConfig = async () => {
       reliantConfig = buildConfig(backendStatus, appInfo);
 
       // Notify renderer that config is ready via postMessage (works with context isolation)
-      window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, '*');
+      window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, window.location.origin);
       log('info', 'Config ready message posted');
 
       // Listen for daemon restart events
@@ -407,7 +407,7 @@ const injectReliantConfig = async () => {
         reliantConfig.daemonPort = newPort;
 
         // Notify renderer of config change via postMessage
-        window.postMessage({ type: 'backend-port-changed', port: newPort }, '*');
+        window.postMessage({ type: 'backend-port-changed', port: newPort }, window.location.origin);
       });
     } else {
       log('info', 'Daemon not ready yet (port:', daemonPort, '), waiting for backend-port event...');
@@ -426,7 +426,7 @@ const injectReliantConfig = async () => {
           log('info', 'Config stored from event:', reliantConfig);
 
           // Notify renderer via postMessage
-          window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, '*');
+          window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, window.location.origin);
           log('info', 'reliant-config-ready event dispatched from event handler');
         } else {
           log('error', 'Invalid port received from backend-port event:', port);
@@ -475,7 +475,7 @@ const injectReliantConfig = async () => {
 
       log('info', 'Fallback: Config stored:', reliantConfig);
 
-      window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, '*');
+      window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, window.location.origin);
       log('info', 'Fallback: reliant-config-ready event dispatched');
     });
   }

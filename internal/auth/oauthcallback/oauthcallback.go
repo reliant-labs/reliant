@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -58,10 +59,60 @@ type callbackServer struct {
 	cfg         CallbackConfig
 	redirectURI string
 	resultCh    chan *Result
+
+	// done is closed when the callback lands, and result holds what arrived.
+	//
+	// A channel delivers to exactly ONE receiver, which is wrong here: the
+	// flow that owns the listener AND every later flow that queued on /result
+	// are all waiting for the same single callback. Closing a channel is a
+	// broadcast, so everyone waiting is released with the same answer.
+	mu     sync.Mutex
+	result *Result
+	done   chan struct{}
+}
+
+// newResult records the callback and wakes every waiter, exactly once.
+// Duplicate deliveries (a provider that redirects twice, a user who reloads
+// the callback URL) are ignored rather than racing a second answer in.
+func (s *callbackServer) newResult(result *Result) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.result != nil {
+		return
+	}
+	s.result = result
+	close(s.done)
+}
+
+// awaitResult blocks until the callback lands or ctx ends. Safe for any number
+// of concurrent callers.
+func (s *callbackServer) awaitResult(ctx context.Context) (*Result, error) {
+	select {
+	case <-s.done:
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		return s.result, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
+	}
 }
 
 var openBrowser = OpenBrowser
-var reuseHTTPClient = &http.Client{Timeout: 2 * time.Second}
+
+// reuseProbeClient asks "is a compatible listener there?" — a local,
+// immediate question, so a short timeout is right.
+var reuseProbeClient = &http.Client{Timeout: 2 * time.Second}
+
+// reuseResultClient waits for the USER to finish signing in on the incumbent
+// listener. That spans human time — logging in, choosing an org, clearing 2FA
+// — so it must NOT carry the probe's timeout.
+//
+// It previously shared the 2s client, which made every overlapping attempt
+// fail: the probe succeeded, /result blocked waiting for a human, the client
+// gave up after two seconds, and Run() reported the ORIGINAL bind error
+// ("address already in use") instead of waiting its turn. Bounded only by the
+// caller's context, which is what actually knows when the user gave up.
+var reuseResultClient = &http.Client{}
 
 // InferConfig inspects the authorize URL to determine callback settings.
 func InferConfig(authorizeURLTemplate string) CallbackConfig {
@@ -134,7 +185,7 @@ func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
 		return nil, fmt.Errorf("failed to open browser: %w", err)
 	}
 
-	result, err := waitForResult(ctx, server.resultCh)
+	result, err := server.awaitResult(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -156,6 +207,7 @@ func newCallbackServer(authorizeURLTemplate string, cfg CallbackConfig) (*callba
 		cfg:         cfg,
 		redirectURI: redirectURI,
 		resultCh:    make(chan *Result, 1),
+		done:        make(chan struct{}),
 	}
 	return server, authorizeURL, nil
 }
@@ -181,10 +233,7 @@ func (s *callbackServer) handleCallback(w http.ResponseWriter, r *http.Request) 
 		OAuthError:            oauthErr,
 		OAuthErrorDescription: desc,
 	}
-	select {
-	case s.resultCh <- result:
-	default:
-	}
+	s.newResult(result)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if code != "" {
@@ -219,7 +268,7 @@ func (s *callbackServer) handleProbe(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *callbackServer) handleResult(w http.ResponseWriter, r *http.Request) {
-	result, err := waitForResult(r.Context(), s.resultCh)
+	result, err := s.awaitResult(r.Context())
 	if err != nil {
 		status := http.StatusGatewayTimeout
 		if errors.Is(err, context.Canceled) {
@@ -270,7 +319,7 @@ func tryReuseExistingListener(ctx context.Context, cfg CallbackConfig, redirectU
 		return nil, err
 	}
 
-	probeResp, err := reuseHTTPClient.Do(probeReq)
+	probeResp, err := reuseProbeClient.Do(probeReq)
 	if err != nil {
 		return nil, err
 	}
@@ -283,8 +332,21 @@ func tryReuseExistingListener(ctx context.Context, cfg CallbackConfig, redirectU
 	if err := json.NewDecoder(probeResp.Body).Decode(&probe); err != nil {
 		return nil, err
 	}
-	if probe.Kind != listenerKind || probe.Version != listenerVersion || probe.CallbackPath != cfg.CallbackPath || probe.RedirectURI != redirectURI || !probe.Active {
-		return nil, fmt.Errorf("incompatible existing OAuth listener")
+	// Name the field that disagreed. A bare "incompatible" is discarded by the
+	// caller in favour of the original bind error, so a mismatch here used to
+	// surface as "address already in use" with no way to tell which of five
+	// conditions rejected the handoff.
+	switch {
+	case probe.Kind != listenerKind:
+		return nil, fmt.Errorf("existing listener kind %q != %q", probe.Kind, listenerKind)
+	case probe.Version != listenerVersion:
+		return nil, fmt.Errorf("existing listener version %d != %d", probe.Version, listenerVersion)
+	case probe.CallbackPath != cfg.CallbackPath:
+		return nil, fmt.Errorf("existing listener path %q != %q", probe.CallbackPath, cfg.CallbackPath)
+	case probe.RedirectURI != redirectURI:
+		return nil, fmt.Errorf("existing listener redirect %q != %q", probe.RedirectURI, redirectURI)
+	case !probe.Active:
+		return nil, fmt.Errorf("existing listener reports inactive")
 	}
 
 	resultURL := fmt.Sprintf("http://%s:%d%s", cfg.ListenHost, cfg.FixedPort, resultPath)
@@ -293,7 +355,7 @@ func tryReuseExistingListener(ctx context.Context, cfg CallbackConfig, redirectU
 		return nil, err
 	}
 
-	resultResp, err := reuseHTTPClient.Do(resultReq)
+	resultResp, err := reuseResultClient.Do(resultReq)
 	if err != nil {
 		return nil, err
 	}

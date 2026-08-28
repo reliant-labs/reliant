@@ -82,8 +82,11 @@ function daemon(status: DaemonStatus, createdAtMs = USER_CREATED_MS + 60_000): D
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The in-progress mark is per-user session state; a leak across tests would
+  // make one test's mid-flow observation suppress another's genuine heal.
+  sessionStorage.clear();
   mockUseCurrentUser.mockReturnValue({
-    data: { onboardingCompleted: false, createdAtMs: USER_CREATED_MS },
+    data: { id: "user-1", onboardingCompleted: false, createdAtMs: USER_CREATED_MS },
     isLoading: false,
   });
   mockUseDaemonList.mockReturnValue({ data: [], isLoading: false });
@@ -182,9 +185,167 @@ describe("OnboardingRoute — returning user", () => {
   // Absent evidence, prefer the recoverable outcome. Wrongly healing silently
   // skips onboarding for a new account; wrongly onboarding a returning user
   // costs them a few clicks they can complete.
+  // THE BUG: onboarding provisions a daemon MID-FLOW (the compute step starts a
+  // cloud machine, and redeeming a compute coupon now does it automatically).
+  // That daemon postdates the account, which is exactly the heal's trigger — so
+  // the heal fired on a user who was actively onboarding, called
+  // CompleteOnboarding, and navigated to "/". Verified in admin-server.log:
+  //
+  //   17:24:40.809  daemon created     name=onboarding-daemon
+  //   17:24:40.848  onboarding completed          (39ms later, no step between)
+  //
+  // The user asked for the NEXT STEP and got ejected from the flow instead.
+  //
+  // The heal is for someone ARRIVING with a daemon from a previous session. A
+  // daemon that appeared while this page was mounted is this session's work, so
+  // it is not evidence of a past completion.
+  it("does NOT heal on a daemon that appeared while onboarding was open", async () => {
+    // Mount with no daemon: the user is genuinely mid-onboarding.
+    mockUseDaemonList.mockReturnValue({ data: [], isLoading: false });
+    const { rerender } = render(<OnboardingRoute />);
+
+    await waitFor(() => {
+      expect(mockCompleteMutate).not.toHaveBeenCalled();
+    });
+
+    // The compute step provisions a machine — it postdates the account, so it
+    // satisfies daemonsPostdating.
+    mockUseDaemonList.mockReturnValue({
+      data: [daemon(DaemonStatus.ACTIVE)],
+      isLoading: false,
+    });
+    rerender(<OnboardingRoute />);
+
+    // Onboarding must continue to its next step, not be completed and exited.
+    await waitFor(() => {
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+    expect(mockCompleteMutate).not.toHaveBeenCalled();
+  });
+
+  // THE RACE that made the mount-latch fix look like it worked and then fail
+  // in the browser.
+  //
+  // useCurrentUser and useDaemonList are INDEPENDENT queries issued in
+  // parallel. The daemon list is a fast local call; the user fetch is slower.
+  // So the first settled daemon list routinely arrives while currentUser is
+  // still undefined — and daemonsPostdating(daemons, undefined) returns [] by
+  // design. The latch therefore captured an EMPTY snapshot and froze it.
+  //
+  // A latch stuck on [] never heals, which is harmless. The damage is the
+  // opposite ordering: latch on the pre-daemon list, then the real daemon
+  // arrives later and... also never heals. Both orderings looked fine in the
+  // Electron test. What the browser hit is that the latch is only correct if
+  // it captures a list computed against a KNOWN user — otherwise it is
+  // latching a placeholder, and the guard silently stops meaning anything.
+  //
+  // Pin the invariant directly: the snapshot must not be taken until the user
+  // is loaded, or the heal decision is made on data that cannot be right.
+  it("does not latch the daemon snapshot until the user has loaded", async () => {
+    // User still loading; daemon list already settled WITH a usable daemon.
+    mockUseCurrentUser.mockReturnValue({ data: undefined, isLoading: true });
+    mockUseDaemonList.mockReturnValue({
+      data: [daemon(DaemonStatus.ACTIVE)],
+      isLoading: false,
+    });
+
+    const { rerender } = render(<OnboardingRoute />);
+    await waitFor(() => {
+      expect(mockCompleteMutate).not.toHaveBeenCalled();
+    });
+
+    // The user resolves. This daemon PREDATES nothing — it postdates the
+    // account and was present before onboarding opened, so this is the genuine
+    // returning-user case and the heal SHOULD fire.
+    mockUseCurrentUser.mockReturnValue({
+      data: { id: "user-1", onboardingCompleted: false, createdAtMs: USER_CREATED_MS },
+      isLoading: false,
+    });
+    rerender(<OnboardingRoute />);
+
+    await waitFor(() => {
+      expect(mockCompleteMutate).toHaveBeenCalled();
+    });
+  });
+
+  // THE GITHUB-RETURN BUG. Connecting GitHub is a full page navigation: the
+  // app is unloaded, the provider redirects back, and everything remounts. A
+  // useRef cannot survive that, so the "what did this user arrive with"
+  // snapshot was retaken on the way back — by which time the daemon the flow
+  // itself provisioned exists, and the heal fired.
+  //
+  // Captured end to end in the logs:
+  //   04:30:19.263  snapshot taken  {snapshot:false, totalDaemons:0}
+  //   04:31:59.863  mounted                              ← OAuth return
+  //   04:31:59.878  snapshot taken  {snapshot:true, totalDaemons:1}
+  //   04:31:59.883  HEALING — completing onboarding
+  //
+  // The snapshot must therefore be keyed to the USER and outlive the
+  // navigation, not the component instance.
+  it("does not heal after a remount caused by the GitHub OAuth round trip", async () => {
+    // First mount: mid-onboarding, no daemon yet.
+    mockUseDaemonList.mockReturnValue({ data: [], isLoading: false });
+    const first = render(<OnboardingRoute />);
+    await waitFor(() => {
+      expect(mockCompleteMutate).not.toHaveBeenCalled();
+    });
+
+    // The user clicks "Connect GitHub". The page navigates away entirely.
+    first.unmount();
+
+    // Meanwhile the compute step's daemon has finished provisioning, so it is
+    // present when the app reloads on the OAuth return.
+    mockUseDaemonList.mockReturnValue({
+      data: [daemon(DaemonStatus.ACTIVE)],
+      isLoading: false,
+    });
+
+    // Back from GitHub: a completely fresh mount.
+    render(<OnboardingRoute />);
+
+    await waitFor(() => {
+      expect(mockNavigate).not.toHaveBeenCalled();
+    });
+    expect(mockCompleteMutate).not.toHaveBeenCalled();
+  });
+
+  // The daemon list and the user are independent parallel queries, and the
+  // list (a fast local call) routinely settles first. Judging a daemon against
+  // a not-yet-loaded account dates every daemon out, so the user reads as
+  // "arrived with nothing" and gets marked mid-flow — which then suppresses
+  // the heal they were entitled to once the account actually loads.
+  it("waits for the user before judging the daemon list", async () => {
+    mockUseCurrentUser.mockReturnValue({ data: undefined, isLoading: true });
+    mockUseDaemonList.mockReturnValue({
+      data: [daemon(DaemonStatus.ACTIVE)],
+      isLoading: false,
+    });
+
+    const { rerender } = render(<OnboardingRoute />);
+    await waitFor(() => {
+      expect(mockCompleteMutate).not.toHaveBeenCalled();
+    });
+
+    // Account resolves. This is a genuine returning user — the daemon predates
+    // this page load — so the heal must still fire.
+    mockUseCurrentUser.mockReturnValue({
+      data: {
+        id: "user-1",
+        onboardingCompleted: false,
+        createdAtMs: USER_CREATED_MS,
+      },
+      isLoading: false,
+    });
+    rerender(<OnboardingRoute />);
+
+    await waitFor(() => {
+      expect(mockCompleteMutate).toHaveBeenCalled();
+    });
+  });
+
   it("does NOT heal when the user's creation time is unknown", async () => {
     mockUseCurrentUser.mockReturnValue({
-      data: { onboardingCompleted: false, createdAtMs: undefined },
+      data: { id: "user-1", onboardingCompleted: false, createdAtMs: undefined },
       isLoading: false,
     });
     mockUseDaemonList.mockReturnValue({

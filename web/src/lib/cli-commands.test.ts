@@ -210,12 +210,12 @@ describe('only variables the target binary actually reads are emitted', () => {
     expect(daemonStartCommand()).not.toContain('RELIANT_API_BASE_URL');
   });
 
-  it('renders auth serve bare in every environment', async () => {
-    // `reliant auth serve` reads NO environment variables at all: it starts a
-    // localhost HTTP server and hands the authorize-URL template it is POSTed
-    // to oauthcallback.Run. Token exchange happens over the authenticated
-    // backend gRPC, not here. Every override on this command was noise, and
-    // one of them pasted the publishable key at a shell for no reason.
+  it('never puts backend or secret vars on auth serve', async () => {
+    // The helper contacts NO backend: it starts a localhost HTTP server and
+    // hands the authorize-URL template it is POSTed to oauthcallback.Run.
+    // Token exchange happens over the browser's authenticated connection. So
+    // server/gateway URLs are meaningless here, and the publishable key must
+    // never be pasted at a shell.
     setEnv({
       VITE_CLI_DEFAULTS_BAKED: undefined,
       VITE_API_URL: 'http://localhost:3091',
@@ -223,6 +223,35 @@ describe('only variables the target binary actually reads are emitted', () => {
       VITE_SUPABASE_URL: 'https://dash.reliantlabs.io',
       VITE_SUPABASE_ANON_KEY: 'sb_publishable_example',
     });
+    const { authServeCommand } = await load();
+    const cmd = authServeCommand();
+
+    expect(cmd).toContain('reliant auth serve');
+    for (const forbidden of [
+      'RELIANT_SERVER_URL',
+      'RELIANT_GATEWAY_URL',
+      'RELIANT_API_BASE_URL',
+      'RELIANT_AUTH_KEY',
+      'sb_publishable_example',
+    ]) {
+      expect(cmd).not.toContain(forbidden);
+    }
+  });
+
+  // The helper CORS-checks its caller against an allowlist that cannot know a
+  // per-worktree dev port (.dev-ports.sh allocates it at runtime). Without
+  // RELIANT_WEB_ORIGIN the browser's request is refused as "origin not
+  // allowed" — so a dev command that omits it is one the user cannot use.
+  it('passes the web origin so the dev server is CORS-allowed', async () => {
+    setEnv({ VITE_CLI_DEFAULTS_BAKED: undefined });
+    const { authServeCommand } = await load();
+    expect(authServeCommand()).toContain(
+      `RELIANT_WEB_ORIGIN=${window.location.origin}`,
+    );
+  });
+
+  it('renders bare in a production build', async () => {
+    setEnv({ VITE_CLI_DEFAULTS_BAKED: 'true' });
     const { authServeCommand } = await load();
     expect(authServeCommand()).toBe('reliant auth serve');
   });

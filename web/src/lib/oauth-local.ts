@@ -22,14 +22,29 @@ export async function startOAuthViaLocalServer(
   authorizeUrlTemplate: string,
   signal?: AbortSignal,
 ): Promise<OAuthStartResult> {
-  const resp = await fetch(`${OAUTH_LOCAL_SERVER_URL}/oauth/start`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      authorize_url_template: authorizeUrlTemplate,
-    }),
-    signal,
-  })
+  let resp: Response
+  try {
+    resp = await fetch(`${OAUTH_LOCAL_SERVER_URL}/oauth/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        authorize_url_template: authorizeUrlTemplate,
+      }),
+      signal,
+    })
+  } catch (err) {
+    // A user-initiated cancel is not a failure — let it through untouched so
+    // callers can tell "I stopped this" from "the helper is gone".
+    if (err instanceof DOMException && err.name === 'AbortError') throw err
+
+    // Everything else here is the helper being unreachable: `reliant auth
+    // serve` was stopped, or never started. The browser reports that as a bare
+    // "Failed to fetch", which tells the user nothing and names no remedy.
+    throw new Error(
+      'The local OAuth helper is no longer running. Start it again with ' +
+        '`reliant auth serve`, then retry.',
+    )
+  }
 
   if (!resp.ok) {
     const body = await resp.json().catch(() => ({ error: 'Unknown error' }))

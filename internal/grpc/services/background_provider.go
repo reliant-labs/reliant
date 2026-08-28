@@ -21,7 +21,12 @@ type BackgroundProcessInfo struct {
 	WorktreeID string
 	SessionID  string
 	ChatID     string
-	Ports      []PortInfo
+	// UserID is the owner of the process. Carried so the handler can confirm a
+	// by-id operation (output/kill/stream) targets the caller's own process,
+	// not another tenant's — the DB is multi-tenant and a process id alone is
+	// not an authorization.
+	UserID string
+	Ports  []PortInfo
 }
 
 // PortInfo holds information about a port used by a process.
@@ -47,8 +52,11 @@ type OutputSubscriptionInfo struct {
 // Implementations:
 //   - DBBackgroundProcessProvider: queries background_processes DB table (distributed api-server)
 type BackgroundProcessProvider interface {
-	// ListProcesses returns processes matching the given filters.
-	ListProcesses(ctx context.Context, worktreeID, sessionID, chatID string) ([]BackgroundProcessInfo, error)
+	// ListProcesses returns processes matching the given filters, scoped to the
+	// owning userID. An empty userID returns no rows — the caller's identity is
+	// required, never optional, so a missing user can never widen the result to
+	// every tenant's processes.
+	ListProcesses(ctx context.Context, userID, worktreeID, sessionID, chatID string) ([]BackgroundProcessInfo, error)
 
 	// GetProcess returns a single process by ID.
 	GetProcess(ctx context.Context, processID string) (*BackgroundProcessInfo, error)

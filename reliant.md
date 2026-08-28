@@ -75,11 +75,16 @@ Postgres is the only supported database driver. SQLite support has been removed.
 
 ### Logs
 
-**⚠️ FIRST: which stack produced the thing you are debugging?** There are two
-log locations and picking the wrong one wastes a long time — the symptom is
-that a chat id greps to a few incidental hits (or none), or the specific
-`toolu_...` ids you are chasing are absent entirely, while the chat plainly
-exists in the DB.
+**Everything the `forge env up` stack produces — backend, frontend, Electron —
+is in ONE directory:**
+
+```
+../control-plane/.forge/logs/dev/
+```
+
+Start every log question there. The only other location is the legacy
+`scripts/dev.sh` stack at the bottom of this section, which you are almost
+certainly not running.
 
 **Control-plane-backed stack (`forge env up` — the usual one)** — logs go to
 `control-plane/.forge/logs/dev/`, NOT to this worktree's `./data/`:
@@ -88,8 +93,37 @@ exists in the DB.
 | -------------------------------------------------------- | ----------------------------------------------- |
 | `control-plane/.forge/logs/dev/reliant-temporal-worker.log` | **Activities: tool execution, call_llm, spawns.** Where tool call ids live. Busiest and usually the one you want. |
 | `control-plane/.forge/logs/dev/reliant-api-server.log`      | RPC handlers: interrupt, pause, send, queueing   |
-| `control-plane/.forge/logs/dev/daemon-gateway.log`          | Daemon connections + tool routing                |
-| `control-plane/.forge/logs/dev/admin-server.log`            | Admin/proxy                                      |
+| `control-plane/.forge/logs/dev/frontend_reliant-web.log`    | **The UI.** Every browser/renderer `console.*` line, prefixed `[browser:<level>]`, plus uncaught errors and unhandled rejections. Anything you add to `web/src` lands HERE — in Electron AND a plain browser tab. |
+| `control-plane/.forge/logs/dev/reliant-electron-main.log`   | Electron MAIN process only (Node side: window lifecycle, daemon spawn, IPC). Not the UI. |
+| `control-plane/.forge/logs/dev/reliant-electron.log`        | The `npm run dev:electron` process's own stdout, as captured by forge. |
+| `control-plane/.forge/logs/dev/admin-server.log`            | Admin/proxy, auth, billing, **coupons**, daemon create, CompleteOnboarding |
+| `control-plane/.forge/logs/dev/daemon-gateway.log`          | Daemon connections + tool routing (absent when not running) |
+
+**ALL dev logging is under `control-plane/.forge/logs/dev/`. There is no
+second location.** `forge env up` tees every host process's stdout there, so
+one directory and one grep covers the whole stack:
+
+```bash
+grep '\[browser:'        ../control-plane/.forge/logs/dev/frontend_reliant-web.log
+grep '\[browser:error\]' ../control-plane/.forge/logs/dev/*.log   # UI errors, any frontend
+grep -r "$CHAT_ID"       ../control-plane/.forge/logs/dev/        # across the stack
+```
+
+How the browser half gets there: `web/src/lib/browser-log-boot.ts` (imported
+FIRST in `main.tsx`, before any other import can log) wraps `console.*` and
+POSTs to `/__forge/log`; the Vite plugin in `web/vite-plugin-browser-logs.ts`
+prints each line to its own stdout, which forge already captures. It runs in
+Electron too — the renderer is the same origin as a browser tab, so treating
+them differently is what previously made the UI go dark with no clue why.
+
+The Electron main process writes to the same directory via `RELIANT_LOG_DIR`,
+set in `control-plane/deploy/kcl/dev/main.k`. Unset, it falls back to
+`.reliant/logs/` for a bare `npm run dev:electron`.
+
+**Do not add another log location.** `.reliant/logs/` and `data/logs/browser.log`
+were both retired precisely because a second plausible-looking file is worse
+than none: greps against it return real output while silently missing most of
+the stream, which is indistinguishable from "my code never ran".
 
 Pair it with the matching DB: that stack's chats/tool_calls are in the
 **control-plane postgres on port 5434**, database `reliant` (read-only for
@@ -112,10 +146,32 @@ Quick disambiguation — run this before trusting any log grep:
 C=<chat-id>
 for f in ../control-plane/.forge/logs/dev/reliant-temporal-worker.log \
          ../control-plane/.forge/logs/dev/reliant-api-server.log \
+         ../control-plane/.forge/logs/dev/reliant-electron.log \
          ./data/logs/reliant.log; do
   printf "%s: %s\n" "$f" "$(grep -c "$C" "$f" 2>/dev/null)"
 done
 ```
+
+**Before concluding "my logging never ran", prove the sink is live.** Zero
+hits means one of two very different things — the code did not execute, or
+you are reading a file nothing writes to — and they are indistinguishable
+from the grep alone. Cheapest discriminator, in order:
+
+```bash
+# 1. Is the file being written RIGHT NOW?
+stat -f "%Sm" -t "%H:%M:%S" <logfile>; date "+now      %H:%M:%S"
+
+# 2. Does the running server actually serve your edit? (Vite, no rebuild needed)
+curl -s http://127.0.0.1:$FRONTEND_PORT/src/path/to/File.tsx | grep -c 'your-tag'
+
+# 3. Only then: is the code path reached?
+grep -c 'your-tag' <logfile>
+```
+
+Step 2 is the one that gets skipped. It separates "my change is not loaded"
+from "my change is loaded but that branch never runs" in a single command,
+and it is the difference between debugging the bug and debugging your own
+tooling for an afternoon.
 
 ### Proxyman request correlation (debug workflow)
 
@@ -186,6 +242,28 @@ Use the standard Tailwind + CSS variable token path for UI styling:
 - When changing tokens or color-scheme CSS, run the color-scheme contract test and a web build path when practical.
 
 ---
+
+### Onboarding: the step you see is derived, and a background effect can end the flow
+
+`deriveStep(plan)` (`web/src/components/OnboardingFlow/stepConfig.ts`) is the
+ONLY thing that decides which step renders — from the `plan` search param in
+the URL, nothing else. `onNext()` is a no-op. So "it skipped steps" is always
+a question about what wrote `plan`, or about whether the flow was exited
+entirely.
+
+**`OnboardingRoute.tsx` can complete onboarding on its own, from a
+`useEffect`, with no user action.** The returning-user heal fires when
+`hasUsableControlPlaneDaemonForOnboarding(daemonsPostdating(daemons, user.createdAtMs))`
+is true — a daemon that postdates the account — and it calls
+`CompleteOnboarding` and navigates to `/`. Creating a daemon DURING onboarding
+satisfies that condition, so any change that provisions a daemon mid-flow can
+trip the heal and end onboarding rather than advance it. Verified in
+`admin-server.log`: `daemon created name=onboarding-daemon` at 17:24:40.809,
+`onboarding completed` 39ms later, with no step in between.
+
+When debugging this flow, read `admin-server.log` first — the RPC sequence
+(`RedeemCoupon` → `CreateDaemon` → `CompleteOnboarding`) tells you what
+actually happened server-side, independent of any frontend logging.
 
 ### Project nuances
 
