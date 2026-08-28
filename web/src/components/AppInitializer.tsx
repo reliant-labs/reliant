@@ -31,6 +31,8 @@ export function AppInitializer({ onInitialized, children }: AppInitializerProps)
               resolve();
             };
             const handleMessage = (event: MessageEvent) => {
+              if (event.source !== window) return;
+              if (event.origin !== window.location.origin) return;
               if (
                 event.data?.type === 'reliant-config-ready' &&
                 event.data?.config?.daemonPort

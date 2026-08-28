@@ -189,6 +189,19 @@ func TestMalformedJSONErrorsAreTransient(t *testing.T) {
 			name: "SDK RawMessage error - invalid character",
 			err:  errors.New("json: error calling MarshalJSON for type json.RawMessage: invalid character 'x' looking for beginning of value"),
 		},
+		// Go 1.27 made json.RawMessage an alias for jsontext.Value, so the
+		// runtime renders the failing type as "*jsontext.Value". The classifier
+		// used to key on the old type name; when it stopped matching, the
+		// "invalid character" case fell through to the "invalid" terminal
+		// pattern and wedged the workflow instead of retrying.
+		{
+			name: "SDK jsontext.Value error - unexpected end (Go 1.27+)",
+			err:  errors.New("json: error calling MarshalJSON for type *jsontext.Value: unexpected end of JSON input"),
+		},
+		{
+			name: "SDK jsontext.Value error - invalid character (Go 1.27+)",
+			err:  errors.New("json: error calling MarshalJSON for type *jsontext.Value: invalid character 'x' looking for beginning of value"),
+		},
 	}
 
 	for _, tt := range tests {

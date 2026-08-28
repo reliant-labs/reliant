@@ -2,6 +2,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { browserLogSink } from "./vite-plugin-browser-logs";
 
 // Get worktree name from parent directory
 // When Vite runs, cwd is the 'web' directory, so we need to go up one level
@@ -18,7 +19,10 @@ function getWorktreeName(): string {
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  // browserLogSink is dev-only (apply: "serve"): it gives a plain browser tab
+  // the file-backed logging that only the Electron build otherwise has. See
+  // vite-plugin-browser-logs.ts.
+  plugins: [react(), browserLogSink()],
   // Load .env files from project root instead of web directory
   envDir: path.resolve(__dirname, ".."),
   // Define global constants available in the app
@@ -95,7 +99,20 @@ export default defineConfig({
   },
   server: {
     host: "127.0.0.1",
-    port: parseInt(process.env.FRONTEND_PORT || "5173"),
+    // PORT wins over FRONTEND_PORT.
+    //
+    // FRONTEND_PORT is this repo's own dev-script convention (scripts/
+    // find-ports.js exports it, and a dev shell usually still has it set from
+    // whichever stack it started). PORT is what forge FORCE-injects from the
+    // KCL `port` binding, above the parent shell, precisely so the launcher's
+    // allocation is authoritative.
+    //
+    // Reading FRONTEND_PORT first inverted that: `forge env up prod --target
+    // reliant-web` allocated :3100, and Vite bound the stale FRONTEND_PORT=3000
+    // it inherited from a dev shell — a port another stack already held — so
+    // strictPort killed the server with "Port 3000 is already in use" while
+    // forge reported :3100.
+    port: parseInt(process.env.PORT || process.env.FRONTEND_PORT || "5173"),
     strictPort: true,
     // Hosts the dev server will answer for, beyond localhost.
     //

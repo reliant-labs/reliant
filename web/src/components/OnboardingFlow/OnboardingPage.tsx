@@ -23,6 +23,7 @@ export function OnboardingPage() {
   const actualStep = deriveStep(plan);
   const allSteps = getStepsForPlan(plan);
 
+
   // A compute step that auto-skipped is hidden from the flow entirely.
   //
   // The user was never asked anything: they already had a running daemon, so

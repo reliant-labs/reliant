@@ -16,7 +16,10 @@
 import React, { useState } from "react";
 
 import { useRedeemCoupon } from "@/hooks/useReliantAIQueries";
-import { RedeemedCouponKind } from "@/services/controlPlane/reliantAI";
+import {
+  RedeemedCouponKind,
+  type RedeemCouponResult,
+} from "@/services/controlPlane/reliantAI";
 import { formatMachineMinutes } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
 
@@ -25,8 +28,13 @@ export interface RedeemCouponFormProps {
    * Called after a successful redemption. Callers use this to refetch whatever
    * the coupon just changed — compute eligibility, a wallet balance, a grant
    * total — so the surrounding UI updates in place rather than going stale.
+   *
+   * Receives what was granted, so a caller can react to the KIND: onboarding
+   * auto-starts a cloud daemon after a code that unblocked compute, which
+   * would be wrong after one that only added wallet credit. Callers that do
+   * not care may ignore the argument.
    */
-  onRedeemed?: () => void;
+  onRedeemed?: (result: RedeemCouponResult) => void;
   /**
    * "collapsed" renders a "Have a coupon code?" link that expands on click —
    * right when most visits are not redemptions and a permanent input invites
@@ -93,7 +101,7 @@ export function RedeemCouponForm({
             : `Added $${(res.amountCents / 100).toFixed(2)} to your balance.`,
         );
         setCode("");
-        onRedeemed?.();
+        onRedeemed?.(res);
       },
       // The server's message is already user-facing and per-case (unknown code
       // / already redeemed / fully claimed / expired), so it is shown verbatim

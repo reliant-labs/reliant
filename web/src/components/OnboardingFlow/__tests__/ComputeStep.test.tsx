@@ -450,6 +450,303 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     expect(mockRefetchCloudEligibility).toHaveBeenCalled();
   });
 
+  // Typing a compute code into the cloud card IS the user asking for a cloud
+  // machine. Requiring a second click on a button that did not exist a moment
+  // ago re-asks a question they just answered, so redemption starts the daemon
+  // and advances the step.
+  //
+  // The mechanism this pins: eligibility is server-owned and false at the
+  // instant onSuccess fires, so the redeem callback cannot simply call
+  // handleCloud — its own `if (!eligible) return` guard would swallow it. The
+  // start must happen on a later render, once the refetch reports eligible.
+  it("auto-starts the cloud daemon and advances after a compute coupon is redeemed", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockRedeemMutate.mockImplementation((_code, callbacks) => {
+      callbacks?.onSuccess?.({
+        amountCents: 0,
+        code: "MACHINE600",
+        newBalanceCents: 0,
+        kind: RedeemedCouponKind.COMPUTE_MINUTES,
+        computeMinutes: 600,
+        newComputeMinutesRemaining: 600,
+      });
+    });
+
+    const onNext = vi.fn();
+    const { rerender } = renderComputeStep({
+      daemons: [],
+      loading: false,
+      onNext,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
+      target: { value: "MACHINE600" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
+
+    // Still ineligible as far as the client knows: nothing may be provisioned
+    // yet, or the guard is being bypassed rather than waited out.
+    await waitFor(() => {
+      expect(mockRefetchCloudEligibility).toHaveBeenCalled();
+    });
+    expect(mockCreateDaemon).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+
+    // The refetch lands and the server now says the user may start a machine.
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 600,
+      refetch: mockRefetchCloudEligibility,
+    });
+    rerender(
+      <ComputeStep
+        plan={{}}
+        updatePlan={vi.fn(async () => {})}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockCreateDaemon).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(onNext).toHaveBeenCalled();
+    });
+  });
+
+  // THE USER'S REPORT: redeeming a compute coupon "skipped all steps and took
+  // me to project picker page".
+  //
+  // project-picker is the LOCAL branch of the flow (deriveStep sends
+  // compute==='local_daemon' there), which is the tell: the cloud commit never
+  // happened. In the desktop app a bundled local daemon is usually already
+  // registered, so the auto-skip effect is sitting armed on
+  // hasUsableDaemon===true. Auto-start made that effect reachable in a state
+  // it was never designed for.
+  //
+  // The auto-skip effect guards on `startingCloud`, which only goes true once
+  // handleCloud RUNS. Between the render where eligibility flips and the
+  // effect that starts the daemon, startingCloud is still false — so the
+  // auto-skip effect can fire FIRST, commit compute:'local_daemon', set
+  // hasAdvanced, and derivation jumps straight past model to project-picker.
+  it("does not fall through to the local auto-skip when a compute coupon is redeemed with a local daemon present", async () => {
+    const localDaemon = makeDaemon({
+      daemonId: "local-1",
+      status: DaemonStatus.ACTIVE,
+    });
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockRedeemMutate.mockImplementation((_code, callbacks) => {
+      callbacks?.onSuccess?.({
+        amountCents: 0,
+        code: "MACHINE600",
+        newBalanceCents: 0,
+        kind: RedeemedCouponKind.COMPUTE_MINUTES,
+        computeMinutes: 600,
+        newComputeMinutesRemaining: 600,
+      });
+    });
+
+    const updatePlan = vi.fn(async () => {});
+    const onNext = vi.fn();
+
+    // No daemon at first render, so the card (and its coupon form) is shown.
+    const { rerender } = renderComputeStep({
+      daemons: [],
+      loading: false,
+      onNext,
+      updatePlan,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
+      target: { value: "MACHINE600" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
+
+    await waitFor(() => {
+      expect(mockRefetchCloudEligibility).toHaveBeenCalled();
+    });
+
+    // The eligibility refetch lands AND the bundled local daemon shows up in
+    // the same render — the desktop-app case.
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 600,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockUseDaemonStatus.mockReturnValue({
+      daemons: [localDaemon],
+      activeDaemon: localDaemon,
+      loading: false,
+      refresh: vi.fn(),
+    });
+    rerender(
+      <ComputeStep
+        plan={{}}
+        updatePlan={updatePlan}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />,
+    );
+
+    // The redemption asked for a CLOUD machine. Committing local here is the
+    // reported bug: it lands the user on project-picker having answered
+    // nothing.
+    await waitFor(() => {
+      expect(mockCreateDaemon).toHaveBeenCalled();
+    });
+    const committedLocal = updatePlan.mock.calls.some(
+      ([updates]) =>
+        (updates as Partial<LaunchPlan>).compute === "local_daemon",
+    );
+    expect(committedLocal).toBe(false);
+  });
+
+  // A wallet-credit code funds LLM usage and buys no compute, so the user is
+  // exactly as unable to start a machine as before. Auto-starting here would
+  // fire a request the server refuses and put an error on screen for a
+  // redemption that SUCCEEDED.
+  it("does not auto-start after a wallet-credit coupon", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockRedeemMutate.mockImplementation((_code, callbacks) => {
+      callbacks?.onSuccess?.({
+        amountCents: 2000,
+        code: "LAUNCH20",
+        newBalanceCents: 2000,
+        kind: RedeemedCouponKind.WALLET_CREDIT,
+        computeMinutes: 0,
+        newComputeMinutesRemaining: 0,
+      });
+    });
+
+    const onNext = vi.fn();
+    const { rerender } = renderComputeStep({
+      daemons: [],
+      loading: false,
+      onNext,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
+      target: { value: "LAUNCH20" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Added \$20\.00 to your balance\./)).toBeInTheDocument();
+    });
+
+    // Even if something else makes the user eligible on a later render, this
+    // redemption must not be what starts a machine.
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    rerender(
+      <ComputeStep
+        plan={{}}
+        updatePlan={vi.fn(async () => {})}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /Start cloud daemon/i }),
+      ).toBeInTheDocument();
+    });
+    expect(mockCreateDaemon).not.toHaveBeenCalled();
+    expect(onNext).not.toHaveBeenCalled();
+  });
+
+  // The refetch is async, and in that window the user may pick "I'll connect
+  // my own". Provisioning a cloud machine under them then would hijack a
+  // decision they have since changed.
+  it("does not auto-start if the user switches to local while eligibility is refetching", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+    mockRedeemMutate.mockImplementation((_code, callbacks) => {
+      callbacks?.onSuccess?.({
+        amountCents: 0,
+        code: "MACHINE600",
+        newBalanceCents: 0,
+        kind: RedeemedCouponKind.COMPUTE_MINUTES,
+        computeMinutes: 600,
+        newComputeMinutesRemaining: 600,
+      });
+    });
+
+    const onNext = vi.fn();
+    const { rerender } = renderComputeStep({
+      daemons: [],
+      loading: false,
+      onNext,
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
+    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
+      target: { value: "MACHINE600" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
+
+    // User changes their mind before the refetch settles.
+    fireEvent.click(screen.getByRole("button", { name: /I'll connect my own/i }));
+
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: true,
+      reason: null,
+      isLoading: false,
+      grantedMinutesRemaining: 600,
+      refetch: mockRefetchCloudEligibility,
+    });
+    rerender(
+      <ComputeStep
+        plan={{}}
+        updatePlan={vi.fn(async () => {})}
+        onNext={onNext}
+        onBack={vi.fn()}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(mockRefetchCloudEligibility).toHaveBeenCalled();
+    });
+    expect(mockCreateDaemon).not.toHaveBeenCalled();
+  });
+
   it("redeem failure shows the server's message and no start button appears", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,

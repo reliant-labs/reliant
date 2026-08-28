@@ -39,6 +39,18 @@ func NewScenarioService(database db.Repository, daemonRouter toolexec.DaemonRout
 	}
 }
 
+// projectBelongsToUser verifies the authenticated user owns the given project.
+func (s *ScenarioService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
+			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		}
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+	}
+	return nil
+}
+
 // ListScenarios returns all scenarios for a workflow from both DB and files.
 // DB scenarios (source="user") take precedence over file scenarios (source="project").
 func (s *ScenarioService) ListScenarios(
@@ -54,6 +66,9 @@ func (s *ScenarioService) ListScenarios(
 	var hasProject bool
 	var projectID string
 	if req.Msg.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
+		}
 		project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 		if err == nil && project != nil {
 			hasProject = true
@@ -125,6 +140,12 @@ func (s *ScenarioService) CreateScenario(
 
 	if req.Msg.Scenario == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scenario definition required"))
+	}
+
+	if req.Msg.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
+		}
 	}
 
 	// Get the workflow to test
@@ -228,6 +249,12 @@ func (s *ScenarioService) RunScenario(
 	var workflowYAML string
 	var isProjectScenario bool
 	projectID := req.Msg.ProjectId
+
+	if projectID != "" {
+		if err := s.projectBelongsToUser(ctx, projectID, userID); err != nil {
+			return nil, err
+		}
+	}
 
 	if req.Msg.ScenarioId != "" {
 		// Check if this is a project (file-based) scenario
@@ -406,6 +433,10 @@ func (s *ScenarioService) UploadScenario(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("yaml_content required"))
 	}
 
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+
 	// Validate the YAML is a valid scenario
 	var scenario simulator.Scenario
 	if err := yaml.Unmarshal([]byte(req.Msg.YamlContent), &scenario); err != nil {
@@ -486,6 +517,10 @@ func (s *ScenarioService) ExportScenario(
 		// Get the project
 		if req.Msg.ProjectId == "" {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id required for project scenarios"))
+		}
+
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
 		}
 
 		project, err := s.database.GetProject(ctx, req.Msg.ProjectId)

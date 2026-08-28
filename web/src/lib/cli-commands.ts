@@ -168,20 +168,44 @@ export function daemonStartCommandNeedsEditing(): boolean {
 }
 
 /**
- * `reliant auth serve` — always bare, in every environment.
+ * `reliant auth serve` — the localhost OAuth bridge.
  *
- * The command reads NO environment variables. It starts an HTTP server on
- * localhost and hands whatever authorize-URL template it is POSTed to
- * oauthcallback.Run; the token exchange happens over the authenticated backend
- * gRPC, not here (cmd/reliant/commands/auth_serve.go). It exists only to bridge
- * the localhost-callback gap for browser users.
+ * The server itself contacts no backend: it binds a loopback port, opens the
+ * browser, catches the redirect, and hands the code back to the tab that asked
+ * (cmd/reliant/commands/auth_serve.go). The token exchange happens over the
+ * BROWSER's authenticated connection, not here.
  *
- * It previously carried the same five-variable prefix as `daemon start`, none
- * of which it could act on — including the Supabase publishable key, pasted at
- * a shell for no reason at all.
+ * ── Why it still carries an env prefix in dev ─────────────────────────
+ *
+ * The binary defaults to PRODUCTION (builddefaults.ServerURL =
+ * https://api.reliantapi.com). A dev web app talking to a dev backend must say
+ * so explicitly, and the only correct way to do that is on the command line —
+ * which means the UI has to SHOW those variables rather than print a bare
+ * command that silently resolves to prod.
+ *
+ * `RELIANT_WEB_ORIGIN` is specific to this command: the helper CORS-checks its
+ * caller against an allowlist, and a dev server on a per-worktree port is not
+ * in the built-in list. Without it the browser's request is rejected as
+ * "origin not allowed".
+ *
+ * In a production build this returns the bare command, because the compiled
+ * defaults are already correct.
  */
 export function authServeCommand(): string {
-  return "reliant auth serve";
+  if (!isNonProd()) return "reliant auth serve";
+
+  const parts: string[] = [];
+
+  // The web app's own origin, so the helper's CORS allowlist accepts it. Read
+  // from the live location rather than a build constant: the dev port is
+  // allocated per worktree (.dev-ports.sh) and is not knowable at build time.
+  if (typeof window !== "undefined" && window.location?.origin) {
+    parts.push(`RELIANT_WEB_ORIGIN=${window.location.origin}`);
+  }
+
+  return parts.length > 0
+    ? `${parts.join(" ")} reliant auth serve`
+    : "reliant auth serve";
 }
 
 /**

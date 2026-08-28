@@ -1,3 +1,9 @@
+// MUST STAY FIRST. Imports are evaluated in order, and this one wraps console
+// before any other module can log. A call in the module body instead of an
+// import would run AFTER every import below (hoisting), missing all of
+// startup — see lib/browser-log-boot.ts.
+import "./lib/browser-log-boot";
+
 import { createRoot } from "react-dom/client";
 import "./index.css";
 import "./components/workflow/workflow-theme.css";

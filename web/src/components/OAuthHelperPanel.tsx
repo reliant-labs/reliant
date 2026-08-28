@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Check, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { authServeCommand, HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
+import { authServeCommand } from "@/lib/cli-commands";
+import { ReliantDownloadOptions } from "@/components/ReliantDownloadOptions";
 
 export interface OAuthHelperPanelProps {
   /** Display name of the OAuth provider (e.g. "Claude Code", "Codex"). */
@@ -211,8 +212,13 @@ export function OAuthHelperPanel({
                 </p>
               )}
 
+              {/* The full download story — platform-detected build, every
+                  other platform, and Homebrew. Previously this rendered the
+                  Homebrew one-liner alone, which is wrong on Windows and Linux
+                  and left those users with no way forward on the only screen
+                  that could unblock them. */}
               {showManualInstall && (
-                <code className={codeBlockClass}>{HOMEBREW_CASK_INSTALL}</code>
+                <ReliantDownloadOptions size={compact ? "compact" : "default"} />
               )}
 
               {installError && (

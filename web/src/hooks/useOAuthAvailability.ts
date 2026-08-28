@@ -90,17 +90,25 @@ export function useOAuthAvailability(
     }
   }, [enabled, isElectron])
 
-  // Poll silently while enabled + unavailable so the UI flips automatically once
-  // the user starts `reliant auth serve`. Stops on success, when disabled, or
-  // on unmount.
+  // Poll while the panel is on screen, in BOTH directions.
+  //
+  // This used to stop once the helper answered (`available` was in the guard
+  // and the interval only ever set it to true), which made `available` a latch
+  // rather than a live signal. If the user then Ctrl-C'd `reliant auth serve`,
+  // the panel kept offering "Login with Codex" and the click died with a raw
+  // "Failed to fetch" — no explanation and no route back to the instructions
+  // that would fix it.
+  //
+  // `available` is deliberately NOT a dependency: it would tear down and
+  // recreate the interval on every flip, and the poll must run at a steady
+  // cadence regardless of the current state.
   useEffect(() => {
-    if (isElectron || !enabled || available) return
+    if (isElectron || !enabled) return
     const id = setInterval(async () => {
-      const ok = await pingHealth()
-      if (ok) setAvailable(true)
+      setAvailable(await pingHealth())
     }, POLL_INTERVAL_MS)
     return () => clearInterval(id)
-  }, [available, isElectron, enabled])
+  }, [isElectron, enabled])
 
   return { available, loading, recheck: check }
 }

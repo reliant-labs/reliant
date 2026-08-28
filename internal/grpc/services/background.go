@@ -11,6 +11,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 )
 
 // BackgroundService implements the BackgroundService RPC handlers
@@ -22,6 +23,37 @@ type BackgroundService struct {
 // NewBackgroundService creates a new BackgroundService with the given provider
 func NewBackgroundService(provider BackgroundProcessProvider) *BackgroundService {
 	return &BackgroundService{provider: provider}
+}
+
+// requireUserID pulls the authenticated caller's id from context, returning a
+// Connect Unauthenticated error when absent.
+func (s *BackgroundService) requireUserID(ctx context.Context) (string, error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+	return userID, nil
+}
+
+// authorizeProcess confirms the named process exists AND belongs to the caller,
+// returning it on success. A process owned by another user is reported as
+// NotFound, never PermissionDenied — a by-id operation must not double as an
+// existence oracle across tenants. This is the single ownership gate every
+// by-process-id handler (output/kill/stream) funnels through: a process id
+// alone is not an authorization in the multi-tenant background_processes table.
+func (s *BackgroundService) authorizeProcess(ctx context.Context, processID string) (*BackgroundProcessInfo, error) {
+	userID, err := s.requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	proc, err := s.provider.GetProcess(ctx, processID)
+	if err != nil || proc == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("process not found"))
+	}
+	if proc.UserID != userID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("process not found"))
+	}
+	return proc, nil
 }
 
 // ============================================================================
@@ -96,7 +128,12 @@ func (s *BackgroundService) ListProcesses(
 		chatID = *req.Msg.ChatId
 	}
 
-	processes, err := s.provider.ListProcesses(ctx, worktreeID, sessionID, chatID)
+	userID, err := s.requireUserID(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	processes, err := s.provider.ListProcesses(ctx, userID, worktreeID, sessionID, chatID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list processes: %w", err))
 	}
@@ -122,6 +159,10 @@ func (s *BackgroundService) GetProcessOutput(
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
+	if _, err := s.authorizeProcess(ctx, processID); err != nil {
+		return nil, err
+	}
+
 	output, err := s.provider.GetOutput(ctx, processID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
@@ -141,6 +182,10 @@ func (s *BackgroundService) KillProcess(
 	processID := req.Msg.ProcessId
 	if processID == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+	}
+
+	if _, err := s.authorizeProcess(ctx, processID); err != nil {
+		return nil, err
 	}
 
 	err := s.provider.KillProcess(ctx, processID)
@@ -169,6 +214,10 @@ func (s *BackgroundService) StreamProcessOutput(
 	processID := req.Msg.ProcessId
 	if processID == "" {
 		return connect.NewError(connect.CodeInvalidArgument, nil)
+	}
+
+	if _, err := s.authorizeProcess(ctx, processID); err != nil {
+		return err
 	}
 
 	// Get current process status

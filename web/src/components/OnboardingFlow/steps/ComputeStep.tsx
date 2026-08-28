@@ -19,6 +19,7 @@ import {
   isEntitlementDenial,
 } from "@/hooks/useOnboardingQueries";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
+import { RedeemedCouponKind } from "@/services/controlPlane/reliantAI";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useBundledDaemonPending } from "@/hooks/useBundledDaemonPending";
 import type {
@@ -171,6 +172,20 @@ export function ComputeStep({
   const [isStartingCloud, setIsStartingCloud] = useState(false);
   const startingCloud = isStartingCloud || createDaemonMutation.isPending;
 
+  // Declared here (above handleLocal, which clears them) so the whole
+  // component body can reach them. See the effect further down for what they
+  // do and why the intent needs BOTH a state flag and a ref.
+  // "A compute coupon was redeemed and the cloud start it implies has not
+  // happened yet."
+  //
+  // A ref AND a state flag would be two spellings of one fact, and they drifted
+  // apart in exactly the window that matters. The ref is the source of truth
+  // because the local auto-skip effect below must see the intent SYNCHRONOUSLY
+  // — a daemon can appear on the very next render — while the counter bumps
+  // the render that lets the start effect re-evaluate once eligibility flips.
+  const pendingCloudStart = useRef(false);
+  const [cloudStartAttempt, setCloudStartAttempt] = useState(0);
+
   const handleCloud = async () => {
     if (!HAS_CLOUD_DAEMONS) return;
     if (isStartingCloud) return;
@@ -257,6 +272,14 @@ export function ComputeStep({
         }
       }
 
+      // Claim the advance before committing, exactly as
+      // commitLocalAndAdvance does. Without this the cloud path left
+      // `hasAdvanced` false, so the local auto-skip effect stayed armed and a
+      // daemon appearing after this point — the desktop app's bundled one,
+      // or the cloud daemon we just started registering — overwrote
+      // compute:'cloud_free_trial' with 'local_daemon' and dropped the user
+      // on project-picker.
+      hasAdvanced.current = true;
       await updatePlan({
         compute: "cloud_free_trial",
         daemonProvisioning: needsProvisioning,
@@ -269,6 +292,11 @@ export function ComputeStep({
       // Whatever happens here, we do NOT advance: onNext() is above, inside
       // the try, so any throw leaves the user on this step — which is where
       // the coupon field and the plans link are.
+      //
+      // Release the advance claim too. The user is staying on this step, so
+      // the local auto-skip must be able to take over again if a daemon shows
+      // up — a failed cloud start should not strand someone who has one.
+      hasAdvanced.current = false;
       //
       // Reasoned-quota errors are already routed into the global
       // UpgradeRequiredModal by upgradeInterceptor — don't double-surface as
@@ -304,6 +332,9 @@ export function ComputeStep({
   const handleLocal = () => {
     setError(null);
     setShowLocal(true);
+    // An explicit local choice overrides a pending post-redemption cloud
+    // start. The minutes stay on the account for later.
+    pendingCloudStart.current = false;
   };
 
   // `autoSkipped` distinguishes "the user chose local" from "we found a
@@ -334,6 +365,51 @@ export function ComputeStep({
     await commitLocalAndAdvance(Boolean(activeDaemon));
   };
 
+  // A coupon that unblocks compute is, in context, the user saying "I want a
+  // cloud machine" — they typed a code into the cloud card to get one. Making
+  // them then find and click "Start cloud daemon" is a second confirmation of
+  // a decision already made, on a button that did not exist a moment ago.
+  //
+  // This CANNOT call handleCloud() directly from the redeem callback: that
+  // callback closes over `eligible` from the render that mounted the form,
+  // where it is still false, and handleCloud's own `if (!eligible) return`
+  // guard would swallow the call. Eligibility is server-owned and only flips
+  // after refetchCloudEligibility() lands. So the redemption arms an intent
+  // and this effect fires it on the render where starting would actually
+  // work — the same shape as the auto-skip effect below.
+  //
+  // The intent is ALSO held in a ref, read by the local auto-skip effect
+  // below. State alone is not enough: `startingCloud` — the guard that effect
+  // already had against racing handleCloud — only goes true once handleCloud
+  // runs, and there is at least one render between "eligibility flipped" and
+  // "handleCloud started". A local daemon appearing in that window (the
+  // desktop app's bundled daemon is the common case) let auto-skip commit
+  // compute:'local_daemon' first, which sent the user to project-picker
+  // having answered nothing. The ref closes that window synchronously.
+  useEffect(() => {
+    if (!pendingCloudStart.current) return;
+    // Still waiting on the eligibility refetch. Stay armed.
+    if (!canStartCloud) return;
+    // The user changed their mind while the refetch was in flight (picked
+    // local, or a detected daemon already advanced the step). Starting a cloud
+    // machine under them now would hijack a decision they have since made.
+    if (showLocal || hasAdvanced.current) {
+      pendingCloudStart.current = false;
+      return;
+    }
+    if (startingCloud) return;
+    // Stays TRUE across the await. The local auto-skip effect reads this ref to
+    // know a cloud start is in flight, and handleCloud does not set
+    // `startingCloud` until it actually runs — clearing here would reopen the
+    // exact window where an arriving daemon commits local instead.
+    void handleCloud().finally(() => {
+      pendingCloudStart.current = false;
+    });
+    // Re-entry is prevented by `startingCloud` flipping true synchronously
+    // inside handleCloud, and by hasAdvanced once it commits.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cloudStartAttempt, canStartCloud, showLocal, startingCloud]);
+
   // Auto-skip the compute step whenever the user already has a usable
   // daemon registered. Cases this covers:
   //   1. Initial mount with a daemon already running (Electron's main
@@ -359,6 +435,11 @@ export function ComputeStep({
     if (daemonLoading) return;
     if (!hasUsableDaemon) return;
     if (startingCloud) return;
+    // A redemption has asked for a CLOUD machine and the start is still
+    // pending. `startingCloud` does not cover the render between eligibility
+    // flipping and handleCloud running, and committing local in that window is
+    // what sent users to project-picker with nothing answered.
+    if (pendingCloudStart.current) return;
     if (hasAdvanced.current) return;
     if (!hasTrackedConnectedRef.current) {
       hasTrackedConnectedRef.current = true;
@@ -531,8 +612,20 @@ export function ComputeStep({
                 <RedeemCouponForm
                   variant={canStartCloud ? "collapsed" : "button"}
                   size="sm"
-                  onRedeemed={() => {
+                  onRedeemed={(result) => {
                     void refetchCloudEligibility();
+                    // Only a COMPUTE_MINUTES code buys a machine. A
+                    // wallet-credit code (LLM funding) leaves the user exactly
+                    // as ineligible for compute as before, so auto-starting
+                    // after one would fire a request the server refuses and
+                    // surface an error for a redemption that succeeded.
+                    if (result.kind === RedeemedCouponKind.COMPUTE_MINUTES) {
+                      // Ref first and synchronously: a local daemon can appear
+                      // on the very next render, and the auto-skip effect must
+                      // already see that a cloud start is pending.
+                      pendingCloudStart.current = true;
+                      setCloudStartAttempt((n) => n + 1);
+                    }
                   }}
                 />
                 <button

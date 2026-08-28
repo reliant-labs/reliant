@@ -76,6 +76,25 @@ type streamProcessingState struct {
 	// marker, so the marker is cleared exactly once — on the first event that
 	// proves the provider answered — rather than on every streamed delta.
 	inProviderBackoff bool
+
+	// streamingToolCalls records every tool call the provider OPENED during
+	// this stream, in block order, so an interrupt can say which calls it
+	// stopped.
+	//
+	// state.toolCalls cannot answer that: it is populated only in handleComplete
+	// from event.Response.ToolCalls, because a call's Input is still empty at
+	// tool_use_start. A turn interrupted mid-tool-input therefore has an empty
+	// toolCalls slice while the UI is already rendering a card for the call —
+	// which is exactly the case that used to leave a tool spinning forever.
+	streamingToolCalls []streamingToolCall
+}
+
+// streamingToolCall is a tool call opened by a tool_use_start delta, tracked so
+// an interrupted stream can cancel precisely the calls it started.
+type streamingToolCall struct {
+	ID         string
+	Name       string
+	BlockIndex int
 }
 
 // ============================================================================
@@ -362,6 +381,135 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 // interruptedTurnWriteTimeout bounds the detached write of an interrupted
 // turn's partial. Short: one insert on a live pool, with the caller unwinding.
 const interruptedTurnWriteTimeout = 5 * time.Second
+
+// cancelInFlightStreamingToolCalls settles every tool call this stream opened
+// but never finished, when the stream is interrupted (pause / cancel /
+// thread-interrupt).
+//
+// # WHY THE SERVER HAS TO DO THIS
+//
+// Until now nothing did. `tool_cancelled` was declared in
+// internal/streaming/types.go and handled by the client in two places, but no
+// Go code ever constructed one — so on an interrupt the client had only the
+// `stream_cancelled` marker and had to INFER which tools had died, marking
+// those guesses `inferred: true`. The durable repair that would have corrected
+// the guess (CleanupActivity.cancelOrphanedToolCalls) runs solely from
+// handleWorkflowCompletion, and a pause does not complete the workflow. So a
+// paused turn left the UI's inference as the only record, with nothing behind
+// it — and where that inference was grafted onto a message the server never
+// persisted, no later snapshot could reach it and the card span forever.
+//
+// This closes that gap at the point the truth is known: the stream that opened
+// the calls is the only place that knows which ones were still open.
+//
+// Each cancelled call gets BOTH halves, matching what ExecuteTools does for a
+// tool it stops:
+//
+//   - the ephemeral `tool_cancelled` delta, so an open UI settles immediately
+//     rather than inferring; and
+//   - a durable tool_call row + persisted tool_call chat_update, so a reload,
+//     a late-joining client and the orphan-repair pass all agree.
+//
+// Ordering matters: the durable write goes first, so a client that reloads
+// between the two never sees a settled delta with no durable backing.
+//
+// SAFETY. Only calls with no terminal outcome are touched, and
+// db.UpsertToolCallStatus independently refuses to move a row that is already
+// terminal (tool_call_status_write.go:57-63) — so a tool that genuinely
+// finished microseconds before the interrupt keeps its real result and cannot
+// be repainted as cancelled. Best-effort throughout: the turn is already
+// ending, and failing here would cost the whole cancellation path.
+//
+// The context arriving here is normally already dead (that is what an interrupt
+// means), so every write is detached, exactly like persistInterruptedTurn and
+// emitToolStatus.
+func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
+	ctx context.Context,
+	chatID string,
+	thread string,
+	state *streamProcessingState,
+) {
+	if state == nil || len(state.streamingToolCalls) == 0 {
+		return
+	}
+
+	// A call the provider finished describing IS in state.toolCalls (populated
+	// by handleComplete). Those belong to the turn that gets persisted and
+	// re-dispatched; they are not what the interrupt orphaned.
+	completed := make(map[string]struct{}, len(state.toolCalls))
+	for _, call := range state.toolCalls {
+		completed[call.ID] = struct{}{}
+	}
+
+	writeCtx, cancel := detachedForTerminalWrite(ctx)
+	defer cancel()
+
+	// ThreadID is optional on core.ToolCall (a call can be recorded before its
+	// assistant message is finalized), so only set it when we have one.
+	var threadID *string
+	if thread != "" {
+		threadID = &thread
+	}
+
+	cancelled := 0
+	for _, call := range state.streamingToolCalls {
+		if call.ID == "" {
+			continue
+		}
+		if _, done := completed[call.ID]; done {
+			continue
+		}
+
+		now := time.Now().UTC()
+
+		// Durable first — see the ordering note above. UpsertToolCallStatus
+		// declines to overwrite a terminal row, so a real outcome wins.
+		if err := db.UpsertToolCallStatus(writeCtx, a.repo, &core.ToolCall{
+			ID:          call.ID,
+			ChatID:      chatID,
+			ThreadID:    threadID,
+			ToolName:    call.Name,
+			Status:      core.ToolCallStatusCancelled,
+			CompletedAt: &now,
+			RequestedAt: now,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}); err != nil {
+			logging.Warn("[CallLLM] Could not persist cancelled status for an interrupted tool call",
+				"chatID", chatID, "toolCallID", call.ID, "toolName", call.Name, "error", err)
+		}
+
+		if err := a.repo.EmitToolCallUpdate(writeCtx, chatID, db.ToolCallUpdate{
+			ToolCallID:  call.ID,
+			ToolName:    call.Name,
+			Status:      db.ToolCallStatus(core.ToolCallStatusCancelled),
+			Timestamp:   now.Format(time.RFC3339),
+			CompletedAt: now.Format(time.RFC3339),
+		}); err != nil {
+			logging.Warn("[CallLLM] Could not emit cancelled update for an interrupted tool call",
+				"chatID", chatID, "toolCallID", call.ID, "toolName", call.Name, "error", err)
+		}
+
+		// The ephemeral half. writeStreamingDelta drops non-stream_cancelled
+		// deltas once ctx is dead, and ctx is dead by definition here, so this
+		// publishes on the detached context.
+		a.writeStreamingDelta(writeCtx, chatID, "tool_cancelled", map[string]interface{}{
+			"block_index": call.BlockIndex,
+			"thread":      thread,
+			"tool_call": map[string]interface{}{
+				"id":   call.ID,
+				"name": call.Name,
+			},
+		}, state)
+
+		cancelled++
+	}
+
+	if cancelled > 0 {
+		logging.Info("[CallLLM] Cancelled in-flight tool calls of an interrupted stream",
+			"chatID", chatID, "thread", thread, "cancelledToolCalls", cancelled)
+	}
+}
 
 // contentFreeTurnExplanation reports whether a finished turn came back with
 // nothing in it, and what to say about it. Split out from streamLLMResponse so
@@ -1263,6 +1411,14 @@ streamLoop:
 	// backoff marker would otherwise outlive the call that opened it and report a
 	// dead thread as parked. Uses ctx, not streamCtx, which may already be dead.
 	a.releaseProviderBackoff(ctx, thread, streamState)
+
+	// Settle any tool call this stream opened and never finished. Runs on the
+	// interrupt path only: a stream that ended normally has its outcomes
+	// written by execute_tools. See cancelInFlightStreamingToolCalls for why
+	// the server has to do this rather than leaving the client to infer it.
+	if streamInterrupted {
+		a.cancelInFlightStreamingToolCalls(ctx, chat.ID, thread, streamState)
+	}
 
 	// Track LLM call completion for analytics.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
@@ -2233,6 +2389,18 @@ func (a *CallLLMActivity) handleToolUseStart(ctx context.Context, chatID string,
 		// NOTE: DO NOT capture tool calls here - Input is empty at this point!
 		// Tool calls will be extracted from event.Response.ToolCalls in EventComplete
 		state.blockStates.StartToolBlock("")
+
+		// Record the OPEN call (id, name, block) even though its input is not
+		// known yet. This is deliberately separate from state.toolCalls, which
+		// only fills in on a completed turn: if the stream is interrupted
+		// before then, this slice is the only record of what the UI is
+		// currently showing a card for, and cancelInFlightStreamingToolCalls
+		// reads it to settle exactly those calls.
+		state.streamingToolCalls = append(state.streamingToolCalls, streamingToolCall{
+			ID:         event.ToolCall.ID,
+			Name:       event.ToolCall.Name,
+			BlockIndex: state.blockStates.CurrentPosition() - 1,
+		})
 
 		// Dual-write: Write tool_use_start delta to chat_updates
 		// NOTE: Input is not included because it's empty at this point

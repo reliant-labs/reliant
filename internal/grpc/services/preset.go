@@ -40,6 +40,19 @@ func NewPresetService(database db.Repository) *PresetService {
 	}
 }
 
+// projectBelongsToUser verifies the authenticated user owns projectID, returning
+// a Connect error if the project doesn't exist or belongs to someone else.
+func (s *PresetService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
+	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
+			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		}
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+	}
+	return nil
+}
+
 // ListPresets returns all presets for a project.
 // Priority: user (database) > project (stored config) > builtin
 func (s *PresetService) ListPresets(
@@ -51,6 +64,10 @@ func (s *PresetService) ListPresets(
 	}
 
 	userID := auth.MustGetUserID(ctx)
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
 
 	// Use a map to deduplicate by slug (user presets take priority)
 	presetsBySlug := make(map[string]*reliantv1.PresetInfo)
@@ -141,6 +158,10 @@ func (s *PresetService) GetPreset(
 
 	userID := auth.MustGetUserID(ctx)
 
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+
 	// Generate slug from name for database lookup
 	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
 
@@ -184,6 +205,10 @@ func (s *PresetService) ListPresetsForWorkflow(
 	}
 
 	userID := auth.MustGetUserID(ctx)
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
 
 	// Load workflow to check compatibility
 	wf, err := s.loadWorkflow(ctx, req.Msg.WorkflowName, req.Msg.ProjectId)
@@ -475,6 +500,9 @@ func (s *PresetService) CreatePreset(
 
 	// Check against stored project presets - project not found is ok, just skip the check
 	if req.Msg.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
+		}
 		record, err := s.database.GetProjectConfigRecord(ctx, req.Msg.ProjectId)
 		if err == nil {
 			storedPresets, err := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
@@ -627,6 +655,12 @@ func (s *PresetService) UpdatePreset(
 	userID := auth.MustGetUserID(ctx)
 	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
 
+	if req.Msg.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
+		}
+	}
+
 	// 1. First check if this is a user preset (database)
 	var dbPreset *db.Preset
 	var err error
@@ -711,6 +745,12 @@ func (s *PresetService) DeletePreset(
 	userID := auth.MustGetUserID(ctx)
 	slug := strings.ToLower(strings.ReplaceAll(req.Msg.Name, " ", "-"))
 
+	if req.Msg.ProjectId != "" {
+		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+			return nil, err
+		}
+	}
+
 	// 1. First check if this is a user preset (database)
 	var dbPreset *db.Preset
 	if req.Msg.ProjectId != "" {
@@ -777,6 +817,10 @@ func (s *PresetService) SetDefaultPreset(
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userIDStr); err != nil {
+		return nil, err
+	}
 
 	// Get group name (empty string = top-level)
 	groupName := ""
@@ -845,6 +889,10 @@ func (s *PresetService) GetDefaultPreset(
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userIDStr); err != nil {
+		return nil, err
+	}
 
 	defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, req.Msg.WorkflowName, nil)
 
@@ -929,6 +977,10 @@ func (s *PresetService) GetDefaultPresetsBatch(
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
+
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userIDStr); err != nil {
+		return nil, err
+	}
 
 	// Load every `preset.defaults.*` override the user has, once. A failure
 	// here is not fatal: it only means no overrides are applied, leaving the

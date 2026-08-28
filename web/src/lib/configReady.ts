@@ -66,6 +66,8 @@ export const waitForConfig = async (timeoutMs = DEFAULT_TIMEOUT_MS): Promise<voi
     };
     
     const handleMessage = (event: MessageEvent) => {
+      if (event.source !== window) return;
+      if (event.origin !== window.location.origin) return;
       if (event.data?.type === "reliant-config-ready" && event.data?.config) {
         window.RELIANT_CONFIG = event.data.config;
         handleConfigReady();

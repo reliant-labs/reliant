@@ -101,8 +101,14 @@ func autoClassify(err error) error {
 
 	// SDK-level JSON parsing errors during streaming accumulation
 	// These occur when the API sends malformed partial JSON chunks
-	// Error format: "json: error calling MarshalJSON for type json.RawMessage: ..."
-	if strings.Contains(errStr, "json.rawmessage") &&
+	//
+	// Matched on the "error calling MarshalJSON" prefix rather than the failing
+	// type's name, because that name is not stable across Go releases: 1.26
+	// reports "json.RawMessage", 1.27 reports "*jsontext.Value" (RawMessage
+	// became an alias for jsontext.Value). Keying on the type name meant the
+	// "invalid character" variant fell through to the "invalid" terminal
+	// pattern below and wedged the workflow permanently instead of retrying.
+	if strings.Contains(errStr, "error calling marshaljson") &&
 		(strings.Contains(errStr, "unexpected end of json") ||
 			strings.Contains(errStr, "invalid character")) {
 		return err // Transient - Temporal will retry
