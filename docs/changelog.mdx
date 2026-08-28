@@ -13,6 +13,17 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.10" description="August 28, 2026">
+### A streaming hiccup no longer wedges a conversation for good
+
+- **A streaming glitch no longer wedges a conversation permanently** Replies arrive in pieces, and occasionally a piece arrives malformed. That has always been a normal, momentary hiccup that we simply retry. A recent change to the underlying language runtime renamed one of the internal types involved, and because the check that recognised this situation was matching on that name, it quietly stopped matching. The hiccup was then treated as a permanent failure: the conversation stopped and could not be continued. The check now keys on a stable part of the message instead of a type name that shifts between runtime versions, so these glitches are retried again — and the fix will not silently come undone the next time that name changes.
+- **Signing in with Claude or Codex is clearer** These sign-ins need something running on your own machine to hand control back to, which is not always available depending on how you are running Reliant. The app now works out whether that hand-back is possible before you begin, and shows a short panel telling you exactly what to run if a step is needed on your side, rather than sending you into a sign-in that cannot finish.
+- **Setting up for the first time is smoother** The step that picks where your work runs has been rebuilt, and download options for the desktop app are now presented properly. Returning users who already have everything they need are recognised more reliably and taken straight to the app instead of being walked back through setup they already completed.
+- **The desktop app no longer vanishes on an unexpected error** An unhandled error in the desktop app's background process could take the whole app down with no explanation. Those errors are now caught and recorded, so the app stays open and there is a trace to explain what went wrong.
+- **Console messages are collected in one place** Diagnostic output from the web interface and the desktop app now gets forwarded into the same log directory as everything else. When something goes wrong there is one place to look, and reporting a problem no longer means copying messages out of a developer console by hand.
+- **The development server opens on the right address** When run through our tooling, the development server could bind a stale, previously configured address rather than the one it was actually assigned — so it appeared to start correctly while being unreachable, or collided with another instance. It now honours the address its launcher gives it. This affects people running Reliant from source, not the packaged app.
+</Update>
+
 <Update label="v1.7.9" description="August 27, 2026">
 ### Signing in with Claude or Codex works in the browser, and the desktop app stops going blank
 
