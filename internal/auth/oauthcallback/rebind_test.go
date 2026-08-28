@@ -2,6 +2,7 @@ package oauthcallback
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -24,6 +25,8 @@ const codexAuthorizeTemplate = "https://auth.openai.com/oauth/authorize?redirect
 // Codex's port is FIXED at 1455 by OpenAI, so "just use another port" is not
 // available: a cancelled flow that lingers blocks every subsequent attempt.
 func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
+	guardFixedPort(t)
+
 	originalOpenBrowser := openBrowser
 	openBrowser = func(string) error { return nil }
 	defer func() { openBrowser = originalOpenBrowser }()
@@ -75,6 +78,7 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 	// B should get far enough to bind and wait for a callback — meaning its
 	// failure, when it comes, is the context deadline rather than a bind
 	// error. A bind failure returns almost immediately.
+	stillWaiting := false
 	select {
 	case err := <-started:
 		if err != nil && strings.Contains(err.Error(), "address already in use") {
@@ -86,6 +90,20 @@ func TestCancelledFlowReleasesFixedPortImmediately(t *testing.T) {
 	case <-time.After(1500 * time.Millisecond):
 		// Still waiting for a callback: it bound successfully. That is the
 		// behavior we want.
+		stillWaiting = true
+	}
+
+	// B is holding 1455 on purpose at this point. Cancel it and wait for Run
+	// to actually return, so the port is released before the next test binds
+	// it — a bare `defer cancelB()` returns without waiting for the teardown
+	// goroutine and leaks the listener across the test boundary.
+	if stillWaiting {
+		cancelB()
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Error("cancelled retry flow never returned")
+		}
 	}
 }
 
@@ -106,12 +124,63 @@ func waitForPortBound(t *testing.T, budget time.Duration) bool {
 	return false
 }
 
+// guardFixedPort makes a test that binds 1455 independent of its neighbours.
+//
+// The port is FIXED at 1455 by OpenAI, so these tests cannot take an
+// OS-assigned port and cannot run in parallel — they all contend for one
+// socket. Run() also tears its listener down asynchronously (a goroutine
+// closes the server on ctx.Done), so a test can return while the kernel still
+// holds the port. That leak is what made this package flaky on CI: the
+// previous test's dying listener still owned 1455, the next test's first flow
+// silently QUEUED on it instead of binding, and when the leftover finished
+// dying the second flow found the port neither bindable nor reusable —
+// "bind: address already in use", exactly the error these tests exist to
+// prevent. It reproduces locally under CPU contention, which is why a slow CI
+// runner hit it and a warm laptop did not.
+//
+// Waiting on the port itself (rather than on goroutine bookkeeping) asserts
+// the invariant that actually matters, both before and after the test.
+func guardFixedPort(t *testing.T) {
+	t.Helper()
+	if !waitForPortFree(t, 10*time.Second) {
+		t.Fatal("fixed port 1455 still held when the test started")
+	}
+	// Registered cleanups run after the test's own defers, so the flows have
+	// already been cancelled by the time this waits.
+	t.Cleanup(func() {
+		if !waitForPortFree(t, 10*time.Second) {
+			t.Error("test leaked the fixed port 1455 to the next test")
+		}
+	})
+}
+
+// waitForPortFree reports whether nothing holds the fixed Codex port, tested
+// by binding it — the same operation Run() performs, so it cannot disagree
+// with the thing under test the way an HTTP probe can.
+func waitForPortFree(t *testing.T, budget time.Duration) bool {
+	t.Helper()
+	deadline := time.Now().Add(budget)
+	for {
+		listener, err := net.Listen("tcp", "127.0.0.1:1455")
+		if err == nil {
+			_ = listener.Close()
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // The seamless-queue behavior: a second flow started while the first is still
 // waiting must QUEUE on the incumbent listener, not fail with a bind error.
 // Both flows then receive the same callback — which is correct, because there
 // is only one sign-in happening and the user should not be able to tell that
 // two requests were in flight.
 func TestOverlappingFlowQueuesInsteadOfFailing(t *testing.T) {
+	guardFixedPort(t)
+
 	originalOpenBrowser := openBrowser
 	openBrowser = func(string) error { return nil }
 	defer func() { openBrowser = originalOpenBrowser }()
