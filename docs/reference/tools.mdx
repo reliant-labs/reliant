@@ -1333,7 +1333,13 @@ Prefer ripgrep for other generic searches:
   ('rg' already honours .gitignore, which usually covers these.)
 - Bound the results: 'rg -l' for filenames only, 'rg -m 20', or pipe to 'head'.
   An unbounded match dump can exhaust the output budget on a large repo.
-- Be careful with flags: the -r flag is a replace flag for instance.
+- ⚠️ 'rg -r' IS NOT RECURSIVE — do not reach for it out of grep habit. In rg, -r
+  is --replace, so 'rg -r pattern .' silently treats your PATTERN as the
+  replacement text and the next argument as the pattern, printing rewritten
+  lines that look like real matches. rg already searches recursively by default,
+  so the flag you want is no flag at all: 'rg pattern .'.
+- Other flags that differ from grep: -t/-T select file TYPES ('rg -t go'), not
+  the grep meanings, and -f reads patterns from a file.
 
 #### 🚫 NEVER SCAN THE FILESYSTEM
 Commands like 'find / -name ...', 'find ~ ...' or 'grep -r ... /usr' are REFUSED

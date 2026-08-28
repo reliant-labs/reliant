@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Files, GitBranch, ListTodo, Check, Terminal, Globe } from "lucide-react";
+import { Files, GitBranch, ListTodo, Check, Terminal, Globe, PanelBottom } from "lucide-react";
 import { FileTree, type FileTreeHandle } from "./FileTree";
 import { FileTreeToolbar } from "./FileTreeToolbar";
 import { useProjectStore } from "../../store/projectStore";
@@ -7,6 +7,7 @@ import { useViewerStore } from "../../store/viewerStore";
 import { useWorktreeStore, useActiveWorktreeId } from "../../store/worktreeStore";
 import { useUIStore } from "../../store/uiStore";
 import { useBrowserStore } from "../../store/browserStore";
+import { useTerminalStore } from "../../store/terminalStore";
 import { isElectron } from "../../lib/constants";
 import { useUnifiedProcessCounts } from "../../hooks/useUnifiedProcesses";
 import { RecentChanges } from "../Chat/RecentChanges";
@@ -93,6 +94,11 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
 
   // Task stats from React Query
   const taskStats = useTaskStats(activeChatId);
+
+  // Terminal panel visibility. This is a panel toggle, not a sidebar tab — the
+  // terminal renders below the viewer, outside this sidebar.
+  const isTerminalOpen = useTerminalStore((state) => state.isOpen);
+  const toggleTerminal = useTerminalStore((state) => state.toggleTerminal);
 
   // Detect when Files tab becomes active to auto-focus
   useEffect(() => {
@@ -617,6 +623,35 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
               </span>
             </button>
           </Tooltip>
+        )}
+
+        {/* Terminal toggle. Not a tab — the terminal panel lives below the
+            viewer, so this shows/hides it rather than switching sidebar
+            content. Separated by a divider to make that distinction visible. */}
+        {currentProject && (
+          <>
+            <span className="self-center h-4 w-px bg-border mx-1" />
+            <Tooltip content={isTerminalOpen ? "Hide Terminal" : "Show Terminal"} placement="bottom">
+              <button
+                onClick={toggleTerminal}
+                tabIndex={-1}
+                aria-pressed={isTerminalOpen}
+                aria-label={isTerminalOpen ? "Hide Terminal" : "Show Terminal"}
+                className={cn(
+                  "px-3 h-full transition-colors border-b-2 border-transparent flex items-center justify-center",
+                  isTerminalOpen
+                    ? "text-foreground"
+                    : "text-muted-foreground bg-accent header-icon-btn"
+                )}
+                style={isTerminalOpen ? {
+                  backgroundColor: 'hsl(var(--tab-active) / 0.15)',
+                  borderBottomColor: 'hsl(var(--tab-active))'
+                } : undefined}
+              >
+                <PanelBottom className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </>
         )}
       </div>
 

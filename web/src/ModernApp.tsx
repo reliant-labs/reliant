@@ -282,10 +282,23 @@ function App() {
     // Restore file browser visibility (per-worktree state)
     // Note: Chat sidebar is now global and handled by the store subscription
     setShowFileBrowserLocal(state.rightPanelState.fileBrowser);
-    
+
+    // Terminal visibility is also per-worktree. terminalStore.isOpen is not
+    // persisted itself, so without this a project selected outside the restore
+    // path (first run, manual switch) would ignore the saved value.
+    const terminalStore = useTerminalStore.getState();
+    if (state.terminalOpen !== terminalStore.isOpen) {
+      if (state.terminalOpen) {
+        terminalStore.showTerminal();
+      } else {
+        terminalStore.hideTerminal();
+      }
+    }
+
     logger.debug("[ModernApp] Restored panel state for worktree", {
       worktreeId,
       fileBrowser: state.rightPanelState.fileBrowser,
+      terminalOpen: state.terminalOpen,
     });
   }, [currentProject?.id, currentWorktree?.id]);
 
