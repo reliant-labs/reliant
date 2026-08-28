@@ -340,18 +340,26 @@ export function useWorkflowInputs({
     [values, onValuesChange]
   );
 
-  // Handle individual input change
+  // Handle individual input change.
+  //
+  // Composes onto `valuesRef` rather than the `values` prop captured in this
+  // closure. Callers fire several of these from one event handler — e.g.
+  // WorkflowStepConfig's handleResponseToolChange writes response_tool_name,
+  // response_tool_description and response_schema back to back. React has not
+  // re-rendered between them, so reading the prop would give all three the
+  // same stale snapshot and the last write would silently discard the others.
   const handleInputChange = useCallback(
     (name: string, value: unknown) => {
-      const newValues = { ...values };
+      const newValues = { ...valuesRef.current };
       if (value === undefined || value === "") {
         delete newValues[name];
       } else {
         newValues[name] = fromJson(ValueSchema, value as any);
       }
+      valuesRef.current = newValues;
       onValuesChange(newValues);
     },
-    [values, onValuesChange]
+    [onValuesChange]
   );
 
   // Get current value for an input (checks: args → selected preset → default)
