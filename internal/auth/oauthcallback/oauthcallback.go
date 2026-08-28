@@ -27,6 +27,17 @@ const (
 
 	listenerKind    = "reliant-oauth-callback"
 	listenerVersion = 1
+
+	// waiterDrainBudget bounds how long the owning flow waits for queued flows
+	// to receive the result. Local writes, so this is generous by an order of
+	// magnitude; it exists only so a waiter that vanishes cannot hang the owner.
+	waiterDrainBudget = 5 * time.Second
+
+	// shutdownBudget bounds the graceful shutdown that follows. The browser
+	// holds a keep-alive connection open after the callback, and Shutdown waits
+	// for idle connections, so this must be short enough not to stall the
+	// caller — Close() is the fallback when it expires.
+	shutdownBudget = 2 * time.Second
 )
 
 // CallbackConfig describes how to listen for and construct the OAuth redirect URI.
@@ -69,6 +80,61 @@ type callbackServer struct {
 	mu     sync.Mutex
 	result *Result
 	done   chan struct{}
+
+	// inFlight counts queued flows currently blocked in handleResult, and
+	// drained is closed once the last one has been written back to.
+	//
+	// Releasing every waiter (close(done)) is not the same as every waiter
+	// having RECEIVED its answer. The owning flow returns from awaitResult the
+	// instant the callback lands and its deferred Close() kills the listener,
+	// which severs the /result responses still being written to the queued
+	// flows. Those flows then fall out of tryReuseExistingListener with a
+	// transport error, and Run reports the ORIGINAL bind error — "address
+	// already in use" — which is precisely the failure the queue exists to
+	// prevent. So the owner must wait for the handoff to complete, not merely
+	// for the answer to exist.
+	inFlight int
+	drained  chan struct{}
+}
+
+// addWaiter registers a queued flow that is about to block on the result.
+func (s *callbackServer) addWaiter() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inFlight++
+}
+
+// doneWaiter marks a queued flow as fully served, closing drained when the
+// last one finishes so the owner's shutdown can proceed.
+func (s *callbackServer) doneWaiter() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.inFlight--
+	if s.inFlight == 0 && s.drained != nil {
+		close(s.drained)
+		s.drained = nil
+	}
+}
+
+// waitForWaiters blocks until every queued flow has been written back to, or
+// the budget expires. A queued flow that never arrives cannot hold the owner
+// open indefinitely.
+func (s *callbackServer) waitForWaiters(budget time.Duration) {
+	s.mu.Lock()
+	if s.inFlight == 0 {
+		s.mu.Unlock()
+		return
+	}
+	if s.drained == nil {
+		s.drained = make(chan struct{})
+	}
+	drained := s.drained
+	s.mu.Unlock()
+
+	select {
+	case <-drained:
+	case <-time.After(budget):
+	}
 }
 
 // newResult records the callback and wakes every waiter, exactly once.
@@ -174,11 +240,29 @@ func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
 
 	httpServer := &http.Server{Handler: server.handler(), ReadHeaderTimeout: 10 * time.Second}
 	go httpServer.Serve(listener) //nolint:errcheck // best-effort serve in background goroutine
-	defer func() { _ = httpServer.Close() }()
+
+	// Hand off to any queued flows before dropping the listener, then shut
+	// down gracefully so their in-flight /result responses — and the browser's
+	// own callback response — finish writing. Close() severs both mid-write.
+	defer func() {
+		server.waitForWaiters(waiterDrainBudget)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			_ = httpServer.Close()
+		}
+	}()
 
 	go func() {
 		<-ctx.Done()
-		_ = httpServer.Close()
+		// A cancelled flow has no answer to hand anyone, so there is nothing
+		// to drain — but still shut down gracefully rather than severing the
+		// socket, so the port is released cleanly for the next attempt.
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
+		defer cancel()
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			_ = httpServer.Close()
+		}
 	}()
 
 	if err := openBrowser(authorizeURL); err != nil {
@@ -268,6 +352,9 @@ func (s *callbackServer) handleProbe(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *callbackServer) handleResult(w http.ResponseWriter, r *http.Request) {
+	s.addWaiter()
+	defer s.doneWaiter()
+
 	result, err := s.awaitResult(r.Context())
 	if err != nil {
 		status := http.StatusGatewayTimeout
