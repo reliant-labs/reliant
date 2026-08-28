@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 
+import { DaemonStatus as ControlPlaneDaemonStatus } from "@/gen/controlplane/v1/public/shared_pb";
 import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
 
 /**
@@ -41,8 +42,18 @@ import { hasUsableControlPlaneDaemonForOnboarding } from "./steps/ComputeStep";
  * dies with the tab, which is the exact lifetime this fact should have.
  */
 
-/** Minimal shape needed to date a daemon; matches the control-plane Daemon. */
-type DatedDaemon = { createdAt?: { seconds: bigint } };
+/**
+ * Minimal shape this hook reads off a daemon; matches the control-plane Daemon.
+ *
+ * Both fields are load-bearing: `createdAt` dates the daemon against the
+ * account, and `status` is what `hasUsableControlPlaneDaemonForOnboarding`
+ * inspects. `status` is the control-plane enum specifically — the reliant
+ * enum of the same name has different numeric values.
+ */
+type DatedDaemon = {
+  createdAt?: { seconds: bigint };
+  status: ControlPlaneDaemonStatus;
+};
 
 const IN_PROGRESS_KEY_PREFIX = "reliant:onboarding:in-progress:";
 
@@ -118,9 +129,7 @@ export function useReturningUserHeal<T extends DatedDaemon>({
         ? Number(daemon.createdAt.seconds) * 1000 >= userCreatedAtMs
         : false,
     );
-    const hasDaemon = hasUsableControlPlaneDaemonForOnboarding(
-      ownDaemons as Parameters<typeof hasUsableControlPlaneDaemonForOnboarding>[0],
-    );
+    const hasDaemon = hasUsableControlPlaneDaemonForOnboarding(ownDaemons);
 
     if (hasDaemon) {
       // Proof of a PRIOR completion only if we have not already watched this

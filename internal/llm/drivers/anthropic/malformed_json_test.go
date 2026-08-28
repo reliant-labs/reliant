@@ -161,8 +161,13 @@ func TestSDKJSONMarshalBehavior(t *testing.T) {
 		}
 		_, err = json.Marshal(invalidBlock)
 		require.Error(t, err)
-		// This is the error pattern we need to catch
-		assert.Contains(t, err.Error(), "json.RawMessage")
+		// This is the error pattern the workflow classifier keys on to decide a
+		// streaming glitch is retryable. Only the stable half is asserted: the
+		// failing type's name is NOT stable across Go releases (1.26 renders
+		// "json.RawMessage", 1.27 "*jsontext.Value", since RawMessage became an
+		// alias for jsontext.Value), which is exactly why the classifier now
+		// matches the prefix instead of the type name.
+		assert.Contains(t, err.Error(), "error calling MarshalJSON")
 		assert.Contains(t, err.Error(), "unexpected end of JSON input")
 	})
 }
