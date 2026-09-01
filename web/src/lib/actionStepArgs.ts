@@ -141,10 +141,12 @@ function wrapValue(value: unknown, fieldType: string, isCel: boolean): unknown {
 
     case 'array':
     case 'string_list': {
-      if (!strValue) return undefined
       if (isExpr) return celExpr(strValue)
-      // Comma-separated list → CelStringList literal
+      // Comma-separated list → CelStringList literal. An all-separator value
+      // (the user has typed "go, " and not yet the next entry) still yields a
+      // list, so the field keeps the entries already committed.
       const items = strValue.split(',').map(s => s.trim()).filter(Boolean)
+      if (items.length === 0) return undefined
       return { value: { case: 'literal' as const, value: { values: items } } }
     }
 

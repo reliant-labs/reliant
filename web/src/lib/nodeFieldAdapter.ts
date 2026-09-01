@@ -115,12 +115,12 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
     }
   }
 
-  // Array or string_list → textarea
+  // Array or string_list → textarea holding a comma-separated list
   if (field.type === 'array' || field.type === 'string_list') {
     return {
       ...base,
       widget: 'textarea',
-      valueKind: 'string',
+      valueKind: 'stringList',
       celCapable: field.isCel,
     }
   }

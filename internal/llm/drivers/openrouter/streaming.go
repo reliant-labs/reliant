@@ -67,6 +67,9 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 
 		if len(convertedTools) > 0 {
 			request["tools"] = convertedTools
+			if choice := forcedToolChoice(c.Options.ForceToolChoice, convertedTools); choice != nil {
+				request["tool_choice"] = choice
+			}
 		}
 
 		requestBody, err := json.Marshal(request)
@@ -329,6 +332,9 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 
 		if len(convertedTools) > 0 {
 			request["tools"] = convertedTools
+			if choice := forcedToolChoice(c.Options.ForceToolChoice, convertedTools); choice != nil {
+				request["tool_choice"] = choice
+			}
 		}
 
 		// Add reasoning config for Gemini thinking models

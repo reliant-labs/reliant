@@ -20,24 +20,24 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "chat-and-sidebars",
     type: "multi-spotlight",
-    title: "Your Development Environment",
+    title: "Everything in one view",
     description:
-      "Three panels work together — conversations on the left, AI chat in the center, and project context on the right.",
+      "Chat in the middle, your history on the left, and your project's files and changes on the right.",
     targets: [
       {
         selector: "[data-onboarding='left-sidebar']",
         label: "Conversations",
-        description: "Chat history grouped by workspace",
+        description: "Every chat you've had, organized by workspace",
       },
       {
         selector: "[data-onboarding='chat-input']",
-        label: "AI Chat",
-        description: "Ask anything — code, debug, refactor",
+        label: "Ask anything",
+        description: "Ask it to fix a bug, write a test, or explain a file",
       },
       {
         selector: "[data-onboarding='right-sidebar']",
-        label: "Project Context",
-        description: "Files, changes, processes, tasks",
+        label: "Project context",
+        description: "The files it's touched, the diffs it's made, and what's running",
       },
     ],
     skippable: true,
@@ -47,7 +47,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     type: "spotlight",
     title: "Workspaces",
     description:
-      "Isolated git branches for parallel work. Create, switch, and manage them here.",
+      "Work on more than one thing at once — each workspace is its own git branch, so nothing collides with your main code.",
     targetSelector: "[data-onboarding='workspace-buttons']",
     skippable: true,
     spotlightConfig: {
@@ -60,7 +60,7 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     type: "spotlight",
     title: "Workflows",
     description:
-      "Multi-agent AI pipelines defined in YAML — with loops, branches, parallel execution, and approval gates.",
+      "Automate a whole task — like fixing a bug and opening a PR — as one multi-step run instead of message by message.",
     targetSelector: "[data-onboarding='workflow-button']",
     skippable: true,
     spotlightConfig: {
@@ -71,9 +71,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "workflow-hub",
     type: "spotlight",
-    title: "Workflow Templates",
+    title: "Ready-made workflows",
     description:
-      "Browse built-in templates or create your own. Start with Agent for general tasks, or Checklist for a full development pipeline.",
+      "Pick a template built for your task — Agent for a quick one-off, or Checklist for a full build-test-review pipeline.",
     targetSelector: "[data-onboarding='workflow-hub']",
     skippable: true,
     spotlightConfig: {
@@ -84,9 +84,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "workflow-builder",
     type: "spotlight",
-    title: "Visual Workflow Builder",
+    title: "Build your own",
     description:
-      "Build workflows visually with drag-and-drop. Nodes represent steps, edges show the flow. Connect steps to create custom AI pipelines.",
+      "Drag steps onto the canvas and connect them to design your own multi-step process.",
     targetSelector: "[data-onboarding='workflow-canvas']",
     skippable: true,
     spotlightConfig: {
@@ -97,9 +97,9 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "workflow-builder-chat",
     type: "spotlight",
-    title: "Builder AI Assistant",
+    title: "Describe, don't draw",
     description:
-      "Generate an entire workflow from a one-line description, or chat to edit and refine an existing one — it writes the YAML for you.",
+      "Describe what you want in plain English and it builds the workflow for you.",
     targetSelector: "[data-onboarding='workflow-chat']",
     skippable: true,
     spotlightConfig: {
@@ -197,7 +197,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "add-api-key",
     title: "Add an API key",
-    description: "Connect an AI provider to start using Reliant",
+    description: "Connect your AI provider so Reliant can start working",
     category: "required",
     action: "open-modal",
     actionTarget: "api-key-setup",
@@ -206,15 +206,15 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "start-chat",
     title: "Start a chat",
-    description: "Send your first message to an AI agent",
+    description: "Ask it to fix a bug, write a test, or explain some code",
     category: "required",
     action: "focus-input",
     actionLabel: "Start chatting",
   },
   {
     id: "use-custom-workflow",
-    title: "Use a custom workflow",
-    description: "Run a chat with a non-default workflow selected",
+    title: "Try a workflow",
+    description: "Run a chat using a ready-made workflow instead of the default",
     category: "required",
     action: "navigate",
     actionTarget: "workflow-hub",
@@ -222,8 +222,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     id: "create-workflow",
-    title: "Create a workflow",
-    description: "Build a custom AI pipeline in the visual editor",
+    title: "Design your own workflow",
+    description: "Put together a multi-step process in the visual builder",
     category: "required",
     action: "navigate",
     actionTarget: "workflow-builder",
@@ -231,8 +231,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     id: "take-product-tour",
-    title: "Take the product tour",
-    description: "Walk through Reliant's chat, workspace, and workflow basics",
+    title: "Take the tour",
+    description: "A two-minute walkthrough of chat, workspaces, and workflows",
     category: "required",
     action: "navigate",
     actionTarget: "product-tour",
@@ -243,7 +243,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "create-workspace",
     title: "Create a workspace",
-    description: "Work on a feature in an isolated git branch",
+    description: "Start a feature on its own branch, without touching main",
     category: "bonus",
     action: "navigate",
     actionTarget: "create-workspace",
@@ -251,8 +251,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     id: "create-preset",
-    title: "Create a preset",
-    description: "Save custom agent settings for reuse",
+    title: "Save a preset",
+    description: "Save your favorite agent settings so you can reuse them later",
     category: "bonus",
     action: "navigate",
     actionTarget: "workflow-hub-presets",
@@ -260,8 +260,8 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   },
   {
     id: "install-mcp",
-    title: "Install an MCP server",
-    description: "Extend AI capabilities with external tools",
+    title: "Connect a tool",
+    description: "Give the AI access to other tools and services via MCP",
     category: "bonus",
     action: "navigate",
     actionTarget: "settings-mcp",
@@ -270,7 +270,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "read-docs",
     title: "Read the docs",
-    description: "Learn about workflows, presets, and more",
+    description: "Learn more about workflows, presets, and everything else",
     category: "bonus",
     action: "external-link",
     actionTarget: "https://docs.reliantlabs.io/",

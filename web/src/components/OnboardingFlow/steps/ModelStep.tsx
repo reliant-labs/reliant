@@ -336,11 +336,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Choose model access
+          Which AI should Reliant use?
         </h2>
-        <p className="text-sm text-muted-foreground">
-          Connect your own provider, or use Reliant credits when capacity is
-          available.
+        <p className="mx-auto max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
+          Already pay for Claude, ChatGPT or Copilot? Sign in and use it here.
+          Or add credit to Reliant and we handle the rest.
         </p>
       </div>
 
@@ -350,11 +350,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
             <KeyRound className="mt-0.5 h-4 w-4 text-primary" />
             <div>
               <h3 className="text-sm font-medium text-foreground">
-                Connect your own provider
+                Choose a provider
               </h3>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Use Reliant's multi-model API, or bring your own key or
-                subscription.
+                Bring a subscription you already pay for, paste an API key, or
+                use Reliant credit.
               </p>
             </div>
           </div>
@@ -401,8 +401,9 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  No API key needed, but Reliant needs credit before it can
-                  answer. Redeem a code or set up billing to continue.
+                  No API key needed — add credit with a code or a card. If you
+                  already pay for Claude, ChatGPT or Copilot, pick it above
+                  instead and this is free.
                 </p>
               )}
               {/* Always offered, never gated on the current balance: a user

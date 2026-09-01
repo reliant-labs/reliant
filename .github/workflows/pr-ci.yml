@@ -109,7 +109,15 @@ jobs:
       # backlog shrinks. Flip this to a hard gate (drop continue-on-error) once
       # it reaches zero — that is a small, separate cleanup.
       - name: Install forge
-        run: go install github.com/reliant-labs/forge/cmd/forge@latest
+        # Pin the CLI to the SAME version go.mod already requires, so the linter
+        # matches the library this code compiles against. @latest silently
+        # switched forge mid-release; a hardcoded version is a second place to
+        # remember to bump. go.mod is the single source of truth.
+        run: |
+          set -euo pipefail
+          FORGE_VERSION="$(go list -m -f '{{.Version}}' github.com/reliant-labs/forge)"
+          echo "installing forge $FORGE_VERSION"
+          go install "github.com/reliant-labs/forge/cmd/forge@$FORGE_VERSION"
 
       - name: Lint (forge)
         continue-on-error: true

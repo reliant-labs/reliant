@@ -26,6 +26,22 @@ type RouterLike = {
   state: { location: { pathname: string } };
   navigate: (opts: { to: string; params?: unknown; search?: unknown }) => unknown;
 };
+
+// Carry the existing search params across a pathname-only navigation.
+//
+// tanstack-router REPLACES search when `search` is omitted, so a bare
+// `navigate({ to, params })` silently drops every param on the URL. This
+// function only decides which *path* the user should be on; the params
+// belong to whoever put them there.
+//
+// The param that made this bite: the post-onboarding tour lives entirely in
+// `?tour=<step-id>` (see useTourNavigation). Onboarding hands off to
+// `/?tour=<first-step>`, then workspace restore selects the project it just
+// created, and this sync moved / → /project/$id and erased the param — so
+// OnboardingWizard read no step and rendered nothing. The tour appeared to
+// "sometimes not trigger", with no error anywhere, purely on whether the
+// restore landed after the handoff.
+const preserveSearch = (prev: Record<string, unknown>) => prev;
 function getRouter(): RouterLike | null {
   const r = (globalThis as { __RELIANT_ROUTER?: RouterLike }).__RELIANT_ROUTER;
   return r ?? null;
@@ -55,6 +71,11 @@ function syncProjectUrl(projectId: string | null) {
         currentPath.startsWith("/reset-password") ||
         currentPath.startsWith("/verify-email") ||
         currentPath.startsWith("/design-sandbox") ||
+        // Onboarding creates and selects a project mid-flow (ensureProject),
+        // which would otherwise yank the user off /onboarding and into the
+        // app before the flow had finished. OnboardingRoute owns when to
+        // leave; the selection is background context until then.
+        currentPath.startsWith("/onboarding") ||
         // The mobile surface has its own project handling (MobileShell picks a
         // fallback project itself). Without this, MobileShell's own
         // selectProject call navigated the user out of /m/* and into the
@@ -65,12 +86,16 @@ function syncProjectUrl(projectId: string | null) {
       ) {
         return;
       }
-      router.navigate({ to: "/project/$projectId", params: { projectId } });
+      router.navigate({
+        to: "/project/$projectId",
+        params: { projectId },
+        search: preserveSearch,
+      });
     } else {
       if (currentPath === "/" || currentPath.startsWith("/settings") || currentPath.startsWith("/workflow")) {
         return;
       }
-      router.navigate({ to: "/", search: {} });
+      router.navigate({ to: "/", search: preserveSearch });
     }
   } catch (err) {
     logger.warn("[ProjectStore] Failed to sync project URL", err);

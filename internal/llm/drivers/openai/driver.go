@@ -241,6 +241,28 @@ func (o *OpenaiClient) ConvertTools(tools []tools.Tool) []openai.ChatCompletionT
 	return openaiTools
 }
 
+// toolListHasFunction reports whether name is present in an already-converted
+// Chat Completions tool list. tool_choice naming an absent tool is a provider
+// 400, so callers must check this before pinning.
+func toolListHasFunction(tools []openai.ChatCompletionToolUnionParam, name string) bool {
+	for _, tool := range tools {
+		if fn := tool.GetFunction(); fn != nil && fn.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+// responsesToolListHasFunction is the Responses-API analog of toolListHasFunction.
+func responsesToolListHasFunction(tools []responses.ToolUnionParam, name string) bool {
+	for _, tool := range tools {
+		if n := tool.GetName(); n != nil && *n == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (o *OpenaiClient) finishReason(reason string) message.FinishReason {
 	switch reason {
 	case "stop":
@@ -267,6 +289,13 @@ func (o *OpenaiClient) preparedParams(messages []openai.ChatCompletionMessagePar
 	// Only set tools if there are any
 	if len(tools) > 0 {
 		params.Tools = tools
+		// A tool_choice naming a tool absent from Tools is a provider 400, so
+		// only pin when the named tool is actually in this request's list.
+		if o.Options.ForceToolChoice != "" && toolListHasFunction(tools, o.Options.ForceToolChoice) {
+			params.ToolChoice = openai.ToolChoiceOptionFunctionToolChoice(
+				openai.ChatCompletionNamedToolChoiceFunctionParam{Name: o.Options.ForceToolChoice},
+			)
+		}
 	}
 
 	// Add temperature if specified in options
@@ -786,7 +815,15 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 	// NOTE: Function-call name truncation is handled in convertMessagesToResponsesInput.
 
 	if len(toolList) > 0 {
-		params.Tools = o.convertToolsToResponsesTools(toolList)
+		convertedTools := o.convertToolsToResponsesTools(toolList)
+		params.Tools = convertedTools
+		// A tool_choice naming a tool absent from Tools is a provider 400, so
+		// only pin when the named tool is actually in this request's list.
+		if o.Options.ForceToolChoice != "" && responsesToolListHasFunction(convertedTools, o.Options.ForceToolChoice) {
+			params.ToolChoice = responses.ResponseNewParamsToolChoiceUnion{
+				OfFunctionTool: &responses.ToolChoiceFunctionParam{Name: o.Options.ForceToolChoice},
+			}
+		}
 	}
 
 	if o.Options.Temperature != nil {

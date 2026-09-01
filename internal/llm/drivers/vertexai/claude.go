@@ -70,12 +70,21 @@ type claudeTool struct {
 	CacheControl *claudeCacheControl    `json:"cache_control,omitempty"`
 }
 
+// claudeToolChoice pins the request to a single named tool. Mirrors the
+// Anthropic Messages API tool_choice shape used by the direct Anthropic
+// driver (see anthropic/base.go toolChoice).
+type claudeToolChoice struct {
+	Type string `json:"type"`
+	Name string `json:"name,omitempty"`
+}
+
 type claudeRequest struct {
 	AnthropicVersion string               `json:"anthropic_version"`
 	Messages         []claudeMessage      `json:"messages"`
 	MaxTokens        int                  `json:"max_tokens"`
 	System           []claudeSystemPrompt `json:"system,omitempty"`
 	Tools            []claudeTool         `json:"tools,omitempty"`
+	ToolChoice       *claudeToolChoice    `json:"tool_choice,omitempty"`
 	Temperature      *float64             `json:"temperature,omitempty"`
 	Stream           bool                 `json:"stream,omitempty"`
 }
@@ -227,6 +236,18 @@ func (c *VertexAIClient) buildClaudeRequest(prompts []string, messages []message
 	// Convert tools with caching (last tool only)
 	if len(toolsList) > 0 {
 		req.Tools = c.convertToolsToClaude(toolsList)
+	}
+
+	// A pin naming a tool absent from toolsList is a provider error, so it is
+	// only honored when the named tool is actually present.
+	if c.options.ForceToolChoice != "" {
+		for _, tool := range toolsList {
+			if tool.Name() == c.options.ForceToolChoice {
+				req.ToolChoice = &claudeToolChoice{Type: "tool", Name: c.options.ForceToolChoice}
+				logging.Debug("Vertex AI Claude: Pinned tool choice", "tool", c.options.ForceToolChoice)
+				break
+			}
+		}
 	}
 
 	return req

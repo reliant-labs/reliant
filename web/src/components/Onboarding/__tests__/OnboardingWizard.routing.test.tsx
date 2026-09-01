@@ -276,8 +276,8 @@ describe("OnboardingWizard URL gating", () => {
     );
     // No tour modal, no spotlight title — heuristic: none of the known
     // step titles should appear.
-    expect(screen.queryByText("Workflow Templates")).toBeNull();
-    expect(screen.queryByText("Your Development Environment")).toBeNull();
+    expect(screen.queryByText("Ready-made workflows")).toBeNull();
+    expect(screen.queryByText("Everything in one view")).toBeNull();
   });
 
   it("renders the multi-spotlight step when at /?tour=chat-and-sidebars", async () => {

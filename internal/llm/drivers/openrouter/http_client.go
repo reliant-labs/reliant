@@ -43,10 +43,53 @@ type OpenRouterRequest struct {
 	Model       string                   `json:"model"`
 	Messages    []map[string]interface{} `json:"messages"`
 	Tools       []map[string]interface{} `json:"tools,omitempty"`
+	ToolChoice  *OpenRouterToolChoice    `json:"tool_choice,omitempty"`
 	Temperature *float64                 `json:"temperature,omitempty"`
 	MaxTokens   int64                    `json:"max_tokens,omitempty"`
 	Stream      bool                     `json:"stream"`
 	Reasoning   *ReasoningConfig         `json:"reasoning,omitempty"`
+}
+
+// OpenRouterToolChoice pins a request to a single named function, in the
+// OpenAI tool_choice wire shape OpenRouter accepts.
+type OpenRouterToolChoice struct {
+	Type     string                   `json:"type"`
+	Function OpenRouterToolChoiceFunc `json:"function"`
+}
+
+// OpenRouterToolChoiceFunc names the pinned function.
+type OpenRouterToolChoiceFunc struct {
+	Name string `json:"name"`
+}
+
+// forcedToolChoice returns the tool_choice for a pinned request, or nil when
+// nothing should be pinned.
+//
+// These two custom paths marshal their own JSON instead of using the OpenAI
+// SDK params, so they do not inherit the pin the embedded OpenaiClient applies
+// — it has to be set here as well. Without it a one-shot request whose
+// correctness depends on the pin (chat title generation, whose only tool is
+// set_title) silently degrades to a prose answer.
+//
+// The name must appear in the tools actually being sent: a tool_choice naming
+// an absent function is rejected by the provider.
+func forcedToolChoice(name string, convertedTools []map[string]interface{}) *OpenRouterToolChoice {
+	if name == "" || len(convertedTools) == 0 {
+		return nil
+	}
+	for _, tool := range convertedTools {
+		function, ok := tool["function"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		if toolName, ok := function["name"].(string); ok && toolName == name {
+			return &OpenRouterToolChoice{
+				Type:     "function",
+				Function: OpenRouterToolChoiceFunc{Name: name},
+			}
+		}
+	}
+	return nil
 }
 
 // OpenRouterResponse represents the response structure from OpenRouter API
@@ -151,6 +194,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 
 	if len(convertedTools) > 0 {
 		request.Tools = convertedTools
+		request.ToolChoice = forcedToolChoice(c.Options.ForceToolChoice, convertedTools)
 	}
 
 	// Marshal request to JSON
@@ -345,6 +389,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 
 	if len(convertedTools) > 0 {
 		request.Tools = convertedTools
+		request.ToolChoice = forcedToolChoice(c.Options.ForceToolChoice, convertedTools)
 	}
 
 	// Add reasoning config for Gemini thinking models

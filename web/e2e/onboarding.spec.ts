@@ -94,11 +94,29 @@ async function mockGrpcRoutes(page: Page) {
   );
 
   // Cloud user + eligibility — a fresh, not-yet-onboarded, cloud-eligible user.
+  //
+  // GetCurrentUser is STATEFUL: it starts as not-onboarded and flips once
+  // CompleteOnboarding is called, because that is what the real server does.
+  // A mock pinned to `false` forever fights the app on the way out of the
+  // flow: useCompleteOnboarding optimistically sets onboardingCompleted=true
+  // (specifically so ModernApp does not bounce back to /onboarding) and then
+  // invalidates, and a refetch answering `false` undoes the optimistic write.
+  // ModernApp's redirect then correctly fires and the user is pulled back to
+  // /onboarding — a mock artifact that looks exactly like a routing bug.
+  let onboardingCompleted = false;
+  await page.route('**/controlplane.v1.UserService/CompleteOnboarding', (route: Route) => {
+    onboardingCompleted = true;
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({}),
+    });
+  });
   await page.route('**/controlplane.v1.UserService/GetCurrentUser', (route: Route) =>
     route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ user: { id: 'user_test', onboardingCompleted: false } }),
+      body: JSON.stringify({ user: { id: 'user_test', onboardingCompleted } }),
     }),
   );
   await page.route(
@@ -190,8 +208,8 @@ test.describe('Onboarding Flow', () => {
     await expect(dialog).toBeVisible();
 
     // First step is Compute — verify the heading is visible.
-    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Start cloud daemon' })).toBeVisible();
+    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Start my machine' })).toBeVisible();
   });
 
   test('landing on / redirects a not-yet-onboarded user to /onboarding', async ({ page }) => {
@@ -254,9 +272,9 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start cloud daemon' }).click();
+    await dialog.getByRole('button', { name: 'Start my machine' }).click();
 
-    await expect(dialog.getByText('Choose model access')).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(/cloud_free_trial/, { timeout: 10_000 });
   });
 
@@ -264,7 +282,7 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: "I'll connect my own" }).click();
+    await dialog.getByRole('button', { name: /Use my own computer/i }).click();
 
     // Stays on the compute step (URL keeps no `compute` plan field) — the
     // local-daemon instructions render inline rather than navigating.
@@ -292,23 +310,23 @@ test.describe('Onboarding Flow', () => {
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
     // Auto-skips straight past the compute step to Model.
-    await expect(dialog.getByText('Choose model access')).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(/local_daemon/, { timeout: 10_000 });
   });
 
   // ── Model → Project-choice / Project-picker ─────────────────
 
-  test('Model: saving a BYO Anthropic key on the cloud path advances to Pick a starting point', async ({ page }) => {
+  test('Model: saving a BYO Anthropic key on the cloud path advances to What do you want to work on?', async ({ page }) => {
     await gotoOnboardingWithPlan(page, { compute: 'cloud_free_trial' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Choose model access')).toBeVisible();
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Anthropic', exact: true }).click();
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-test-key');
     await dialog.getByRole('button', { name: 'Save key and start' }).click();
 
-    // Cloud path lands on project-choice ("Pick a starting point").
-    await expect(dialog.getByText('Pick a starting point')).toBeVisible({ timeout: 10_000 });
+    // Cloud path lands on project-choice ("What do you want to work on?").
+    await expect(dialog.getByText('What do you want to work on?')).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(/modelProvider.*anthropic|anthropic.*modelProvider/, {
       timeout: 10_000,
     });
@@ -317,7 +335,7 @@ test.describe('Onboarding Flow', () => {
   test('Model: saving a BYO key on the local path advances to Pick a project', async ({ page }) => {
     await gotoOnboardingWithPlan(page, { compute: 'local_daemon' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Choose model access')).toBeVisible();
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Anthropic', exact: true }).click();
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-test-key');
@@ -336,7 +354,7 @@ test.describe('Onboarding Flow', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Pick a starting point')).toBeVisible();
+    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
 
     await dialog.getByRole('button', { name: /Start something new/i }).click();
 
@@ -351,7 +369,7 @@ test.describe('Onboarding Flow', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Pick a starting point')).toBeVisible();
+    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
 
     // Simulate an existing_codebase plan seeded directly (equivalent to the
     // OAuth round trip having already happened) — deriveStep sends an
@@ -406,15 +424,15 @@ test.describe('Onboarding Flow', () => {
     // First step (compute): no Back button.
     await expect(dialog.getByRole('button', { name: /Back/i })).not.toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Start cloud daemon' }).click();
-    await expect(dialog.getByText('Choose model access')).toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     // Back button now visible in the footer, and returns to Compute.
     const backButton = dialog.getByRole('button', { name: /Back/i });
     await expect(backButton).toBeVisible();
     await backButton.click();
 
-    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible({
+    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -425,7 +443,7 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboardingWithPlan(page, { compute: 'cloud_free_trial' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await expect(dialog).toBeVisible({ timeout: 10_000 });
-    await expect(dialog.getByText('Choose model access')).toBeVisible({ timeout: 5_000 });
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 5_000 });
   });
 
   test('An unrecognized top-level search param (no plan key) is ignored, landing on the first step', async ({ page }) => {
@@ -436,7 +454,7 @@ test.describe('Onboarding Flow', () => {
     await page.getByRole('dialog', { name: 'Onboarding setup' }).waitFor({ timeout: 10_000 });
 
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible({
+    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -452,7 +470,7 @@ test.describe('Onboarding Flow', () => {
  * mockGrpcRoutes seeds `eligible: true`, which is the funded path every other
  * test here exercises. But the compute auto-grant at signup is gone, so an
  * actual brand-new account comes back NO_SUBSCRIPTION — and that was the one
- * state where the step's primary control, "Start cloud daemon", could never be
+ * state where the step's primary control, "Start my machine", could never be
  * clicked. It rendered greyed out with the two controls that fix it (redeem a
  * coupon, set up billing) demoted to small links underneath.
  *
@@ -481,21 +499,21 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await loginWithApiKey(page);
   });
 
-  test('offers no dead "Start cloud daemon" button, and promotes coupon + billing instead', async ({
+  test('offers no dead "Start my machine" button, and promotes coupon + billing instead', async ({
     page,
   }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
     // The reported bug: a button that is always grey. It is now absent.
-    await expect(dialog.getByRole('button', { name: 'Start cloud daemon' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Start my machine' })).toHaveCount(0);
 
     // The two controls that CAN change this user's state are the ones on offer.
     await expect(dialog.getByRole('button', { name: /Have a coupon code/i })).toBeEnabled();
     await expect(dialog.getByRole('button', { name: /Set up billing/i })).toBeEnabled();
 
     // And the self-hosted path — which needs no billing at all — is still here.
-    await expect(dialog.getByRole('button', { name: /I'll connect my own/i })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: /Use my own computer/i })).toBeEnabled();
   });
 
   test('no control on the Compute step is disabled', async ({ page }) => {
@@ -522,7 +540,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await expect(dialog.getByPlaceholder(/Enter code/i)).toBeVisible();
     await expect(dialog.getByRole('button', { name: /^Redeem$/ })).toBeEnabled();
     // Still on Compute — the step did not navigate away.
-    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible();
+    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
   });
 });
 
@@ -568,10 +586,10 @@ test.describe('Onboarding – Failure Scenarios', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start cloud daemon' }).click();
+    await dialog.getByRole('button', { name: 'Start my machine' }).click();
 
     // Stays on Compute and surfaces the server's error text.
-    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible({
+    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
       timeout: 5_000,
     });
     await expect(dialog.getByText('Internal server error')).toBeVisible({ timeout: 10_000 });
@@ -591,12 +609,12 @@ test.describe('Onboarding – Failure Scenarios', () => {
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Pick a starting point')).toBeVisible();
+    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
 
     await dialog.getByRole('button', { name: /Start something new/i }).click();
 
     await expect(
-      dialog.getByText(/Couldn't create your workspace/i),
+      dialog.getByText(/Couldn't set up your project/i),
     ).toBeVisible({ timeout: 10_000 });
     // Onboarding dialog is still open — the user can retry.
     await expect(dialog).toBeVisible();
@@ -614,7 +632,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
 
     await gotoOnboardingWithPlan(page, { compute: 'cloud_free_trial' });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-    await expect(dialog.getByText('Choose model access')).toBeVisible();
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
 
     await dialog.getByRole('button', { name: 'Anthropic', exact: true }).click();
     await dialog.getByPlaceholder('sk-ant-...').fill('sk-ant-bad-key');
@@ -622,7 +640,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
 
     await expect(dialog.getByText(/Invalid API key/i)).toBeVisible({ timeout: 10_000 });
     // Still on Model — no navigation happened.
-    await expect(dialog.getByText('Choose model access')).toBeVisible();
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible();
   });
 });
 
@@ -680,15 +698,15 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await loginWithApiKey(page);
   });
 
-  test('Rapid double-click on "Start cloud daemon" does not skip past Model', async ({ page }) => {
+  test('Rapid double-click on "Start my machine" does not skip past Model', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start cloud daemon' }).dblclick();
+    await dialog.getByRole('button', { name: 'Start my machine' }).dblclick();
 
     // Lands on Model, not further — a double-fire would otherwise race two
     // updatePlan calls and could land past it.
-    await expect(dialog.getByText('Choose model access')).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
   });
 
   test('An absurd/garbage plan value does not leave a blank screen', async ({ page }) => {
@@ -714,15 +732,15 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start cloud daemon' }).click();
-    await expect(dialog.getByText('Choose model access')).toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
-    await expect(dialog.getByText('One chat interface. Daemons anywhere.')).toBeVisible({
+    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
       timeout: 5_000,
     });
 
-    await dialog.getByRole('button', { name: "I'll connect my own" }).click();
+    await dialog.getByRole('button', { name: /Use my own computer/i }).click();
     await expect(
       dialog.getByText('Install Reliant Daemon and connect with a token'),
     ).toBeVisible({ timeout: 5_000 });

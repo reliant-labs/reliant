@@ -210,6 +210,18 @@ func (c *LocalClient) finishReason(reason string) message.FinishReason {
 	}
 }
 
+// toolListHasFunction reports whether name is present in an already-converted
+// Chat Completions tool list. tool_choice naming an absent tool is a provider
+// 400, so callers must check this before pinning.
+func toolListHasFunction(tools []openai.ChatCompletionToolUnionParam, name string) bool {
+	for _, tool := range tools {
+		if fn := tool.GetFunction(); fn != nil && fn.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 func (c *LocalClient) preparedParams(messages []openai.ChatCompletionMessageParamUnion, tools []openai.ChatCompletionToolUnionParam) openai.ChatCompletionNewParams {
 	params := openai.ChatCompletionNewParams{
 		Model:    openai.ChatModel(c.Options.Model.APIModel),
@@ -219,6 +231,13 @@ func (c *LocalClient) preparedParams(messages []openai.ChatCompletionMessagePara
 	// Only set tools if there are any
 	if len(tools) > 0 {
 		params.Tools = tools
+		// A tool_choice naming a tool absent from Tools is a provider 400, so
+		// only pin when the named tool is actually in this request's list.
+		if c.Options.ForceToolChoice != "" && toolListHasFunction(tools, c.Options.ForceToolChoice) {
+			params.ToolChoice = openai.ToolChoiceOptionFunctionToolChoice(
+				openai.ChatCompletionNamedToolChoiceFunctionParam{Name: c.Options.ForceToolChoice},
+			)
+		}
 	}
 
 	// Add temperature if specified in options

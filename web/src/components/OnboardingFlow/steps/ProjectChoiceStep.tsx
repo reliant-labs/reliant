@@ -56,7 +56,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
         logger.warn("[ProjectChoiceStep] ensureProject failed; aborting", projectErr);
         trackEvent("onboarding_ensure_project_failed", { error: String(projectErr) });
         setError(
-          "Couldn't create your workspace. Please try again, or contact support if the problem persists.",
+          "Couldn't set up your project. Please try again, or contact support if the problem persists.",
         );
         setBusy(false);
         return;
@@ -126,10 +126,10 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Pick a starting point
+          What do you want to work on?
         </h2>
         <p className="text-sm text-muted-foreground">
-          You can change this later — both paths land you in the same workspace.
+          You can add more projects later — this is just where you start.
         </p>
       </div>
 
@@ -156,7 +156,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
               </span>
             </div>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Spin up a fresh workspace. Reliant scaffolds the project and gets the agent ready to build.
+              Reliant sets up a new project from scratch and gets to work on your first idea.
             </p>
           </div>
         </button>
@@ -179,7 +179,7 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
               Connect GitHub
             </span>
             <p className="text-xs leading-relaxed text-muted-foreground">
-              Connect GitHub to work on an existing project.
+              Pick a repository and Reliant will start working in it.
             </p>
           </div>
         </button>

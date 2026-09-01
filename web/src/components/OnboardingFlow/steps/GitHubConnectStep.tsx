@@ -148,7 +148,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
       const daemon =
         daemons.find((d) => d.status === DAEMON_STATUS_ACTIVE) ?? daemons[0];
       if (!daemon) {
-        throw new Error("Hosted workspace is still starting. Try again in a moment.");
+        throw new Error("Your machine is still starting. Try again in a moment.");
       }
 
       // Persist the picked repo on the daemon row before cloning. ComputeStep
@@ -332,7 +332,7 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
           Confirm your selection
         </h2>
         <p className="text-sm text-muted-foreground">
-          We'll clone this repo into your cloud workspace.
+          Reliant will copy this repository onto your machine to work on it.
         </p>
       </div>
 

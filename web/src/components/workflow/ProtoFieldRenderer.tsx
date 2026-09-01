@@ -26,6 +26,14 @@ interface ProtoFieldRendererProps {
 
 const DEFAULT_CEL_REGEX = /\{\{[\s\S]*\}\}/
 
+/** Split the comma-separated form of a list field into its stored entries. */
+function splitStringList(value: string): string[] {
+  return value
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+}
+
 function canRenderAsSelectLiteral(value: string, options: NonNullable<ProtoFieldSchema['options']>): boolean {
   if (value.length === 0) {
     return true
@@ -101,6 +109,25 @@ export function ProtoFieldRenderer({
     }
   }, [shouldForceCelMode])
 
+  // List-valued fields are stored as `{ values: [...] }` but edited as a
+  // comma-separated string, and that conversion is lossy mid-edit: the
+  // separator the user is still typing (", ") has no representation in the
+  // stored array, so echoing the stored value back would erase it. Hold the
+  // raw text while this field is being edited and show that instead.
+  const isStringListField = schema.valueKind === 'stringList'
+  const [listDraft, setListDraft] = useState<string | null>(null)
+  const displayStringValue =
+    isStringListField && listDraft !== null && splitStringList(listDraft).join(', ') === normalizedStringValue
+      ? listDraft
+      : normalizedStringValue
+
+  const emitChange = (nextValue: string) => {
+    if (isStringListField) {
+      setListDraft(nextValue)
+    }
+    onChange(nextValue)
+  }
+
   if (!isProtoFieldVisible(schema, context)) {
     return null
   }
@@ -149,7 +176,7 @@ export function ProtoFieldRenderer({
     <CELInput
       id={inputId}
       value={celValue}
-      onChange={(nextValue) => onChange(nextValue)}
+      onChange={(nextValue) => emitChange(nextValue)}
       placeholder={placeholder}
       disabled={disabled}
       multiline={multiline}
@@ -190,12 +217,12 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'textarea' &&
         (isCelInput ? (
-          renderCelInput(normalizedStringValue, { multiline: true })
+          renderCelInput(displayStringValue, { multiline: true })
         ) : (
           <textarea
             id={inputId}
-            value={normalizedStringValue}
-            onChange={(event) => onChange(event.target.value)}
+            value={displayStringValue}
+            onChange={(event) => emitChange(event.target.value)}
             placeholder={schema.placeholder}
             disabled={disabled}
             rows={3}

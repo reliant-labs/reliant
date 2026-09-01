@@ -3,7 +3,7 @@
  *
  * Focus: the loading gate that blocks the radio + Continue button until the
  * first `listDaemons` query has settled. Before this gate existed, a fast
- * user could click "I'll connect my own" before the auto-skip useEffect
+ * user could click "Use my own computer" before the auto-skip useEffect
  * ever read `hasUsableDaemonForOnboarding(daemons)`, leaving them stranded
  * on the local-daemon path even though a cloud daemon was already wired up.
  *
@@ -183,18 +183,6 @@ vi.mock("@/lib/event-context", () => ({
   }),
 }));
 
-// jsdom doesn't ship a ResizeObserver, and DaemonConnectionDiagrams (which
-// the form branch renders) constructs one to fluidly scale its SVG. A
-// minimal no-op stub is enough — the tests don't assert any scaling
-// behavior, they only need the component tree to mount without throwing.
-class ResizeObserverStub {
-  observe(): void {}
-  unobserve(): void {}
-  disconnect(): void {}
-}
-// @ts-expect-error: minimal stub for jsdom.
-globalThis.ResizeObserver = ResizeObserverStub;
-
 // Imported AFTER mocks above so ComputeStep picks them up.
 import { ComputeStep } from "../steps/ComputeStep";
 
@@ -272,15 +260,15 @@ describe("ComputeStep loading gate", () => {
 
     // The deterministic loading marker is present.
     expect(screen.getByTestId("compute-step-loading")).toBeInTheDocument();
-    expect(screen.getByText(/Checking your workspace/i)).toBeInTheDocument();
+    expect(screen.getByText(/Checking your setup/i)).toBeInTheDocument();
 
     // The form's CTAs are NOT in the DOM — there is no path through which
     // a click can race the auto-skip evaluation.
     expect(
-      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+      screen.queryByRole("button", { name: /Start my machine/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /I'll connect my own/i }),
+      screen.queryByRole("button", { name: /Use my own computer/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -290,10 +278,10 @@ describe("ComputeStep loading gate", () => {
     // Loading marker is gone, form is back.
     expect(screen.queryByTestId("compute-step-loading")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
+      screen.getByRole("button", { name: /Start my machine/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /I'll connect my own/i }),
+      screen.getByRole("button", { name: /Use my own computer/i }),
     ).toBeInTheDocument();
   });
 
@@ -363,7 +351,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+      screen.queryByRole("button", { name: /Start my machine/i }),
     ).not.toBeInTheDocument();
     expect(screen.getByText("No compute plan yet")).toBeInTheDocument();
     expect(
@@ -399,7 +387,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     }
   });
 
-  it("enables Start cloud daemon when eligible", () => {
+  it("enables Start my machine when eligible", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: true,
       reason: null,
@@ -411,7 +399,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
+      screen.getByRole("button", { name: /Start my machine/i }),
     ).not.toBeDisabled();
   });
 
@@ -680,7 +668,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole("button", { name: /Start cloud daemon/i }),
+        screen.getByRole("button", { name: /Start my machine/i }),
       ).toBeInTheDocument();
     });
     expect(mockCreateDaemon).not.toHaveBeenCalled();
@@ -723,7 +711,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
 
     // User changes their mind before the refetch settles.
-    fireEvent.click(screen.getByRole("button", { name: /I'll connect my own/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Use my own computer/i }));
 
     mockUseCloudEligibility.mockReturnValue({
       eligible: true,
@@ -774,7 +762,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     // A failed redemption leaves the user ineligible, so the start button must
     // not have appeared.
     expect(
-      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+      screen.queryByRole("button", { name: /Start my machine/i }),
     ).not.toBeInTheDocument();
   });
   // REGRESSION: the dev bypass (`getIsDev() ? true : cloudEligible`) enabled
@@ -807,7 +795,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+      screen.queryByRole("button", { name: /Start my machine/i }),
     ).not.toBeInTheDocument();
 
     // Click every control the blocked card does offer. None of them may
@@ -836,7 +824,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     renderComputeStep({ daemons: [], loading: false });
 
-    const start = screen.getByRole("button", { name: /Start cloud daemon/i });
+    const start = screen.getByRole("button", { name: /Start my machine/i });
     expect(start).toBeEnabled();
     fireEvent.click(start);
 
@@ -846,7 +834,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   });
   // ── The original complaint ──────────────────────────────────────────────
   //
-  // "I can still hit Start cloud daemon which CONTINUES the onboarding."
+  // "I can still hit Start my machine which CONTINUES the onboarding."
   //
   // The button being disabled was never the whole story. Once the handler runs
   // — and it can, via a stale render or any of the paths below — a server
@@ -878,7 +866,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     const onNext = vi.fn();
     renderComputeStep({ daemons: [], loading: false, onNext });
 
-    fireEvent.click(screen.getByRole("button", { name: /Start cloud daemon/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Start my machine/i }));
 
     await waitFor(() => {
       expect(mockCreateDaemon).toHaveBeenCalled();
@@ -917,7 +905,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     const onNext = vi.fn();
     renderComputeStep({ daemons: [], loading: false, onNext });
 
-    fireEvent.click(screen.getByRole("button", { name: /Start cloud daemon/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Start my machine/i }));
 
     await waitFor(() => {
       expect(mockResumeDaemon).toHaveBeenCalled();
@@ -942,7 +930,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     const onNext = vi.fn();
     renderComputeStep({ daemons: [], loading: false, onNext });
 
-    fireEvent.click(screen.getByRole("button", { name: /Start cloud daemon/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Start my machine/i }));
 
     await waitFor(() => {
       expect(onNext).toHaveBeenCalled();
@@ -968,7 +956,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
+      screen.getByRole("button", { name: /Start my machine/i }),
     ).toBeEnabled();
     // ...and no "you have no credits" scare copy.
     expect(
@@ -991,7 +979,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.queryByRole("button", { name: /Start cloud daemon/i }),
+      screen.queryByRole("button", { name: /Start my machine/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Set up billing/i }),
@@ -1020,7 +1008,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start cloud daemon/i }),
+      screen.getByRole("button", { name: /Start my machine/i }),
     ).toBeEnabled();
     expect(
       screen.getByRole("button", { name: /View plans/i }),
