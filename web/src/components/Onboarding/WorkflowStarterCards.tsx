@@ -219,20 +219,28 @@ export function WorkflowStarterCards({
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto font-sans">
+    // @container, not viewport breakpoints: this grid sits inside the chat
+    // pane, which is narrow whenever the terminal is open even though the
+    // window is wide. Keyed to `lg:` it kept three columns in a ~600px pane
+    // and every card wrapped one word per line.
+    <div className="@container w-full max-w-5xl mx-auto font-sans">
       <div className="space-y-5 font-sans">
         <h2 className="text-center text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
           What are you building?
         </h2>
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {/* Thresholds are chosen so a card is never narrower than ~320px:
+            two columns need 42rem, three need 56rem. */}
+        <div className="grid grid-cols-1 gap-3 @2xl:grid-cols-2 @4xl:grid-cols-3">
           {STARTER_OPTIONS.map((option) => (
             <SecondaryCard
               key={option.intent}
               option={option}
               selected={selectedIntent === option.intent}
               onClick={() => handlePick(option)}
-              className={cn(option.featured && "sm:col-span-2 lg:col-span-3")}
+              className={cn(
+                option.featured && "@2xl:col-span-2 @4xl:col-span-3",
+              )}
             />
           ))}
         </div>
@@ -283,12 +291,6 @@ function SecondaryCard({
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent"
         aria-hidden="true"
       />
-      {option.featured && (
-        <span className="absolute right-4 top-4 inline-flex items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
-          <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/60" />
-          Recommended
-        </span>
-      )}
       <div className="flex items-start gap-3.5">
         <div
           className={cn(
@@ -301,14 +303,21 @@ function SecondaryCard({
           <Icon className={option.featured ? "h-6 w-6" : "h-5 w-5"} />
         </div>
         <div className="min-w-0 flex-1 space-y-1.5">
-          <h3
-            className={cn(
-              "font-semibold leading-tight tracking-tight text-foreground",
-              option.featured ? "text-base pr-32" : "text-base",
+          {/* The badge flows after the title rather than being absolutely
+              positioned in the corner: at pane width there was no corner to
+              reserve, and the fixed pr-32 gutter meant it sat on top of the
+              label instead of beside it. */}
+          <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1.5">
+            <h3 className="text-base font-semibold leading-tight tracking-tight text-foreground">
+              {option.label}
+            </h3>
+            {option.featured && (
+              <span className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-primary/15 px-2.5 py-1 text-[0.65rem] font-semibold uppercase tracking-wider text-primary ring-1 ring-inset ring-primary/30">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_8px_1px] shadow-primary/60" />
+                Recommended
+              </span>
             )}
-          >
-            {option.label}
-          </h3>
+          </div>
           <p
             className={cn(
               "leading-relaxed text-muted-foreground/80",

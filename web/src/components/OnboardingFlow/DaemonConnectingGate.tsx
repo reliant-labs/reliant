@@ -1,5 +1,5 @@
 /**
- * Post-onboarding "Connecting your daemon..." gate.
+ * Post-onboarding "Starting your machine..." gate.
  *
  * Polls the control-plane's listDaemons every 2s for up to 60s after the user
  * finishes onboarding, and surfaces one of four states:
@@ -47,7 +47,7 @@ export const POLL_INTERVAL_MS = 2_000;
 export const POLL_TIMEOUT_MS = 60_000;
 
 const FAILED_FALLBACK_MESSAGE =
-  "We couldn't establish a connection. This usually means a networking or configuration issue.";
+  "We couldn't reach your machine. This is usually a network or configuration problem.";
 
 export type DaemonConnectingPhase = "connecting" | "connected" | "failed";
 
@@ -190,10 +190,10 @@ export function DaemonConnectingGate({
         </div>
         <div className="space-y-1">
           <h2 className="text-xl font-semibold tracking-tight text-foreground">
-            Connected
+            Your machine is ready
           </h2>
           <p className="text-sm text-muted-foreground">
-            Your environment is ready. You can start chatting now.
+            Everything is connected. You can start building now.
           </p>
         </div>
         <button
@@ -230,7 +230,7 @@ export function DaemonConnectingGate({
         </div>
         <div className="space-y-1">
           <h2 className="text-xl font-semibold tracking-tight text-foreground">
-            Couldn't connect
+            Couldn't reach your machine
           </h2>
           <p className="text-sm text-muted-foreground">
             {reason || FAILED_FALLBACK_MESSAGE}
@@ -280,10 +280,11 @@ export function DaemonConnectingGate({
       </div>
       <div className="space-y-1">
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
-          Connecting your environment...
+          Starting your machine...
         </h2>
         <p className="text-sm text-muted-foreground">
-          Hang tight — your hosted workspace is coming online.
+          This usually takes a minute or two. You can skip ahead and it will
+          connect when it is ready.
         </p>
       </div>
       <p className="text-xs text-muted-foreground">

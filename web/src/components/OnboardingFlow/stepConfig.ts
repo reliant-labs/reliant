@@ -27,30 +27,21 @@ export const STEP_LABELS: Record<OnboardingStepId, string> = {
   'project-picker': 'Project',
 };
 
-/** Max width of the onboarding card, per step.
+/** Max width of the onboarding card.
  *
- *  Text-and-form steps want a readable measure, so they stay narrow. The
- *  compute step leads with the daemon-topology diagram, which scales itself
- *  down to fit its container (see DaemonConnectionDiagrams) — inside the
- *  narrow card it rendered at roughly three-quarter size and the node labels
- *  got small enough to skim past.
+ *  Every step is text and form controls, which want a readable measure — so
+ *  they all share one width and the card never resizes between steps.
  *
- *  The wide value is derived, not eyeballed: the diagram's intrinsic 1060px
- *  plus its own 40px of section padding plus the card's 64px of horizontal
- *  padding. That lands it at exactly 1:1, and since the diagram caps itself
- *  at its intrinsic width, going wider would only pad the sides.
- *
- *  Width is keyed on the STEP, not on what the step is currently showing, so
- *  the card only ever resizes on a step transition.
+ *  The compute step used to be widened to 1164px to fit a topology diagram
+ *  at its intrinsic 1060px. That diagram is gone: at 480px tall it pushed the
+ *  actual choice buttons below the fold of the default 1400x900 window, and
+ *  being the largest thing on screen it read as the interface rather than as
+ *  an illustration. The step now leads with the question itself.
  */
 const STEP_MAX_WIDTH_DEFAULT = 'max-w-[840px]';
 
-export const STEP_MAX_WIDTH: Partial<Record<OnboardingStepId, string>> = {
-  'compute': 'max-w-[1164px]',
-};
-
-export function stepMaxWidth(step: OnboardingStepId): string {
-  return STEP_MAX_WIDTH[step] ?? STEP_MAX_WIDTH_DEFAULT;
+export function stepMaxWidth(_step: OnboardingStepId): string {
+  return STEP_MAX_WIDTH_DEFAULT;
 }
 
 /** All steps that *would* appear in the user's onboarding given the plan

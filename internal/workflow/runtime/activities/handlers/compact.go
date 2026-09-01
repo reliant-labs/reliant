@@ -11,7 +11,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/accumulator"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -457,48 +456,57 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 	return models.ModelSelector{}, "", fmt.Errorf("no available models for compaction (user has no API keys configured)")
 }
 
+// titleModelSelector picks the model that titles a chat.
+//
+// Tag-based, not a named model: titling was pinned to Claude Haiku, so a user
+// with no Anthropic credentials could not title at all — resolution failed and
+// every chat fell back to its truncated first message, which looks identical to
+// a working title. "fast" resolves against the user's configured providers, so
+// an Anthropic user still gets Haiku and everyone else gets their provider's
+// equivalent.
+//
+// Single tag by design. Adding "meta" would score four narrowly-tagged models
+// above better-suited "fast" ones, which is backwards for a latency-sensitive
+// one-shot call.
+func titleModelSelector() models.ModelSelector {
+	return models.ModelSelector{Tags: []string{models.TagFast}}
+}
+
 // generateTitle generates a concise, meaningful title using the LLM
 func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, firstMessage string) (string, error) {
 	if firstMessage == "" {
 		return "", fmt.Errorf("first message is empty")
 	}
 
-	// Get LLM driver (use Claude 3.5 Haiku for fast, cheap title generation)
-	registry := models.MustGetRegistry()
-	def, ok := registry.GetDefinition(string(models.Claude45Haiku))
-	if !ok {
-		return "", fmt.Errorf("title generation model not found")
-	}
-	model := def.ToModel()
-
-	// Use low temperature for consistent, focused titles
+	// Low temperature keeps titles consistent and focused.
 	temperature := 0.3
-	preferences := models.Preferences{
-		{
-			ModelID:     models.Claude45Haiku,
-			Temperature: &temperature,
-		},
-	}
-
-	resolve := drivers.GetDriver
-	if a.driverResolver != nil {
-		resolve = a.driverResolver
-	}
-	titleTool := tools.NewSetTitleTool()
-	driver, err := resolve(ctx, userID, preferences,
-		llm.WithModel(model),
+	maxTokens := int64(256)
+	spec := llmCallSpec{
+		UserID:      userID,
+		Temperature: &temperature,
 		// Room for a tool_use block wrapping the title, not just a bare
 		// string: a tighter cap truncates the arguments JSON mid-object and
 		// loses an otherwise good title.
-		llm.WithMaxTokens(256),
+		MaxTokens: &maxTokens,
 		// Pin tool_choice so a tool call is the only thing the model can emit.
 		// Safe here and nowhere near an agent loop: this is a single request
 		// and set_title is the only tool offered.
-		llm.WithForceToolChoice(tools.SetTitleToolName),
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to get LLM driver: %w", err)
+		ForceToolChoice: tools.SetTitleToolName,
 	}
+
+	// With an injected resolver (tests) the registry is skipped and the
+	// resolver supplies its own driver/model, mirroring CallLLM.
+	if a.driverResolver == nil {
+		spec.Selector = titleModelSelector()
+	}
+
+	titleTool := tools.NewSetTitleTool()
+	resolved, err := resolveLLMCall(ctx, a.driverResolver, spec)
+	if err != nil {
+		return "", err
+	}
+	driver := resolved.Driver
+	logging.Info("[GenerateTitle] Selected model", "model", resolved.ModelID)
 
 	// Wrap the message in a delimiter and restate the instruction after it.
 	// Unwrapped, the first message reads as a live request to an agent — and

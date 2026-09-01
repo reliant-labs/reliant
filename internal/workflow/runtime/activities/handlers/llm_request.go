@@ -36,6 +36,14 @@ type llmCallSpec struct {
 	ThinkingLevel string
 	MaxTokens     *int64
 	WorkingDir    string
+
+	// ForceToolChoice pins the request to a single named tool, making a tool
+	// call the only thing the model can emit.
+	//
+	// Safe only for a ONE-SHOT request, never an agent loop: the pin applies to
+	// every request in a turn, so a model given real tools alongside it could
+	// never call them.
+	ForceToolChoice string
 }
 
 // resolvedLLMCall bundles the driver plus the effective settings the shared
@@ -173,6 +181,9 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	}
 	if effectiveThinkingLevel != "" {
 		driverOpts = append(driverOpts, llm.WithReasoningEffort(effectiveThinkingLevel))
+	}
+	if spec.ForceToolChoice != "" {
+		driverOpts = append(driverOpts, llm.WithForceToolChoice(spec.ForceToolChoice))
 	}
 
 	resolve := drivers.GetDriver

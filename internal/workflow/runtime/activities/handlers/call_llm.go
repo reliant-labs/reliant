@@ -1974,7 +1974,9 @@ func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, co
 
 	description := fmt.Sprintf(`Spawn a sub-agent to delegate a task. The call returns a handle IMMEDIATELY — it does not block. The spawned agent's result is NOT in this tool call's result; you are notified in a later turn when it finishes. You stay free to read files, edit, plan, and spawn more agents while it runs, and because work discovered mid-run can join an in-flight fan-out, you do not have to plan all your parallelism up front.
 
-While a spawned agent runs you can steer and observe it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight.
+KEEP ABOUT 6 SUB-AGENTS OUTSTANDING AT ONCE. Past that the provider starts throttling, and a throttled agent's requests queue behind rate limits — so the 7th does not run alongside the first six, it makes all seven slower. Observed: an 11-agent fan-out hit throttling and was slower than the same work would have been six at a time. More than six units of work is fine and often right; hold the extras as a QUEUE instead of a wider wave — spawn six, then spawn the next one each time one finishes. Do not merge units to get under six: an oversized unit sets the floor for the whole wave, which is worse than a queued one.
+
+While a spawned agent runs you can steer and observe it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight. spawn_status with no agent_id lists your children and their states, which is how you count what is outstanding before spawning more.
 
 Available presets:
 %s

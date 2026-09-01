@@ -28,7 +28,6 @@ import type {
   OnboardingIntent,
   StepProps,
 } from "../types";
-import { DaemonConnectionDiagrams } from "../DaemonConnectionDiagrams";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
 import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
@@ -151,7 +150,7 @@ export function ComputeStep({
         "Redeem a coupon code or choose a plan to start a cloud machine.");
   const loading = forcedEligibility == null && cloudLoading;
 
-  // Whether a "Start cloud daemon" click would actually reach a machine. Named
+  // Whether a "Start my machine" click would actually reach a machine. Named
   // and derived the same way ConnectDaemonModal does, because it is the same
   // question asked at the other door into the same action — and it now decides
   // whether the button EXISTS, not merely whether it is disabled.
@@ -309,12 +308,12 @@ export function ComputeStep({
       // for a user ("no compute subscription — subscribe to a compute plan to
       // create daemons") and names the remedy.
       if (isEntitlementDenial(err)) {
-        setError(err instanceof Error ? err.message : "Cannot start a hosted daemon.");
+        setError(err instanceof Error ? err.message : "Cannot start a hosted machine.");
         void refetchCloudEligibility();
         return;
       }
       const msg =
-        err instanceof Error ? err.message : "Failed to start hosted daemon";
+        err instanceof Error ? err.message : "Failed to start your machine";
       setError(msg);
       events.emit("toast:show", { message: msg, variant: "error" });
     } finally {
@@ -367,7 +366,7 @@ export function ComputeStep({
 
   // A coupon that unblocks compute is, in context, the user saying "I want a
   // cloud machine" — they typed a code into the cloud card to get one. Making
-  // them then find and click "Start cloud daemon" is a second confirmation of
+  // them then find and click "Start my machine" is a second confirmation of
   // a decision already made, on a button that did not exist a moment ago.
   //
   // This CANNOT call handleCloud() directly from the redeem callback: that
@@ -479,26 +478,32 @@ export function ComputeStep({
         <div className="space-y-1">
           <h2 className="text-sm font-medium text-foreground">
             {awaitingBundledDaemon
-              ? "Connecting your daemon…"
-              : "Checking your workspace…"}
+              ? "Getting your machine ready…"
+              : "Checking your setup…"}
           </h2>
           <p className="text-xs text-muted-foreground">
             {awaitingBundledDaemon
-              ? "This app ships with a daemon — finishing its setup."
-              : "One moment while we look for an existing daemon."}
+              ? "This app comes with everything it needs — just finishing up."
+              : "One moment while we look for a machine you have already set up."}
           </p>
         </div>
       </div>
     );
   }
 
-  // The card is widened for this step so the topology diagram renders at full
-  // size (see stepMaxWidth in ../stepConfig). Everything below the diagram is
-  // prose and controls, which would read badly at that measure — so the
-  // diagram spans the card and the rest stays centered at the normal width.
   return (
     <div className="space-y-6">
-      {!showLocal && <DaemonConnectionDiagrams />}
+      {!showLocal && (
+        <div className="space-y-2 text-center">
+          <h2 className="text-2xl font-semibold tracking-tight text-foreground">
+            Where should Reliant run your code?
+          </h2>
+          <p className="mx-auto max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
+            Reliant needs a computer to open your project, edit files and run
+            commands. Use one we host, or connect your own.
+          </p>
+        </div>
+      )}
 
       <div className="mx-auto w-full max-w-[840px] space-y-6">
         <div className="grid gap-3 sm:grid-cols-2">
@@ -522,32 +527,32 @@ export function ComputeStep({
               <div className="min-w-0 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-sm font-semibold text-foreground">
-                    Reliant Cloud
+                    A Reliant machine
                   </span>
                   <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary">
-                    Fastest
+                    Nothing to install
                   </span>
                 </div>
                 {/* Describes what the user can do RIGHT NOW. Promising "start
-                    a hosted daemon now" to someone with no compute plan sets
-                    up the dead end this card no longer has. */}
+                    a machine now" to someone with no compute plan sets up the
+                    dead end this card no longer has. */}
                 <span className="block text-xs leading-relaxed text-muted-foreground">
                   {!HAS_CLOUD_DAEMONS
-                    ? "Cloud daemons are not enabled for this environment."
+                    ? "Hosted machines are not available in this setup."
                     : canStartCloud || loading
-                      ? "Start a hosted daemon now. If provisioning takes a few minutes, Reliant will continue setup and connect when it is ready."
-                      : // Deliberately says what Reliant Cloud IS and stops.
-                        // The `reason` line directly below names what to do
-                        // about it, and having both sentences give the same
-                        // instruction read as a stutter.
-                        "A hosted machine, ready in a few minutes with nothing to install."}
+                      ? "We start one for you, ready in a few minutes. Setup continues while it boots."
+                      : // Deliberately says what the hosted option IS and
+                        // stops. The `reason` line directly below names what
+                        // to do about it, and having both sentences give the
+                        // same instruction read as a stutter.
+                        "We run it for you — no setup, and it keeps working after you close your laptop."}
                 </span>
               </div>
             </div>
 
             {/* Three states, and only ONE of them shows a start button.
 
-                A disabled "Start cloud daemon" used to render unconditionally,
+                A disabled "Start my machine" used to render unconditionally,
                 and for the single most common visitor to this screen — a brand
                 new user — it was permanently greyed out: the signup compute
                 auto-grant is gone, so every new account resolves to
@@ -580,7 +585,7 @@ export function ComputeStep({
                 )}
               >
                 {startingCloud && <Loader2 className="h-4 w-4 animate-spin" />}
-                {startingCloud ? "Requesting daemon..." : "Start cloud daemon"}
+                {startingCloud ? "Starting your machine..." : "Start my machine"}
               </button>
             ) : null}
 
@@ -592,7 +597,7 @@ export function ComputeStep({
             {!loading && !canStartCloud && (
               <p className="text-xs leading-relaxed text-muted-foreground">
                 {!HAS_CLOUD_DAEMONS
-                  ? 'Cloud daemons are unavailable because this environment is not configured for cloud mode. Choose "I\'ll connect my own" to continue.'
+                  ? 'Hosted machines are not available in this setup. Choose "Use my own computer" to continue — it is free.'
                   : reason}
               </p>
             )}
@@ -659,12 +664,17 @@ export function ComputeStep({
               <Monitor className="h-6 w-6" />
             </div>
             <div className="min-w-0 space-y-1">
-              <span className="block text-sm font-semibold text-foreground">
-                I'll connect my own
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-semibold text-foreground">
+                  Use my own computer
+                </span>
+                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-emerald-500">
+                  Free
+                </span>
+              </div>
               <span className="block text-xs leading-relaxed text-muted-foreground">
-                Run the daemon on a laptop or server that can access the directory
-                you choose.
+                Run it on this computer or your own server. Your code stays
+                where it is. Takes a couple of minutes to set up.
               </span>
             </div>
           </button>
@@ -678,11 +688,11 @@ export function ComputeStep({
               <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
               <div>
                 <h3 className="text-sm font-medium text-foreground">
-                  Daemon already connected
+                  Your machine is connected
                 </h3>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Reliant detected a running daemon. Continue to choose a
-                  directory.
+                  Reliant found a machine already running. Continue to pick a
+                  folder to work in.
                 </p>
               </div>
             </div>

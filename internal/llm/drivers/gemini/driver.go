@@ -287,6 +287,33 @@ func (g *GeminiClient) convertTools(tools []tools.Tool) []*genai.Tool {
 
 	return []*genai.Tool{geminiTool}
 }
+
+// buildToolConfig returns a ToolConfig that restricts function calling to the
+// pinned tool, or nil when there is nothing to pin. A pin naming a function
+// absent from toolsList is a provider error, so it is only honored when the
+// named tool is actually present.
+func (g *GeminiClient) buildToolConfig(toolsList []tools.Tool) *genai.ToolConfig {
+	if g.options.ForceToolChoice == "" || len(toolsList) == 0 {
+		return nil
+	}
+	found := false
+	for _, tool := range toolsList {
+		if tool.Name() == g.options.ForceToolChoice {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	return &genai.ToolConfig{
+		FunctionCallingConfig: &genai.FunctionCallingConfig{
+			Mode:                 genai.FunctionCallingConfigModeAny,
+			AllowedFunctionNames: []string{g.options.ForceToolChoice},
+		},
+	}
+}
+
 func (g *GeminiClient) finishReason(reason genai.FinishReason) message.FinishReason {
 	switch reason {
 	case genai.FinishReasonStop:
@@ -405,6 +432,10 @@ func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messa
 
 	if len(tools) > 0 {
 		config.Tools = g.convertTools(tools)
+	}
+	if toolConfig := g.buildToolConfig(tools); toolConfig != nil {
+		config.ToolConfig = toolConfig
+		logging.Debug("[GEMINI] Pinned tool choice", "tool", g.options.ForceToolChoice)
 	}
 	chat, err := g.client.Chats.Create(ctx, g.options.Model.APIModel, config, history)
 	if err != nil {
@@ -609,6 +640,10 @@ func (g *GeminiClient) StreamResponse(ctx context.Context, prompts []string, mes
 		if len(tools) > 0 {
 			config.Tools = g.convertTools(tools)
 			logging.Debug("[GEMINI] Tools configured", "toolCount", len(tools))
+		}
+		if toolConfig := g.buildToolConfig(tools); toolConfig != nil {
+			config.ToolConfig = toolConfig
+			logging.Debug("[GEMINI] Pinned tool choice", "tool", g.options.ForceToolChoice)
 		}
 
 		// Create chat session

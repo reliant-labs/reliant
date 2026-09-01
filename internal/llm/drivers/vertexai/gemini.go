@@ -11,6 +11,7 @@ import (
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"google.golang.org/genai"
 )
@@ -160,6 +161,11 @@ func (c *VertexAIClient) buildGeminiConfig(prompts []string, toolsList []tools.T
 	// Add tools if provided
 	if len(toolsList) > 0 {
 		config.Tools = []*genai.Tool{c.convertTools(toolsList)}
+	}
+
+	if toolConfig := c.buildToolConfig(toolsList); toolConfig != nil {
+		config.ToolConfig = toolConfig
+		logging.Debug("[VERTEXAI] Pinned tool choice", "tool", c.options.ForceToolChoice)
 	}
 
 	// Set safety settings based on options
@@ -371,6 +377,32 @@ func (c *VertexAIClient) convertTools(toolsList []tools.Tool) *genai.Tool {
 	}
 
 	return &genai.Tool{FunctionDeclarations: functionDeclarations}
+}
+
+// buildToolConfig returns a ToolConfig that restricts function calling to the
+// pinned tool, or nil when there is nothing to pin. A pin naming a function
+// absent from toolsList is a provider error, so it is only honored when the
+// named tool is actually present.
+func (c *VertexAIClient) buildToolConfig(toolsList []tools.Tool) *genai.ToolConfig {
+	if c.options.ForceToolChoice == "" || len(toolsList) == 0 {
+		return nil
+	}
+	found := false
+	for _, tool := range toolsList {
+		if tool.Name() == c.options.ForceToolChoice {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil
+	}
+	return &genai.ToolConfig{
+		FunctionCallingConfig: &genai.FunctionCallingConfig{
+			Mode:                 genai.FunctionCallingConfigModeAny,
+			AllowedFunctionNames: []string{c.options.ForceToolChoice},
+		},
+	}
 }
 
 // convertSchemaProperty converts a jsonschema.Schema to Gemini Schema format

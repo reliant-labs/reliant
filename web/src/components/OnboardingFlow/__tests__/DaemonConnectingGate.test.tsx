@@ -141,7 +141,7 @@ describe("DaemonConnectingGate", () => {
 
     expect(screen.getByTestId("daemon-gate-connecting")).toBeInTheDocument();
     expect(
-      screen.getByText(/Connecting your environment\.\.\./i),
+      screen.getByText(/Starting your machine\.\.\./i),
     ).toBeInTheDocument();
     expect(screen.getByText(/Elapsed: 0s/)).toBeInTheDocument();
     expect(onContinue).not.toHaveBeenCalled();
@@ -196,7 +196,7 @@ describe("DaemonConnectingGate", () => {
     await flush(50);
 
     expect(screen.getByTestId("daemon-gate-failed")).toBeInTheDocument();
-    expect(screen.getByText(/Couldn't connect/i)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't reach your machine/i)).toBeInTheDocument();
     expect(
       screen.getByText(/Image pull failed: ECR rate limit/),
     ).toBeInTheDocument();
@@ -233,7 +233,7 @@ describe("DaemonConnectingGate", () => {
     expect(screen.getByTestId("daemon-gate-failed")).toBeInTheDocument();
     expect(
       screen.getByText(
-        /We couldn't establish a connection\. This usually means a networking or configuration issue\./,
+        /We couldn't reach your machine\. This is usually a network or configuration problem\./,
       ),
     ).toBeInTheDocument();
   });
@@ -258,7 +258,7 @@ describe("DaemonConnectingGate", () => {
     expect(screen.getByTestId("daemon-gate-failed")).toBeInTheDocument();
     // No status message → falls back to the generic copy.
     expect(
-      screen.getByText(/We couldn't establish a connection/),
+      screen.getByText(/We couldn't reach your machine/),
     ).toBeInTheDocument();
   });
 

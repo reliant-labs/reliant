@@ -68,6 +68,22 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
+ * Render a `CelStringList` literal (`{ values: string[] }`) as the
+ * comma-separated string the list editors display. The write side splits this
+ * same format back apart, so the two stay in step.
+ */
+function celStringListToDisplay(value: unknown): string | undefined {
+  if (!isObjectRecord(value)) {
+    return undefined
+  }
+  const values = (value as { values?: unknown }).values
+  if (!Array.isArray(values)) {
+    return undefined
+  }
+  return values.filter((item) => typeof item === 'string').join(', ')
+}
+
+/**
  * Normalizes plain strings and CEL wrapper values to a scalar string.
  *
  * Supports:
@@ -98,10 +114,21 @@ export function normalizeCelString(value: unknown, fallback = ''): string {
     if ((oneof.case === 'literal' || oneof.case === 'expr') && typeof oneof.value === 'number') {
       return String(oneof.value)
     }
+    if (oneof.case === 'literal') {
+      const list = celStringListToDisplay(oneof.value)
+      if (list !== undefined) {
+        return list
+      }
+    }
   }
 
   if (typeof wrapper.literal === 'string') {
     return wrapper.literal
+  }
+
+  const literalList = celStringListToDisplay(wrapper.literal)
+  if (literalList !== undefined) {
+    return literalList
   }
 
   if (typeof wrapper.literal === 'number') {

@@ -94,6 +94,26 @@ beforeEach(() => {
   mockCompleteMutate.mockImplementation((_vars, opts) => opts?.onSettled?.());
 });
 
+/**
+ * The search argument is a REDUCER, not a literal — it forwards `?tour=` (the
+ * post-onboarding tour's only trigger) while dropping onboarding-local params.
+ * Asserting the literal `{}` here would pin the shape and forbid that, so
+ * these helpers assert the destination and the reducer's OUTPUT instead.
+ */
+function lastNavigationTo(path: string) {
+  const call = [...mockNavigate.mock.calls]
+    .reverse()
+    .find(([opts]) => opts?.to === path);
+  if (!call) throw new Error(`no navigation to ${path}`);
+  return call[0] as { to: string; search: (prev: Record<string, unknown>) => unknown };
+}
+
+/** Resolve a navigation's search reducer against the params on the URL. */
+function resolvedSearch(path: string, prev: Record<string, unknown> = {}) {
+  const { search } = lastNavigationTo(path);
+  return typeof search === "function" ? search(prev) : search;
+}
+
 describe("OnboardingRoute — returning user", () => {
   it("sends a user with a working daemon into the app instead of onboarding", async () => {
     mockUseDaemonList.mockReturnValue({
@@ -104,8 +124,49 @@ describe("OnboardingRoute — returning user", () => {
     render(<OnboardingRoute />);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith({ to: "/", search: {} });
+      expect(lastNavigationTo("/")).toBeDefined();
     });
+    // Nothing to carry from a bare /onboarding landing.
+    expect(resolvedSearch("/")).toEqual({});
+  });
+
+  // The tour lives entirely in `?tour=<step-id>`; a redirect that raced the
+  // handoff used to erase it, and the tour then silently never started.
+  it("carries the tour handoff param into the app", async () => {
+    mockUseDaemonList.mockReturnValue({
+      data: [daemon(DaemonStatus.ACTIVE)],
+      isLoading: false,
+    });
+
+    render(<OnboardingRoute />);
+
+    await waitFor(() => {
+      expect(lastNavigationTo("/")).toBeDefined();
+    });
+    expect(resolvedSearch("/", { tour: "chat-and-sidebars" })).toEqual({
+      tour: "chat-and-sidebars",
+    });
+  });
+
+  // Onboarding-local params must NOT leak into the app.
+  it("drops the onboarding plan and OAuth return params on the way out", async () => {
+    mockUseDaemonList.mockReturnValue({
+      data: [daemon(DaemonStatus.ACTIVE)],
+      isLoading: false,
+    });
+
+    render(<OnboardingRoute />);
+
+    await waitFor(() => {
+      expect(lastNavigationTo("/")).toBeDefined();
+    });
+    expect(
+      resolvedSearch("/", {
+        plan: { intent: "build_app" },
+        github_connected: true,
+        tour: "chat-and-sidebars",
+      }),
+    ).toEqual({ tour: "chat-and-sidebars" });
   });
 
   it("records the completion so the flag is repaired for good", async () => {
@@ -133,7 +194,7 @@ describe("OnboardingRoute — returning user", () => {
     render(<OnboardingRoute />);
 
     await waitFor(() => {
-      expect(mockNavigate).toHaveBeenCalledWith({ to: "/", search: {} });
+      expect(lastNavigationTo("/")).toBeDefined();
     });
   });
 

@@ -164,7 +164,7 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
           Pick a project
         </h2>
         <p className="text-sm text-muted-foreground">
-          Open one of your existing projects or create a new one to finish setup.
+          Choose a folder for Reliant to work in. You can add more later.
         </p>
       </div>
 
@@ -187,7 +187,7 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
             Create a new project
           </span>
           <p className="text-xs leading-relaxed text-muted-foreground">
-            Point Reliant at a folder on this machine and we'll set things up.
+            Pick a folder on your machine — an existing codebase, or an empty one to start fresh.
           </p>
         </div>
       </button>

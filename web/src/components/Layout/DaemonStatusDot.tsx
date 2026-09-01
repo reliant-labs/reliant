@@ -19,26 +19,26 @@ function getStatusMeta(status: DaemonConnectionStatus, daemonName?: string, hear
   switch (status) {
     case "connected":
       return {
-        label: daemonName ? `Daemon connected: ${daemonName}` : "Daemon connected",
+        label: daemonName ? `Machine connected: ${daemonName}` : "Machine connected",
         dotClassName: "bg-green-500 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]",
         iconClassName: "text-green-500",
       };
     case "loading":
       return {
-        label: "Checking daemon status...",
+        label: "Checking your machine...",
         dotClassName: "bg-muted-foreground/60 animate-pulse",
         iconClassName: "text-muted-foreground",
       };
     case "recent":
       return {
-        label: `Daemon heartbeat seen ${heartbeatAgeSeconds ?? "recently"}s ago; reconnecting status...`,
+        label: `Last seen ${heartbeatAgeSeconds ?? "a moment"}s ago — reconnecting...`,
         dotClassName: "bg-yellow-500 shadow-[0_0_0_3px_rgba(234,179,8,0.15)]",
         iconClassName: "text-yellow-500",
       };
     case "offline":
     default:
       return {
-        label: "No daemon connected",
+        label: "No machine connected",
         dotClassName: "bg-red-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]",
         iconClassName: "text-red-500",
       };
