@@ -13,6 +13,16 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.11" description="September 1, 2026">
+### Pinning a step to one tool works on every provider, and chats get real titles without an Anthropic account
+
+- **Forcing a step to use one specific tool now works on every provider** A workflow step can require the assistant to use one particular tool rather than choosing freely. That instruction was only understood by some providers — on the others it was accepted and then silently ignored, so the same workflow behaved differently depending on which AI you had configured, with nothing to indicate why. Every supported provider now honours it. The instruction is also only applied when the named tool is genuinely available for that request, since asking for a tool that is not on offer is rejected outright by every provider.
+- **Chat titles no longer require an Anthropic account** Titles are written by a small, fast model, and that step used to be tied to one specific model from one specific provider. If you had not connected that provider, titling could not run at all — and because the chat then fell back to showing the opening words of your first message, the result looked like a title rather than like a failure. Nobody had reason to report it. Titling now picks whichever fast model your own provider offers, so every chat gets a real title regardless of which AI you use.
+- **The guided tour after setup no longer loses its place** When setup finished and the tour began, restoring your newly created project could arrive a moment later and wipe out the tour's position, leaving it with no step to show and nothing on screen. Whether this happened came down to timing, which is why the tour appeared to work sometimes and silently not others. The tour's place is now preserved across that handoff.
+- **Setting up for the first time is shorter and clearer** The step that chooses where your work runs led with a large diagram that pushed the actual choices below the bottom of a normal window, so the illustration read as the interface. The question now comes first and the options are visible without scrolling. Wording throughout setup has been rewritten to describe what you get instead of naming internal machinery, and the starter cards on the workflow screen now lay themselves out based on the space actually available rather than the width of your whole window, so they no longer wrap to one word per line beside an open terminal.
+- **Editing a list of values no longer drops entries as you type** Workflow fields that hold several values are typed as a comma-separated list. While you were mid-entry, the partially typed text could be read as empty and discard values you had already committed, or overwrite the separator you were in the middle of typing. What you type is now kept exactly as entered until you are done with the field.
+</Update>
+
 <Update label="v1.7.10" description="August 28, 2026">
 ### A streaming hiccup no longer wedges a conversation for good
 
