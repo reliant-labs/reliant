@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-func strptr(s string) *string { return &s }
+// strptr lives in workflow_supervise_test.go, which post-dates this file.
 
 func TestSummarizeAskUser(t *testing.T) {
 	meta := `{"type":"ask_user","questions":[{"question":"Continue?","options":[{"label":"Continue"},{"label":"Feedback"}]}]}`
