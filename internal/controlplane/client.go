@@ -49,6 +49,20 @@ func getBaseURL() string {
 	return defaultBaseURL
 }
 
+// BaseURLFromEnv returns the configured control-plane origin, or "" when
+// this deployment has none configured. Unlike getBaseURL/NewClient there is
+// no localhost fallback — callers that need to distinguish "no control
+// plane at all" from "control plane at the default address" (e.g. deciding
+// whether to wire an optional daemon-registry client) use this instead.
+func BaseURLFromEnv() string {
+	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func (c *connectClient) billingClient() controlplanev1connect.BillingServiceClient {
 	return controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
 }

@@ -93,8 +93,11 @@ func mapDaemonDispatchError(commandType string, err error) *connect.Error {
 	}
 
 	// Everything else — daemon unreachable, dispatch timeout, command not
-	// registered on the daemon, or an unexpected daemon-side failure — surfaces
-	// as a loud, retryable Unavailable.
+	// registered on the daemon, unexpected daemon-side failure, or a daemon
+	// that exists but hasn't connected yet (toolexec.ErrDaemonPending) —
+	// surfaces as a loud, retryable Unavailable. The pending case is the one
+	// the frontend's daemon-wait machinery specifically looks for via the
+	// "no daemon connected" message marker (see toolexec.ErrDaemonPending).
 	return connect.NewError(connect.CodeUnavailable,
 		fmt.Errorf("daemon command %s failed: %w", commandType, err))
 }

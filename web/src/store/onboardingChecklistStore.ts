@@ -4,6 +4,18 @@
  * Achievement-based onboarding that tracks real user actions.
  * The guided-tour wizard lives in tourStore.ts; the two stores coordinate
  * for the "take-product-tour" achievement.
+ *
+ * "add-api-key" specifically: like every other item here it is STICKY —
+ * once earned it stays in `completedItems` even if the user later removes
+ * their only key — consistent with the rest of the checklist (e.g.
+ * "create-workspace" doesn't un-complete when the workspace is deleted) and
+ * with what `completedItems` already persists to the settings table. What
+ * changed is not stickiness but WHERE the "earned" signal comes from: it is
+ * now derived by reading `settingsKeys.providers()` — the same React Query
+ * cache `useProviderStatuses()` (hooks/settings-queries.ts) exposes to the
+ * rest of the app — rather than by trusting a UI flow to announce itself via
+ * the "api-key:saved" event. See `subscribeToStoreChanges` below for why a
+ * forgotten emit site can no longer leave this permanently unchecked.
  */
 
 import { create } from "zustand";
@@ -28,6 +40,11 @@ import { useProjectStore } from "./projectStore";
 import { useGlobalDataStore } from "./globalDataStore";
 import { getEventBus } from "../lib/events";
 import { chatKeys, getCachedChatList } from "../hooks/chat-queries";
+import {
+  settingsKeys,
+  hasAnyConfiguredProvider,
+  type ProviderStatus,
+} from "../hooks/settings-queries";
 import { queryClient } from "../lib/query-client";
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
@@ -327,11 +344,17 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       const projectId = useProjectStore.getState().currentProject?.id;
 
-      // 1. API key
+      // 1. API key — read through the shared React Query cache (settingsKeys.providers())
+      // rather than calling the API directly, so this and every other consumer of
+      // "is a provider configured?" agree on one in-flight request and one cached answer.
       if (!newItems.has("add-api-key")) {
         try {
-          const providers = await api.settings.getProviders();
-          if (providers.some((p) => p.hasApiKey || p.configured)) {
+          const providers = await queryClient.fetchQuery({
+            queryKey: settingsKeys.providers(),
+            queryFn: () => api.settings.getProviders(),
+            staleTime: 10_000,
+          });
+          if (hasAnyConfiguredProvider(providers)) {
             newItems.add("add-api-key");
             changed = true;
           }
@@ -505,14 +528,58 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         }),
       );
 
+      // "add-api-key" derives from the provider-status query cache
+      // (settingsKeys.providers()), not from any one save flow announcing
+      // itself. Whenever that cache is written — by a background refetch, a
+      // focus refetch, or the invalidation nudge below — re-read it and mark
+      // complete if a provider is now configured. This is what makes the
+      // completion correct even when nothing ever emits "api-key:saved": the
+      // checklist agrees with whatever the settings page or a fresh
+      // getProviders() poll would show, on its own schedule.
+      unsubscribers.push(
+        queryClient.getQueryCache().subscribe((event) => {
+          if (get().completedItems.has("add-api-key")) return;
+          const key = event.query.queryKey;
+          if (key[0] !== settingsKeys.all[0] || key[1] !== "providers") return;
+          const providers = event.query.state.data as ProviderStatus[] | undefined;
+          if (providers && hasAnyConfiguredProvider(providers)) {
+            get().markComplete("add-api-key");
+          }
+        }),
+      );
+
+      // "api-key:saved" is now ONLY a refetch nudge, not a completion signal.
+      // A missed emit — a new save path that forgets to fire it — is
+      // harmless: the query cache subscription above still catches the
+      // completion on the next natural refetch (focus, remount, staleTime
+      // expiry, or the poll below). This is what fixed the RedeemCouponForm
+      // bug's whole class: no call site is load-bearing for correctness
+      // anymore, only for latency.
       try {
         const unsubscribeApiKey = getEventBus().on("api-key:saved", () => {
-          get().markComplete("add-api-key");
+          void queryClient.invalidateQueries({ queryKey: settingsKeys.providers() });
         });
         unsubscribers.push(unsubscribeApiKey);
       } catch {
         /* bus not ready yet */
       }
+
+      // Belt-and-suspenders poll: refetch provider status periodically while
+      // "add-api-key" is outstanding, so the item still completes for a user
+      // who never triggers a refetch any other way (no window blur/focus, no
+      // remount, no event emitted at all). `fetchQuery` (not
+      // `invalidateQueries`) so this fires even with no active observer of
+      // the query — the cache-subscribe listener above reacts to the write
+      // either way. Stops once the item is complete — nothing left to detect.
+      const providerPoll = setInterval(() => {
+        if (get().completedItems.has("add-api-key")) return;
+        void queryClient.fetchQuery({
+          queryKey: settingsKeys.providers(),
+          queryFn: () => api.settings.getProviders(),
+          staleTime: 0,
+        });
+      }, 15_000);
+      unsubscribers.push(() => clearInterval(providerPoll));
 
       return () => {
         unsubscribers.forEach((unsub) => unsub());

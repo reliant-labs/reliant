@@ -142,6 +142,37 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		}
 	}
 
+	// Second idempotency check, keyed on the PRE-ALLOCATED id rather than the
+	// activity id. Both are needed, because a turn can reach this function
+	// twice under two different activity ids:
+	//
+	//   1. CallLLM persists an interrupted turn's partial itself, keyed on the
+	//      stable callLLMIdempotencyKey (workflow, step, loop iteration).
+	//   2. The workflow re-dispatches the save_message node for that same turn,
+	//      whose RuntimeContext carries no MessageIdempotencyKey, so it falls
+	//      back to a Temporal-minted <workflow>-<run>-<activity> key.
+	//
+	// The keys differ, so the activity-id check above sees nothing and decides
+	// this is a fresh write — but both writes carry the SAME pre-allocated
+	// MessageID, so the insert collides on messages_pkey. The collision is
+	// deterministic, so every retry fails identically: five failed attempts, an
+	// error banner per attempt, and a thread that cannot advance because the
+	// surviving partial is now its tail.
+	//
+	// The pre-allocated id is the real uniqueness constraint here, so it is
+	// what convergence has to key on. Reconciling on it also gets the delta
+	// identity protocol right by construction: streamed deltas were stamped
+	// with this id, so the one persisted row must be the one they name.
+	if opts.MessageID != "" {
+		existing, err := s.checkExistingMessageByID(ctx, opts, cw)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			return existing, nil
+		}
+	}
+
 	// Get effective message count
 	messageCount, err := s.repo.GetEffectiveMessageCount(ctx, opts.ChatID, opts.Thread)
 	if err != nil {
@@ -375,6 +406,56 @@ func (s *Service) checkExistingMessage(ctx context.Context, opts SaveMessageOpts
 	}
 
 	return nil, nil
+}
+
+// checkExistingMessageByID reconciles against a row already written under the
+// caller's pre-allocated message id, whatever activity wrote it.
+//
+// Convergence, not replacement: the existing row wins and is returned as-is.
+// The alternative — delete and re-insert with this call's content — is wrong
+// here in a way that matters. The two writers are not retries of one write;
+// they are two views of the same turn, and the FIRST one is the one that
+// observed the stream. CallLLM persists exactly what it received before
+// unwinding, whereas the re-dispatched save_message node runs after the turn
+// yielded and can carry less (an interrupted turn's node re-evaluation has no
+// stream to read). Deleting the richer row to write the poorer one loses the
+// partial the interrupt was trying to save. It would also cascade the existing
+// row's content blocks and tool_calls away, and any agent_messages row
+// pointing at it via delivered_message_id would have that reference nulled.
+//
+// The retry ladder is unaffected: a genuine Temporal retry of ONE writer still
+// matches on activity id in checkExistingMessage above, which keeps its
+// delete-and-recreate behavior for a half-written attempt.
+func (s *Service) checkExistingMessageByID(ctx context.Context, opts SaveMessageOpts, cw *db.ContextWindow) (*SaveMessageResult, error) {
+	existing, err := s.repo.FindMessage(ctx, opts.MessageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check for existing message by id: %w", err)
+	}
+	if existing == nil {
+		return nil, nil
+	}
+
+	slog.Info("SaveMessage: Converging on the row already written under this pre-allocated id",
+		"messageID", existing.ID,
+		"existingActivityID", ptr.From(existing.ActivityID),
+		"incomingActivityID", ptr.From(opts.ActivityID),
+		"attemptNumber", opts.AttemptNumber)
+
+	messageCount, err := s.repo.GetEffectiveMessageCount(ctx, opts.ChatID, opts.Thread)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get effective message count: %w", err)
+	}
+
+	return &SaveMessageResult{
+		MessageID:        existing.ID,
+		Ordinal:          existing.Ordinal,
+		ContextWindowID:  cw.ID,
+		ThreadTokenCount: opts.TokenCount,
+		MessageCount:     messageCount,
+		ToolCalls:        opts.ToolCalls,
+		ToolResults:      opts.ToolResults,
+		WasExisting:      true,
+	}, nil
 }
 
 // createContentBlocks creates the appropriate content blocks based on message role.

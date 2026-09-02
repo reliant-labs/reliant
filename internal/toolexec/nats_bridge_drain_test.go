@@ -35,6 +35,26 @@ func (m *recordingDaemonMgr) SendDaemonCommand(_ context.Context, _ string, req 
 	return &reliantv1.DaemonCommandResponse{Success: true}, nil
 }
 
+// slowDaemonMgr simulates a command whose EXECUTION takes longer than the
+// drain's fetch budget (e.g. a real git.clone on a cold cloud pod, per the
+// prod incident this reproduces). SendDaemonCommand blocks for `delay`,
+// racing the passed-in ctx: if ctx is cancelled before `delay` elapses, that
+// is exactly the bug — the drain's fetch-budget context must never be handed
+// to the dispatch call.
+type slowDaemonMgr struct {
+	recordingDaemonMgr
+	delay time.Duration
+}
+
+func (m *slowDaemonMgr) SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error) {
+	select {
+	case <-time.After(m.delay):
+		return m.recordingDaemonMgr.SendDaemonCommand(ctx, userID, req)
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
 func (m *recordingDaemonMgr) IsDaemonOnline(context.Context, string) bool { return true }
 func (m *recordingDaemonMgr) ListConnectedDaemons(string) []DaemonInfo    { return nil }
 func (m *recordingDaemonMgr) SendToolRequest(context.Context, string, *ToolExecutionRequest) error {
@@ -767,4 +787,170 @@ func TestDrainPendingCommands_MultipleFetchBatches(t *testing.T) {
 	require.Len(t, mgr.commands, 2)
 	assert.Equal(t, "req-1", mgr.commands[0].RequestId)
 	assert.Equal(t, "req-2", mgr.commands[1].RequestId)
+}
+
+// Reproduces the prod bug directly: a dispatched command (e.g. git.clone)
+// that takes LONGER than the drain's fetch budget must still be allowed to
+// complete. Before the fix, fetchCtx (meant only to bound the fetch loop)
+// was also passed to SendDaemonCommand, so a slow command was cancelled the
+// instant the fetch budget elapsed — exactly the "context deadline exceeded"
+// seen in the daemon-gateway logs for git.clone, even though the daemon
+// itself went on to finish the command.
+func TestDrainPendingCommands_SlowDispatchOutlivesFetchBudget(t *testing.T) {
+	orig := pendingDrainFetchBudget
+	pendingDrainFetchBudget = 30 * time.Millisecond
+	defer func() { pendingDrainFetchBudget = orig }()
+
+	// Dispatch takes 3x the fetch budget — long enough that if fetchCtx were
+	// still wired to SendDaemonCommand, ctx.Done() would fire first and the
+	// mock would return ctx.Err() ("context deadline exceeded") instead of
+	// completing.
+	mgr := &slowDaemonMgr{delay: 90 * time.Millisecond}
+
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{"repo":"https://example.com/r.git"}`), 0)
+
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Len(t, mgr.commands, 1, "the slow command must still be dispatched and recorded as completed")
+	assert.Equal(t, "git.clone", mgr.commands[0].CommandType)
+	assert.True(t, msg.wasAcked(), "a command that completed successfully, even slowly, must be acked, not left for redelivery")
+	assert.False(t, msg.wasNaked(), "must not be treated as a dispatch failure just because it outlived the fetch budget")
+}
+
+// The reason the 5s fetch budget exists in the first place: when there is
+// nothing queued, the drain loop must return promptly rather than blocking
+// for the full budget. This must not regress when fetchCtx is decoupled from
+// dispatch.
+func TestDrainPendingCommands_EmptyDrainReturnsPromptly(t *testing.T) {
+	orig := pendingDrainFetchBudget
+	pendingDrainFetchBudget = 5 * time.Second // realistic prod value
+	defer func() { pendingDrainFetchBudget = orig }()
+
+	mgr := &recordingDaemonMgr{}
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			&stubMessageBatch{err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	start := time.Now()
+	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	elapsed := time.Since(start)
+
+	assert.Less(t, elapsed, 1*time.Second,
+		"an empty drain must return quickly, not block for the full fetch budget (%s)", elapsed)
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Empty(t, mgr.commands)
+}
+
+// TestPollPendingCommands_PicksUpCommandEnqueuedWhileAlreadyConnected is the
+// direct test for the fire-and-forget design: control-plane's CloneRepo
+// (gitcredential.svc.Clone) never sends a live NATS request — it only ever
+// publishes to DAEMON_PENDING_COMMANDS and returns immediately, whether or
+// not a daemon happens to already be connected at that moment. A
+// connect-time-only drain would strand that command until the daemon's next
+// reconnect. pollPendingCommands must pick it up on its next poll instead.
+func TestPollPendingCommands_PicksUpCommandEnqueuedWhileAlreadyConnected(t *testing.T) {
+	origInterval := pendingCommandPollInterval
+	pendingCommandPollInterval = 20 * time.Millisecond
+	defer func() { pendingCommandPollInterval = origInterval }()
+
+	mgr := &recordingDaemonMgr{}
+	msg := makePendingMsg(t, "req-1", "git.clone", json.RawMessage(`{"repo":"https://example.com/r.git"}`), 0)
+
+	consumer := &stubConsumer{
+		batches: []jetstream.MessageBatch{
+			// First drain (at "connect"): nothing queued yet — this models
+			// the command being enqueued AFTER the daemon already connected.
+			&stubMessageBatch{err: jetstream.ErrMsgIteratorClosed},
+			// A later poll: the command has since been published.
+			&stubMessageBatch{msgs: []jetstream.Msg{msg}, err: jetstream.ErrMsgIteratorClosed},
+		},
+	}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		bridge.pollPendingCommands(ctx, "user-1", "daemon-1")
+		close(done)
+	}()
+
+	require.Eventually(t, func() bool {
+		mgr.mu.Lock()
+		defer mgr.mu.Unlock()
+		return len(mgr.commands) == 1
+	}, 2*time.Second, 10*time.Millisecond,
+		"a command enqueued after connect must still be dispatched, without waiting for a reconnect")
+
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pollPendingCommands did not exit after its context was cancelled")
+	}
+
+	mgr.mu.Lock()
+	defer mgr.mu.Unlock()
+	require.Len(t, mgr.commands, 1)
+	assert.Equal(t, "git.clone", mgr.commands[0].CommandType)
+}
+
+// TestPollPendingCommands_StopsWhenContextCancelled guards against a leaked
+// polling goroutine outliving a disconnected daemon.
+func TestPollPendingCommands_StopsWhenContextCancelled(t *testing.T) {
+	origInterval := pendingCommandPollInterval
+	pendingCommandPollInterval = 5 * time.Millisecond
+	defer func() { pendingCommandPollInterval = origInterval }()
+
+	mgr := &recordingDaemonMgr{}
+	// Every Fetch call returns "nothing queued" forever — stubConsumer.Fetch
+	// falls back to ErrMsgIteratorClosed once its (empty) batch list is
+	// exhausted, which is immediately.
+	consumer := &stubConsumer{}
+	stream := &stubStream{consumer: consumer}
+	js := &stubJetStream{stream: stream}
+	bridge := newTestBridge(js, mgr)
+	defer bridge.cancel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan struct{})
+	go func() {
+		bridge.pollPendingCommands(ctx, "user-1", "daemon-1")
+		close(done)
+	}()
+
+	// Let it poll a few times, then cancel and confirm it actually exits
+	// rather than looping forever on a dead context.
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pollPendingCommands did not exit after its context was cancelled")
+	}
 }

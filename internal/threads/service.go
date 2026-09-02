@@ -39,6 +39,9 @@ type Repository interface {
 
 	// Message operations (for resolution, token counting, and fork point resolution)
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
+	// FindMessage returns (nil, nil) when no row carries the id, so
+	// SaveMessage can ask whether a pre-allocated id is already taken.
+	FindMessage(ctx context.Context, id string) (*db.Message, error)
 	GetMessagesByContextWindow(ctx context.Context, contextWindowID string, maxOrdinal *int64) ([]*db.Message, error)
 	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*db.Message, error)
 	// GetLatestMessageInThread returns (nil, nil) for a thread with no

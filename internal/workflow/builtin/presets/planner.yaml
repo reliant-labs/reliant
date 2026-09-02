@@ -9,6 +9,7 @@ params:
   tools:
   - view          # Quick file checks when needed
   - tag:shell     # search the codebase via the shell tool (rg, and a language server for callers/implementations)
+  - code_context  # definition + callers + callees + implementations in ONE call
   - create_plan   # Document the final plan
   model:
     tags: [flagship]

@@ -20,6 +20,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 
 import type { Daemon } from "@/services/controlPlane/daemon";
+import { DaemonLifecyclePhase } from "@/gen/controlplane/v1/public/shared_pb";
+import { DAEMON_WAIT_SLOW_MS } from "@/lib/daemon-wait";
 
 // ── Mock the daemon service module ───────────────────────────
 
@@ -81,6 +83,13 @@ const ACTIVE = 2;
 const DISCONNECTED = 4;
 const FAILED = 5;
 
+// Lifecycle phase constants (control-plane DaemonLifecyclePhase). Kept
+// numeric to match the status constants above; the gate reads them straight
+// off the wire record.
+const UNSPECIFIED = DaemonLifecyclePhase.UNSPECIFIED;
+const PROVISIONING = DaemonLifecyclePhase.PROVISIONING;
+const CLONING = DaemonLifecyclePhase.CLONING;
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useFakeTimers();
@@ -140,9 +149,10 @@ describe("DaemonConnectingGate", () => {
     await flush(50);
 
     expect(screen.getByTestId("daemon-gate-connecting")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Starting your machine\.\.\./i),
-    ).toBeInTheDocument();
+    // No phase on this record, so the shared classifier's generic step. The
+    // trailing ellipsis is gone: the copy is now `classifyDaemonWait`'s, not
+    // this component's.
+    expect(screen.getByText("Starting your machine")).toBeInTheDocument();
     expect(screen.getByText(/Elapsed: 0s/)).toBeInTheDocument();
     expect(onContinue).not.toHaveBeenCalled();
   });
@@ -259,6 +269,114 @@ describe("DaemonConnectingGate", () => {
     // No status message → falls back to the generic copy.
     expect(
       screen.getByText(/We couldn't reach your machine/),
+    ).toBeInTheDocument();
+  });
+
+  it("narrates the PROVISIONING phase instead of a generic 'starting' string", async () => {
+    mockListDaemons.mockResolvedValue({
+      daemons: [makeDaemon({ status: PENDING, lifecyclePhase: PROVISIONING })],
+    });
+
+    render(<DaemonConnectingGate onContinue={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+    await flush(50);
+
+    expect(screen.getByTestId("daemon-gate-connecting")).toBeInTheDocument();
+    expect(screen.getByText("Preparing your machine")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Getting compute and downloading the image/i),
+    ).toBeInTheDocument();
+    // The whole point: the fixed copy must be gone.
+    expect(screen.queryByText(/Starting your machine/i)).not.toBeInTheDocument();
+  });
+
+  it("names the repository clone, the step most likely to look like a hang", async () => {
+    mockListDaemons.mockResolvedValue({
+      daemons: [makeDaemon({ status: PENDING, lifecyclePhase: CLONING })],
+    });
+
+    render(<DaemonConnectingGate onContinue={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+    await flush(50);
+
+    expect(screen.getByText("Cloning your repository")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Your code is being copied onto the machine/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Starting your machine/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps the generic copy when the machine reports no phase", async () => {
+    // Self-hosted machines and rows predating the lifecycle_phase column
+    // legitimately report UNSPECIFIED; the fallback has to stay honest rather
+    // than guess a step.
+    mockListDaemons.mockResolvedValue({
+      daemons: [makeDaemon({ status: PENDING, lifecyclePhase: UNSPECIFIED })],
+    });
+
+    render(<DaemonConnectingGate onContinue={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+    await flush(50);
+
+    expect(screen.getByText("Starting your machine")).toBeInTheDocument();
+    expect(
+      screen.getByText(/This usually takes about a minute/i),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces the backend's reason on a reported failure rather than spinning", async () => {
+    // A phase of CLONING alongside a FAILED status must not read as progress:
+    // status is the more certain signal, so the gate has to stop narrating a
+    // clone and show what broke.
+    mockListDaemons.mockResolvedValue({
+      daemons: [
+        makeDaemon({
+          id: "daemon-failed-1",
+          status: FAILED,
+          lifecyclePhase: CLONING,
+          lastStatusMessage: "clone failed: repository not found",
+        }),
+      ],
+    });
+
+    render(<DaemonConnectingGate onContinue={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+    await flush(50);
+
+    expect(screen.getByTestId("daemon-gate-failed")).toBeInTheDocument();
+    expect(
+      screen.getByText(/clone failed: repository not found/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("daemon-gate-connecting"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("Cloning your repository")).not.toBeInTheDocument();
+  });
+
+  it("escalates the phase copy once the wait passes the slow threshold", async () => {
+    mockListDaemons.mockResolvedValue({
+      daemons: [makeDaemon({ status: PENDING, lifecyclePhase: CLONING })],
+    });
+
+    render(<DaemonConnectingGate onContinue={vi.fn()} />, {
+      wrapper: makeWrapper(),
+    });
+    await flush(50);
+    expect(
+      screen.getByText(/Your code is being copied onto the machine/i),
+    ).toBeInTheDocument();
+
+    await flush(DAEMON_WAIT_SLOW_MS);
+
+    // Escalation must keep the phase headline while getting more forthcoming
+    // about why a big clone is legitimately slow.
+    expect(screen.getByText("Cloning your repository")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Large repositories can take a few minutes to clone/i),
     ).toBeInTheDocument();
   });
 

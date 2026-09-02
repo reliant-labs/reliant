@@ -1009,7 +1009,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
 	}
 
-	d.announceFilesystemMutation(req.CommandType, resultPayload, err)
+	d.announceFilesystemMutation(req.RequestId, req.CommandType, resultPayload, err)
 
 	// NOTE: the terminal output pump is NOT started here on terminal.create.
 	// It is subscribe-driven — started only when a TerminalOutputSubscribeMessage
@@ -1035,14 +1035,28 @@ var filesystemMutatingCommands = map[string]bool{
 	"git.remove":  true,
 }
 
-// announceFilesystemMutation tells the server a command changed the shape of
-// the filesystem, so it can emit a refetch for clients that were not listening.
+// announceFilesystemMutation tells the server a command changed (or tried
+// to change) the shape of the filesystem, so it can emit a refetch — or, on
+// failure, a durable failure notification — for clients that were not
+// listening for the DaemonCommandResponse.
+//
+// This is the ONLY way a command dispatched from DAEMON_PENDING_COMMANDS
+// (no live RPC waiter — see control-plane's fire-and-forget CloneRepo) gets
+// its outcome to a client at all: the response above went nowhere, because
+// nothing registered a pendingCommands channel for a request id the API
+// server never issued synchronously. Without this, a failed pending clone
+// would vanish into the daemon-gateway log with no user-visible trace.
 //
 // Best-effort and non-blocking by design: the command response has already
-// been sent, and failing to announce must never turn a successful clone into
-// a reported failure.
-func (d *daemonClient) announceFilesystemMutation(commandType string, resultPayload []byte, cmdErr error) {
-	if cmdErr != nil || !filesystemMutatingCommands[commandType] {
+// been sent (or attempted), and a failure to announce must never be
+// reported as if the underlying command itself had failed.
+func (d *daemonClient) announceFilesystemMutation(requestID, commandType string, resultPayload []byte, cmdErr error) {
+	if !filesystemMutatingCommands[commandType] {
+		return
+	}
+
+	if cmdErr != nil {
+		d.announceCommandFailure(requestID, commandType, cmdErr)
 		return
 	}
 
@@ -1069,6 +1083,29 @@ func (d *daemonClient) announceFilesystemMutation(commandType string, resultPayl
 	}); err != nil {
 		logging.Warn(logPrefix+" Failed to announce filesystem mutation",
 			"commandType", commandType, "path", result.Path, "error", err)
+	}
+}
+
+// announceCommandFailure is the failure counterpart of announceFilesystemMutation.
+// It does NOT carry a request id keyed to a live waiter — a normal (live)
+// caller already got its failure via the DaemonCommandResponse sent just
+// before this runs, so re-announcing it here would be a harmless duplicate
+// for that caller and the only signal at all for a pending-drained one. The
+// server turns it into a user_updates row (see handleDaemonCommandFailed),
+// which replays to any client that reconnects after the fact.
+func (d *daemonClient) announceCommandFailure(requestID, commandType string, cmdErr error) {
+	if err := d.send(&reliantv1.DaemonMessage{
+		Message: &reliantv1.DaemonMessage_DaemonCommandFailed{
+			DaemonCommandFailed: &reliantv1.DaemonCommandFailed{
+				RequestId:       requestID,
+				CommandType:     commandType,
+				ErrorMessage:    cmdErr.Error(),
+				TimestampUnixMs: time.Now().UTC().UnixMilli(),
+			},
+		},
+	}); err != nil {
+		logging.Warn(logPrefix+" Failed to announce command failure",
+			"requestID", requestID, "commandType", commandType, "error", err)
 	}
 }
 

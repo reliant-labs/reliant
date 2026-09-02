@@ -1063,6 +1063,11 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle filesystem changed", "error", err)
 			}
 
+		case *reliantv1.DaemonMessage_DaemonCommandFailed:
+			if err := s.handleDaemonCommandFailed(ctx, conn, m.DaemonCommandFailed); err != nil {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle daemon command failure", "error", err)
+			}
+
 		default:
 			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
 		}
@@ -1180,6 +1185,39 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 
 	return s.database.EmitUserRefetch(ctx, conn.userID, db.RefetchFileTree, db.RefetchOpts{
 		ProjectID: &project.ID,
+	})
+}
+
+// handleDaemonCommandFailed persists a DaemonCommandFailed announcement as a
+// USER_UPDATE_TYPE_NOTIFICATION row. This is the only outcome signal for a
+// command dispatched with no live RPC waiter (control-plane's fire-and-forget
+// CloneRepo enqueues onto DAEMON_PENDING_COMMANDS and returns immediately —
+// see gitcredential.svc.Clone) — the DaemonCommandResponse the daemon also
+// sends has nowhere to go, since no pendingCommands channel was ever
+// registered for a request id the API server never issued synchronously.
+// Writing it to user_updates makes it replay to the client on reconnect,
+// same as the success path in handleFileSystemChanged.
+func (s *ToolsDaemonService) handleDaemonCommandFailed(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonCommandFailed) error {
+	if msg == nil {
+		return nil
+	}
+
+	data, err := json.Marshal(map[string]string{
+		"reason":       "daemon_command_failed",
+		"command_type": msg.CommandType,
+		"request_id":   msg.RequestId,
+		"error":        msg.ErrorMessage,
+	})
+	if err != nil {
+		return fmt.Errorf("marshaling daemon command failure notification: %w", err)
+	}
+
+	return s.database.CreateUserUpdate(ctx, &db.UserUpdate{
+		UserID:     conn.userID,
+		UpdateType: db.UserUpdateNotification,
+		EntityType: db.EntityTypeSystem,
+		EntityID:   msg.CommandType,
+		Data:       data,
 	})
 }
 

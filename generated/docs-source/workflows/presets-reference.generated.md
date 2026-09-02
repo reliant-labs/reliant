@@ -25,11 +25,11 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 | `forge_implementer` | `tags:moderate` | `tag:default`, `component_library` | Implementation specialist for a single seam of a Forge app — same tier as `... |
 | `general` | `tags:flagship` | `tag:default` (+2 more) | Balanced general-purpose agent with full tool access including file modificat... |
 | `git` | `tags:fast` | `tag:shell`, `view` | Git specialist for commits, branching, and version control operations - loads... |
-| `implementer` | `tags:moderate` | `tag:default` | Implementation specialist for well-specified code changes — follows detaile... |
+| `implementer` | `tags:flagship` | `tag:default` | Implementation specialist for well-specified code changes — follows detaile... |
 | `migrate` | `tags:flagship` | `tag:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
 | `planner` | `tags:flagship` | `view`, `tag:shell`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
 | `refactor` | `tags:moderate` | `view` (+5 more) | Code refactoring specialist who reorganizes and improves code structure while... |
-| `researcher` | `tags:cheap` | `tag:shell`, `tag:web`, `view` | Research and analysis specialist conducting comprehensive investigations of t... |
+| `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view` | Research and analysis specialist conducting comprehensive investigations of t... |
 | `tester` | `tags:moderate` | `view`, `write`, `edit`, `tag:shell` | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
 | `ux` | `tags:flagship` | `fetch` (+19 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
 | `workflow_builder` | `tags:flagship` | `tag:workflow` (+4 more) | Specialized assistant for building and modifying Reliant workflows |
@@ -132,7 +132,7 @@ Implementation specialist for well-specified code changes — follows detailed i
 
 | Parameter | Value |
 |-----------|-------|
-| **Model** | `tags:moderate` |
+| **Model** | `tags:flagship` |
 | **Tag** | `agent` |
 | **Tools** | `tag:default` |
 | **Spawn Presets** | `researcher` |
@@ -184,7 +184,7 @@ Research and analysis specialist conducting comprehensive investigations of the 
 
 | Parameter | Value |
 |-----------|-------|
-| **Model** | `tags:cheap` |
+| **Model** | `tags:flagship` |
 | **Tag** | `agent` |
 | **Tools** | `tag:shell`, `tag:web`, `view` |
 

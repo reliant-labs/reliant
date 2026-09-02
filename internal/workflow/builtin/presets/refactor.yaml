@@ -14,5 +14,6 @@ params:
   - find_replace
   - move_code
   - tag:shell
+  - code_context  # find every caller before changing a signature
   model:
     tags: [moderate]

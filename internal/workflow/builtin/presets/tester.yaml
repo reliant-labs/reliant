@@ -11,5 +11,6 @@ params:
   - write
   - edit
   - tag:shell
+  - code_context  # find the callers a new test must cover
   model:
     tags: [moderate]

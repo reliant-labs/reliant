@@ -64,6 +64,11 @@ message DaemonMessage {
 
     // Filesystem change detection
     FileSystemChanged file_system_changed = 12;
+
+    // Async failure of a command that had no live RPC waiter to report to
+    // (e.g. one dispatched from the DAEMON_PENDING_COMMANDS queue after the
+    // original caller already returned). See DaemonCommandFailed.
+    DaemonCommandFailed daemon_command_failed = 13;
   }
 }
 
@@ -265,6 +270,20 @@ message ChangedFile {
 message FileSystemChanged {
   string project_path = 1;        // Which project directory had changes
   int64 timestamp_unix_ms = 2;    // When the change was detected
+}
+
+// Sent by the daemon when a command dispatched WITHOUT a live RPC waiter
+// (i.e. one drained from DAEMON_PENDING_COMMANDS after the caller that
+// enqueued it already returned — see control-plane's fire-and-forget
+// CloneRepo) fails. There is no synchronous response channel to carry the
+// failure back to that caller, so the API server turns this into a
+// user_updates row instead, which replays to the client on reconnect —
+// the same path FileSystemChanged uses for the success case.
+message DaemonCommandFailed {
+  string request_id = 1;
+  string command_type = 2;        // e.g. "git.clone"
+  string error_message = 3;
+  int64 timestamp_unix_ms = 4;
 }
 
 message IndexedWorkflow {

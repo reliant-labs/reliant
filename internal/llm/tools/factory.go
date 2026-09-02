@@ -230,6 +230,10 @@ func (f *ToolsFactory) Sourcegraph() Tool {
 	return NewSourcegraphTool()
 }
 
+func (f *ToolsFactory) CodeContext() Tool {
+	return NewCodeContextTool()
+}
+
 // Metadata tools
 func (f *ToolsFactory) MetadataWriter() Tool {
 	return NewMetadataWriterTool()

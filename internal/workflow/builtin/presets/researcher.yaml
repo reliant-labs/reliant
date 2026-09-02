@@ -9,5 +9,7 @@ params:
   - tag:shell    # search the codebase via the shell tool (rg, and a language server for callers/implementations)
   - tag:web      # fetch for documentation research
   - view         # Read files
+  - code_context # definition + callers + callees + implementations in ONE call
   model:
-    tags: [cheap]
+    tags: [flagship]
+    thinking_level: low

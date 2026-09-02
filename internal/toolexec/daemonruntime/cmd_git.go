@@ -56,6 +56,23 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 		req.Path = filepath.Join("/home/workspace/projects", repoName)
 	}
 
+	// Idempotency guard: a redelivered git.clone (JetStream WorkQueue
+	// redelivery after a dispatch timeout/NAK — see drainPendingCommands in
+	// nats_bridge.go) can arrive after the FIRST attempt already completed
+	// the clone on disk. `git clone` itself refuses to run into an existing
+	// non-empty directory, so without this check a redelivered clone that
+	// already succeeded would report failure on retry even though req.Path
+	// is a valid, complete clone. Only short-circuits when req.Path already
+	// looks like a real clone (has .git); any other pre-existing conflict
+	// (a non-git directory in the way) still falls through to the normal
+	// clone attempt and its normal failure.
+	if _, err := os.Stat(filepath.Join(req.Path, ".git")); err == nil {
+		return json.Marshal(gitCloneResponse{
+			Success: true,
+			Path:    req.Path,
+		})
+	}
+
 	// Ensure parent directory exists
 	if err := os.MkdirAll(filepath.Dir(req.Path), 0755); err != nil {
 		return nil, fmt.Errorf("failed to create directory: %v", err)

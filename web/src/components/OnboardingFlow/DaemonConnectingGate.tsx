@@ -5,7 +5,9 @@
  * finishes onboarding, and surfaces one of four states:
  *
  *   1. Connecting — status is PENDING or DISCONNECTED inside the 60s window.
- *      Spinner + elapsed seconds.
+ *      The copy comes from `classifyDaemonWait`, so the gate narrates the
+ *      reported lifecycle phase ("Cloning your repository") and escalates on
+ *      the shared thresholds rather than showing one fixed string.
  *   2. Connected — status flipped to ACTIVE. Green check + Continue button.
  *   3. Failed — status is FAILED, or 60s elapsed without ACTIVE. Red icon,
  *      headline, optional reason from `last_status_message`, plus Retry,
@@ -24,10 +26,11 @@ import {
   AlertCircle,
   CheckCircle2,
   ExternalLink,
-  Loader2,
   RotateCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { classifyDaemonWait } from "@/lib/daemon-wait";
+import { DaemonWaitState } from "../DaemonWaitState";
 import {
   DAEMON_STATUS_ACTIVE,
   DAEMON_STATUS_FAILED,
@@ -268,25 +271,33 @@ export function DaemonConnectingGate({
   }
 
   // phase === "connecting"
+  //
+  // The copy is NOT written here. `classifyDaemonWait` owns the vocabulary and
+  // the escalation policy for "the machine isn't there yet", and every other
+  // daemon-backed surface (file tree, terminal, connect modal) already renders
+  // it through `DaemonWaitState`. This gate used to hardcode "Starting your
+  // machine...", which meant a three-minute repository clone and a machine
+  // wedged on a bad image pull read identically to a user who had just
+  // finished signing up.
+  //
+  // `isCloud` is true unconditionally because the gate is only ever rendered
+  // on the cloud onboarding path — the terminal steps show it after
+  // completeOnboarding for a `cloud_free_trial` plan. A self-hosted user never
+  // reaches it, so asking the deployment-wide capability flag would only
+  // introduce a way to get the wrong branch.
+  const waitState = classifyDaemonWait({ daemon, elapsedMs, isCloud: true });
+
   return (
-    <div
-      className="space-y-5 text-center"
-      role="status"
-      aria-live="polite"
-      data-testid="daemon-gate-connecting"
-    >
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary/15 text-primary">
-        <Loader2 className="h-7 w-7 animate-spin" />
-      </div>
-      <div className="space-y-1">
-        <h2 className="text-xl font-semibold tracking-tight text-foreground">
-          Starting your machine...
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          This usually takes a minute or two. You can skip ahead and it will
-          connect when it is ready.
-        </p>
-      </div>
+    // No live region here: DaemonWaitState is itself one, and announcing the
+    // wrapper too would read the per-second elapsed counter aloud on every
+    // tick, burying the phase change that is the thing worth hearing.
+    <div className="space-y-5 text-center" data-testid="daemon-gate-connecting">
+      <DaemonWaitState
+        state={waitState}
+        variant="panel"
+        onRetry={handleRetry}
+        className="h-auto p-0"
+      />
       <p className="text-xs text-muted-foreground">
         Elapsed: {elapsedSeconds}s {timedOut ? "" : `/ ${Math.floor(POLL_TIMEOUT_MS / 1000)}s`}
       </p>
