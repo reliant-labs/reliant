@@ -1175,19 +1175,27 @@ func wfaRoleString(r reliantv1.MessageRole) string {
 }
 
 func wfaWorkflowStatus(s db.WorkflowStatus) string {
-	switch s {
-	case db.WorkflowStatusPending:
+	// WorkflowStatus was an eight-value enum when this command was written and
+	// is now a {State, StopReason} pair. This reproduces the ORIGINAL display
+	// strings exactly against the new shape — the old `running` is the new
+	// Active state, and the four terminal values are stop reasons.
+	switch s.State {
+	case db.WorkflowStatePending:
 		return "pending"
-	case db.WorkflowStatusRunning:
+	case db.WorkflowStateActive:
 		return "running"
-	case db.WorkflowStatusCompleted:
-		return "completed"
-	case db.WorkflowStatusFailed:
-		return "failed"
-	case db.WorkflowStatusCancelled:
-		return "cancelled"
-	case db.WorkflowStatusPaused:
-		return "paused"
+	case db.WorkflowStateStopped:
+		switch s.StopReason {
+		case db.StopReasonCompleted:
+			return "completed"
+		case db.StopReasonFailed:
+			return "failed"
+		case db.StopReasonCancelled:
+			return "cancelled"
+		case db.StopReasonPaused:
+			return "paused"
+		}
+		return "unspecified"
 	default:
 		return "unspecified"
 	}
