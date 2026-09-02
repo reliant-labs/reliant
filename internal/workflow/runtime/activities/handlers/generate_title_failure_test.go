@@ -31,16 +31,19 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
-// failingTitleDriver fails SendMessages the way a provider outage does.
+// failingTitleDriver fails the request the way a provider outage does.
 type failingTitleDriver struct {
 	mockLLMDriverForIdempotency
 	err   error
 	calls int
 }
 
-func (d *failingTitleDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tls []tools.Tool) (*llm.DriverResponse, error) {
+func (d *failingTitleDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tls []tools.Tool) <-chan llm.DriverEvent {
 	d.calls++
-	return nil, d.err
+	ch := make(chan llm.DriverEvent, 1)
+	ch <- llm.DriverEvent{Type: llm.EventError, Error: d.err}
+	close(ch)
+	return ch
 }
 
 func failingTitleResolver(d *failingTitleDriver) drivers.DriverResolver {

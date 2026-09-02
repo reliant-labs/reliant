@@ -686,11 +686,24 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	isError := !execResult.Success || execResult.IsError
 	result := a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, isError, execResult.BinaryParts)
 
+	// What the command actually printed. Captured BEFORE the nudge below,
+	// because this is what gets stored and rendered: a tip appended to the
+	// durable row would show up in the UI as if the command had emitted it,
+	// and would still be there on reload months later.
+	durableContent := result.Content
+
+	// A grep for a symbol is a question code_context answers outright. Say so
+	// on the result the model is already reading — telling agents this in a
+	// description ahead of time has been measured at zero uptake, twice.
+	if !isError {
+		result.Content += maybeCodeContextNudge(toolName, tec.toolInput, tec.thread)
+	}
+
 	status := core.ToolCallStatusCompleted
 	errMsg := ""
 	if isError {
 		status = core.ToolCallStatusFailed
-		errMsg = result.Content
+		errMsg = durableContent
 	}
 
 	// Announce the SAME outcome that is about to be written durably.
@@ -712,7 +725,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 		startedAt:    &startedAt,
 		completedAt:  &completedAt,
 		errorMessage: errMsg,
-	}, &toolCallResultWrite{content: result.Content, isError: isError})
+	}, &toolCallResultWrite{content: durableContent, isError: isError})
 
 	return result
 }

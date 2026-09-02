@@ -10,5 +10,6 @@ params:
   - tag:shell    # search the codebase via the shell tool (rg, and a language server for callers/implementations)
   - tag:web      # fetch for documentation
   - view         # File access
+  - code_context # blast radius of a change: who calls this, what implements it
   model:
     tags: [flagship]

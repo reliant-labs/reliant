@@ -54,6 +54,9 @@ func (s *TerminalProxyService) ListSessions(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
 	if err != nil {
+		if toolexec.IsDaemonPending(err) {
+			return nil, connect.NewError(connect.CodeUnavailable, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -115,6 +118,9 @@ func (s *TerminalProxyService) CloseSession(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
 	if err != nil {
+		if toolexec.IsDaemonPending(err) {
+			return nil, connect.NewError(connect.CodeUnavailable, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 

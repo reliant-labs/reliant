@@ -20,7 +20,31 @@ export interface UserPreferences {
 export const settingsKeys = {
   all: ["settings"] as const,
   preferences: () => [...settingsKeys.all, "preferences"] as const,
+  providers: () => [...settingsKeys.all, "providers"] as const,
 };
+
+export type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[number];
+
+/** True once any provider has either a stored key or is otherwise configured (e.g. the managed `reliant` provider). */
+export function hasAnyConfiguredProvider(providers: ProviderStatus[]): boolean {
+  return providers.some((p) => p.hasApiKey || p.configured);
+}
+
+/**
+ * The single source of truth for "is any AI provider configured?" — server
+ * state via `GetProviderStatuses`, not a latch set by whichever UI flow
+ * happened to save a key. Every caller that needs this answer reads this
+ * query (or `hasAnyConfiguredProvider` on its data) instead of listening for
+ * an event; a forgotten emit site can no longer leave the answer stale
+ * forever, only until the next refetch.
+ */
+export function useProviderStatuses() {
+  return useQuery({
+    queryKey: settingsKeys.providers(),
+    queryFn: () => api.settings.getProviders(),
+    staleTime: 10_000,
+  });
+}
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   streamingEnabled: true,

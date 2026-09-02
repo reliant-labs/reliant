@@ -15,10 +15,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
@@ -307,7 +309,17 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	// Daemon routing: reuses the same NATS connection
-	daemonRouter := toolexec.NewNATSDaemonRouter(nc, toolexec.WithDatabase(repo))
+	daemonRouterOpts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
+	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
+		// Lets the router distinguish "daemon exists but is still
+		// provisioning" from "no daemon at all" via the control plane's
+		// ResolveDaemon RPC — without this, a cloud daemon that hasn't
+		// registered with THIS process's DB yet (still coming up) falls
+		// straight through to the generic "no daemon available" error.
+		daemonRouterOpts = append(daemonRouterOpts,
+			toolexec.WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, cpURL)))
+	}
+	daemonRouter := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	natsChecker := nc.IsConnected
 	remoteExecutor.SetDaemonRouter(daemonRouter)
 	logging.Info("Using NATS daemon router — daemon services run in separate daemon-gateway process")

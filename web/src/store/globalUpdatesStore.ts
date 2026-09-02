@@ -35,6 +35,7 @@ import { showWorkflowCompletionNotification, showApprovalRequiredNotification, g
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
 import { setDaemonLastSeen } from "../api/grpc-client";
+import { toast } from "../lib/toast-manager";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -346,6 +347,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
           break;
         case UserUpdateType.REFETCH:
           handleRefetch(update);
+          break;
+        case UserUpdateType.NOTIFICATION:
+          handleNotification(update);
           break;
         case UserUpdateType.DAEMON_HEARTBEAT: {
           const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
@@ -1133,6 +1137,27 @@ function updateProcessStatus(
       worktree_id: data.worktree_id || update.worktree_id,
     });
   }
+}
+
+/**
+ * Handle USER_UPDATE_TYPE_NOTIFICATION events from the user stream.
+ *
+ * Today this only carries reason: "daemon_command_failed" — the failure
+ * counterpart of the file_tree refetch a successful git.clone emits. A
+ * clone dispatched via the pending-command queue (control-plane's CloneRepo
+ * enqueues and returns immediately; see gitcredential.svc.Clone) has no
+ * RPC response to fail on the client's original call, so this row —
+ * replayed on reconnect just like any other user_update — is the only
+ * place a background clone failure becomes visible at all.
+ */
+function handleNotification(update: UserUpdate) {
+  const data = update.data as { reason?: string; command_type?: string; error?: string } | undefined;
+  if (data?.reason === "daemon_command_failed") {
+    const label = data.command_type === "git.clone" ? "Clone" : (data.command_type ?? "Command");
+    toast.error(`${label} failed: ${data.error ?? "unknown error"}`);
+    return;
+  }
+  logger.debug(`${LOG_PREFIX} Unhandled notification reason`, { data });
 }
 
 /**

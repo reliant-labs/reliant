@@ -45,6 +45,9 @@ func (s *BackgroundProxyService) sendCommand(ctx context.Context, userID, comman
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
+		if toolexec.IsDaemonPending(err) {
+			return connect.NewError(connect.CodeUnavailable, err)
+		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
 

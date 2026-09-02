@@ -72,7 +72,14 @@ export interface EventMap {
   "github-credential:succeeded": { trigger: string; attempt: number };
   "github-credential:failed": { trigger: string; attempts: number; error: string };
 
-  // API key lifecycle
+  // API key / provider-credential lifecycle. NOTE: this is a latency hint,
+  // not a source of truth. Nothing may treat "was this emitted" as the
+  // answer to "is a provider configured" — that lives in the
+  // settingsKeys.providers() query cache (hooks/settings-queries.ts),
+  // populated from GetProviderStatuses. A missed emit here only delays the
+  // next refetch; it can never leave a consumer permanently wrong. See
+  // onboardingChecklistStore.ts's subscribeToStoreChanges for the consumer
+  // this was written to fix.
   "api-key:saved": { provider: string };
 }
 

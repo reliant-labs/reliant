@@ -41,6 +41,21 @@ func drainFileSystemChanged(d *daemonClient) *reliantv1.FileSystemChanged {
 	}
 }
 
+// drainCommandFailed returns the first DaemonCommandFailed message queued,
+// or nil when none was sent.
+func drainCommandFailed(d *daemonClient) *reliantv1.DaemonCommandFailed {
+	for {
+		select {
+		case msg := <-d.sendCh:
+			if f := msg.GetDaemonCommandFailed(); f != nil {
+				return f
+			}
+		default:
+			return nil
+		}
+	}
+}
+
 func clonePayload(t *testing.T, path string) []byte {
 	t.Helper()
 	payload, err := json.Marshal(gitCloneResponse{Success: true, Path: path})
@@ -57,7 +72,7 @@ func clonePayload(t *testing.T, path string) []byte {
 func TestAnnounceFilesystemMutationOnClone(t *testing.T) {
 	d := newAnnounceTestClient()
 
-	d.announceFilesystemMutation("git.clone", clonePayload(t, "/home/workspace/projects/acme"), nil)
+	d.announceFilesystemMutation("req-1", "git.clone", clonePayload(t, "/home/workspace/projects/acme"), nil)
 
 	fsc := drainFileSystemChanged(d)
 	require.NotNil(t, fsc, "a successful clone must announce the new directory")
@@ -65,26 +80,45 @@ func TestAnnounceFilesystemMutationOnClone(t *testing.T) {
 	assert.NotZero(t, fsc.TimestampUnixMs)
 }
 
-// TestAnnounceFilesystemMutationSkipsFailures guards against telling clients to
-// refetch a directory that was never created.
-func TestAnnounceFilesystemMutationSkipsFailures(t *testing.T) {
+// TestAnnounceFilesystemMutationAnnouncesFailures is the failure counterpart
+// of the success path above, and the fix for the "clone fails silently"
+// gap: a git.clone dispatched from DAEMON_PENDING_COMMANDS (no live RPC
+// waiter — control-plane's CloneRepo enqueues and returns immediately) has
+// nowhere else to report a failure. Without this, the repo would just never
+// appear and nothing would tell the user why.
+func TestAnnounceFilesystemMutationAnnouncesFailures(t *testing.T) {
 	d := newAnnounceTestClient()
 
-	d.announceFilesystemMutation("git.clone", clonePayload(t, "/home/workspace/projects/acme"),
+	d.announceFilesystemMutation("req-1", "git.clone", clonePayload(t, "/home/workspace/projects/acme"),
 		errors.New("git clone failed: authentication required"))
 
-	assert.Nil(t, drainFileSystemChanged(d), "a failed clone must not announce")
+	// Check DaemonCommandFailed FIRST: both drain helpers discard any
+	// message that isn't the type they're looking for, so draining
+	// FileSystemChanged first would consume (and hide) the one message
+	// actually sent.
+	failed := drainCommandFailed(d)
+	require.NotNil(t, failed, "a failed clone must announce the failure")
+	assert.Nil(t, drainFileSystemChanged(d), "a failed clone must not announce a filesystem change")
+	assert.Equal(t, "req-1", failed.RequestId)
+	assert.Equal(t, "git.clone", failed.CommandType)
+	assert.Contains(t, failed.ErrorMessage, "authentication required")
+	assert.NotZero(t, failed.TimestampUnixMs)
 }
 
 // TestAnnounceFilesystemMutationIgnoresUnrelatedCommands keeps this narrow.
 // Most daemon commands mutate files inside a directory the file-tree watcher
 // already polls; announcing for those would duplicate its signal on every
-// read, write, and shell invocation.
+// read, write, and shell invocation. Applies to both the success and
+// failure announcement paths.
 func TestAnnounceFilesystemMutationIgnoresUnrelatedCommands(t *testing.T) {
 	for _, commandType := range []string{"fs.read_file", "fs.write_file", "exec.run", "worktree.create"} {
 		d := newAnnounceTestClient()
-		d.announceFilesystemMutation(commandType, clonePayload(t, "/some/path"), nil)
+		d.announceFilesystemMutation("req-1", commandType, clonePayload(t, "/some/path"), nil)
 		assert.Nil(t, drainFileSystemChanged(d), "%s must not announce", commandType)
+
+		d2 := newAnnounceTestClient()
+		d2.announceFilesystemMutation("req-1", commandType, nil, errors.New("boom"))
+		assert.Nil(t, drainCommandFailed(d2), "%s failure must not announce", commandType)
 	}
 }
 
@@ -94,22 +128,23 @@ func TestAnnounceFilesystemMutationIgnoresUnrelatedCommands(t *testing.T) {
 func TestAnnounceFilesystemMutationCoversRepoRemoval(t *testing.T) {
 	for _, commandType := range []string{"git.reclone", "git.remove"} {
 		d := newAnnounceTestClient()
-		d.announceFilesystemMutation(commandType, clonePayload(t, "/home/workspace/projects/acme"), nil)
+		d.announceFilesystemMutation("req-1", commandType, clonePayload(t, "/home/workspace/projects/acme"), nil)
 		assert.NotNil(t, drainFileSystemChanged(d), "%s must announce", commandType)
 	}
 }
 
 // TestAnnounceFilesystemMutationRequiresPath — the server resolves a project
 // from the path, so an announcement without one has nothing to scope a refetch
-// to and would be dropped there anyway.
+// to and would be dropped there anyway. Only applies to the success path —
+// a failure has no path to require.
 func TestAnnounceFilesystemMutationRequiresPath(t *testing.T) {
 	d := newAnnounceTestClient()
 
-	d.announceFilesystemMutation("git.clone", clonePayload(t, ""), nil)
+	d.announceFilesystemMutation("req-1", "git.clone", clonePayload(t, ""), nil)
 	assert.Nil(t, drainFileSystemChanged(d), "no path means nothing to announce")
 
 	d2 := newAnnounceTestClient()
-	d2.announceFilesystemMutation("git.clone", nil, nil)
+	d2.announceFilesystemMutation("req-1", "git.clone", nil, nil)
 	assert.Nil(t, drainFileSystemChanged(d2), "an empty payload must not panic or announce")
 }
 
@@ -154,4 +189,50 @@ func TestHandleDaemonCommandAnnouncesClone(t *testing.T) {
 	assert.True(t, sawResponse, "the command response must still be sent")
 	require.NotNil(t, announced, "dispatch must announce a filesystem-mutating command")
 	assert.Equal(t, clonedTo, announced.ProjectPath)
+}
+
+// TestHandleDaemonCommandAnnouncesCloneFailure is the failure-path twin of
+// TestHandleDaemonCommandAnnouncesClone, pinning the WIRING for a command
+// that fails — including a command dispatched with no live RPC waiter,
+// exactly like the drain path in nats_bridge.go. Verifies both the normal
+// (still-sent) DaemonCommandResponse AND the DaemonCommandFailed
+// announcement fire off a single real handleDaemonCommand call.
+func TestHandleDaemonCommandAnnouncesCloneFailure(t *testing.T) {
+	RegisterCommand("test.fake_clone_fail", func(_ context.Context, _ []byte) ([]byte, error) {
+		return nil, errors.New("git clone failed: repository not found")
+	})
+	filesystemMutatingCommands["test.fake_clone_fail"] = true
+	t.Cleanup(func() { delete(filesystemMutatingCommands, "test.fake_clone_fail") })
+
+	d := newAnnounceTestClient()
+	d.handleDaemonCommand(&reliantv1.DaemonCommandRequest{
+		RequestId:   "req-2",
+		CommandType: "test.fake_clone_fail",
+	})
+
+	var sawResponse bool
+	var responseSuccess bool
+	var announced *reliantv1.DaemonCommandFailed
+	for {
+		select {
+		case msg := <-d.sendCh:
+			if resp := msg.GetDaemonCommandResponse(); resp != nil {
+				sawResponse = true
+				responseSuccess = resp.Success
+			}
+			if f := msg.GetDaemonCommandFailed(); f != nil {
+				announced = f
+			}
+			continue
+		default:
+		}
+		break
+	}
+
+	assert.True(t, sawResponse, "the command response must still be sent")
+	assert.False(t, responseSuccess, "the command response must report failure")
+	require.NotNil(t, announced, "dispatch must announce the failure of a filesystem-mutating command")
+	assert.Equal(t, "req-2", announced.RequestId)
+	assert.Equal(t, "test.fake_clone_fail", announced.CommandType)
+	assert.Contains(t, announced.ErrorMessage, "repository not found")
 }

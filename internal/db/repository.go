@@ -27,6 +27,9 @@ type Repository interface {
 	CreateMessage(ctx context.Context, msg *Message) error
 	CreateMessageIfNotExists(ctx context.Context, msg *Message) error // INSERT OR IGNORE - same warning
 	GetMessage(ctx context.Context, id string) (*Message, error)
+	// FindMessage is GetMessage's does-it-exist variant: (nil, nil) on a miss
+	// rather than an error. Used by SaveMessage's idempotency checks.
+	FindMessage(ctx context.Context, id string) (*Message, error)
 	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*Message, error)
 	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*Message, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error)

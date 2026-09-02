@@ -128,6 +128,15 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID, comman
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
+		// A daemon that exists but hasn't connected yet (still
+		// provisioning) is retryable, unlike every other daemon-command
+		// failure this helper maps to CodeInternal — CodeUnavailable is
+		// what the frontend's daemon-wait machinery expects, and the
+		// message still carries the "no daemon connected" marker
+		// isDaemonConnectingError keys on either way.
+		if toolexec.IsDaemonPending(err) {
+			return connect.NewError(connect.CodeUnavailable, err)
+		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
 

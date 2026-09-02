@@ -20,6 +20,9 @@ import {
   RedeemedCouponKind,
   type RedeemCouponResult,
 } from "@/services/controlPlane/reliantAI";
+import { onboardingService } from "@/services/controlPlane/onboarding";
+import { getEventBus } from "@/lib/events";
+import { logger } from "@/lib/logger";
 import { formatMachineMinutes } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
 
@@ -77,6 +80,7 @@ export function RedeemCouponForm({
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [redeemed, setRedeemed] = useState("");
+  const [syncWarning, setSyncWarning] = useState("");
   const redeem = useRedeemCoupon();
 
   const small = size === "sm";
@@ -85,6 +89,7 @@ export function RedeemCouponForm({
     e?.preventDefault();
     setError("");
     setRedeemed("");
+    setSyncWarning("");
 
     const trimmed = code.trim();
     if (!trimmed) {
@@ -102,6 +107,34 @@ export function RedeemCouponForm({
         );
         setCode("");
         onRedeemed?.(res);
+
+        // Only WALLET_CREDIT actually buys AI access — COMPUTE_MINUTES pays
+        // for machine time and grants no provider entitlement, so syncing a
+        // key after one would (incorrectly) check off "Add an API key" for a
+        // coupon that never funded any AI usage.
+        if (res.kind === RedeemedCouponKind.WALLET_CREDIT) {
+          onboardingService.provisionManagedKey().then(
+            (result) => {
+              if (!result.synced) return;
+              // Established pattern for this provider — see
+              // CombinedGeneralSettings' handleEnableReliant.
+              getEventBus().emit("api-key:saved", { provider: "reliant" });
+            },
+            (err: unknown) => {
+              // The redemption itself already succeeded; don't relitigate it.
+              // But don't silently mark the checklist complete either — tell
+              // the user there's a follow-up step outstanding.
+              logger.warn(
+                "[RedeemCouponForm] Reliant provider sync failed after redemption",
+                err,
+              );
+              setSyncWarning(
+                "Credit added, but we couldn't sync your Reliant API key automatically. " +
+                  "Try again from Settings, or reopen this page.",
+              );
+            },
+          );
+        }
       },
       // The server's message is already user-facing and per-case (unknown code
       // / already redeemed / fully claimed / expired), so it is shown verbatim
@@ -180,6 +213,11 @@ export function RedeemCouponForm({
       {redeemed && (
         <p className={cn("text-success", small ? "text-xs" : "text-sm")}>
           {redeemed}
+        </p>
+      )}
+      {syncWarning && (
+        <p className={cn("text-warning", small ? "text-xs" : "text-sm")}>
+          {syncWarning}
         </p>
       )}
     </form>

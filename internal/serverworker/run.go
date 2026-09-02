@@ -14,9 +14,11 @@ import (
 
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -231,7 +233,15 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	// 10. Tool execution routing via NATS
 	// -----------------------------------------------------------------
-	router := toolexec.NewNATSDaemonRouter(nc, toolexec.WithDatabase(repo))
+	daemonRouterOpts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
+	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
+		// See serverapi/run.go for why this matters: without it a
+		// still-provisioning cloud daemon is indistinguishable from "no
+		// daemon at all".
+		daemonRouterOpts = append(daemonRouterOpts,
+			toolexec.WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, cpURL)))
+	}
+	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)
 	remoteExecutor.SetDaemonRouter(router)
 	natsChecker := nc.IsConnected
 	logging.Info("Tool execution routing via NATS")
