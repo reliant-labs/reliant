@@ -27,6 +27,21 @@ github.com/hashicorp/go-cleanhttp    # MPL-2.0, unmodified — stdlib http clien
 github.com/hashicorp/go-getter       # MPL-2.0, unmodified — artifact fetching
 github.com/hashicorp/aws-sdk-go-base/v2  # MPL-2.0, unmodified — transitive of go-getter
 
+# filepath-securejoin is dual-licensed per FILE, declared
+# `SPDX-License-Identifier: BSD-3-Clause AND MPL-2.0` in its COPYING.md: the
+# path-joining code we actually call (join*.go, vfs.go, doc.go) is
+# BSD-3-Clause, and the MPL-2.0 half covers the rest. The same file-level
+# copyleft reasoning as the hashicorp entries above applies to that half — we
+# import it unmodified, so nothing is triggered.
+#
+# It arrives transitively (go-git and kcl-lang.io/kpm, via forge's CLI), so we
+# do not control the require. It was already in the graph at v0.6.1; the bump
+# to v0.7.0 is what made the gate notice, because upstream split its single
+# LICENSE into COPYING.md + LICENSE.BSD + LICENSE.MPL-2.0 — a packaging change
+# to work around a pkg.go.dev classifier limitation (go.dev/issue/75067), not a
+# change of terms.
+github.com/cyphar/filepath-securejoin  # BSD-3-Clause AND MPL-2.0 per-file; MPL half unmodified, transitive via go-git/kpm
+
 # --- Custom / unrecognized license text ---
 #
 # xi2/xz is a Go port of XZ Embedded. Its LICENSE is a hand-written preamble
@@ -35,6 +50,27 @@ github.com/hashicorp/aws-sdk-go-base/v2  # MPL-2.0, unmodified — transitive of
 # Embedded is public domain, and the Go port carries the same grant. Verified
 # by reading the file directly; permissive, no obligations.
 github.com/xi2/xz                    # public domain (XZ Embedded port), non-standard LICENSE text
+
+# --- Multi-license file where the copyleft-ish part covers only docs ---
+#
+# The MCP Go SDK is mid-transition from MIT to Apache-2.0, and its single
+# LICENSE file concatenates THREE grants: Apache-2.0 for code and specs, MIT
+# for contributions not yet relicensed, and CC-BY-4.0 for DOCUMENTATION
+# (explicitly "excluding specifications"). The classifier sees the CC-BY-4.0
+# section and reports the whole module as CC-*.
+#
+# What we link is Go code under Apache-2.0/MIT, both already in
+# ALLOWED_LICENSES. CC-BY-4.0 is attribution-only in any case — it carries no
+# source-disclosure or use restriction reaching a linking binary — and it
+# applies to prose we do not ship.
+#
+# This became a gate failure when the bump moved go-sdk 1.2.0 -> 1.7.0, the
+# release that introduced the transitional LICENSE text.
+#
+# Re-examine if we ever vendor its docs, or once the transition completes and
+# the LICENSE collapses to a single Apache-2.0 grant (at which point this entry
+# can just be deleted).
+github.com/modelcontextprotocol/go-sdk  # Apache-2.0/MIT code; the CC-BY-4.0 section covers documentation only
 
 # --- License granted upstream, but after the tag we depend on ---
 #

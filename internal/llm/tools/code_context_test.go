@@ -105,6 +105,7 @@ func TestCodeContext_RequiresSymbol(t *testing.T) {
 
 func TestCodeContext_FindsDefinition(t *testing.T) {
 	requireRipgrep(t)
+	requireGopls(t)
 	dir := codeContextFixture(t)
 
 	resp := runCodeContext(t, dir, CodeContextParams{Symbol: "Target"})
@@ -383,6 +384,7 @@ func TestCodeContext_SelectsEngineByExtension(t *testing.T) {
 
 func TestCodeContext_PrefersNonTestDeclaration(t *testing.T) {
 	requireRipgrep(t)
+	requireGopls(t)
 	dir := codeContextFixture(t)
 	// A same-named helper in a test file must not outrank the real declaration.
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "other_test.go"),
@@ -461,6 +463,7 @@ func TestCodeContext_DefaultsToMultiLevelTrace(t *testing.T) {
 // view call — a whole turn — while the extra input tokens are nearly free.
 func TestCodeContext_IncludesSourceByDefault(t *testing.T) {
 	requireRipgrep(t)
+	requireGopls(t)
 	dir := codeContextFixture(t)
 
 	resp := runCodeContext(t, dir, CodeContextParams{Symbol: "Target", Want: "definition"})
@@ -472,6 +475,7 @@ func TestCodeContext_IncludesSourceByDefault(t *testing.T) {
 
 func TestCodeContext_SourceCanBeDisabled(t *testing.T) {
 	requireRipgrep(t)
+	requireGopls(t)
 	dir := codeContextFixture(t)
 	off := false
 
@@ -690,6 +694,7 @@ func TestCodeContext_PrefersDeclarationThatResolves(t *testing.T) {
 // a reader ends up confidently reading about the wrong type.
 func TestCodeContext_ReportsAmbiguousDeclarations(t *testing.T) {
 	requireRipgrep(t)
+	requireGopls(t)
 	dir := codeContextFixture(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "other"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "other", "dup.go"),
@@ -717,6 +722,7 @@ func TestCodeContext_DescriptionNamesSupportedLanguages(t *testing.T) {
 // replaced.
 func TestCodeContext_PrefersSourceOverProse(t *testing.T) {
 	requireRipgrep(t)
+	requireGopls(t)
 	dir := codeContextFixture(t)
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "specs"), 0o755))
 	// Sorts before target.go and matches the declaration regex.
