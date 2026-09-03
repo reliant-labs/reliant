@@ -51,6 +51,7 @@ import (
 // SDK resolves the future with ErrCanceled, which carries no details.
 // (go.temporal.io/sdk/internal/context.go: ErrCanceled = NewCanceledError())
 func TestInterruptedStep_BareCancelCannotSettle_ForcesRedispatch(t *testing.T) {
+	t.Parallel()
 	err := temporal.NewCanceledError()
 
 	var canceledErr *temporal.CanceledError
@@ -71,6 +72,7 @@ func TestInterruptedStep_BareCancelCannotSettle_ForcesRedispatch(t *testing.T) {
 // A CallLLM-shaped cancellation, by contrast, settles — which is why an
 // interrupted LLM turn advances the loop instead of repeating it.
 func TestInterruptedStep_CancelWithDetailsSettles_AdvancesLoop(t *testing.T) {
+	t.Parallel()
 	partial := map[string]interface{}{
 		"message":       map[string]interface{}{"role": "assistant", "text": "partial answer"},
 		"pending_inbox": true,

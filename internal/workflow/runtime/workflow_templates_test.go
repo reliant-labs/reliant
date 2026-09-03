@@ -13,6 +13,7 @@ import (
 // TestTemplateResolution tests various template expression patterns
 // These tests define the expected behavior for template resolution
 func TestTemplateResolution(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		template string
@@ -238,6 +239,7 @@ func TestTemplateResolution(t *testing.T) {
 
 // TestResolveWorkflowMap tests resolving templates in a full workflow map structure
 func TestResolveWorkflowMap(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		raw     map[string]interface{}
@@ -421,6 +423,7 @@ func TestResolveWorkflowMap(t *testing.T) {
 
 // TestEndToEndWithTypedStruct tests the full flow: raw map -> resolve -> proto
 func TestEndToEndWithTypedStruct(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		raw    map[string]interface{}
@@ -542,6 +545,7 @@ func TestEndToEndWithTypedStruct(t *testing.T) {
 
 // TestTemplateResolutionAndParsing tests template-aware parsing for validation
 func TestTemplateResolutionAndParsing(t *testing.T) {
+	t.Parallel()
 	// YAML with template in loop while
 	yaml := []byte(`
 name: test-workflow
@@ -604,6 +608,7 @@ nodes:
 
 // TestRuntimeTemplateResolutionFlow tests the full runtime flow as it happens in DynamicWorkflow
 func TestRuntimeTemplateResolutionFlow(t *testing.T) {
+	t.Parallel()
 	yaml := []byte(`
 name: agent
 apiVersion: "0.0.6"
@@ -654,6 +659,7 @@ nodes:
 // completion. Output templates should be preserved and only evaluated later via
 // EvaluateWorkflowOutputs().
 func TestOutputsNotResolvedAtLoadTime(t *testing.T) {
+	t.Parallel()
 	t.Run("outputs remain as templates", func(t *testing.T) {
 		// This mimics the structure of agent.yaml which caused the bug
 		raw := map[string]interface{}{
@@ -746,6 +752,7 @@ outputs:
 // workflow.thread, workflow.id, or step outputs that don't exist at load time.
 // They are evaluated at step execution time via evaluateTemplates().
 func TestNodeInputsNotResolvedAtLoadTime(t *testing.T) {
+	t.Parallel()
 	t.Run("node inputs remain as templates", func(t *testing.T) {
 		// This mimics the structure of agent.yaml where node inputs reference
 		// inputs.* fields that may not be provided

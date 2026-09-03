@@ -15,6 +15,7 @@ import (
 // =============================================================================
 
 func TestWhileConditionViaV2celAPI(t *testing.T) {
+	t.Parallel()
 	// -------------------------------------------------------------------------
 	// The exact agent.yaml while condition
 	// -------------------------------------------------------------------------
@@ -247,6 +248,7 @@ func TestWhileConditionViaV2celAPI(t *testing.T) {
 // =============================================================================
 
 func TestCELTypeSafety(t *testing.T) {
+	t.Parallel()
 	t.Run("workflow CEL EvaluateBool with typed IterContext works", func(t *testing.T) {
 		ctx := &wfcel.LoopEvalContext{
 			Outputs: map[string]interface{}{"exit_code": int64(1)},
@@ -291,6 +293,7 @@ func TestCELTypeSafety(t *testing.T) {
 // =============================================================================
 
 func TestCELRealWorldPatterns(t *testing.T) {
+	t.Parallel()
 	t.Run("TDD loop: exit when tests fail", func(t *testing.T) {
 		expr := "outputs.exit_code != 0"
 

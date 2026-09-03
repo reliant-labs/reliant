@@ -12,6 +12,7 @@ import (
 // - ERROR: accessing unknown field on a KNOWN type (e.g., nodes.llm.unknown_field)
 // - WARNING: accessing field on a DYN type (e.g., nodes.external_ref.field where external_ref is dyn)
 func TestOutputTypeValidationDistinction(t *testing.T) {
+	t.Parallel()
 	t.Run("error on unknown field of known type", func(t *testing.T) {
 		yaml := `
 name: test
@@ -88,6 +89,7 @@ outputs:
 
 // TestOutputTypeValidation verifies that output expressions are type-checked.
 func TestOutputTypeValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		yaml           string
@@ -219,6 +221,7 @@ outputs:
 
 // TestOutputTypeInference verifies that output types are correctly inferred.
 func TestOutputTypeInference(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		yaml          string

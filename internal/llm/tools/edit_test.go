@@ -24,6 +24,7 @@ func newTestToolContext(t *testing.T, tempDir, chatID, thread string) *rctx.Tool
 }
 
 func TestEditToolFileModifiedCheck(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
 
@@ -146,6 +147,7 @@ func TestEditToolFileModifiedCheck(t *testing.T) {
 // happy-path replacement, replace_all, non-unique old_string, not-found, and
 // file creation — all with top-level params (no edits array).
 func TestEditToolFlatSchema(t *testing.T) {
+	t.Parallel()
 	tool := &editTool{}
 	chatID := "test-chat"
 	thread := "0"
@@ -279,6 +281,7 @@ func TestEditToolFlatSchema(t *testing.T) {
 }
 
 func TestEditToolThreadIsolation(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "thread_test.txt")
 
@@ -347,6 +350,7 @@ func TestEditToolThreadIsolation(t *testing.T) {
 }
 
 func TestEditToolDeleteContentModifiedCheck(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "delete_test.txt")
 
@@ -397,6 +401,7 @@ func TestEditToolDeleteContentModifiedCheck(t *testing.T) {
 }
 
 func TestEditToolValidateFileForEdit(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	tool := &editTool{}

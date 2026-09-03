@@ -11,6 +11,7 @@ import (
 )
 
 func TestFindTriggeredNodes_WithEntryPoints(t *testing.T) {
+	t.Parallel()
 	t.Run("workflow with entry field from JSON", func(t *testing.T) {
 		wfJSON := `{
             "name": "test",
@@ -48,6 +49,7 @@ func TestFindTriggeredNodes_WithEntryPoints(t *testing.T) {
 }
 
 func TestLoopExecutor_InlineWithEntry(t *testing.T) {
+	t.Parallel()
 	// Test that inline loop sub-workflows with entry fields work correctly.
 	// Use a direct proto workflow to avoid v3 type casting issues.
 	wfJSON := `{

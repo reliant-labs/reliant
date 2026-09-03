@@ -11,6 +11,7 @@ import (
 )
 
 func TestGetWorkflowSuggestionsTool(t *testing.T) {
+	t.Parallel()
 	tool := NewGetWorkflowSuggestionsTool()
 	typedTool := tool.(*ToolWrapper[GetWorkflowSuggestionsParams, ToolResponse])
 

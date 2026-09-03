@@ -67,6 +67,7 @@ edges: []
 // =============================================================================
 
 func TestWriteWorkflow_RequiresID(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -215,6 +216,7 @@ edges: []
 }
 
 func TestWriteWorkflow_UpdateExisting(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -295,6 +297,7 @@ edges: []
 }
 
 func TestWriteWorkflow_ConflictDetection(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -370,6 +373,7 @@ func TestWriteWorkflow_ConflictDetection(t *testing.T) {
 }
 
 func TestWriteWorkflow_ValidationErrors(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -470,6 +474,7 @@ nodes:
 }
 
 func TestWriteWorkflow_ResponseStructure(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -532,6 +537,7 @@ func TestWriteWorkflow_ResponseStructure(t *testing.T) {
 // =============================================================================
 
 func TestCreateWorkflow_DefaultTemplate(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -561,6 +567,7 @@ func TestCreateWorkflow_DefaultTemplate(t *testing.T) {
 }
 
 func TestCreateWorkflow_WithName(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -587,6 +594,7 @@ func TestCreateWorkflow_WithName(t *testing.T) {
 }
 
 func TestCreateWorkflow_WithContent(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -613,6 +621,7 @@ func TestCreateWorkflow_WithContent(t *testing.T) {
 }
 
 func TestCreateWorkflow_WithInvalidContent(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

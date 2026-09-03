@@ -5,6 +5,7 @@ import (
 )
 
 func TestExtractLLMErrorSummary(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		errMsg   string
@@ -93,6 +94,7 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 }
 
 func TestCleanTemporalError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		errMsg   string

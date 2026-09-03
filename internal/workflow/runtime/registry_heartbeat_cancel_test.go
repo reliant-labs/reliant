@@ -16,6 +16,7 @@ import (
 // Temporal server kills a healthy activity and the workflow treats the
 // resulting context.Canceled as a pause.
 func TestSpuriousHeartbeatCancel(t *testing.T) {
+	t.Parallel()
 	closedWorkerStop := func() <-chan struct{} {
 		ch := make(chan struct{})
 		close(ch)

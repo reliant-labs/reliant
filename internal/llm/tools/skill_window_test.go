@@ -65,6 +65,7 @@ func newOversizeSkillEnv() *skillTestEnv {
 // remains. Without this an agent cannot tell a complete result from a cut one,
 // which is what drives the observed "load then sed -n" recovery round-trips.
 func TestSkillTool_Load_Oversize_ReportsTotalSizeAndHasMore(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 	full := oversizeSkillBody()
 
@@ -116,6 +117,7 @@ func extractContinueOffset(t *testing.T, resp ToolResponse) int {
 // defensive paging: the observed agent paged a 15,231-byte skill that was never
 // truncated, purely because the result did not say it was complete.
 func TestSkillTool_Load_UnderBudget_ReportsCompleteDelivery(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "go/defer"})
@@ -133,6 +135,7 @@ func TestSkillTool_Load_UnderBudget_ReportsCompleteDelivery(t *testing.T) {
 // tail. Telling it to open SKILL.md on disk is not actionable when skills are
 // embedded in a binary and synced through the config pipeline.
 func TestSkillTruncationNotice_NamesToolParametersNotDisk(t *testing.T) {
+	t.Parallel()
 	notice := skillTruncationNotice(50_000, 26_000)
 
 	assert.NotContains(t, notice, "SKILL.md",
@@ -146,6 +149,7 @@ func TestSkillTruncationNotice_NamesToolParametersNotDisk(t *testing.T) {
 // The whole point: content dropped from the default load must be reachable
 // through the tool. This walks the exact recovery an agent would perform.
 func TestSkillTool_Load_Oversize_TailReachableByOffset(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	first := env.execute(t, SkillParams{Action: "load", Path: "db"})
@@ -177,6 +181,7 @@ func TestSkillTool_Load_Oversize_TailReachableByOffset(t *testing.T) {
 // Capping in the tool rather than leaving it to the wrapper is what keeps the
 // footer (the part naming the next call) from being cut off.
 func TestSkillTool_Load_Window_RespectsBudgetIncludingFooter(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	for _, offset := range []int{0, 1, 12_000, 23_999} {
@@ -192,6 +197,7 @@ func TestSkillTool_Load_Window_RespectsBudgetIncludingFooter(t *testing.T) {
 // Section-aware retrieval: an agent that saw the outline can fetch the section
 // it needs in one targeted call rather than guessing a byte range.
 func TestSkillTool_Load_Section_FetchesNamedSectionOnly(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db", Section: "FKs And Diamonds"})
@@ -206,6 +212,7 @@ func TestSkillTool_Load_Section_FetchesNamedSectionOnly(t *testing.T) {
 // the agent learns the section names from the same call that told it the skill
 // was too big.
 func TestSkillTool_Load_Oversize_ListsSectionsForFollowUp(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db"})
@@ -220,6 +227,7 @@ func TestSkillTool_Load_Oversize_ListsSectionsForFollowUp(t *testing.T) {
 // Section names are matched case-insensitively and by unique substring, so an
 // agent that half-remembers a heading still lands on it.
 func TestSkillTool_Load_Section_ResolvesLoosely(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db", Section: "diamonds"})
@@ -229,6 +237,7 @@ func TestSkillTool_Load_Section_ResolvesLoosely(t *testing.T) {
 
 // A miss must name the real sections rather than dead-ending.
 func TestSkillTool_Load_Section_UnknownNamesRealSections(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db", Section: "no-such-section"})
@@ -238,6 +247,7 @@ func TestSkillTool_Load_Section_UnknownNamesRealSections(t *testing.T) {
 
 // The filter path: locate content in a large skill without paging to it.
 func TestSkillTool_Load_Regex_DeliversMatchingLinesWithNumbers(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db", Regex: "DIAMOND MARKER"})
@@ -251,6 +261,7 @@ func TestSkillTool_Load_Regex_DeliversMatchingLinesWithNumbers(t *testing.T) {
 }
 
 func TestSkillTool_Load_Regex_ContextLinesAreIncluded(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{
@@ -263,6 +274,7 @@ func TestSkillTool_Load_Regex_ContextLinesAreIncluded(t *testing.T) {
 }
 
 func TestSkillTool_Load_Regex_CaseInsensitive(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	sensitive := env.execute(t, SkillParams{Action: "load", Path: "db", Regex: "diamond marker"})
@@ -278,6 +290,7 @@ func TestSkillTool_Load_Regex_CaseInsensitive(t *testing.T) {
 
 // A filter with no hits must still tell the agent what the skill contains.
 func TestSkillTool_Load_Regex_NoMatchesOffersSections(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db", Regex: "zzz-not-present"})
@@ -289,6 +302,7 @@ func TestSkillTool_Load_Regex_NoMatchesOffersSections(t *testing.T) {
 
 // Headings inside fenced code blocks are shell comments, not sections.
 func TestSkillSections_IgnoresFencedCodeBlocks(t *testing.T) {
+	t.Parallel()
 	body := "# Title\n\n```bash\n# not a heading\nls\n```\n\n## Real Section\n\nbody\n"
 
 	var titles []string
@@ -301,6 +315,7 @@ func TestSkillSections_IgnoresFencedCodeBlocks(t *testing.T) {
 }
 
 func TestSkillTool_Load_RejectsContradictorySelectors(t *testing.T) {
+	t.Parallel()
 	env := newOversizeSkillEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "db", Section: "Seeding", Regex: "x"})
@@ -316,6 +331,7 @@ func TestSkillTool_Load_RejectsContradictorySelectors(t *testing.T) {
 // tools — must be byte-identical to today. The delivery footer is additive and
 // appended after it.
 func TestSkillTool_Load_NormalSkill_ContentPrefixUnchanged(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "go"})
@@ -335,6 +351,7 @@ func TestSkillTool_Load_NormalSkill_ContentPrefixUnchanged(t *testing.T) {
 // bytes into the cached prompt prefix, where a per-call delivery footer would
 // be both meaningless and permanently resident.
 func TestLoadSkillForInjection_ExcludesDeliveryFooter(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	_, body, ok := LoadSkillForInjection(env.tool.skills, "go/defer")

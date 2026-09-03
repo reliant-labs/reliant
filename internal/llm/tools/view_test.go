@@ -16,6 +16,7 @@ import (
 )
 
 func TestViewToolLimitLogic(t *testing.T) {
+	t.Parallel()
 	// Create a temporary test file with known content
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -112,6 +113,7 @@ func TestViewToolLimitLogic(t *testing.T) {
 }
 
 func TestViewToolLimitEdgeCases(t *testing.T) {
+	t.Parallel()
 	// Create a temporary test file with exactly 1000 lines
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "large_test.txt")
@@ -168,6 +170,7 @@ func newViewTestCtx(t *testing.T, dir string) *rctx.ToolContext {
 }
 
 func TestViewBinaryAndPDFDetection(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	tool := &viewTool{}
 	ctx := newViewTestCtx(t, tempDir)
@@ -334,6 +337,7 @@ func buildTestPDF(n int) []byte {
 // `offset: 1`, and one cost a scaffolded file its `"use client";` directive when
 // the agent composed the file back from what it had read.
 func TestViewReturnsTheFirstLine(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	tool := &viewTool{}
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: dir}

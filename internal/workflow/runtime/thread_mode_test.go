@@ -15,6 +15,7 @@ import (
 // =============================================================================
 
 func TestThreadModeInherit_ChildGetsSameThreadAsParent(t *testing.T) {
+	t.Parallel()
 	// Create parent context with a specific thread
 	parent := NewExecutionContext("wf-parent-123", "chat-456", "parent-workflow", "parent-thread-uuid")
 
@@ -27,6 +28,7 @@ func TestThreadModeInherit_ChildGetsSameThreadAsParent(t *testing.T) {
 }
 
 func TestThreadModeInherit_ThreadModeIsSetCorrectly(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("step", model.ThreadModeInherit, "child", true)
@@ -35,6 +37,7 @@ func TestThreadModeInherit_ThreadModeIsSetCorrectly(t *testing.T) {
 }
 
 func TestThreadModeInherit_ForkedFromIsEmpty(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("step", model.ThreadModeInherit, "child", true)
@@ -44,6 +47,7 @@ func TestThreadModeInherit_ForkedFromIsEmpty(t *testing.T) {
 }
 
 func TestThreadModeInherit_ParentContextIsSet(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-parent-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("my_child_step", model.ThreadModeInherit, "child-wf", true)
@@ -54,6 +58,7 @@ func TestThreadModeInherit_ParentContextIsSet(t *testing.T) {
 }
 
 func TestThreadModeInherit_MultipleChildrenShareSameThread(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "shared-thread")
 
 	child1 := parent.ForChild("step_a", model.ThreadModeInherit, "wf-a", true)
@@ -67,6 +72,7 @@ func TestThreadModeInherit_MultipleChildrenShareSameThread(t *testing.T) {
 }
 
 func TestThreadModeInherit_NestedInheritance(t *testing.T) {
+	t.Parallel()
 	// Create a chain: grandparent -> parent -> child
 	grandparent := NewExecutionContext("wf-gp", "chat", "gp", "original-thread")
 	parent := grandparent.ForChild("parent_step", model.ThreadModeInherit, "parent", true)
@@ -83,6 +89,7 @@ func TestThreadModeInherit_NestedInheritance(t *testing.T) {
 // =============================================================================
 
 func TestThreadModeNew_ChildGetsNewDeterministicThread(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "parent-thread")
 
 	child := parent.ForChild("new_thread_step", model.ThreadModeNew, "child-workflow", true)
@@ -94,6 +101,7 @@ func TestThreadModeNew_ChildGetsNewDeterministicThread(t *testing.T) {
 }
 
 func TestThreadModeNew_ThreadModeIsSetCorrectly(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("step", model.ThreadModeNew, "child", true)
@@ -102,6 +110,7 @@ func TestThreadModeNew_ThreadModeIsSetCorrectly(t *testing.T) {
 }
 
 func TestThreadModeNew_ForkedFromIsEmpty(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("step", model.ThreadModeNew, "child", true)
@@ -111,6 +120,7 @@ func TestThreadModeNew_ForkedFromIsEmpty(t *testing.T) {
 }
 
 func TestThreadModeNew_DeterministicThreadID_SameInputsSameOutput(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	// Call ForChild multiple times with the same parameters
@@ -122,6 +132,7 @@ func TestThreadModeNew_DeterministicThreadID_SameInputsSameOutput(t *testing.T) 
 }
 
 func TestThreadModeNew_DeterministicThreadID_DifferentStepIDsDifferentThreads(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child1 := parent.ForChild("step_alpha", model.ThreadModeNew, "child", true)
@@ -132,6 +143,7 @@ func TestThreadModeNew_DeterministicThreadID_DifferentStepIDsDifferentThreads(t 
 }
 
 func TestThreadModeNew_DeterministicThreadID_DifferentParentWorkflowIDsDifferentThreads(t *testing.T) {
+	t.Parallel()
 	parent1 := NewExecutionContext("wf-111", "chat-456", "parent", "thread-0")
 	parent2 := NewExecutionContext("wf-222", "chat-456", "parent", "thread-0")
 
@@ -143,6 +155,7 @@ func TestThreadModeNew_DeterministicThreadID_DifferentParentWorkflowIDsDifferent
 }
 
 func TestThreadModeNew_MultipleChildrenGetUniqueThreads(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "shared-thread")
 
 	child1 := parent.ForChild("step_a", model.ThreadModeNew, "wf-a", true)
@@ -165,6 +178,7 @@ func TestThreadModeNew_MultipleChildrenGetUniqueThreads(t *testing.T) {
 // =============================================================================
 
 func TestThreadModeFork_ChildGetsNewThread(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "parent-thread")
 
 	child := parent.ForChild("fork_step", model.ThreadModeFork, "child-workflow", true)
@@ -175,6 +189,7 @@ func TestThreadModeFork_ChildGetsNewThread(t *testing.T) {
 }
 
 func TestThreadModeFork_ThreadModeIsSetCorrectly(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("step", model.ThreadModeFork, "child", true)
@@ -183,6 +198,7 @@ func TestThreadModeFork_ThreadModeIsSetCorrectly(t *testing.T) {
 }
 
 func TestThreadModeFork_ForkedFromIsSetToParentThread(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "the-parent-thread")
 
 	child := parent.ForChild("fork_step", model.ThreadModeFork, "child", true)
@@ -193,6 +209,7 @@ func TestThreadModeFork_ForkedFromIsSetToParentThread(t *testing.T) {
 }
 
 func TestThreadModeFork_DeterministicThreadID(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child1 := parent.ForChild("fork_step", model.ThreadModeFork, "child", true)
@@ -203,6 +220,7 @@ func TestThreadModeFork_DeterministicThreadID(t *testing.T) {
 }
 
 func TestThreadModeFork_DifferentStepIDsDifferentThreads(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0")
 
 	child1 := parent.ForChild("fork_alpha", model.ThreadModeFork, "child", true)
@@ -213,6 +231,7 @@ func TestThreadModeFork_DifferentStepIDsDifferentThreads(t *testing.T) {
 }
 
 func TestThreadModeFork_ParentContextIsSet(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-parent-123", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChild("my_fork_step", model.ThreadModeFork, "child-wf", true)
@@ -223,6 +242,7 @@ func TestThreadModeFork_ParentContextIsSet(t *testing.T) {
 }
 
 func TestThreadModeFork_MultipleForks(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "parent-thread")
 
 	// Fork multiple times (e.g., parallel reviewers)
@@ -245,6 +265,7 @@ func TestThreadModeFork_MultipleForks(t *testing.T) {
 // =============================================================================
 
 func TestDeterministicThread_SameInputsSameOutput(t *testing.T) {
+	t.Parallel()
 	thread1 := DeterministicThread("wf-123", "some-key")
 	thread2 := DeterministicThread("wf-123", "some-key")
 
@@ -252,6 +273,7 @@ func TestDeterministicThread_SameInputsSameOutput(t *testing.T) {
 }
 
 func TestDeterministicThread_DifferentInputsDifferentOutput(t *testing.T) {
+	t.Parallel()
 	thread1 := DeterministicThread("wf-123", "key-a")
 	thread2 := DeterministicThread("wf-123", "key-b")
 
@@ -259,6 +281,7 @@ func TestDeterministicThread_DifferentInputsDifferentOutput(t *testing.T) {
 }
 
 func TestDeterministicThread_DifferentWorkflowIDsDifferentOutput(t *testing.T) {
+	t.Parallel()
 	thread1 := DeterministicThread("wf-111", "same-key")
 	thread2 := DeterministicThread("wf-222", "same-key")
 
@@ -266,6 +289,7 @@ func TestDeterministicThread_DifferentWorkflowIDsDifferentOutput(t *testing.T) {
 }
 
 func TestDeterministicThread_OutputIsValidUUID(t *testing.T) {
+	t.Parallel()
 	thread := DeterministicThread("wf-123", "test-key")
 
 	// Should be a valid UUID format (36 characters with hyphens)
@@ -274,6 +298,7 @@ func TestDeterministicThread_OutputIsValidUUID(t *testing.T) {
 }
 
 func TestDeterministicThread_ConsistentAcrossMultipleCalls(t *testing.T) {
+	t.Parallel()
 	parentID := "wf-test-workflow-12345"
 	key := "step_call_llm:iter:5"
 
@@ -289,6 +314,7 @@ func TestDeterministicThread_ConsistentAcrossMultipleCalls(t *testing.T) {
 }
 
 func TestDeterministicThread_EmptyInputs(t *testing.T) {
+	t.Parallel()
 	// Should handle empty strings gracefully
 	thread1 := DeterministicThread("", "key")
 	thread2 := DeterministicThread("wf", "")
@@ -309,6 +335,7 @@ func TestDeterministicThread_EmptyInputs(t *testing.T) {
 // =============================================================================
 
 func TestThreadMode_DefaultFallsBackToInherit(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "parent-thread")
 
 	// Using an empty/invalid model.ThreadMode should default to inherit
@@ -322,6 +349,7 @@ func TestThreadMode_DefaultFallsBackToInherit(t *testing.T) {
 // =============================================================================
 
 func TestForChild_InheritsLoopContext(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "parent", "thread-0").
 		WithLoop("agent_loop", 5)
 
@@ -338,6 +366,7 @@ func TestForChild_InheritsLoopContext(t *testing.T) {
 // =============================================================================
 
 func TestForChildWorkflow_SetsChildWorkflowID(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-parent", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChildWorkflow("wf-child-specific", "spawn_step", model.ThreadModeInherit, "child-workflow", true)
@@ -346,6 +375,7 @@ func TestForChildWorkflow_SetsChildWorkflowID(t *testing.T) {
 }
 
 func TestForChildWorkflow_TracksParentWorkflowID(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-parent", "chat-456", "parent", "thread-0")
 
 	child := parent.ForChildWorkflow("wf-child", "spawn_step", model.ThreadModeInherit, "child", true)
@@ -356,6 +386,7 @@ func TestForChildWorkflow_TracksParentWorkflowID(t *testing.T) {
 }
 
 func TestForChildWorkflow_WithForkMode(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-parent", "chat-456", "parent", "parent-thread")
 
 	child := parent.ForChildWorkflow("wf-child", "fork_step", model.ThreadModeFork, "child", true)
@@ -371,6 +402,7 @@ func TestForChildWorkflow_WithForkMode(t *testing.T) {
 // =============================================================================
 
 func TestThreadModes_TypicalParallelReviewerPattern(t *testing.T) {
+	t.Parallel()
 	// Simulates: main workflow -> fork to multiple reviewers -> each has own thread
 	main := NewExecutionContext("wf-main", "chat", "implement-validate", "main-thread")
 
@@ -394,6 +426,7 @@ func TestThreadModes_TypicalParallelReviewerPattern(t *testing.T) {
 }
 
 func TestThreadModes_TypicalDevilsAdvocatePattern(t *testing.T) {
+	t.Parallel()
 	// Simulates: main debate with advocates in fresh threads
 	debate := NewExecutionContext("wf-debate", "chat", "devils-advocate", "debate-thread")
 
@@ -413,6 +446,7 @@ func TestThreadModes_TypicalDevilsAdvocatePattern(t *testing.T) {
 }
 
 func TestThreadModes_NestedWorkflowScenario(t *testing.T) {
+	t.Parallel()
 	// Simulates: parent -> child (inherit) -> grandchild (fork)
 	parent := NewExecutionContext("wf-parent", "chat", "parent-wf", "root-thread")
 
@@ -437,6 +471,7 @@ func TestThreadModes_NestedWorkflowScenario(t *testing.T) {
 // =============================================================================
 
 func TestThreadModeConstants(t *testing.T) {
+	t.Parallel()
 	// Verify the string values of thread mode constants
 	assert.Equal(t, "inherit", model.ThreadModeInherit)
 	assert.Equal(t, "new", model.ThreadModeNew)

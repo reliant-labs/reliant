@@ -12,6 +12,7 @@ import (
 // TestStaticValidation_RejectsUnknownNodeType verifies that static analysis
 // rejects workflows with unrecognized node types.
 func TestStaticValidation_RejectsUnknownNodeType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		yaml        string
@@ -72,6 +73,7 @@ nodes:
 // node type passes the type check in validateNodeArgs (they may fail for
 // other reasons like missing args, but NOT for unknown type).
 func TestStaticValidation_AcceptsKnownNodeTypes(t *testing.T) {
+	t.Parallel()
 	// Minimal valid workflow for each known type
 	workflows := map[string]string{
 		"call_llm": `
@@ -131,6 +133,7 @@ nodes:
 // field at all is rejected. This is the exact bug from the blog-content-pipeline
 // workflow where `deai_loop` used `loop:` as a nested key instead of `type: loop`.
 func TestStaticValidation_RejectsMissingType(t *testing.T) {
+	t.Parallel()
 	// Simulate a node that has no type field — this is what the YAML parser
 	// produces when a node uses structural keys (like loop:) without type:
 	wf, err := wfyaml.ParseWorkflow([]byte(`
@@ -156,6 +159,7 @@ nodes:
 // TestStaticValidation_UnknownTypeIncludesValidTypes verifies the error
 // message includes the list of valid types for discoverability.
 func TestStaticValidation_UnknownTypeIncludesValidTypes(t *testing.T) {
+	t.Parallel()
 	yaml := `
 name: test
 entry: [n]

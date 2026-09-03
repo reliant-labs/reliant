@@ -52,6 +52,7 @@ func mustReturnWithin(t *testing.T, d time.Duration, what string, f func()) {
 // lock and drives every gate an edit passes through on its way to Execute; each
 // must complete while the lock is held.
 func TestPathLockNotHeldAcrossPermissionGate(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "gated.txt")
 	require.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
@@ -108,6 +109,7 @@ func TestPathLockNotHeldAcrossPermissionGate(t *testing.T) {
 // The failure is an ERROR, never a success — the whole point of the fix is that
 // an edit which could not be applied must say so.
 func TestPathLockIsContextCancellable(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "contended.txt")
 	require.NoError(t, os.WriteFile(path, []byte("hello\n"), 0o644))
@@ -152,6 +154,7 @@ func TestPathLockIsContextCancellable(t *testing.T) {
 // opposite argument order still acquire in the same global order, so neither can
 // hold one while waiting for the other.
 func TestPathLockMultiPathOrdering(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")
@@ -202,6 +205,7 @@ func TestPathLockMultiPathOrdering(t *testing.T) {
 // when the bytes on disk are not the bytes the edit was computed from, the write
 // must be reported as a conflict and the other writer's content put back.
 func TestWriteFileGuardedDetectsClobber(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "cas.txt")
 	require.NoError(t, os.WriteFile(path, []byte("theirs\n"), 0o644))

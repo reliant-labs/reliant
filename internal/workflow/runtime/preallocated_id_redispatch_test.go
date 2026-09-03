@@ -31,6 +31,7 @@ import (
 // matters for interrupt — is a workflow-level RE-DISPATCH: StepExecutor.Start
 // called again after a CanceledError, which issues a NEW SideEffect command.
 func TestPreallocatedMessageID_FreshPerDispatch(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 

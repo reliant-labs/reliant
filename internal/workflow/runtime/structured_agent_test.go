@@ -26,6 +26,7 @@ func loadStructuredAgentWorkflow(t *testing.T) *reliantv1.Workflow {
 
 // TestStructuredAgentWorkflow tests the structured-agent builtin workflow
 func TestStructuredAgentWorkflow(t *testing.T) {
+	t.Parallel()
 	t.Run("validates successfully", func(t *testing.T) {
 		wf := loadStructuredAgentWorkflow(t)
 		require.NotNil(t, wf)
@@ -216,6 +217,7 @@ func TestStructuredAgentWorkflow(t *testing.T) {
 //
 // This is the regression test for: "CEL evaluation error: no such key: submit_review"
 func TestStructuredAgentOutputCEL(t *testing.T) {
+	t.Parallel()
 	wf := loadStructuredAgentWorkflow(t)
 
 	// Extract the inline workflow outputs from agent_loop
@@ -353,6 +355,7 @@ func assertCELNull(t *testing.T, val interface{}, msgAndArgs ...interface{}) {
 
 // TestFilterUnresolvedTemplates tests the helper that removes unresolved {{...}} templates.
 func TestFilterUnresolvedTemplates(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    []string
@@ -395,6 +398,7 @@ func TestFilterUnresolvedTemplates(t *testing.T) {
 
 // TestResponseToolDetectionInLoop tests that response tool detection works in loop contexts
 func TestResponseToolDetectionInLoop(t *testing.T) {
+	t.Parallel()
 	t.Run("inline workflow can detect response tools", func(t *testing.T) {
 		wfJSON := `{
 			"name": "test-inline",

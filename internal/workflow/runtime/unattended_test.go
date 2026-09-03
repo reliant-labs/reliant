@@ -152,6 +152,7 @@ func runAskQuestionWorkflow(
 // An unattended run must never park on a checkpoint. No questions row is created,
 // so there is nothing for a human to answer and nothing to wait on.
 func TestUnattendedAskQuestionCreatesNoQuestionRow(t *testing.T) {
+	t.Parallel()
 	scheduled, result := runAskQuestionWorkflow(t, map[string]interface{}{"unattended": true}, nil)
 
 	require.NotContains(t, scheduled, "QuestionCreate",
@@ -168,6 +169,7 @@ func TestUnattendedAskQuestionCreatesNoQuestionRow(t *testing.T) {
 // The auto-resolution has to be legible as an auto-resolution. A human answer and
 // a machine's "nobody was there" must not read the same in the record.
 func TestUnattendedAskQuestionIsDistinguishableFromAHumanAnswer(t *testing.T) {
+	t.Parallel()
 	_, auto := runAskQuestionWorkflow(t, map[string]interface{}{"unattended": true}, nil)
 
 	require.Equal(t, true, auto.Outputs["auto_resolved"],
@@ -197,6 +199,7 @@ func TestUnattendedAskQuestionIsDistinguishableFromAHumanAnswer(t *testing.T) {
 
 // Regression guard: with the input unset, nothing about the interactive path moves.
 func TestInteractiveAskQuestionStillCreatesAQuestionAndWaits(t *testing.T) {
+	t.Parallel()
 	scheduled, result := runAskQuestionWorkflow(t, map[string]interface{}{}, func(env *testsuite.TestWorkflowEnvironment, questionID *string) {
 		env.RegisterDelayedCallback(func() {
 			require.NotEmpty(t, *questionID)
@@ -215,6 +218,7 @@ func TestInteractiveAskQuestionStillCreatesAQuestionAndWaits(t *testing.T) {
 
 // Explicitly false must behave exactly like unset.
 func TestExplicitlyAttendedAskQuestionStillCreatesAQuestion(t *testing.T) {
+	t.Parallel()
 	scheduled, _ := runAskQuestionWorkflow(t, map[string]interface{}{"unattended": false}, func(env *testsuite.TestWorkflowEnvironment, questionID *string) {
 		env.RegisterDelayedCallback(func() {
 			env.SignalWorkflow("signal.question."+*questionID, map[string]interface{}{
@@ -262,6 +266,7 @@ func askUserToolWorkflowBytes(t *testing.T) []byte {
 // scope-conversation's charter says "You MUST use ask_user at least once" — the
 // call cannot park an unattended run.
 func TestUnattendedAskUserToolReturnsUnansweredWithoutAQuestionRow(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -313,6 +318,7 @@ func TestUnattendedAskUserToolReturnsUnansweredWithoutAQuestionRow(t *testing.T)
 
 // Regression guard for the tool path.
 func TestInteractiveAskUserToolStillCreatesAQuestion(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -362,6 +368,7 @@ func TestInteractiveAskUserToolStillCreatesAQuestion(t *testing.T) {
 // ─── propagation ──────────────────────────────────────────────────────────────
 
 func TestIsUnattended(t *testing.T) {
+	t.Parallel()
 	assert.False(t, IsUnattended(nil))
 	assert.False(t, IsUnattended(map[string]interface{}{}))
 	assert.False(t, IsUnattended(map[string]interface{}{"unattended": false}))
@@ -377,6 +384,7 @@ func TestIsUnattended(t *testing.T) {
 // it is why `unattended` cannot repeat `ask`'s history of being declared,
 // threaded, and inert.
 func TestPropagateUnattendedIsMonotone(t *testing.T) {
+	t.Parallel()
 	t.Run("an unattended parent overrides a child arg that says otherwise", func(t *testing.T) {
 		child := map[string]interface{}{"unattended": false}
 		propagateUnattended(map[string]interface{}{"unattended": true}, child)
@@ -409,6 +417,7 @@ func TestPropagateUnattendedIsMonotone(t *testing.T) {
 // The forge preset hands every spawned fan-out unit `ask_user`. Without this, one
 // unit's question parks the whole unattended run.
 func TestBuildSpawnChildInputsPropagatesUnattended(t *testing.T) {
+	t.Parallel()
 	child := buildSpawnChildInputs(map[string]interface{}{"mode": "auto", "unattended": true})
 	assert.Equal(t, true, child["unattended"],
 		"a spawned sub-agent runs in the same world as its parent")
@@ -419,6 +428,7 @@ func TestBuildSpawnChildInputsPropagatesUnattended(t *testing.T) {
 }
 
 func TestUnattendedAskUserResponseNamesTheQuestionsItCouldNotAnswer(t *testing.T) {
+	t.Parallel()
 	const metadata = `{"type":"ask_user","questions":[` +
 		`{"question":"Which entities?","options":[{"label":"Peptide"},{"label":"Protocol"}]},` +
 		`{"question":"Branding?","options":[]}]}`

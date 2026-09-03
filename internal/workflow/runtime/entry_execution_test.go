@@ -15,6 +15,7 @@ import (
 // ============================================================================
 
 func TestEntryExecution_SingleEntry(t *testing.T) {
+	t.Parallel()
 	t.Run("workflow with single entry triggers correct node on start", func(t *testing.T) {
 		wfJSON := `{
 			"name": "test-workflow",
@@ -92,6 +93,7 @@ func TestEntryExecution_SingleEntry(t *testing.T) {
 // ============================================================================
 
 func TestEntryExecution_MultipleEntryPoints(t *testing.T) {
+	t.Parallel()
 	t.Run("workflow with multiple entries triggers all nodes in parallel", func(t *testing.T) {
 		wfJSON := `{
 			"name": "parallel-start-workflow",
@@ -159,6 +161,7 @@ func TestEntryExecution_MultipleEntryPoints(t *testing.T) {
 // ============================================================================
 
 func TestEntryExecution_EntryFieldHelpers(t *testing.T) {
+	t.Parallel()
 	t.Run("workflow without entry field", func(t *testing.T) {
 		wfJSON := `{
 			"name": "missing-entry-workflow",
@@ -200,6 +203,7 @@ func TestEntryExecution_EntryFieldHelpers(t *testing.T) {
 // ============================================================================
 
 func TestEntryExecution_EdgeCases(t *testing.T) {
+	t.Parallel()
 	t.Run("GetEntryNodes handles different Entry values", func(t *testing.T) {
 		// Test single entry
 		wf1JSON := `{"name":"t1","entry": ["single_node"],"nodes":[{"id":"single_node","type":"a"}],"edges":[]}`

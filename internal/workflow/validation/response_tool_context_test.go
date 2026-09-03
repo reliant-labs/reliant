@@ -15,6 +15,7 @@ import (
 // =============================================================================
 
 func TestBuildResponseToolContext_SimpleNode(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
 entry: [call_llm, execute]
@@ -57,6 +58,7 @@ outputs:
 }
 
 func TestBuildResponseToolContext_MultipleTools(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
 entry: [call_llm_1]
@@ -120,6 +122,7 @@ outputs:
 }
 
 func TestBuildResponseToolContext_DynamicSource(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
 entry: [call_llm, execute]
@@ -158,6 +161,7 @@ outputs:
 }
 
 func TestBuildResponseToolContext_NoResponseTool(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
 entry: [call_llm, execute]
@@ -188,6 +192,7 @@ outputs:
 }
 
 func TestBuildResponseToolContext_TemplateToolName(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
 entry: [call_llm, execute]
@@ -230,6 +235,7 @@ outputs:
 // =============================================================================
 
 func TestResolveToolCallsSource_SimplePattern(t *testing.T) {
+	t.Parallel()
 	// Test that simple node.X.tool_calls patterns are correctly resolved
 	// by checking that validation correctly identifies the source node
 	wf, err := wfyaml.ParseWorkflow([]byte(`
@@ -265,6 +271,7 @@ outputs:
 }
 
 func TestResolveToolCallsSource_ComplexExpression(t *testing.T) {
+	t.Parallel()
 	// Complex expressions should be treated as dynamic source
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
@@ -308,6 +315,7 @@ outputs:
 // =============================================================================
 
 func TestJSONSchemaToFieldInfo(t *testing.T) {
+	t.Parallel()
 	// Test that JSON Schema properties are correctly converted and used in validation
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test
@@ -349,6 +357,7 @@ nodes:
 }
 
 func TestJSONSchemaToFieldInfo_EmptySchema(t *testing.T) {
+	t.Parallel()
 	// Object with no properties should allow dynamic access
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: test

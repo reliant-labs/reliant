@@ -30,6 +30,7 @@ import (
 
 // TestStepExecutorLoopContextInjection verifies that StepExecutor injects loop context
 func TestStepExecutorLoopContextInjection(t *testing.T) {
+	t.Parallel()
 	t.Run("StepExecutor has loop context fields", func(t *testing.T) {
 		// Verify the struct fields exist
 		executor := &StepExecutor{
@@ -97,6 +98,7 @@ func TestStepExecutorLoopContextInjection(t *testing.T) {
 
 // TestExtractActivityInputInfo verifies the extraction function used in activity wrapper
 func TestExtractActivityInputInfo(t *testing.T) {
+	t.Parallel()
 	t.Run("extracts loop context from map with float64 iteration", func(t *testing.T) {
 		// JSON numbers deserialize as float64
 		inputMap := map[string]interface{}{
@@ -180,6 +182,7 @@ func TestExtractActivityInputInfo(t *testing.T) {
 
 // TestLoopContextDatabasePersistence verifies loop context is stored correctly in DB
 func TestLoopContextDatabasePersistence(t *testing.T) {
+	t.Parallel()
 	// Create test database
 	repo := db.NewTestRepo(t)
 
@@ -354,6 +357,7 @@ func TestLoopContextDatabasePersistence(t *testing.T) {
 // =============================================================================
 
 func TestLoopContextIntegration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping integration test in short mode")
 	}

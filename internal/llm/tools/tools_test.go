@@ -44,6 +44,7 @@ func (m *mockReadOnlyTool) IsReadOnly() bool {
 }
 
 func TestIsToolReadOnly(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		tool     Tool

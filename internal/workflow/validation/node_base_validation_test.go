@@ -11,6 +11,7 @@ import (
 // TestNodeBaseValidation_ThreadInject tests that CEL expressions in thread.inject are properly validated.
 // This test should fail before the fix, as the recursive validation skips NodeBase.
 func TestNodeBaseValidation_ThreadInject(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-thread-inject-validation
 entry: [step1]
@@ -46,6 +47,7 @@ nodes:
 
 // TestNodeBaseValidation_SaveMessage_Valid tests that valid CEL in save_message passes.
 func TestNodeBaseValidation_SaveMessage_Valid(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-save-message-validation-valid
 entry: [step1]
@@ -74,6 +76,7 @@ nodes:
 // TestNodeBaseValidation_SaveMessage_Invalid tests that invalid CEL in save_message is caught.
 // This test should fail before the fix.
 func TestNodeBaseValidation_SaveMessage_Invalid(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-save-message-validation-invalid
 entry: [step1]
@@ -109,6 +112,7 @@ nodes:
 // TestNodeBaseValidation_SaveMessage_ToolCallsTypeMismatch tests that save_message.tool_calls
 // correctly validates the return type. It should fail if a non-list type is returned.
 func TestNodeBaseValidation_SaveMessage_ToolCallsTypeMismatch(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-save-message-tool-calls-type-mismatch
 entry: [step1]
@@ -144,6 +148,7 @@ nodes:
 // TestNodeBaseValidation_SaveMessage_ToolCallsStaticTextError tests that providing static text
 // for save_message.tool_calls results in an error, as it requires a CEL expression.
 func TestNodeBaseValidation_SaveMessage_ToolCallsStaticTextError(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-save-message-tool-calls-static-text
 entry: [step1]

@@ -13,6 +13,7 @@ import (
 // TestWarnConditionalNodeAccess_DirectAccess tests that a warning IS generated
 // when directly accessing outputs from a conditional node without null safety.
 func TestWarnConditionalNodeAccess_DirectAccess(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-conditional-access
 entry: [step1]
@@ -65,6 +66,7 @@ nodes:
 // TestWarnConditionalNodeAccess_UnconditionalNode tests that NO warning is generated
 // when accessing outputs from an unconditional node.
 func TestWarnConditionalNodeAccess_UnconditionalNode(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-unconditional-access
 entry: [step1]
@@ -96,6 +98,7 @@ nodes:
 // TestWarnConditionalNodeAccess_OptionalChaining tests that NO warning is generated
 // when using optional chaining (nodes.?id.field) to access conditional node outputs.
 func TestWarnConditionalNodeAccess_OptionalChaining(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-optional-chaining
 entry: [step1]
@@ -139,6 +142,7 @@ nodes:
 // TestWarnConditionalNodeAccess_HasCheck tests that NO warning is generated
 // when using has() to check for conditional node outputs.
 func TestWarnConditionalNodeAccess_HasCheck(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-has-check
 entry: [step1]
@@ -181,6 +185,7 @@ edges:
 // TestWarnConditionalNodeAccess_NullCheck tests that NO warning is generated
 // when using null comparison to check conditional node outputs.
 func TestWarnConditionalNodeAccess_NullCheck(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-null-check
 entry: [step1]
@@ -223,6 +228,7 @@ edges:
 // TestWarnConditionalNodeAccess_ReverseNullCheck tests that NO warning is generated
 // when using reverse null comparison (null != nodes.id).
 func TestWarnConditionalNodeAccess_ReverseNullCheck(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-reverse-null-check
 entry: [step1]
@@ -265,6 +271,7 @@ edges:
 // TestWarnConditionalNodeAccess_JoinNode tests that JoinNode conditions don't trigger warnings.
 // JoinNode uses condition differently (for join mode: all/any), not for conditional execution.
 func TestWarnConditionalNodeAccess_JoinNode(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-join-node
 entry: [step1]
@@ -314,6 +321,7 @@ edges:
 
 // TestWarnConditionalNodeAccess_EdgeCondition tests warnings in edge conditions.
 func TestWarnConditionalNodeAccess_EdgeCondition(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-edge-condition
 entry: [step1]
@@ -364,6 +372,7 @@ edges:
 
 // TestWarnConditionalNodeAccess_OutputExpression tests warnings in output expressions.
 func TestWarnConditionalNodeAccess_OutputExpression(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-output-expression
 entry: [step1]
@@ -408,6 +417,7 @@ outputs:
 // TestWarnConditionalNodeAccess_MultipleConditionalNodes tests warnings when
 // multiple conditional nodes are accessed unsafely.
 func TestWarnConditionalNodeAccess_MultipleConditionalNodes(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-multiple-conditional
 entry: [step1]

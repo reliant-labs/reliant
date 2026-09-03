@@ -12,6 +12,7 @@ import (
 
 // TestLoopOutputProtoBackedSemantics verifies proto-backed loop output preserves CEL map shape.
 func TestLoopOutputProtoBackedSemantics(t *testing.T) {
+	t.Parallel()
 	protoOutputs, err := structpb.NewStruct(map[string]interface{}{
 		"exit_code": 0,
 		"message":   "success",

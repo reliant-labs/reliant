@@ -9,6 +9,7 @@ import (
 )
 
 func TestNewExecutionContext(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	assert.Equal(t, "wf-123", ctx.WorkflowID)
@@ -22,6 +23,7 @@ func TestNewExecutionContext(t *testing.T) {
 }
 
 func TestExecutionContext_WithThreadMode(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithThreadMode(model.ThreadModeFork, "parent-thread")
 
@@ -30,6 +32,7 @@ func TestExecutionContext_WithThreadMode(t *testing.T) {
 }
 
 func TestExecutionContext_WithParent(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithParent("parent-wf", "step-path")
 
@@ -39,6 +42,7 @@ func TestExecutionContext_WithParent(t *testing.T) {
 }
 
 func TestExecutionContext_WithLoop(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithLoop("agent_loop", 5)
 
@@ -48,6 +52,7 @@ func TestExecutionContext_WithLoop(t *testing.T) {
 }
 
 func TestExecutionContext_ForIteration_StaticKey(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithLoop("agent_loop", 0)
 
@@ -67,6 +72,7 @@ func TestExecutionContext_ForIteration_StaticKey(t *testing.T) {
 }
 
 func TestExecutionContext_ForChild_Inherit(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	child := parent.ForChild("call_llm", model.ThreadModeInherit, "sub-workflow", true)
@@ -81,6 +87,7 @@ func TestExecutionContext_ForChild_Inherit(t *testing.T) {
 }
 
 func TestExecutionContext_ForChild_Own(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	child := parent.ForChild("new_thread_step", model.ThreadModeNew, "sub-workflow", true)
@@ -91,6 +98,7 @@ func TestExecutionContext_ForChild_Own(t *testing.T) {
 }
 
 func TestExecutionContext_ForChild_Fork(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	child := parent.ForChild("fork_step", model.ThreadModeFork, "sub-workflow", true)
@@ -101,6 +109,7 @@ func TestExecutionContext_ForChild_Fork(t *testing.T) {
 }
 
 func TestExecutionContext_ForChild_DeterministicThreads(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	// Same step + mode should produce same thread
@@ -115,6 +124,7 @@ func TestExecutionContext_ForChild_DeterministicThreads(t *testing.T) {
 }
 
 func TestExecutionContext_ForChildWorkflow(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	child := parent.ForChildWorkflow("child-wf-789", "spawn_step", model.ThreadModeInherit, "child-workflow", true)
@@ -128,6 +138,7 @@ func TestExecutionContext_ForChildWorkflow(t *testing.T) {
 }
 
 func TestExecutionContext_Helpers(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	assert.False(t, ctx.IsInLoop())
@@ -141,6 +152,7 @@ func TestExecutionContext_Helpers(t *testing.T) {
 }
 
 func TestExecutionContext_WithProjectPath(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithProjectPath("/path/to/worktree")
 
@@ -149,6 +161,7 @@ func TestExecutionContext_WithProjectPath(t *testing.T) {
 }
 
 func TestExecutionContext_HasProjectPath_Empty(t *testing.T) {
+	t.Parallel()
 	ctx := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0")
 
 	assert.Empty(t, ctx.ProjectPath)
@@ -156,6 +169,7 @@ func TestExecutionContext_HasProjectPath_Empty(t *testing.T) {
 }
 
 func TestExecutionContext_ForIteration_PropagatesProjectPath(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithProjectPath("/path/to/worktree").
 		WithLoop("agent_loop", 0)
@@ -168,6 +182,7 @@ func TestExecutionContext_ForIteration_PropagatesProjectPath(t *testing.T) {
 }
 
 func TestExecutionContext_ForChild_PropagatesProjectPath(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithProjectPath("/path/to/worktree")
 
@@ -179,6 +194,7 @@ func TestExecutionContext_ForChild_PropagatesProjectPath(t *testing.T) {
 }
 
 func TestExecutionContext_ForChildWorkflow_PropagatesProjectPath(t *testing.T) {
+	t.Parallel()
 	parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 		WithProjectPath("/path/to/worktree")
 
@@ -223,6 +239,7 @@ func TestExecutionContext_Clone(t *testing.T) {
 }
 
 func TestForChild_MemoFalse_InLoop_Fork(t *testing.T) {
+	t.Parallel()
 	parent := &ExecutionContext{
 		WorkflowID: "wf-1",
 		Thread:     "parent-thread",
@@ -248,6 +265,7 @@ func TestForChild_MemoFalse_InLoop_Fork(t *testing.T) {
 }
 
 func TestForChild_MemoTrue_InLoop_Fork(t *testing.T) {
+	t.Parallel()
 	parent := &ExecutionContext{
 		WorkflowID: "wf-1",
 		Thread:     "parent-thread",
@@ -264,6 +282,7 @@ func TestForChild_MemoTrue_InLoop_Fork(t *testing.T) {
 }
 
 func TestForChild_MemoFalse_NotInLoop(t *testing.T) {
+	t.Parallel()
 	parent := &ExecutionContext{
 		WorkflowID: "wf-1",
 		Thread:     "parent-thread",
@@ -278,6 +297,7 @@ func TestForChild_MemoFalse_NotInLoop(t *testing.T) {
 }
 
 func TestForChild_MemoFalse_InLoop_New(t *testing.T) {
+	t.Parallel()
 	parent := &ExecutionContext{
 		WorkflowID: "wf-1",
 		Thread:     "parent-thread",
@@ -293,6 +313,7 @@ func TestForChild_MemoFalse_InLoop_New(t *testing.T) {
 }
 
 func TestForChild_MemoFalse_InLoop_Inherit(t *testing.T) {
+	t.Parallel()
 	parent := &ExecutionContext{
 		WorkflowID: "wf-1",
 		Thread:     "parent-thread",

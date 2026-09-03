@@ -10,6 +10,7 @@ import (
 )
 
 func TestClassifyError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		err        error
@@ -126,6 +127,7 @@ func TestClassifyError(t *testing.T) {
 }
 
 func TestTerminalError(t *testing.T) {
+	t.Parallel()
 	cause := errors.New("original error")
 	termErr := &TerminalError{
 		Message: "validation failed",
@@ -154,6 +156,7 @@ func TestTerminalError(t *testing.T) {
 }
 
 func TestDefaultTransient(t *testing.T) {
+	t.Parallel()
 	// Unknown errors should default to transient (retryable)
 	unknownErr := errors.New("some random error")
 	classified := classifyError(unknownErr)
@@ -170,6 +173,7 @@ func TestDefaultTransient(t *testing.T) {
 }
 
 func TestMalformedJSONErrorsAreTransient(t *testing.T) {
+	t.Parallel()
 	// These tests verify that malformed JSON errors from streaming are treated as transient
 	// They should NOT be terminal because they typically succeed on retry
 
@@ -223,6 +227,7 @@ func TestMalformedJSONErrorsAreTransient(t *testing.T) {
 }
 
 func TestClassifyError_DNS(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		err        error
@@ -273,6 +278,7 @@ func TestClassifyError_DNS(t *testing.T) {
 }
 
 func TestRegularMalformedErrorsAreStillTerminal(t *testing.T) {
+	t.Parallel()
 	// Verify that regular "malformed" errors (not JSON streaming) are still terminal
 	// For example, validation errors
 
@@ -308,6 +314,7 @@ func TestRegularMalformedErrorsAreStillTerminal(t *testing.T) {
 // advance in place ("Retrying (Attempt 1/3)" → "Attempt 3/3") instead of
 // stacking three rows for one failure.
 func TestActivityErrorEventID(t *testing.T) {
+	t.Parallel()
 	const workflowID = "wf-1"
 
 	t.Run("retries of one activity share an id", func(t *testing.T) {

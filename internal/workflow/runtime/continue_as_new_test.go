@@ -20,6 +20,7 @@ import (
 const oneMB = 1024 * 1024
 
 func TestHistoryNeedsContinueAsNew(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		length    int
@@ -58,6 +59,7 @@ func TestHistoryNeedsContinueAsNew(t *testing.T) {
 // over 73 turns of real history. Event density: 517–1,157 bytes/event across
 // sampled production runs.
 func TestThresholdsLeaveHeadroomForWorstCaseTurns(t *testing.T) {
+	t.Parallel()
 	const (
 		countCap          = 51200      // limit.historyCount.error
 		sizeCap           = 50 * oneMB // limit.historySize.error
@@ -81,6 +83,7 @@ func TestThresholdsLeaveHeadroomForWorstCaseTurns(t *testing.T) {
 // Neither threshold may sit at or above the limit it protects against — that
 // would mean handing off only once the run is already dead.
 func TestThresholdsStayBelowTemporalLimits(t *testing.T) {
+	t.Parallel()
 	require.Less(t, continueAsNewEventThreshold, 51200,
 		"count threshold must be below limit.historyCount.error")
 	require.Less(t, continueAsNewSizeThreshold, 50*oneMB,
@@ -93,6 +96,7 @@ func TestThresholdsStayBelowTemporalLimits(t *testing.T) {
 // always trips first. This pins the decision to ignore it: a history well past
 // the server's hint but short of ours must NOT trigger a handoff.
 func TestServerSuggestionThresholdIsNotUsed(t *testing.T) {
+	t.Parallel()
 	const (
 		serverCountHint = 4096
 		serverSizeHint  = 4 * oneMB
@@ -108,6 +112,7 @@ func TestServerSuggestionThresholdIsNotUsed(t *testing.T) {
 // =========================================================================
 
 func TestQuiescentForContinueAsNew(t *testing.T) {
+	t.Parallel()
 	trackerWithSpawn := func() *ChildWorkflowTracker {
 		tracker := &ChildWorkflowTracker{}
 		tracker.registerDetachedSpawn(&detachedSpawnRecord{
@@ -164,6 +169,7 @@ type ContinueAsNewInputTestSuite struct {
 }
 
 func TestContinueAsNewInput(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ContinueAsNewInputTestSuite))
 }
 
@@ -209,6 +215,7 @@ func (s *ContinueAsNewInputTestSuite) TestCarriesResumePositionAndInputs() {
 // predecessor stopped at. This is the round trip that makes the continuation
 // correct, and it goes through the same resolver the coarse restart uses.
 func TestContinuationPositionResolvesBackToLoop(t *testing.T) {
+	t.Parallel()
 	wf := resumeTestWorkflow(t, `
 name: single-loop
 entry: [agent_loop]
@@ -256,6 +263,7 @@ type ContinueAsNewClassifyTestSuite struct {
 }
 
 func TestContinueAsNewClassify(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ContinueAsNewClassifyTestSuite))
 }
 
@@ -282,6 +290,7 @@ func (s *ContinueAsNewClassifyTestSuite) TestIsContinueAsNew() {
 // verbatim. Anything less exact means the successor either redoes work or
 // skips it.
 func TestLoopBoundaryCheckOrdering(t *testing.T) {
+	t.Parallel()
 	var events []string
 
 	executor := &InlineLoopExecutor{}
@@ -312,6 +321,7 @@ func TestLoopBoundaryCheckOrdering(t *testing.T) {
 // DynamicWorkflow's top-level wiring sets the check. An executor without it
 // runs its boundary unchanged.
 func TestNestedLoopHasNoContinueAsNewCheck(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{}
 	require.Nil(t, executor.continueAsNewCheck,
 		"a bare executor must not continue as new; only top-level loops opt in")
@@ -330,6 +340,7 @@ type ContinueAsNewCompletionTestSuite struct {
 }
 
 func TestContinueAsNewCompletion(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ContinueAsNewCompletionTestSuite))
 }
 

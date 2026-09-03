@@ -25,6 +25,7 @@ import (
 //   - Implementation loop: implement → lint/test/build → evaluate
 //   - Loop exits on success or max_retries
 func TestOneRingWorkflowScenarios(t *testing.T) {
+	t.Parallel()
 	workflowData, err := builtin.BuiltinWorkflowsFS.ReadFile("one-ring.yaml")
 	require.NoError(t, err, "Failed to read one-ring.yaml")
 
@@ -106,6 +107,7 @@ var bugScenarios = map[string]bool{}
 // TestOneRingWorkflowScenarios_Passing runs only the scenarios expected to pass.
 // Use this for CI.
 func TestOneRingWorkflowScenarios_Passing(t *testing.T) {
+	t.Parallel()
 	workflowData, err := builtin.BuiltinWorkflowsFS.ReadFile("one-ring.yaml")
 	require.NoError(t, err)
 
@@ -148,6 +150,7 @@ func TestOneRingWorkflowScenarios_Passing(t *testing.T) {
 
 // TestOneRingWorkflowScenarios_BugDemonstration documents known limitations.
 func TestOneRingWorkflowScenarios_BugDemonstration(t *testing.T) {
+	t.Parallel()
 	workflowData, err := builtin.BuiltinWorkflowsFS.ReadFile("one-ring.yaml")
 	require.NoError(t, err)
 

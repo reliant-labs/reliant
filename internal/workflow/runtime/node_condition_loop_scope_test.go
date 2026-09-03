@@ -35,6 +35,7 @@ func conditionNode(id, expr string) *reliantv1.Node {
 // get-it-right's re-review entry is that expression: `implement` is skipped only on
 // the iteration after the REVIEWER declared itself stuck and a human answered.
 func TestNodeConditionSeesIterAndPreviousIterationOutputs(t *testing.T) {
+	t.Parallel()
 	inputs := map[string]interface{}{"max_retries": 5}
 
 	t.Run("outputs carries the previous iteration", func(t *testing.T) {

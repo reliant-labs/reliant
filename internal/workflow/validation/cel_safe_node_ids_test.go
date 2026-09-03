@@ -9,6 +9,7 @@ import (
 )
 
 func TestStaticAnalysis_RejectsHyphenatedNodeIDs(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test_invalid_node_ids
 entry: [router_1]

@@ -36,6 +36,7 @@ func orderingIssues(result *Result) []*Error {
 // scrape_website — so the unguarded {{nodes.scrape_website.response_text}}
 // in the inject content hard-fails at runtime. Static validation must flag it.
 func TestNodeOrdering_RouterSkipUnguardedInjectWarns(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: pitch-deck-shape
 entry: [classify]
@@ -95,6 +96,7 @@ edges:
 // founder_interview shape: guarding the reference with has() silences the
 // ordering warning (mirrors the actual pitch-deck.yaml fix).
 func TestNodeOrdering_GuardedInjectDoesNotWarn(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: pitch-deck-shape-fixed
 entry: [classify]
@@ -138,6 +140,7 @@ edges:
 // workflow at all is a validation ERROR — including inside thread.inject
 // content, not just primary args.
 func TestNodeOrdering_UnknownNodeReferenceInInjectIsError(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: unknown-node-ref
 entry: [first]
@@ -170,6 +173,7 @@ edges:
 // TestNodeOrdering_DownstreamReferenceIsError: referencing a node that always
 // executes AFTER the current node can never be satisfied — hard error.
 func TestNodeOrdering_DownstreamReferenceIsError(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: downstream-ref
 entry: [first]
@@ -206,6 +210,7 @@ edges:
 // TestNodeOrdering_LinearChainDoesNotWarn: straight-line references to
 // guaranteed-upstream nodes are fine.
 func TestNodeOrdering_LinearChainDoesNotWarn(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: linear-chain
 entry: [first]
@@ -233,6 +238,7 @@ edges:
 // TestNodeOrdering_AllJoinGuaranteesBothBranches: after an "all" join, BOTH
 // parallel parents are guaranteed complete — no warning.
 func TestNodeOrdering_AllJoinGuaranteesBothBranches(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: all-join
 entry: [start]
@@ -277,6 +283,7 @@ edges:
 // TestNodeOrdering_ParallelSiblingWarns: a node referencing its parallel
 // sibling (no join in between) is not guaranteed ordering — warning.
 func TestNodeOrdering_ParallelSiblingWarns(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: parallel-sibling
 entry: [start]
@@ -312,6 +319,7 @@ edges:
 // conditional-access warning covers them (their output KEY exists even when
 // skipped, only field access is risky).
 func TestNodeOrdering_ConditionalNodeCoveredByConditionalWarning(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: conditional-node
 entry: [first]
@@ -351,6 +359,7 @@ edges:
 // TestComputeGuaranteedBefore_PitchDeckShape verifies the guaranteed-before
 // sets on the pitch-deck-like graph directly.
 func TestComputeGuaranteedBefore_PitchDeckShape(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: guaranteed-before
 entry: [classify]

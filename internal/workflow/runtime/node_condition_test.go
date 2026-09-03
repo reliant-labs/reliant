@@ -12,6 +12,7 @@ import (
 
 // TestEvaluateNodeCondition tests the node condition evaluation logic
 func TestEvaluateNodeCondition(t *testing.T) {
+	t.Parallel()
 	t.Run("empty condition returns true", func(t *testing.T) {
 		node := &reliantv1.Node{Id: "test", Type: "run"}
 		result, err := evaluateNodeCondition(node, nil, nil, nil, nil)
@@ -166,6 +167,7 @@ func TestEvaluateNodeCondition(t *testing.T) {
 
 // TestSkippedRunNodeOutputs tests that skipped run nodes have type-aware outputs
 func TestSkippedRunNodeOutputs(t *testing.T) {
+	t.Parallel()
 	t.Run("skipped run node has exit_code accessible in downstream CEL", func(t *testing.T) {
 		nodeOutputs := map[string]interface{}{
 			"lint": model.SkippedRunOutputMap(),
@@ -214,6 +216,7 @@ func TestSkippedRunNodeOutputs(t *testing.T) {
 }
 
 func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
+	t.Parallel()
 	t.Run("skipped non-run node does NOT have exit_code field", func(t *testing.T) {
 		// SkippedOutputMap() only has {"skipped": true}.
 		// Accessing exit_code should fail or return false with has().
@@ -288,6 +291,7 @@ func TestSkippedNodeNegativeEdgeCases(t *testing.T) {
 
 // TestNodeConditionInWorkflow tests that conditions are correctly parsed from workflow YAML
 func TestNodeConditionInWorkflow(t *testing.T) {
+	t.Parallel()
 	t.Run("parse workflow with condition", func(t *testing.T) {
 		yamlData := []byte(`
 name: test-workflow

@@ -28,6 +28,7 @@ import (
 // - CEL expression errors
 // - Missing required fields
 func TestValidateBuiltinWorkflows(t *testing.T) {
+	t.Parallel()
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err, "Should be able to read builtin workflows directory")
 
@@ -71,6 +72,7 @@ func TestValidateBuiltinWorkflows(t *testing.T) {
 
 // TestAllBuiltinWorkflowsDiscoverable ensures all .yaml files in builtin/ can be read from embedded FS
 func TestAllBuiltinWorkflowsDiscoverable(t *testing.T) {
+	t.Parallel()
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err, "Should be able to read builtin workflows directory")
 
@@ -103,6 +105,7 @@ func TestAllBuiltinWorkflowsDiscoverable(t *testing.T) {
 
 // TestStructuredAgentWorkflowExists tests that structured-agent workflow exists and can be loaded
 func TestStructuredAgentWorkflowExists(t *testing.T) {
+	t.Parallel()
 	// Test that the file exists in embedded FS
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("structured-agent.yaml")
 	require.NoError(t, err, "structured-agent.yaml should exist in builtin workflows")
@@ -126,6 +129,7 @@ func TestStructuredAgentWorkflowExists(t *testing.T) {
 // TestBuiltinWorkflowLoading simulates how the runtime loads builtin workflows
 // This tests the same code path that would be used when a user selects builtin://agent
 func TestBuiltinWorkflowLoading(t *testing.T) {
+	t.Parallel()
 	testCases := []string{
 		"agent",
 		"auditing-agent",
@@ -170,6 +174,7 @@ func TestBuiltinWorkflowLoading(t *testing.T) {
 // can be loaded via ResolveAndParseWorkflow without errors.
 // This originally caught a bug where trigger templates inside nodes were being resolved too early.
 func TestBuiltinWorkflowTemplateResolution(t *testing.T) {
+	t.Parallel()
 	// Complex workflows with nested structures and CEL expressions
 	workflowsToTest := []string{
 		"parallel-compete", // Complex parallel workflow with worktrees
@@ -194,6 +199,7 @@ func TestBuiltinWorkflowTemplateResolution(t *testing.T) {
 // reference valid, registered model IDs. This catches mismatches like using "claude-sonnet-4.5"
 // when the registered model ID is "claude-4.5-sonnet".
 func TestBuiltinWorkflowModelIDsAreValid(t *testing.T) {
+	t.Parallel()
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err, "Should be able to read builtin workflows directory")
 
@@ -282,6 +288,7 @@ func validateNodesForModels(t *testing.T, nodes []*reliantv1.Node, filename, pat
 // - Presets with params that don't exist in the target workflow
 // - Type mismatches between preset params and workflow inputs
 func TestBuiltinPresetsValidateAgainstWorkflows(t *testing.T) {
+	t.Parallel()
 	// Load all builtin workflows
 	var workflows []*reliantv1.Workflow
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
@@ -389,6 +396,7 @@ func protoInputNames(inputs map[string]*reliantv1.Input) []string {
 // - References to deleted presets
 // - Missing presets that should exist
 func TestBuiltinWorkflowNodePresetReferencesExist(t *testing.T) {
+	t.Parallel()
 	// Load all builtin preset names
 	presetEntries, err := builtin.BuiltinPresetsFS.ReadDir("presets")
 	require.NoError(t, err, "Should be able to read builtin presets directory")

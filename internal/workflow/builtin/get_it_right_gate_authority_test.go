@@ -112,6 +112,7 @@ func evalStrategy(t *testing.T, nodes map[string]interface{}) string {
 
 // TestRedGateCannotYieldPass is the regression test for the lost guarantee.
 func TestRedGateCannotYieldPass(t *testing.T) {
+	t.Parallel()
 	for _, lane := range []struct {
 		name              string
 		lint, test, build int
@@ -140,6 +141,7 @@ func TestRedGateCannotYieldPass(t *testing.T) {
 // because the gate is red would silently drop that escalation and re-run the
 // implementer against a blocker only a human can clear.
 func TestRedGatePreservesStuck(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "stuck", evalStrategy(t, withReview(gateNodes(1, 0, 1), "stuck")),
 		"a red gate must not convert `stuck` into `continue` — `stuck` means the REVIEW was "+
 			"blocked, and the human's answer is addressed to the reviewer")
@@ -149,6 +151,7 @@ func TestRedGatePreservesStuck(t *testing.T) {
 // constraint is one-way: exit codes cannot see a blank page or a wrong API
 // shape, so a green gate settles nothing on its own.
 func TestReviewerKeepsAuthorityOverAGreenGate(t *testing.T) {
+	t.Parallel()
 	for _, strategy := range []string{"continue", "refactor", "stuck"} {
 		t.Run("reviewer says "+strategy, func(t *testing.T) {
 			require.Equal(t, strategy, evalStrategy(t, withReview(gateNodes(0, 0, 0), strategy)),
@@ -170,6 +173,7 @@ func TestReviewerKeepsAuthorityOverAGreenGate(t *testing.T) {
 // read an absent or empty lane as "failed", those four pipelines could never
 // reach `pass` and would burn max_retries on every run.
 func TestUnconfiguredGateIsNotAFailure(t *testing.T) {
+	t.Parallel()
 	t.Run("no commands configured, reviewer passes", func(t *testing.T) {
 		require.Equal(t, "pass", evalStrategy(t, withReview(skippedGateNodes(), "pass")),
 			"a consumer that configures no gate commands has nothing that can fail; its "+
@@ -191,6 +195,7 @@ func TestUnconfiguredGateIsNotAFailure(t *testing.T) {
 // which is the behaviour the merge was supposed to preserve. With no review node
 // the exit codes are the whole verdict.
 func TestReviewDisabledStillGatesOnExitCodes(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "pass", evalStrategy(t, gateNodes(0, 0, 0)),
 		"no reviewer and a green gate is the deterministic pass")
 	require.Equal(t, "continue", evalStrategy(t, gateNodes(0, 1, 0)),
@@ -212,6 +217,7 @@ func TestReviewDisabledStillGatesOnExitCodes(t *testing.T) {
 // `outputs.gate_failed`: loop outputs carry the PREVIOUS iteration's values, and
 // the gate is re-measured before the reviewer runs.
 func TestReviewerIsToldTheGateIsAuthoritative(t *testing.T) {
+	t.Parallel()
 	template := injectContent(t, "get-it-right.yaml", "attempt", "review")
 
 	render := func(t *testing.T, nodes map[string]interface{}) string {
@@ -248,6 +254,7 @@ func TestReviewerIsToldTheGateIsAuthoritative(t *testing.T) {
 // GREEN") while `eval_strategy` drives CONTROL FLOW; if they ever disagree about
 // what red means, the agent is told one thing and routed by another.
 func TestGateFailedOutputAgreesWithEvalStrategy(t *testing.T) {
+	t.Parallel()
 	gateFailedExpr := loopOutputExpr(t, "get-it-right.yaml", "attempt", "gate_failed")
 
 	for _, tc := range []struct {

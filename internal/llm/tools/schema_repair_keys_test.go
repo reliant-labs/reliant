@@ -29,6 +29,7 @@ func writeSchemaJSON(t *testing.T) []byte {
 // {"file_path": ...} and the write was hard-rejected with
 // `unexpected additional properties ["file"]`, costing a full turn to retry.
 func TestValidateJSONWithRepair_WriteFileAliasIsRepaired(t *testing.T) {
+	t.Parallel()
 	schema := writeSchemaJSON(t)
 	input := `{"file": "/tmp/scratchpad/x.md", "content": "hello"}`
 
@@ -55,6 +56,7 @@ func TestValidateJSONWithRepair_WriteFileAliasIsRepaired(t *testing.T) {
 // TestValidateJSONWithRepair_WriteCamelCaseAliasIsRepaired covers the other
 // spelling models reach for: filePath instead of file_path.
 func TestValidateJSONWithRepair_WriteCamelCaseAliasIsRepaired(t *testing.T) {
+	t.Parallel()
 	schema := writeSchemaJSON(t)
 	input := `{"filePath": "/tmp/scratchpad/y.md", "content": "hi"}`
 
@@ -77,6 +79,7 @@ func TestValidateJSONWithRepair_WriteCamelCaseAliasIsRepaired(t *testing.T) {
 // onto an already-present "file_path" would silently write to a different path
 // than the one requested — strictly worse than a clean rejection.
 func TestValidateJSONWithRepair_NeverClobbersProvidedValue(t *testing.T) {
+	t.Parallel()
 	schema := writeSchemaJSON(t)
 	input := `{"file": "/tmp/decoy.md", "file_path": "/tmp/real.md", "content": "hi"}`
 
@@ -89,6 +92,7 @@ func TestValidateJSONWithRepair_NeverClobbersProvidedValue(t *testing.T) {
 // key could plausibly mean two different schema properties, the repair declines
 // rather than guessing.
 func TestRepairAliasedKeys_AmbiguousMatchIsRejected(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -108,6 +112,7 @@ func TestRepairAliasedKeys_AmbiguousMatchIsRejected(t *testing.T) {
 // TestRepairAliasedKeys_TypeMismatchIsRejected asserts a lexical match alone is
 // not enough: the supplied value must also fit the target property's type.
 func TestRepairAliasedKeys_TypeMismatchIsRejected(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -127,6 +132,7 @@ func TestRepairAliasedKeys_TypeMismatchIsRejected(t *testing.T) {
 // unknown key is actually illegal. When additionalProperties is permitted the
 // key is a legitimate value and renaming it would destroy data.
 func TestRepairAliasedKeys_OpenSchemaIsLeftAlone(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -144,6 +150,7 @@ func TestRepairAliasedKeys_OpenSchemaIsLeftAlone(t *testing.T) {
 // TestRepairAliasedKeys_UnrelatedKeyIsLeftAlone asserts the matcher is lexical,
 // not semantic: it must not invent a mapping between unrelated names.
 func TestRepairAliasedKeys_UnrelatedKeyIsLeftAlone(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -163,6 +170,7 @@ func TestRepairAliasedKeys_UnrelatedKeyIsLeftAlone(t *testing.T) {
 // both the wrong key and what it was resolved to, so the log answers "which
 // alias did the model reach for" without re-deriving it.
 func TestRepairAliasedKeys_ReportsRenamePath(t *testing.T) {
+	t.Parallel()
 	schema := map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -184,6 +192,7 @@ func TestRepairAliasedKeys_ReportsRenamePath(t *testing.T) {
 // TestValidateJSONWithRepair_ValidInputUntouched guards the common path: a
 // correct call must not be perturbed by the repair layer.
 func TestValidateJSONWithRepair_ValidInputUntouched(t *testing.T) {
+	t.Parallel()
 	schema := writeSchemaJSON(t)
 	input := `{"file_path": "/tmp/ok.md", "content": "hi"}`
 
@@ -202,6 +211,7 @@ func TestValidateJSONWithRepair_ValidInputUntouched(t *testing.T) {
 // it survives the wrapper's strict DisallowUnknownFields decode after
 // validation, which this exercises and the unit tests above do not.
 func TestWriteTool_FileAliasWritesTheFile(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	target := filepath.Join(tempDir, "aliased.md")
 
@@ -230,6 +240,7 @@ func TestWriteTool_FileAliasWritesTheFile(t *testing.T) {
 // wrapper level: when the model supplies BOTH the alias and the real key, the
 // call must fail rather than silently write to one of the two paths.
 func TestWriteTool_AmbiguousAliasStillRejected(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	decoy := filepath.Join(tempDir, "decoy.md")
 	real := filepath.Join(tempDir, "real.md")

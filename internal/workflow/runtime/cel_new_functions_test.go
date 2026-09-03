@@ -47,6 +47,7 @@ func evalCEL(t *testing.T, env *cel.Env, expr string, vars map[string]interface{
 // ============================================================================
 
 func TestCelCoalesce_ReturnsFirstNonNull(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	tests := []struct {
@@ -114,6 +115,7 @@ func TestCelCoalesce_ReturnsFirstNonNull(t *testing.T) {
 }
 
 func TestCelCoalesce_AllNull_ReturnsNull(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	// When all values are null, coalesce returns the CEL null type
@@ -132,6 +134,7 @@ func TestCelCoalesce_AllNull_ReturnsNull(t *testing.T) {
 // ============================================================================
 
 func TestCelGetOrDefault_KeyExists(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `getOrDefault(data, "name", "unknown")`, map[string]interface{}{
@@ -144,6 +147,7 @@ func TestCelGetOrDefault_KeyExists(t *testing.T) {
 }
 
 func TestCelGetOrDefault_KeyMissing(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `getOrDefault(data, "missing", "default_value")`, map[string]interface{}{
@@ -156,6 +160,7 @@ func TestCelGetOrDefault_KeyMissing(t *testing.T) {
 }
 
 func TestCelGetOrDefault_ValueIsNull(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `getOrDefault(data, "value", "fallback")`, map[string]interface{}{
@@ -168,6 +173,7 @@ func TestCelGetOrDefault_ValueIsNull(t *testing.T) {
 }
 
 func TestCelGetOrDefault_MapIsNull(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `getOrDefault(data, "key", "default")`, map[string]interface{}{
@@ -178,6 +184,7 @@ func TestCelGetOrDefault_MapIsNull(t *testing.T) {
 }
 
 func TestCelGetOrDefault_NumericValue(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `getOrDefault(data, "count", 0)`, map[string]interface{}{
@@ -190,6 +197,7 @@ func TestCelGetOrDefault_NumericValue(t *testing.T) {
 }
 
 func TestCelGetOrDefault_NestedMap(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `getOrDefault(data.nested, "key", "default")`, map[string]interface{}{
@@ -208,6 +216,7 @@ func TestCelGetOrDefault_NestedMap(t *testing.T) {
 // ============================================================================
 
 func TestCelParseDuration_ParsesMinutes(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `parseDuration("5m")`, map[string]interface{}{})
@@ -216,6 +225,7 @@ func TestCelParseDuration_ParsesMinutes(t *testing.T) {
 }
 
 func TestCelParseDuration_ParsesHours(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `parseDuration("2h")`, map[string]interface{}{})
@@ -224,6 +234,7 @@ func TestCelParseDuration_ParsesHours(t *testing.T) {
 }
 
 func TestCelParseDuration_ParsesComplex(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `parseDuration("1h30m")`, map[string]interface{}{})
@@ -232,6 +243,7 @@ func TestCelParseDuration_ParsesComplex(t *testing.T) {
 }
 
 func TestCelParseDuration_ParsesSeconds(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `parseDuration("45s")`, map[string]interface{}{})
@@ -240,6 +252,7 @@ func TestCelParseDuration_ParsesSeconds(t *testing.T) {
 }
 
 func TestCelParseDuration_ParsesMilliseconds(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `parseDuration("500ms")`, map[string]interface{}{})
@@ -248,6 +261,7 @@ func TestCelParseDuration_ParsesMilliseconds(t *testing.T) {
 }
 
 func TestCelParseDuration_ParsesFractional(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `parseDuration("1.5h")`, map[string]interface{}{})
@@ -256,6 +270,7 @@ func TestCelParseDuration_ParsesFractional(t *testing.T) {
 }
 
 func TestCelParseDuration_InvalidFormat(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	ast, issues := env.Compile(`parseDuration("invalid")`)
@@ -274,6 +289,7 @@ func TestCelParseDuration_InvalidFormat(t *testing.T) {
 // ============================================================================
 
 func TestCelJoin_JoinsStrings(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `["a", "b", "c"].join(",")`, map[string]interface{}{})
@@ -281,6 +297,7 @@ func TestCelJoin_JoinsStrings(t *testing.T) {
 }
 
 func TestCelJoin_EmptyList(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `items.join(",")`, map[string]interface{}{"items": []string{}})
@@ -288,6 +305,7 @@ func TestCelJoin_EmptyList(t *testing.T) {
 }
 
 func TestCelJoin_SingleElement(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `["only"].join(",")`, map[string]interface{}{})
@@ -295,6 +313,7 @@ func TestCelJoin_SingleElement(t *testing.T) {
 }
 
 func TestCelJoin_CustomDelimiter(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `["a", "b", "c"].join(" | ")`, map[string]interface{}{})
@@ -302,6 +321,7 @@ func TestCelJoin_CustomDelimiter(t *testing.T) {
 }
 
 func TestCelJoin_FromVariable(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	result := evalCEL(t, env, `items.join(",")`, map[string]interface{}{
@@ -311,6 +331,7 @@ func TestCelJoin_FromVariable(t *testing.T) {
 }
 
 func TestCelJoin_MixedTypes(t *testing.T) {
+	t.Parallel()
 	// ext.Strings().join() only supports string lists; mixed-type lists are not supported.
 	// Verify that join on a string-coerced list works by converting each element to string first.
 	env := newTestCELEnv(t)
@@ -324,6 +345,7 @@ func TestCelJoin_MixedTypes(t *testing.T) {
 // ============================================================================
 
 func TestCelNewFunctions_Integration(t *testing.T) {
+	t.Parallel()
 	env := newTestCELEnv(t)
 
 	// Test coalesce with getOrDefault

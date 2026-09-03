@@ -27,6 +27,7 @@ import (
 // loop (loop_executor.go). These tests drive the exact same path:
 // EvaluateWorkflowOutputs -> structpb.NewStruct.
 func TestLoopOutputsWithCELNull(t *testing.T) {
+	t.Parallel()
 	workflowContext := buildWorkflowContext("test-wf-id", "test-wf", "test-chat",
 		map[string]interface{}{"response_tool_name": "submit_response"})
 
@@ -138,6 +139,7 @@ func TestLoopOutputsWithCELNull(t *testing.T) {
 // shared normalizer prevents: the structpb.NullValue enum is rejected by
 // structpb.NewStruct/NewValue, so it must be normalized to Go nil.
 func TestConvertToNativeNormalizesNullValueEnum(t *testing.T) {
+	t.Parallel()
 	t.Run("structpb rejects the raw NullValue enum (the old failure)", func(t *testing.T) {
 		_, err := structpb.NewStruct(map[string]interface{}{
 			"response": structpb.NullValue(0),

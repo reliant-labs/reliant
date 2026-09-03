@@ -135,6 +135,7 @@ func toolsNamedIn(text string) []string {
 // A required field with no reachable way to fill it is not a strict schema, it is
 // a dead end. Every prompt that names a tool must be able to reach it.
 func TestReviewerHoldsEveryToolItsInstructionsName(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name  string
 		text  string
@@ -193,6 +194,7 @@ func sortedKeys(m map[string]bool) []string {
 // prompt, the membership check BITES when the grant is missing them, and prose that
 // merely contains a tool word is not mistaken for an order to use it.
 func TestToolNameExtractionIsNotVacuous(t *testing.T) {
+	t.Parallel()
 	named := toolsNamedIn(injectContent(t, "get-it-right.yaml", "attempt", "review"))
 	require.NotEmpty(t, named,
 		"the reviewer's prompt names shell-family tools; an extractor that returns nothing "+
@@ -308,6 +310,7 @@ func gateInputs() map[string]interface{} {
 // the `gate_failed` loop output, and on a green gate the prompt leads with the
 // verdict that really did drive the retry.
 func TestGetItRightRetryPromptTellsTheTruthAboutAGreenGate(t *testing.T) {
+	t.Parallel()
 	template := injectContent(t, "get-it-right.yaml", "attempt", "implement")
 
 	const reviewerVerdict = "The deviation-state page renders an empty table where it should render the terminal-state banner."
@@ -378,6 +381,7 @@ func TestGetItRightRetryPromptTellsTheTruthAboutAGreenGate(t *testing.T) {
 // that actually owns process lifecycle — and the command is interpolated into its
 // prompt verbatim rather than paraphrased.
 func TestGetItRightHandsTheReviewerTheStartCommandInsteadOfAPort(t *testing.T) {
+	t.Parallel()
 	reviewInject := injectContent(t, "get-it-right.yaml", "attempt", "review")
 
 	require.NotContains(t, reviewInject, "The application was started via the phase start command",
@@ -458,6 +462,7 @@ func TestGetItRightHandsTheReviewerTheStartCommandInsteadOfAPort(t *testing.T) {
 // stuck_feedback_rereviews_without_reimplementing scenario; this holds the shape
 // the scenario depends on.
 func TestGetItRightReEntersAtReviewWhenTheREVIEWIsWhatWasStuck(t *testing.T) {
+	t.Parallel()
 	doc := loadWorkflowYAML(t, "get-it-right.yaml")
 	inline := mapAt(t, nodeByID(t, doc, "attempt"), "inline")
 
@@ -530,6 +535,7 @@ func TestGetItRightReEntersAtReviewWhenTheREVIEWIsWhatWasStuck(t *testing.T) {
 // without the shell: nothing can be in `bash_list` for an agent that cannot start
 // a process.
 func TestShellTagCarriesTheToolsTheShellToolTellsAgentsToUse(t *testing.T) {
+	t.Parallel()
 	granted := make(map[string]bool)
 	for _, name := range tools.ExpandToolFilter([]string{"tag:shell"}, nil) {
 		granted[name] = true

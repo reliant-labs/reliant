@@ -10,6 +10,7 @@ import (
 )
 
 func TestIsPreviewablePort(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		addr string
 		want bool
@@ -39,6 +40,7 @@ func TestIsPreviewablePort(t *testing.T) {
 }
 
 func TestProxyPreviewURL(t *testing.T) {
+	t.Parallel()
 	// Dev/test: path-based proxy URL on the local proxy host.
 	require.Equal(t,
 		"http://localhost:28080/proxy/daemon-123/3000/",

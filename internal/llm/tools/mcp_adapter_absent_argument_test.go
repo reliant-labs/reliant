@@ -37,6 +37,7 @@ func (r *argumentRecordingRuntime) CallTool(_, _, _ string, arguments map[string
 // forward exactly the keys the model produced — never materialize a zero value
 // for a key the model left out, and never drop a zero value the model chose.
 func TestMCPToolAdapter_ForwardsProvidedKeysAndOnlyProvidedKeys(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		input   string

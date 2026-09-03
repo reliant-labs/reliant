@@ -17,6 +17,7 @@ import (
 
 // TestAuditingAgentWorkflowInputs tests the input structure for auditing-agent.
 func TestAuditingAgentWorkflowInputs(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("auditing-agent.yaml")
 	require.NoError(t, err, "Should read auditing-agent.yaml")
 
@@ -49,6 +50,7 @@ func TestAuditingAgentWorkflowInputs(t *testing.T) {
 
 // TestAuditCheckNodeHasModel verifies audit_check references the top-level auditor inputs.
 func TestAuditCheckNodeHasModel(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("auditing-agent.yaml")
 	require.NoError(t, err)
 
@@ -94,6 +96,7 @@ func TestAuditCheckNodeHasModel(t *testing.T) {
 // TestPresetsOnCallLLMRejected verifies that v2 validation rejects
 // presets on call_llm nodes (presets only work on workflow/loop nodes).
 func TestPresetsOnCallLLMRejected(t *testing.T) {
+	t.Parallel()
 	yamlData := []byte(`
 name: test-invalid
 apiVersion: "0.0.5"

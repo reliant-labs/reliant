@@ -9,6 +9,7 @@ import (
 // The model populates `description`; the wrapper decodes with
 // DisallowUnknownFields, so an undeclared field would be a hard error.
 func TestShellDescriptionAccepted(t *testing.T) {
+	t.Parallel()
 	in := `{"command":"git status","description":"Show working tree status"}`
 	var p ShellParams
 	dec := json.NewDecoder(strings.NewReader(in))
@@ -26,6 +27,7 @@ func TestShellDescriptionAccepted(t *testing.T) {
 
 // Omitting it must still work: old transcripts and models that skip it.
 func TestShellDescriptionOptional(t *testing.T) {
+	t.Parallel()
 	var p ShellParams
 	dec := json.NewDecoder(strings.NewReader(`{"command":"ls"}`))
 	dec.DisallowUnknownFields()
@@ -39,6 +41,7 @@ func TestShellDescriptionOptional(t *testing.T) {
 
 // The description must survive re-serialization, which is how it reaches the UI.
 func TestShellDescriptionRoundTrips(t *testing.T) {
+	t.Parallel()
 	p := ShellParams{Command: "ls", Description: "List files in current directory"}
 	b, err := json.Marshal(p)
 	if err != nil {
@@ -51,6 +54,7 @@ func TestShellDescriptionRoundTrips(t *testing.T) {
 
 // Real line breaks, not literal backslash-n, must reach the model.
 func TestShellDescriptionSchemaHasRealNewlines(t *testing.T) {
+	t.Parallel()
 	s := NewShellTool().ParamSchema()
 	prop, ok := s.Properties.Get("description")
 	if !ok {

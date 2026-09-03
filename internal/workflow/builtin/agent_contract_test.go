@@ -40,6 +40,7 @@ const (
 )
 
 func TestContractExpressionsMatchAgentYAML(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("agent.yaml")
 	if err != nil {
 		t.Fatalf("failed to read agent.yaml: %v", err)
@@ -133,6 +134,7 @@ func TestContractExpressionsMatchAgentYAML(t *testing.T) {
 // This ensures that if the YAML expressions change, they remain evaluable
 // (no syntax or type errors).
 func TestContractAgentYAMLExpressionsEvaluate(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("agent.yaml")
 	if err != nil {
 		t.Fatalf("failed to read agent.yaml: %v", err)

@@ -19,6 +19,7 @@ type PauseSignalTestSuite struct {
 }
 
 func TestPauseSignal(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(PauseSignalTestSuite))
 }
 

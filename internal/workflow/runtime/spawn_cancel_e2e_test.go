@@ -242,6 +242,7 @@ type SpawnCancelE2ESuite struct {
 }
 
 func TestSpawnCancelE2E(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(SpawnCancelE2ESuite))
 }
 

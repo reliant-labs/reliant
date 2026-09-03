@@ -12,6 +12,7 @@ import (
 // This test ensures we don't regress on the fix for:
 // "tools.41.custom.input_schema: Invalid $ref in schema: '#/$defs/LinterConfig' does not exist"
 func TestAnthropicAPISchemaCompliance(t *testing.T) {
+	t.Parallel()
 	factory := NewToolsFactory(&ToolsOptions{})
 	registry := GetToolRegistry()
 
@@ -74,6 +75,7 @@ func TestAnthropicAPISchemaCompliance(t *testing.T) {
 // TestLinterConfigSchemaResolution specifically tests that LinterConfig references
 // are properly resolved, as this was the original issue reported.
 func TestLinterConfigSchemaResolution(t *testing.T) {
+	t.Parallel()
 	factory := NewToolsFactory(&ToolsOptions{})
 	tool := factory.MetadataWriter()
 
@@ -139,6 +141,7 @@ func searchForRef(data interface{}, targetRef string) bool {
 
 // TestResolveSchemaRefsWithNestedArrays tests the fix for nested array item references
 func TestResolveSchemaRefsWithNestedArrays(t *testing.T) {
+	t.Parallel()
 	// This simulates the exact structure that was failing:
 	// An array with items that reference a definition
 	testSchema := map[string]interface{}{

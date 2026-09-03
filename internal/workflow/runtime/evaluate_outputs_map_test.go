@@ -8,6 +8,7 @@ import (
 )
 
 func TestEvaluateOutputsMap(t *testing.T) {
+	t.Parallel()
 	t.Run("basic field access via outputs namespace", func(t *testing.T) {
 		outputsMap := map[string]string{
 			"message": "outputs.response_text",

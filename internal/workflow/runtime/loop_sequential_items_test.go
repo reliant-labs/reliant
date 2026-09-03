@@ -9,6 +9,7 @@ import (
 )
 
 func TestBuildIterCtx_WithResolvedItems(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration: 1,
 		resolvedItems: []interface{}{
@@ -28,6 +29,7 @@ func TestBuildIterCtx_WithResolvedItems(t *testing.T) {
 }
 
 func TestBuildIterCtx_WithoutResolvedItems(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration:     3,
 		resolvedItems: nil,
@@ -45,6 +47,7 @@ func TestBuildIterCtx_WithoutResolvedItems(t *testing.T) {
 }
 
 func TestBuildIterCtx_BoundsCheck(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration: 2,
 		resolvedItems: []interface{}{
@@ -65,6 +68,7 @@ func TestBuildIterCtx_BoundsCheck(t *testing.T) {
 }
 
 func TestBuildIterCtx_FirstItem(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration:     0,
 		resolvedItems: []interface{}{"alpha", "beta"},
@@ -80,6 +84,7 @@ func TestBuildIterCtx_FirstItem(t *testing.T) {
 }
 
 func TestBuildIterCtx_MapValueUnwrap(t *testing.T) {
+	t.Parallel()
 	// resolveIterItem unwraps _map_value from map items
 	executor := &InlineLoopExecutor{
 		iteration: 0,
@@ -97,6 +102,7 @@ func TestBuildIterCtx_MapValueUnwrap(t *testing.T) {
 }
 
 func TestBuildIterContextModel_WithResolvedItems(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration: 1,
 		resolvedItems: []interface{}{
@@ -116,6 +122,7 @@ func TestBuildIterContextModel_WithResolvedItems(t *testing.T) {
 }
 
 func TestBuildIterContextModel_WithoutResolvedItems(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration:     5,
 		resolvedItems: nil,
@@ -132,6 +139,7 @@ func TestBuildIterContextModel_WithoutResolvedItems(t *testing.T) {
 }
 
 func TestBuildIterContextModel_BoundsCheck(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration:     3,
 		resolvedItems: []interface{}{"a", "b"},
@@ -149,6 +157,7 @@ func TestBuildIterContextModel_BoundsCheck(t *testing.T) {
 }
 
 func TestBuildIterContextModel_MapValueUnwrap(t *testing.T) {
+	t.Parallel()
 	executor := &InlineLoopExecutor{
 		iteration: 0,
 		resolvedItems: []interface{}{
@@ -165,6 +174,7 @@ func TestBuildIterContextModel_MapValueUnwrap(t *testing.T) {
 }
 
 func TestSequentialLoopAutoStop(t *testing.T) {
+	t.Parallel()
 	// The auto-stop condition is: resolvedItems != nil && iteration >= len(resolvedItems)
 	// We test the condition directly since full loop execution requires Temporal context.
 
@@ -227,6 +237,7 @@ func TestSequentialLoopAutoStop(t *testing.T) {
 }
 
 func TestBuildIterCtx_ConsistentWithModel(t *testing.T) {
+	t.Parallel()
 	// Verify that buildIterCtx and buildIterContextModel produce consistent data
 	executor := &InlineLoopExecutor{
 		iteration: 1,
@@ -248,6 +259,7 @@ func TestBuildIterCtx_ConsistentWithModel(t *testing.T) {
 
 // Verify the model package helpers used by buildIterCtx produce expected shapes.
 func TestModelBuildIterContextHelpers(t *testing.T) {
+	t.Parallel()
 	t.Run("BuildIterContext basic", func(t *testing.T) {
 		ctx := model.BuildIterContext(7)
 		assert.Equal(t, 7, ctx["iteration"])

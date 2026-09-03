@@ -15,6 +15,7 @@ import (
 // nothing puts the run straight back to reporting a false green.
 
 func TestNodeOutcomeParsesAndValidates(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: outcome-valid
 entry: [work]
@@ -57,6 +58,7 @@ edges:
 }
 
 func TestNodeOutcomeRejectsUnknownValue(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: outcome-typo
 entry: [work]
@@ -83,6 +85,7 @@ nodes:
 // inline executor, which never stamps the run's verdict. A declaration there
 // would read correctly and do nothing — silently reinstating the false green.
 func TestNodeOutcomeRejectedInsideInlineWorkflow(t *testing.T) {
+	t.Parallel()
 	wf, err := wfyaml.ParseWorkflow([]byte(`
 name: outcome-inline
 entry: [attempt]

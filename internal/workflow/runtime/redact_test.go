@@ -22,6 +22,7 @@ var liveSecrets = []string{
 }
 
 func TestRedactString_ScrubsKnownSecretPrefixes(t *testing.T) {
+	t.Parallel()
 	for _, secret := range liveSecrets {
 		line := "API key is " + secret + " trailing"
 		out := redactString(line)
@@ -34,6 +35,7 @@ func TestRedactString_ScrubsKnownSecretPrefixes(t *testing.T) {
 }
 
 func TestRedactString_ScrubsEnvAssignments(t *testing.T) {
+	t.Parallel()
 	cases := []string{
 		"STRIPE_SECRET=plain-random-value-no-prefix",
 		"DATABASE_PASSWORD: aGVsbG8td29ybGQtc3VwZXItc2VjcmV0",
@@ -50,6 +52,7 @@ func TestRedactString_ScrubsEnvAssignments(t *testing.T) {
 }
 
 func TestRedactString_LeavesNonSecretsAlone(t *testing.T) {
+	t.Parallel()
 	// Includes keys that merely contain a signal word as a substring (tokens,
 	// total_tokens, author) — these must NOT be redacted, or useful debug logging
 	// (token counts, etc.) would be destroyed.
@@ -68,6 +71,7 @@ func TestRedactString_LeavesNonSecretsAlone(t *testing.T) {
 // tool_results[].content, and that map is logged. After redaction, no secret
 // byte may appear in the emitted log line.
 func TestRedactValue_NodeOutputWithToolResults(t *testing.T) {
+	t.Parallel()
 	envFileContents := strings.Join([]string{
 		"STRIPE_SECRET_KEY=" + liveSecrets[0],
 		"STRIPE_WEBHOOK_SECRET=" + liveSecrets[2],

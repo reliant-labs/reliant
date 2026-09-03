@@ -15,6 +15,7 @@ import (
 // read-before-write guard: writing an existing-but-unread file now SUCCEEDS and
 // the model-visible content carries a compact diff of what was overwritten.
 func TestWriteTool_ExistingUnreadFile_SucceedsWithDiff(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "notes.txt")
 	require.NoError(t, os.WriteFile(testFile, []byte("original line 1\noriginal line 2\n"), 0644))
@@ -57,6 +58,7 @@ func TestWriteTool_ExistingUnreadFile_SucceedsWithDiff(t *testing.T) {
 // guard remains a HARD ERROR: a file read, then modified externally, then
 // written must be rejected to protect against multi-agent data loss.
 func TestWriteTool_ConcurrentModification_StillErrors(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "shared.txt")
 	require.NoError(t, os.WriteFile(testFile, []byte("v1\n"), 0644))
@@ -93,6 +95,7 @@ func TestWriteTool_ConcurrentModification_StillErrors(t *testing.T) {
 // specific to unread overwrites: a properly-read file overwrite succeeds with a
 // plain success message and no diff note.
 func TestWriteTool_ReadThenWrite_NoClobberNote(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	testFile := filepath.Join(tempDir, "known.txt")
 	require.NoError(t, os.WriteFile(testFile, []byte("aaa\n"), 0644))

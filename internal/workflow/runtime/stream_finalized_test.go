@@ -36,6 +36,7 @@ type StreamFinalizedSuite struct {
 }
 
 func TestStreamFinalized(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(StreamFinalizedSuite))
 }
 
@@ -337,6 +338,7 @@ func (s *StreamFinalizedSuite) TestSaveMessageFailure_MarkerStillFires() {
 
 // TestStreamIDTracker pins the tracker's bookkeeping.
 func TestStreamIDTracker(t *testing.T) {
+	t.Parallel()
 	tr := NewStreamIDTracker()
 	tr.Register("b", "chat-1", "t1")
 	tr.Register("a", "chat-1", "t1")

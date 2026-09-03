@@ -14,6 +14,7 @@ import (
 // causes all iterations to share the SAME thread ID.
 // Loops are passthrough — they always inherit the parent's thread.
 func TestMemoization_ReuseThread(t *testing.T) {
+	t.Parallel()
 	t.Run("multiple iterations get same thread ID", func(t *testing.T) {
 		parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 			WithLoop("agent_loop", 0)
@@ -53,6 +54,7 @@ func TestMemoization_ReuseThread(t *testing.T) {
 
 // TestMemoization_LoopContext tests that LoopContext is properly set during iteration.
 func TestMemoization_LoopContext(t *testing.T) {
+	t.Parallel()
 	t.Run("LoopContext is set with correct iteration number", func(t *testing.T) {
 		parent := NewExecutionContext("wf-123", "chat-456", "agent", "thread-0").
 			WithLoop("test_loop", 0)
@@ -100,6 +102,7 @@ func TestMemoization_LoopContext(t *testing.T) {
 // TestMemoization_InheritedProperties tests that ForIteration correctly
 // inherits properties from the parent context.
 func TestMemoization_InheritedProperties(t *testing.T) {
+	t.Parallel()
 	t.Run("iteration inherits workflow metadata", func(t *testing.T) {
 		parent := NewExecutionContext("wf-parent", "chat-parent", "parent-workflow", "thread-parent").
 			WithLoop("loop", 0)

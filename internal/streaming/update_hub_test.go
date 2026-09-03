@@ -12,6 +12,7 @@ type testUpdate struct {
 // --- UpdateEvent JSON round-trip ---
 
 func TestUpdateEvent_JSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	original := UpdateEvent[testUpdate]{
 		Key:            "user-123",
 		SequenceNumber: 42,

@@ -32,6 +32,7 @@ func originForAnnouncement(threadMode string) string {
 // omits the field (workflow_status.go only sets "origin" when non-empty), so
 // the authoritative earlier announcement stands.
 func TestInlineExecutorDoesNotOverwriteSpawnOrigin(t *testing.T) {
+	t.Parallel()
 	// The mode a spawned sub-agent's workflow runs under must NOT produce an
 	// origin — anything non-empty here clobbers "spawn".
 	for _, mode := range []string{model.ThreadModeNew, model.ThreadModeInherit} {
@@ -50,6 +51,7 @@ func TestInlineExecutorDoesNotOverwriteSpawnOrigin(t *testing.T) {
 // (377 spawn / 166 fork / 142 main / 28 node in a real database), so the
 // stream never needs to restate it — the read path joins the thread row.
 func TestThreadOriginConstantsAreDistinct(t *testing.T) {
+	t.Parallel()
 	seen := map[string]bool{}
 	for _, o := range []string{
 		model.ThreadOriginMain, model.ThreadOriginSpawn,

@@ -18,6 +18,7 @@ import (
 // ==========================================================================
 
 func TestChildWorkflowTracker_RegisterThreadInputs(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs := map[string]interface{}{"model": "gpt-4", "temperature": 0.7}
@@ -31,6 +32,7 @@ func TestChildWorkflowTracker_RegisterThreadInputs(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_GetThreadInputs_Unregistered(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	got := tracker.GetThreadInputs("nonexistent")
@@ -38,6 +40,7 @@ func TestChildWorkflowTracker_GetThreadInputs_Unregistered(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_GetThreadInputs_NilMap(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 	// threadInputs is nil by default
 	got := tracker.GetThreadInputs("anything")
@@ -45,6 +48,7 @@ func TestChildWorkflowTracker_GetThreadInputs_NilMap(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_UnregisterThreadInputs(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs := map[string]interface{}{"model": "claude"}
@@ -56,6 +60,7 @@ func TestChildWorkflowTracker_UnregisterThreadInputs(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_MultipleThreads(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs1 := map[string]interface{}{"model": "gpt-4"}
@@ -71,6 +76,7 @@ func TestChildWorkflowTracker_MultipleThreads(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_GetAllThreadInputs(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs1 := map[string]interface{}{"a": 1}
@@ -85,6 +91,7 @@ func TestChildWorkflowTracker_GetAllThreadInputs(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_SharedPointerMutation(t *testing.T) {
+	t.Parallel()
 	// Verify that mutating through the registry mutates the original map
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
@@ -109,6 +116,7 @@ type ThreadInputsSuite struct {
 }
 
 func TestThreadInputsSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(ThreadInputsSuite))
 }
 
@@ -518,6 +526,7 @@ func (s *ThreadInputsSuite) TestSignal_ThreadScopedUpdate_DoesNotAffectOtherThre
 // TestChildWorkflowTracker_GlobalPropagation_Unit verifies that mutating all thread
 // inputs via GetAllThreadInputs (as the signal handler does) works correctly.
 func TestChildWorkflowTracker_GlobalPropagation_Unit(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs1 := map[string]interface{}{"model": "claude", "mode": "research"}
@@ -546,6 +555,7 @@ func TestChildWorkflowTracker_GlobalPropagation_Unit(t *testing.T) {
 // TestChildWorkflowTracker_GlobalPropagation_DoesNotAffectUnregistered verifies that
 // unregistered threads are not affected by global propagation.
 func TestChildWorkflowTracker_GlobalPropagation_DoesNotAffectUnregistered(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
 
 	inputs1 := map[string]interface{}{"model": "claude"}
@@ -569,6 +579,7 @@ func TestChildWorkflowTracker_GlobalPropagation_DoesNotAffectUnregistered(t *tes
 // sub-workflows get the exact same map pointer as the parent, so signal updates
 // to the parent are visible immediately without any propagation.
 func TestInlineInheritedSubWorkflow_SharesParentMap(t *testing.T) {
+	t.Parallel()
 	parentInputs := map[string]interface{}{"model": "gpt-4", "ask": true}
 
 	executor := &InlineWorkflowExecutor{

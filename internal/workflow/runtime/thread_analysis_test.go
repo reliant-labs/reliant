@@ -9,6 +9,7 @@ import (
 )
 
 func TestRuntimeThreadMapping(t *testing.T) {
+	t.Parallel()
 	t.Run("basic operations", func(t *testing.T) {
 		m := NewRuntimeThreadMapping()
 
@@ -36,6 +37,7 @@ func TestRuntimeThreadMapping(t *testing.T) {
 }
 
 func TestThreadTracker(t *testing.T) {
+	t.Parallel()
 	t.Run("basic operations", func(t *testing.T) {
 		tracker := NewThreadTracker()
 
@@ -82,6 +84,7 @@ func TestThreadTracker(t *testing.T) {
 }
 
 func TestLogicalThreadName(t *testing.T) {
+	t.Parallel()
 	t.Run("ThreadRoot constant", func(t *testing.T) {
 		assert.Equal(t, "thread:root", string(ThreadRoot))
 	})

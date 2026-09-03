@@ -20,6 +20,7 @@ func newTestStore() *LoadedToolsStore {
 }
 
 func TestLoadedToolsStore_AddAndGet(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatID := "chat-add-get"
 
@@ -30,6 +31,7 @@ func TestLoadedToolsStore_AddAndGet(t *testing.T) {
 }
 
 func TestLoadedToolsStore_Has(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatID := "chat-has"
 
@@ -40,6 +42,7 @@ func TestLoadedToolsStore_Has(t *testing.T) {
 }
 
 func TestLoadedToolsStore_MultipleChatsIsolated(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatA := "chat-A"
 	chatB := "chat-B"
@@ -60,6 +63,7 @@ func TestLoadedToolsStore_MultipleChatsIsolated(t *testing.T) {
 }
 
 func TestLoadedToolsStore_Clear(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatID := "chat-clear"
 
@@ -74,6 +78,7 @@ func TestLoadedToolsStore_Clear(t *testing.T) {
 }
 
 func TestLoadedToolsStore_ClearDoesNotAffectOtherChats(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatA := "chat-keep"
 	chatB := "chat-clear"
@@ -88,6 +93,7 @@ func TestLoadedToolsStore_ClearDoesNotAffectOtherChats(t *testing.T) {
 }
 
 func TestLoadedToolsStore_AddDuplicate_NoError(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatID := "chat-dup"
 
@@ -99,6 +105,7 @@ func TestLoadedToolsStore_AddDuplicate_NoError(t *testing.T) {
 }
 
 func TestLoadedToolsStore_SetAndGetPermission(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatID := "chat-perm"
 
@@ -111,6 +118,7 @@ func TestLoadedToolsStore_SetAndGetPermission(t *testing.T) {
 }
 
 func TestLoadedToolsStore_GetPermission_DefaultOrchestrator(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 
 	// No permission ever set -> backward-compatible default of orchestrator.
@@ -119,6 +127,7 @@ func TestLoadedToolsStore_GetPermission_DefaultOrchestrator(t *testing.T) {
 }
 
 func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 	chatID := "chat-clear-perm"
 
@@ -135,6 +144,7 @@ func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
 }
 
 func TestLoadedToolsStore_AvailableMCPTools_SetGetClear(t *testing.T) {
+	t.Parallel()
 	s := newTestStore() // note: newTestStore does not init availableMCP; setter must lazily init
 	chatID := "chat-mcp"
 
@@ -159,6 +169,7 @@ func TestLoadedToolsStore_AvailableMCPTools_SetGetClear(t *testing.T) {
 }
 
 func TestSearchTools_SurfacesConnectedMCPTool(t *testing.T) {
+	t.Parallel()
 	mcpTools := []MCPToolInfo{
 		{Name: "mcp__chrome-devtools__take_screenshot", Description: "Capture a screenshot of the current page"},
 		{Name: "mcp__chrome-devtools__navigate_page", Description: "Navigate the browser to a URL"},
@@ -201,6 +212,7 @@ func containsToolResult(results []ToolSearchResult, name string) bool {
 }
 
 func TestLoadedToolsStore_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	s := newTestStore()
 
 	const goroutines = 50

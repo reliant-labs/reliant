@@ -14,6 +14,7 @@ import (
 // multiple cases: one with a condition and one default (no condition).
 // This pattern was failing in the context-reducing-turn workflow.
 func TestEdgeRoutingWithConditionalAndDefault(t *testing.T) {
+	t.Parallel()
 	// Workflow with conditional + default edge cases from a single step
 	wfJSON := `{
 		"name": "test-conditional-default",
@@ -118,6 +119,7 @@ func TestEdgeRoutingWithConditionalAndDefault(t *testing.T) {
 // when numbers have been through JSON serialization (int -> float64).
 // This is important because Temporal serializes activity outputs as JSON.
 func TestEdgeRoutingWithJSONSerializedNumbers(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-json-numbers",
 		"nodes": [
@@ -237,6 +239,7 @@ func TestEdgeRoutingWithJSONSerializedNumbers(t *testing.T) {
 // TestEdgeRoutingWithMissingField tests behavior when the condition references
 // a field that doesn't exist in the step output.
 func TestEdgeRoutingWithMissingField(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-missing-field",
 		"nodes": [
@@ -290,6 +293,7 @@ func TestEdgeRoutingWithMissingField(t *testing.T) {
 // TestEdgeRoutingWithNullValue tests behavior when the condition references
 // a field that is explicitly null.
 func TestEdgeRoutingWithNullValue(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-null-value",
 		"nodes": [
@@ -389,6 +393,7 @@ func TestEdgeRoutingWithNullValue(t *testing.T) {
 
 // TestEdgeRoutingMultipleCases tests edge routing with more than two cases.
 func TestEdgeRoutingMultipleCases(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-multiple-cases",
 		"nodes": [
@@ -464,6 +469,7 @@ func TestEdgeRoutingMultipleCases(t *testing.T) {
 // TestEdgeRoutingContextReducingPattern tests the exact pattern that was used
 // in context-reducing-turn workflow before simplification.
 func TestEdgeRoutingContextReducingPattern(t *testing.T) {
+	t.Parallel()
 	// This is the pattern that was failing in runtime:
 	// execute_tools -> filter_results (if total_result_chars > 4000)
 	// execute_tools -> save_tool_results (default)
@@ -639,6 +645,7 @@ func TestEdgeRoutingContextReducingPattern(t *testing.T) {
 
 // TestEdgeRoutingWithNestedMapAccess tests conditions that access nested map fields.
 func TestEdgeRoutingWithNestedMapAccess(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-nested-access",
 		"nodes": [
@@ -721,6 +728,7 @@ func TestEdgeRoutingWithNestedMapAccess(t *testing.T) {
 
 // TestEdgeRoutingNoMatchingEdge tests behavior when no edge matches the event source.
 func TestEdgeRoutingNoMatchingEdge(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-no-edge",
 		"nodes": [
@@ -764,6 +772,7 @@ func TestEdgeRoutingNoMatchingEdge(t *testing.T) {
 // TestEdgeRoutingAllConditionsFail tests behavior when all conditional cases fail
 // and there's no default case.
 func TestEdgeRoutingAllConditionsFail(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-all-fail",
 		"nodes": [
@@ -818,6 +827,7 @@ func TestEdgeRoutingAllConditionsFail(t *testing.T) {
 // for edge condition evaluation. This is important for workflows like thread-demo
 // that use conditions like: has(inputs.message.role) ? inputs.message.role == "user" : true
 func TestEdgeRoutingWithInputsNamespace(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-inputs-namespace",
 		"nodes": [

@@ -96,6 +96,7 @@ func callLLMEvent() *StepEvent {
 // ============================================================================
 
 func TestDaemonOfflineCircuitBreaker_NilSafe(t *testing.T) {
+	t.Parallel()
 	var b *DaemonOfflineCircuitBreaker
 	// Must be no-ops on nil receiver, never panic.
 	b.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
@@ -110,6 +111,7 @@ func TestDaemonOfflineCircuitBreaker_NilSafe(t *testing.T) {
 }
 
 func TestDaemonOfflineCircuitBreaker_CounterAndPauseSemantics(t *testing.T) {
+	t.Parallel()
 	type step struct {
 		activityName string
 		event        *StepEvent
@@ -272,6 +274,7 @@ func TestDaemonOfflineCircuitBreaker_CounterAndPauseSemantics(t *testing.T) {
 }
 
 func TestDaemonOfflineCircuitBreaker_NilPauseCallbackOnlyCounts(t *testing.T) {
+	t.Parallel()
 	b := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, nil)
 	for i := 0; i < 5; i++ {
 		b.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
@@ -291,6 +294,7 @@ type DaemonOfflinePauseSuite struct {
 }
 
 func TestDaemonOfflinePause(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(DaemonOfflinePauseSuite))
 }
 

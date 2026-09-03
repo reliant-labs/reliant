@@ -6,6 +6,7 @@ import "testing"
 // spawn_status must NOT be orchestrator-tier: an agent that already holds a
 // handle to a sub-agent it spawned needs no extra privilege to observe it.
 func TestSpawnStatus_IsNotOrchestratorTier(t *testing.T) {
+	t.Parallel()
 	if got := MinimumPermissionForTool(ToolSpawnStatus); got == PermissionOrchestrator {
 		t.Errorf("spawn_status must not require orchestrator permission — a depth-1 sub-agent could never check its own children")
 	}
@@ -15,6 +16,7 @@ func TestSpawnStatus_IsNotOrchestratorTier(t *testing.T) {
 // they must be present in the master name list validators check requests
 // against.
 func TestSpawnTools_AreRegistered(t *testing.T) {
+	t.Parallel()
 	names := map[string]bool{ToolSpawnStatus: false, ToolSpawnSend: false}
 	for _, def := range GetToolRegistry() {
 		if _, ok := names[def.Name]; ok {
@@ -32,6 +34,7 @@ func TestSpawnTools_AreRegistered(t *testing.T) {
 // and tag:readonly filters (plan mode) should still be able to pick it up
 // once permission allows it.
 func TestSpawnStatus_IsReadOnlyTagged(t *testing.T) {
+	t.Parallel()
 	found := false
 	for _, def := range GetToolRegistry() {
 		if def.Name != ToolSpawnStatus {
@@ -57,6 +60,7 @@ func TestSpawnStatus_IsReadOnlyTagged(t *testing.T) {
 // list their names — a name present in the registry but unreachable through
 // the factory is effectively unregistered.
 func TestSpawnTools_ConstructibleViaFactory(t *testing.T) {
+	t.Parallel()
 	factory := NewToolsFactory(&ToolsOptions{})
 	for _, name := range []string{ToolSpawnStatus, ToolSpawnSend} {
 		tool := factory.GetToolByName(name, nil)

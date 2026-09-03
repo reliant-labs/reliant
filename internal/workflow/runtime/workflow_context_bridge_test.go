@@ -8,6 +8,7 @@ import (
 )
 
 func TestWorkflowContextToTyped(t *testing.T) {
+	t.Parallel()
 	t.Run("maps all known fields", func(t *testing.T) {
 		ctx := map[string]interface{}{
 			workflowContextKeyID:           "wf-123",

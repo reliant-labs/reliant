@@ -33,6 +33,7 @@ import (
 // This asserts the absence directly against the built options, so re-adding the
 // flag anywhere in this path fails here rather than in a user's chat.
 func TestActivityOptions_NeverWaitForCancellation(t *testing.T) {
+	t.Parallel()
 	for _, nodeType := range []string{
 		model.NodeTypeCallLLM,
 		model.NodeTypeExecuteTools,

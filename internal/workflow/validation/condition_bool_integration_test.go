@@ -11,6 +11,7 @@ import (
 // TestConditionBoolType_Integration demonstrates the boolean type validation
 // working end-to-end with realistic workflow examples.
 func TestConditionBoolType_Integration(t *testing.T) {
+	t.Parallel()
 	t.Run("Valid workflow with boolean conditions", func(t *testing.T) {
 		workflowYAML := `
 name: valid-workflow
@@ -243,6 +244,7 @@ edges:
 
 // TestConditionBoolType_ErrorQuality tests that error messages are helpful and actionable.
 func TestConditionBoolType_ErrorQuality(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		condition          string

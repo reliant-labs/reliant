@@ -58,6 +58,7 @@ func seedMessage(t *testing.T, repo db.Repository, ctx context.Context, chatID, 
 // belonging to an unrelated parent thread in the same chat must never leak
 // into the listing, even though they share a chat_id.
 func TestSpawnStatus_Listing_OnlyReturnsCallersOwnChildren(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -88,6 +89,7 @@ func TestSpawnStatus_Listing_OnlyReturnsCallersOwnChildren(t *testing.T) {
 }
 
 func TestSpawnStatus_Listing_NoChildren_ReturnsFriendlyMessage(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -114,6 +116,7 @@ func TestSpawnStatus_Listing_NoChildren_ReturnsFriendlyMessage(t *testing.T) {
 // Single-agent mode must reject an agent_id that is not the caller's own
 // spawn child — it must not be usable as a general "peek at any thread" tool.
 func TestSpawnStatus_SingleAgent_RejectsNonChildAgent(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -132,6 +135,7 @@ func TestSpawnStatus_SingleAgent_RejectsNonChildAgent(t *testing.T) {
 }
 
 func TestSpawnStatus_SingleAgent_OwnChildWithNoMessages_ReturnsFriendlyMessage(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -152,6 +156,7 @@ func TestSpawnStatus_SingleAgent_OwnChildWithNoMessages_ReturnsFriendlyMessage(t
 // first one and not a concatenation of all of them — an orchestrator wants
 // the agent's current answer, not its whole history.
 func TestSpawnStatus_SingleAgent_ReturnsLastAssistantMessage_NotFirstOrConcatenated(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -180,6 +185,7 @@ func TestSpawnStatus_SingleAgent_ReturnsLastAssistantMessage_NotFirstOrConcatena
 // A child that is already terminal at call time must return promptly with
 // wait: true — no reason to poll or block at all.
 func TestSpawnStatus_Wait_ReturnsPromptlyWhenAlreadyTerminal(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -206,6 +212,7 @@ func TestSpawnStatus_Wait_ReturnsPromptlyWhenAlreadyTerminal(t *testing.T) {
 // full budget and then saying "not found" wastes exactly the time waiting
 // exists to save.
 func TestSpawnStatus_Wait_UnknownAgentFailsFast(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -229,6 +236,7 @@ func TestSpawnStatus_Wait_UnknownAgentFailsFast(t *testing.T) {
 // result once its (short) budget elapses, and must not have touched the
 // agent.
 func TestSpawnStatus_Wait_TimeoutIsNotAnError(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -263,6 +271,7 @@ func TestSpawnStatus_Wait_TimeoutIsNotAnError(t *testing.T) {
 // already-terminal agent proves the call still completes normally rather
 // than erroring on the oversized value.
 func TestSpawnStatus_Wait_ClampsTimeoutAboveCeiling(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

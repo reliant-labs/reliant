@@ -42,6 +42,7 @@ func scaffoldInputs(unattended bool) map[string]interface{} {
 // inside get-it-right's loop, and scaffold_and_verify sets review_enabled: false,
 // so the edge is unreachable. Setting ask=false changed nothing.
 func TestScaffoldCharterDoesNotOpenWithAGateWhenNobodyIsWatching(t *testing.T) {
+	t.Parallel()
 	template := topLevelInjectContent(t, "forge-one-shot.yaml", "build_app")
 
 	unattended := renderPrompt(t, template, scaffoldInputs(true), nil, nil, 0)
@@ -60,6 +61,7 @@ func TestScaffoldCharterDoesNotOpenWithAGateWhenNobodyIsWatching(t *testing.T) {
 
 // The interactive path must be unchanged when the input is off.
 func TestScaffoldCharterStillOpensTheConversationWhenAHumanIsThere(t *testing.T) {
+	t.Parallel()
 	template := topLevelInjectContent(t, "forge-one-shot.yaml", "build_app")
 
 	interactive := renderPrompt(t, template, scaffoldInputs(false), nil, nil, 0)
@@ -83,6 +85,7 @@ func TestScaffoldCharterStillOpensTheConversationWhenAHumanIsThere(t *testing.T)
 // specific instruction to open by asking. The escape has to say plainly that an
 // explicit instruction overrides the directive to ask.
 func TestScaffoldCharterNeverAsksWhatTheOpeningMessageAlreadyAnswered(t *testing.T) {
+	t.Parallel()
 	template := topLevelInjectContent(t, "forge-one-shot.yaml", "build_app")
 	interactive := renderPrompt(t, template, scaffoldInputs(false), nil, nil, 0)
 
@@ -108,6 +111,7 @@ func TestScaffoldCharterNeverAsksWhatTheOpeningMessageAlreadyAnswered(t *testing
 // every existing caller: `ask` decides whether a PRESENT human is paused for
 // between iterations, `unattended` says there is no human at all.
 func TestUnattendedIsDeclaredSeparatelyFromAsk(t *testing.T) {
+	t.Parallel()
 	for _, file := range []string{"forge-one-shot.yaml", "get-it-right.yaml"} {
 		doc := loadWorkflowYAML(t, file)
 		inputs := mapAt(t, doc, "inputs")

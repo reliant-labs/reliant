@@ -72,6 +72,7 @@ func runSpawnSend(t *testing.T, tool Tool, rc *rctx.ToolContext, params SpawnSen
 }
 
 func TestSpawnSend_ToRunningChild_QueuesHonestReceipt(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -115,6 +116,7 @@ func (n *recordingAgentMessageNotifier) NotifyAgentMessageQueued(_ context.Conte
 // this child is the last one, the parent's gate wakes for the completion,
 // exits, and the message is marked undelivered having never been read.
 func TestSpawnSend_ChildToParent_RingsMailboxDoorbell(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -146,6 +148,7 @@ func TestSpawnSend_ChildToParent_RingsMailboxDoorbell(t *testing.T) {
 // A refused send must not ring the doorbell: there is no row to drain, and
 // waking a parked parent to find an empty mailbox is a wasted turn.
 func TestSpawnSend_RefusedSend_DoesNotRingDoorbell(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -167,6 +170,7 @@ func TestSpawnSend_RefusedSend_DoesNotRingDoorbell(t *testing.T) {
 // with no Temporal connection at all, and spawn_send has to keep working
 // there — degraded to next-boundary delivery, not broken.
 func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -190,6 +194,7 @@ func TestSpawnSend_NilNotifier_StillQueues(t *testing.T) {
 // regression: messaging a finished agent must fail loudly with a pointer to
 // spawn(agent_id=...), never silently no-op or resurrect the thread.
 func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -212,6 +217,7 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 }
 
 func TestSpawnSend_ToSibling_Rejected(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -239,6 +245,7 @@ func TestSpawnSend_ToSibling_Rejected(t *testing.T) {
 // A sub-agent messaging its own parent is the reverse relationship spawn_send
 // must also allow per spec §4.4/§4.3.
 func TestSpawnSend_ChildToParent_Allowed(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

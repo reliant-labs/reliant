@@ -17,6 +17,7 @@ func contentDelta(thread string, block int, text string) StreamingDelta {
 }
 
 func TestCoalescible(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name  string
 		delta StreamingDelta
@@ -51,6 +52,7 @@ func TestCoalescible(t *testing.T) {
 }
 
 func TestCanCoalesceWith(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		a, b StreamingDelta
@@ -91,6 +93,7 @@ func TestCanCoalesceWith(t *testing.T) {
 }
 
 func TestCoalesce_ConcatenatesText(t *testing.T) {
+	t.Parallel()
 	a := contentDelta("t", 0, "Hello, ")
 	b := contentDelta("t", 0, "world")
 
@@ -136,6 +139,7 @@ func TestCoalesce_KeepsExistingTokenCountWhenNewerHasNone(t *testing.T) {
 // A long run of same-block content deltas folds into one, mirroring what the
 // consume loop does while a consumer is behind.
 func TestCoalesce_FoldsRun(t *testing.T) {
+	t.Parallel()
 	acc := contentDelta("t", 0, "")
 	for _, chunk := range []string{"The ", "quick ", "brown ", "fox"} {
 		next := contentDelta("t", 0, chunk)

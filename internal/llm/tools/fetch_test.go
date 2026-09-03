@@ -14,6 +14,7 @@ import (
 )
 
 func TestFetchTool(t *testing.T) {
+	t.Parallel()
 	tool := NewFetchTool()
 
 	assert.Equal(t, FetchToolName, tool.Name())
@@ -23,6 +24,7 @@ func TestFetchTool(t *testing.T) {
 }
 
 func TestFetchToolValidation(t *testing.T) {
+	t.Parallel()
 	tool := NewFetchTool()
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 
@@ -53,6 +55,7 @@ func TestFetchToolValidation(t *testing.T) {
 }
 
 func TestFetchReadabilityExtraction(t *testing.T) {
+	t.Parallel()
 	// Create a test server that returns realistic HTML with nav chrome
 	richHTML := `<!DOCTYPE html>
 <html>
@@ -164,6 +167,7 @@ func TestFetchReadabilityExtraction(t *testing.T) {
 }
 
 func TestFetchJSRenderedDetection(t *testing.T) {
+	t.Parallel()
 	// Simulate a JS-rendered SPA page - large HTML, almost no text content
 	spaHTML := `<!DOCTYPE html>
 <html>
@@ -206,6 +210,7 @@ func TestFetchJSRenderedDetection(t *testing.T) {
 }
 
 func TestFetchNonHTMLContent(t *testing.T) {
+	t.Parallel()
 	jsonContent := `{"name": "test", "version": "1.0.0"}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -242,6 +247,7 @@ func TestFetchNonHTMLContent(t *testing.T) {
 }
 
 func TestExtractWithReadability(t *testing.T) {
+	t.Parallel()
 	html := `<!DOCTYPE html>
 <html>
 <head><title>Article Title</title></head>
@@ -268,6 +274,7 @@ explanations that make this article valuable to the reader.</p>
 }
 
 func TestExtractTextFromHTML(t *testing.T) {
+	t.Parallel()
 	html := `<!DOCTYPE html>
 <html>
 <head><title>Test</title><script>var x = 1;</script><style>body { color: red; }</style></head>

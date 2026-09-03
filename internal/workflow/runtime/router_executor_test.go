@@ -27,6 +27,7 @@ func (nilLogger) Warn(string, ...interface{})  {}
 func (nilLogger) Error(string, ...interface{}) {}
 
 func TestRouterThreadMode(t *testing.T) {
+	t.Parallel()
 	t.Run("returns new when no thread config", func(t *testing.T) {
 		node := &reliantv1.Node{
 			Id:   "route",
@@ -82,6 +83,7 @@ func TestRouterThreadMode(t *testing.T) {
 }
 
 func TestRouterWorkflowIdentity(t *testing.T) {
+	t.Parallel()
 	t.Run("returns router with candidate refs", func(t *testing.T) {
 		node := &reliantv1.Node{
 			Id:   "route",
@@ -136,6 +138,7 @@ func TestRouterWorkflowIdentity(t *testing.T) {
 }
 
 func TestNodeRoutingCallLLMUsesExecutionContextThread(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -195,6 +198,7 @@ func TestNodeRoutingCallLLMUsesExecutionContextThread(t *testing.T) {
 }
 
 func TestDynamicWorkflowNodeRoutingPassesThreadToCallLLM(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -290,6 +294,7 @@ func buildTestNodeRoutingRouter() *reliantv1.Node {
 }
 
 func TestParseRoutingDecision(t *testing.T) {
+	t.Parallel()
 	newExecutor := func(fallback string) *RouterExecutor {
 		evalResult := &reliantv1.Node{
 			Id:   "route",
@@ -406,6 +411,7 @@ type saveMessageCall struct {
 }
 
 func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
+	t.Parallel()
 	// emptyWorkflowJSON is a minimal valid workflow with no nodes.
 	emptyWorkflowJSON, err := json.Marshal(map[string]interface{}{
 		"name":  "test-workflow",

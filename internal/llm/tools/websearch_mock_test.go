@@ -12,6 +12,7 @@ import (
 // TestExtractActualURL tests the URL extraction logic
 
 func TestExtractActualURL(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -48,6 +49,7 @@ func TestExtractActualURL(t *testing.T) {
 }
 
 func TestFormatWebSearchResults(t *testing.T) {
+	t.Parallel()
 	results := []searchResult{
 		{
 			Title:       "Test Result 1",
@@ -86,6 +88,7 @@ func TestFormatWebSearchResults(t *testing.T) {
 }
 
 func TestFormatWebSearchResultsEmpty(t *testing.T) {
+	t.Parallel()
 	results := []searchResult{}
 	params := WebSearchParams{
 		Query: "no results query",
@@ -101,6 +104,7 @@ func TestFormatWebSearchResultsEmpty(t *testing.T) {
 }
 
 func TestWebSearchToolMetadata(t *testing.T) {
+	t.Parallel()
 	tool := NewWebSearchTool()
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
@@ -150,6 +154,7 @@ func TestWebSearchToolMetadata(t *testing.T) {
 }
 
 func TestWebSearchToolCountLimits(t *testing.T) {
+	t.Parallel()
 
 	t.Run("CountAboveMax", func(t *testing.T) {
 		params := WebSearchParams{

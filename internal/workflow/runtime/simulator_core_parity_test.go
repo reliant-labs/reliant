@@ -10,6 +10,7 @@ import (
 )
 
 func TestWorkflowSimulator_WorkflowIdentityFromCoreContracts(t *testing.T) {
+	t.Parallel()
 	rootWorkflow := &reliantv1.Workflow{
 		Name: "builtin://agent",
 		Nodes: []*reliantv1.Node{{
@@ -48,6 +49,7 @@ func TestWorkflowSimulator_WorkflowIdentityFromCoreContracts(t *testing.T) {
 }
 
 func TestWorkflowSimulator_AssembleSubWorkflowInputs_InlineInheritsParentInputs(t *testing.T) {
+	t.Parallel()
 	rootWorkflow := &reliantv1.Workflow{
 		Name: "builtin://agent",
 		Nodes: []*reliantv1.Node{{
@@ -76,6 +78,7 @@ func TestWorkflowSimulator_AssembleSubWorkflowInputs_InlineInheritsParentInputs(
 }
 
 func TestWorkflowSimulator_AssembleSubWorkflowInputs_RefUsesArgsThenDefaults(t *testing.T) {
+	t.Parallel()
 	rootWorkflow := &reliantv1.Workflow{
 		Name: "builtin://agent",
 		Nodes: []*reliantv1.Node{{
@@ -137,6 +140,7 @@ func TestWorkflowSimulator_AssembleSubWorkflowInputs_RefUsesArgsThenDefaults(t *
 }
 
 func TestWorkflowSimulator_Run_PropagatesStateMachineRoutingErrors(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name:  "sim-routing-error",
 		Entry: []string{"call_llm"},
@@ -168,6 +172,7 @@ func TestWorkflowSimulator_Run_PropagatesStateMachineRoutingErrors(t *testing.T)
 }
 
 func TestWorkflowSimulator_CompileFailureFallsBackDeterministicallyToRootIdentity(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name: "builtin://root-fallback",
 		Nodes: []*reliantv1.Node{{
@@ -192,6 +197,7 @@ func TestWorkflowSimulator_CompileFailureFallsBackDeterministicallyToRootIdentit
 }
 
 func TestWorkflowSimulator_Run_FailsOnMalformedInlineLoopCondition(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name:  "sim-inline-loop-condition-error",
 		Entry: []string{"loop_node"},
@@ -225,6 +231,7 @@ func TestWorkflowSimulator_Run_FailsOnMalformedInlineLoopCondition(t *testing.T)
 }
 
 func TestWorkflowSimulator_Run_FailsOnMalformedLoopOutputExpression(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name:  "sim-loop-output-error",
 		Entry: []string{"loop_node"},
@@ -260,6 +267,7 @@ func TestWorkflowSimulator_Run_FailsOnMalformedLoopOutputExpression(t *testing.T
 }
 
 func TestWorkflowSimulator_Run_FailsOnMalformedRefLoopWhileExpression(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name:  "sim-ref-loop-while-error",
 		Entry: []string{"loop_node"},

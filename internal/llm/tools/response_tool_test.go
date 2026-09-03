@@ -10,6 +10,7 @@ import (
 )
 
 func TestResponseTool_BasicUsage(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "test_response",
 		Description: "A test response tool",
@@ -85,6 +86,7 @@ func TestResponseTool_BasicUsage(t *testing.T) {
 }
 
 func TestResponseTool_Run(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "validation_result",
 		Description: "Report validation results",
@@ -141,6 +143,7 @@ func TestResponseTool_Run(t *testing.T) {
 }
 
 func TestResponseTool_RunInvalidJSON(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "test",
 		Description: "Test",
@@ -172,6 +175,7 @@ func TestResponseTool_RunInvalidJSON(t *testing.T) {
 }
 
 func TestResponseTool_ArraySchema(t *testing.T) {
+	t.Parallel()
 	// Test the array schema format with nested results
 	def := ResponseToolDefinition{
 		Name:        "filtered_results",
@@ -230,6 +234,7 @@ func TestResponseTool_ArraySchema(t *testing.T) {
 }
 
 func TestResponseTool_EmptySchema(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "test",
 		Description: "Test",
@@ -246,6 +251,7 @@ func TestResponseTool_EmptySchema(t *testing.T) {
 }
 
 func TestResponseTool_IsReadOnly(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "test",
 		Description: "Test",
@@ -264,6 +270,7 @@ func TestResponseTool_IsReadOnly(t *testing.T) {
 }
 
 func TestResponseTool_RequiresNoPermission(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "test",
 		Description: "Test",
@@ -285,6 +292,7 @@ func TestResponseTool_RequiresNoPermission(t *testing.T) {
 }
 
 func TestResponseTool_RunWithArrayInput(t *testing.T) {
+	t.Parallel()
 	def := ResponseToolDefinition{
 		Name:        "filtered_results",
 		Description: "Submit filtered results",
@@ -350,6 +358,7 @@ func TestResponseTool_RunWithArrayInput(t *testing.T) {
 // TestResponseToolMetadataForWorkflow tests the workflow response tool scenario
 // This validates that metadata contains the nested structure needed for CEL evaluation
 func TestResponseToolMetadataForWorkflow(t *testing.T) {
+	t.Parallel()
 	// This test validates the workflow scenario:
 	// 1. A node uses a response tool with structured schema
 	// 2. LLM responds with structured data matching the schema

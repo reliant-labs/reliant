@@ -56,6 +56,7 @@ import (
 // of forge's internals that reliant cannot import and cannot execute here, so
 // they stay substrings until something exports them.
 func TestForgeOneShotCharterFacts(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("forge-one-shot.yaml")
 	require.NoError(t, err)
 	charter := string(data)
@@ -190,6 +191,7 @@ func commentedFKClaims(text string) []string {
 //     foreign keys" all trip it. Rewording the TRUE claim cannot trip it,
 //     because the true claim has no reason to mention commenting near an FK.
 func TestForgeOneShotDoesNotCallBirthsForeignKeysCommented(t *testing.T) {
+	t.Parallel()
 	// The producer half: forge's own db skill is the authority the charter
 	// is paraphrasing, and it says the reference is APPLIED.
 	skill, err := forgecli.LoadSkill("", "db")
@@ -246,6 +248,7 @@ func TestForgeOneShotDoesNotCallBirthsForeignKeysCommented(t *testing.T) {
 // back (an agent sent to split a file forge no longer births hunts for
 // something that does not exist), and the per-RPC spelling must stay named.
 func TestForgeOneShotNamesThePerRPCScaffoldTestFile(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("forge-one-shot.yaml")
 	require.NoError(t, err)
 	charter := string(data)
@@ -282,6 +285,7 @@ func TestForgeOneShotNamesThePerRPCScaffoldTestFile(t *testing.T) {
 // pattern-matching pkill in a shared dev environment is how an agent takes out
 // processes it does not own.
 func TestForgeOneShotStartsAndStopsTheDevServerTheWayForgeActuallyBehaves(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("forge-one-shot.yaml")
 	require.NoError(t, err)
 	charter := string(data)
@@ -319,6 +323,7 @@ func TestForgeOneShotStartsAndStopsTheDevServerTheWayForgeActuallyBehaves(t *tes
 // the stub lands in its own `rpc_<snake>.go`; declared in the proto first, the
 // next `forge generate` APPENDS it to the one shared handlers.go.
 func TestForgeOneShotSaysScaffoldRPCDoesNotWriteTheProto(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("forge-one-shot.yaml")
 	require.NoError(t, err)
 	charter := string(data)
@@ -353,6 +358,7 @@ func TestForgeOneShotSaysScaffoldRPCDoesNotWriteTheProto(t *testing.T) {
 // struct). The subordinate rule is resolvability, and it has exactly two legal
 // answers, which is what this guard pins.
 func TestForgeOneShotResolvesTheDepsSurfaceContradiction(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("forge-one-shot.yaml")
 	require.NoError(t, err)
 	charter := string(data)
@@ -392,6 +398,7 @@ func TestForgeOneShotResolvesTheDepsSurfaceContradiction(t *testing.T) {
 // which phase it was measured at, and that the ~19-minute figure is never
 // restored as an unqualified claim.
 func TestForgeOneShotCommandCostsAreMeasuredOnAFinishedApp(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("forge-one-shot.yaml")
 	require.NoError(t, err)
 	charter := string(data)
@@ -441,6 +448,7 @@ func TestForgeOneShotCommandCostsAreMeasuredOnAFinishedApp(t *testing.T) {
 // actually declared (a rename would otherwise make every lane bullet silently
 // evaluate to nothing, restoring the original bug without a word changing).
 func TestGetItRightRetryPromptNamesTheFailingLane(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("get-it-right.yaml")
 	require.NoError(t, err)
 	wf := string(data)

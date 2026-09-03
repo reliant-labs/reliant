@@ -9,6 +9,7 @@ import (
 )
 
 func TestCompileRuntimeSemantics_SubWorkflowContracts(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name: "root",
 		Nodes: []*reliantv1.Node{
@@ -81,6 +82,7 @@ func TestCompileRuntimeSemantics_SubWorkflowContracts(t *testing.T) {
 }
 
 func TestSimplifiedStateMachine_FindTriggeredNodes_PropagatesCoreProcessorErrors(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{Id: "call_llm", Type: "call_llm"},
@@ -112,6 +114,7 @@ func TestSimplifiedStateMachine_FindTriggeredNodes_PropagatesCoreProcessorErrors
 }
 
 func TestCompileRuntimeSemantics_CompileErrorsIncludeBridgeContext(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name: "broken",
 		Nodes: []*reliantv1.Node{{

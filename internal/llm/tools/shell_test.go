@@ -15,6 +15,7 @@ import (
 // a JSON envelope larger than MaxOutputSize and the generic tool_wrapper
 // truncation head+tail-cut the JSON string, corrupting the envelope.
 func TestFitBashOutputToBudget(t *testing.T) {
+	t.Parallel()
 	// ~44KB stdout + ~20KB stderr: comfortably over the budget once encoded.
 	stdout := strings.Repeat("stdout line of output\n", 2000)
 	stderr := strings.Repeat("stderr warning line\n", 1000)
@@ -47,6 +48,7 @@ func TestFitBashOutputToBudget(t *testing.T) {
 // TestFitBashOutputToBudget_SmallOutputUnchanged verifies output that already
 // fits is returned verbatim (no needless truncation markers).
 func TestFitBashOutputToBudget_SmallOutputUnchanged(t *testing.T) {
+	t.Parallel()
 	stdout := "hello world\n"
 	stderr := "a warning\n"
 
@@ -59,6 +61,7 @@ func TestFitBashOutputToBudget_SmallOutputUnchanged(t *testing.T) {
 // TestFitBashOutputToBudget_LargeStdoutEmptyStderr covers the common case of a
 // chatty command with no stderr.
 func TestFitBashOutputToBudget_LargeStdoutEmptyStderr(t *testing.T) {
+	t.Parallel()
 	stdout := strings.Repeat("x", 60000)
 
 	o, e := fitBashOutputToBudget(stdout, "", 1, MaxOutputSize)

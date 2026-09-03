@@ -48,6 +48,7 @@ func hasPresetLogMessage(entries []presetLogEntry, substr string) bool {
 }
 
 func TestApplyPresets(t *testing.T) {
+	t.Parallel()
 	t.Run("literal preset name still works", func(t *testing.T) {
 		logger := &presetTestLogger{}
 		subInputs := map[string]interface{}{}
@@ -170,6 +171,7 @@ func TestApplyPresets(t *testing.T) {
 }
 
 func TestMergePresetParams(t *testing.T) {
+	t.Parallel()
 	t.Run("default group flattens to top-level", func(t *testing.T) {
 		subInputs := map[string]interface{}{"keep": "me"}
 		mergePresetParams(subInputs, DefaultPresetGroup, map[string]interface{}{"a": 1, "b": 2})
@@ -198,6 +200,7 @@ func TestMergePresetParams(t *testing.T) {
 }
 
 func TestBuildSubWorkflowInputs_PassthroughNegative(t *testing.T) {
+	t.Parallel()
 	makeExecutor := func(parentInputs, subInputs map[string]interface{}, passthrough []string) *InlineWorkflowExecutor {
 		evalResult := &reliantv1.Node{
 			Id:   "child",
@@ -274,6 +277,7 @@ func TestBuildSubWorkflowInputs_PassthroughNegative(t *testing.T) {
 }
 
 func TestBuildSubWorkflowInputs_Passthrough(t *testing.T) {
+	t.Parallel()
 	// Helper to create an executor with minimal state for buildSubWorkflowInputs testing.
 	makeExecutor := func(parentInputs, subInputs map[string]interface{}, passthrough []string) *InlineWorkflowExecutor {
 		evalResult := &reliantv1.Node{

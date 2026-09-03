@@ -10,6 +10,7 @@ import (
 // ----- PermissionAtLeast -----
 
 func TestPermissionAtLeast_ReadOnlyNotSufficientForMutating(t *testing.T) {
+	t.Parallel()
 	assert.False(t, PermissionAtLeast(PermissionReadOnly, PermissionMutating),
 		"readonly must not satisfy mutating requirement")
 	assert.False(t, PermissionAtLeast(PermissionReadOnly, PermissionOrchestrator),
@@ -17,6 +18,7 @@ func TestPermissionAtLeast_ReadOnlyNotSufficientForMutating(t *testing.T) {
 }
 
 func TestPermissionAtLeast_MutatingNotSufficientForOrchestrator(t *testing.T) {
+	t.Parallel()
 	assert.False(t, PermissionAtLeast(PermissionMutating, PermissionOrchestrator),
 		"mutating must not satisfy orchestrator requirement")
 	// But mutating >= readonly
@@ -25,18 +27,21 @@ func TestPermissionAtLeast_MutatingNotSufficientForOrchestrator(t *testing.T) {
 }
 
 func TestPermissionAtLeast_OrchestratorIsSufficientForAll(t *testing.T) {
+	t.Parallel()
 	assert.True(t, PermissionAtLeast(PermissionOrchestrator, PermissionReadOnly))
 	assert.True(t, PermissionAtLeast(PermissionOrchestrator, PermissionMutating))
 	assert.True(t, PermissionAtLeast(PermissionOrchestrator, PermissionOrchestrator))
 }
 
 func TestPermissionAtLeast_SamePermission(t *testing.T) {
+	t.Parallel()
 	assert.True(t, PermissionAtLeast(PermissionReadOnly, PermissionReadOnly))
 	assert.True(t, PermissionAtLeast(PermissionMutating, PermissionMutating))
 	assert.True(t, PermissionAtLeast(PermissionOrchestrator, PermissionOrchestrator))
 }
 
 func TestPermissionAtLeast_InvalidPermission(t *testing.T) {
+	t.Parallel()
 	// Unknown permissions must not satisfy any real permission requirement.
 	assert.False(t, PermissionAtLeast("bogus", PermissionReadOnly),
 		"unknown 'have' permission must be treated as insufficient")
@@ -77,6 +82,7 @@ func containsNone(haystack []string, needles ...string) bool {
 }
 
 func TestInitialToolsForPermission_ReadOnly(t *testing.T) {
+	t.Parallel()
 	got := InitialToolsForPermission(PermissionReadOnly)
 
 	// Read-only agents must get the core discovery/read tools.
@@ -98,6 +104,7 @@ func TestInitialToolsForPermission_ReadOnly(t *testing.T) {
 }
 
 func TestInitialToolsForPermission_Mutating(t *testing.T) {
+	t.Parallel()
 	got := InitialToolsForPermission(PermissionMutating)
 
 	// Mutating agents get everything readonly gets...
@@ -113,6 +120,7 @@ func TestInitialToolsForPermission_Mutating(t *testing.T) {
 }
 
 func TestInitialToolsForPermission_Orchestrator(t *testing.T) {
+	t.Parallel()
 	got := InitialToolsForPermission(PermissionOrchestrator)
 
 	// Orchestrator at minimum contains everything the mutating level has.
@@ -130,6 +138,7 @@ func TestInitialToolsForPermission_Orchestrator(t *testing.T) {
 // ----- MinimumPermissionForTool -----
 
 func TestMinimumPermissionForTool_ReadOnlyTools(t *testing.T) {
+	t.Parallel()
 	readOnlyTools := []string{ToolView, ToolFetch, ToolWebSearch}
 	for _, name := range readOnlyTools {
 		assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool(name),
@@ -138,6 +147,7 @@ func TestMinimumPermissionForTool_ReadOnlyTools(t *testing.T) {
 }
 
 func TestMinimumPermissionForTool_MutatingTools(t *testing.T) {
+	t.Parallel()
 	mutatingTools := []string{ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode}
 	for _, name := range mutatingTools {
 		assert.Equal(t, PermissionMutating, MinimumPermissionForTool(name),
@@ -153,6 +163,7 @@ func TestMinimumPermissionForTool_MutatingTools(t *testing.T) {
 // shell can still redirect into a file. A hard read-only boundary has to be
 // enforced below the tool layer.
 func TestMinimumPermissionForTool_ShellIsReadOnlyTier(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{ShellToolName, ToolBashList, ToolBashOutput, ToolBashKill} {
 		assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool(name),
 			"tool %q must be loadable by a readonly agent so search still works", name)
@@ -160,18 +171,21 @@ func TestMinimumPermissionForTool_ShellIsReadOnlyTier(t *testing.T) {
 }
 
 func TestMinimumPermissionForTool_OrchestratorTools(t *testing.T) {
+	t.Parallel()
 	// The implementation explicitly lists "spawn" and ToolAgent as orchestrator-only.
 	assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool("spawn"))
 	assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(ToolAgent))
 }
 
 func TestMinimumPermissionForTool_UnknownTool(t *testing.T) {
+	t.Parallel()
 	// Unknown tools default to readonly (safe default per implementation comment).
 	assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool("nonexistent_tool_xyz"),
 		"unknown tools must default to the safest permission level")
 }
 
 func TestMinimumPermissionForTool_MCPTools(t *testing.T) {
+	t.Parallel()
 	// MCP tools (prefix mcp__) aren't in the registry and should get the safe default.
 	assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool("mcp__proxyman__get_flow_detail"))
 	assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool("mcp__serena__find_symbol"))

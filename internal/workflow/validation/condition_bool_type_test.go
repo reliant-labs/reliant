@@ -10,6 +10,7 @@ import (
 
 // TestEdgeCondition_BoolType tests that edge conditions must return boolean type.
 func TestEdgeCondition_BoolType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		condition      string
@@ -131,6 +132,7 @@ edges:
 
 // TestNodeCondition_BoolType tests that node conditions must return boolean type.
 func TestNodeCondition_BoolType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		condition      string
@@ -240,6 +242,7 @@ nodes:
 
 // TestEdgeCondition_BoolType_DetailedSuggestions tests that error suggestions are helpful.
 func TestEdgeCondition_BoolType_DetailedSuggestions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name               string
 		condition          string
@@ -314,6 +317,7 @@ edges:
 // TestLoopWhileCondition_BoolType tests that loop while conditions must return boolean.
 // Note: Loop while conditions are validated separately, but should also enforce bool type.
 func TestLoopWhileCondition_BoolType(t *testing.T) {
+	t.Parallel()
 	t.Run("Valid: boolean comparison", func(t *testing.T) {
 		workflowYAML := `
 name: test-loop-while-bool
@@ -353,6 +357,7 @@ nodes:
 
 // TestConditionBoolType_ComplexExpressions tests boolean validation with complex expressions.
 func TestConditionBoolType_ComplexExpressions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		condition  string

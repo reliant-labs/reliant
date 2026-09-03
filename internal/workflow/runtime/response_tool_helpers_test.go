@@ -17,6 +17,7 @@ func loadTestNodes(t *testing.T, wfJSON string) []*reliantv1.Node {
 }
 
 func Test_detectResponseToolsFromWorkflow(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		toolCallsArg   string
@@ -237,6 +238,7 @@ func Test_detectResponseToolsFromWorkflow(t *testing.T) {
 // TestDetectResponseTools_SchemaContent verifies the actual schema content
 // is correct after sentinel resolution, not just that schemas exist.
 func TestDetectResponseTools_SchemaContent(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test", "entry": ["call_llm"],
 		"nodes": [{
@@ -283,6 +285,7 @@ func TestDetectResponseTools_SchemaContent(t *testing.T) {
 }
 
 func TestExtractToolCallsSourceNode(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		expr string
@@ -351,6 +354,7 @@ func TestExtractToolCallsSourceNode(t *testing.T) {
 }
 
 func TestResolveSimpleInputExpr(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		expr   string

@@ -11,6 +11,7 @@ import (
 )
 
 func TestCelToJsonFunction(t *testing.T) {
+	t.Parallel()
 	t.Run("serializes simple object", func(t *testing.T) {
 		env, err := cel.NewEnv(
 			append([]cel.EnvOption{cel.StdLib(), cel.Variable("data", cel.DynType)}, wfcel.CustomFunctions()...)...,
@@ -190,6 +191,7 @@ func TestCelToJsonFunction(t *testing.T) {
 }
 
 func TestToJsonAndParseJsonRoundTrip(t *testing.T) {
+	t.Parallel()
 	t.Run("parseJson(toJson(data)) returns original structure", func(t *testing.T) {
 		env, err := cel.NewEnv(
 			append([]cel.EnvOption{cel.StdLib(), cel.Variable("data", cel.DynType)}, wfcel.CustomFunctions()...)...,

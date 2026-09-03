@@ -33,6 +33,7 @@ func (r *capturingRepo) CreateChatUpdate(_ context.Context, _ string, _ db.Updat
 // DrainAgentMessages failures rendered at the top of a spawn thread that did
 // not exist when those failures happened.
 func TestExtractThread(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    interface{}
@@ -116,6 +117,7 @@ func TestExtractThread(t *testing.T) {
 // The helper test above can pass while the wiring is missing — which is
 // exactly the state that produced the reported bug.
 func TestWriteErrorEventCarriesThread(t *testing.T) {
+	t.Parallel()
 	repo := &capturingRepo{}
 	wrapper := NewActivityWrapper(
 		"DrainAgentMessages",
@@ -159,6 +161,7 @@ func TestWriteErrorEventCarriesThread(t *testing.T) {
 // branches on presence, so an empty string would be a thread that matches no
 // thread — the error would vanish instead of showing everywhere.
 func TestWriteErrorEventOmitsAbsentThread(t *testing.T) {
+	t.Parallel()
 	repo := &capturingRepo{}
 	wrapper := NewActivityWrapper(
 		"ChatScoped",
@@ -200,6 +203,7 @@ func TestWriteErrorEventOmitsAbsentThread(t *testing.T) {
 // invalid, and an activity error is exactly the moment we cannot afford a
 // second failure while reporting the first.
 func TestExtractThreadNilPointer(t *testing.T) {
+	t.Parallel()
 	var input *types.DrainAgentMessagesInput
 	if got := extractThread(input); got != "" {
 		t.Errorf("extractThread(nil pointer) = %q, want empty", got)

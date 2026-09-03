@@ -30,6 +30,7 @@ func freePort(t *testing.T) string {
 // the one that runs in production. It must not listen, must not leak a
 // goroutine, and must not panic.
 func TestStartPprofServer_EmptyAddrIsNoOp(t *testing.T) {
+	t.Parallel()
 	before := runtime.NumGoroutine()
 
 	require.NotPanics(t, func() {
@@ -58,6 +59,7 @@ func TestStartPprofServer_EmptyAddrIsNoOp(t *testing.T) {
 // actually reachable there. A debug surface that silently fails to serve is
 // the same defect as one that never existed.
 func TestStartPprofServer_ServesWhenAddrSet(t *testing.T) {
+	t.Parallel()
 	addr := freePort(t)
 	startPprofServer(addr)
 
@@ -87,6 +89,7 @@ func TestStartPprofServer_ServesWhenAddrSet(t *testing.T) {
 // there would kill the whole test binary rather than fail an assertion; the
 // proof of survival is that the process goes on to serve a later profiler.
 func TestStartPprofServer_BindFailureIsNotFatal(t *testing.T) {
+	t.Parallel()
 	// Hold the address ourselves so the pprof listener is guaranteed to lose.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)

@@ -272,6 +272,7 @@ func TestStaticAnalysisWithOptions_InlineInputInheritanceContract(t *testing.T) 
 }
 
 func TestStaticAnalysisWithOptions_WorkflowNameIdentityContract(t *testing.T) {
+	t.Parallel()
 	parent := &reliantv1.Workflow{
 		Name:  "builtin://agent",
 		Entry: []string{"workflow_call"},
@@ -315,6 +316,7 @@ func TestStaticAnalysisWithOptions_WorkflowNameIdentityContract(t *testing.T) {
 }
 
 func TestStaticAnalysisWithOptions_SpawnWorkflowNameIdentityTemplateContract(t *testing.T) {
+	t.Parallel()
 	workflow := &reliantv1.Workflow{
 		Name:  "builtin://agent",
 		Entry: []string{"llm"},
@@ -360,6 +362,7 @@ func TestStaticAnalysisWithOptions_SpawnWorkflowNameIdentityTemplateContract(t *
 }
 
 func TestStaticAnalysisWithOptions_SpawnWorkflowNameUsesCanonicalWorkflowRefOverride(t *testing.T) {
+	t.Parallel()
 	workflow := &reliantv1.Workflow{
 		Name:  "agent",
 		Entry: []string{"llm"},
@@ -523,6 +526,7 @@ func TestPassthroughOnInlineWorkflowIsIgnored(t *testing.T) {
 }
 
 func TestPassthroughOnNonWorkflowNodeIsRejectedByYAML(t *testing.T) {
+	t.Parallel()
 	// passthrough is only a valid field on workflow and loop nodes.
 	// If someone puts passthrough on a run node in YAML, the parser should
 	// reject it as an unknown field.

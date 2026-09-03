@@ -92,6 +92,7 @@ func (e *skillTestEnv) execute(t *testing.T, params SkillParams) ToolResponse {
 // -----------------------------------------------------------------------------
 
 func TestSkillTool_List_EmptyPath_ReturnsTopLevelOnly(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "list"})
@@ -107,6 +108,7 @@ func TestSkillTool_List_EmptyPath_ReturnsTopLevelOnly(t *testing.T) {
 }
 
 func TestSkillTool_List_WithPath_ReturnsChildren(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "list", Path: "go"})
@@ -123,6 +125,7 @@ func TestSkillTool_List_WithPath_ReturnsChildren(t *testing.T) {
 }
 
 func TestSkillTool_List_WithDeepPath_ReturnsChildren(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "list", Path: "go/error-handling"})
@@ -132,6 +135,7 @@ func TestSkillTool_List_WithDeepPath_ReturnsChildren(t *testing.T) {
 }
 
 func TestSkillTool_List_NonexistentPath_ReturnsError(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "list", Path: "nonexistent"})
@@ -140,6 +144,7 @@ func TestSkillTool_List_NonexistentPath_ReturnsError(t *testing.T) {
 }
 
 func TestSkillTool_List_LeafSkill_ReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	// 'go/defer' has no sub-skills.
@@ -149,6 +154,7 @@ func TestSkillTool_List_LeafSkill_ReturnsEmpty(t *testing.T) {
 }
 
 func TestSkillTool_List_IncludesDescription(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "list"})
@@ -165,6 +171,7 @@ func TestSkillTool_List_IncludesDescription(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestSkillTool_Load_TopLevelSkill_ReturnsBody(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "go"})
@@ -175,6 +182,7 @@ func TestSkillTool_Load_TopLevelSkill_ReturnsBody(t *testing.T) {
 }
 
 func TestSkillTool_Load_NestedSkill_ReturnsBody(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "go/error-handling"})
@@ -185,6 +193,7 @@ func TestSkillTool_Load_NestedSkill_ReturnsBody(t *testing.T) {
 }
 
 func TestSkillTool_Load_WithSubSkills_AppendsSubSkillsSection(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "go"})
@@ -197,6 +206,7 @@ func TestSkillTool_Load_WithSubSkills_AppendsSubSkillsSection(t *testing.T) {
 }
 
 func TestSkillTool_Load_WithAllowedTools_AppendsToolsSection(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "database-migration"})
@@ -209,6 +219,7 @@ func TestSkillTool_Load_WithAllowedTools_AppendsToolsSection(t *testing.T) {
 }
 
 func TestSkillTool_Load_LeafSkill_NoSubSkillsSection(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "go/defer"})
@@ -220,6 +231,7 @@ func TestSkillTool_Load_LeafSkill_NoSubSkillsSection(t *testing.T) {
 }
 
 func TestSkillTool_Load_NonexistentSkill_ReturnsError(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "nonexistent"})
@@ -228,6 +240,7 @@ func TestSkillTool_Load_NonexistentSkill_ReturnsError(t *testing.T) {
 }
 
 func TestSkillTool_Load_PathNormalization(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	// Case-insensitive lookup is explicitly implemented via strings.ToLower.
@@ -253,6 +266,7 @@ func TestSkillTool_Load_PathNormalization(t *testing.T) {
 }
 
 func TestSkillTool_Load_SiblingsSection(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	// go/defer has sibling go/error-handling
@@ -270,6 +284,7 @@ func TestSkillTool_Load_SiblingsSection(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestSkillTool_Search_FindsByName(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search", Query: "migration"})
@@ -280,6 +295,7 @@ func TestSkillTool_Search_FindsByName(t *testing.T) {
 }
 
 func TestSkillTool_Search_FindsByDescription(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search", Query: "error"})
@@ -292,6 +308,7 @@ func TestSkillTool_Search_FindsByDescription(t *testing.T) {
 }
 
 func TestSkillTool_Search_FindsNestedSkills(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search", Query: "defer"})
@@ -302,6 +319,7 @@ func TestSkillTool_Search_FindsNestedSkills(t *testing.T) {
 }
 
 func TestSkillTool_Search_NoMatches_ReturnsEmptyResults(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search", Query: "zebra"})
@@ -312,6 +330,7 @@ func TestSkillTool_Search_NoMatches_ReturnsEmptyResults(t *testing.T) {
 }
 
 func TestSkillTool_Search_ShowsFullPath(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search", Query: "wrap"})
@@ -322,6 +341,7 @@ func TestSkillTool_Search_ShowsFullPath(t *testing.T) {
 }
 
 func TestSkillTool_ListAndSearch_RenderNormalizedStoredSkillPaths(t *testing.T) {
+	t.Parallel()
 	skills := config.NormalizeStoredSkills([]config.StoredSkill{
 		{
 			Name:        "testing-methodology",
@@ -344,6 +364,7 @@ func TestSkillTool_ListAndSearch_RenderNormalizedStoredSkillPaths(t *testing.T) 
 }
 
 func TestSkillTool_Search_EmptyQuery_ReturnsError(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search", Query: ""})
@@ -356,6 +377,7 @@ func TestSkillTool_Search_EmptyQuery_ReturnsError(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestSkillTool_InvalidAction_ReturnsError(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "delete"})
@@ -368,6 +390,7 @@ func TestSkillTool_InvalidAction_ReturnsError(t *testing.T) {
 }
 
 func TestSkillTool_Load_MissingPath_ReturnsError(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "load"})
@@ -376,6 +399,7 @@ func TestSkillTool_Load_MissingPath_ReturnsError(t *testing.T) {
 }
 
 func TestSkillTool_Search_MissingQuery_ReturnsError(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 
 	resp := env.execute(t, SkillParams{Action: "search"})
@@ -388,6 +412,7 @@ func TestSkillTool_Search_MissingQuery_ReturnsError(t *testing.T) {
 // -----------------------------------------------------------------------------
 
 func TestSkillsAnnouncement_OnlyTopLevel(t *testing.T) {
+	t.Parallel()
 	env := newSkillTestEnv(t)
 	got := SkillsAnnouncement(env.tool.skills)
 
@@ -402,6 +427,7 @@ func TestSkillsAnnouncement_OnlyTopLevel(t *testing.T) {
 }
 
 func TestSkillsAnnouncement_EmptyReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	got := SkillsAnnouncement(nil)
 	assert.Empty(t, got)
 }
@@ -454,6 +480,7 @@ func newForgeNamespaceEnv() *skillTestEnv {
 // independently called `skill load frontend/design` — the path `forge skill
 // list` prints and `forge skill load` accepts — and each got a 404.
 func TestSkillTool_Load_AcceptsPathForgePrints(t *testing.T) {
+	t.Parallel()
 	env := newForgeNamespaceEnv()
 
 	for _, path := range []string{"frontend/design", "forge/frontend/design", "FRONTEND/DESIGN", "  frontend/design  "} {
@@ -466,6 +493,7 @@ func TestSkillTool_Load_AcceptsPathForgePrints(t *testing.T) {
 // forge's skill bodies cross-reference each other unprefixed, so following a
 // skill's own advice has to work.
 func TestSkillTool_Load_AcceptsUnprefixedCrossReference(t *testing.T) {
+	t.Parallel()
 	env := newForgeNamespaceEnv()
 
 	resp := env.execute(t, SkillParams{Action: "load", Path: "frontend/state"})
@@ -480,6 +508,7 @@ func TestSkillTool_Load_AcceptsUnprefixedCrossReference(t *testing.T) {
 // Listing a group by the name forge prints must list that group's children,
 // and must echo the prefixed path those children carry.
 func TestSkillTool_List_AcceptsPathForgePrints(t *testing.T) {
+	t.Parallel()
 	env := newForgeNamespaceEnv()
 
 	resp := env.execute(t, SkillParams{Action: "list", Path: "frontend"})
@@ -493,6 +522,7 @@ func TestSkillTool_List_AcceptsPathForgePrints(t *testing.T) {
 // A multi-repo project stacks "<repo>/" on top of "forge/". The bare path is
 // still what forge prints, so it still has to resolve.
 func TestSkillTool_Load_AcceptsPathForgePrints_NestedRepo(t *testing.T) {
+	t.Parallel()
 	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
 		{SkillPath: "api/forge/frontend/design", Name: "frontend-design", Body: "# Nested design", Source: "api"},
 	}}}
@@ -505,6 +535,7 @@ func TestSkillTool_Load_AcceptsPathForgePrints_NestedRepo(t *testing.T) {
 // An exact match must never be shadowed by a suffix match, or a project skill
 // could be silently replaced by a forge skill of the same name.
 func TestSkillTool_Load_ExactMatchBeatsSuffixMatch(t *testing.T) {
+	t.Parallel()
 	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
 		{SkillPath: "deploy", Name: "deploy", Body: "# Project deploy"},
 		{SkillPath: "forge/deploy", Name: "deploy", Body: "# Forge deploy"},
@@ -519,6 +550,7 @@ func TestSkillTool_Load_ExactMatchBeatsSuffixMatch(t *testing.T) {
 // Two equally-good suffix candidates must not be guessed between — the caller
 // gets the "did you mean" list instead.
 func TestSkillTool_Load_AmbiguousSuffix_ReturnsCandidates(t *testing.T) {
+	t.Parallel()
 	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
 		{SkillPath: "api/forge/db", Name: "db", Body: "# API db"},
 		{SkillPath: "web/forge/db", Name: "db", Body: "# Web db"},
@@ -533,6 +565,7 @@ func TestSkillTool_Load_AmbiguousSuffix_ReturnsCandidates(t *testing.T) {
 // The suffix match is component-aligned — a bare word must not match the tail
 // of a longer path component.
 func TestSkillTool_Load_SuffixMatchIsComponentAligned(t *testing.T) {
+	t.Parallel()
 	env := &skillTestEnv{tool: &skillTool{skills: []config.StoredSkill{
 		{SkillPath: "forge/frontend-design", Name: "frontend-design", Body: "# Hyphenated"},
 	}}}
@@ -628,6 +661,7 @@ func listedSkillPaths(content string) []string {
 // `list frontend` answered "no sub-skills found under: frontend" while
 // `load frontend/design` happily loaded one of its members.
 func TestSkillTool_List_NamespaceAgreesWithLoad(t *testing.T) {
+	t.Parallel()
 	env := newForgeProjectSkillsEnv()
 
 	want := addressableNamespaces(env.tool.skills)
@@ -664,6 +698,7 @@ func TestSkillTool_List_NamespaceAgreesWithLoad(t *testing.T) {
 // A path with genuinely nothing under it must say so actionably — naming the
 // namespaces that do exist, so the agent can retry instead of giving up.
 func TestSkillTool_List_EmptyNamespace_NamesExistingNamespaces(t *testing.T) {
+	t.Parallel()
 	env := newForgeProjectSkillsEnv()
 
 	resp := env.execute(t, SkillParams{Action: "list", Path: "nonexistent"})

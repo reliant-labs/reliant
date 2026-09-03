@@ -70,6 +70,7 @@ func execGitCommand(dir, command string, args ...string) error {
 }
 
 func TestNewService(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	service, err := NewService(tempDir, tempDir)
@@ -333,6 +334,7 @@ func TestWorktreeWithSessionID(t *testing.T) {
 }
 
 func TestWorktreeStates(t *testing.T) {
+	t.Parallel()
 	states := []Status{StatusActive, StatusCompleted, StatusAbandoned, StatusMerging}
 
 	for _, state := range states {
@@ -385,6 +387,7 @@ func BenchmarkListWorktrees(b *testing.B) {
 // Tests for recursive file copy functionality
 
 func TestFindMatchingFiles(t *testing.T) {
+	t.Parallel()
 	// Create temporary directory structure
 	tmpDir := t.TempDir()
 
@@ -482,6 +485,7 @@ func TestFindMatchingFiles(t *testing.T) {
 }
 
 func TestCopyFilePaths(t *testing.T) {
+	t.Parallel()
 	// Create source directory
 	srcDir := t.TempDir()
 
@@ -526,6 +530,7 @@ func TestCopyFilePaths(t *testing.T) {
 }
 
 func TestCopyFilesIntegration(t *testing.T) {
+	t.Parallel()
 	// Create source directory with nested .env files
 	srcDir := t.TempDir()
 
@@ -594,6 +599,7 @@ func TestCreateWorktreeWithCopyFiles(t *testing.T) {
 }
 
 func TestCopyDirectory(t *testing.T) {
+	t.Parallel()
 	// Create source directory
 	srcDir := t.TempDir()
 
@@ -648,6 +654,7 @@ func TestCopyDirectory(t *testing.T) {
 }
 
 func TestFindMatchingFilesWithDirectory(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create directory structure

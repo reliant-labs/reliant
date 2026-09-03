@@ -21,6 +21,7 @@ func loadTestWorkflow(t *testing.T, wfJSON string) *reliantv1.Workflow {
 }
 
 func TestJoinState_InitializeJoins(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["started"],
@@ -55,6 +56,7 @@ func TestJoinState_InitializeJoins(t *testing.T) {
 }
 
 func TestJoinState_RecordCompletion(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -90,6 +92,7 @@ func TestJoinState_RecordCompletion(t *testing.T) {
 }
 
 func TestJoinState_IsJoinSatisfied_All(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -120,6 +123,7 @@ func TestJoinState_IsJoinSatisfied_All(t *testing.T) {
 }
 
 func TestJoinState_IsJoinSatisfied_Any(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -146,6 +150,7 @@ func TestJoinState_IsJoinSatisfied_Any(t *testing.T) {
 }
 
 func TestJoinState_MarkTriggered(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -172,6 +177,7 @@ func TestJoinState_MarkTriggered(t *testing.T) {
 }
 
 func TestJoinState_GetJoinOutput(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -212,6 +218,7 @@ func TestJoinState_GetJoinOutput(t *testing.T) {
 }
 
 func TestJoinState_DuplicateEdges(t *testing.T) {
+	t.Parallel()
 	// Test that duplicate edges to same join don't create duplicate sources
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
@@ -235,6 +242,7 @@ func TestJoinState_DuplicateEdges(t *testing.T) {
 }
 
 func TestJoinState_NonJoinStep(t *testing.T) {
+	t.Parallel()
 	// Test that non-join steps don't create progress entries
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-no-join",
@@ -264,6 +272,7 @@ func (l *testLogger) Info(msg string, keyvals ...interface{}) {
 }
 
 func TestProcessJoinEvents_ConditionAll(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -330,6 +339,7 @@ func TestProcessJoinEvents_ConditionAll(t *testing.T) {
 }
 
 func TestProcessJoinEvents_ConditionAny(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -374,6 +384,7 @@ func TestProcessJoinEvents_ConditionAny(t *testing.T) {
 }
 
 func TestProcessJoinEvents_SkipsWorkflowStartEvent(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join",
 		"entry": ["task_a"],
@@ -404,6 +415,7 @@ func TestProcessJoinEvents_SkipsWorkflowStartEvent(t *testing.T) {
 }
 
 func TestExpandJoinCondition(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    string
@@ -424,6 +436,7 @@ func TestExpandJoinCondition(t *testing.T) {
 }
 
 func TestJoinState_SkippedSourcesSatisfyAllCondition(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join-skipped",
 		"entry": ["task_a"],
@@ -454,6 +467,7 @@ func TestJoinState_SkippedSourcesSatisfyAllCondition(t *testing.T) {
 }
 
 func TestJoinState_SkippedSourcesSatisfyAnyCondition(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join-skipped-any",
 		"entry": ["task_a"],
@@ -480,6 +494,7 @@ func TestJoinState_SkippedSourcesSatisfyAnyCondition(t *testing.T) {
 }
 
 func TestBuildJoinSources_SkippedTreatedAsCompleted(t *testing.T) {
+	t.Parallel()
 	progress := &JoinProgress{
 		Sources:   []string{"task_a", "task_b", "task_c"},
 		Completed: map[string]bool{"task_a": true},
@@ -516,6 +531,7 @@ func TestBuildJoinSources_SkippedTreatedAsCompleted(t *testing.T) {
 }
 
 func TestProcessJoinEvents_SkippedSourceTriggersJoin(t *testing.T) {
+	t.Parallel()
 	workflow := loadTestWorkflow(t, `{
 		"name": "test-join-skipped-event",
 		"entry": ["task_a"],

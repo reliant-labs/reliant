@@ -12,6 +12,7 @@ import (
 
 // TestStructuredAgentV3Validation tests that the v3 structured-agent validates correctly
 func TestStructuredAgentV3Validation(t *testing.T) {
+	t.Parallel()
 	// Load the structured-agent workflow
 	data, err := os.ReadFile("../builtin/structured-agent.yaml")
 	require.NoError(t, err, "should read structured-agent.yaml")

@@ -10,6 +10,7 @@ import (
 )
 
 func TestInlineWorkflowExecutor_BuildSubWorkflowInputs_UsesCoreInputPolicy(t *testing.T) {
+	t.Parallel()
 	t.Run("inline policy shares parent map reference", func(t *testing.T) {
 		parentInputs := map[string]interface{}{"model": "gpt-5", "mode": "auto"}
 		executor := &InlineWorkflowExecutor{
@@ -108,6 +109,7 @@ func (l *runtimeBridgeNoopLogger) Warn(string, ...interface{})  {}
 func (l *runtimeBridgeNoopLogger) Error(string, ...interface{}) {}
 
 func TestInlineLoopExecutor_BuildIterationInputs_UsesCoreInputPolicy(t *testing.T) {
+	t.Parallel()
 	loopNode := &reliantv1.Node{
 		Id:   "loop_node",
 		Type: "loop",

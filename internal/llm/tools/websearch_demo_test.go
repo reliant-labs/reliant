@@ -28,6 +28,7 @@ import (
 //
 //	RELIANT_TEST_NETWORK=1 go test ./internal/llm/tools/ -run TestWebSearchDemo
 func TestWebSearchDemo(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping demo test in short mode")
 	}
@@ -120,6 +121,7 @@ func TestWebSearchDemo(t *testing.T) {
 
 // TestWebSearchToolSchema verifies the tool schema is properly generated
 func TestWebSearchToolSchema(t *testing.T) {
+	t.Parallel()
 	tool := NewWebSearchTool()
 
 	// Verify the tool has a schema

@@ -33,6 +33,7 @@ func unwrapArraySchema() *jsonschema.Schema {
 }
 
 func TestUnwrapStringifiedValues(t *testing.T) {
+	t.Parallel()
 	arraySchema := unwrapArraySchema()
 
 	// Create a test schema with various types
@@ -125,6 +126,7 @@ func TestUnwrapStringifiedValues(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_DoubleStringified(t *testing.T) {
+	t.Parallel()
 	schema := unwrapArraySchema()
 
 	// items arrives as a JSON string whose contents are *themselves* a JSON
@@ -147,6 +149,7 @@ func TestUnwrapStringifiedValues_DoubleStringified(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_WholeObjectStringified(t *testing.T) {
+	t.Parallel()
 	schema := unwrapArraySchema()
 
 	// The entire argument payload arrived as a JSON-encoded string rather than
@@ -160,6 +163,7 @@ func TestUnwrapStringifiedValues_WholeObjectStringified(t *testing.T) {
 }
 
 func TestUnwrapStringifiedObject(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		input   string
@@ -183,6 +187,7 @@ func TestUnwrapStringifiedObject(t *testing.T) {
 }
 
 func TestUnwrapToType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		strVal string
@@ -208,6 +213,7 @@ func TestUnwrapToType(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_NilSchema(t *testing.T) {
+	t.Parallel()
 	input := `{"items": "[{\"file_path\": \"/test.go\"}]"}`
 	result := unwrapStringifiedValues(input, nil)
 
@@ -217,6 +223,7 @@ func TestUnwrapStringifiedValues_NilSchema(t *testing.T) {
 }
 
 func TestUnwrapStringifiedValues_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	schema := unwrapArraySchema()
 
 	input := `{invalid json}`

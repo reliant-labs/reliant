@@ -103,6 +103,7 @@ func lostEdits(t *testing.T, path string, results []string) []int {
 // ambiguous — no two edits touch the same text — so there is no correct
 // outcome other than "all N applied".
 func TestEditConcurrentSameFileNoLostWrites(t *testing.T) {
+	t.Parallel()
 	for _, n := range []int{2, 3, 4, 8} {
 		t.Run(fmt.Sprintf("n=%d", n), func(t *testing.T) {
 			path, run := concurrentEditFixture(t, n)
@@ -122,6 +123,7 @@ func TestEditConcurrentSameFileNoLostWrites(t *testing.T) {
 // trials. A race that shows up once in ten runs is still a race; this is the
 // measurement that answers "at what N does it start losing writes".
 func TestEditConcurrentSameFileRepeated(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("race measurement; skipped under -short")
 	}
@@ -175,6 +177,7 @@ func (d *interposingDaemon) ReadFile(ctx context.Context, path string, opts *dae
 // stale under it must fail loudly. Reporting "Content replaced in file" while
 // having erased somebody else's write is the failure mode that costs data.
 func TestEditExternalWriteBetweenReadAndWriteErrors(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "contended.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\nbeta\ngamma\n"), 0o644))
@@ -220,6 +223,7 @@ func TestEditExternalWriteBetweenReadAndWriteErrors(t *testing.T) {
 // uncontended single edit — by far the common case — must behave exactly as
 // before, success text and file contents included.
 func TestEditSingleEditUnchanged(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "single.go")
 	require.NoError(t, os.WriteFile(path, []byte("package main\n\nfunc main() {}\n"), 0o644))
@@ -242,6 +246,7 @@ func TestEditSingleEditUnchanged(t *testing.T) {
 // read-modify-write shape through the same daemon client, so it inherits the
 // same defect. Two inserts in one batch, both to one file, both must land.
 func TestInsertAtConcurrentSameFileNoLostWrites(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "insert.txt")
 	require.NoError(t, os.WriteFile(path, []byte("aaa\nbbb\nccc\nddd\n"), 0o644))
@@ -284,6 +289,7 @@ func TestInsertAtConcurrentSameFileNoLostWrites(t *testing.T) {
 
 // TestEditLinesConcurrentSameFileNoLostWrites — same shape for edit_lines.
 func TestEditLinesConcurrentSameFileNoLostWrites(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "lines.txt")
 	require.NoError(t, os.WriteFile(path, []byte("l1\nl2\nl3\nl4\nl5\nl6\n"), 0o644))

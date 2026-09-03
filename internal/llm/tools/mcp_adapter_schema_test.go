@@ -13,6 +13,7 @@ import (
 // treat that key as a property name and preserve its subschema, not collapse it
 // to the bare string "object" (which invopop rejects, forcing a loose fallback).
 func TestParseSchema_PropertyNamedType(t *testing.T) {
+	t.Parallel()
 	adapter := &MCPToolAdapter{
 		serverName: "chrome-devtools",
 		tool: mcp.Tool{
@@ -53,6 +54,7 @@ func TestParseSchema_PropertyNamedType(t *testing.T) {
 // TestNormalizeSchemaForInvopop_PreservesPropertyNamedType is a focused unit test
 // for the normalizer: a property named "type" must remain a subschema map.
 func TestNormalizeSchemaForInvopop_PreservesPropertyNamedType(t *testing.T) {
+	t.Parallel()
 	input := map[string]interface{}{
 		"type": []interface{}{"object", "null"},
 		"properties": map[string]interface{}{
@@ -93,6 +95,7 @@ func TestNormalizeSchemaForInvopop_PreservesPropertyNamedType(t *testing.T) {
 }
 
 func TestNormalizeSchemaType_ArrayPrefersConcreteNonNull(t *testing.T) {
+	t.Parallel()
 	typeValue := []interface{}{"object", "null"}
 	got := normalizeSchemaType(typeValue)
 	if got != "object" {
@@ -101,6 +104,7 @@ func TestNormalizeSchemaType_ArrayPrefersConcreteNonNull(t *testing.T) {
 }
 
 func TestNormalizeSchemaForInvopop_NormalizesNestedTypeArrays(t *testing.T) {
+	t.Parallel()
 	input := map[string]interface{}{
 		"type": []interface{}{"object", "null"},
 		"properties": map[string]interface{}{
@@ -144,6 +148,7 @@ func TestNormalizeSchemaForInvopop_NormalizesNestedTypeArrays(t *testing.T) {
 }
 
 func TestExtractSchemaHints(t *testing.T) {
+	t.Parallel()
 	input := map[string]interface{}{
 		"properties": map[string]interface{}{
 			"zeta":  map[string]interface{}{"type": "string"},
@@ -162,6 +167,7 @@ func TestExtractSchemaHints(t *testing.T) {
 }
 
 func TestMCPToolAdapterName_UsesLogicalServerName(t *testing.T) {
+	t.Parallel()
 	adapter, err := NewProjectMCPToolAdapter(
 		"/tmp/project",
 		"chrome-devtools",
@@ -177,6 +183,7 @@ func TestMCPToolAdapterName_UsesLogicalServerName(t *testing.T) {
 }
 
 func TestNewProjectMCPToolAdapter_RejectsScopedServerIdentifier(t *testing.T) {
+	t.Parallel()
 	_, err := NewProjectMCPToolAdapter(
 		"/tmp/project",
 		"/tmp/project::chrome-devtools",
@@ -188,6 +195,7 @@ func TestNewProjectMCPToolAdapter_RejectsScopedServerIdentifier(t *testing.T) {
 }
 
 func TestValidateMCPLogicalServerName(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		in      string
@@ -213,6 +221,7 @@ func TestValidateMCPLogicalServerName(t *testing.T) {
 }
 
 func TestMCPToolRegistryBuildAdapters_PrunesDuplicateLogicalToolNamesDeterministically(t *testing.T) {
+	t.Parallel()
 	registry := NewMCPToolRegistry(nil, "/tmp/project")
 	serverTools := map[string][]mcp.Tool{
 		"alpha": {

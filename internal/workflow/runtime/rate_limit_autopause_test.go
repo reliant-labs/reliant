@@ -30,6 +30,7 @@ type HandleWorkflowCompletionSuite struct {
 }
 
 func TestHandleWorkflowCompletion(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(HandleWorkflowCompletionSuite))
 }
 
@@ -125,6 +126,7 @@ type StepExecutorRetrySuite struct {
 }
 
 func TestStepExecutorRetry(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(StepExecutorRetrySuite))
 }
 
@@ -238,6 +240,7 @@ func (s *StepExecutorRetrySuite) TestSuccessfulActivity_DoesNotSetRetryExhausted
 // =============================================================================
 
 func TestPauseController_DoRequestPause_Integration(t *testing.T) {
+	t.Parallel()
 	t.Run("RequestPause sets pause flag and cancels activities", func(t *testing.T) {
 		var pauseRequested bool
 		var cancelCalled bool
@@ -302,6 +305,7 @@ func TestPauseController_DoRequestPause_Integration(t *testing.T) {
 // =============================================================================
 
 func TestStepEvent_RetryExhausted_CancelledErrorNotExhausted(t *testing.T) {
+	t.Parallel()
 	event := &StepEvent{
 		StepID:         "test-step",
 		Error:          temporal.NewCanceledError("context cancelled"),
@@ -312,6 +316,7 @@ func TestStepEvent_RetryExhausted_CancelledErrorNotExhausted(t *testing.T) {
 }
 
 func TestStepEvent_RetryExhausted_TimeoutErrorIsExhausted(t *testing.T) {
+	t.Parallel()
 	event := &StepEvent{
 		StepID:         "test-step",
 		Error:          errors.New("activity timed out"),
@@ -322,6 +327,7 @@ func TestStepEvent_RetryExhausted_TimeoutErrorIsExhausted(t *testing.T) {
 }
 
 func TestStepEvent_RetryExhausted_ApplicationErrorIsExhausted(t *testing.T) {
+	t.Parallel()
 	event := &StepEvent{
 		StepID:         "test-step",
 		Error:          errors.New("429 Too Many Requests"),
@@ -344,6 +350,7 @@ type RateLimitAutoPauseSuite struct {
 }
 
 func TestRateLimitAutoPause(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(RateLimitAutoPauseSuite))
 }
 

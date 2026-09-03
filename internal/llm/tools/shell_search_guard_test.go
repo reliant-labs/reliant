@@ -10,6 +10,7 @@ import (
 // three fan-out units independently ran a full-disk find. Those calls averaged
 // 268.7s each and five hit the hard timeout at 5m0s.
 func TestUnscopedSearchRefusal(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		command string
@@ -73,6 +74,7 @@ func TestUnscopedSearchRefusal(t *testing.T) {
 // The refusal is only useful if it tells the agent what to do instead. Without
 // the alternative the agent has no way to answer the question it was asking.
 func TestUnscopedSearchRefusalNamesTheScopedAlternative(t *testing.T) {
+	t.Parallel()
 	msg := unscopedSearchRefusal(`find / -path "*forge/pkg/svcerr*"`)
 	if msg == "" {
 		t.Fatal("expected a refusal")
@@ -91,6 +93,7 @@ func TestUnscopedSearchRefusalNamesTheScopedAlternative(t *testing.T) {
 // Execute returns the refusal as a tool error before touching the daemon, which
 // is why a nil-daemon context still has to be rejected first.
 func TestShellToolRefusesFilesystemWideScan(t *testing.T) {
+	t.Parallel()
 	if unscopedSearchRefusal(`find / -name "*.go"`) == "" {
 		t.Fatal("guard did not fire on the canonical offender")
 	}

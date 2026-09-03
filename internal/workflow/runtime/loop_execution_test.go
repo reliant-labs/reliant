@@ -13,6 +13,7 @@ import (
 
 // TestLoopExecution_LoopOutput tests proto-backed loop output structure.
 func TestLoopExecution_LoopOutput(t *testing.T) {
+	t.Parallel()
 	t.Run("loop output contains sub-workflow outputs", func(t *testing.T) {
 		protoOutputs, err := structpb.NewStruct(map[string]interface{}{
 			"exit_code": 0,
@@ -45,6 +46,7 @@ func TestLoopExecution_LoopOutput(t *testing.T) {
 
 // TestLoopExecution_StateMachineRouting tests state machine routing after loop completion
 func TestLoopExecution_StateMachineRouting(t *testing.T) {
+	t.Parallel()
 	t.Run("state machine routes based on loop output", func(t *testing.T) {
 		wfJSON := `{
 			"name": "test-routing",
@@ -88,6 +90,7 @@ func TestLoopExecution_StateMachineRouting(t *testing.T) {
 }
 
 func TestBackfillNodeOutputsFromEvents(t *testing.T) {
+	t.Parallel()
 	nodeOutputs := map[string]interface{}{}
 	events := []*core.WorkflowEvent{
 		nil,

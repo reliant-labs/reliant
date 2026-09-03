@@ -9,6 +9,7 @@ import (
 )
 
 func TestLoadWorkflow_ProtoJSONRoundTrip_PreservesSaveMessageNode(t *testing.T) {
+	t.Parallel()
 	yamlData := []byte(`
 name: save-message-regression
 apiVersion: v2
@@ -41,6 +42,7 @@ nodes:
 }
 
 func TestLoadWorkflow_LegacyJSONFallback_StillSupportsArgsShape(t *testing.T) {
+	t.Parallel()
 	legacyJSON := []byte(`{
   "name": "legacy-shape",
   "entry": ["save"],

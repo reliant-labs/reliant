@@ -22,6 +22,7 @@ func makeResponseSchemaStruct(schema map[string]interface{}) *structpb.Value {
 // TestIterItemTypeInference_ResponseSchema tests that iter.item fields are validated
 // when the loop items come from a workflow node with a response_schema arg.
 func TestIterItemTypeInference_ResponseSchema(t *testing.T) {
+	t.Parallel()
 	// Build a response schema with waves array containing has_frontend boolean
 	responseSchema := map[string]interface{}{
 		"type": "object",
@@ -96,6 +97,7 @@ func TestIterItemTypeInference_ResponseSchema(t *testing.T) {
 // TestIterItemTypeInference_InvalidField tests that accessing a nonexistent field
 // on iter.item produces a validation error when the item type is known.
 func TestIterItemTypeInference_InvalidField(t *testing.T) {
+	t.Parallel()
 	responseSchema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -172,6 +174,7 @@ func TestIterItemTypeInference_InvalidField(t *testing.T) {
 // TestIterItemTypeInference_FallbackToDyn tests that when iter.item type can't be
 // inferred (no response_schema), validation falls back to dyn and allows any field.
 func TestIterItemTypeInference_FallbackToDyn(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Name:  "test-iter-type-dyn",
 		Entry: []string{"data_source"},
@@ -219,6 +222,7 @@ func TestIterItemTypeInference_FallbackToDyn(t *testing.T) {
 
 // TestInferLoopItemFields_ParseNodeFieldPath tests the expression parser.
 func TestInferLoopItemFields_ParseNodeFieldPath(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		expr     string
 		wantNil  bool
@@ -263,6 +267,7 @@ func TestInferLoopItemFields_ParseNodeFieldPath(t *testing.T) {
 
 // TestInferLoopItemFields_Direct tests the inference function directly.
 func TestInferLoopItemFields_Direct(t *testing.T) {
+	t.Parallel()
 	responseSchema := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -322,6 +327,7 @@ func TestInferLoopItemFields_Direct(t *testing.T) {
 // TestTypedIterCELCompilation directly tests that the CEL environment rejects
 // unknown fields on iter.item when the type is known.
 func TestTypedIterCELCompilation(t *testing.T) {
+	t.Parallel()
 	typeCtx := &WorkflowTypeContext{
 		InputFields:  make(map[string]*FieldInfo),
 		InputGroups:  make(map[string]map[string]*FieldInfo),

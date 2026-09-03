@@ -21,6 +21,7 @@ import (
 // legal. Validation flags only the statically-provable always-null case, which
 // is almost certainly an authoring mistake.
 func TestAlwaysNullOutputWarning(t *testing.T) {
+	t.Parallel()
 	findAlwaysNullWarnings := func(result *Result) []*Error {
 		var found []*Error
 		for _, w := range result.Warnings() {

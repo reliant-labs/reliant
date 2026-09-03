@@ -14,6 +14,7 @@ import (
 )
 
 func TestMoveCodeTool(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 	chatID := "test-chat-move"
 	thread := "0"
