@@ -13,7 +13,10 @@
 // exported-vars rule is asking for; the vars themselves are the injection site.
 package version
 
-import "runtime/debug"
+import (
+	"runtime/debug"
+	"strings"
+)
 
 // Build-time parameters set via -ldflags
 var (
@@ -42,12 +45,52 @@ func init() {
 	Version = mainVersion
 }
 
+// forgeModulePath is the CLI module. Reliant also requires
+// github.com/reliant-labs/forge/pkg at the same version (a split between the
+// two is caught by TestForgeModulePinsMatch in internal/buildmode), so either
+// entry answers "which forge is this binary carrying".
+const forgeModulePath = "github.com/reliant-labs/forge"
+
+// Forge reports the forge version this binary was built against, read from the
+// module graph the linker already embedded.
+//
+// Deliberately NOT another -ldflags -X var. The go.mod pin is the fact, and a
+// second hand-maintained copy of it can disagree with the module actually
+// linked in — which is the exact skew control-plane wants to resolve by
+// deriving forge's version from reliant's pin rather than restating it.
+//
+// Returns "unknown" when there is no build info (e.g. a test binary that links
+// no forge package).
+func Forge() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, dep := range info.Deps {
+		// Prefer the CLI module, but accept /pkg: which of the two appears
+		// depends on what the binary imports, and both are tagged together.
+		if dep.Path == forgeModulePath || strings.HasPrefix(dep.Path, forgeModulePath+"/") {
+			// A replaced module reports the replacement's version; the
+			// effective one is what shipped.
+			if dep.Replace != nil && dep.Replace.Version != "" {
+				return dep.Replace.Version
+			}
+			if dep.Version != "" {
+				return dep.Version
+			}
+		}
+	}
+	return "unknown"
+}
+
 // BuildInfo contains all build metadata
 type BuildInfo struct {
 	Version string
 	Commit  string
 	Date    string
 	Branch  string
+	// Forge is resolved from the embedded module graph, not from -ldflags.
+	Forge string
 }
 
 // Get returns the current build information
@@ -57,6 +100,7 @@ func Get() BuildInfo {
 		Commit:  Commit,
 		Date:    Date,
 		Branch:  Branch,
+		Forge:   Forge(),
 	}
 }
 

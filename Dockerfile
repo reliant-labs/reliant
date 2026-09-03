@@ -52,16 +52,32 @@ ENV GOWORK=off
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-# VERSION stamps the binary so `reliant version` reports the release rather
-# than "unknown". The release workflow already injects internal/version for the
-# Electron-bundled binary; this image built without it, so every published
-# container reported an unknown version. Defaults to "dev" for a plain
-# `docker build` with no --build-arg.
+# Stamps internal/version so `reliant version` reports the release rather than
+# "unknown". The release workflow already injects these for the
+# Electron-bundled binary; this image previously stamped only Version, so every
+# published container reported `commit: unknown` / `built: unknown` — verified
+# against the running prod pod.
+#
+# All four are stamped because a partial stamp is worse than none: a version
+# with no commit cannot be traced back to a tree, which is exactly the state
+# prod was in.
+#
+# Defaults are for a plain `docker build` with no --build-arg. VERSION defaults
+# to "dev" rather than a branch name — see build-images.yml, which passes a
+# real semver on a tag and a `0.0.0-dev-<sha>` pseudo-version otherwise. The
+# bare word "main" is never an acceptable value here; internal/version's
+# TestVersionIsNeverABranchName pins that.
 ARG VERSION=dev
+ARG COMMIT=unknown
+ARG BUILD_DATE=unknown
+ARG BRANCH=unknown
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     CGO_ENABLED=0 GOARCH=${TARGETARCH} go build \
-      -ldflags "-X github.com/reliant-labs/reliant/internal/version.Version=${VERSION}" \
+      -ldflags "-X github.com/reliant-labs/reliant/internal/version.Version=${VERSION} \
+                -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} \
+                -X github.com/reliant-labs/reliant/internal/version.Date=${BUILD_DATE} \
+                -X github.com/reliant-labs/reliant/internal/version.Branch=${BRANCH}" \
       -o /reliant ./cmd/reliant/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────
