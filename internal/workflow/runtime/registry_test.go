@@ -11,6 +11,7 @@ import (
 // handles various input/output patterns correctly. This tests what Temporal does
 // under the hood - no manual conversion code needed!
 func TestTemporalJSONSerialization(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    interface{}
@@ -128,6 +129,7 @@ func TestTemporalJSONSerialization(t *testing.T) {
 // TestActivityWrapperSupportsVariousTypes verifies that the wrapper signature
 // allows activities to return various types (slices, structs, primitives)
 func TestActivityWrapperSupportsVariousTypes(t *testing.T) {
+	t.Parallel()
 	// This test verifies that we can create wrappers for activities with different output types.
 	// Temporal handles all serialization - we just need typed functions.
 
@@ -192,6 +194,7 @@ func TestActivityWrapperSupportsVariousTypes(t *testing.T) {
 
 // TestExtractChatID verifies that chat_id is correctly extracted from various input formats
 func TestExtractChatID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		input    interface{}

@@ -28,12 +28,14 @@ func v3Input(chatID, thread string) types.ActivityInput {
 }
 
 func TestExtractChatID_ReadsV3ActivityInput(t *testing.T) {
+	t.Parallel()
 	if got := extractChatID(v3Input("chat-58cc003f", "thread-58cc003f")); got != "chat-58cc003f" {
 		t.Errorf("extractChatID() = %q, want %q — without it no activity error reaches the chat", got, "chat-58cc003f")
 	}
 }
 
 func TestExtractThread_ReadsV3ActivityInput(t *testing.T) {
+	t.Parallel()
 	if got := extractThread(v3Input("chat-58cc003f", "thread-58cc003f")); got != "thread-58cc003f" {
 		t.Errorf("extractThread() = %q, want %q", got, "thread-58cc003f")
 	}
@@ -42,6 +44,7 @@ func TestExtractThread_ReadsV3ActivityInput(t *testing.T) {
 // The end-to-end assertion, in the shape the helper tests cannot make: a
 // failing v3 activity must actually write the error event.
 func TestWriteErrorEventReachesChatForV3Input(t *testing.T) {
+	t.Parallel()
 	repo := &capturingRepo{}
 	wrapper := NewActivityWrapper(
 		"SaveMessage",
@@ -83,6 +86,7 @@ func TestWriteErrorEventReachesChatForV3Input(t *testing.T) {
 // ZERO rows for chats the v3 runtime ran. A chat that stopped then has no
 // durable record of the step it stopped on.
 func TestExtractActivityInputInfo_ReadsV3ActivityInput(t *testing.T) {
+	t.Parallel()
 	info := extractActivityInputInfo(types.ActivityInput{
 		Runtime: types.RuntimeContext{
 			ChatID:        "chat-58cc003f",
@@ -114,6 +118,7 @@ func TestExtractActivityInputInfo_ReadsV3ActivityInput(t *testing.T) {
 // A field the input carries itself always wins over one found in a nested
 // struct — the descent adds answers, it must never replace them.
 func TestExtractInputString_OwnFieldWinsOverNested(t *testing.T) {
+	t.Parallel()
 	type nested struct {
 		ChatID string `json:"chat_id"`
 	}

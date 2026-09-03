@@ -3,6 +3,7 @@ package runtime
 import "testing"
 
 func TestIsActivityType_KnownActivityTypes(t *testing.T) {
+	t.Parallel()
 	activityTypes := []string{
 		"call_llm",
 		"execute_tools",
@@ -19,6 +20,7 @@ func TestIsActivityType_KnownActivityTypes(t *testing.T) {
 }
 
 func TestIsActivityType_StructuralTypes(t *testing.T) {
+	t.Parallel()
 	structuralTypes := []string{
 		"run",
 		"workflow",
@@ -34,6 +36,7 @@ func TestIsActivityType_StructuralTypes(t *testing.T) {
 }
 
 func TestIsActivityType_RejectsUnknownTypes(t *testing.T) {
+	t.Parallel()
 	// These are the critical cases: unknown strings that previously would
 	// have been dispatched as Temporal activities, causing ActivityNotRegisteredError.
 	unknownTypes := []string{
@@ -52,6 +55,7 @@ func TestIsActivityType_RejectsUnknownTypes(t *testing.T) {
 }
 
 func TestNodeTypeToActivityName_KnownTypes(t *testing.T) {
+	t.Parallel()
 	tests := map[string]string{
 		"call_llm":        "CallLLM",
 		"execute_tools":   "ExecuteTools",
@@ -69,6 +73,7 @@ func TestNodeTypeToActivityName_KnownTypes(t *testing.T) {
 }
 
 func TestNodeTypeToActivityName_EmptyReturnsEmpty(t *testing.T) {
+	t.Parallel()
 	if got := nodeTypeToActivityName(""); got != "" {
 		t.Errorf("nodeTypeToActivityName(\"\") = %q, want empty", got)
 	}
@@ -78,6 +83,7 @@ func TestNodeTypeToActivityName_EmptyReturnsEmpty(t *testing.T) {
 // must reject unknown types: snakeToPascal("null") produces "Null", which is
 // not a registered activity name.
 func TestNodeTypeToActivityName_NullProducesBadName(t *testing.T) {
+	t.Parallel()
 	got := nodeTypeToActivityName("null")
 	if got != "Null" {
 		t.Fatalf("expected nodeTypeToActivityName(\"null\") = \"Null\", got %q", got)

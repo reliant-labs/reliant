@@ -18,6 +18,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestPopulateSaveMessageResolved_ToolCalls(t *testing.T) {
+	t.Parallel()
 	toolCallsJSON := `[{"id":"toolu_abc","name":"grep","input":"{\"pattern\":\"test\"}"},{"id":"toolu_def","name":"write_file","input":"{\"path\":\"a.txt\"}"}]`
 
 	args := &reliantv1.SaveMessageNodeArgs{
@@ -42,6 +43,7 @@ func TestPopulateSaveMessageResolved_ToolCalls(t *testing.T) {
 }
 
 func TestPopulateSaveMessageResolved_ToolResults(t *testing.T) {
+	t.Parallel()
 	toolResultsJSON := `[{"tool_call_id":"toolu_abc","name":"grep","content":"found 5 matches","is_error":false},{"tool_call_id":"toolu_def","name":"write_file","content":"written","is_error":false}]`
 
 	args := &reliantv1.SaveMessageNodeArgs{
@@ -67,6 +69,7 @@ func TestPopulateSaveMessageResolved_ToolResults(t *testing.T) {
 }
 
 func TestPopulateSaveMessageResolved_ToolResultsWithError(t *testing.T) {
+	t.Parallel()
 	toolResultsJSON := `[{"tool_call_id":"toolu_err","name":"bash","content":"command not found","is_error":true}]`
 
 	args := &reliantv1.SaveMessageNodeArgs{
@@ -85,6 +88,7 @@ func TestPopulateSaveMessageResolved_ToolResultsWithError(t *testing.T) {
 }
 
 func TestPopulateSaveMessageResolved_Attachments(t *testing.T) {
+	t.Parallel()
 	attachmentsJSON := `["file1.txt","file2.png","image.jpg"]`
 
 	args := &reliantv1.SaveMessageNodeArgs{
@@ -102,6 +106,7 @@ func TestPopulateSaveMessageResolved_Attachments(t *testing.T) {
 }
 
 func TestPopulateSaveMessageResolved_EmptyToolCalls(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		args *reliantv1.SaveMessageNodeArgs
@@ -161,6 +166,7 @@ func TestPopulateSaveMessageResolved_EmptyToolCalls(t *testing.T) {
 }
 
 func TestPopulateSaveMessageResolved_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		literal string

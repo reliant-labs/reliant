@@ -9,6 +9,7 @@ import (
 )
 
 func TestEdgeCondition_ToolCallsNotNull(t *testing.T) {
+	t.Parallel()
 	// Simulate what happens when call_llm returns tool calls
 	// After Temporal serialization/deserialization, tool_calls becomes []interface{}{...}
 	nodeOutputs := map[string]interface{}{

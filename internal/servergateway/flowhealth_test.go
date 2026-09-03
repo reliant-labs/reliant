@@ -41,6 +41,7 @@ func held(daemonID string, connectedAt, lastActivity time.Time) services.HeldDae
 }
 
 func TestDaemonFlowHealth_Pure(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	long := now.Add(-2 * time.Hour)         // connected long enough to be evidence
 	fresh := now.Add(-10 * time.Second)     // lease renewed / stream exchanging
@@ -191,6 +192,7 @@ func serveFlowHealth(t *testing.T, lister flowHealthAttachmentLister, streams fl
 }
 
 func TestFlowHealthHandler_Healthy200(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	long := now.Add(-time.Hour)
 	rr := serveFlowHealth(t,
@@ -217,6 +219,7 @@ func TestFlowHealthHandler_Healthy200(t *testing.T) {
 // over EVERY row in the table, so those two orphans held the whole
 // environment at 503 permanently and dragged `forge env smoke` red with it.
 func TestFlowHealthHandler_OrphanRowsStayGreen(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	long := now.Add(-time.Hour)
 	rr := serveFlowHealth(t,
@@ -244,6 +247,7 @@ func TestFlowHealthHandler_OrphanRowsStayGreen(t *testing.T) {
 // for: a daemon this gateway is actively serving whose lease has stopped
 // being renewed — inbound traffic has died while we keep talking into it.
 func TestFlowHealthHandler_StaleLiveAttachment503(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	rr := serveFlowHealth(t,
 		fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-10*time.Minute))}},
@@ -265,6 +269,7 @@ func TestFlowHealthHandler_StaleLiveAttachment503(t *testing.T) {
 // The alternative ("at least one daemon must be attached") is precisely the
 // unachievable assertion that made this endpoint permanently red.
 func TestFlowHealthHandler_EmptyRegistry200(t *testing.T) {
+	t.Parallel()
 	rr := serveFlowHealth(t, fakeLister{}, fakeStreams{}, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200 on an empty registry, got %d (%s)", rr.Code, rr.Body.String())
@@ -282,6 +287,7 @@ func TestFlowHealthHandler_EmptyRegistry200(t *testing.T) {
 // also tightened the in-memory window the stream would look dead to the
 // sweeper instead and the knob would cancel itself out.
 func TestFlowHealthHandler_StaleAfterKnob(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	rr := serveFlowHealth(t,
 		fakeLister{attachments: []*db.DaemonAttachment{att("a", now.Add(-1*time.Second))}},
@@ -298,6 +304,7 @@ func TestFlowHealthHandler_StaleAfterKnob(t *testing.T) {
 // same table, so a registry we cannot read is a flow that is genuinely broken
 // for users.
 func TestFlowHealthHandler_ReadError503(t *testing.T) {
+	t.Parallel()
 	rr := serveFlowHealth(t, fakeLister{err: errors.New("db down")}, fakeStreams{}, "")
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("expected 503 on read error, got %d", rr.Code)
@@ -307,6 +314,7 @@ func TestFlowHealthHandler_ReadError503(t *testing.T) {
 // TestFlowHealthHandler_NilStreamSource keeps the handler total: a nil source
 // asserts nothing rather than panicking on a health probe.
 func TestFlowHealthHandler_NilStreamSource(t *testing.T) {
+	t.Parallel()
 	rr := serveFlowHealth(t, fakeLister{attachments: []*db.DaemonAttachment{att("a", time.Now())}}, nil, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d (%s)", rr.Code, rr.Body.String())
@@ -321,6 +329,7 @@ func TestFlowHealthHandler_NilStreamSource(t *testing.T) {
 // truncates past that). A body that overflows loses its tail — the part an
 // operator reads to find out WHY — so the length is part of the contract.
 func TestFlowHealthBodyFitsSmokeDetail(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	long := now.Add(-time.Hour)
 	cases := map[string]*httptest.ResponseRecorder{

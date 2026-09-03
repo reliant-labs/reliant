@@ -10,6 +10,7 @@ import (
 // TestNativeTypeValidation verifies that native types enable compile-time field validation.
 // Invalid field access like workflow.typo, iter.previous should fail at compile time.
 func TestNativeTypeValidation(t *testing.T) {
+	t.Parallel()
 	config := wfcel.DefaultCELEnvConfig()
 	env, err := wfcel.NewEnv(config)
 	assert.NoError(t, err)

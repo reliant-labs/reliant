@@ -16,6 +16,7 @@ import (
 // TestValidateCELWithCompilation_TypeMismatch tests that type mismatches in comparisons
 // are caught at validation time via CEL compilation.
 func TestValidateCELWithCompilation_TypeMismatch(t *testing.T) {
+	t.Parallel()
 	// Workflow with type mismatch: comparing int to string
 	workflowYAML := `
 name: test-type-mismatch
@@ -62,12 +63,14 @@ edges:
 }
 
 func TestEncodedNodeCELIdentifier(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "simple_node", encodedNodeCELIdentifier("simple_node"))
 	assert.Equal(t, "router_1775339690239", encodedNodeCELIdentifier("router-1775339690239"))
 	assert.Equal(t, "loop_inner_node", encodedNodeCELIdentifier("loop.inner:node"))
 }
 
 func TestRewriteNodesAccess_EncodesHyphenatedNodeIDs(t *testing.T) {
+	t.Parallel()
 	rewritten := rewriteNodesAccess(
 		"nodes.router-1775339690239.response_text == '' || size(nodes.router-1775339690239.message.text) == 0",
 		[]string{"router-1775339690239"},
@@ -76,6 +79,7 @@ func TestRewriteNodesAccess_EncodesHyphenatedNodeIDs(t *testing.T) {
 }
 
 func TestRewriteNodesAccess_PreservesHasAndBareNodeAccess(t *testing.T) {
+	t.Parallel()
 	rewritten := rewriteNodesAccess(
 		"has(nodes.router-1775339690239) || size(nodes.router-1775339690239) == 0 || nodes.router-1775339690239 != null",
 		[]string{"router-1775339690239"},
@@ -88,6 +92,7 @@ func TestRewriteNodesAccess_PreservesHasAndBareNodeAccess(t *testing.T) {
 }
 
 func TestRewriteNodesAccess_IgnoresStringLiteralsAndLongestMatchWins(t *testing.T) {
+	t.Parallel()
 	rewritten := rewriteNodesAccess(
 		"'nodes.router-1.response_text' + nodes.router-1.response_text + nodes.router-1a.response_text",
 		[]string{"router-1", "router-1a"},
@@ -100,6 +105,7 @@ func TestRewriteNodesAccess_IgnoresStringLiteralsAndLongestMatchWins(t *testing.
 }
 
 func TestValidateCELWithCompilation_CELSafeNodeIDOutputs(t *testing.T) {
+	t.Parallel()
 	// Router has fixed top-level fields; child outputs are accessed via outputs sub-field.
 	t.Run("valid access via outputs sub-field and metadata fields", func(t *testing.T) {
 		workflowYAML := `
@@ -161,6 +167,7 @@ outputs:
 // accessed via nodes.router.outputs.<field>. Direct access to child output
 // names at the top level (e.g. nodes.router.message) is an error.
 func TestRouterNodeStrictOutputValidation(t *testing.T) {
+	t.Parallel()
 	makeYAML := func(fieldExpr string) string {
 		return fmt.Sprintf(`
 name: test-router-strict
@@ -441,6 +448,7 @@ outputs:
 
 // TestValidateCELWithCompilation_ValidFieldAccess tests that valid field access passes.
 func TestValidateCELWithCompilation_ValidFieldAccess(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-valid-field
 entry: [my_run]
@@ -471,6 +479,7 @@ outputs:
 
 // TestValidateCELWithCompilation_TypeInference tests that output types are inferred.
 func TestValidateCELWithCompilation_TypeInference(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-type-inference
 entry: [my_run]
@@ -504,6 +513,7 @@ outputs:
 }
 
 func TestValidateCELWithCompilation_MalformedExpressionsAndUnknownSelectors(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-cel-negative
 entry: [step1]
@@ -572,6 +582,7 @@ func containsAt(s, sub string) bool {
 // TestValidateCELWithCompilation_AllBuiltinWorkflows validates all builtin workflows
 // using CEL compilation to catch invalid field access and type errors.
 func TestValidateCELWithCompilation_AllBuiltinWorkflows(t *testing.T) {
+	t.Parallel()
 	// Find all builtin workflow files
 	builtinDir := "../builtin"
 	files, err := filepath.Glob(filepath.Join(builtinDir, "*.yaml"))
@@ -666,6 +677,7 @@ func TestValidateCELWithCompilation_AllBuiltinWorkflows(t *testing.T) {
 // TestValidateCELWithCompilation_AllUserWorkflows validates all user workflows
 // in .reliant/workflows/ directory.
 func TestValidateCELWithCompilation_AllUserWorkflows(t *testing.T) {
+	t.Parallel()
 	// Find user workflow files
 	userDir := "../../../../.reliant/workflows"
 	files, err := filepath.Glob(filepath.Join(userDir, "**/*.yaml"))
@@ -727,6 +739,7 @@ func TestValidateCELWithCompilation_AllUserWorkflows(t *testing.T) {
 // TestBuildWorkflowTypeContext_RefBasedOutputResolution tests that ref-based
 // workflow nodes resolve their outputs via the WorkflowLoader.
 func TestBuildWorkflowTypeContext_RefBasedOutputResolution(t *testing.T) {
+	t.Parallel()
 	parentYAML := `
 name: test-ref-outputs
 entry: [call_agent]
@@ -798,6 +811,7 @@ outputs:
 // TestBuildWorkflowTypeContext_RefBasedLoopOutputResolution tests that ref-based
 // loop nodes resolve their outputs via the WorkflowLoader.
 func TestBuildWorkflowTypeContext_RefBasedLoopOutputResolution(t *testing.T) {
+	t.Parallel()
 	parentYAML := `
 name: test-ref-loop-outputs
 entry: [my_loop]
@@ -848,6 +862,7 @@ outputs:
 // features were designed to fix. Without those features, these workflow patterns
 // would fail at CEL compilation time (load-time validation), not at runtime.
 func TestValidation_CatchesPreFixBugs(t *testing.T) {
+	t.Parallel()
 
 	// Bug 1: Referencing output.log_file in a run node's save_message
 	// Our fix: added log_file and working_dir to RunOutput proto so CEL knows about them.

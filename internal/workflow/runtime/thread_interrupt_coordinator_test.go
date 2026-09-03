@@ -103,6 +103,7 @@ func parkedInterruptWorkflow(thread string, tracker *ChildWorkflowTracker) func(
 }
 
 func TestThreadInterrupt_WakesParkedDetachedWaitAndForcesNextTurn(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	tracker := &ChildWorkflowTracker{}
@@ -129,6 +130,7 @@ func TestThreadInterrupt_WakesParkedDetachedWaitAndForcesNextTurn(t *testing.T) 
 }
 
 func TestThreadInterrupt_ParkedWaitIgnoresOtherThreads(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	tracker := &ChildWorkflowTracker{}

@@ -70,6 +70,7 @@ func watchDispatch(env *testsuite.TestWorkflowEnvironment, name string) *dispatc
 // TestEmitStreamFinalized_DispatchedLocally pins the SUCCESS path — the hot
 // one, fired once per agent turn — as a local activity.
 func TestEmitStreamFinalized_DispatchedLocally(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -115,6 +116,7 @@ func TestEmitStreamFinalized_DispatchedLocally(t *testing.T) {
 // context survives that. It is also rare (measured: one such call in a
 // 51,199-event history), so it costs nothing to leave durable.
 func TestEmitStreamFinalized_TerminalPathStaysRegular(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 

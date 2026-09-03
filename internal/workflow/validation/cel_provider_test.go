@@ -11,6 +11,7 @@ import (
 )
 
 func TestWorkflowTypeProvider_StrictUnknownNestedNodeOutputField(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv()
 	require.NoError(t, err)
 
@@ -33,6 +34,7 @@ func TestWorkflowTypeProvider_StrictUnknownNestedNodeOutputField(t *testing.T) {
 }
 
 func TestWorkflowTypeProvider_DynamicNestedNodeOutputFieldException(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv()
 	require.NoError(t, err)
 
@@ -55,6 +57,7 @@ func TestWorkflowTypeProvider_DynamicNestedNodeOutputFieldException(t *testing.T
 }
 
 func TestWorkflowTypeProvider_AdditionalPropertiesNestedNodeOutputFieldException(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv()
 	require.NoError(t, err)
 
@@ -79,6 +82,7 @@ func TestWorkflowTypeProvider_AdditionalPropertiesNestedNodeOutputFieldException
 }
 
 func TestGetAvailableToolNames_DeterministicOrder(t *testing.T) {
+	t.Parallel()
 	names := getAvailableToolNames(map[string]*ResponseToolSchema{
 		"zeta":  {},
 		"alpha": {},

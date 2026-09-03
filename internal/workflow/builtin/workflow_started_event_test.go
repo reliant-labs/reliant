@@ -19,6 +19,7 @@ import (
 // - Example: role: "{{inputs.message.role}}"
 // - All data access is explicit via inputs.*, workflow.*, or nodes.*
 func TestWorkflowStartedEventData(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		event         *core.WorkflowEvent
@@ -112,6 +113,7 @@ func TestWorkflowStartedEventData(t *testing.T) {
 // - Example: role: "{{inputs.message.role}}"
 // - No implicit passthrough - all data access is explicit
 func TestWorkflowStartedToSaveMessageFlow(t *testing.T) {
+	t.Parallel()
 	// Create workflow inputs with message data (as chat.go does)
 	// This is what gets put into inputs namespace
 	workflowInputs := map[string]interface{}{

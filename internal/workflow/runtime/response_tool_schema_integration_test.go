@@ -26,6 +26,7 @@ func celStringLiteral(s string) *reliantv1.CelString {
 // "__cel_expr__" key. The resulting schema was {"__cel_expr__": {actual schema}}
 // instead of just {actual schema}.
 func TestResponseToolSchema_CELResolution_Integration(t *testing.T) {
+	t.Parallel()
 	// This is the schema the user passes as a workflow input
 	inputSchema := map[string]interface{}{
 		"type":     "object",
@@ -109,6 +110,7 @@ func TestResponseToolSchema_CELResolution_Integration(t *testing.T) {
 // TestResponseToolSchema_InlineSchema_NotMutated verifies that a normal inline
 // schema (not a CEL expression) passes through EvaluateNodeConfig unchanged.
 func TestResponseToolSchema_InlineSchema_NotMutated(t *testing.T) {
+	t.Parallel()
 	inlineSchema, err := structpb.NewStruct(map[string]interface{}{
 		"type":     "object",
 		"required": []interface{}{"verdict"},

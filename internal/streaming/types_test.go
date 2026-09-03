@@ -21,6 +21,7 @@ func identifiedDelta(msgID string, seq int64, thread string, block int, text str
 }
 
 func TestCanCoalesceWith_MessageID(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		a, b StreamingDelta
@@ -67,6 +68,7 @@ func TestCanCoalesceWith_MessageID(t *testing.T) {
 }
 
 func TestCoalesce_KeepsLaterStreamSeq(t *testing.T) {
+	t.Parallel()
 	a := identifiedDelta("m1", 3, "t", 0, "hello ")
 	b := identifiedDelta("m1", 7, "t", 0, "world")
 
@@ -83,6 +85,7 @@ func TestCoalesce_KeepsLaterStreamSeq(t *testing.T) {
 }
 
 func TestCoalesce_ZeroSeqDoesNotClobber(t *testing.T) {
+	t.Parallel()
 	// Legacy id-less deltas carry StreamSeq 0; merging them must not reset an
 	// existing seq (can only happen when both are id-less, but pin it anyway).
 	a := identifiedDelta("", 5, "t", 0, "x")

@@ -32,6 +32,7 @@ func casesEdge(from string, cases []*reliantv1.EdgeCase, defaults ...string) *re
 // =============================================================================
 
 func TestUnreachableNodeDetection(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		workflow    *reliantv1.Workflow
@@ -189,6 +190,7 @@ func TestUnreachableNodeDetection(t *testing.T) {
 // =============================================================================
 
 func TestCycleDetection(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		workflow    *reliantv1.Workflow
@@ -387,6 +389,7 @@ func TestCycleDetection(t *testing.T) {
 // =============================================================================
 
 func TestRouterNodeValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		workflow    *reliantv1.Workflow
@@ -660,6 +663,7 @@ func TestRouterNodeValidation(t *testing.T) {
 }
 
 func TestInlineWorkflowCycleDetection(t *testing.T) {
+	t.Parallel()
 	// Test that cycle detection also works for inline workflows
 	workflow := &reliantv1.Workflow{
 		Name:  "parent",
@@ -702,6 +706,7 @@ func TestInlineWorkflowCycleDetection(t *testing.T) {
 }
 
 func TestInlineWorkflowUnreachableNodeDetection(t *testing.T) {
+	t.Parallel()
 	// Test that unreachable node detection also works for inline workflows
 	workflow := &reliantv1.Workflow{
 		Name:  "parent",
@@ -745,6 +750,7 @@ func TestInlineWorkflowUnreachableNodeDetection(t *testing.T) {
 // ============================================================================
 
 func TestValidateStructure_ResumeNode(t *testing.T) {
+	t.Parallel()
 	makeWf := func(resumeNode string) *reliantv1.Workflow {
 		return &reliantv1.Workflow{
 			Name:       "test",

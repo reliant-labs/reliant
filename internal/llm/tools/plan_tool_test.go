@@ -18,6 +18,7 @@ import (
 // <uuid>" branch, which names no remedy — an agent was observed retrying it
 // eight times in a row against the same empty thread.
 func TestPlanTools_MissingPlanErrorNamesTheRemedy(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -58,6 +59,7 @@ func TestPlanTools_MissingPlanErrorNamesTheRemedy(t *testing.T) {
 }
 
 func TestCreatePlan_InlineDependencies(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -119,6 +121,7 @@ func TestCreatePlan_InlineDependencies(t *testing.T) {
 }
 
 func TestCreatePlan_InlineDependencies_Validation(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -224,6 +227,7 @@ func TestCreatePlan_InlineDependencies_Validation(t *testing.T) {
 }
 
 func TestCreatePlan_NoDependencies_BackwardsCompat(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -254,6 +258,7 @@ func TestCreatePlan_NoDependencies_BackwardsCompat(t *testing.T) {
 }
 
 func TestCreatePlan_TaskMetadata(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -320,6 +325,7 @@ func TestCreatePlan_TaskMetadata(t *testing.T) {
 }
 
 func TestCreatePlan_ParallelWithDependency(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -370,6 +376,7 @@ func TestCreatePlan_ParallelWithDependency(t *testing.T) {
 }
 
 func TestCreatePlan_MixedValidAndInvalidDeps(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

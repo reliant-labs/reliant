@@ -16,6 +16,7 @@ import (
 // NODE_EXECUTION_STATUS_SKIPPED existed in the proto and in db.models the whole
 // time with nothing ever assigning it.
 func TestSkippedNodeGetsSkippedStatus(t *testing.T) {
+	t.Parallel()
 	if got := nodeStatusFor("completed", true); got != db.NodeStatusSkipped {
 		t.Fatalf("a skipped node reports status %v, want %v — a check that never ran is indistinguishable from one that passed",
 			got, db.NodeStatusSkipped)
@@ -25,6 +26,7 @@ func TestSkippedNodeGetsSkippedStatus(t *testing.T) {
 // The lifecycle mapping for nodes that actually ran is unchanged: skipped is a
 // new state, not a reclassification of the existing ones.
 func TestNodeStatusForLifecycleEvents(t *testing.T) {
+	t.Parallel()
 	cases := map[string]db.NodeExecutionStatus{
 		"started":   db.NodeStatusRunning,
 		"completed": db.NodeStatusCompleted,

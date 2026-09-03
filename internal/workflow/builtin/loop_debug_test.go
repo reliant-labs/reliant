@@ -5,6 +5,7 @@ import (
 )
 
 func TestLoopDebug(t *testing.T) {
+	t.Parallel()
 	// DISABLED: This test was for the old one-ring workflow structure that had
 	// nested loops (one_ring_loop → review loop). The workflow has been restructured
 	// to a linear flow with only implement_loop, so this test no longer applies.

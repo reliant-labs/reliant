@@ -159,6 +159,7 @@ func TestPlanReadThrough_OwnPlanWins(t *testing.T) {
 // tasks have no dependency between them, which is precisely the fan-out set —
 // the number is only useful if it says so.
 func TestPlanReadThrough_ReadySetIsStatedAsFanOut(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

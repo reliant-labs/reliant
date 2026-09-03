@@ -16,6 +16,7 @@ func newTestConnector() *DaemonConnector {
 }
 
 func TestStartConnection_AddsToActiveConns(t *testing.T) {
+	t.Parallel()
 	dc := newTestConnector()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -32,6 +33,7 @@ func TestStartConnection_AddsToActiveConns(t *testing.T) {
 }
 
 func TestStopConnection_CancelsActiveConnection(t *testing.T) {
+	t.Parallel()
 	dc := newTestConnector()
 
 	connCtx, connCancel := context.WithCancel(context.Background())
@@ -47,6 +49,7 @@ func TestStopConnection_CancelsActiveConnection(t *testing.T) {
 }
 
 func TestStopConnection_UnknownDaemon_NoOp(t *testing.T) {
+	t.Parallel()
 	dc := newTestConnector()
 
 	// Should not panic.
@@ -58,6 +61,7 @@ func TestStopConnection_UnknownDaemon_NoOp(t *testing.T) {
 }
 
 func TestStartConnection_ReplacesExisting(t *testing.T) {
+	t.Parallel()
 	dc := newTestConnector()
 	ctx := context.Background()
 
@@ -77,6 +81,7 @@ func TestStartConnection_ReplacesExisting(t *testing.T) {
 }
 
 func TestCloseAll_CancelsAllConnections(t *testing.T) {
+	t.Parallel()
 	dc := newTestConnector()
 
 	ctx1, cancel1 := context.WithCancel(context.Background())

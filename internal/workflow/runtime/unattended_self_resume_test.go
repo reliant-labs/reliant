@@ -32,6 +32,7 @@ type SelfResumeSuite struct {
 }
 
 func TestSelfResume(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(SelfResumeSuite))
 }
 

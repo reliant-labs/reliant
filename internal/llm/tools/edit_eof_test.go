@@ -137,6 +137,7 @@ func TestEditReplaceLastDeclaration(t *testing.T) {
 // Split/Join over the same corrupted content, so it dropped the final newline
 // too. It must also not let an insert land past the real last line.
 func TestInsertAtPreservesTrailingNewline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\nbravo\ncharlie\n"), 0o644))
@@ -165,6 +166,7 @@ func TestInsertAtPreservesTrailingNewline(t *testing.T) {
 // strings.Split on exact content would append an empty final element and print
 // a bogus numbered blank line at the bottom of every file.
 func TestViewNoPhantomTrailingLine(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\nbravo\n"), 0o644))
@@ -184,6 +186,7 @@ func TestViewNoPhantomTrailingLine(t *testing.T) {
 // the formatter, which must strip it for display (addLineNumbers already does)
 // without that stripping leaking back into anything that gets written.
 func TestViewCRLFRendersClean(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\r\nbravo\r\n"), 0o644))
@@ -202,6 +205,7 @@ func TestViewCRLFRendersClean(t *testing.T) {
 // TestEditLinesPreservesTrailingNewline: edit_lines reported an extra phantom
 // line and, on the corrupted content, dropped the final newline on write.
 func TestEditLinesPreservesTrailingNewline(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	require.NoError(t, os.WriteFile(path, []byte("alpha\nbravo\ncharlie\n"), 0o644))

@@ -9,6 +9,7 @@ import (
 )
 
 func TestWhileConditionWithToolCalls(t *testing.T) {
+	t.Parallel()
 	// Simulate what the loop while condition gets: outputs from EvaluateWorkflowOutputs
 	// tool_calls is []interface{} containing map[string]interface{} (from JSON deserialization)
 	outputs := map[string]interface{}{

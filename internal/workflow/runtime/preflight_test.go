@@ -47,12 +47,14 @@ func testPreflightConfig() *PreflightConfig {
 }
 
 func TestRequiresDaemon_Nil(t *testing.T) {
+	t.Parallel()
 	if RequiresDaemon(nil, testPreflightConfig()) {
 		t.Error("nil workflow should not require daemon")
 	}
 }
 
 func TestRequiresDaemon_EmptyWorkflow(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{}
 	if RequiresDaemon(wf, testPreflightConfig()) {
 		t.Error("empty workflow should not require daemon")
@@ -60,6 +62,7 @@ func TestRequiresDaemon_EmptyWorkflow(t *testing.T) {
 }
 
 func TestRequiresDaemon_WorkflowLevelDaemon(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Daemon: &reliantv1.CelDaemonSelector{
 			Value: &reliantv1.CelDaemonSelector_Literal{
@@ -73,6 +76,7 @@ func TestRequiresDaemon_WorkflowLevelDaemon(t *testing.T) {
 }
 
 func TestRequiresDaemon_RunNode(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{Id: "build", Type: "run"},
@@ -84,6 +88,7 @@ func TestRequiresDaemon_RunNode(t *testing.T) {
 }
 
 func TestRequiresDaemon_NodeWithDaemonField(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{
@@ -103,6 +108,7 @@ func TestRequiresDaemon_NodeWithDaemonField(t *testing.T) {
 }
 
 func TestRequiresDaemon_ServerOnlyWorkflow(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{
@@ -130,6 +136,7 @@ func TestRequiresDaemon_ServerOnlyWorkflow(t *testing.T) {
 }
 
 func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
+	t.Parallel()
 	// tag:default includes bash (ToolRunsOnDaemon)
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
@@ -158,6 +165,7 @@ func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
 }
 
 func TestRequiresDaemon_CELToolFilter(t *testing.T) {
+	t.Parallel()
 	// CEL expressions can't be statically evaluated — conservatively require daemon
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
@@ -184,6 +192,7 @@ func TestRequiresDaemon_CELToolFilter(t *testing.T) {
 }
 
 func TestRequiresDaemon_InlineSubWorkflow(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{
@@ -207,6 +216,7 @@ func TestRequiresDaemon_InlineSubWorkflow(t *testing.T) {
 }
 
 func TestRequiresDaemon_InlineLoop(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{
@@ -230,6 +240,7 @@ func TestRequiresDaemon_InlineLoop(t *testing.T) {
 }
 
 func TestRequiresDaemon_CallLLMNoToolFilter(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{
@@ -248,6 +259,7 @@ func TestRequiresDaemon_CallLLMNoToolFilter(t *testing.T) {
 }
 
 func TestRequiresDaemon_NilConfig(t *testing.T) {
+	t.Parallel()
 	// With nil config, tool filter analysis should be conservative
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
@@ -276,6 +288,7 @@ func TestRequiresDaemon_NilConfig(t *testing.T) {
 }
 
 func TestRequiresDaemon_ReadOnlyToolsOnly(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{

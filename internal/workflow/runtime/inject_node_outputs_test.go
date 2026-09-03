@@ -321,6 +321,7 @@ func TestInjectWithMissingResponseTextKey(t *testing.T) {
 
 // TestLoopIterationNodeOutputIsolation verifies that each iteration has isolated nodeOutputs
 func TestLoopIterationNodeOutputIsolation(t *testing.T) {
+	t.Parallel()
 	t.Run("iteration outputs are isolated", func(t *testing.T) {
 		iter1Outputs := make(map[string]interface{})
 		iter1Outputs["step_a"] = map[string]interface{}{"value": "iteration-1-value"}

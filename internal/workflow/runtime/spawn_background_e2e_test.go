@@ -262,6 +262,7 @@ type SpawnBackgroundE2ESuite struct {
 }
 
 func TestSpawnBackgroundE2E(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(SpawnBackgroundE2ESuite))
 }
 

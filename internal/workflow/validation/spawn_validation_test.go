@@ -30,6 +30,7 @@ func makeCallLLMNode(id string, spawnEntries []string) *reliantv1.Node {
 }
 
 func TestValidateSpawnRefsLoadable_ExistingWorkflow(t *testing.T) {
+	t.Parallel()
 	loader := func(name string) (*reliantv1.Workflow, error) {
 		if name == "builtin://agent" {
 			return &reliantv1.Workflow{Name: "agent", Entry: []string{"loop"}, Nodes: []*reliantv1.Node{
@@ -48,6 +49,7 @@ func TestValidateSpawnRefsLoadable_ExistingWorkflow(t *testing.T) {
 }
 
 func TestValidateSpawnRefsLoadable_NonExistentWorkflow(t *testing.T) {
+	t.Parallel()
 	loader := func(name string) (*reliantv1.Workflow, error) {
 		return nil, fmt.Errorf("workflow not found: %s", name)
 	}
@@ -63,6 +65,7 @@ func TestValidateSpawnRefsLoadable_NonExistentWorkflow(t *testing.T) {
 }
 
 func TestValidateSpawnRefsLoadable_TemplateSpawnWorkflowNameUsesIdentity(t *testing.T) {
+	t.Parallel()
 	loader := func(name string) (*reliantv1.Workflow, error) {
 		if name == "builtin://agent" {
 			return &reliantv1.Workflow{Name: "agent"}, nil
@@ -79,6 +82,7 @@ func TestValidateSpawnRefsLoadable_TemplateSpawnWorkflowNameUsesIdentity(t *test
 }
 
 func TestValidateSpawnRefsLoadable_TemplateSpawnWorkflowNameExpressionMustBeDirectIdentity(t *testing.T) {
+	t.Parallel()
 	loader := func(name string) (*reliantv1.Workflow, error) {
 		if name == "builtin://agent" {
 			return &reliantv1.Workflow{Name: "agent"}, nil
@@ -106,6 +110,7 @@ func TestValidateSpawnRefsLoadable_TemplateSpawnWorkflowNameExpressionMustBeDire
 }
 
 func TestValidateSpawnRefsLoadable_TemplateSpawnWorkflowNameWithWhitespaceStillValidates(t *testing.T) {
+	t.Parallel()
 	loader := func(name string) (*reliantv1.Workflow, error) {
 		if name == "builtin://agent" {
 			return &reliantv1.Workflow{Name: "agent"}, nil
@@ -122,6 +127,7 @@ func TestValidateSpawnRefsLoadable_TemplateSpawnWorkflowNameWithWhitespaceStillV
 }
 
 func TestValidateSpawnRefsLoadable_SyntheticNameIsRejected(t *testing.T) {
+	t.Parallel()
 	loader := func(name string) (*reliantv1.Workflow, error) {
 		if name == "builtin://agent" {
 			return &reliantv1.Workflow{Name: "agent"}, nil

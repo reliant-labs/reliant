@@ -64,6 +64,7 @@ func terminalStatus(t *testing.T, rec *resumeEnvRecorder) map[string]interface{}
 }
 
 func TestDynamicWorkflow_FailureTerminalRecordsTheVerdict(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, terminalOutcomeYAML)
@@ -82,6 +83,7 @@ func TestDynamicWorkflow_FailureTerminalRecordsTheVerdict(t *testing.T) {
 }
 
 func TestDynamicWorkflow_SuccessTerminalRecordsTheVerdict(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, successOutcomeYAML)
@@ -97,6 +99,7 @@ func TestDynamicWorkflow_SuccessTerminalRecordsTheVerdict(t *testing.T) {
 // TestDynamicWorkflow_UndeclaredOutcomeStaysUndeclared: most workflows declare
 // nothing, and absence must never be recorded as a verdict in either direction.
 func TestDynamicWorkflow_UndeclaredOutcomeStaysUndeclared(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, noOutcomeYAML)
@@ -113,6 +116,7 @@ func TestDynamicWorkflow_UndeclaredOutcomeStaysUndeclared(t *testing.T) {
 // TestDynamicWorkflow_SkippedTerminalStampsNothing: a node whose condition is
 // false never runs, so it must not stamp its verdict on the run.
 func TestDynamicWorkflow_SkippedTerminalStampsNothing(t *testing.T) {
+	t.Parallel()
 	const skippedYAML = `
 name: resume-test
 entry: [work]

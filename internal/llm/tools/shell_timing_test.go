@@ -60,6 +60,7 @@ func runShell(t *testing.T, d *stallDaemon) (BashOutput, ShellResponseMetadata) 
 // what makes a future "why did that take ten minutes?" answerable from the
 // stored transcript instead of from four independent lines of evidence.
 func TestShell_DurationAlwaysInMetadata(t *testing.T) {
+	t.Parallel()
 	_, meta := runShell(t, &stallDaemon{stall: 0, durationMs: 1234})
 
 	if meta.CommandDurationMs != 1234 {
@@ -73,6 +74,7 @@ func TestShell_DurationAlwaysInMetadata(t *testing.T) {
 // cost across thousands of calls; the signal is the DISAGREEMENT, not the
 // number.
 func TestShell_NoTimingBlockWhenClocksAgree(t *testing.T) {
+	t.Parallel()
 	out, _ := runShell(t, &stallDaemon{stall: 0, durationMs: 5})
 
 	if out.Timing != nil {
@@ -84,6 +86,7 @@ func TestShell_NoTimingBlockWhenClocksAgree(t *testing.T) {
 // gate unattributable: the tool call cost far more wall-clock than the command
 // itself ran. When two independent clocks disagree, say so.
 func TestShell_TimingBlockWhenTransportDominates(t *testing.T) {
+	t.Parallel()
 	out, _ := runShell(t, &stallDaemon{stall: 1500 * time.Millisecond, durationMs: 20})
 
 	if out.Timing == nil {
@@ -105,6 +108,7 @@ func TestShell_TimingBlockWhenTransportDominates(t *testing.T) {
 // genuinely long command with ordinary transport overhead must stay quiet,
 // even though the absolute gap is larger than on a fast call.
 func TestShell_NoTimingBlockForSmallOverheadOnSlowCommand(t *testing.T) {
+	t.Parallel()
 	// 1.2s of stall against a command that ran 300s: a 0.4% overhead.
 	out, _ := runShell(t, &stallDaemon{stall: 1200 * time.Millisecond, durationMs: 300_000})
 

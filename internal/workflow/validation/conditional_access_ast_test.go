@@ -11,6 +11,7 @@ import (
 
 // TestAST_DirectAccess_Unsafe tests that direct access to conditional nodes is detected as unsafe.
 func TestAST_DirectAccess_Unsafe(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expr     string
@@ -74,6 +75,7 @@ func TestAST_DirectAccess_Unsafe(t *testing.T) {
 // TestAST_OptionalChaining_Safe tests that optional chaining is correctly identified as safe.
 // Note: CEL's optional chaining syntax uses macros and requires EnableMacroCallTracking
 func TestAST_OptionalChaining_Safe(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		expr string
@@ -118,6 +120,7 @@ func TestAST_OptionalChaining_Safe(t *testing.T) {
 
 // TestAST_HasCheck_Safe tests that has() checks are correctly identified as safe.
 func TestAST_HasCheck_Safe(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		expr string
@@ -155,6 +158,7 @@ func TestAST_HasCheck_Safe(t *testing.T) {
 
 // TestAST_NullComparison_Safe tests that null comparisons are correctly identified as safe.
 func TestAST_NullComparison_Safe(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		expr string
@@ -204,6 +208,7 @@ func TestAST_NullComparison_Safe(t *testing.T) {
 
 // TestAST_StringLiteral_NoFalsePositive tests that string literals don't trigger false positives.
 func TestAST_StringLiteral_NoFalsePositive(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		expr string
@@ -239,6 +244,7 @@ func TestAST_StringLiteral_NoFalsePositive(t *testing.T) {
 
 // TestAST_MultipleNodes_MixedSafety tests expressions with both safe and unsafe accesses.
 func TestAST_MultipleNodes_MixedSafety(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		expr           string
@@ -293,6 +299,7 @@ func TestAST_MultipleNodes_MixedSafety(t *testing.T) {
 
 // TestAST_NestedAccess tests deeply nested field access patterns.
 func TestAST_NestedAccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expr     string
@@ -339,6 +346,7 @@ func TestAST_NestedAccess(t *testing.T) {
 
 // TestAST_ComplexExpressions tests complex real-world expressions.
 func TestAST_ComplexExpressions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		expr           string
@@ -400,6 +408,7 @@ func TestAST_ComplexExpressions(t *testing.T) {
 
 // TestAST_UnconditionalNodes tests that unconditional nodes don't trigger warnings.
 func TestAST_UnconditionalNodes(t *testing.T) {
+	t.Parallel()
 	expr := "nodes.regular_node.output + nodes.another_regular.value"
 
 	env, err := cel.NewEnv(
@@ -419,6 +428,7 @@ func TestAST_UnconditionalNodes(t *testing.T) {
 
 // TestAST_EmptyExpression tests handling of empty/nil expressions.
 func TestAST_EmptyExpression(t *testing.T) {
+	t.Parallel()
 	conditionalNodes := map[string]bool{
 		"cond": true,
 	}

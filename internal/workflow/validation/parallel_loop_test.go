@@ -34,6 +34,7 @@ func hasStructuralError(result *Result, substring string) bool {
 }
 
 func TestParallelLoopRequiresItems(t *testing.T) {
+	t.Parallel()
 	wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
 		Parallel: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
 		Ref:      &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "builtin://agent"}},
@@ -45,6 +46,7 @@ func TestParallelLoopRequiresItems(t *testing.T) {
 }
 
 func TestParallelLoopDisallowsWhile(t *testing.T) {
+	t.Parallel()
 	wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
 		Parallel: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
 		Items:    &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "{{inputs.components}}"}},
@@ -58,6 +60,7 @@ func TestParallelLoopDisallowsWhile(t *testing.T) {
 }
 
 func TestParallelLoopValidOnFailure(t *testing.T) {
+	t.Parallel()
 	for _, valid := range []string{"continue", "fail_fast", "fail_all"} {
 		wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
 			Parallel:  &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
@@ -73,6 +76,7 @@ func TestParallelLoopValidOnFailure(t *testing.T) {
 }
 
 func TestParallelLoopInvalidOnFailure(t *testing.T) {
+	t.Parallel()
 	wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
 		Parallel:  &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
 		Items:     &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "{{inputs.components}}"}},
@@ -86,6 +90,7 @@ func TestParallelLoopInvalidOnFailure(t *testing.T) {
 }
 
 func TestSequentialLoopStillRequiresWhile(t *testing.T) {
+	t.Parallel()
 	wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
 		// No parallel flag = sequential
 		Ref: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "builtin://agent"}},
@@ -97,6 +102,7 @@ func TestSequentialLoopStillRequiresWhile(t *testing.T) {
 }
 
 func TestValidParallelLoopPasses(t *testing.T) {
+	t.Parallel()
 	wf := makeParallelLoopWorkflow(&reliantv1.LoopArgs{
 		Parallel: &reliantv1.CelBool{Value: &reliantv1.CelBool_Literal{Literal: true}},
 		Items:    &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "{{inputs.components}}"}},

@@ -15,6 +15,7 @@ import (
 
 // TestCheckTypeCompatibility_ExactMatch tests that exact type matches are compatible.
 func TestCheckTypeCompatibility_ExactMatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expected *FieldInfo
@@ -63,6 +64,7 @@ func TestCheckTypeCompatibility_ExactMatch(t *testing.T) {
 
 // TestCheckTypeCompatibility_SliceTypes tests array/slice type compatibility.
 func TestCheckTypeCompatibility_SliceTypes(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		expected *FieldInfo
@@ -138,6 +140,7 @@ func TestCheckTypeCompatibility_SliceTypes(t *testing.T) {
 
 // TestCheckTypeCompatibility_DynamicAllowed tests that dynamic types are always allowed.
 func TestCheckTypeCompatibility_DynamicAllowed(t *testing.T) {
+	t.Parallel()
 	expected := &FieldInfo{
 		Kind:     reflect.Slice,
 		IsSlice:  true,
@@ -156,6 +159,7 @@ func TestCheckTypeCompatibility_DynamicAllowed(t *testing.T) {
 
 // TestCheckTypeCompatibility_Mismatch tests type mismatches are detected.
 func TestCheckTypeCompatibility_Mismatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		expected   *FieldInfo
@@ -206,6 +210,7 @@ func TestCheckTypeCompatibility_Mismatch(t *testing.T) {
 
 // TestGetExpectedFieldType_SaveMessage tests expected types for save_message fields.
 func TestGetExpectedFieldType_SaveMessage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		fieldName string
@@ -256,6 +261,7 @@ func TestGetExpectedFieldType_SaveMessage(t *testing.T) {
 
 // TestInferCELOutputType_Simple tests output type inference for simple expressions.
 func TestInferCELOutputType_Simple(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv(
 		cel.Variable("str", cel.StringType),
 		cel.Variable("num", cel.IntType),
@@ -317,6 +323,7 @@ func TestInferCELOutputType_Simple(t *testing.T) {
 
 // TestInferCELOutputType_ObjectLiteral tests object literal construction.
 func TestInferCELOutputType_ObjectLiteral(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv(
 		ext.NativeTypes(
 			ext.ParseStructTag("json"),
@@ -342,6 +349,7 @@ func TestInferCELOutputType_ObjectLiteral(t *testing.T) {
 
 // TestInferCELOutputType_MapExpression tests map/filter operations.
 func TestInferCELOutputType_MapExpression(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv(
 		ext.NativeTypes(
 			ext.ParseStructTag("json"),
@@ -385,6 +393,7 @@ func TestInferCELOutputType_MapExpression(t *testing.T) {
 
 // TestIntegration_ToolResultsValidation tests end-to-end validation of tool_results field.
 func TestIntegration_ToolResultsValidation(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv(
 		ext.NativeTypes(
 			ext.ParseStructTag("json"),
@@ -442,6 +451,7 @@ func TestIntegration_ToolResultsValidation(t *testing.T) {
 
 // TestIntegration_ManualConstruction tests manually constructed objects.
 func TestIntegration_ManualConstruction(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv(
 		ext.NativeTypes(
 			ext.ParseStructTag("json"),
@@ -474,6 +484,7 @@ func TestIntegration_ManualConstruction(t *testing.T) {
 
 // TestIntegration_ConditionalLogic tests conditional expressions.
 func TestIntegration_ConditionalLogic(t *testing.T) {
+	t.Parallel()
 	env, err := cel.NewEnv(
 		ext.NativeTypes(
 			ext.ParseStructTag("json"),
@@ -500,6 +511,7 @@ func TestIntegration_ConditionalLogic(t *testing.T) {
 
 // TestFormatTypeError tests error message formatting.
 func TestFormatTypeError(t *testing.T) {
+	t.Parallel()
 	expected := &FieldInfo{
 		Kind:     reflect.Slice,
 		IsSlice:  true,
@@ -521,6 +533,7 @@ func TestFormatTypeError(t *testing.T) {
 
 // TestInferElementType tests element type inference from list type strings.
 func TestInferElementType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		typeStr  string
@@ -563,6 +576,7 @@ func TestInferElementType(t *testing.T) {
 
 // TestFormatFieldType tests field type formatting for user messages.
 func TestFormatFieldType(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		info *FieldInfo

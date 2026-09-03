@@ -12,6 +12,7 @@ import (
 )
 
 func TestWebSearchTool(t *testing.T) {
+	t.Parallel()
 	tool := NewWebSearchTool()
 
 	assert.Equal(t, WebSearchToolName, tool.Name())
@@ -56,6 +57,7 @@ func TestWebSearchTool(t *testing.T) {
 }
 
 func TestWebSearchToolValidation(t *testing.T) {
+	t.Parallel()
 	tool := NewWebSearchTool()
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 

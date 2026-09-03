@@ -18,6 +18,7 @@ import (
 )
 
 func TestNormalizeOutput_MergesSnakeCaseDefaults(t *testing.T) {
+	t.Parallel()
 	executor := &StepExecutor{}
 	rawOutput := map[string]interface{}{
 		"response_text": "hello",
@@ -36,6 +37,7 @@ func TestNormalizeOutput_MergesSnakeCaseDefaults(t *testing.T) {
 }
 
 func TestNormalizeOutput_CallLLMAddsMissingToolCallsField(t *testing.T) {
+	t.Parallel()
 	executor := &StepExecutor{}
 	rawOutput := map[string]interface{}{
 		"message":      map[string]interface{}{"role": "assistant", "text": "ok"},
@@ -51,6 +53,7 @@ func TestNormalizeOutput_CallLLMAddsMissingToolCallsField(t *testing.T) {
 }
 
 func TestEnsureStepEventRoutable(t *testing.T) {
+	t.Parallel()
 	t.Run("nil step event returns explicit error", func(t *testing.T) {
 		err := EnsureStepEventRoutable(nil)
 		require.Error(t, err)

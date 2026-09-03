@@ -16,6 +16,7 @@ import (
 
 // TestCELEnvConfigs verifies all CEL environment configs can be created
 func TestCELEnvConfigs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name   string
 		config wfcel.CELEnvConfig
@@ -37,6 +38,7 @@ func TestCELEnvConfigs(t *testing.T) {
 
 // TestNewCELEnvFromContext verifies auto-detection of namespaces
 func TestNewCELEnvFromContext(t *testing.T) {
+	t.Parallel()
 	ctx := map[string]interface{}{
 		"inputs":   map[string]interface{}{"mode": "auto"},
 		"workflow": map[string]interface{}{"id": "test"},
@@ -54,6 +56,7 @@ func TestNewCELEnvFromContext(t *testing.T) {
 
 // TestEnsureNamespaceDefaults verifies namespace defaults are set
 func TestEnsureNamespaceDefaults(t *testing.T) {
+	t.Parallel()
 	ctx := map[string]interface{}{
 		"inputs": map[string]interface{}{"x": 1},
 	}
@@ -69,6 +72,7 @@ func TestEnsureNamespaceDefaults(t *testing.T) {
 // TestBuiltinWorkflowCELExpressions validates ALL CEL expressions from builtin workflows
 // compile against the runtime CEL environment. This test would catch namespace mismatches.
 func TestBuiltinWorkflowCELExpressions(t *testing.T) {
+	t.Parallel()
 	// Find builtin workflow directory
 	builtinDir := filepath.Join(".", "..", "builtin")
 	if _, err := os.Stat(builtinDir); os.IsNotExist(err) {
@@ -143,6 +147,7 @@ func TestBuiltinWorkflowCELExpressions(t *testing.T) {
 
 // TestTemplateResolutionCELNamespace verifies that template resolution uses correct namespaces
 func TestTemplateResolutionCELNamespace(t *testing.T) {
+	t.Parallel()
 	config := wfcel.TemplateResolutionCELEnvConfig()
 	env, err := wfcel.NewEnv(config)
 	require.NoError(t, err)
@@ -155,6 +160,7 @@ func TestTemplateResolutionCELNamespace(t *testing.T) {
 
 // TestCELContextBuilder_WithExecContext verifies execution context is set
 func TestCELContextBuilder_WithExecContext(t *testing.T) {
+	t.Parallel()
 	builder := NewCELContextBuilder().
 		WithWorkflow("wf-1", "test-workflow").
 		WithExecContext(&ExecutionContext{
@@ -173,6 +179,7 @@ func TestCELContextBuilder_WithExecContext(t *testing.T) {
 
 // TestCELContextBuilder_WorkflowContext verifies workflow context is properly built
 func TestCELContextBuilder_WorkflowContext(t *testing.T) {
+	t.Parallel()
 	builder := NewCELContextBuilder().
 		WithWorkflow("wf-1", "test-workflow").
 		WithEnvironment("/workspace", "main").
@@ -189,6 +196,7 @@ func TestCELContextBuilder_WorkflowContext(t *testing.T) {
 
 // TestCELContextBuilder_ImplementsCELEvaluator verifies the interface is satisfied
 func TestCELContextBuilder_ImplementsCELEvaluator(t *testing.T) {
+	t.Parallel()
 	builder := NewCELContextBuilder().
 		WithWorkflow("wf-1", "test-workflow").
 		WithInputs(map[string]interface{}{"mode": "auto", "count": float64(5)})
@@ -217,6 +225,7 @@ func TestCELContextBuilder_ImplementsCELEvaluator(t *testing.T) {
 // content string, including substituting a concrete port via CEL's string
 // .replace (ext.Strings) — the shape a workflow author writes.
 func TestPreviewURLTemplateResolvesInInject(t *testing.T) {
+	t.Parallel()
 	builder := NewCELContextBuilder().
 		WithWorkflow("wf-1", "test-workflow").
 		WithInputs(map[string]interface{}{

@@ -31,6 +31,7 @@ func deckPlanSchema() []byte {
 }
 
 func TestValidateJSONWithRepair(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name       string
 		toolName   string
@@ -192,6 +193,7 @@ func TestValidateJSONWithRepair(t *testing.T) {
 // (unwrapToType peels the layers inside a single repair), never a
 // repair-of-a-repair.
 func TestRepairStringifiedJSON_RepairedAtMostOncePerPath(t *testing.T) {
+	t.Parallel()
 	var schemaMap map[string]interface{}
 	if err := json.Unmarshal(deckPlanSchema(), &schemaMap); err != nil {
 		t.Fatal(err)
@@ -218,6 +220,7 @@ func TestRepairStringifiedJSON_RepairedAtMostOncePerPath(t *testing.T) {
 // TestRepairStringifiedJSON_NeverRepairsStringSchemas exercises the "never
 // repair when the schema expects string" rule directly at the walk level.
 func TestRepairStringifiedJSON_NeverRepairsStringSchemas(t *testing.T) {
+	t.Parallel()
 	schemaMap := map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{

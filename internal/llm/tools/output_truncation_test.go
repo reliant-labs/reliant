@@ -18,6 +18,7 @@ import (
 // TestViewToolOutputTruncation tests that large file outputs are properly truncated
 // to stay within the MaxOutputSize limit (16KB)
 func TestViewToolOutputTruncation(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	// Create the view tool
@@ -102,6 +103,7 @@ func TestViewToolOutputTruncation(t *testing.T) {
 
 // TestViewToolLongLineTruncation tests that individual lines over MaxLineLength are truncated
 func TestViewToolLongLineTruncation(t *testing.T) {
+	t.Parallel()
 	tempDir := t.TempDir()
 
 	tool := &viewTool{}
@@ -131,6 +133,7 @@ func TestViewToolLongLineTruncation(t *testing.T) {
 
 // TestTruncationMessagesContainGuidance tests that truncation messages include actionable hints
 func TestTruncationMessagesContainGuidance(t *testing.T) {
+	t.Parallel()
 	t.Run("View truncation message mentions offset", func(t *testing.T) {
 		largeOutput := strings.Repeat("line of code\n", 5000)
 		result := TruncateOutput("view", largeOutput, true)
@@ -180,6 +183,7 @@ func TestTruncationMessagesContainGuidance(t *testing.T) {
 // cliff, a skill has to be delivered under the same ceiling as any other tool
 // result, and head+tail truncation needs enough room to leave two useful ends.
 func TestOutputLimitsConstants(t *testing.T) {
+	t.Parallel()
 	t.Run("the warning threshold arrives before the ceiling", func(t *testing.T) {
 		assert.Less(t, TruncationWarningThreshold, MaxOutputSize,
 			"a warning at or past the ceiling fires only once output is already cut")

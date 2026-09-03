@@ -5,6 +5,7 @@ import (
 )
 
 func TestNewStreamingHub_UnknownDriver(t *testing.T) {
+	t.Parallel()
 	_, err := NewStreamingHub(StreamingConfig{Driver: "redis"})
 	if err == nil {
 		t.Fatal("expected error for unknown driver")
@@ -12,6 +13,7 @@ func TestNewStreamingHub_UnknownDriver(t *testing.T) {
 }
 
 func TestParseStreamingDriver(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		input    string
 		expected StreamingDriver

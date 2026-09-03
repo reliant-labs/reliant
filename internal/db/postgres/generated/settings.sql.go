@@ -159,7 +159,7 @@ const listSettings = `-- name: ListSettings :many
 SELECT id, user_id, project_id, key, value, value_type, created_at, updated_at FROM settings
 WHERE user_id = $1
     AND project_id IS NOT DISTINCT FROM $2
-ORDER BY key
+ORDER BY key, updated_at
 `
 
 type ListSettingsParams struct {
@@ -167,6 +167,12 @@ type ListSettingsParams struct {
 	ProjectID sql.NullString `json:"project_id"`
 }
 
+// ORDER BY key, updated_at: key alone is not a total order, so any duplicate
+// rows came back in an arbitrary sequence and the client — which loads rows
+// into localStorage one after another — could end up keeping a stale value.
+// The upsert above plus the partial unique index mean duplicates should no
+// longer exist; ordering by updated_at as well guarantees that if any survive,
+// the NEWEST wins rather than whichever the planner happened to emit last.
 func (q *Queries) ListSettings(ctx context.Context, arg ListSettingsParams) ([]Setting, error) {
 	rows, err := q.db.QueryContext(ctx, listSettings, arg.UserID, arg.ProjectID)
 	if err != nil {

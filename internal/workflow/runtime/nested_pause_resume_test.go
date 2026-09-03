@@ -174,6 +174,7 @@ func nestedPauseInput(chatID string) WorkflowInput {
 // THE REGRESSION. A pause during a nested step must resume that step, not
 // re-enter the node that dispatched it.
 func TestNestedPause_ResumesInPlaceWithoutReEnteringTheNode(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
@@ -217,6 +218,7 @@ func TestNestedPause_ResumesInPlaceWithoutReEnteringTheNode(t *testing.T) {
 // rather than depending on the pause coordinator's behavior under a cancelled
 // root. If it is ever removed, the failure mode is a spin, not a wrong answer.
 func TestNestedPause_GenuineCancelStillUnwinds(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 

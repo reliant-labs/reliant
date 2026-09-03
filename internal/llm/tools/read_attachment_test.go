@@ -16,6 +16,7 @@ func newReadAttachmentCtx() *rctx.ToolContext {
 }
 
 func TestReadAttachmentReadPDF(t *testing.T) {
+	t.Parallel()
 	tool := &ReadAttachmentTool{}
 
 	t.Run("small PDF returns whole document block", func(t *testing.T) {
@@ -62,6 +63,7 @@ func TestReadAttachmentReadPDF(t *testing.T) {
 }
 
 func TestReadAttachmentGuards(t *testing.T) {
+	t.Parallel()
 	tool := &ReadAttachmentTool{} // nil repo
 
 	resp, err := tool.Execute(newReadAttachmentCtx(), ReadAttachmentParams{AttachmentID: "x"})

@@ -24,6 +24,7 @@ import (
 // task title, so the only way to notice was to read the response closely and
 // realise it named the wrong one.
 func TestUpdateTask_OrdinalIsOneIndexed(t *testing.T) {
+	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

@@ -10,6 +10,7 @@ import (
 // TestAllToolsSchemasResolved verifies that all registered tools have schemas
 // without $ref or $defs, as required by the Anthropic API
 func TestAllToolsSchemasResolved(t *testing.T) {
+	t.Parallel()
 	// Create factory
 	factory := NewToolsFactory(&ToolsOptions{})
 

@@ -253,6 +253,7 @@ type RootThreadMailboxDrainSuite struct {
 }
 
 func TestRootThreadMailboxDrainE2E(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(RootThreadMailboxDrainSuite))
 }
 

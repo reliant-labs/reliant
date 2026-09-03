@@ -15,6 +15,7 @@ import (
 // This validates that nested response_data structures can be accessed correctly,
 // such as: {{nodes.execute_filter.response_data.filtered_results.results}}
 func TestResponseDataCELAccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		responseData  map[string]interface{}
@@ -166,6 +167,7 @@ func TestResponseDataCELAccess(t *testing.T) {
 // TestResponseDataStructureFromExecuteTools tests the actual structure returned by ExecuteTools
 // This validates what execute_tools.go lines 354-364 produce
 func TestResponseDataStructureFromExecuteTools(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		toolName     string
@@ -256,6 +258,7 @@ func TestResponseDataStructureFromExecuteTools(t *testing.T) {
 // TestResponseToolMetadataFlow tests the complete flow from ResponseTool to CEL evaluation
 // This is an integration test that validates the entire chain
 func TestResponseToolMetadataFlow(t *testing.T) {
+	t.Parallel()
 	// Step 1: Simulate LLM calling filtered_results tool
 	llmInput := map[string]interface{}{
 		"results": []interface{}{
@@ -312,6 +315,7 @@ func TestResponseToolMetadataFlow(t *testing.T) {
 
 // TestResponseDataNestedAccess validates nested response_data structure access
 func TestResponseDataNestedAccess(t *testing.T) {
+	t.Parallel()
 	t.Run("correct_implementation", func(t *testing.T) {
 		responseData := map[string]interface{}{
 			"filtered_results": map[string]interface{}{

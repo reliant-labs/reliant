@@ -603,6 +603,7 @@ func TestLoadSemanticParityFixtures_FailureBehavior(t *testing.T) {
 }
 
 func TestFindNodeBySlashPath_FailureBehavior(t *testing.T) {
+	t.Parallel()
 	workflowDef := &reliantv1.Workflow{
 		Name: "root",
 		Nodes: []*reliantv1.Node{{

@@ -27,6 +27,7 @@ type SpawnLifetimeSuite struct {
 }
 
 func TestSpawnLifetime(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(SpawnLifetimeSuite))
 }
 
@@ -393,6 +394,7 @@ func (s *SpawnLifetimeSuite) TestAwaitLiveDetachedSpawns_IgnoresOtherThreads() {
 }
 
 func TestChildWorkflowTracker_DetachedSpawnRegistry(t *testing.T) {
+	t.Parallel()
 	tracker := &ChildWorkflowTracker{}
 	assert.False(t, tracker.hasLiveDetachedSpawns("thread-a"))
 	assert.Equal(t, 0, tracker.detachedCompletionCount("thread-a"))
@@ -414,6 +416,7 @@ func TestChildWorkflowTracker_DetachedSpawnRegistry(t *testing.T) {
 }
 
 func TestChildWorkflowTracker_ListLiveDetachedSpawns_SortedByToolCallID(t *testing.T) {
+	t.Parallel()
 	// Regression for replay-safety: map iteration order is randomized, so
 	// listLiveDetachedSpawns must return a stable order.
 	tracker := &ChildWorkflowTracker{}

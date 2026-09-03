@@ -11,6 +11,7 @@ import (
 // the regex-based template extraction. This correctly handles nested braces in
 // CEL expressions like map/object literals.
 func TestExtractTemplateExpressions(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name     string
 		template string

@@ -25,6 +25,7 @@ import (
 // =========================================================================
 
 func TestSplitProtoToolCalls_AllRegular(t *testing.T) {
+	t.Parallel()
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{Name: "bash", Id: "tc1", Input: "ls"},
 		{Name: "read_file", Id: "tc2", Input: "foo.go"},
@@ -37,6 +38,7 @@ func TestSplitProtoToolCalls_AllRegular(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_AllSpawn(t *testing.T) {
+	t.Parallel()
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{Name: "spawn", Id: "tc1", Input: `{"preset":"researcher","prompt":"analyze"}`},
 		{Name: "spawn", Id: "tc2", Input: `{"preset":"tester","prompt":"test it"}`},
@@ -49,6 +51,7 @@ func TestSplitProtoToolCalls_AllSpawn(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_Mixed(t *testing.T) {
+	t.Parallel()
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{Name: "bash", Id: "tc1", Input: "ls"},
 		{Name: "spawn", Id: "tc2", Input: `{"preset":"researcher","prompt":"do it"}`},
@@ -71,6 +74,7 @@ func TestSplitProtoToolCalls_Mixed(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_EmptyArray(t *testing.T) {
+	t.Parallel()
 	result := splitProtoToolCalls([]*reliantv1.ToolCallMsg{})
 
 	assert.Len(t, result.regularToolCalls, 0)
@@ -78,6 +82,7 @@ func TestSplitProtoToolCalls_EmptyArray(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_NoNameField(t *testing.T) {
+	t.Parallel()
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{Id: "tc1", Input: "something"},
 	}
@@ -90,6 +95,7 @@ func TestSplitProtoToolCalls_NoNameField(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_AllAskUser(t *testing.T) {
+	t.Parallel()
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{Name: "ask_user", Id: "tc1", Input: `{"question":"Which option?"}`},
 		{Name: "ask_user", Id: "tc2", Input: `{"question":"Are you sure?"}`},
@@ -105,6 +111,7 @@ func TestSplitProtoToolCalls_AllAskUser(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_MixedWithAskUser(t *testing.T) {
+	t.Parallel()
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{Name: "bash", Id: "tc1", Input: "ls"},
 		{Name: "spawn", Id: "tc2", Input: `{"preset":"researcher","prompt":"do it"}`},
@@ -132,6 +139,7 @@ func TestSplitProtoToolCalls_MixedWithAskUser(t *testing.T) {
 }
 
 func TestSplitProtoToolCalls_EmptyHasNoAskUser(t *testing.T) {
+	t.Parallel()
 	result := splitProtoToolCalls([]*reliantv1.ToolCallMsg{})
 
 	assert.Len(t, result.regularToolCalls, 0)
@@ -140,6 +148,7 @@ func TestSplitProtoToolCalls_EmptyHasNoAskUser(t *testing.T) {
 }
 
 func TestBuildSpawnChildInputs_NoParentInputs(t *testing.T) {
+	t.Parallel()
 	result := buildSpawnChildInputs(nil)
 
 	assert.Equal(t, "manual", result["mode"])
@@ -148,6 +157,7 @@ func TestBuildSpawnChildInputs_NoParentInputs(t *testing.T) {
 }
 
 func TestBuildSpawnChildInputs_StringModelNotInherited(t *testing.T) {
+	t.Parallel()
 	// The parent's model must NOT be forwarded to the child. A spawned agent runs
 	// under its own preset, whose declared model must win; forwarding the parent
 	// model here would clobber the preset (node args override preset params).
@@ -164,6 +174,7 @@ func TestBuildSpawnChildInputs_StringModelNotInherited(t *testing.T) {
 }
 
 func TestBuildSpawnChildInputs_ObjectModelNotInherited(t *testing.T) {
+	t.Parallel()
 	// Same rule for a rich model selector (id/providers/thinking/etc.): the child
 	// inherits none of it, so its preset's model + thinking stay authoritative.
 	selector := map[string]interface{}{
@@ -184,6 +195,7 @@ func TestBuildSpawnChildInputs_ObjectModelNotInherited(t *testing.T) {
 }
 
 func TestBuildFinalToolResult_WithMessageAndResults(t *testing.T) {
+	t.Parallel()
 	results := []interface{}{
 		map[string]interface{}{"tool_call_id": "tc1", "content": "done"},
 		map[string]interface{}{"tool_call_id": "tc2", "content": "spawned"},
@@ -197,6 +209,7 @@ func TestBuildFinalToolResult_WithMessageAndResults(t *testing.T) {
 }
 
 func TestBuildFinalToolResult_NilMessage_CreatesDefault(t *testing.T) {
+	t.Parallel()
 	results := []interface{}{
 		map[string]interface{}{"tool_call_id": "tc1", "content": "spawned"},
 	}
@@ -211,6 +224,7 @@ func TestBuildFinalToolResult_NilMessage_CreatesDefault(t *testing.T) {
 }
 
 func TestBuildFinalToolResult_EmptyResults_NoMessage(t *testing.T) {
+	t.Parallel()
 	final := buildFinalToolResult([]interface{}{}, nil)
 
 	assert.Equal(t, []interface{}{}, final["tool_results"])
@@ -219,6 +233,7 @@ func TestBuildFinalToolResult_EmptyResults_NoMessage(t *testing.T) {
 }
 
 func TestDeterministicWorkflowID_IsDeterministic(t *testing.T) {
+	t.Parallel()
 	id1 := DeterministicWorkflowID("parent-wf-123", "tool-call-abc")
 	id2 := DeterministicWorkflowID("parent-wf-123", "tool-call-abc")
 
@@ -226,6 +241,7 @@ func TestDeterministicWorkflowID_IsDeterministic(t *testing.T) {
 }
 
 func TestDeterministicWorkflowID_DifferentKeys(t *testing.T) {
+	t.Parallel()
 	id1 := DeterministicWorkflowID("parent-wf-123", "tool-call-abc")
 	id2 := DeterministicWorkflowID("parent-wf-123", "tool-call-xyz")
 
@@ -233,6 +249,7 @@ func TestDeterministicWorkflowID_DifferentKeys(t *testing.T) {
 }
 
 func TestDeterministicWorkflowID_DifferentParents(t *testing.T) {
+	t.Parallel()
 	id1 := DeterministicWorkflowID("parent-wf-123", "tool-call-abc")
 	id2 := DeterministicWorkflowID("parent-wf-456", "tool-call-abc")
 
@@ -240,6 +257,7 @@ func TestDeterministicWorkflowID_DifferentParents(t *testing.T) {
 }
 
 func TestDeterministicThread_MatchesWorkflowID(t *testing.T) {
+	t.Parallel()
 	// DeterministicThread should produce the same value as DeterministicWorkflowID
 	threadID := DeterministicThread("parent-wf-123", "tool-call-abc")
 	workflowID := DeterministicWorkflowID("parent-wf-123", "tool-call-abc")
@@ -248,6 +266,7 @@ func TestDeterministicThread_MatchesWorkflowID(t *testing.T) {
 }
 
 func TestSpawnChildWorkflowConfig_Fields(t *testing.T) {
+	t.Parallel()
 	config := &spawnChildWorkflowConfig{
 		childWorkflowID: "child-123",
 		childThread:     "thread-456",
@@ -275,6 +294,7 @@ type SpawnTestSuite struct {
 }
 
 func TestSpawnSuite(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(SpawnTestSuite))
 }
 

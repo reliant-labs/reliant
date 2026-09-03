@@ -54,6 +54,7 @@ edges: []
 // TestSpawnCancel_LoopStopsWhenThreadCancelled pins that a cancelled thread's
 // loop stops instead of executing turns.
 func TestSpawnCancel_LoopStopsWhenThreadCancelled(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 

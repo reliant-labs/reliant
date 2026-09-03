@@ -14,6 +14,7 @@ import (
 // TestCELAdversarial_FalsePositives tests valid expressions that might incorrectly fail validation.
 // These are expressions that SHOULD pass but might trigger false alarms.
 func TestCELAdversarial_FalsePositives(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		yaml string
@@ -371,6 +372,7 @@ nodes:
 // TestCELAdversarial_FalseNegatives tests invalid expressions that might incorrectly pass validation.
 // These are expressions that SHOULD fail but might slip through.
 func TestCELAdversarial_FalseNegatives(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name          string
 		yaml          string
@@ -617,6 +619,7 @@ edges:
 
 // TestCELAdversarial_TypeSystemEdgeCases tests edge cases in the type system.
 func TestCELAdversarial_TypeSystemEdgeCases(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		yaml        string
@@ -770,6 +773,7 @@ nodes:
 
 // TestCELAdversarial_NullHandling tests null handling edge cases.
 func TestCELAdversarial_NullHandling(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		yaml        string
@@ -928,6 +932,7 @@ edges:
 
 // TestCELAdversarial_ComplexNesting tests deeply nested object access.
 func TestCELAdversarial_ComplexNesting(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		yaml        string
@@ -1082,6 +1087,7 @@ nodes:
 
 // TestCELAdversarial_BuiltinWorkflows tests real builtin workflows for validation issues.
 func TestCELAdversarial_BuiltinWorkflows(t *testing.T) {
+	t.Parallel()
 	builtinDir := "../../../workflow/builtin"
 	workflows := []string{
 		"agent.yaml",

@@ -11,6 +11,7 @@ import (
 
 // TestValidateResponseDataAccess_ValidAccess tests that valid response_data field access passes.
 func TestValidateResponseDataAccess_ValidAccess(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-valid-response-data
 entry: [call_llm]
@@ -65,6 +66,7 @@ outputs:
 
 // TestValidateResponseDataAccess_InvalidToolName tests that invalid tool names are caught.
 func TestValidateResponseDataAccess_InvalidToolName(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-invalid-tool-name
 entry: [call_llm]
@@ -114,6 +116,7 @@ outputs:
 
 // TestValidateResponseDataAccess_InvalidFieldName tests that invalid field names are caught.
 func TestValidateResponseDataAccess_InvalidFieldName(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-invalid-field-name
 entry: [call_llm]
@@ -168,6 +171,7 @@ outputs:
 // TestValidateResponseDataAccess_NoResponseTool tests that accessing response_data
 // without a response tool defined doesn't cause errors (lenient for MCP/external tools).
 func TestValidateResponseDataAccess_NoResponseTool(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-no-response-tool
 entry: [call_llm]
@@ -203,6 +207,7 @@ outputs:
 
 // TestValidateResponseDataAccess_EdgeCondition tests validation in edge conditions.
 func TestValidateResponseDataAccess_EdgeCondition(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-edge-condition
 entry: [call_llm]
@@ -267,6 +272,7 @@ edges:
 // TestValidateResponseDataAccess_MultipleResponseTools tests validation with multiple
 // response tools (multiple call_llm nodes feeding into different execute_tools).
 func TestValidateResponseDataAccess_MultipleResponseTools(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-multiple-response-tools
 entry: [review_llm]

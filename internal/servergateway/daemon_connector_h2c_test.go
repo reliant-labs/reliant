@@ -96,6 +96,7 @@ func startTestDaemonServer(t *testing.T) (baseURL string, opened <-chan struct{}
 // times out on stream.Receive() within 10s. If it passes, the bug must
 // require the cluster environment (NetworkPolicy, MTU, kube-proxy, etc).
 func TestH2cBidiReceive(t *testing.T) {
+	t.Parallel()
 	baseURL, streamOpened, stop := startTestDaemonServer(t)
 	defer stop()
 

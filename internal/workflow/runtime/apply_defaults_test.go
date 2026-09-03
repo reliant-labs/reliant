@@ -16,6 +16,7 @@ import (
 // as missing and applies schema defaults. This prevents CEL "no such overload"
 // errors when comparing nil against numeric types.
 func TestApplyDefaultsNilValues(t *testing.T) {
+	t.Parallel()
 	intDefault := int64(185000)
 	strDefault := "default_value"
 
@@ -147,6 +148,7 @@ func TestApplyDefaultsNilValues(t *testing.T) {
 // TestApplyDefaultsWithGroupInputs verifies that ApplyDefaults creates nested
 // structures for group inputs, enabling CEL access like inputs.agent.model.
 func TestApplyDefaultsWithGroupInputs(t *testing.T) {
+	t.Parallel()
 	strDefault := "gpt-4"
 	numDefault := 0.7
 	intDefault := int64(10)

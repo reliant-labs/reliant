@@ -9,6 +9,7 @@ import (
 // for empty prompts in agent nodes. The actual runtime behavior is tested via integration
 // tests that run real workflows.
 func TestEmptyPromptRuntimeValidation_Documentation(t *testing.T) {
+	t.Parallel()
 	t.Run("Runtime validation prevents empty prompts", func(t *testing.T) {
 		t.Log("")
 		t.Log("╔══════════════════════════════════════════════════════════════════╗")

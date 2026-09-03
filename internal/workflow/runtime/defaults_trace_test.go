@@ -11,6 +11,7 @@ import (
 // TestDefaultsTraceE2E traces the full flow from parsing to buildWorkflowContext
 // to verify defaults are preserved through the entire path
 func TestDefaultsTraceE2E(t *testing.T) {
+	t.Parallel()
 	yamlData := []byte(`
 name: test-loop-workflow
 apiVersion: "0.0.6"
@@ -105,6 +106,7 @@ nodes:
 
 // TestDefaultsJSONRoundTrip tests that defaults survive the YAML->proto round trip
 func TestDefaultsJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	yamlData := []byte(`
 name: test-roundtrip-workflow
 apiVersion: "0.0.6"

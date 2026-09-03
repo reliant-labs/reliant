@@ -7,6 +7,7 @@ import (
 )
 
 func TestExpandToolFilter(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name              string
 		filter            []string
@@ -137,6 +138,7 @@ func TestExpandToolFilter(t *testing.T) {
 }
 
 func TestMatchGlob(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		pattern string
 		name    string
@@ -163,6 +165,7 @@ func TestMatchGlob(t *testing.T) {
 }
 
 func TestExpandToolFilterDeduplication(t *testing.T) {
+	t.Parallel()
 	// Verify that tools are never duplicated even when specified both
 	// explicitly and via tag expansion
 	tests := []struct {
@@ -213,6 +216,7 @@ func TestExpandToolFilterDeduplication(t *testing.T) {
 }
 
 func TestTagDefault(t *testing.T) {
+	t.Parallel()
 	// Verify that tag:default includes the expected default tools
 	mcpTools := []string{"mcp__test__foo"}
 	result := ExpandToolFilter([]string{"tag:default"}, mcpTools)
@@ -259,6 +263,7 @@ func TestTagDefault(t *testing.T) {
 }
 
 func TestTagReadOnly(t *testing.T) {
+	t.Parallel()
 	// Verify that tag:readonly includes only truly read-only tools (don't modify files/code/state)
 	mcpTools := []string{"mcp__test__readonly"}
 	result := ExpandToolFilter([]string{"tag:readonly"}, mcpTools)
@@ -306,6 +311,7 @@ func TestTagReadOnly(t *testing.T) {
 }
 
 func TestTagPlan(t *testing.T) {
+	t.Parallel()
 	// Verify that tag:plan includes all tools available in planning mode
 	mcpTools := []string{}
 	result := ExpandToolFilter([]string{"tag:plan"}, mcpTools)
@@ -355,6 +361,7 @@ func TestTagPlan(t *testing.T) {
 // ============================================================================
 
 func TestParseSpawnFilter(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		spec string
@@ -441,6 +448,7 @@ func TestParseSpawnFilter(t *testing.T) {
 }
 
 func TestExpandToolFilterWithSpawn(t *testing.T) {
+	t.Parallel()
 	mcpTools := []string{"mcp__test__tool"}
 
 	t.Run("extracts spawn configs and expands tools", func(t *testing.T) {
@@ -523,6 +531,7 @@ func TestExpandToolFilterWithSpawn(t *testing.T) {
 }
 
 func TestExpandToolFilterWithSpawn_AskUser(t *testing.T) {
+	t.Parallel()
 	mcpTools := []string{}
 
 	t.Run("ask_user in filter appears in ToolNames", func(t *testing.T) {
@@ -554,6 +563,7 @@ func TestExpandToolFilterWithSpawn_AskUser(t *testing.T) {
 }
 
 func TestExpandToolFilterIgnoresSpawn(t *testing.T) {
+	t.Parallel()
 	// ExpandToolFilter should ignore spawn: entries
 	mcpTools := []string{}
 	filter := []string{
@@ -573,6 +583,7 @@ func TestExpandToolFilterIgnoresSpawn(t *testing.T) {
 }
 
 func TestExpandToolFilterMCPTags(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		filter       []string

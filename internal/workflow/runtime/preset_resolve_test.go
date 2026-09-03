@@ -12,6 +12,7 @@ import (
 // TestResolvePresetName_Literal verifies literal preset names pass through untouched.
 // Regression: the existing literal-preset-name behavior must not change.
 func TestResolvePresetName_Literal(t *testing.T) {
+	t.Parallel()
 	evalCtx := &wfcel.EdgeEvalContext{
 		Inputs: map[string]interface{}{"foo": "bar"},
 	}
@@ -23,6 +24,7 @@ func TestResolvePresetName_Literal(t *testing.T) {
 
 // TestResolvePresetName_LiteralEmpty verifies empty literal stays empty.
 func TestResolvePresetName_LiteralEmpty(t *testing.T) {
+	t.Parallel()
 	got, err := ResolvePresetName("", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "", got)
@@ -30,6 +32,7 @@ func TestResolvePresetName_LiteralEmpty(t *testing.T) {
 
 // TestResolvePresetName_FromInputs verifies templated preset name resolves via inputs.*.
 func TestResolvePresetName_FromInputs(t *testing.T) {
+	t.Parallel()
 	evalCtx := &wfcel.EdgeEvalContext{
 		Inputs: map[string]interface{}{
 			"implementer_preset": "codex-high",
@@ -46,6 +49,7 @@ func TestResolvePresetName_FromInputs(t *testing.T) {
 // NOTE: Sequential loops do not expose iter.item; this test uses inputs keyed
 // by iteration to model per-iteration variation.
 func TestResolvePresetName_PerIteration_Sequential(t *testing.T) {
+	t.Parallel()
 	iterations := []struct {
 		iter     int
 		expected string
@@ -78,6 +82,7 @@ func TestResolvePresetName_PerIteration_Sequential(t *testing.T) {
 // TestResolvePresetName_PerIteration_Parallel simulates the parallel loop
 // case: preset name driven by iter.item.preset where item is a map.
 func TestResolvePresetName_PerIteration_Parallel(t *testing.T) {
+	t.Parallel()
 	items := []map[string]interface{}{
 		{"name": "auth", "preset": "claude-default"},
 		{"name": "billing", "preset": "codex-high"},
@@ -103,6 +108,7 @@ func TestResolvePresetName_PerIteration_Parallel(t *testing.T) {
 // TestResolvePresetName_FailedEval ensures missing references return an error
 // (so callers can log + skip rather than crash the loop).
 func TestResolvePresetName_FailedEval(t *testing.T) {
+	t.Parallel()
 	evalCtx := &wfcel.EdgeEvalContext{
 		Inputs: map[string]interface{}{},
 	}
@@ -114,6 +120,7 @@ func TestResolvePresetName_FailedEval(t *testing.T) {
 // TestResolvePresetName_EmptyStringFromEval verifies that a template resolving
 // to an empty string yields "" (caller will skip).
 func TestResolvePresetName_EmptyStringFromEval(t *testing.T) {
+	t.Parallel()
 	evalCtx := &wfcel.EdgeEvalContext{
 		Inputs: map[string]interface{}{
 			"preset_name": "",
@@ -128,6 +135,7 @@ func TestResolvePresetName_EmptyStringFromEval(t *testing.T) {
 // TestResolvePresetName_EmbeddedTemplateInterpolates verifies that a mixed
 // string with {{...}} is interpolated into the surrounding literal text.
 func TestResolvePresetName_EmbeddedTemplateInterpolates(t *testing.T) {
+	t.Parallel()
 	evalCtx := &wfcel.EdgeEvalContext{
 		Inputs: map[string]interface{}{
 			"variant": "fast",
@@ -142,6 +150,7 @@ func TestResolvePresetName_EmbeddedTemplateInterpolates(t *testing.T) {
 // TestResolvePresetName_PureNonStringReturnsError verifies a pure template
 // resolving to a non-string returns an error (callers will skip).
 func TestResolvePresetName_PureNonStringReturnsError(t *testing.T) {
+	t.Parallel()
 	evalCtx := &wfcel.EdgeEvalContext{
 		Inputs: map[string]interface{}{
 			"idx": int64(42),

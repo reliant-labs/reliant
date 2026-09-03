@@ -16,6 +16,7 @@ import (
 )
 
 func TestDynamicWorkflowAskQuestionDoesNotScheduleUnregisteredActivity(t *testing.T) {
+	t.Parallel()
 	var suite testsuite.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 

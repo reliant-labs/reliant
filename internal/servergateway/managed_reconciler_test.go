@@ -17,6 +17,7 @@ import (
 // creation must retry rather than fail the reconciler permanently. Once the
 // stream appears, creation succeeds and the reconciler proceeds.
 func TestCreateConsumerWithRetry_RetriesWhenStreamMissing(t *testing.T) {
+	t.Parallel()
 	r := &ManagedDaemonReconciler{}
 
 	calls := 0
@@ -45,6 +46,7 @@ func TestCreateConsumerWithRetry_RetriesWhenStreamMissing(t *testing.T) {
 // JetStream API error (code=404 err_code=10059 description="stream not found")
 // is treated as retryable, not just the normalized ErrStreamNotFound sentinel.
 func TestCreateConsumerWithRetry_RetriesRawAPIError(t *testing.T) {
+	t.Parallel()
 	r := &ManagedDaemonReconciler{}
 
 	rawErr := &jetstream.APIError{
@@ -76,6 +78,7 @@ func TestCreateConsumerWithRetry_RetriesRawAPIError(t *testing.T) {
 // TestCreateConsumerWithRetry_NonRetryableSurfaces verifies that errors other
 // than stream-not-found are returned immediately without retrying.
 func TestCreateConsumerWithRetry_NonRetryableSurfaces(t *testing.T) {
+	t.Parallel()
 	r := &ManagedDaemonReconciler{}
 
 	sentinel := errors.New("boom: some other failure")
@@ -97,6 +100,7 @@ func TestCreateConsumerWithRetry_NonRetryableSurfaces(t *testing.T) {
 // TestCreateConsumerWithRetry_CtxCancelStops verifies the retry loop honors
 // context cancellation while the stream remains absent (no infinite spin).
 func TestCreateConsumerWithRetry_CtxCancelStops(t *testing.T) {
+	t.Parallel()
 	r := &ManagedDaemonReconciler{}
 
 	create := func(ctx context.Context) (jetstream.Consumer, error) {

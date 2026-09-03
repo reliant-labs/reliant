@@ -80,6 +80,7 @@ func runInlineSave(
 // The skip itself: role=assistant with no content, no tool calls and no
 // thinking must return cleanly without dispatching anything.
 func TestInlineSave_ContentFreeAssistantIsSkipped(t *testing.T) {
+	t.Parallel()
 	dispatched, err := runInlineSave(t,
 		&reliantv1.SaveMessageConfig{Role: celLit("assistant")},
 		map[string]interface{}{},
@@ -95,6 +96,7 @@ func TestInlineSave_ContentFreeAssistantIsSkipped(t *testing.T) {
 // (strings.EqualFold), so the spelling must not decide whether poison is
 // written.
 func TestInlineSave_ContentFreeAssistantSkipIsCaseInsensitive(t *testing.T) {
+	t.Parallel()
 	for _, role := range []string{"Assistant", "ASSISTANT"} {
 		t.Run(role, func(t *testing.T) {
 			dispatched, err := runInlineSave(t,
@@ -111,6 +113,7 @@ func TestInlineSave_ContentFreeAssistantSkipIsCaseInsensitive(t *testing.T) {
 // enough to make the message real — the skip must not swallow a turn that had
 // something to say.
 func TestInlineSave_AnyContentStillDispatches(t *testing.T) {
+	t.Parallel()
 	t.Run("text", func(t *testing.T) {
 		dispatched, err := runInlineSave(t,
 			&reliantv1.SaveMessageConfig{
@@ -169,6 +172,7 @@ func TestInlineSave_AnyContentStillDispatches(t *testing.T) {
 // message is a different question with a different validator, and must not be
 // swept up by this gate.
 func TestInlineSave_NonAssistantRolesAreUnaffected(t *testing.T) {
+	t.Parallel()
 	for _, role := range []string{"user", "tool", "system"} {
 		t.Run(role, func(t *testing.T) {
 			dispatched, err := runInlineSave(t,

@@ -45,6 +45,7 @@ func iter(n int64) *int64 { return &n }
 // the key must not vary with anything the run owns. Here the same logical frame
 // is keyed twice, as the original run and its resume would.
 func TestInjectKey_IsStableAcrossRuns(t *testing.T) {
+	t.Parallel()
 	frame := func() string {
 		return injectIdempotencyKey(injectOpts("wf-root", "thread-impl", "implement", iter(0)))
 	}
@@ -67,6 +68,7 @@ func TestInjectKey_IsStableAcrossRuns(t *testing.T) {
 // ForChild resolves them to different threads, so collapsing them here would
 // suppress a legitimate injection.
 func TestInjectKey_LoopPresenceIsDistinctFromIterationZero(t *testing.T) {
+	t.Parallel()
 	inLoop := injectIdempotencyKey(injectOpts("wf-root", "thread-a", "implement", iter(0)))
 	noLoop := injectIdempotencyKey(injectOpts("wf-root", "thread-a", "implement", nil))
 
@@ -78,6 +80,7 @@ func TestInjectKey_LoopPresenceIsDistinctFromIterationZero(t *testing.T) {
 // Each iteration of a retry loop is a genuinely new instruction ("Attempt 2 of
 // 4"), so each must inject.
 func TestInjectKey_EachIterationInjects(t *testing.T) {
+	t.Parallel()
 	seen := map[string]int{}
 	for i := int64(0); i < 4; i++ {
 		seen[injectIdempotencyKey(injectOpts("wf-root", "thread-a", "implement", iter(i)))]++
@@ -89,6 +92,7 @@ func TestInjectKey_EachIterationInjects(t *testing.T) {
 
 // Two different nodes seeding two different children must not share a key.
 func TestInjectKey_DistinctNodesAndThreads(t *testing.T) {
+	t.Parallel()
 	base := injectIdempotencyKey(injectOpts("wf-root", "thread-a", "implement", iter(1)))
 
 	assert.NotEqual(t, base,
@@ -144,6 +148,7 @@ func TestInjectKey_MemoIsCapturedViaThreadIdentity(t *testing.T) {
 // concatenating components, so a component that is empty or that contains the
 // separator could let two different frames render the same string.
 func TestInjectKey_ComponentsCannotCollideThroughFormatting(t *testing.T) {
+	t.Parallel()
 	// A node ID containing the separator must not be able to impersonate a
 	// different (thread, node) split.
 	a := injectIdempotencyKey(injectOpts("wf", "thread|implement", "review", iter(0)))

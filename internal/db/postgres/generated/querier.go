@@ -451,6 +451,12 @@ type Querier interface {
 	// List root workflows (parent_id IS NULL) at a specific lifecycle.
 	// Root workflows are the entry points that need dedicated workers.
 	ListRootWorkflowsByStatus(ctx context.Context, arg ListRootWorkflowsByStatusParams) ([]Workflow, error)
+	// ORDER BY key, updated_at: key alone is not a total order, so any duplicate
+	// rows came back in an arbitrary sequence and the client — which loads rows
+	// into localStorage one after another — could end up keeping a stale value.
+	// The upsert above plus the partial unique index mean duplicates should no
+	// longer exist; ordering by updated_at as well guarantees that if any survive,
+	// the NEWEST wins rather than whichever the planner happened to emit last.
 	ListSettings(ctx context.Context, arg ListSettingsParams) ([]Setting, error)
 	ListSettingsByKey(ctx context.Context, arg ListSettingsByKeyParams) ([]Setting, error)
 	// Every spawn call a thread has issued, joined to the child's live workflow

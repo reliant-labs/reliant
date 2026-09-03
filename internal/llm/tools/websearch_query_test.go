@@ -8,6 +8,7 @@ import (
 )
 
 func TestValidateSearchQuery(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		query          string
@@ -113,6 +114,7 @@ func searchSubstring(s, substr string) bool {
 }
 
 func TestFormatWebSearchResultsZeroResults(t *testing.T) {
+	t.Parallel()
 	params := WebSearchParams{
 		Query: "test query",
 		Count: 10,

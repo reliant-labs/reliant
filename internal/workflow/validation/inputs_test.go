@@ -829,6 +829,7 @@ func TestValidateInputs_GroupTypeMismatchAndAmbiguousShapes(t *testing.T) {
 // reject every value with an empty "(allowed: )" list, which bricks in-flight
 // workflows resumed against a schema loaded mid-edit.
 func TestValidateInputs_EmptyEnumAcceptsAnyString(t *testing.T) {
+	t.Parallel()
 	workflow := &reliantv1.Workflow{
 		Name: "empty-enum",
 		Inputs: map[string]*reliantv1.Input{

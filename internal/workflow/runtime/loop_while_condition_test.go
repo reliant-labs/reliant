@@ -18,6 +18,7 @@ import (
 // This specifically tests CEL evaluation behavior. The `while` condition determines
 // whether the loop should continue (true = continue, false = exit).
 func TestLoopWhileConditionEvaluation(t *testing.T) {
+	t.Parallel()
 	t.Run("while: outputs.exit_code != 0 should exit when exit_code is 1", func(t *testing.T) {
 		outputs := map[string]interface{}{
 			"exit_code": 1,
@@ -182,6 +183,7 @@ func TestLoopWhileConditionEvaluation(t *testing.T) {
 // TestLoopExitConditionE2E tests the complete flow: output evaluation -> while condition
 // This simulates what happens inside InlineLoopExecutor when checking if the loop should exit.
 func TestLoopExitConditionE2E(t *testing.T) {
+	t.Parallel()
 	t.Run("loop exits when while condition becomes false", func(t *testing.T) {
 		outputDefs := map[string]string{
 			"exit_code": "{{has(nodes.verify_red) ? nodes.verify_red.exit_code : 0}}",
@@ -245,6 +247,7 @@ func TestLoopExitConditionE2E(t *testing.T) {
 // `inputs.max_iterations` in the while condition fails with "no such overload"
 // because the value comes through as a string instead of an integer.
 func TestLoopWhileConditionWithInputsMaxIterations(t *testing.T) {
+	t.Parallel()
 	t.Run("while with inputs.max_iterations as integer should work", func(t *testing.T) {
 		ctx := &wfcel.LoopEvalContext{
 			Inputs:  map[string]interface{}{"max_iterations": 3},
@@ -316,6 +319,7 @@ func TestLoopWhileConditionWithInputsMaxIterations(t *testing.T) {
 // TestLoopWhileConditionWithApplyDefaults tests the integration between
 // ApplyDefaults type coercion and while condition CEL evaluation.
 func TestLoopWhileConditionWithApplyDefaults(t *testing.T) {
+	t.Parallel()
 	t.Run("ApplyDefaults coerces float64 input to int64 for CEL arithmetic", func(t *testing.T) {
 		defaultVal := int64(10)
 		schema := map[string]*reliantv1.Input{
@@ -380,6 +384,7 @@ func TestLoopWhileConditionWithApplyDefaults(t *testing.T) {
 // TestLoopOutputsFromSubWorkflow tests that sub-workflow outputs are correctly
 // collected and passed to the while condition evaluation.
 func TestLoopOutputsFromSubWorkflow(t *testing.T) {
+	t.Parallel()
 	t.Run("EvaluateWorkflowOutputs with template delimiters", func(t *testing.T) {
 		outputDefs := map[string]string{
 			"exit_code": "{{has(nodes.verify_red) ? nodes.verify_red.exit_code : 0}}",

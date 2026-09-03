@@ -11,6 +11,7 @@ import (
 )
 
 func TestCelParseJsonFunction(t *testing.T) {
+	t.Parallel()
 	t.Run("parses simple object", func(t *testing.T) {
 		env, err := cel.NewEnv(
 			append([]cel.EnvOption{cel.StdLib()}, wfcel.CustomFunctions()...)...,
@@ -243,6 +244,7 @@ func TestCelParseJsonFunction(t *testing.T) {
 }
 
 func TestParseJsonWithMemberFunctions(t *testing.T) {
+	t.Parallel()
 	// Note: last() and first() are member overloads (myList.last(), not last(myList))
 	t.Run("parseJson result with array indexing", func(t *testing.T) {
 		env, err := cel.NewEnv(

@@ -36,6 +36,7 @@ import (
 // `initChildWorkflow(ChildWorkflowInitOpts{...})` in this package), never from
 // a hand-maintained list of files, and an empty set fails loudly.
 func TestEveryChildWorkflowInitPassesParentThread(t *testing.T) {
+	t.Parallel()
 	fset := token.NewFileSet()
 	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
 		return !strings.HasSuffix(fi.Name(), "_test.go")
@@ -99,6 +100,7 @@ func (nopLogger) Warn(string, ...interface{})  {}
 func (nopLogger) Error(string, ...interface{}) {}
 
 func TestBuildInjectMessageConfig(t *testing.T) {
+	t.Parallel()
 	logger := nopLogger{}
 
 	t.Run("defaults role and display style", func(t *testing.T) {
@@ -127,6 +129,7 @@ func TestBuildInjectMessageConfig(t *testing.T) {
 }
 
 func TestResolveInjectAttachments(t *testing.T) {
+	t.Parallel()
 	logger := nopLogger{}
 
 	t.Run("nil inject config fields", func(t *testing.T) {

@@ -22,6 +22,7 @@ func celExpr(s string) *reliantv1.CelString {
 }
 
 func TestEvaluateSaveMessageConfig_NullAttachments(t *testing.T) {
+	t.Parallel()
 	// This test verifies that CEL expressions returning null for attachments
 	// are handled correctly. The expression:
 	//   "{{has(inputs.attachments) ? inputs.attachments : null}}"
@@ -145,6 +146,7 @@ func TestEvaluateSaveMessageConfig_NullAttachments(t *testing.T) {
 // 'iter'"). After the fix iter resolves from the loop iteration (or a zero default
 // when not in a loop).
 func TestEvaluateSaveMessageConfig_IterInContent(t *testing.T) {
+	t.Parallel()
 	config := &reliantv1.SaveMessageConfig{
 		Role:    celLiteral("assistant"),
 		Content: celExpr("## Implementation Notes (Attempt {{iter.iteration + 1}})"),
@@ -193,6 +195,7 @@ func TestEvaluateSaveMessageConfig_IterInContent(t *testing.T) {
 }
 
 func TestEvaluateSaveMessageConfig_ThreadField(t *testing.T) {
+	t.Parallel()
 	// Thread is now always inherited from execution context (workflowThread parameter)
 	// No explicit thread field in SaveMessageConfig anymore
 	t.Run("thread is always inherited from workflow context", func(t *testing.T) {
@@ -227,6 +230,7 @@ func TestEvaluateSaveMessageConfig_ThreadField(t *testing.T) {
 }
 
 func TestEvaluateCELTemplate_MultilineYAML(t *testing.T) {
+	t.Parallel()
 	// This test verifies that multi-line YAML strings (using | operator) are
 	// correctly handled when they contain pure CEL expressions.
 	// YAML's | operator preserves whitespace, which was causing pure expressions
@@ -321,6 +325,7 @@ func TestEvaluateCELTemplate_MultilineYAML(t *testing.T) {
 }
 
 func TestConvertToToolCalls_TypeAssertions(t *testing.T) {
+	t.Parallel()
 	// Test that type assertion failures are caught and reported, not silently ignored
 	tests := []struct {
 		name        string
@@ -425,6 +430,7 @@ func TestConvertToToolCalls_TypeAssertions(t *testing.T) {
 }
 
 func TestConvertToToolResults_TypeAssertions(t *testing.T) {
+	t.Parallel()
 	// Test that type assertion failures are caught and reported, not silently ignored
 	tests := []struct {
 		name        string
@@ -494,6 +500,7 @@ func TestConvertToToolResults_TypeAssertions(t *testing.T) {
 }
 
 func TestEvaluateSaveMessageConfig_ThinkingOutput(t *testing.T) {
+	t.Parallel()
 	// Test that thinking output is correctly extracted from activity output
 	// and included in the SaveMessageInput for proper persistence.
 
@@ -608,6 +615,7 @@ func TestEvaluateSaveMessageConfig_ThinkingOutput(t *testing.T) {
 // identity from the workflow context, so messages.model / messages.agent are
 // populated for assistant messages.
 func TestEvaluateSaveMessageConfig_ModelAndAgent(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		activityOutput  map[string]interface{}

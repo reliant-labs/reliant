@@ -14,6 +14,7 @@ import (
 // The RetryExhausted flag should NOT prevent routing — the caller is
 // responsible for checking it before calling EnsureStepEventRoutable.
 func TestStepEvent_RetryExhausted_FlagBehavior(t *testing.T) {
+	t.Parallel()
 	t.Run("RetryExhausted event with error is routable error", func(t *testing.T) {
 		event := &StepEvent{
 			StepID:         "call_llm",
@@ -65,6 +66,7 @@ func TestStepEvent_RetryExhausted_FlagBehavior(t *testing.T) {
 // TestPauseController_RequestPause verifies the RequestPause callback works
 // and is nil-safe when not set.
 func TestPauseController_RequestPause(t *testing.T) {
+	t.Parallel()
 	t.Run("DoRequestPause with nil receiver", func(t *testing.T) {
 		var pc *PauseController
 		// Should not panic

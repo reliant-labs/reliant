@@ -10,6 +10,7 @@ import (
 )
 
 func TestGetBoolInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		inputs      map[string]interface{}
@@ -103,6 +104,7 @@ func TestGetBoolInput(t *testing.T) {
 }
 
 func TestGetStringInput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		inputs      map[string]interface{}
@@ -212,6 +214,7 @@ func TestGetStringInput(t *testing.T) {
 }
 
 func TestModeFromInputs(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		inputs       map[string]interface{}
@@ -269,6 +272,7 @@ func TestModeFromInputs(t *testing.T) {
 }
 
 func TestWorkflowInputData_ToMap(t *testing.T) {
+	t.Parallel()
 	// Test basic fields using builder pattern
 	t.Run("basic fields", func(t *testing.T) {
 		data := NewWorkflowInputs().
@@ -360,6 +364,7 @@ func TestWorkflowInputData_ToMap(t *testing.T) {
 }
 
 func TestNewChatContext(t *testing.T) {
+	t.Parallel()
 	ctx := NewChatContext("chat-456")
 
 	if ctx.ID != "chat-456" {
@@ -371,6 +376,7 @@ func TestNewChatContext(t *testing.T) {
 // TestBuildWorkflowContext_ThreadAccessibility tests that thread is accessible via inputs.thread
 // NOTE: workflow.thread is DEPRECATED and no longer exposed - use inputs.thread instead
 func TestBuildWorkflowContext_ThreadAccessibility(t *testing.T) {
+	t.Parallel()
 	t.Run("thread is accessible via inputs.thread", func(t *testing.T) {
 		inputs := map[string]interface{}{
 			"thread": "test-thread-path",
@@ -420,6 +426,7 @@ func TestBuildWorkflowContext_ThreadAccessibility(t *testing.T) {
 
 // TestGetExecContext tests the GetExecContext helper on WorkflowInput.
 func TestGetExecContext(t *testing.T) {
+	t.Parallel()
 	t.Run("returns ExecContext when set", func(t *testing.T) {
 		execCtx := &ExecutionContext{
 			WorkflowID:   "wf-123",
@@ -539,6 +546,7 @@ func TestGetExecContext(t *testing.T) {
 }
 
 func TestHumanizeRetryError(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		err          error

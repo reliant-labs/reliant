@@ -61,6 +61,7 @@ type testCallLLMOutput struct {
 // JSON round-trip (which is what Temporal does with activity outputs).
 
 func TestCallLLMOutput_ToolCallsJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	// Construct a CallLLMOutput as the call_llm activity would produce it
 	output := testCallLLMOutput{
 		ResponseText: "Let me check that file for you.",
@@ -119,6 +120,7 @@ func TestCallLLMOutput_ToolCallsJSONRoundTrip(t *testing.T) {
 }
 
 func TestCallLLMOutput_EmptyToolCalls_RoundTrip(t *testing.T) {
+	t.Parallel()
 	// When the LLM returns no tool calls (text-only response)
 	output := testCallLLMOutput{
 		ResponseText: "Hello, how can I help?",
@@ -147,6 +149,7 @@ func TestCallLLMOutput_EmptyToolCalls_RoundTrip(t *testing.T) {
 }
 
 func TestCallLLMOutput_NilToolCalls_RoundTrip(t *testing.T) {
+	t.Parallel()
 	// When the LLM returns nil tool calls (no tool_calls field at all)
 	output := testCallLLMOutput{
 		ResponseText: "Hello",
@@ -179,6 +182,7 @@ func TestCallLLMOutput_NilToolCalls_RoundTrip(t *testing.T) {
 // correctly evaluates when tool calls come from a JSON round-tripped CallLLMOutput.
 
 func TestEdgeCondition_ToolCallsFromJSONRoundTrip(t *testing.T) {
+	t.Parallel()
 	// This test simulates the exact data flow:
 	// 1. CallLLM produces output with ToolCalls
 	// 2. Temporal serializes/deserializes via JSON
@@ -278,6 +282,7 @@ func TestEdgeCondition_ToolCallsFromJSONRoundTrip(t *testing.T) {
 }
 
 func TestEdgeCondition_ToolCallsNotText(t *testing.T) {
+	t.Parallel()
 	// Regression test: tool calls should NOT be plain text strings in the output.
 	// When tool calls appear as text (the bug), tool_calls field will be null/empty
 	// and the text will be embedded in response_text instead.
@@ -349,6 +354,7 @@ func TestEdgeCondition_ToolCallsNotText(t *testing.T) {
 // to state machine routing, which is the exact production path.
 
 func TestCallLLMToStateMachineRouting(t *testing.T) {
+	t.Parallel()
 	wfJSON := `{
 		"name": "test-agent",
 		"entry": ["call_llm"],
@@ -436,6 +442,7 @@ func TestCallLLMToStateMachineRouting(t *testing.T) {
 // Tests that {{output.tool_calls}} properly resolves in save_message configuration.
 
 func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
+	t.Parallel()
 	t.Run("output.tool_calls resolves to structured array", func(t *testing.T) {
 		// Build a save_message config that references output.tool_calls
 		config := &reliantv1.SaveMessageConfig{
@@ -640,6 +647,7 @@ func TestSaveMessageConfig_OutputToolCallsResolution(t *testing.T) {
 // from the DriverResponse, matching the real data flow.
 
 func TestCallLLMOutput_ToolCallFieldTypes(t *testing.T) {
+	t.Parallel()
 	// After JSON round-trip, verify the types of tool call fields match what CEL expects
 	output := testCallLLMOutput{
 		ToolCalls: []testToolCall{

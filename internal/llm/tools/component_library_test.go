@@ -15,6 +15,7 @@ import (
 )
 
 func TestComponentLibraryRegistry(t *testing.T) {
+	t.Parallel()
 	lib := components.NewLibrary()
 	reg := lib.Registry()
 
@@ -51,6 +52,7 @@ func TestComponentLibraryRegistry(t *testing.T) {
 }
 
 func TestComponentLibraryCategories(t *testing.T) {
+	t.Parallel()
 	lib := components.NewLibrary()
 	counts := make(map[components.Category]int)
 	for _, entry := range lib.Registry() {
@@ -73,6 +75,7 @@ func TestComponentLibraryCategories(t *testing.T) {
 }
 
 func TestComponentLibraryGet(t *testing.T) {
+	t.Parallel()
 	tool := &componentLibraryTool{}
 
 	// Get existing component
@@ -101,6 +104,7 @@ func TestComponentLibraryGet(t *testing.T) {
 }
 
 func TestComponentLibrarySearch(t *testing.T) {
+	t.Parallel()
 	tool := &componentLibraryTool{}
 
 	// Search by tag keyword
@@ -159,6 +163,7 @@ func TestComponentLibrarySearch(t *testing.T) {
 }
 
 func TestComponentLibraryList(t *testing.T) {
+	t.Parallel()
 	tool := &componentLibraryTool{}
 	lib := components.NewLibrary()
 
@@ -193,6 +198,7 @@ func TestComponentLibraryList(t *testing.T) {
 }
 
 func TestComponentLibraryInstall(t *testing.T) {
+	t.Parallel()
 	tool := &componentLibraryTool{}
 
 	t.Run("install writes file to disk", func(t *testing.T) {
@@ -287,6 +293,7 @@ func TestComponentLibraryInstall(t *testing.T) {
 }
 
 func TestComponentLibraryRequiresPermission(t *testing.T) {
+	t.Parallel()
 	tool := &componentLibraryTool{}
 
 	// Read-only actions don't require permission
@@ -311,6 +318,7 @@ func TestComponentLibraryRequiresPermission(t *testing.T) {
 }
 
 func TestComponentLibraryToolInterface(t *testing.T) {
+	t.Parallel()
 	tool := NewComponentLibraryTool()
 	if tool.Name() != "component_library" {
 		t.Errorf("tool name = %q, want %q", tool.Name(), "component_library")

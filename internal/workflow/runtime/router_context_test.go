@@ -10,6 +10,7 @@ import (
 )
 
 func TestBuildRoutingSystemPrompt(t *testing.T) {
+	t.Parallel()
 	t.Run("custom system prompt override", func(t *testing.T) {
 		candidates := []routerWorkflowInfo{
 			{
@@ -133,6 +134,7 @@ func TestBuildRoutingSystemPrompt(t *testing.T) {
 }
 
 func TestBuildRoutingResponseSchema(t *testing.T) {
+	t.Parallel()
 	t.Run("schema contains workflow enum with all candidate refs", func(t *testing.T) {
 		candidates := []routerWorkflowInfo{
 			{
@@ -224,6 +226,7 @@ func TestBuildRoutingResponseSchema(t *testing.T) {
 }
 
 func TestGetInputDescription(t *testing.T) {
+	t.Parallel()
 	t.Run("string input", func(t *testing.T) {
 		input := &reliantv1.Input{
 			Type: "string",
@@ -271,6 +274,7 @@ func TestGetInputDescription(t *testing.T) {
 }
 
 func TestFilterPresetsByAllowed(t *testing.T) {
+	t.Parallel()
 	allPresets := []*preset.Preset{
 		{Name: "general", Description: "General purpose"},
 		{Name: "researcher", Description: "Research specialist"},

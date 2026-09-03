@@ -99,6 +99,7 @@ func runWait(t *testing.T, d daemon.Client, params BashWaitParams) (ToolResponse
 // A process that has already finished must return immediately with its exit
 // code — the whole point is that waiting costs no model round-trips.
 func TestBashWait_ReturnsExitCodeWhenProcessExits(t *testing.T) {
+	t.Parallel()
 	d := &scriptedDaemon{
 		steps:        []*daemon.ProcessInfo{running("p1"), running("p1"), exited("p1", 0)},
 		output:       "ok 42 tests passed",
@@ -129,6 +130,7 @@ func TestBashWait_ReturnsExitCodeWhenProcessExits(t *testing.T) {
 // A still-running process is NOT an error. Returning one would teach the model
 // that a slow build failed, which is the opposite of what happened.
 func TestBashWait_TimeoutIsNotAnError(t *testing.T) {
+	t.Parallel()
 	d := &scriptedDaemon{
 		steps:        []*daemon.ProcessInfo{running("p1")},
 		listErrAfter: -1,
@@ -161,6 +163,7 @@ func TestBashWait_TimeoutIsNotAnError(t *testing.T) {
 // A bad process id must fail fast. Blocking the full budget and then saying
 // "not found" wastes exactly the time this tool exists to save.
 func TestBashWait_UnknownProcessFailsFast(t *testing.T) {
+	t.Parallel()
 	d := &scriptedDaemon{steps: []*daemon.ProcessInfo{nil}, listErrAfter: -1}
 
 	start := time.Now()
@@ -186,6 +189,7 @@ func TestBashWait_UnknownProcessFailsFast(t *testing.T) {
 // to outlast it would be killed mid-flight and report a hard timeout — the very
 // failure `sleep 300` produced.
 func TestBashWait_ClampsTimeoutBelowToolCeiling(t *testing.T) {
+	t.Parallel()
 	d := &scriptedDaemon{steps: []*daemon.ProcessInfo{exited("p1", 0)}, listErrAfter: -1}
 
 	// Ask for an hour; the call must still return promptly.
@@ -213,6 +217,7 @@ func TestBashWait_ClampsTimeoutBelowToolCeiling(t *testing.T) {
 
 // A transient listing failure must not abandon a wait that may be nearly done.
 func TestBashWait_SurvivesTransientListingFailure(t *testing.T) {
+	t.Parallel()
 	d := &scriptedDaemon{
 		steps:        []*daemon.ProcessInfo{running("p1"), running("p1"), exited("p1", 3)},
 		output:       "FAILED",
@@ -232,6 +237,7 @@ func TestBashWait_SurvivesTransientListingFailure(t *testing.T) {
 // Cancelling the surrounding tool call must stop the loop rather than keep
 // polling a daemon for a result nobody is waiting on.
 func TestBashWait_StopsWhenToolCallCancelled(t *testing.T) {
+	t.Parallel()
 	d := &scriptedDaemon{steps: []*daemon.ProcessInfo{running("p1")}, listErrAfter: -1}
 
 	ctx, cancel := context.WithCancel(context.Background())

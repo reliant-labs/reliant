@@ -8,6 +8,7 @@ import (
 )
 
 func TestCheckOutputSize(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		toolName    string
@@ -59,6 +60,7 @@ func TestCheckOutputSize(t *testing.T) {
 }
 
 func TestTruncateOutput(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		toolName string
@@ -122,6 +124,7 @@ func TestTruncateOutput(t *testing.T) {
 }
 
 func TestGetToolSpecificSuggestions(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		toolName    string
 		expectCount int // minimum expected suggestions
@@ -145,6 +148,7 @@ func TestGetToolSpecificSuggestions(t *testing.T) {
 }
 
 func TestOutputLimitError(t *testing.T) {
+	t.Parallel()
 	err := &OutputLimitError{
 		ToolName:   ShellToolName,
 		OutputSize: 60000,
@@ -168,6 +172,7 @@ func TestOutputLimitError(t *testing.T) {
 }
 
 func TestViewToolTruncation(t *testing.T) {
+	t.Parallel()
 	// View tool should use head+tail truncation like bash
 	largeOutput := strings.Repeat("line of code\n", 5000)
 	result := TruncateOutput("view", largeOutput, true)
@@ -190,6 +195,7 @@ func TestViewToolTruncation(t *testing.T) {
 }
 
 func TestViewSuggestionsExist(t *testing.T) {
+	t.Parallel()
 	suggestions := getToolSpecificSuggestions("view")
 	if len(suggestions) < 2 {
 		t.Errorf("expected at least 2 suggestions for view, got %d", len(suggestions))
@@ -210,6 +216,7 @@ func TestViewSuggestionsExist(t *testing.T) {
 
 // A skill that fits must pass through untouched — no notice, no reformatting.
 func TestCapSkillContent_UnderBudgetIsUntouched(t *testing.T) {
+	t.Parallel()
 	body := strings.Repeat("a", MaxSkillBodySize)
 	got, truncated := CapSkillContent(body)
 	if truncated {
@@ -224,6 +231,7 @@ func TestCapSkillContent_UnderBudgetIsUntouched(t *testing.T) {
 // load is where the tool appends its sub-skill / related-skill / suggested-tools
 // pointers, so a silent cut severs the links to the rest of the skill tree.
 func TestCapSkillContent_OverBudgetIsMarkedAndFits(t *testing.T) {
+	t.Parallel()
 	// Size the fixture FROM the budget rather than to a fixed line count: a
 	// literal count silently stops exercising truncation the moment the
 	// ceiling is raised, and the test then passes while proving nothing.
@@ -264,6 +272,7 @@ func TestCapSkillContent_OverBudgetIsMarkedAndFits(t *testing.T) {
 // The notice length varies with the digits of the numbers it reports, so the
 // fitting loop has to converge for any input size, never overshooting.
 func TestCapSkillContent_FitsAtEveryOversizeBoundary(t *testing.T) {
+	t.Parallel()
 	for _, extra := range []int{1, 9, 99, 999, 9_999, 99_999, 1_000_000} {
 		body := strings.Repeat("x", MaxSkillBodySize+extra)
 		got, truncated := CapSkillContent(body)
@@ -279,6 +288,7 @@ func TestCapSkillContent_FitsAtEveryOversizeBoundary(t *testing.T) {
 // TruncateOutput must route the skill tool to the skill-aware cap rather than
 // the generic tail cut, so both skill-delivery paths emit identical bytes.
 func TestTruncateOutput_SkillUsesSkillCap(t *testing.T) {
+	t.Parallel()
 	body := strings.Repeat("skill content line\n", 2000)
 	viaTruncate := TruncateOutput(ToolSkill, body, true)
 	viaCap, _ := CapSkillContent(body)
@@ -299,6 +309,7 @@ func TestTruncateOutput_SkillUsesSkillCap(t *testing.T) {
 // would still have arrived cut at 24KB — which is exactly what drove eleven
 // fan-out agents to page a generated proto by `grep`, one message at a time.
 func TestOutputCeiling_ViewReadsMoreThanOtherTools(t *testing.T) {
+	t.Parallel()
 	big := strings.Repeat("x", 40_000) // over MaxOutputSize, under MaxReadSize
 
 	t.Run("view delivers it whole", func(t *testing.T) {

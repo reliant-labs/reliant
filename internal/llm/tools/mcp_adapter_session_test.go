@@ -38,6 +38,7 @@ func (r *sessionRecordingRuntime) CallTool(session, _, _ string, _ map[string]in
 // not the chat: the engine fans several threads out inside one chat, and those
 // siblings are exactly the callers that were clobbering each other.
 func TestMCPToolAdapter_PassesTheAgentThreadAsTheSessionKey(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		chatID string

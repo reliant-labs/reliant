@@ -63,6 +63,7 @@ func validateInject(t *testing.T, yaml string) []*Error {
 // the exact expression the removed weakening used to accept — inputs.preview_url_template,
 // with no such declared input — must now be a hard validation error.
 func TestReservedInputs_PreviewURLTemplateNowErrors(t *testing.T) {
+	t.Parallel()
 	yaml := buildInjectWorkflow(t, "preview-url-undeclared", "", "{{ inputs.preview_url_template }}")
 	errs := validateInject(t, yaml)
 	require.NotEmpty(t, errs,
@@ -73,6 +74,7 @@ func TestReservedInputs_PreviewURLTemplateNowErrors(t *testing.T) {
 // TestReservedInputs_ArbitraryUndeclaredErrors proves the validator is not merely
 // blocking one name — any undeclared input reference fails.
 func TestReservedInputs_ArbitraryUndeclaredErrors(t *testing.T) {
+	t.Parallel()
 	yaml := buildInjectWorkflow(t, "arbitrary-undeclared", "", "{{ inputs.totally_made_up_thing }}")
 	errs := validateInject(t, yaml)
 	require.NotEmpty(t, errs, "an arbitrary undeclared input reference must be a hard error")
@@ -84,6 +86,7 @@ func TestReservedInputs_ArbitraryUndeclaredErrors(t *testing.T) {
 // session_daemon_id, project_path, and spawned_by may be absent at runtime, so a
 // template reference would be a foot-gun — it must fail static validation.
 func TestReservedInputs_ConditionalEngineValuesNotReferenceable(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"session_daemon_id", "project_path", "spawned_by"} {
 		t.Run(name, func(t *testing.T) {
 			yaml := buildInjectWorkflow(t, "conditional-"+name, "", "{{ inputs."+name+" }}")
@@ -98,6 +101,7 @@ func TestReservedInputs_ConditionalEngineValuesNotReferenceable(t *testing.T) {
 // TestReservedInputs_SystemKeywordsValidateCleanly proves the always-injected trio
 // is declared as typed reserved keywords, so referencing them is allowed.
 func TestReservedInputs_SystemKeywordsValidateCleanly(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"chat_id", "workflow_id", "unique_activity_id"} {
 		t.Run(name, func(t *testing.T) {
 			yaml := buildInjectWorkflow(t, "reserved-"+name, "", "{{ inputs."+name+" }}")
@@ -114,6 +118,7 @@ func TestReservedInputs_SystemKeywordsValidateCleanly(t *testing.T) {
 // closed, typed set — not a wildcard that swallows near-misses. A typo of a
 // reserved name must still fail (and ideally suggest the correct name).
 func TestReservedInputs_TypoOfSystemKeywordErrors(t *testing.T) {
+	t.Parallel()
 	yaml := buildInjectWorkflow(t, "reserved-typo", "", "{{ inputs.chat_idd }}")
 	errs := validateInject(t, yaml)
 	require.NotEmpty(t, errs, "a typo of a reserved keyword (chat_idd) must still be a hard error")
@@ -124,6 +129,7 @@ func TestReservedInputs_TypoOfSystemKeywordErrors(t *testing.T) {
 // declared input is referenceable, so the hardening didn't over-rotate into
 // rejecting legitimate inputs.
 func TestReservedInputs_DeclaredInputStillValidates(t *testing.T) {
+	t.Parallel()
 	declared := "  topic:\n    type: string\n"
 	yaml := buildInjectWorkflow(t, "declared-ok", declared, "{{ inputs.topic }}")
 	errs := validateInject(t, yaml)

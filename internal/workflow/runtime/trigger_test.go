@@ -10,6 +10,7 @@ import (
 )
 
 func TestThreadMode_Constants(t *testing.T) {
+	t.Parallel()
 	// Verify the string values match the spec
 	assert.Equal(t, "new", model.ThreadModeNew)
 	assert.Equal(t, "inherit", model.ThreadModeInherit)
@@ -21,6 +22,7 @@ func TestThreadMode_Constants(t *testing.T) {
 // ============================================================================
 
 func TestInlineWorkflowExecutor_ExecContext(t *testing.T) {
+	t.Parallel()
 	t.Run("WithExecContext sets execution context", func(t *testing.T) {
 		// Note: We can only test the struct-level behavior without Temporal context
 		executor := &InlineWorkflowExecutor{

@@ -98,12 +98,14 @@ func requireGopls(t *testing.T) {
 }
 
 func TestCodeContext_RequiresSymbol(t *testing.T) {
+	t.Parallel()
 	resp := runCodeContext(t, t.TempDir(), CodeContextParams{})
 	assert.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "symbol is required")
 }
 
 func TestCodeContext_FindsDefinition(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -119,6 +121,7 @@ func TestCodeContext_FindsDefinition(t *testing.T) {
 // The behavior that justifies the tool: callers and callees arrive together,
 // in one call, without a per-hop turn.
 func TestCodeContext_ResolvesCallersAndCallees(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -133,6 +136,7 @@ func TestCodeContext_ResolvesCallersAndCallees(t *testing.T) {
 }
 
 func TestCodeContext_ResolvesImplementations(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -147,6 +151,7 @@ func TestCodeContext_ResolvesImplementations(t *testing.T) {
 }
 
 func TestCodeContext_UnknownSymbolExplainsItself(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := codeContextFixture(t)
 
@@ -161,6 +166,7 @@ func TestCodeContext_UnknownSymbolExplainsItself(t *testing.T) {
 // An unsupported language must not silently present text matches as resolved
 // call edges.
 func TestCodeContext_TextEngineIsLabeled(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "app.rb"),
@@ -181,6 +187,7 @@ func TestCodeContext_TextEngineIsLabeled(t *testing.T) {
 // and nothing in the output let a reader tell that apart from a real answer.
 // An error the caller can act on beats a plausible wrong one.
 func TestCodeContext_MissingTypeScriptIsAnError(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"name":"x"}`), 0o644))
@@ -202,6 +209,7 @@ func TestCodeContext_MissingTypeScriptIsAnError(t *testing.T) {
 // source subdirectory — sending an agent to install in src/ would create a
 // stray node_modules in the wrong place.
 func TestCodeContext_MissingTypeScriptNamesThePackageDir(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "web", "src", "lib"), 0o755))
@@ -321,6 +329,7 @@ func locateTypeScriptLib(t *testing.T) string {
 }
 
 func TestCodeContext_TypeScriptResolvesCallersAndCallees(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := tsFixtureWithTypeScript(t)
 
@@ -334,6 +343,7 @@ func TestCodeContext_TypeScriptResolvesCallersAndCallees(t *testing.T) {
 }
 
 func TestCodeContext_TypeScriptResolvesImplementations(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := tsFixtureWithTypeScript(t)
 
@@ -351,6 +361,7 @@ func TestCodeContext_TypeScriptResolvesImplementations(t *testing.T) {
 // tsserver yields the real signature; the declaration regex only sees the
 // source line it matched.
 func TestCodeContext_TypeScriptReportsSignature(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	dir := tsFixtureWithTypeScript(t)
 
@@ -364,6 +375,7 @@ func TestCodeContext_TypeScriptReportsSignature(t *testing.T) {
 // A file in src/ must be resolved by the TypeScript install at the project
 // root — the monorepo case, where each frontend carries its own copy.
 func TestCodeContext_FindsTypeScriptByWalkingUp(t *testing.T) {
+	t.Parallel()
 	dir := tsFixtureWithTypeScript(t)
 
 	found := findTSServer(dir, filepath.Join(dir, "src", "target.ts"))
@@ -373,6 +385,7 @@ func TestCodeContext_FindsTypeScriptByWalkingUp(t *testing.T) {
 }
 
 func TestCodeContext_SelectsEngineByExtension(t *testing.T) {
+	t.Parallel()
 	// A language with no server available anywhere degrades rather than
 	// erroring: unlike a missing npm install there is nothing to install, so
 	// an approximate answer is genuinely the best result on offer.
@@ -383,6 +396,7 @@ func TestCodeContext_SelectsEngineByExtension(t *testing.T) {
 }
 
 func TestCodeContext_PrefersNonTestDeclaration(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -403,6 +417,7 @@ func TestCodeContext_PrefersNonTestDeclaration(t *testing.T) {
 // by entryPoint, which only appears if traversal re-queries from the caller's
 // DECLARATION rather than from the call site.
 func TestCodeContext_CallMapReachesSecondLevel(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -422,6 +437,7 @@ func TestCodeContext_CallMapReachesSecondLevel(t *testing.T) {
 // keep the call site for display AND the enclosing declaration for traversal.
 // Losing the second silently flattens every tree to one level.
 func TestCodeContext_CallerKeepsDeclarationPosition(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -448,6 +464,7 @@ func mustDeclare(t *testing.T, dir, symbol string) codeLocation {
 
 // depth is defaulted, not required: the common call is code_context(symbol).
 func TestCodeContext_DefaultsToMultiLevelTrace(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -462,6 +479,7 @@ func TestCodeContext_DefaultsToMultiLevelTrace(t *testing.T) {
 // Source is included by default because the measured follow-up to a digest is a
 // view call — a whole turn — while the extra input tokens are nearly free.
 func TestCodeContext_IncludesSourceByDefault(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -474,6 +492,7 @@ func TestCodeContext_IncludesSourceByDefault(t *testing.T) {
 }
 
 func TestCodeContext_SourceCanBeDisabled(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -488,6 +507,7 @@ func TestCodeContext_SourceCanBeDisabled(t *testing.T) {
 }
 
 func TestCodeContext_SourcePreviewIsCapped(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	var body strings.Builder
 	body.WriteString("package big\n\nfunc Long() {\n")
@@ -508,6 +528,7 @@ func TestCodeContext_SourcePreviewIsCapped(t *testing.T) {
 
 // A brace inside a string must not end the preview early.
 func TestCodeContext_SourcePreviewIgnoresBracesInStrings(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "s.go")
 	require.NoError(t, os.WriteFile(path, []byte(
@@ -523,6 +544,7 @@ func TestCodeContext_SourcePreviewIgnoresBracesInStrings(t *testing.T) {
 // The node budget is what keeps a deep trace from costing more tokens than the
 // turns it saves.
 func TestCodeContext_CallMapIsBounded(t *testing.T) {
+	t.Parallel()
 	wide := make([]codeLocation, 40)
 	for i := range wide {
 		wide[i] = codeLocation{Path: "a.go", Line: i + 1, Enclosing: fmt.Sprintf("fn%d", i)}
@@ -540,6 +562,7 @@ func TestCodeContext_CallMapIsBounded(t *testing.T) {
 
 // A cycle must terminate and be labeled rather than expanded forever.
 func TestCodeContext_CallMapHandlesCycles(t *testing.T) {
+	t.Parallel()
 	a := codeLocation{Path: "a.go", Line: 10, Enclosing: "A"}
 	b := codeLocation{Path: "b.go", Line: 20, Enclosing: "B"}
 	engine := cycleEngine{a: a, b: b}
@@ -599,6 +622,7 @@ func (c cycleEngine) ResolveEdges(_ context.Context, _ string, decl codeLocation
 // workspace root are the user's code — scoping to the module instead would
 // break the cross-repo tracing this tool is most useful for.
 func TestCodeContext_ScopeKeepsWorkspaceExcludesDependencies(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("/ws")
 	for _, tc := range []struct {
 		path string
@@ -619,6 +643,7 @@ func TestCodeContext_ScopeKeepsWorkspaceExcludesDependencies(t *testing.T) {
 }
 
 func TestCodeContext_ScopeAllIncludesEverything(t *testing.T) {
+	t.Parallel()
 	assert.True(t, inScope("/ws", "/usr/local/go/src/fmt/errors.go", scopeAll))
 	assert.True(t, inScope("/ws", "/ws/web/node_modules/react/index.js", scopeAll))
 }
@@ -626,6 +651,7 @@ func TestCodeContext_ScopeAllIncludesEverything(t *testing.T) {
 // Filtering must be visible: silently dropping edges is indistinguishable from
 // a symbol that genuinely has none.
 func TestCodeContext_OmittedDependencyEdgesAreReported(t *testing.T) {
+	t.Parallel()
 	locs := []codeLocation{
 		{Path: "/ws/internal/a.go", Line: 1},
 		{Path: "/usr/local/go/src/fmt/errors.go", Line: 23},
@@ -646,6 +672,7 @@ func TestCodeContext_OmittedDependencyEdgesAreReported(t *testing.T) {
 // The node budget is the scarce resource in a deep trace, so an out-of-scope
 // edge must never consume a slot — otherwise stdlib crowds out the user's code.
 func TestCodeContext_CallMapDoesNotSpendBudgetOnDependencies(t *testing.T) {
+	t.Parallel()
 	engine := stubEngine{edges: []codeLocation{
 		{Path: "/ws/internal/real.go", Line: 1, Enclosing: "Real"},
 		{Path: "/usr/local/go/src/fmt/errors.go", Line: 23, Enclosing: "Errorf"},
@@ -667,6 +694,7 @@ func TestCodeContext_CallMapDoesNotSpendBudgetOnDependencies(t *testing.T) {
 // The text engine must refuse to build a map: text matches cannot distinguish a
 // call from a mention, and a tree of mentions would be confidently wrong.
 func TestCodeContext_TextEngineBuildsNoCallMap(t *testing.T) {
+	t.Parallel()
 	edges := textEngine{}.ResolveEdges(context.Background(), ".", codeLocation{}, "callers")
 	assert.Empty(t, edges)
 }
@@ -676,6 +704,7 @@ func TestCodeContext_TextEngineBuildsNoCallMap(t *testing.T) {
 // implementation. Picking the interface yields an empty call map, which reads
 // as "nothing calls this" on a symbol with many callers.
 func TestCodeContext_PrefersDeclarationThatResolves(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -693,6 +722,7 @@ func TestCodeContext_PrefersDeclarationThatResolves(t *testing.T) {
 // Answering about one of many same-named declarations without saying so is how
 // a reader ends up confidently reading about the wrong type.
 func TestCodeContext_ReportsAmbiguousDeclarations(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -710,6 +740,7 @@ func TestCodeContext_ReportsAmbiguousDeclarations(t *testing.T) {
 
 // The description must not promise resolution for languages that cannot get it.
 func TestCodeContext_DescriptionNamesSupportedLanguages(t *testing.T) {
+	t.Parallel()
 	desc := NewCodeContextTool().Description()
 	assert.Contains(t, desc, "GO AND TYPESCRIPT/JAVASCRIPT ONLY")
 	assert.Contains(t, desc, "rg", "unsupported languages must be pointed at the alternative")
@@ -721,6 +752,7 @@ func TestCodeContext_DescriptionNamesSupportedLanguages(t *testing.T) {
 // ever use of this tool, and it returned a worse answer than the grep it
 // replaced.
 func TestCodeContext_PrefersSourceOverProse(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -742,6 +774,7 @@ func TestCodeContext_PrefersSourceOverProse(t *testing.T) {
 // drift, a file the engine can resolve gets ranked as unresolvable (or worse,
 // the reverse) and queries degrade for no visible reason.
 func TestCodeContext_RankingMatchesEngines(t *testing.T) {
+	t.Parallel()
 	for ext := range resolvableSourceExtensions {
 		engine, _, err := selectEngine(t.TempDir(), "/x/y/thing"+ext)
 		// Either the engine resolves, or the toolchain is missing and that is
@@ -767,6 +800,7 @@ func TestCodeContext_RankingMatchesEngines(t *testing.T) {
 // The narrowest request must not be the worst answer: asking where a symbol is
 // defined should still say who calls it, or the caller spends another turn.
 func TestCodeContext_DefinitionStillIncludesGraph(t *testing.T) {
+	t.Parallel()
 	requireRipgrep(t)
 	requireGopls(t)
 	dir := codeContextFixture(t)
@@ -779,6 +813,7 @@ func TestCodeContext_DefinitionStillIncludesGraph(t *testing.T) {
 }
 
 func TestCodeContext_SectionsAreBounded(t *testing.T) {
+	t.Parallel()
 	locs := make([]codeLocation, 60)
 	for i := range locs {
 		locs[i] = codeLocation{Path: "a.go", Line: i + 1}
@@ -793,6 +828,7 @@ func TestCodeContext_SectionsAreBounded(t *testing.T) {
 }
 
 func TestCodeContext_RegisteredAsDefaultReadOnlyTool(t *testing.T) {
+	t.Parallel()
 	assert.Contains(t, names.AllToolNames, names.ToolCodeContext)
 
 	var found *ToolDefinition
@@ -812,6 +848,7 @@ func TestCodeContext_RegisteredAsDefaultReadOnlyTool(t *testing.T) {
 // The tool only pays off if agents have it without discovering it first. A tag
 // alone does not prove that — `tag:default` must actually EXPAND to include it.
 func TestCodeContext_IncludedInDefaultToolset(t *testing.T) {
+	t.Parallel()
 	expanded := ExpandToolFilter([]string{"tag:default"}, nil)
 	assert.Contains(t, expanded, ToolCodeContext,
 		"code_context must arrive without load_tool; got: %v", expanded)
@@ -821,6 +858,7 @@ func TestCodeContext_IncludedInDefaultToolset(t *testing.T) {
 // reaches. Those are exactly the agents that spend turns on grep walks, so the
 // tool has to be named in each one.
 func TestCodeContext_ReachesCodeNavigationPresets(t *testing.T) {
+	t.Parallel()
 	for _, preset := range []string{
 		"researcher", "planner", "debug", "code_reviewer", "refactor", "tester",
 		"general", "implementer",
@@ -870,6 +908,7 @@ func presetToolFilter(t *testing.T, preset string) []string {
 }
 
 func TestCodeContext_NeedsNoPermission(t *testing.T) {
+	t.Parallel()
 	// Requiring approval would push agents back to bash — the tool being replaced.
 	ok, err := (&codeContextTool{}).RequiresPermission(CodeContextParams{Symbol: "X"})
 	require.NoError(t, err)

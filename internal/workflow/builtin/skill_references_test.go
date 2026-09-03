@@ -62,6 +62,7 @@ func newBuiltinSkillResolver(t *testing.T) *validation.SkillResolver {
 // params.skills the same way — the two together cover both surfaces that name
 // a skill statically.
 func TestBuiltinWorkflowSkillsResolve(t *testing.T) {
+	t.Parallel()
 	resolver := newBuiltinSkillResolver(t)
 
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
@@ -173,6 +174,7 @@ func proseSkillNames(text string) []string {
 // a charter grew a new one. The anchor is the text convention, so the text is
 // what it reads.
 func TestBuiltinWorkflowProseSkillsResolve(t *testing.T) {
+	t.Parallel()
 	resolver := newBuiltinSkillResolver(t)
 
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
@@ -213,6 +215,7 @@ func TestBuiltinWorkflowProseSkillsResolve(t *testing.T) {
 // "forge/service-layer" does not — which is not obvious, is exactly what the
 // charter got wrong, and is the property the guard depends on.
 func TestBuiltinSkillResolverRejectsNamespacedBareSkill(t *testing.T) {
+	t.Parallel()
 	resolver := newBuiltinSkillResolver(t)
 
 	// emit:both — addressable bare, NOT under the synthetic namespace.

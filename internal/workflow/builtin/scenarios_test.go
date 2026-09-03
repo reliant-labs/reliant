@@ -31,6 +31,7 @@ import (
 //
 // Scenario files can contain multiple YAML documents separated by ---.
 func TestBuiltinWorkflowScenarios(t *testing.T) {
+	t.Parallel()
 	// Get all builtin workflows
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err, "Failed to read builtin workflows directory")
@@ -182,6 +183,7 @@ func parseMultiDocYAML(data []byte) ([]*simulator.Scenario, error) {
 // TestScenarioFilesAreValid validates that all scenario files parse correctly
 // without actually running them. This catches YAML syntax errors early.
 func TestScenarioFilesAreValid(t *testing.T) {
+	t.Parallel()
 	err := fs.WalkDir(builtin.BuiltinScenariosFS, "testdata", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// If testdata directory doesn't exist, that's OK
@@ -224,6 +226,7 @@ func TestScenarioFilesAreValid(t *testing.T) {
 // are dead tests that can never run — they must be updated or removed when a
 // workflow is renamed or deleted.
 func TestScenarioDirsMapToWorkflows(t *testing.T) {
+	t.Parallel()
 	entries, err := builtin.BuiltinScenarioDirsFS.ReadDir("scenarios")
 	if err != nil {
 		t.Skip("no scenarios directory embedded")
@@ -243,6 +246,7 @@ func TestScenarioDirsMapToWorkflows(t *testing.T) {
 // TestAllWorkflowsHaveScenarios checks that each workflow has a corresponding
 // scenario file. This is informational - not all workflows require scenarios.
 func TestAllWorkflowsHaveScenarios(t *testing.T) {
+	t.Parallel()
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err)
 

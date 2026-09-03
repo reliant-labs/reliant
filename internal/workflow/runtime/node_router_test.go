@@ -10,6 +10,7 @@ import (
 )
 
 func TestBuildNodeRoutingSystemPrompt(t *testing.T) {
+	t.Parallel()
 	t.Run("uses default prompt when custom is empty", func(t *testing.T) {
 		candidates := []*reliantv1.NodeRouterCandidate{
 			{Id: "summarize", Description: "Summarize content"},
@@ -81,6 +82,7 @@ func TestBuildNodeRoutingSystemPrompt(t *testing.T) {
 }
 
 func TestBuildNodeRoutingResponseSchema(t *testing.T) {
+	t.Parallel()
 	t.Run("schema has correct structure", func(t *testing.T) {
 		candidates := []*reliantv1.NodeRouterCandidate{
 			{Id: "summarize"},
@@ -144,6 +146,7 @@ func TestBuildNodeRoutingResponseSchema(t *testing.T) {
 }
 
 func TestParseNodeRoutingDecision(t *testing.T) {
+	t.Parallel()
 	newExecutor := func() *RouterExecutor {
 		return &RouterExecutor{
 			logger: nilLogger{},

@@ -9,6 +9,7 @@ import (
 )
 
 func TestNodeOutputStore_Basic(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 
 	// Initially empty
@@ -30,6 +31,7 @@ func TestNodeOutputStore_Basic(t *testing.T) {
 }
 
 func TestNodeOutputStore_NilOutput(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 
 	// Setting nil output should still mark step as having output
@@ -42,6 +44,7 @@ func TestNodeOutputStore_NilOutput(t *testing.T) {
 }
 
 func TestNodeOutputStore_FromExistingMap(t *testing.T) {
+	t.Parallel()
 	existingData := map[string]interface{}{
 		"step1": map[string]interface{}{"result": "ok"},
 		"step2": "simple string",
@@ -59,12 +62,14 @@ func TestNodeOutputStore_FromExistingMap(t *testing.T) {
 }
 
 func TestNodeOutputStore_FromNilMap(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStoreFrom(nil, "test-workflow")
 	assert.NotNil(t, store)
 	assert.Equal(t, 0, store.Count())
 }
 
 func TestNodeOutputStore_Keys(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step_a", "a")
 	store.Set("step_b", "b")
@@ -78,6 +83,7 @@ func TestNodeOutputStore_Keys(t *testing.T) {
 }
 
 func TestNodeOutputStore_AsMap(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", "value1")
 	store.Set("step2", "value2")
@@ -93,6 +99,7 @@ func TestNodeOutputStore_AsMap(t *testing.T) {
 }
 
 func TestNodeOutputStore_Clone(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", map[string]interface{}{"key": "value"})
 
@@ -108,6 +115,7 @@ func TestNodeOutputStore_Clone(t *testing.T) {
 }
 
 func TestNodeOutputStore_Merge(t *testing.T) {
+	t.Parallel()
 	store1 := NewNodeOutputStore("test-workflow")
 	store1.Set("step1", "value1")
 
@@ -124,6 +132,7 @@ func TestNodeOutputStore_Merge(t *testing.T) {
 }
 
 func TestNodeOutputStore_MergeNil(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", "value1")
 
@@ -133,6 +142,7 @@ func TestNodeOutputStore_MergeNil(t *testing.T) {
 }
 
 func TestNodeOutputStore_MergeMap(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", "value1")
 
@@ -145,6 +155,7 @@ func TestNodeOutputStore_MergeMap(t *testing.T) {
 }
 
 func TestNodeOutputStore_Clear(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", "value1")
 	store.Set("step2", "value2")
@@ -156,6 +167,7 @@ func TestNodeOutputStore_Clear(t *testing.T) {
 }
 
 func TestNodeOutputStore_GetMap(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 
 	// Map output
@@ -173,6 +185,7 @@ func TestNodeOutputStore_GetMap(t *testing.T) {
 }
 
 func TestNodeOutputStore_GetString(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", map[string]interface{}{
 		"message": "hello",
@@ -193,6 +206,7 @@ func TestNodeOutputStore_GetString(t *testing.T) {
 }
 
 func TestNodeOutputStore_GetBool(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", map[string]interface{}{
 		"success": true,
@@ -208,6 +222,7 @@ func TestNodeOutputStore_GetBool(t *testing.T) {
 }
 
 func TestNodeOutputStore_GetInt(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow")
 	store.Set("step1", map[string]interface{}{
 		"count":     42,
@@ -225,6 +240,7 @@ func TestNodeOutputStore_GetInt(t *testing.T) {
 }
 
 func TestNodeOutputStore_EnableDebug(t *testing.T) {
+	t.Parallel()
 	store := NewNodeOutputStore("test-workflow").EnableDebug()
 
 	// Just verify it doesn't panic

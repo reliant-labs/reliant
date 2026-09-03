@@ -35,6 +35,7 @@ type SpawnCancelParkedSuite struct {
 }
 
 func TestSpawnCancelParked(t *testing.T) {
+	t.Parallel()
 	suite.Run(t, new(SpawnCancelParkedSuite))
 }
 

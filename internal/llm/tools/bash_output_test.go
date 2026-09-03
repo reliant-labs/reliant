@@ -6,6 +6,7 @@ import (
 )
 
 func TestValidateParams(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name    string
 		params  BashOutputParams

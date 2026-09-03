@@ -20,6 +20,7 @@ import (
 // The hypothesis is that CEL may fail with "no such overload" when the integer type from the
 // Go map doesn't match the expected CEL type declaration.
 func TestCELMultiplicationWithMapIntegerValues(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		nodeOutputs    map[string]interface{}
@@ -155,6 +156,7 @@ func TestCELMultiplicationWithMapIntegerValues(t *testing.T) {
 // TestCELMultiplicationRealWorldScenario tests the exact scenario from agent.yaml
 // where save_tool_results.thread_token_count is compared to determine if compaction is needed.
 func TestCELMultiplicationRealWorldScenario(t *testing.T) {
+	t.Parallel()
 	// This simulates the actual step outputs from the save_tool_results step
 	// ThreadTokenCount is returned as an int from SaveMessageOutput
 	nodeOutputs := map[string]interface{}{
@@ -213,6 +215,7 @@ func TestCELMultiplicationRealWorldScenario(t *testing.T) {
 // but has issues with floating point numbers and unsigned integers when performing
 // arithmetic operations like multiplication.
 func TestCELTypeCoercion(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		value       interface{}

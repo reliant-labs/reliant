@@ -32,6 +32,7 @@ func newLoadToolTestCtx(t *testing.T, permission string) *rctx.ToolContext {
 // ----- Load / search behavior -----
 
 func TestLoadTool_LoadByName_Success(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -47,6 +48,7 @@ func TestLoadTool_LoadByName_Success(t *testing.T) {
 }
 
 func TestLoadTool_LoadByName_NonexistentTool(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -57,6 +59,7 @@ func TestLoadTool_LoadByName_NonexistentTool(t *testing.T) {
 }
 
 func TestLoadTool_SearchByQuery_ReturnsMatches(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -69,6 +72,7 @@ func TestLoadTool_SearchByQuery_ReturnsMatches(t *testing.T) {
 }
 
 func TestLoadTool_SearchByQuery_NoMatches(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -81,6 +85,7 @@ func TestLoadTool_SearchByQuery_NoMatches(t *testing.T) {
 }
 
 func TestLoadTool_EmptyParams_ReturnsError(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -94,6 +99,7 @@ func TestLoadTool_EmptyParams_ReturnsError(t *testing.T) {
 // ----- MCP tool discovery / loading -----
 
 func TestLoadTool_SearchByQuery_SurfacesConnectedMCPTool(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -109,6 +115,7 @@ func TestLoadTool_SearchByQuery_SurfacesConnectedMCPTool(t *testing.T) {
 }
 
 func TestLoadTool_LoadMCPTool_ConnectedSucceeds(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -127,6 +134,7 @@ func TestLoadTool_LoadMCPTool_ConnectedSucceeds(t *testing.T) {
 }
 
 func TestLoadTool_LoadMCPTool_UnconnectedErrors(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -145,6 +153,7 @@ func TestLoadTool_LoadMCPTool_UnconnectedErrors(t *testing.T) {
 }
 
 func TestLoadTool_LoadMCPTool_NoneConnectedErrors(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -158,6 +167,7 @@ func TestLoadTool_LoadMCPTool_NoneConnectedErrors(t *testing.T) {
 // ----- Permission gating -----
 
 func TestLoadTool_PermissionGating_ReadOnlyCannotLoadMutatingTool(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionReadOnly)
 
@@ -169,6 +179,7 @@ func TestLoadTool_PermissionGating_ReadOnlyCannotLoadMutatingTool(t *testing.T) 
 }
 
 func TestLoadTool_PermissionGating_ReadOnlyCanLoadReadOnlyTool(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionReadOnly)
 
@@ -179,6 +190,7 @@ func TestLoadTool_PermissionGating_ReadOnlyCanLoadReadOnlyTool(t *testing.T) {
 }
 
 func TestLoadTool_PermissionGating_MutatingCanLoadMutatingTool(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionMutating)
 
@@ -189,6 +201,7 @@ func TestLoadTool_PermissionGating_MutatingCanLoadMutatingTool(t *testing.T) {
 }
 
 func TestLoadTool_PermissionGating_OrchestratorCanLoadAnything(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 
 	// Try a representative set spanning readonly and mutating tools.
@@ -208,6 +221,7 @@ func TestLoadTool_PermissionGating_OrchestratorCanLoadAnything(t *testing.T) {
 // ----- Store integration -----
 
 func TestLoadTool_StoresInLoadedToolsStore(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -223,6 +237,7 @@ func TestLoadTool_StoresInLoadedToolsStore(t *testing.T) {
 }
 
 func TestLoadTool_LoadAlreadyLoadedTool_Idempotent(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
@@ -244,6 +259,7 @@ func TestLoadTool_LoadAlreadyLoadedTool_Idempotent(t *testing.T) {
 }
 
 func TestLoadTool_DeniedLoadNotStored(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionReadOnly)
 
@@ -261,6 +277,7 @@ func TestLoadTool_DeniedLoadNotStored(t *testing.T) {
 // ----- SetDeferredTools / Description -----
 
 func TestLoadTool_DescriptionIncludesDeferredTools(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 
 	// Without deferred tools, description is the base text.
@@ -275,6 +292,7 @@ func TestLoadTool_DescriptionIncludesDeferredTools(t *testing.T) {
 }
 
 func TestLoadTool_DescriptionNoDeferredTools(t *testing.T) {
+	t.Parallel()
 	tool := &loadToolTool{}
 	tool.SetDeferredTools(nil)
 	assert.Equal(t, loadToolDescription, tool.Description())
@@ -284,6 +302,7 @@ func TestLoadTool_DescriptionNoDeferredTools(t *testing.T) {
 }
 
 func TestLoadTool_ImplementsDeferredToolsAware(t *testing.T) {
+	t.Parallel()
 	tool := NewLoadToolTool()
 	u, ok := tool.(interface{ Unwrap() any })
 	require.True(t, ok, "load_tool wrapper must implement Unwrap")

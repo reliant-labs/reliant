@@ -13,6 +13,7 @@ import (
 
 // TestAgentWorkflowValidation verifies that agent.yaml parses and validates correctly.
 func TestAgentWorkflowValidation(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("agent.yaml")
 	if err != nil {
 		t.Fatalf("Failed to read agent.yaml: %v", err)
@@ -73,6 +74,7 @@ func TestAgentWorkflowValidation(t *testing.T) {
 
 // TestCompactWorkflowValidation verifies that the hardcoded compact workflow is valid.
 func TestCompactWorkflowValidation(t *testing.T) {
+	t.Parallel()
 	// Compact is now a hardcoded internal workflow YAML, not a YAML file
 	data := builtin.GetInternalWorkflowYAML("compact")
 	if data == nil {
@@ -112,6 +114,7 @@ func TestCompactWorkflowValidation(t *testing.T) {
 
 // TestAgentSpawnPresets verifies that the spawn_presets input is correctly configured.
 func TestAgentSpawnPresets(t *testing.T) {
+	t.Parallel()
 	data, err := builtin.BuiltinWorkflowsFS.ReadFile("agent.yaml")
 	if err != nil {
 		t.Fatalf("Failed to read agent.yaml: %v", err)
@@ -161,6 +164,7 @@ func TestAgentSpawnPresets(t *testing.T) {
 
 // TestParseBuiltinWorkflow tests loading builtin workflows by name.
 func TestParseBuiltinWorkflow(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name         string
 		workflowName string

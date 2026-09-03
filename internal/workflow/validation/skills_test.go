@@ -45,6 +45,7 @@ func skillsArg(values ...string) map[string]*structpb.Value {
 // charter asked for it under the synthetic namespace, and the preloader
 // silently skipped it on every run.
 func TestValidateSkillReferencesRejectsUnresolvable(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Name: "charter",
 		Nodes: []*reliantv1.Node{
@@ -64,6 +65,7 @@ func TestValidateSkillReferencesRejectsUnresolvable(t *testing.T) {
 }
 
 func TestValidateSkillReferencesAcceptsResolvable(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			workflowNode("build", &reliantv1.Node_Workflow{
@@ -86,6 +88,7 @@ func TestValidateSkillReferencesAcceptsResolvable(t *testing.T) {
 // TestValidateSkillReferencesChecksCallLLMLiterals covers the terminal
 // consumer: skills named directly on a call_llm node.
 func TestValidateSkillReferencesChecksCallLLMLiterals(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{{
 			Id:   "ask",
@@ -109,6 +112,7 @@ func TestValidateSkillReferencesChecksCallLLMLiterals(t *testing.T) {
 // DEFAULT names a skill — just as silent a failure, and the shape
 // scope-conversation.yaml ships.
 func TestValidateSkillReferencesChecksInputDefaults(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Inputs: map[string]*reliantv1.Input{
 			"skills": {Type: "array", Config: &reliantv1.Input_ArrayInput{
@@ -131,6 +135,7 @@ func TestValidateSkillReferencesChecksInputDefaults(t *testing.T) {
 // guessed at — otherwise every forwarding workflow ("{{inputs.skills}}") would
 // fail validation and the check would be turned off.
 func TestValidateSkillReferencesSkipsTemplates(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			workflowNode("forward", &reliantv1.Node_Workflow{
@@ -160,6 +165,7 @@ func TestValidateSkillReferencesSkipsTemplates(t *testing.T) {
 // layer. The guard against that becoming a silent no-op everywhere is
 // TestBuiltinWorkflowSkillsResolve, which always supplies a real one.
 func TestValidateSkillReferencesNoResolverIsNoOp(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			workflowNode("build", &reliantv1.Node_Workflow{
@@ -178,6 +184,7 @@ func TestValidateSkillReferencesNoResolverIsNoOp(t *testing.T) {
 // the whole list on the first unknowable entry would let a typo ride along
 // beside any templated entry.
 func TestValidateSkillReferencesChecksLiteralsInAMixedList(t *testing.T) {
+	t.Parallel()
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			workflowNode("build", &reliantv1.Node_Workflow{

@@ -11,6 +11,7 @@ import (
 // TestValidateCEL_ObjectPropertyAccess tests that CEL validation properly validates
 // access to object input properties defined in JSON Schema.
 func TestValidateCEL_ObjectPropertyAccess(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		workflow  string
@@ -293,6 +294,7 @@ nodes:
 
 // TestValidateCEL_ObjectArrayProperties tests CEL validation for array properties in objects.
 func TestValidateCEL_ObjectArrayProperties(t *testing.T) {
+	t.Parallel()
 	workflowYAML := `
 name: test-array-property
 entry: [step1]
@@ -338,6 +340,7 @@ nodes:
 
 // TestValidateCEL_ObjectRequiredFields tests that required fields are properly checked.
 func TestValidateCEL_ObjectRequiredFields(t *testing.T) {
+	t.Parallel()
 	// This test verifies that the type context properly includes required field information
 	workflowYAML := `
 name: test-required-fields
@@ -384,6 +387,7 @@ nodes:
 // TestSchemaTypeChecker_TypeMismatch tests that type mismatches in operations
 // are caught by the AST-based schema type checker.
 func TestSchemaTypeChecker_TypeMismatch(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		workflow  string
@@ -516,6 +520,7 @@ nodes:
 
 // TestSchemaTypeChecker_ValidOperations tests that valid operations pass type checking.
 func TestSchemaTypeChecker_ValidOperations(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		workflow string
@@ -645,6 +650,7 @@ outputs:
 
 // TestSchemaTypeChecker_NestedObjects tests type checking for nested object properties.
 func TestSchemaTypeChecker_NestedObjects(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		workflow  string
@@ -760,6 +766,7 @@ nodes:
 
 // TestSchemaTypeChecker_AdditionalProperties tests behavior when additionalProperties is set.
 func TestSchemaTypeChecker_AdditionalProperties(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		workflow  string

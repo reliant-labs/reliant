@@ -25,6 +25,7 @@ import (
 
 // TestYAMLNumericParsing verifies YAML parsing behavior for numeric values
 func TestYAMLNumericParsing(t *testing.T) {
+	t.Parallel()
 	t.Run("unquoted_numbers_are_parsed_as_integers", func(t *testing.T) {
 		yamlContent := `
 input_tokens: 0
@@ -102,6 +103,7 @@ type SaveMessageInputTest struct {
 // TestSaveMessageInputNumericTypes verifies that SaveMessageInput correctly
 // deserializes numeric fields from workflow config
 func TestSaveMessageInputNumericTypes(t *testing.T) {
+	t.Parallel()
 	t.Run("integer_values_deserialize_correctly", func(t *testing.T) {
 		// Simulate config with proper integer types
 		config := map[string]interface{}{
