@@ -48,6 +48,65 @@ jobs:
       - name: Validate electron/release.config.json
         run: node .github/scripts/sync-release-config.mjs --check
 
+  # The generators moved OFF the critical path, and this job is what keeps
+  # that safe.
+  #
+  # .gitignore's "Generated code is committed" note makes the contract
+  # explicit: a checkout must build as-cloned, and regenerating must be a
+  # no-op. Every other job now relies on the committed output instead of
+  # spending ~140s re-deriving it, so something has to prove the two agree —
+  # otherwise stale generated code would ship silently, which is worse than a
+  # slow build.
+  #
+  # This runs in PARALLEL with the test jobs rather than in front of them, so
+  # it costs wall-clock only if it is the slowest job (it is not — measured
+  # ~14s of generate locally, against 190s of Go tests).
+  #
+  # It is a hard gate: if `make generate-go` produces a diff, the fix is to
+  # commit that diff in the change that caused it.
+  generate-drift:
+    name: Generated code is up to date
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Cache Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-drift-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-drift-${{ runner.os }}-
+
+      - name: Install buf
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          version: '1.50.0'
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          buf_api_token: ${{ secrets.BUF_API_KEY }}
+
+      - name: Generate Go code
+        run: make generate-go
+
+      - name: Fail if generated code differs from what is committed
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet; then
+            echo "::error::Generated code is out of date. Run 'make generate-go' and commit the result."
+            git diff --stat
+            echo "--- full diff ---"
+            git diff
+            exit 1
+          fi
+          echo "Generated code matches the committed output."
+
   backend:
     name: Backend (Go)
     runs-on: ubuntu-latest
@@ -58,11 +117,32 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
+      # setup-go's `cache: true` caches the MODULE cache (~/go/pkg/mod) but
+      # NOT the build cache (~/.cache/go-build), so every run recompiled the
+      # whole dependency graph from source before a single test ran.
+      #
+      # Keyed on the resolved Go version + go.sum: a toolchain bump or a
+      # dependency change invalidates it, which is exactly when the cached
+      # objects stop being reusable. The restore-keys prefix means a go.sum
+      # change still restores the previous cache and recompiles only what
+      # actually changed, rather than starting cold.
+      - name: Cache Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-backend-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
+            go-build-backend-${{ runner.os }}-
+
+      # buf stays: `forge lint` wraps buf lint alongside golangci-lint, so
+      # dropping it here would quietly reduce what the lint step checks.
       - name: Install buf
         uses: bufbuild/buf-setup-action@v1
         with:
@@ -70,20 +150,32 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           buf_api_token: ${{ secrets.BUF_API_KEY }}
 
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
-
-      - name: Generate Go code
-        run: make generate-go
+      # Generated code is COMMITTED (see the "Generated code is committed"
+      # note in .gitignore): a checkout compiles and tests as-cloned, and
+      # regenerating is required to be a no-op. So this job does NOT need to
+      # run the generators to build or test — that was ~140s of the critical
+      # path producing, by contract, no change. Drift is caught by the
+      # dedicated `generate-drift` job below, which runs in PARALLEL rather
+      # than in front of the tests.
+      #
+      # goose was installed here for ~58s a job and never invoked: it is a
+      # LIBRARY dependency (github.com/pressly/goose/v3, imported by
+      # internal/db/connect.go, which embeds the migrations). Nothing in this
+      # repo shells out to the goose BINARY except check-migrations.yml, which
+      # installs it itself. Removed rather than cached.
 
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
 
+      # ripgrep is a genuine RUNTIME dependency of this job: internal/llm/tools
+      # shells out to `rg`, and requireRipgrep() SKIPS those tests when it is
+      # missing — so without it the job goes green having silently not run
+      # them. Installed from apt (prebuilt) rather than compiled from source.
+      #
+      # ubuntu-latest does not ship ripgrep, so the `command -v` guard this
+      # replaces never once took its fast path.
       - name: Install ripgrep
-        run: |
-          if ! command -v rg &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y ripgrep
-          fi
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
 
       # Lint via FORGE rather than a raw golangci-lint pin.
       #
@@ -108,16 +200,32 @@ jobs:
       # The findings are REPORTED on every PR so they stay visible and the
       # backlog shrinks. Flip this to a hard gate (drop continue-on-error) once
       # it reaches zero — that is a small, separate cleanup.
-      - name: Install forge
-        # Pin the CLI to the SAME version go.mod already requires, so the linter
-        # matches the library this code compiles against. @latest silently
-        # switched forge mid-release; a hardcoded version is a second place to
-        # remember to bump. go.mod is the single source of truth.
+      # Resolve the forge version BEFORE the cache step, so the cache key can
+      # be keyed on it. go.mod stays the single source of truth — @latest
+      # silently switched forge mid-release once, and a hardcoded version is a
+      # second place to remember to bump.
+      - name: Resolve forge version
+        id: forge-version
         run: |
           set -euo pipefail
           FORGE_VERSION="$(go list -m -f '{{.Version}}' github.com/reliant-labs/forge)"
-          echo "installing forge $FORGE_VERSION"
-          go install "github.com/reliant-labs/forge/cmd/forge@$FORGE_VERSION"
+          echo "version=$FORGE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "forge $FORGE_VERSION"
+
+      # Cache the BUILT binary keyed on the exact version, so the ~52s
+      # `go install` from source happens once per forge bump instead of once
+      # per run. No restore-keys: a stale binary from a different version is
+      # not a partial hit, it is the wrong linter.
+      - name: Cache forge binary
+        id: forge-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/go/bin/forge
+          key: forge-${{ runner.os }}-${{ steps.forge-version.outputs.version }}
+
+      - name: Install forge
+        if: steps.forge-cache.outputs.cache-hit != 'true'
+        run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.forge-version.outputs.version }}"
 
       - name: Lint (forge)
         continue-on-error: true
@@ -136,32 +244,35 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Set up Go
+        id: setup-go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Install buf
-        uses: bufbuild/buf-setup-action@v1
+      # See the backend job for why this is needed on top of setup-go's
+      # module cache. Separate key prefix because this job compiles a
+      # different package set (-tags=e2e), so sharing one cache entry would
+      # have the two jobs evicting each other's objects.
+      - name: Cache Go build cache
+        uses: actions/cache@v4
         with:
-          version: '1.50.0'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
+          path: ~/.cache/go-build
+          key: go-build-e2e-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-${{ hashFiles('go.sum') }}
+          restore-keys: |
+            go-build-e2e-${{ runner.os }}-${{ steps.setup-go.outputs.go-version }}-
+            go-build-e2e-${{ runner.os }}-
 
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+      # buf is not needed here: nothing in this job generates code, and the
+      # e2e tests run against the committed generated output.
 
-      - name: Generate Go code
-        run: make generate-go
+      # Same reasoning as the backend job: generated code is committed, so the
+      # generators are not a build input here, and the goose BINARY is never
+      # invoked (goose is a library dependency). Both steps removed; drift is
+      # covered by the parallel `generate-drift` job.
 
       - name: Disable VCS stamping
         run: echo "GOFLAGS=-buildvcs=false" >> $GITHUB_ENV
-
-      - name: Install ripgrep
-        run: |
-          if ! command -v rg &> /dev/null; then
-            sudo apt-get update && sudo apt-get install -y ripgrep
-          fi
 
       - name: Go E2E tests
         # -tags=e2e is REQUIRED: every file under ./e2e/stories carries
@@ -177,11 +288,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      # No Go toolchain and no buf here: with the generators gone (see below)
+      # this job is pure Node — npm lint / typecheck / vitest / vite build.
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -190,25 +298,25 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Install buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: '1.50.0'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
-
       - name: Install deps
         working-directory: web
         run: npm ci || npm install
 
-      - name: Generate protobufs (TypeScript)
-        run: buf generate --template buf.gen.yaml
-
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
-
-      - name: Generate docs and shortcuts
-        run: make generate
+      # The generated TypeScript (web/src/gen/**, 38 files) and
+      # web/src/store/shortcutsData.generated.ts are COMMITTED, so this job
+      # lints, typechecks, tests and builds straight from the checkout.
+      # Verified locally: `npm run typecheck` and `npm run build:alpha` both
+      # succeed on a clean `git archive` of HEAD with no generator run.
+      #
+      # Removed from this job:
+      #   - `buf generate` (TS protobufs) — output is committed
+      #   - `go install goose` (~58s) — goose's BINARY is never invoked
+      #     anywhere in this repo; it is a library dep of internal/db
+      #   - `make generate` (~140s) — builds 14 Go-side docgen targets
+      #     (CLI/tools/models/Mintlify reference…) that web/ does not consume
+      #
+      # Drift in any of that committed output is caught by the `generate-drift`
+      # job, which runs in parallel.
 
       - name: Lint
         working-directory: web
@@ -274,11 +382,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      # Pure Node job now — no Go toolchain, no buf (see the note below).
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -287,38 +391,16 @@ jobs:
           cache: npm
           cache-dependency-path: web/package-lock.json
 
-      - name: Install buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: '1.50.0'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
-
       - name: Install deps
         working-directory: web
         run: npm ci || npm install
 
-      - name: Generate protobufs (TypeScript)
-        run: buf generate --template buf.gen.yaml
-
-      - name: Install goose
-        # Pinned to match the version in go.mod. This step was an unpinned
-        # `@latest` install; every one of this job's non-timeout failures in
-        # the last 50 runs (8/50) died here in <3s on a transient resolution
-        # flake, not because the version drifted. Pinning removes the flake
-        # source; it doesn't change behavior otherwise.
-        run: go install github.com/pressly/goose/v3/cmd/goose@v3.25.0
-
-      - name: Generate shortcuts
-        # Only `make generate-shortcuts` output is a build input for web/ —
-        # web/src/store/shortcutsData.generated.ts, imported by
-        # shortcutsStore.ts (confirmed: deleting it breaks `vite build` with
-        # "Could not resolve ./shortcutsData.generated"). The full `make
-        # generate` also builds 14 unrelated Go-side doc/reference targets
-        # (CLI reference, tools reference, Mintlify pages, etc.) that this
-        # job doesn't consume; that cost ~2.5-3 minutes of this job's budget
-        # for no effect on the build or the tests.
-        run: make generate-shortcuts
+      # web/src/store/shortcutsData.generated.ts — the one generated file this
+      # job's build genuinely needs (shortcutsStore.ts imports it; deleting it
+      # breaks `vite build`) — is COMMITTED, as is the generated TypeScript
+      # under web/src/gen/. So `make generate-shortcuts`, `buf generate` and
+      # the goose install that supported them are all gone from this job;
+      # `generate-drift` verifies the committed copies are current.
 
       - name: Cache Playwright browsers
         uses: actions/cache@v4
@@ -373,11 +455,16 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
+      # No Go toolchain and no buf here. `npm run dist:pr` runs
+      # build:config -> build:web:alpha -> electron-builder --dir; none of that
+      # compiles Go. The backend binaries live in electron/resources/server,
+      # which is UNTRACKED — CI has never populated it, so this job has always
+      # packaged an empty server dir, and removing Go does not change what it
+      # produces. (build:backend exists but is not on the dist:pr path.)
+      #
+      # Also removed: `buf generate` (committed TS output) and `make generate`
+      # (~140s of Go docgen this job does not consume), plus the goose install
+      # (~58s) whose binary is never invoked.
 
       - name: Set up Node
         uses: actions/setup-node@v6
@@ -388,25 +475,9 @@ jobs:
             web/package-lock.json
             electron/package-lock.json
 
-      - name: Install buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: '1.50.0'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
-
       - name: Install web deps
         working-directory: web
         run: npm ci || npm install
-
-      - name: Generate protobufs (TypeScript)
-        run: buf generate --template buf.gen.yaml
-
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
-
-      - name: Generate docs and shortcuts
-        run: make generate
 
       - name: Install electron deps
         working-directory: electron
