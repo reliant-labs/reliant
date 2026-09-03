@@ -190,8 +190,13 @@ func (r *SentryReporter) CaptureExceptionWithContext(err error, tags map[string]
 		for k, v := range tags {
 			scope.SetTag(k, v)
 		}
-		for k, v := range extra {
-			scope.SetExtra(k, v)
+		// sentry-go 0.49 removed Scope.SetExtra. Its upgrade note is explicit
+		// that SetAttributes is NOT the replacement here: attributes attach to
+		// logs and metrics and do not appear on error events. This path only
+		// ever captures exceptions, so the extras go in a context block, which
+		// is what renders on the event.
+		if len(extra) > 0 {
+			scope.SetContext("extra", sentry.Context(extra))
 		}
 	})
 
