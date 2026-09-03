@@ -307,7 +307,7 @@ jobs:
           EOF
 
   # ============================================================================
-  # BACKEND BINARIES: Matrix build (industry-standard fan-out)
+  # BACKEND BINARIES: Matrix build (full-width fan-out)
   # ============================================================================
   build-backend:
     name: Build backend (${{ matrix.target_os }}-${{ matrix.target_arch }})
@@ -315,8 +315,30 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
+      # fail-fast: false so ONE broken target reports its own failure instead of
+      # cancelling the other five — you want all six results from a release run.
       fail-fast: false
-      max-parallel: 2
+      #
+      # DELIBERATELY UNTHROTTLED — do not re-add `max-parallel`.
+      #
+      # These are six independent `go build` invocations that share nothing: no
+      # registry, no signing service, no notarization, no rate-limited third
+      # party. Every step in this job is a GitHub-native action
+      # (checkout / setup-go / download-artifact / upload-artifact), so there is
+      # no external quota for a throttle to protect.
+      #
+      # Nor is there a runner quota to protect. This org is on the GitHub Free
+      # plan: 20 concurrent jobs, of which 5 may be macOS. Six ubuntu-latest
+      # legs sit well inside that, and the `concurrency: releases` group at the
+      # top of this file already serializes whole release runs, so two of these
+      # matrices can never overlap.
+      #
+      # The previous `max-parallel: 2` cost ~7 minutes of pure waiting on every
+      # release. Each leg takes ~3 minutes, but the throttle stair-stepped them
+      # into ~10 (measured on the v1.7.11 run: linux pair 04:40:50-04:44:00,
+      # then darwin 04:43:59, then windows 04:46:53, with the last leg not
+      # finishing until 04:50:09). The three packaging jobs below are gated on
+      # the whole matrix, so they inherit every second of that delay.
       matrix:
         include:
           - target_os: linux
