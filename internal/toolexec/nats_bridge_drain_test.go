@@ -243,6 +243,12 @@ func (s *stubStream) PauseConsumer(context.Context, string, time.Time) (*jetstre
 func (s *stubStream) ResumeConsumer(context.Context, string) (*jetstream.ConsumerPauseResponse, error) {
 	panic("not implemented")
 }
+func (s *stubStream) ResetConsumer(context.Context, string) (*jetstream.ConsumerResetResponse, error) {
+	panic("not implemented")
+}
+func (s *stubStream) ResetConsumerToSequence(context.Context, string, uint64) (*jetstream.ConsumerResetResponse, error) {
+	panic("not implemented")
+}
 func (s *stubStream) ListConsumers(context.Context) jetstream.ConsumerInfoLister {
 	panic("not implemented")
 }
@@ -337,6 +343,12 @@ func (js *stubJetStream) PauseConsumer(context.Context, string, string, time.Tim
 	panic("not implemented")
 }
 func (js *stubJetStream) ResumeConsumer(context.Context, string, string) (*jetstream.ConsumerPauseResponse, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) ResetConsumer(context.Context, string, string) (*jetstream.ConsumerResetResponse, error) {
+	panic("not implemented")
+}
+func (js *stubJetStream) ResetConsumerToSequence(context.Context, string, string, uint64) (*jetstream.ConsumerResetResponse, error) {
 	panic("not implemented")
 }
 func (js *stubJetStream) CreateOrUpdatePushConsumer(context.Context, string, jetstream.ConsumerConfig) (jetstream.PushConsumer, error) {
