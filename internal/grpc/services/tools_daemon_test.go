@@ -678,6 +678,66 @@ func TestHandleFileSystemChanged(t *testing.T) {
 	})
 }
 
+// TestHandleDaemonCommandFailed covers the failure counterpart of
+// handleFileSystemChanged: the only outcome signal for a command dispatched
+// with no live RPC waiter (e.g. a git.clone drained from
+// DAEMON_PENDING_COMMANDS after control-plane's fire-and-forget CloneRepo
+// already returned — see gitcredential.svc.Clone). Without this, that
+// failure would vanish with nothing telling the user why their repo never
+// showed up.
+func TestHandleDaemonCommandFailed(t *testing.T) {
+	t.Run("nil message returns no error", func(t *testing.T) {
+		repo, cleanup := db.SetupTestDB(t)
+		defer cleanup()
+
+		svc := NewToolsDaemonService(repo)
+		defer svc.Close()
+
+		conn := &daemonConnection{userID: "test-user", daemonID: uuid.New().String(), done: make(chan struct{})}
+		require.NoError(t, svc.handleDaemonCommandFailed(context.Background(), conn, nil))
+
+		updates, err := repo.GetUserUpdatesSince(context.Background(), "test-user", 0, 100)
+		require.NoError(t, err)
+		require.Empty(t, updates)
+	})
+
+	t.Run("failure emits a NOTIFICATION user update", func(t *testing.T) {
+		repo, cleanup := db.SetupTestDB(t)
+		defer cleanup()
+
+		svc := NewToolsDaemonService(repo)
+		defer svc.Close()
+
+		ctx := context.Background()
+		userID := "test-user"
+		daemonID := uuid.New().String()
+
+		conn := &daemonConnection{userID: userID, daemonID: daemonID, done: make(chan struct{})}
+
+		require.NoError(t, svc.handleDaemonCommandFailed(ctx, conn, &reliantv1.DaemonCommandFailed{
+			RequestId:    "req-1",
+			CommandType:  "git.clone",
+			ErrorMessage: "git clone failed: authentication required",
+		}))
+
+		updates, err := repo.GetUserUpdatesSince(ctx, userID, 0, 100)
+		require.NoError(t, err)
+		require.Len(t, updates, 1)
+
+		u := updates[0]
+		require.Equal(t, db.UserUpdateNotification, u.UpdateType)
+		require.Equal(t, db.EntityTypeSystem, u.EntityType)
+		require.Equal(t, "git.clone", u.EntityID)
+
+		var data map[string]string
+		require.NoError(t, json.Unmarshal(u.Data, &data))
+		require.Equal(t, "daemon_command_failed", data["reason"])
+		require.Equal(t, "git.clone", data["command_type"])
+		require.Equal(t, "req-1", data["request_id"])
+		require.Contains(t, data["error"], "authentication required")
+	})
+}
+
 func testStringPtr(v string) *string {
 	return &v
 }

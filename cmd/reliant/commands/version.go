@@ -34,6 +34,7 @@ func newVersionCmd() *cobra.Command {
 					"commit":  build.Commit,
 					"built":   build.Date,
 					"branch":  build.Branch,
+					"forge":   build.Forge,
 					"go":      runtime.Version(),
 					"os":      runtime.GOOS,
 					"arch":    runtime.GOARCH,
@@ -46,6 +47,7 @@ func newVersionCmd() *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "reliant version %s\n", build.Version)
 			fmt.Fprintf(cmd.OutOrStdout(), "  commit:  %s\n", build.Commit)
 			fmt.Fprintf(cmd.OutOrStdout(), "  built:   %s\n", build.Date)
+			fmt.Fprintf(cmd.OutOrStdout(), "  forge:   %s\n", build.Forge)
 			fmt.Fprintf(cmd.OutOrStdout(), "  go:      %s\n", runtime.Version())
 			fmt.Fprintf(cmd.OutOrStdout(), "  os/arch: %s/%s\n", runtime.GOOS, runtime.GOARCH)
 			return nil

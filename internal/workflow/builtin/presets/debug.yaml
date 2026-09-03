@@ -10,5 +10,6 @@ params:
   tools:
   - view          # Read code and logs
   - tag:shell     # Run tests, check logs, search the codebase (rg, and a language server for callers/implementations)
+  - code_context  # trace a symbol's callers/callees in ONE call instead of a grep walk
   model:
     tags: [flagship]

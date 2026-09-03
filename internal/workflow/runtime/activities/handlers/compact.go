@@ -538,8 +538,15 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 			"Do not include quotes, trailing punctuation, or any assistant or product name (e.g. 'Claude', 'Reliant'). A good title looks like: Debugging Workflows",
 	}
 
-	// Call LLM to generate title
-	response, err := driver.SendMessages(ctx, prompt, messages, []tools.Tool{titleTool})
+	// Stream and accumulate rather than SendMessages. Titling is a one-shot
+	// request that wants a single response, but not every provider offers a
+	// non-streaming path: the Codex backend (chatgpt.com/backend-api/codex)
+	// requires stream: true and answers a non-streaming request with a bare 400.
+	// That was invisible while titling was pinned to Anthropic, and became
+	// reachable the moment model selection opened up to any "fast" model.
+	// Accumulating yields the same single response and preserves tool calls,
+	// which is all this path reads.
+	response, err := accumulator.StreamAndAccumulate(ctx, driver, prompt, messages, []tools.Tool{titleTool})
 	if err != nil {
 		return "", fmt.Errorf("failed to generate title: %w", err)
 	}

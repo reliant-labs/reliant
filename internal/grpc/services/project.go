@@ -607,10 +607,13 @@ Two questions are not text search, because the answer is not in the text: "who
 calls this / what does this call" and "what implements this interface". A call
 site does not name the receiver's type, and an implementation does not mention
 its interface, so grep matches every same-named symbol and the error compounds
-at each level. Use a language server for those (` + "`gopls call_hierarchy`" + ` /
-` + "`gopls implementation`" + ` in Go; check availability first in other languages).
-Everything else — definitions, references to a distinctive name, reading code —
-is faster with ` + "`rg`" + `. Load the ` + "`code-search`" + ` skill for the details.
+at each level.
+
+IMPORTANT: in Go and TypeScript, use the ` + "`code_context`" + ` tool for those —
+` + "`code_context(symbol: \"X\")`" + ` returns the definition, its source and a
+multi-level call map in one call. Everything else — definitions, references to a
+distinctive name, reading code, and any other language — is faster with
+` + "`rg`" + `. Load the ` + "`code-search`" + ` skill for the details.
 
 ## Available Skills
 

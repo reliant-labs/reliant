@@ -3,6 +3,12 @@ name: Build & Push Image
 on:
   push:
     branches: [main]
+    # Tags are what make docker/metadata-action's `type=semver` produce a real
+    # version. Without this trigger the workflow only ever ran on a branch
+    # push, so `type=ref,event=branch` won the `steps.meta.outputs.version`
+    # slot and the binary was stamped with the literal string "main" — which
+    # the UI rendered as "vmain". Verified against the running prod pod.
+    tags: ["v*.*.*"]
   workflow_dispatch:
     inputs:
       image_tag:
@@ -69,6 +75,34 @@ jobs:
             echo "tag=sha-$(echo ${{ github.sha }} | cut -c1-7)" >> "$GITHUB_OUTPUT"
           fi
 
+      # The version STAMPED INTO THE BINARY, which is not the same thing as the
+      # image tag above.
+      #
+      # This step exists because `${{ steps.meta.outputs.version }}` is not a
+      # safe source for it. On a branch push metadata-action resolves that to
+      # the branch name, so the published image reported `reliant version main`
+      # and Settings → About rendered "vmain". A version that is a branch name
+      # identifies no build.
+      #
+      # Two cases, both honest:
+      #   tag push  -> the semver, without the leading "v" (matches release.yml,
+      #                which stamps ${VERSION#v})
+      #   otherwise -> 0.0.0-dev-<short-sha>, a pseudo-version that sorts below
+      #                every real release and names the exact commit.
+      - name: Determine stamped version
+        id: stamp
+        run: |
+          set -euo pipefail
+          SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-7)"
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            STAMP_VERSION="${GITHUB_REF_NAME#v}"
+          else
+            STAMP_VERSION="0.0.0-dev-${SHORT_SHA}"
+          fi
+          echo "version=$STAMP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "Stamping version=$STAMP_VERSION"
+
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -93,9 +127,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           # Stamps internal/version so `reliant version` reports the release
-          # rather than "unknown" (see #166).
+          # rather than "unknown" (see #166). All four, not just VERSION: a
+          # version with no commit cannot be traced to a tree, which is the
+          # state prod was in (`commit: unknown` in the running pod).
+          #
+          # VERSION comes from the `stamp` step, NOT steps.meta.outputs.version
+          # — see that step for why the latter yields "main" on a branch push.
           build-args: |
-            VERSION=${{ steps.meta.outputs.version || github.ref_name }}
+            VERSION=${{ steps.stamp.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.stamp.outputs.date }}
+            BRANCH=${{ github.ref_name }}
           cache-from: type=gha,scope=reliant
           cache-to: type=gha,scope=reliant,mode=max
 

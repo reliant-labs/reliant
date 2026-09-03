@@ -38,6 +38,7 @@ const (
 	// Analysis tools
 	ToolProjectAnalyzer = "project_analyzer"
 	ToolSourcegraph     = "sourcegraph"
+	ToolCodeContext     = "code_context"
 
 	// Build tools
 	ToolBuild = "build"
@@ -121,7 +122,7 @@ var AllToolNames = []string{
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
 	ToolListTasks, ToolAddTask, ToolUpdateTask, ToolCreateSubtask,
-	ToolProjectAnalyzer, ToolSourcegraph,
+	ToolProjectAnalyzer, ToolSourcegraph, ToolCodeContext,
 	ToolBuild,
 	ToolStateTransition,
 	ToolAgent,

@@ -569,10 +569,15 @@ func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID
 	logging.Info("[NATSToolBridge] Subscribing to daemon subjects",
 		"userID", userID, "daemonID", daemonID, "count", len(subs))
 
-	// Drain any pending commands queued before this daemon was online.
-	// The control-plane publishes to daemon.pending.{daemonID} via JetStream
-	// when a clone/command is requested but the daemon isn't connected yet.
-	go b.drainPendingCommands(daemonCtx, userID, daemonID)
+	// Drain any pending commands queued before this daemon was online, then
+	// keep polling for as long as the daemon stays connected. The
+	// control-plane publishes to daemon.pending.{daemonID} via JetStream —
+	// for a genuinely fire-and-forget command (e.g. git.clone) that publish
+	// happens whether or not the daemon is online AT THAT MOMENT, so a
+	// one-shot drain at connect would miss anything enqueued after this
+	// daemon was already connected and stranded it until the daemon's next
+	// reconnect. See pollPendingCommands.
+	go b.pollPendingCommands(daemonCtx, userID, daemonID)
 }
 
 // OnDaemonDisconnected implements DaemonConnectionListener. It unsubscribes
@@ -724,11 +729,65 @@ const (
 	// reconnect). It also guarantees a Nak'd message is not immediately
 	// re-fetched within the same drain's fetch window.
 	pendingCommandRedeliveryDelay = 5 * time.Second
+
+	// pendingCommandDispatchDefaultTimeout bounds a dispatched command whose
+	// envelope carries no TimeoutMs (zero/unset). This is a real case, not a
+	// hypothetical: EnqueueDaemonCommand honors whatever the caller passes,
+	// and the wire envelope's TimeoutMs field is only ever set by callers
+	// that explicitly populate it.
+	pendingCommandDispatchDefaultTimeout = 60 * time.Second
+	// pendingCommandDispatchMaxTimeout caps a declared TimeoutMs so a
+	// misconfigured enqueue can't pin a drain goroutine (and the daemon
+	// connection's context) open indefinitely.
+	pendingCommandDispatchMaxTimeout = 5 * time.Minute
 )
 
+// pendingDrainFetchBudget bounds how long drainPendingCommands spends
+// pulling ALREADY-QUEUED messages off DAEMON_PENDING_COMMANDS on daemon
+// connect — it must NOT bound how long a dispatched command is allowed to
+// run. Those two were previously the same context, which cut off a
+// mid-flight git.clone (a 10-60s NATS round trip, see
+// filesystemMutatingCommands in daemonruntime/runtime.go) after exactly 5s
+// even though the daemon went on to finish the clone successfully — the
+// caller had already given up and NAK'd it for redelivery. Var (not const)
+// so tests can shrink it instead of running real-time against a 5s budget.
+var pendingDrainFetchBudget = 5 * time.Second
+
+// pendingCommandPollInterval controls how often pollPendingCommands re-runs
+// drainPendingCommands for a daemon that stays connected. A genuinely
+// fire-and-forget enqueue (control-plane's Clone, which never sends a live
+// NATS request at all — see gitcredential.svc.Clone) can land on
+// DAEMON_PENDING_COMMANDS at any point during a long-lived connection, not
+// just before it. A connect-time-only drain would strand that command until
+// the daemon's next reconnect, which may be hours away. Var so tests don't
+// pay real wall-clock time for it.
+var pendingCommandPollInterval = 10 * time.Second
+
+// pollPendingCommands runs drainPendingCommands once immediately (covering
+// anything queued while the daemon was offline) and then repeats on
+// pendingCommandPollInterval for as long as ctx (the per-daemon connection
+// context) is alive, so commands enqueued at any point during a long-lived
+// connection still get picked up without waiting for a reconnect.
+func (b *NATSToolBridge) pollPendingCommands(ctx context.Context, userID, daemonID string) {
+	b.drainPendingCommands(ctx, userID, daemonID)
+
+	ticker := time.NewTicker(pendingCommandPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			b.drainPendingCommands(ctx, userID, daemonID)
+		}
+	}
+}
+
 // drainPendingCommands creates a pull consumer on the
-// DAEMON_PENDING_COMMANDS stream, drains any messages queued for this
-// daemon while it was offline, dispatches them, and returns.
+// DAEMON_PENDING_COMMANDS stream, drains any messages currently queued for
+// this daemon, dispatches them, and returns. Called both once at connect
+// (draining what queued while offline) and periodically by
+// pollPendingCommands while the daemon stays connected.
 func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemonID string) {
 	if b.js == nil {
 		return
@@ -796,13 +855,25 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 		}
 	}()
 
-	// Fetch available messages with a short timeout — we only want to drain
-	// what's already queued, not block waiting for new messages.
-	fetchCtx, fetchCancel := context.WithTimeout(ctx, 5*time.Second)
+	// fetchCtx bounds ONLY the loop below that pulls already-queued messages
+	// off the stream — we want to drain what's queued, not block waiting for
+	// new arrivals. It must never be handed to SendDaemonCommand: dispatching
+	// a command is a separate, longer-lived operation with its own timeout
+	// derived from the envelope below (see pendingCommandDispatchTimeout).
+	fetchCtx, fetchCancel := context.WithTimeout(ctx, pendingDrainFetchBudget)
 	defer fetchCancel()
 
 	var dispatched int
 	for {
+		// Bound total time spent looping over fetch batches to the drain
+		// budget, independent of how long any individual dispatch below
+		// takes (dispatch now runs on its own context — see
+		// pendingCommandDispatchTimeout).
+		if fetchCtx.Err() != nil {
+			break
+		}
+		// Each individual Fetch call is capped at 2s so a slow/empty stream
+		// doesn't stall past the fetchCtx budget by more than one poll.
 		msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(2*time.Second))
 		if err != nil {
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
@@ -842,7 +913,25 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				Policy: daemonpolicy.WireToProto(envelope.Policy),
 			}
 
-			if _, err := b.mgr.SendDaemonCommand(fetchCtx, userID, protoReq); err != nil {
+			// Dispatch runs on ITS OWN context, bounded by the command's
+			// declared TimeoutMs (default/cap below), never by fetchCtx.
+			// fetchCtx expires after pendingDrainFetchBudget purely to stop
+			// the drain LOOP from polling for new batches — reusing it here
+			// cancelled a still-running command (e.g. a 10-60s git.clone)
+			// out from under the daemon after 5s even though the daemon
+			// went on to finish it. Root cause of the prod clone failures;
+			// see the drainPendingCommands doc comment.
+			dispatchTimeout := pendingCommandDispatchDefaultTimeout
+			if envelope.TimeoutMs > 0 {
+				dispatchTimeout = time.Duration(envelope.TimeoutMs) * time.Millisecond
+				if dispatchTimeout > pendingCommandDispatchMaxTimeout {
+					dispatchTimeout = pendingCommandDispatchMaxTimeout
+				}
+			}
+			dispatchCtx, dispatchCancel := context.WithTimeout(ctx, dispatchTimeout)
+			_, err = b.mgr.SendDaemonCommand(dispatchCtx, userID, protoReq)
+			dispatchCancel()
+			if err != nil {
 				// Dispatch failed. This is often transient — the daemon may be
 				// momentarily busy or the stream just healed on reconnect.
 				// DAEMON_PENDING_COMMANDS is WorkQueue retention, so the ONLY

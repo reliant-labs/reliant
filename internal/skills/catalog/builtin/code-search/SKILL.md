@@ -40,38 +40,27 @@ server's startup cost buys nothing.
 Capability varies sharply by language. Check before you rely on it; advice that
 fails on contact is worse than no advice.
 
-| Language | Tool | call hierarchy | implementations | references | hover (inferred types) |
-|---|---|---|---|---|---|
-| **Go** | `gopls` CLI, and `gopls mcp` if your harness exposes it | yes | yes | yes | yes |
-| **TypeScript / C#** | `mcp-language-server` bridge, when enabled | **no** | **no** | yes | yes |
-| **Rust / C++** | `rust-analyzer`, `clangd` | no CLI query surface — LSP/MCP only | | | |
+| Language | How to navigate | call hierarchy | implementations |
+|---|---|---|---|
+| **Go**, **TypeScript / JavaScript** | the **`code_context` tool** | yes | yes |
+| everything else | `rg` | no | no |
 
-For TypeScript and C#, `hover` is the unique win: it returns the INFERRED type of
-`const x = useFoo()` with no annotation, which `rg` cannot compute at any cost.
-Call hierarchy is not available through the bridge, so for those languages a
-careful `rg` remains the practical approach for caller walks — keep the depth
-shallow and verify.
+**IMPORTANT: for Go and TypeScript, use the `code_context` tool.** One call returns
+the definition, its source, and a multi-level call map:
 
-Probe first; degrade without ceremony:
+    code_context(symbol: "ResolveDaemon")            # definition + 3-level caller map
+    code_context(symbol: "X", want: "callees")       # what it calls
+    code_context(symbol: "X", want: "implementations")
+    code_context(symbol: "X", file: "svc.go")        # disambiguate a common name
 
-    command -v gopls >/dev/null && gopls call_hierarchy path/to/file.go:LINE:COL
+Do not hand-run `gopls` or `tsserver` — code_context drives them, scopes results to
+your workspace (no stdlib noise), and traces depth without a turn per hop.
 
-## Go: the commands
-
-    gopls call_hierarchy path/to/file.go:LINE:COL   # callers AND callees
-    gopls implementation path/to/file.go:LINE:COL   # interface -> concrete types
-    gopls references     path/to/file.go:LINE:COL   # only when rg is ambiguous
-
-Get LINE:COL from an `rg -n` hit first (the column is the 1-based offset of the
-identifier on that line). CHAIN the lookup and the query into ONE command rather
-than spending a turn on each:
-
-    f=internal/svc/x.go; l=$(rg -n 'func .*executeApproval' $f | cut -d: -f1); \
-      gopls call_hierarchy $f:$l:34
-
-A cold `gopls` CLI invocation measured ~9s in a large repo. That is why it is worth
-it for the two questions above and a waste for a plain name lookup. An always-warm
-MCP server avoids the startup cost; prefer it when your harness exposes one.
+**IMPORTANT: never walk callers with `rg`.** A call site does not name its
+receiver's type, so `rg` matches every same-named method and the error compounds at
+every level — a measured depth-3 grep walk returned functions that were not on the
+call path at all. `rg` remains correct for name lookup, full-text search, and for
+languages with no server.
 
 ## Traps
 

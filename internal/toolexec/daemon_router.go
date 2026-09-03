@@ -3,9 +3,37 @@ package toolexec
 
 import (
 	"context"
+	"errors"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
+
+// ErrDaemonPending means a daemon record exists for this user (it was
+// created and is provisioning) but has not yet connected. Distinct from a
+// resolution failure meaning no daemon exists at all: callers that see this
+// error should tell the user to wait, not surface a terminal failure.
+//
+// errors.Is is the Go-level contract: any router path that discovers "a
+// daemon exists but nothing is attached yet" wraps this sentinel so callers
+// can test for it without parsing message text (IsDaemonPending below).
+//
+// The message text ALSO deliberately contains "no daemon connected" — the
+// same marker daemonRequestError already produces for a daemon that
+// registered but dropped its NATS subscription (see isDaemonConnectingError
+// on the frontend). That reuse is intentional: it puts the "record exists,
+// still starting" case into the exact wait/retry family the frontend
+// already renders (classifyDaemonWait + useDaemonWait's poll loop), instead
+// of inventing a second wire format the client would need new plumbing to
+// understand.
+var ErrDaemonPending = errors.New("no daemon connected: daemon record exists but has not registered yet (still starting)")
+
+// IsDaemonPending reports whether err indicates a daemon exists for the user
+// but has not connected yet (still provisioning) — as opposed to no daemon
+// existing at all. Callers use this to choose between a retryable "still
+// starting" state and a terminal error.
+func IsDaemonPending(err error) bool {
+	return errors.Is(err, ErrDaemonPending)
+}
 
 // TerminalOutputEvent represents a terminal output message or session lifecycle event.
 type TerminalOutputEvent struct {

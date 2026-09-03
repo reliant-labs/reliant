@@ -452,6 +452,11 @@ export const LightweightDiffViewer = memo(function LightweightDiffViewer({
             key={line.key}
             style={{
               display: 'flex',
+              // Without this the row is only as wide as the *visible* viewport,
+              // so on a diff wide enough to scroll horizontally the add/remove
+              // background stops at the fold and everything past it renders on
+              // the bare editor background.
+              minWidth: 'max-content',
               minHeight: `${LINE_HEIGHT}px`,
               backgroundColor: line.bgColor,
               borderLeft: `3px solid ${line.borderColor}`,

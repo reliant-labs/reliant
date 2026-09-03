@@ -466,6 +466,62 @@ func loadAllPresets(t *testing.T) map[string]Preset {
 	return presets
 }
 
+// TestPresetThinkingLevelsAreSupported checks that every preset declaring a
+// thinking_level names a level the models its selector resolves to actually
+// support. An unsupported level is silently reconciled away at request time,
+// so the preset would run at the model default with nothing to show for it.
+func TestPresetThinkingLevelsAreSupported(t *testing.T) {
+	registry := models.MustGetRegistry()
+
+	for name, preset := range loadAllPresets(t) {
+		t.Run(name, func(t *testing.T) {
+			modelMap, ok := preset.Params["model"].(map[string]any)
+			if !ok {
+				return
+			}
+			level, ok := modelMap["thinking_level"].(string)
+			if !ok || level == "" {
+				return
+			}
+
+			require.True(t, models.IsKnownThinkingLevel(level),
+				"thinking_level %q is not a known level (one of %v)", level, models.KnownThinkingLevels)
+
+			id, _ := modelMap["id"].(string)
+			if id == "" {
+				return
+			}
+			definition, found := registry.GetDefinition(id)
+			require.True(t, found, "model %q not in registry", id)
+			assert.True(t, models.SupportsThinkingLevelForCaps(definition.Capabilities, level),
+				"model %q does not support thinking_level %q (supports %v)",
+				id, level, models.SupportedThinkingLevels(definition.Capabilities))
+		})
+	}
+}
+
+// TestAgentPresetThinkingLevels pins the thinking level each agent preset runs
+// at. These are deliberate cost/quality choices, not incidental values: the
+// levels are what keep a flagship-model preset from defaulting to the model's
+// own (higher) default_thinking_level.
+func TestAgentPresetThinkingLevels(t *testing.T) {
+	want := map[string]string{
+		"implementer.yaml": "medium",
+		"researcher.yaml":  "low",
+	}
+
+	presets := loadAllPresets(t)
+	for file, wantLevel := range want {
+		preset, ok := presets[file]
+		require.True(t, ok, "preset %s not found", file)
+
+		modelMap, ok := preset.Params["model"].(map[string]any)
+		require.True(t, ok, "%s: model param should be an object", file)
+		assert.Equal(t, wantLevel, modelMap["thinking_level"],
+			"%s declares an unexpected thinking_level", file)
+	}
+}
+
 // getValidParamsForTag returns the valid parameter names for a given workflow tag
 func getValidParamsForTag(tag string) map[string]bool {
 	switch tag {

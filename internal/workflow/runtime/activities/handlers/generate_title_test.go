@@ -39,11 +39,21 @@ type titleDriver struct {
 	gotTools    []tools.Tool
 }
 
-func (d *titleDriver) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tls []tools.Tool) (*llm.DriverResponse, error) {
+// StreamResponse, not SendMessages: titling streams and accumulates, because
+// the Codex backend rejects a non-streaming request outright.
+func (d *titleDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tls []tools.Tool) <-chan llm.DriverEvent {
 	d.gotPrompts = prompts
 	d.gotMessages = messages
 	d.gotTools = tls
-	return d.resp, nil
+
+	ch := make(chan llm.DriverEvent, len(d.resp.ToolCalls)+2)
+	for i := range d.resp.ToolCalls {
+		call := d.resp.ToolCalls[i]
+		ch <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: &call}
+	}
+	ch <- llm.DriverEvent{Type: llm.EventComplete, Response: d.resp}
+	close(ch)
+	return ch
 }
 
 // titleResolver injects the driver and captures the options the activity set.
@@ -199,6 +209,36 @@ func TestGenerateTitle_CleansUpModelOutput(t *testing.T) {
 			assert.Equal(t, tt.want, title)
 		})
 	}
+}
+
+// Titling must STREAM. The Codex backend (chatgpt.com/backend-api/codex)
+// requires stream: true and answers a non-streaming request with a bare 400,
+// so a driver that only implements SendMessages fails in production against
+// any Codex-served "fast" model. A driver whose SendMessages panics proves the
+// activity never reaches for it.
+type streamOnlyTitleDriver struct {
+	titleDriver
+}
+
+func (d *streamOnlyTitleDriver) SendMessages(context.Context, []string, []message.Message, []tools.Tool) (*llm.DriverResponse, error) {
+	panic("titling must stream: the Codex backend rejects non-streaming requests with a 400")
+}
+
+func TestGenerateTitle_StreamsRatherThanSendMessages(t *testing.T) {
+	d := &streamOnlyTitleDriver{
+		titleDriver: titleDriver{resp: setTitleCall(`{"title":"Debugging Workflows"}`)},
+	}
+	var opts llm.DriverOptions
+	a := &GenerateTitleActivity{driverResolver: func(ctx context.Context, userID string, prefs models.Preferences, o ...llm.DriverOption) (llm.Driver, error) {
+		for _, apply := range o {
+			apply(&opts)
+		}
+		return d, nil
+	}}
+
+	title, err := a.generateTitle(context.Background(), "user-1", "can you help me debug my workflows?")
+	require.NoError(t, err)
+	assert.Equal(t, "Debugging Workflows", title)
 }
 
 // The 60-char clamp counts runes: a byte slice would cut a multi-byte

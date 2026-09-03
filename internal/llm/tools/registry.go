@@ -46,6 +46,7 @@ const (
 	// Analysis tools
 	ToolProjectAnalyzer = "project_analyzer"
 	ToolSourcegraph     = "sourcegraph"
+	ToolCodeContext     = "code_context"
 
 	// Build tools
 	ToolBuild = "build"
@@ -487,6 +488,15 @@ func GetToolRegistry() []ToolDefinition {
 
 		// Analysis tools - conditionally add project analyzer
 		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagPlan}, ToolRunsAnywhere},
+
+		// code_context is a SYMBOL-graph tool, not a text-search tool, which is
+		// why it exists where the grep/glob tools above were deleted. It answers
+		// "who calls this / what implements this" — questions ripgrep cannot
+		// compute at all, because a call site never names its receiver's type.
+		// It is TagDefault because its value is in replacing a multi-turn grep
+		// walk, and a tool an agent must first discover does not get used.
+		// Daemon-located: it needs the real checkout and a language server.
+		{ToolCodeContext, (*ToolsFactory).CodeContext, []ToolTag{TagAnalysis, TagSearch, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
 
 		// State tools
 		// Note: StateTransition is registered dynamically with flow context

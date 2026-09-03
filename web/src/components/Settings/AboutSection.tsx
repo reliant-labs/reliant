@@ -58,11 +58,16 @@ export function AboutSection() {
         });
       } catch (error) {
         console.error("Failed to fetch version info:", error);
+        // Every field says "unknown", including the date. The previous
+        // fallback invented "1.0.0" / today's date / "main" — a version that
+        // looks like a real release and is not one, so a user reporting a bug
+        // reports a version that never shipped. A blank is recoverable; a
+        // plausible lie is not.
         setVersionInfo({
-          version: "1.0.0",
+          version: "unknown",
           commit: "unknown",
-          date: new Date().toISOString().split("T")[0],
-          branch: "main",
+          date: "unknown",
+          branch: "unknown",
         });
       }
     };
@@ -143,7 +148,9 @@ export function AboutSection() {
             Reliant
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            v{versionInfo?.version || "1.0.0"}
+            {versionInfo?.version && versionInfo.version !== "unknown"
+              ? `v${versionInfo.version}`
+              : "version unknown"}
           </p>
         </div>
 
