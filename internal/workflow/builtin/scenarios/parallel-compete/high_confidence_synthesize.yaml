@@ -15,48 +15,64 @@ events:
       response_text: "Build a comprehensive authentication system with OAuth, password auth, and JWT"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl
+    output:
       response_text: "OAuth provider integration complete with Google, GitHub, and Apple support"
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl
+    output:
       response_text: "Password auth with bcrypt hashing, rate limiting, and account lockout"
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl
+    output:
       response_text: "JWT token generation, validation, refresh flow, and session management"
 
-  - node: review
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Each candidate excels at a different auth component. Combining all three creates a complete auth system."
-      response_text: "Each candidate excels at a different auth component. Combining all three creates a complete auth system."
-      response:
-        winner: 2
-        strategy: "synthesize"
-        confidence: 10
-        rationale: "Candidate 1 has the best OAuth integration, Candidate 2 has the best password handling with security features, Candidate 3 has the best JWT management. Together they form a complete auth system."
-        synthesis_instructions: |
-          1. Start with Candidate 2's password auth as the base (most complete project structure)
-          2. Integrate Candidate 1's OAuth provider setup from /wt/1/auth/oauth.go
-          3. Add Candidate 3's JWT token generation and validation from /wt/3/auth/jwt.go
-          4. Ensure all auth methods use consistent user session handling
-          5. Merge test files from all three candidates
-      completed: true
-
-  - node: synthesizer
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 2
+          strategy: "synthesize"
+          confidence: 10
+          rationale: "Candidate 1 has the best OAuth integration, Candidate 2 has the best password handling with security features, Candidate 3 has the best JWT management. Together they form a complete auth system."
+          synthesis_instructions: |
+            1. Start with Candidate 2's password auth as the base (most complete project structure)
+            2. Integrate Candidate 1's OAuth provider setup from /wt/1/auth/oauth.go
+            3. Add Candidate 3's JWT token generation and validation from /wt/3/auth/jwt.go
+            4. Ensure all auth methods use consistent user session handling
+            5. Merge test files from all three candidates
+  - node: synthesizer.agent_loop.call_llm
     output:
       message:
         role: assistant
         text: "Successfully combined OAuth, password auth, and JWT into a unified auth system with full test coverage"
       response_text: "Successfully combined OAuth, password auth, and JWT into a unified auth system with full test coverage"
-
+      tool_calls: []
 expect:
   outcome: completed
   reached:

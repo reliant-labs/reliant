@@ -19,17 +19,26 @@ description: Pausing during the de-AI (style) loop resumes into de_ai, not from 
 start_at: de_ai
 
 events:
-  - node: de_ai
+  # Phase agents below are EXECUTED, not black-boxed: the qualified id makes the
+  # builtin://agent ref transparent so each node's own args CEL is compiled.
+  # de_ai EXECUTES its get-it-right body rather than standing in for it.
+  - node: de_ai.attempt.implement
     output:
-      response_text: "De-AI voice pass resumed from where it paused and completed."
-      review_grade: pass
-      eval_strategy: pass
-      strategy: pass
-      iterations: 3
+      response_text: "Applied the de-AI edits to the assembled post."
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Reads like genuine practitioner writing."
 
-  - node: reddit_summary
+  - node: reddit_summary.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Reddit summary written."
       response_text: "Reddit summary written."
+      tool_calls: []
 
 expect:
   outcome: completed

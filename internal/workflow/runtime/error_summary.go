@@ -37,8 +37,63 @@ var knownErrorPatterns = []struct {
 	{"bad gateway", "The AI provider returned a bad gateway error"},
 	{"gateway timeout", "The AI provider timed out"},
 	{"timeout", "Request to the AI provider timed out"},
-	{"connection refused", "Could not connect to the AI provider"},
-	{"connection reset", "Connection to the AI provider was reset"},
+}
+
+// networkFailureSummary is what we tell a user whose transport never reached the
+// provider. It deliberately names no provider and proposes no re-authentication:
+// the credentials were never presented, so nothing about them is known.
+const networkFailureSummary = "Cannot reach the AI provider — check your network connection"
+
+// networkFailureSignals appear only when the request failed below HTTP — the
+// socket was never opened, or died before a response arrived. Any of them alone
+// is conclusive.
+var networkFailureSignals = []string{
+	"no such host",
+	"dial tcp",
+	"dial udp",
+	"connection refused",
+	"connection reset",
+	"broken pipe",
+	"i/o timeout",
+	"network is unreachable",
+	"no route to host",
+	"tls handshake timeout",
+}
+
+// transportLayerSignals name the syscall that failed. They qualify errors that
+// are ambiguous on their own — "context deadline exceeded" is a plain request
+// timeout everywhere else in this codebase.
+var transportLayerSignals = []string{"dial tcp", "dial udp", "read tcp", "write tcp"}
+
+// isNetworkFailure reports whether the transport never produced a usable HTTP
+// response. It must be consulted before any provider-specific matching: a
+// provider's hostname appears in the URL of every failed request to it, so
+// matching on the hostname alone reports DNS and connectivity outages as
+// expired credentials and sends users to re-authenticate for no reason.
+func isNetworkFailure(errLower string) bool {
+	for _, signal := range networkFailureSignals {
+		if strings.Contains(errLower, signal) {
+			return true
+		}
+	}
+
+	// A truncated stream reads as EOF. Anchor on the delimiter so an unrelated
+	// word that merely ends in those three letters cannot match.
+	if strings.Contains(errLower, "unexpected eof") ||
+		strings.Contains(errLower, ": eof") ||
+		strings.HasSuffix(errLower, " eof") {
+		return true
+	}
+
+	if strings.Contains(errLower, "context deadline exceeded") {
+		for _, signal := range transportLayerSignals {
+			if strings.Contains(errLower, signal) {
+				return true
+			}
+		}
+	}
+
+	return false
 }
 
 // Temporal wraps every failure in scaffolding frames naming the history event
@@ -77,16 +132,39 @@ func cleanTemporalError(errMsg string) string {
 	return cleaned
 }
 
+// codexBackendHost identifies a request to Codex's responses API. A 401 against
+// this host is a Codex credential problem no matter how the body is worded, so
+// it is the signal that lets us name Codex without letting a bare "401" from
+// some other provider claim a Codex-specific message.
+const codexBackendHost = "chatgpt.com/backend-api/codex"
+
+// anthropicAPIHost identifies a request to Claude's messages API. Like
+// codexBackendHost it only names the provider — it must be paired with an auth
+// signal to mean anything, because this hostname appears in the URL of every
+// failed Anthropic request, including overloads, 500s and outages.
+const anthropicAPIHost = "api.anthropic.com"
+
 // extractProviderReconnectSummary recognizes provider-specific auth failures that
 // should surface a concrete reconnect action instead of a generic auth error.
 func extractProviderReconnectSummary(errLower string) string {
+	unauthorized := strings.Contains(errLower, "401 unauthorized")
+	tokenExpired := strings.Contains(errLower, "token_expired")
+
 	switch {
 	case strings.Contains(errLower, "claude session expired"), strings.Contains(errLower, "please reconnect claude"):
 		return "Claude session expired. Please reconnect Claude"
 	case strings.Contains(errLower, "codex session expired"), strings.Contains(errLower, "please reconnect codex"), strings.Contains(errLower, "codex authentication required"):
 		return "Codex session expired. Please reconnect Codex"
-	case strings.Contains(errLower, "api.anthropic.com"), strings.Contains(errLower, "authentication_error"), strings.Contains(errLower, "invalid authentication credentials"):
+	case strings.Contains(errLower, codexBackendHost) && (unauthorized || tokenExpired):
+		return "Codex session expired. Please reconnect Codex"
+	case strings.Contains(errLower, anthropicAPIHost) && (unauthorized || tokenExpired):
 		return "Claude session expired. Please reconnect Claude"
+	case strings.Contains(errLower, "authentication_error"), strings.Contains(errLower, "invalid authentication credentials"):
+		return "Claude session expired. Please reconnect Claude"
+	case tokenExpired:
+		return "Authentication token expired. Please reconnect your AI provider"
+	case unauthorized:
+		return "Authentication failed with the AI provider"
 	default:
 		return ""
 	}
@@ -100,6 +178,13 @@ func extractProviderReconnectSummary(errLower string) string {
 // Returns an empty string if no recognizable LLM error is found.
 func extractLLMErrorSummary(errMsg string) string {
 	errLower := strings.ToLower(errMsg)
+
+	// Before anything else: if the request never reached the provider, no
+	// provider-specific claim about it can be true.
+	if isNetworkFailure(errLower) {
+		return networkFailureSummary
+	}
+
 	if reconnectSummary := extractProviderReconnectSummary(errLower); reconnectSummary != "" {
 		return reconnectSummary
 	}

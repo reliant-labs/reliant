@@ -43,9 +43,39 @@ inputs:
   existing_deck_dir: ""
 
 events:
-  # Phase 1: Scrape website
-  - node: scrape_website
+  # The builtin://agent phase nodes below are EXECUTED rather than black-boxed:
+  # a qualified id (`<node>.agent_loop.call_llm`) makes the ref transparent, so
+  # each node's own args CEL — tools, and scrape_website's website_url-dependent
+  # system prompt — is compiled and evaluated.
+  # Router: this scenario runs the pipeline from scratch, so the scrape entry is
+  # chosen explicitly rather than inherited from the router's default candidate.
+  - node: classify
     output:
+      selected_node: scrape_website
+      reasoning: "No prior work exists — start by scraping the company website."
+
+  # Phase 1: Scrape website
+  - node: scrape_website.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: |
+          ## Company Overview
+          Example Corp builds developer tools with AI workflows.
+
+          ## Products
+          - Example Code: shipped, beta
+          - Example Engine: waitlist only
+
+          ## Traction Claims
+          - "5,000+ downloads" — PLAUSIBLE
+          - GitHub: 340 stars — VERIFIED
+
+          ## Brand Identity
+          Colors: #a855f7 purple, #0a0a0a bg
+          Font: Inter
+          Tone: Technical, casual
+
       response_text: |
         ## Company Overview
         Example Corp builds developer tools with AI workflows.
@@ -63,9 +93,20 @@ events:
         Font: Inter
         Tone: Technical, casual
 
+      tool_calls: []
   # Phase 2a: Competitive research
-  - node: research_competitors
+  - node: research_competitors.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          ## Direct Competitors
+          - Cursor: $2.5B valuation, 20M+ downloads
+          - Copilot: 15M users
+
+          ## Honest Assessment
+          Behind on users, ahead on workflows.
+
       response_text: |
         ## Direct Competitors
         - Cursor: $2.5B valuation, 20M+ downloads
@@ -74,9 +115,19 @@ events:
         ## Honest Assessment
         Behind on users, ahead on workflows.
 
+      tool_calls: []
   # Phase 2b: Market research
-  - node: research_market
+  - node: research_market.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          ## Market Size
+          AI-assisted dev tools: $22.1B by 2028 (IDC)
+
+          ## Comparable Raises
+          Codeium: $150M Series C, Augment: $227M Series B
+
       response_text: |
         ## Market Size
         AI-assisted dev tools: $22.1B by 2028 (IDC)
@@ -84,9 +135,21 @@ events:
         ## Comparable Raises
         Codeium: $150M Series C, Augment: $227M Series B
 
+      tool_calls: []
   # Phase 3: Founder interview
-  - node: founder_interview
+  - node: founder_interview.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          ## Founder Brief
+          Downloads: 3,200. WAU: 800. Revenue: $0.
+          Raising $2M seed. 2 founders (AWS, Google).
+
+          ## Claims to Soften
+          - 5,000 → 3,200 real downloads
+          - Remove big company name-dropping
+
       response_text: |
         ## Founder Brief
         Downloads: 3,200. WAU: 800. Revenue: $0.
@@ -96,34 +159,52 @@ events:
         - 5,000 → 3,200 real downloads
         - Remove big company name-dropping
 
+      tool_calls: []
   # Phase 4a: Plan deck (standalone structured-agent)
-  - node: plan_deck
+  # plan_deck EXECUTES its structured-agent body rather than being replaced by a
+  # literal. The response tool is `submit_deck_plan` (pitch-deck.yaml sets
+  # response_tool_name); using any other key leaves `completed` false and spins.
+  - node: plan_deck.agent_loop.call_llm
     output:
-      response_text: "Planned 3-slide deck with demo-first narrative."
-      response:
-        narrative_arc: "Demo-first: open with product, build through traction to the ask."
-        slides:
-          - filename: "01-hook.md"
-            title: "What if your IDE could run multi-agent workflows?"
-            purpose: "Hook with a demo-first opening"
-            key_content: "AI-powered IDE with workflow automation, 3,200 downloads"
-            layout_hint: centered-hero
-            sources: "phase-1-scrape/website-analysis.md, phase-3-interview/founder-brief.md"
-          - filename: "02-traction.md"
-            title: "3,200 downloads, 800 weekly active"
-            purpose: "Show honest traction"
-            key_content: "3,200 downloads (not 5K), 800 WAU, 40% retention"
-            layout_hint: full-bleed-stat
-            sources: "phase-3-interview/founder-brief.md"
-          - filename: "03-ask.md"
-            title: "Raising $2M seed"
-            purpose: "The ask"
-            key_content: "$2M seed, 18 months runway, hire 3 engineers"
-            layout_hint: centered-hero
-            sources: "phase-3-interview/founder-brief.md"
-
-  # Phase 4b: slide_pipeline — parallel loop (mocked as black box)
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_plan
+          name: submit_deck_plan
+          input: {}
+  - node: plan_deck.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_deck_plan:
+          narrative_arc: "Demo-first: open with product, build through traction to the ask."
+          slides:
+            - filename: "01-hook.md"
+              title: "What if your IDE could run multi-agent workflows?"
+              purpose: "Hook with a demo-first opening"
+              key_content: "AI-powered IDE with workflow automation, 3,200 downloads"
+              layout_hint: centered-hero
+              sources: "phase-1-scrape/website-analysis.md, phase-3-interview/founder-brief.md"
+            - filename: "02-traction.md"
+              title: "3,200 downloads, 800 weekly active"
+              purpose: "Show honest traction"
+              key_content: "3,200 downloads (not 5K), 800 WAU, 40% retention"
+              layout_hint: full-bleed-stat
+              sources: "phase-3-interview/founder-brief.md"
+            - filename: "03-ask.md"
+              title: "Raising $2M seed"
+              purpose: "The ask"
+              key_content: "$2M seed, 18 months runway, hire 3 engineers"
+              layout_hint: centered-hero
+              sources: "phase-3-interview/founder-brief.md"
   - node: slide_pipeline
+    # Deliberate black box: this scenario mocks the parallel loop's AGGREGATE
+    # result (_results/_completed) rather than exercising the per-slide body,
+    # which builtin://agent black-boxes anyway. Loop bodies execute by default.
+    black_box: true
     output:
       _completed: 3
       _failed: 0
@@ -172,9 +253,20 @@ events:
       stdout: ""
       stderr: ""
 
+  # handoff EXECUTES: previously this node had NO event at all, so it fell
+  # through to the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Deck served; posted the preview URL."
+      response_text: "Deck served; posted the preview URL."
+      tool_calls: []
+
 expect:
   outcome: completed
   reached:
+    - classify
     - scrape_website
     - research_competitors
     - research_market
@@ -208,51 +300,91 @@ inputs:
   existing_deck_dir: ""
 
 events:
+  # Router: this scenario runs the pipeline from scratch, so the scrape entry is
+  # chosen explicitly rather than inherited from the router's default candidate.
+  - node: classify
+    output:
+      selected_node: scrape_website
+      reasoning: "No prior work exists — start by scraping the company website."
+
   # Phases 1-3: Minimal stubs
-  - node: scrape_website
+  - node: scrape_website.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Company analysis done."
       response_text: "Company analysis done."
+      tool_calls: []
 
-  - node: research_competitors
+  - node: research_competitors.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Competitors analyzed."
       response_text: "Competitors analyzed."
+      tool_calls: []
 
-  - node: research_market
+  - node: research_market.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Market sized."
       response_text: "Market sized."
+      tool_calls: []
 
-  - node: founder_interview
+  - node: founder_interview.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Founder brief done."
       response_text: "Founder brief done."
+      tool_calls: []
 
   # Phase 4a: plan_deck with 3 slides
-  - node: plan_deck
+  # plan_deck EXECUTES its structured-agent body rather than being replaced by a
+  # literal. The response tool is `submit_deck_plan` (pitch-deck.yaml sets
+  # response_tool_name); using any other key leaves `completed` false and spins.
+  - node: plan_deck.agent_loop.call_llm
     output:
-      response_text: "Planned 3 slides."
-      response:
-        narrative_arc: "Demo-first: open with product, build to traction."
-        slides:
-          - filename: "01-hook.md"
-            title: "What we built"
-            purpose: "Open with the product"
-            key_content: "Developer tool with AI workflows"
-            layout_hint: centered-hero
-            sources: "phase-1-scrape/website-analysis.md"
-          - filename: "02-traction.md"
-            title: "3,200 downloads in 3 months"
-            purpose: "Show early traction"
-            key_content: "3,200 downloads, 800 WAU"
-            layout_hint: full-bleed-stat
-            sources: "phase-3-interview/founder-brief.md"
-          - filename: "03-ask.md"
-            title: "Raising $2M seed"
-            purpose: "Close with the ask"
-            key_content: "$2M seed, 18 months runway"
-            layout_hint: centered-hero
-            sources: "phase-3-interview/founder-brief.md"
-
-  # Phase 4b: slide_pipeline (parallel loop) completes
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_plan
+          name: submit_deck_plan
+          input: {}
+  - node: plan_deck.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_deck_plan:
+          narrative_arc: "Demo-first: open with product, build to traction."
+          slides:
+            - filename: "01-hook.md"
+              title: "What we built"
+              purpose: "Open with the product"
+              key_content: "Developer tool with AI workflows"
+              layout_hint: centered-hero
+              sources: "phase-1-scrape/website-analysis.md"
+            - filename: "02-traction.md"
+              title: "3,200 downloads in 3 months"
+              purpose: "Show early traction"
+              key_content: "3,200 downloads, 800 WAU"
+              layout_hint: full-bleed-stat
+              sources: "phase-3-interview/founder-brief.md"
+            - filename: "03-ask.md"
+              title: "Raising $2M seed"
+              purpose: "Close with the ask"
+              key_content: "$2M seed, 18 months runway"
+              layout_hint: centered-hero
+              sources: "phase-3-interview/founder-brief.md"
   - node: slide_pipeline
+    # Deliberate black box: this scenario mocks the parallel loop's AGGREGATE
+    # result (_results/_completed) rather than exercising the per-slide body,
+    # which builtin://agent black-boxes anyway. Loop bodies execute by default.
+    black_box: true
     output:
       _completed: 3
       _failed: 0
@@ -297,6 +429,16 @@ events:
     output:
       exit_code: 0
 
+  # handoff EXECUTES: previously this node had NO event at all, so it fell
+  # through to the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Deck served; posted the preview URL."
+      response_text: "Deck served; posted the preview URL."
+      tool_calls: []
+
 expect:
   outcome: completed
   reached:
@@ -329,57 +471,97 @@ inputs:
   existing_deck_dir: ""
 
 events:
+  # Router: this scenario runs the pipeline from scratch, so the scrape entry is
+  # chosen explicitly rather than inherited from the router's default candidate.
+  - node: classify
+    output:
+      selected_node: scrape_website
+      reasoning: "No prior work exists — start by scraping the company website."
+
   # Phases 1-3: Minimal stubs
-  - node: scrape_website
+  - node: scrape_website.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Company analysis done."
       response_text: "Company analysis done."
+      tool_calls: []
 
-  - node: research_competitors
+  - node: research_competitors.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Competitors analyzed."
       response_text: "Competitors analyzed."
+      tool_calls: []
 
-  - node: research_market
+  - node: research_market.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Market sized."
       response_text: "Market sized."
+      tool_calls: []
 
-  - node: founder_interview
+  - node: founder_interview.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Founder brief done."
       response_text: "Founder brief done."
+      tool_calls: []
 
   # Phase 4a: plan_deck with 4 slides
-  - node: plan_deck
+  # plan_deck EXECUTES its structured-agent body rather than being replaced by a
+  # literal. The response tool is `submit_deck_plan` (pitch-deck.yaml sets
+  # response_tool_name); using any other key leaves `completed` false and spins.
+  - node: plan_deck.agent_loop.call_llm
     output:
-      response_text: "Planned 4 slides."
-      response:
-        narrative_arc: "Traction-first: lead with growth, build to the ask."
-        slides:
-          - filename: "01-hook.md"
-            title: "3,200 downloads in 90 days"
-            purpose: "Lead with traction"
-            key_content: "3,200 downloads, 800 WAU"
-            layout_hint: full-bleed-stat
-            sources: "phase-3-interview/founder-brief.md"
-          - filename: "02-product.md"
-            title: "Multi-agent workflows in your IDE"
-            purpose: "Show the product"
-            key_content: "YAML pipelines, parallel execution"
-            layout_hint: demo-screenshot
-            sources: "phase-1-scrape/website-analysis.md"
-          - filename: "03-market.md"
-            title: "$22.1B by 2028"
-            purpose: "Market validation"
-            key_content: "IDC 2024 market sizing"
-            layout_hint: two-column
-            sources: "phase-2-research/market-sizing.md"
-          - filename: "04-ask.md"
-            title: "Raising $2M seed"
-            purpose: "The ask"
-            key_content: "$2M, 18 months, 3 hires"
-            layout_hint: centered-hero
-            sources: "phase-3-interview/founder-brief.md"
-
-  # Phase 4b: slide_pipeline with mixed results
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_plan
+          name: submit_deck_plan
+          input: {}
+  - node: plan_deck.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_deck_plan:
+          narrative_arc: "Traction-first: lead with growth, build to the ask."
+          slides:
+            - filename: "01-hook.md"
+              title: "3,200 downloads in 90 days"
+              purpose: "Lead with traction"
+              key_content: "3,200 downloads, 800 WAU"
+              layout_hint: full-bleed-stat
+              sources: "phase-3-interview/founder-brief.md"
+            - filename: "02-product.md"
+              title: "Multi-agent workflows in your IDE"
+              purpose: "Show the product"
+              key_content: "YAML pipelines, parallel execution"
+              layout_hint: demo-screenshot
+              sources: "phase-1-scrape/website-analysis.md"
+            - filename: "03-market.md"
+              title: "$22.1B by 2028"
+              purpose: "Market validation"
+              key_content: "IDC 2024 market sizing"
+              layout_hint: two-column
+              sources: "phase-2-research/market-sizing.md"
+            - filename: "04-ask.md"
+              title: "Raising $2M seed"
+              purpose: "The ask"
+              key_content: "$2M, 18 months, 3 hires"
+              layout_hint: centered-hero
+              sources: "phase-3-interview/founder-brief.md"
   - node: slide_pipeline
+    # Deliberate black box: this scenario mocks the parallel loop's AGGREGATE
+    # result (_results/_completed) rather than exercising the per-slide body,
+    # which builtin://agent black-boxes anyway. Loop bodies execute by default.
+    black_box: true
     output:
       _completed: 4
       _failed: 0
@@ -430,9 +612,20 @@ events:
       exit_code: 0
       stdout: ""
 
+  # handoff EXECUTES: previously this node had NO event at all, so it fell
+  # through to the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Deck served; posted the preview URL."
+      response_text: "Deck served; posted the preview URL."
+      tool_calls: []
+
 expect:
   outcome: completed
   reached:
+    - classify
     - scrape_website
     - research_competitors
     - research_market
@@ -469,51 +662,91 @@ inputs:
   existing_deck_dir: ""
 
 events:
+  # Router: this scenario runs the pipeline from scratch, so the scrape entry is
+  # chosen explicitly rather than inherited from the router's default candidate.
+  - node: classify
+    output:
+      selected_node: scrape_website
+      reasoning: "No prior work exists — start by scraping the company website."
+
   # Phases 1-3: Minimal stubs
-  - node: scrape_website
+  - node: scrape_website.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Company analysis complete. Brand: purple #a855f7, dark bg, Inter font."
       response_text: "Company analysis complete. Brand: purple #a855f7, dark bg, Inter font."
+      tool_calls: []
 
-  - node: research_competitors
+  - node: research_competitors.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Competitors analyzed."
       response_text: "Competitors analyzed."
+      tool_calls: []
 
-  - node: research_market
+  - node: research_market.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Market sized."
       response_text: "Market sized."
+      tool_calls: []
 
-  - node: founder_interview
+  - node: founder_interview.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Founder brief complete."
       response_text: "Founder brief complete."
+      tool_calls: []
 
   # Phase 4a: plan_deck (standalone)
-  - node: plan_deck
+  # plan_deck EXECUTES its structured-agent body rather than being replaced by a
+  # literal. The response tool is `submit_deck_plan` (pitch-deck.yaml sets
+  # response_tool_name); using any other key leaves `completed` false and spins.
+  - node: plan_deck.agent_loop.call_llm
     output:
-      response_text: "Planned 3 slides."
-      response:
-        narrative_arc: "Demo-first."
-        slides:
-          - filename: "01-hook.md"
-            title: "Hook"
-            purpose: "Open"
-            key_content: "Product"
-            layout_hint: centered-hero
-            sources: "phase-1-scrape/website-analysis.md"
-          - filename: "02-traction.md"
-            title: "Traction"
-            purpose: "Numbers"
-            key_content: "3,200 downloads"
-            layout_hint: full-bleed-stat
-            sources: "phase-3-interview/founder-brief.md"
-          - filename: "03-ask.md"
-            title: "The Ask"
-            purpose: "Close"
-            key_content: "$2M seed"
-            layout_hint: centered-hero
-            sources: "phase-3-interview/founder-brief.md"
-
-  # Phase 4b: slide_pipeline passes
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_plan
+          name: submit_deck_plan
+          input: {}
+  - node: plan_deck.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_deck_plan:
+          narrative_arc: "Demo-first."
+          slides:
+            - filename: "01-hook.md"
+              title: "Hook"
+              purpose: "Open"
+              key_content: "Product"
+              layout_hint: centered-hero
+              sources: "phase-1-scrape/website-analysis.md"
+            - filename: "02-traction.md"
+              title: "Traction"
+              purpose: "Numbers"
+              key_content: "3,200 downloads"
+              layout_hint: full-bleed-stat
+              sources: "phase-3-interview/founder-brief.md"
+            - filename: "03-ask.md"
+              title: "The Ask"
+              purpose: "Close"
+              key_content: "$2M seed"
+              layout_hint: centered-hero
+              sources: "phase-3-interview/founder-brief.md"
   - node: slide_pipeline
+    # Deliberate black box: this scenario mocks the parallel loop's AGGREGATE
+    # result (_results/_completed) rather than exercising the per-slide body,
+    # which builtin://agent black-boxes anyway. Loop bodies execute by default.
+    black_box: true
     output:
       _completed: 3
       _failed: 0
@@ -610,9 +843,20 @@ events:
     output:
       exit_code: 0
 
+  # handoff EXECUTES: previously this node had NO event at all, so it fell
+  # through to the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Deck served; posted the preview URL."
+      response_text: "Deck served; posted the preview URL."
+      tool_calls: []
+
 expect:
   outcome: completed
   reached:
+    - classify
     - scrape_website
     - research_competitors
     - research_market

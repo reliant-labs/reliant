@@ -9,10 +9,17 @@ name: full_pipeline_happy_path
 description: All phases reached in order from context_intake to complete
 
 events:
+  # Every phase agent below is EXECUTED rather than black-boxed: the qualified
+  # id (`<node>.agent_loop.call_llm`) makes the builtin://agent ref transparent,
+  # so each phase node's own args CEL is compiled and evaluated.
   # Context intake: no missing website/source context for this run
-  - node: context_intake
+  - node: context_intake.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Context already provided or not required."
       response_text: "Context already provided or not required."
+      tool_calls: []
 
   # Router selects the default full-pipeline starting point
   - node: classify
@@ -21,49 +28,101 @@ events:
       reasoning: "Start from scratch with topic discovery."
 
   # Phase 1: Topic Discovery
-  - node: topic_discovery
+  - node: topic_discovery.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Selected topic: ai-agent-repetition-pattern. Slug: ai-agent-repetition-pattern."
       response_text: "Selected topic: ai-agent-repetition-pattern. Slug: ai-agent-repetition-pattern."
+      tool_calls: []
 
   # Phase 2: Research + Brief
-  - node: research_brief
+  - node: research_brief.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Research complete. Brief written with 6 sections."
       response_text: "Research complete. Brief written with 6 sections."
+      tool_calls: []
 
   # Phase 3: Writing
-  - node: writing
+  - node: writing.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Draft complete. All 6 sections written. Word count: 3200."
       response_text: "Draft complete. All 6 sections written. Word count: 3200."
+      tool_calls: []
 
   # Phase 4: Evaluation
-  - node: evaluation
+  - node: evaluation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Evaluation complete. All sections present. Q1-Q3 passed."
       response_text: "Evaluation complete. All sections present. Q1-Q3 passed."
+      tool_calls: []
 
   # Phase 5: Visual Generation
-  - node: visual_generation
+  - node: visual_generation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Visual generation complete. 2 visuals generated."
       response_text: "Visual generation complete. 2 visuals generated."
+      tool_calls: []
 
   # Phase 6: Distribution
-  - node: distribution
+  - node: distribution.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Final assembly complete. Title applied, images embedded."
       response_text: "Final assembly complete. Title applied, images embedded."
+      tool_calls: []
 
   # Phase 7: De-AI pass (get-it-right sub-workflow, black-box mocked)
-  - node: de_ai
+  # de_ai EXECUTES its get-it-right body. `iterations: 2` used to be a scenario
+  # literal; it is now produced by the loop genuinely running twice.
+  - node: de_ai.attempt.implement
     output:
-      response_text: "De-AI pass complete. Post reads like practitioner writing."
-      review_grade: pass
-      eval_strategy: pass
-      iterations: 2
+      response_text: "First de-AI pass: removed the most obvious AI tells."
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Still reads synthetic in the intro. Authenticity 3/5."
+  - node: de_ai.attempt.implement
+    output:
+      response_text: "Second pass: rewrote the intro and varied paragraph rhythm."
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Post reads like practitioner writing. Authenticity 4/5."
 
   # Phase 8: Reddit Summary
-  - node: reddit_summary
+  - node: reddit_summary.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Reddit post written to final/reddit-post.md."
       response_text: "Reddit post written to final/reddit-post.md."
+      tool_calls: []
 
   # validate_artifacts is a run node — default mock exit_code 0 (success)
+
+  # handoff EXECUTES: it previously had NO event, so it silently fell through to
+  # the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Handoff complete; posted the result."
+      response_text: "Handoff complete; posted the result."
+      tool_calls: []
 
 expect:
   outcome: completed

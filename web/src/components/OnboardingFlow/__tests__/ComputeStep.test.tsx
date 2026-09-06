@@ -12,6 +12,14 @@
  * during the initial fetch). Mocking the hook is preferred over mocking the
  * underlying gRPC client because the contract under test IS the hook return
  * shape, not the network layer.
+ *
+ * WHAT MOVED OUT OF THIS FILE: everything that asserted the step PROVISIONS.
+ * The step no longer creates, resumes or charges anything — it records the
+ * user's choice and advances, and provisioning happens once at the commit
+ * point. The guarantee that it never provisions is now pinned by
+ * `ComputeStep.noSpeculativeProvisioning.test.tsx`, and the provisioning
+ * outcomes themselves (denial, resume, idempotency, ordering) by
+ * `commitLaunchPlan.test.ts`.
  */
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -265,7 +273,7 @@ describe("ComputeStep loading gate", () => {
     // The form's CTAs are NOT in the DOM — there is no path through which
     // a click can race the auto-skip evaluation.
     expect(
-      screen.queryByRole("button", { name: /Start my machine/i }),
+      screen.queryByRole("button", { name: /Use a Reliant machine/i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Use my own computer/i }),
@@ -278,7 +286,7 @@ describe("ComputeStep loading gate", () => {
     // Loading marker is gone, form is back.
     expect(screen.queryByTestId("compute-step-loading")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Start my machine/i }),
+      screen.getByRole("button", { name: /Use a Reliant machine/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Use my own computer/i }),
@@ -333,13 +341,17 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   //
   // It really was ALWAYS grey for a new account: the signup compute auto-grant
   // is gone, so every new user resolves to NO_SUBSCRIPTION and lands here
-  // ineligible. The card's most prominent control was one that could never be
-  // clicked, with the two that fix it demoted to links underneath.
+  // ineligible. This card has since been through two answers to that. First
+  // "no start button at all when ineligible, with coupon and 'Set up billing'
+  // promoted in its place" — which fixed the inert control by replacing it
+  // with an exit out of the wizard to /settings/billing.
   //
-  // So the contract is now absence, not disabled-ness: when the user cannot
-  // start a machine there is no start button on the screen at all, and the
-  // coupon and billing actions are the card's primary controls.
-  it("omits the start button entirely when ineligible, and promotes coupon + billing instead", () => {
+  // Now there is a checkout step inside the flow, so the answer is simpler and
+  // better: the choice is ALWAYS offered, because offering it is the only
+  // thing this step does, and an un-entitled choice routes to checkout rather
+  // than to a dead end. Entitlement changes what the card says, not what it
+  // permits.
+  it("offers the cloud choice even when ineligible, and keeps the coupon field", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "No compute plan yet",
@@ -351,20 +363,73 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.queryByRole("button", { name: /Start my machine/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.getByText("No compute plan yet")).toBeInTheDocument();
+      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+    ).toBeEnabled();
     expect(
       screen.queryByText(/No cloud credits available/i),
     ).not.toBeInTheDocument();
 
-    // The two controls that can actually change the user's state are present.
+    // Coupon redemption survives — a code still skips the checkout step.
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),
     ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: /Set up billing/i }),
-    ).toBeEnabled();
+  });
+
+  // The owner's ask, at this step: onboarding must not leave the flow. Both
+  // labels this button ever wore are checked, because the exit was the same
+  // navigation under either one.
+  it("has no route out to the billing settings page, eligible or not", () => {
+    for (const eligible of [false, true]) {
+      mockUseCloudEligibility.mockReturnValue({
+        eligible,
+        reason: eligible ? null : "No compute plan yet",
+        isLoading: false,
+        grantedMinutesRemaining: 0,
+        refetch: mockRefetchCloudEligibility,
+      });
+
+      const { unmount } = renderComputeStep({ daemons: [], loading: false });
+      expect(
+        screen.queryByRole("button", { name: /Set up billing/i }),
+        `eligible=${eligible}`,
+      ).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /View plans/i }),
+        `eligible=${eligible}`,
+      ).toBeNull();
+      expect(mockGoToBilling).not.toHaveBeenCalled();
+      unmount();
+    }
+  });
+
+  // Choosing cloud while un-entitled must RECORD the choice, so derivation has
+  // something to route to checkout. A silently swallowed click would be the
+  // old dead end wearing a different disguise.
+  it("records a cloud choice made while ineligible", async () => {
+    mockUseCloudEligibility.mockReturnValue({
+      eligible: false,
+      reason: "No compute plan yet",
+      isLoading: false,
+      grantedMinutesRemaining: 0,
+      refetch: mockRefetchCloudEligibility,
+    });
+
+    const updatePlan = vi.fn();
+    renderComputeStep({ daemons: [], loading: false, updatePlan });
+
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      );
+    });
+
+    expect(updatePlan).toHaveBeenCalledWith(
+      expect.objectContaining({ compute: "cloud_paid" }),
+    );
+    // Recording a choice is not provisioning. The commit point owns that, and
+    // it must stay true on the newly-reachable un-entitled path.
+    expect(mockCreateDaemon).not.toHaveBeenCalled();
+    expect(mockResumeDaemon).not.toHaveBeenCalled();
   });
 
   // The card must never present a control the user cannot use. Absence of the
@@ -387,7 +452,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     }
   });
 
-  it("enables Start my machine when eligible", () => {
+  it("offers the cloud choice when eligible", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: true,
       reason: null,
@@ -399,7 +464,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start my machine/i }),
+      screen.getByRole("button", { name: /Use a Reliant machine/i }),
     ).not.toBeDisabled();
   });
 
@@ -438,304 +503,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     expect(mockRefetchCloudEligibility).toHaveBeenCalled();
   });
 
-  // Typing a compute code into the cloud card IS the user asking for a cloud
-  // machine. Requiring a second click on a button that did not exist a moment
-  // ago re-asks a question they just answered, so redemption starts the daemon
-  // and advances the step.
-  //
-  // The mechanism this pins: eligibility is server-owned and false at the
-  // instant onSuccess fires, so the redeem callback cannot simply call
-  // handleCloud — its own `if (!eligible) return` guard would swallow it. The
-  // start must happen on a later render, once the refetch reports eligible.
-  it("auto-starts the cloud daemon and advances after a compute coupon is redeemed", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: false,
-      reason: "No compute plan yet",
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    mockRedeemMutate.mockImplementation((_code, callbacks) => {
-      callbacks?.onSuccess?.({
-        amountCents: 0,
-        code: "MACHINE600",
-        newBalanceCents: 0,
-        kind: RedeemedCouponKind.COMPUTE_MINUTES,
-        computeMinutes: 600,
-        newComputeMinutesRemaining: 600,
-      });
-    });
-
-    const onNext = vi.fn();
-    const { rerender } = renderComputeStep({
-      daemons: [],
-      loading: false,
-      onNext,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
-    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
-      target: { value: "MACHINE600" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
-
-    // Still ineligible as far as the client knows: nothing may be provisioned
-    // yet, or the guard is being bypassed rather than waited out.
-    await waitFor(() => {
-      expect(mockRefetchCloudEligibility).toHaveBeenCalled();
-    });
-    expect(mockCreateDaemon).not.toHaveBeenCalled();
-    expect(onNext).not.toHaveBeenCalled();
-
-    // The refetch lands and the server now says the user may start a machine.
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 600,
-      refetch: mockRefetchCloudEligibility,
-    });
-    rerender(
-      <ComputeStep
-        plan={{}}
-        updatePlan={vi.fn(async () => {})}
-        onNext={onNext}
-        onBack={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mockCreateDaemon).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(onNext).toHaveBeenCalled();
-    });
-  });
-
-  // THE USER'S REPORT: redeeming a compute coupon "skipped all steps and took
-  // me to project picker page".
-  //
-  // project-picker is the LOCAL branch of the flow (deriveStep sends
-  // compute==='local_daemon' there), which is the tell: the cloud commit never
-  // happened. In the desktop app a bundled local daemon is usually already
-  // registered, so the auto-skip effect is sitting armed on
-  // hasUsableDaemon===true. Auto-start made that effect reachable in a state
-  // it was never designed for.
-  //
-  // The auto-skip effect guards on `startingCloud`, which only goes true once
-  // handleCloud RUNS. Between the render where eligibility flips and the
-  // effect that starts the daemon, startingCloud is still false — so the
-  // auto-skip effect can fire FIRST, commit compute:'local_daemon', set
-  // hasAdvanced, and derivation jumps straight past model to project-picker.
-  it("does not fall through to the local auto-skip when a compute coupon is redeemed with a local daemon present", async () => {
-    const localDaemon = makeDaemon({
-      daemonId: "local-1",
-      status: DaemonStatus.ACTIVE,
-    });
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: false,
-      reason: "No compute plan yet",
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    mockRedeemMutate.mockImplementation((_code, callbacks) => {
-      callbacks?.onSuccess?.({
-        amountCents: 0,
-        code: "MACHINE600",
-        newBalanceCents: 0,
-        kind: RedeemedCouponKind.COMPUTE_MINUTES,
-        computeMinutes: 600,
-        newComputeMinutesRemaining: 600,
-      });
-    });
-
-    const updatePlan = vi.fn(async () => {});
-    const onNext = vi.fn();
-
-    // No daemon at first render, so the card (and its coupon form) is shown.
-    const { rerender } = renderComputeStep({
-      daemons: [],
-      loading: false,
-      onNext,
-      updatePlan,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
-    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
-      target: { value: "MACHINE600" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
-
-    await waitFor(() => {
-      expect(mockRefetchCloudEligibility).toHaveBeenCalled();
-    });
-
-    // The eligibility refetch lands AND the bundled local daemon shows up in
-    // the same render — the desktop-app case.
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 600,
-      refetch: mockRefetchCloudEligibility,
-    });
-    mockUseDaemonStatus.mockReturnValue({
-      daemons: [localDaemon],
-      activeDaemon: localDaemon,
-      loading: false,
-      refresh: vi.fn(),
-    });
-    rerender(
-      <ComputeStep
-        plan={{}}
-        updatePlan={updatePlan}
-        onNext={onNext}
-        onBack={vi.fn()}
-      />,
-    );
-
-    // The redemption asked for a CLOUD machine. Committing local here is the
-    // reported bug: it lands the user on project-picker having answered
-    // nothing.
-    await waitFor(() => {
-      expect(mockCreateDaemon).toHaveBeenCalled();
-    });
-    const committedLocal = updatePlan.mock.calls.some(
-      ([updates]) =>
-        (updates as Partial<LaunchPlan>).compute === "local_daemon",
-    );
-    expect(committedLocal).toBe(false);
-  });
-
-  // A wallet-credit code funds LLM usage and buys no compute, so the user is
-  // exactly as unable to start a machine as before. Auto-starting here would
-  // fire a request the server refuses and put an error on screen for a
-  // redemption that SUCCEEDED.
-  it("does not auto-start after a wallet-credit coupon", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: false,
-      reason: "No compute plan yet",
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    mockRedeemMutate.mockImplementation((_code, callbacks) => {
-      callbacks?.onSuccess?.({
-        amountCents: 2000,
-        code: "LAUNCH20",
-        newBalanceCents: 2000,
-        kind: RedeemedCouponKind.WALLET_CREDIT,
-        computeMinutes: 0,
-        newComputeMinutesRemaining: 0,
-      });
-    });
-
-    const onNext = vi.fn();
-    const { rerender } = renderComputeStep({
-      daemons: [],
-      loading: false,
-      onNext,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
-    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
-      target: { value: "LAUNCH20" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Added \$20\.00 to your balance\./)).toBeInTheDocument();
-    });
-
-    // Even if something else makes the user eligible on a later render, this
-    // redemption must not be what starts a machine.
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    rerender(
-      <ComputeStep
-        plan={{}}
-        updatePlan={vi.fn(async () => {})}
-        onNext={onNext}
-        onBack={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: /Start my machine/i }),
-      ).toBeInTheDocument();
-    });
-    expect(mockCreateDaemon).not.toHaveBeenCalled();
-    expect(onNext).not.toHaveBeenCalled();
-  });
-
-  // The refetch is async, and in that window the user may pick "I'll connect
-  // my own". Provisioning a cloud machine under them then would hijack a
-  // decision they have since changed.
-  it("does not auto-start if the user switches to local while eligibility is refetching", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: false,
-      reason: "No compute plan yet",
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    mockRedeemMutate.mockImplementation((_code, callbacks) => {
-      callbacks?.onSuccess?.({
-        amountCents: 0,
-        code: "MACHINE600",
-        newBalanceCents: 0,
-        kind: RedeemedCouponKind.COMPUTE_MINUTES,
-        computeMinutes: 600,
-        newComputeMinutesRemaining: 600,
-      });
-    });
-
-    const onNext = vi.fn();
-    const { rerender } = renderComputeStep({
-      daemons: [],
-      loading: false,
-      onNext,
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: /Have a coupon code\?/i }));
-    fireEvent.change(screen.getByPlaceholderText(/Enter code/i), {
-      target: { value: "MACHINE600" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: /^Redeem$/i }));
-
-    // User changes their mind before the refetch settles.
-    fireEvent.click(screen.getByRole("button", { name: /Use my own computer/i }));
-
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 600,
-      refetch: mockRefetchCloudEligibility,
-    });
-    rerender(
-      <ComputeStep
-        plan={{}}
-        updatePlan={vi.fn(async () => {})}
-        onNext={onNext}
-        onBack={vi.fn()}
-      />,
-    );
-
-    await waitFor(() => {
-      expect(mockRefetchCloudEligibility).toHaveBeenCalled();
-    });
-    expect(mockCreateDaemon).not.toHaveBeenCalled();
-  });
-
-  it("redeem failure shows the server's message and no start button appears", async () => {
+  it("redeem failure shows the server's message and does not refetch eligibility", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: "No compute plan yet",
@@ -759,11 +527,12 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       expect(screen.getByText("Unknown coupon code.")).toBeInTheDocument();
     });
     expect(mockRefetchCloudEligibility).not.toHaveBeenCalled();
-    // A failed redemption leaves the user ineligible, so the start button must
-    // not have appeared.
-    expect(
-      screen.queryByRole("button", { name: /Start my machine/i }),
-    ).not.toBeInTheDocument();
+    // The cloud choice is offered regardless of entitlement now, so its
+    // presence says nothing about the redemption. What a failed redemption
+    // must NOT do is claim entitlement changed — which is the refetch
+    // assertion above, and the reason the old "no start button" assertion here
+    // was removed rather than inverted: it would have been testing the card's
+    // unconditional rendering, not the redemption's outcome.
   });
   // REGRESSION: the dev bypass (`getIsDev() ? true : cloudEligible`) enabled
   // this button for an unfunded user, so the click ran the whole
@@ -774,15 +543,16 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
   // Asserting on the mutation rather than only on `disabled` is the point:
   // `disabled` is a rendering concern, and the bug was that the HANDLER ran.
   //
-  // The guarantee is now structural rather than a `disabled` attribute: while
-  // the user is ineligible there is no start control in the tree, so there is
-  // no element a stale render, a keyboard activation, or devtools can activate
-  // to reach provisioning. (`handleCloud` keeps its own `if (!eligible)`
-  // guard as defense in depth; it is simply no longer reachable from the UI in
-  // this state, which is the stronger position.)
+  // The guarantee is now structural in a stronger sense than "the button is
+  // absent". This step does not provision AT ALL — no listDaemons, no
+  // CreateDaemon, no ResumeDaemon — so there is no handler to reach, however
+  // it is activated. That property is what let the cloud choice be re-enabled
+  // for un-entitled users without reopening this bug: clicking it records a
+  // plan field and nothing else, and the commit point owns provisioning.
   //
-  // Asserting on the MUTATIONS, not just on the absent button, is the point:
-  // the original bug was that the HANDLER ran.
+  // Asserting on the MUTATIONS is the point: the original bug was that the
+  // HANDLER ran, and an absent-button assertion would now be checking the
+  // card's layout rather than that.
   it("clicking around while ineligible never starts provisioning", async () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
@@ -794,13 +564,8 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     renderComputeStep({ daemons: [], loading: false });
 
-    expect(
-      screen.queryByRole("button", { name: /Start my machine/i }),
-    ).not.toBeInTheDocument();
-
-    // Click every control the blocked card does offer. None of them may
-    // provision a machine — the only paths out are the coupon form and
-    // billing navigation.
+    // Click EVERY control on the card, including the cloud choice itself,
+    // which is now reachable in this state.
     for (const button of screen.getAllByRole("button")) {
       fireEvent.click(button);
     }
@@ -812,130 +577,6 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     expect(mockResumeDaemon).not.toHaveBeenCalled();
   });
 
-  // The mirror image: an eligible user must still be able to start one.
-  it("clicking Start while eligible provisions a daemon", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 600,
-      refetch: mockRefetchCloudEligibility,
-    });
-
-    renderComputeStep({ daemons: [], loading: false });
-
-    const start = screen.getByRole("button", { name: /Start my machine/i });
-    expect(start).toBeEnabled();
-    fireEvent.click(start);
-
-    await waitFor(() => {
-      expect(mockCreateDaemon).toHaveBeenCalled();
-    });
-  });
-  // ── The original complaint ──────────────────────────────────────────────
-  //
-  // "I can still hit Start my machine which CONTINUES the onboarding."
-  //
-  // The button being disabled was never the whole story. Once the handler runs
-  // — and it can, via a stale render or any of the paths below — a server
-  // DENIAL still fell through to onNext(), so onboarding advanced as if a
-  // machine had been provisioned. The user lands in the app with no daemon.
-  //
-  // The server denies with PermissionDenied / FailedPrecondition
-  // ("no compute subscription — subscribe to a compute plan to create
-  // daemons"), NOT ResourceExhausted, so isReasonedQuotaError() does not match
-  // it and the upgrade modal never fires either.
-  it("does NOT advance onboarding when the server denies daemon creation", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true, // client thinks it is fine; the SERVER disagrees
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    mockCreateDaemon.mockRejectedValue(
-      // Carries x-reliant-reason exactly as daemonDenied() does server-side —
-      // that header, not the status code, is what marks a deliberate denial.
-      deniedError(
-        "no compute subscription — subscribe to a compute plan to create daemons",
-        Code.FailedPrecondition,
-        "no_compute_subscription",
-      ),
-    );
-
-    const onNext = vi.fn();
-    renderComputeStep({ daemons: [], loading: false, onNext });
-
-    fireEvent.click(screen.getByRole("button", { name: /Start my machine/i }));
-
-    await waitFor(() => {
-      expect(mockCreateDaemon).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(onNext).not.toHaveBeenCalled();
-  });
-
-  // Same guarantee on the RESUME path. That catch block swallowed every error
-  // ("Resume failure is non-fatal"), including an entitlement denial, and then
-  // fell through to onNext() — so a user with a suspended daemon they are no
-  // longer entitled to run also sailed through onboarding.
-  it("does NOT advance onboarding when resuming an existing daemon is denied", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-    // One suspended daemon → the resume branch.
-    mockListDaemons.mockResolvedValue({
-      daemons: [{ id: "d1", status: DaemonStatus.SUSPENDED }],
-    });
-    mockResumeDaemon.mockRejectedValue(
-      deniedError(
-        "your free trial has ended — subscribe to a compute plan",
-        Code.PermissionDenied,
-        "trial_expired",
-      ),
-    );
-
-    const onNext = vi.fn();
-    renderComputeStep({ daemons: [], loading: false, onNext });
-
-    fireEvent.click(screen.getByRole("button", { name: /Start my machine/i }));
-
-    await waitFor(() => {
-      expect(mockResumeDaemon).toHaveBeenCalled();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(onNext).not.toHaveBeenCalled();
-  });
-
-  // The happy path must still advance, or the fix above is just a new bug.
-  it("DOES advance onboarding when daemon creation succeeds", async () => {
-    mockUseCloudEligibility.mockReturnValue({
-      eligible: true,
-      reason: null,
-      isLoading: false,
-      grantedMinutesRemaining: 0,
-      refetch: mockRefetchCloudEligibility,
-    });
-
-    const onNext = vi.fn();
-    renderComputeStep({ daemons: [], loading: false, onNext });
-
-    fireEvent.click(screen.getByRole("button", { name: /Start my machine/i }));
-
-    await waitFor(() => {
-      expect(onNext).toHaveBeenCalled();
-    });
-  });
   // The user's report: "why is the CreateDaemon button even clickable just to
   // return an error to the user" — and its twin, a DISABLED button for a user
   // whose CreateDaemon actually succeeds (their real state: an active
@@ -956,7 +597,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start my machine/i }),
+      screen.getByRole("button", { name: /Use a Reliant machine/i }),
     ).toBeEnabled();
     // ...and no "you have no credits" scare copy.
     expect(
@@ -964,10 +605,13 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     ).not.toBeInTheDocument();
   });
 
-  // An ineligible user must always get BOTH ways out: the billing link and the
-  // coupon field. The billing block used to be gated on `reason` being a
-  // non-empty string, so an unrecognised reason hid the only escape route.
-  it("ineligible => shows the billing action AND the coupon field, even with no reason text", () => {
+  // The card must offer the same controls whatever the server says about
+  // entitlement, including for a reason string this build has no copy for. The
+  // billing block used to be gated on `reason` being non-empty, so an
+  // unrecognised reason hid the only escape route on the screen — a bug that
+  // is now unreachable, because there is no escape route to hide and the
+  // choice itself is never withheld.
+  it("offers the same controls for an unrecognised ineligibility reason", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: false,
       reason: null, // server sent a reason this build has no copy for
@@ -979,24 +623,23 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.queryByRole("button", { name: /Start my machine/i }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /Set up billing/i }),
-    ).toBeInTheDocument();
+      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+    ).toBeEnabled();
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),
     ).toBeInTheDocument();
   });
+
   // The user's report, verbatim: "I signed in with a brand new user... why
   // doesn't it show pricing".
   //
-  // A new user lands on the free compute trial, so the server correctly says
-  // eligible=true (verified against the live dev stack: eligible=true,
-  // hasActiveSubscription=true, planName="Compute Small"). Pricing and the
-  // coupon field used to be gated on !eligible, so this — the MOST COMMON
-  // state a real new user is in — was the one state that showed neither.
-  it("shows View plans and the coupon affordance even when the user IS eligible", () => {
+  // The answer moved: pricing is on the checkout step now, which a new cloud
+  // user reaches immediately after this one, rather than behind a "View plans"
+  // link that navigated out of the wizard. What this step still owes an
+  // already-entitled user is the coupon field — someone with a running plan
+  // may still be holding a code, and hiding the field until they run out means
+  // redeeming requires first spending down.
+  it("keeps the coupon affordance for an eligible user", () => {
     mockUseCloudEligibility.mockReturnValue({
       eligible: true,
       reason: null,
@@ -1008,11 +651,8 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Start my machine/i }),
+      screen.getByRole("button", { name: /Use a Reliant machine/i }),
     ).toBeEnabled();
-    expect(
-      screen.getByRole("button", { name: /View plans/i }),
-    ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),
     ).toBeInTheDocument();

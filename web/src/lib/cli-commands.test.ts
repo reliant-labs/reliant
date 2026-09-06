@@ -140,11 +140,11 @@ describe('production renders a bare command', () => {
   });
 
   it('still emits overrides for a non-prod build', async () => {
-    // staging/preprod/dev CLI builds carry no injected defaults, so their
+    // dev and OSS self-hosted CLI builds carry no injected defaults, so their
     // users genuinely need the prefix — the flag is absent there.
     setEnv({
       VITE_CLI_DEFAULTS_BAKED: undefined,
-      VITE_API_URL: 'https://preprod.reliantapi.com',
+      VITE_API_URL: 'https://api.self-hosted.example.com',
     });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).toContain('RELIANT_SERVER_URL=');

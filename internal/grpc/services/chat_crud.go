@@ -233,30 +233,6 @@ func (s *ChatService) CreateChat(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create chat"))
 	}
 
-	// Associate chat with workflow draft for workflow builder chats editing EXISTING workflows.
-	// For existing workflows: frontend passes builder_workflow_slug, backend looks up and associates.
-	// For new workflows: frontend creates draft via CreateWorkflowDraft, then calls
-	// AssociateChatWithWorkflowDraft after chat creation.
-	// Best-effort: the chat already exists, so a failure here just means the
-	// builder association is missing, not that the chat is broken.
-	var createdDraftID string
-	if isWorkflowBuilderChat(req.Msg.SelectedPresets) {
-		if builderSlug, ok := req.Msg.WorkflowParams["builder_workflow_slug"]; ok {
-			if slugValue, isString := builderSlug.AsInterface().(string); isString && slugValue != "" {
-				draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slugValue)
-				if err != nil {
-					logging.Warn("Failed to look up workflow draft for builder", "error", err, "slug", slugValue)
-				} else if draft != nil {
-					_, err := s.database.AssociateChatWithDraft(ctx, draft.ID, chatID)
-					if err != nil {
-						logging.Warn("Failed to associate chat with workflow draft", "error", err, "draftID", draft.ID, "chatID", chatID)
-					}
-					createdDraftID = draft.ID
-				}
-			}
-		}
-	}
-
 	// Start workflow on shared task queue
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                       workflowID,
@@ -317,9 +293,6 @@ func (s *ChatService) CreateChat(
 		Chat:       createChatProto,
 		WorkflowId: workflowID,
 		RunId:      runID,
-	}
-	if createdDraftID != "" {
-		response.DraftId = &createdDraftID
 	}
 	return connect.NewResponse(response), nil
 }

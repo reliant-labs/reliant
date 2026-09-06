@@ -261,9 +261,10 @@ func resolveGateway(cmd *cobra.Command, conn *connection) (string, valueSource) 
 // deriveGatewayURL computes the gateway endpoint for a server URL by prefixing
 // the host, e.g.
 //
-//	https://staging.reliantapi.com -> https://gateway-staging.reliantapi.com
-//	https://reliantapi.com         -> https://gateway.reliantapi.com
-//	http://localhost:3110          -> http://localhost:3110 (kept as-is)
+//	https://api.reliantapi.com -> https://gateway.reliantapi.com
+//	https://eu.reliantapi.com  -> https://gateway-eu.reliantapi.com
+//	https://reliantapi.com     -> https://gateway.reliantapi.com
+//	http://localhost:3110      -> http://localhost:3110 (kept as-is)
 func deriveGatewayURL(server string) string {
 	parsed, err := url.Parse(server)
 	if err != nil {
@@ -282,12 +283,12 @@ func deriveGatewayURL(server string) string {
 	}
 
 	// Count dots to determine whether there is a subdomain:
-	// "staging.reliantapi.com" (2 dots) -> gateway-staging.reliantapi.com
+	// "eu.reliantapi.com" (2 dots) -> gateway-eu.reliantapi.com
 	// "reliantapi.com" (1 dot) -> gateway.reliantapi.com
 	if strings.Count(host, ".") >= 2 {
 		parts := strings.SplitN(host, ".", 2)
-		// The leading label is an ENVIRONMENT name (staging, preprod), so the
-		// gateway for it is that same environment's gateway: gateway-staging.
+		// A leading label that NAMES A DEPLOYMENT rather than a service gets a
+		// gateway in the same deployment: gateway-<label>.<domain>.
 		// But when the leading label is the SERVICE name `api`, the gateway is
 		// its SIBLING service — gateway.<domain> — not a prefixed form of the
 		// api host. Prefixing there invents gateway-api.<domain>, which does

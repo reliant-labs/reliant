@@ -70,6 +70,7 @@ const {
 } = require("./app-protocol");
 const oauthLoopback = require("./oauth-loopback");
 const oauthProviderLogin = require("./oauth-provider-login");
+const { openStripeCheckout } = require("./stripe-checkout");
 const { watchRendererHealth } = require("./renderer-health");
 const {
   formatDiagnosticsReport,
@@ -2503,6 +2504,33 @@ ipcMain.handle("oauth:provider-login-wait", async (_event, flowId) => {
 ipcMain.handle("oauth:provider-login-cancel", async (_event, flowId) => {
   oauthProviderLogin.cancelProviderLogin(flowId);
   return { success: true };
+});
+
+// Stripe checkout as a round trip this window can observe.
+//
+// Setting window.location.href to the hosted Stripe URL sends the purchase to
+// the system browser: the target is https:// against an app://bundle origin, so
+// will-navigate hands it to shell.openExternal — correctly, since that IS an
+// external navigation. The problem was never the classification; it was that
+// nothing brought the user back, and the app was never told the purchase
+// happened. See stripe-checkout.js.
+ipcMain.handle("billing:open-checkout", async (_event, { checkoutUrl, returnUrl }) => {
+  try {
+    const { outcome } = await openStripeCheckout({
+      BrowserWindow,
+      parent: mainWindow,
+      checkoutUrl,
+      returnUrl,
+    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.focus();
+    }
+    return { success: true, outcome };
+  } catch (error) {
+    log.error("[IPC] Stripe checkout window failed:", error);
+    return { success: false, error: error.message };
+  }
 });
 
 ipcMain.handle("auth:load", async () => {

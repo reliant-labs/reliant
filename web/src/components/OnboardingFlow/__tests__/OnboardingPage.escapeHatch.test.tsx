@@ -24,12 +24,25 @@ vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({ isElectron: false, dragRegionStyle: {} }),
 }));
 
+// The page reads compute eligibility and the wallet balance to derive the
+// step. Both are react-query reads and this test mounts no client; stepConfig
+// is stubbed below anyway, so the facts never reach a real decision here.
+vi.mock("../useOnboardingFacts", () => ({
+  useOnboardingFacts: () => ({
+    computeEligible: true,
+    walletFunded: true,
+    loading: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 // The real step registry drags in the whole compute/model/GitHub graph. A
 // single stub step is enough — this test is about the chrome around it.
 vi.mock("../stepConfig", () => ({
   BACK_CLEARS: { compute: [] },
   deriveStep: () => "compute",
   getStepsForPlan: () => ["compute"],
+  visibleStepsForPlan: () => ["compute"],
   stepMaxWidth: () => "max-w-2xl",
   STEP_COMPONENTS: { compute: () => <div data-testid="step" /> },
   STEP_LABELS: { compute: "Compute" },

@@ -482,18 +482,26 @@ func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
 // The production transaction wrapper must absorb those retries rather than
 // surfacing a failed SendMessage under normal fan-out.
 //
-// Scope note, so this test is not trusted for more than it proves: it drives
-// real concurrent writes through the production path and passes, but it does
-// NOT reliably reproduce the 40001 on its own — verified by reverting to the
-// MAX()+1 allocator, where it still passed. Reproducing exhausted retries needs
-// the contention the live system had (many spawns and long-running ambient
-// transactions widening the conflict window). It guards the invariant that
-// concurrent writes to one user's scoped counter must succeed.
+// Every update sequence for a user is allocated from ONE counter row, so all
+// of that user's concurrent chats serialize on it. This test pins the property
+// that matters: under realistic concurrency those writes must all SUCCEED, not
+// merely mostly succeed. A dropped allocation is a lost update event in the UI.
+//
+// Sizing is empirical, not arbitrary. With the old maxRetries=3 budget the
+// measured failure rate on one counter row was 0% at 4 writers, 5% at 8, and
+// 8.8% at 16 — so 8 writers (the previous value) sat right at the threshold
+// and failed only intermittently, which is why this read as a flaky test for
+// a long time rather than as the real defect it was.
+//
+// The count here is chosen so the OLD budget fails every time rather than one
+// run in five: an intermittent regression test is barely better than none,
+// because the next person to see it green will assume the property holds.
+// Verified by reverting maxRetries to 3, where this fails consistently.
 func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	const writers = 8
+	const writers = 48
 	chatIDs := make([]string, writers)
 	for i := range chatIDs {
 		chatIDs[i] = fmt.Sprintf("chat-seq-conc-%d", i)

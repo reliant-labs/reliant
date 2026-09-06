@@ -3,8 +3,8 @@
  */
 
 import { logger } from "@/lib/logger";
-import { onboardingService } from "@/services/controlPlane/onboarding";
-import type { LaunchPlan, ModelProvider } from "./types";
+import { isCloudCompute } from "./types";
+import type { LaunchPlan } from "./types";
 
 const DEFAULT_PROJECT_NAME = "first_project";
 const CLOUD_DEFAULT_PROJECT_PATH = `/home/workspace/projects/${DEFAULT_PROJECT_NAME}`;
@@ -42,8 +42,7 @@ export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> 
     return first.id;
   }
 
-  const isCloud = plan.compute === "cloud_free_trial";
-  const projectPath = await defaultProjectPath(isCloud);
+  const projectPath = await defaultProjectPath(isCloudCompute(plan.compute));
   const projectName = DEFAULT_PROJECT_NAME;
 
   logger.info("[OnboardingComplete] Creating default project", { projectName, projectPath });
@@ -62,71 +61,39 @@ export async function ensureProject(plan: Partial<LaunchPlan>): Promise<string> 
   return created.id;
 }
 
-/** Options for {@link finalizeOnboardingSideEffects}. */
-export interface FinalizeOptions {
-  /**
-   * Whether to navigate to `/` once the side effects are done.
-   *
-   * Cloud callers pass `false`: they still have to render
-   * `DaemonConnectingGate`, which only exists to tell the user their machine
-   * is still provisioning. Navigating here unmounted the step before the gate
-   * could render, dropping the user on `/` with onboarding marked complete and
-   * no ACTIVE daemon — the state ModernApp answers with ProjectPicker's
-   * "Connect a daemon" / "Resume a daemon" screens.
-   */
-  navigate?: boolean;
-}
-
-export async function finalizeOnboardingSideEffects(
-  modelProvider: ModelProvider | undefined,
-  { navigate = true }: FinalizeOptions = {},
-): Promise<void> {
-  if (modelProvider === "reliant_credits") {
-    onboardingService.provisionManagedKey().then(
-      (result) => logger.info("[OnboardingComplete] Reliant provider synced", { synced: result.synced }),
-      (err) => logger.warn("[OnboardingComplete] Reliant provider sync failed", err),
-    );
-  }
-
-  // Tour state lives in the URL now — clear any prior progress and push the
-  // user to the home route with the first step in the search params. The
-  // wizard is mounted at the root and will render the step on arrival.
-  const [{ useTourStore }, { router }, { ONBOARDING_STEPS }] = await Promise.all([
-    import("@/store/tourStore"),
-    import("@/routes"),
-    import("@/components/Onboarding/constants"),
-  ]);
-  await useTourStore.getState().resetTourProgress();
-  if (!navigate) return;
-  void router.navigate({
-    to: "/",
-    search: { tour: ONBOARDING_STEPS[0].id },
-  });
-}
-
 /**
- * Leave onboarding for the app, starting the post-onboarding tour.
+ * The side effects of finishing onboarding. Does NOT navigate.
  *
- * This is the deferred half of {@link finalizeOnboardingSideEffects}: callers
- * that passed `navigate: false` so they could show `DaemonConnectingGate` call
- * this from the gate's Continue. Setting the tour param HERE rather than
- * relying on it surviving in `prev` is what keeps the tour starting for cloud
- * users, whose finalize never touched the URL.
+ * This used to end with an unconditional `router.navigate({to: "/"})` through
+ * the global singleton, which fired before a cloud caller could render
+ * `DaemonConnectingGate` and dropped the user on `/` with onboarding complete
+ * and no ACTIVE daemon. The fix at the time was a `navigate: false` option
+ * threaded down here from four call sites.
+ *
+ * That option is gone. Navigation is `leaveOnboarding`'s job and only
+ * `leaveOnboarding`'s job, so there is no flag left to pass wrongly — a caller
+ * that forgets to exit stays on `/onboarding`, which is visible, rather than
+ * exiting at the wrong moment, which is not.
  */
-export async function navigateAfterOnboarding(): Promise<void> {
-  const [{ router }, { ONBOARDING_STEPS }] = await Promise.all([
-    import("@/routes"),
-    import("@/components/Onboarding/constants"),
-  ]);
-  void router.navigate({ to: "/", search: { tour: ONBOARDING_STEPS[0].id } });
+export async function finalizeOnboardingSideEffects(): Promise<void> {
+  // The managed-key provision used to happen here, fire-and-forget, with its
+  // failure going to a log line nobody reads. It is now `grant_ai_access`
+  // inside `commitLaunchPlan`, awaited and reported, because a grant that
+  // silently failed left the user's first message failing on a zero balance
+  // with nothing on screen to explain it.
+  //
+  // Tour state lives in the URL. Clear any prior progress here; the exit puts
+  // the first step in the search params (see leaveOnboarding).
+  const { useTourStore } = await import("@/store/tourStore");
+  await useTourStore.getState().resetTourProgress();
 }
 
 /**
  * Where to send the user when the guided tour ENDS.
  *
- * Distinct from {@link navigateAfterOnboarding}, which STARTS the tour by
- * putting `?tour=<first-step>` back in the URL — calling that on finish would
- * restart the tour the user just completed.
+ * Distinct from the onboarding exit, which STARTS the tour by putting
+ * `?tour=<first-step>` in the URL (see leaveOnboarding) — landing there on
+ * finish would restart the tour the user just completed.
  *
  * The tour's last steps spotlight the workflow builder, so simply clearing the
  * `?tour` param left the user sitting on `/workflow/...`. Clearing the active

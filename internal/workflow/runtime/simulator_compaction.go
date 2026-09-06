@@ -32,6 +32,31 @@ func applyCallLLMCompactionThreshold(output map[string]interface{}, node *relian
 	output["compaction_threshold"] = threshold
 }
 
+// ApplyMockedCompactionThreshold injects compaction_threshold onto a mocked
+// call_llm output, reading the explicit arg off the node's EVALUATED args.
+//
+// Exported for the Temporal scenario backend, which mocks the CallLLM activity
+// and therefore faces the identical problem the simulator solves here: the real
+// activity always returns a non-zero threshold (explicit arg, else a
+// model-derived value, else DefaultCompactionThreshold), so a mock that omits
+// the field makes the agent-loop compact edge
+// (nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold)
+// compare against 0 and fire on every iteration.
+//
+// Both backends share this so the mocked threshold cannot drift between them.
+func ApplyMockedCompactionThreshold(output map[string]interface{}, node *reliantv1.Node) {
+	if output == nil || node == nil || node.GetType() != model.NodeTypeCallLLM {
+		return
+	}
+	threshold := simDefaultCompactionThreshold
+	if args := model.GetCallLLMArgs(node); args != nil {
+		if v, ok := simCoerceInt(model.CelIntValue(args.GetCompactionThreshold())); ok && v > 0 {
+			threshold = v
+		}
+	}
+	output["compaction_threshold"] = threshold
+}
+
 // simCoerceInt converts a CEL-evaluated numeric arg (which may be int, int64,
 // float64, or a protojson string) to an int.
 func simCoerceInt(v interface{}) (int, bool) {

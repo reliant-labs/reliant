@@ -51,6 +51,19 @@ func (s *QuestionService) ResolveQuestion(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
 	}
 
+	// Ownership is transitive through the chat: resolving a question signals
+	// the chat's workflow, so a question id alone is not an authorization. A
+	// foreign question is NotFound, never PermissionDenied — no cross-tenant
+	// existence oracle.
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+	chat, err := s.database.GetChat(ctx, question.ChatID)
+	if err != nil || chat == nil || chat.UserID != userID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
+	}
+
 	if question.Status != db.QuestionStatusPending {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("question already resolved"))
 	}

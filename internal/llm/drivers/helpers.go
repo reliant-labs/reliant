@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
@@ -69,8 +70,23 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 				continue
 			}
 			accessToken := strings.TrimSpace(tokens.AccessToken)
-			if accessToken == "" || codex.IsTokenExpired(accessToken) {
+			if accessToken == "" {
 				continue
+			}
+			// Don't skip expired tokens here — the transport interceptor will
+			// refresh them. Only skip if there's no refresh token AND the token
+			// is expired, which is a session that cannot be recovered without
+			// the user reconnecting Codex.
+			if codex.IsTokenExpired(accessToken) && strings.TrimSpace(tokens.RefreshToken) == "" {
+				continue
+			}
+			// Codex access tokens are JWTs carrying their own exp claim, so the
+			// expiry is derived rather than stored (codex_auth_tokens has no
+			// expires_at column). An unparseable token yields the zero time,
+			// which the refresh transport treats as "refresh before using".
+			expiresAt, err := codex.GetTokenExpiry(accessToken)
+			if err != nil {
+				expiresAt = time.Time{}
 			}
 			drivers[models.DriverID(driverID)] = models.DriverConfig{
 				DriverID: models.DriverID(driverID),
@@ -81,7 +97,9 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 				// makes each upstream account derive a distinct installation_id so
 				// one Reliant user's multiple accounts don't share a device
 				// fingerprint (Codex enforces one account per device).
-				AccountUUID: tokens.AccountID,
+				AccountUUID:    tokens.AccountID,
+				RefreshToken:   tokens.RefreshToken,
+				TokenExpiresAt: expiresAt,
 			}
 			continue
 		}

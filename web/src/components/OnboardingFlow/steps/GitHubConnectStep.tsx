@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -9,12 +10,11 @@ import { useEventBus } from "@/lib/event-context";
 import { useCloneRepo, useCompleteOnboarding, useCreateDaemon } from "@/hooks/useOnboardingQueries";
 import { trackEvent } from "@/lib/analytics";
 import { gitService } from "@/services/controlPlane/git";
-import {
-  finalizeOnboardingSideEffects,
-  navigateAfterOnboarding,
-} from "../useOnboardingComplete";
+import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";
-import { DaemonConnectingGate } from "../DaemonConnectingGate";
+import { ProvisioningGate } from "../ProvisioningGate";
+import { useCommitLaunchPlan } from "../useCommitLaunchPlan";
 import type { StepProps } from "../types";
 import {
   DAEMON_STATUS_ACTIVE,
@@ -65,6 +65,7 @@ function findProjectByPath(projects: Project[], path: string): Project | undefin
 }
 
 export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
+  const navigate = useNavigate();
   const createProject = useProjectStore((state) => state.createProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
   const projects = useProjectStore((state) => state.projects);
@@ -75,12 +76,11 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   const [phase, setPhase] = useState<Phase>("picker");
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState("");
-  // After clone + completeOnboarding succeed we show the daemon gate before
-  // navigating to the chat view. The clone may have queued via JetStream
-  // because the daemon was still provisioning — the gate lets the user wait
-  // (or skip) instead of landing on a silent "No daemon connected" banner.
-  const [showDaemonGate, setShowDaemonGate] = useState(false);
-  const [gateDaemonRef, setGateDaemonRef] = useState<string | undefined>(undefined);
+  // The commit point. This step reaches it having ALREADY needed a machine —
+  // it cloned into one — so its commit is usually a no-op that observes the
+  // running daemon. It still goes through the same function, because "usually"
+  // is not "always" and a second path to provisioning is how the two drift.
+  const { commit, runCommit, retry } = useCommitLaunchPlan(updatePlan);
 
   const [selectedRepo, setSelectedRepo] = useState<GitRepo | null>(null);
 
@@ -248,14 +248,10 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
         modelProvider: plan.modelProvider,
       });
       markOnboardingFinalized(plan, "github");
-      // This path always shows the gate below, so navigation is always the
-      // gate's job — see FinalizeOptions.navigate.
-      await finalizeOnboardingSideEffects(plan.modelProvider, { navigate: false });
-      // Show the daemon gate before navigating — the daemon may still be
-      // provisioning. We hand the gate the UUID we already used for the
-      // CloneRepo call so its polling looks up the same row.
-      setGateDaemonRef(daemon.id);
-      setShowDaemonGate(true);
+      // This path always shows the gate below, so the exit is always the
+      // gate's job.
+      await finalizeOnboardingSideEffects();
+      await runCommit(plan);
     } catch (err) {
       if (isMissingGitCredentialError(err)) {
         setConfirmCredentialMissing(true);
@@ -284,14 +280,15 @@ export function GitHubConnectStep({ plan, updatePlan, onBack }: StepProps) {
   // -- Phase: Daemon connecting gate --
   // Rendered after a successful clone + completeOnboarding while we wait for
   // the daemon to come ACTIVE. Takes precedence over the picker / confirm UI.
-  if (showDaemonGate) {
+  if (commit) {
     return (
       <div className="space-y-6">
-        <DaemonConnectingGate
-          daemonRef={gateDaemonRef}
-          // finalize ran with `navigate: false` so this gate could render, so
-          // it never set ?tour=<first-step>. This sets it on the way out.
-          onContinue={() => void navigateAfterOnboarding()}
+        <ProvisioningGate
+          commit={commit}
+          onContinue={() =>
+            void leaveOnboarding("completed_cloud_gate_continue", navigate)
+          }
+          onRetry={() => void retry(plan)}
         />
       </div>
     );

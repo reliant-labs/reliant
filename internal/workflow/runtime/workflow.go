@@ -1112,6 +1112,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				ctx, step.Node, nodeOutputs, input.Inputs,
 				workflowID, input.ChatID, input.WorkflowName, logger,
 				nil,
+				"", // top level: the node's path is its own id
 			)
 			if condErr != nil {
 				return nil, condErr
@@ -1763,6 +1764,40 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				continue
 			}
 
+			// Handle approval nodes inline (signal-based). StepExecutor treats
+			// an approval node as a bug and fails it, so a top-level approval —
+			// migrate.yaml's `confirm` gate, for one — needs the same inline
+			// dispatch a sub-workflow body and a loop body get.
+			if step.Node.GetType() == model.NodeTypeApproval {
+				exec, err := approvalExecutionFromNode(
+					step.Node, nodeOutputs, input.Inputs,
+					workflowID, input.WorkflowName,
+					nil, // not in a loop
+					nil,
+					execCtx, input.ChatID,
+					"", 0, // not in a loop
+					step.Node.GetId(), // top level: path is the bare id
+					logger,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
+				}
+				approvalOutput, err := executeApprovalSignalFlow(ctx, exec)
+				if err != nil {
+					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
+				}
+				nodeOutputs[step.Node.GetId()] = approvalOutput
+				events = append(events, &core.WorkflowEvent{
+					ID:           fmt.Sprintf("approval-%s-%s", workflowID, step.Node.GetId()),
+					WorkflowID:   workflowID,
+					ChatID:       input.ChatID,
+					WorkflowName: input.WorkflowName,
+					StepID:       step.Node.GetId(),
+					Data:         approvalOutput,
+				})
+				continue
+			}
+
 			logger.Info("[Workflow Runtime] ========== EXECUTING STEP ==========",
 				"stepID", step.Node.GetId(),
 				"type", string(step.Node.GetType()))
@@ -1850,18 +1885,18 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					})
 					var errorResult map[string]interface{}
 					errStr := stepEvent.Error.Error()
-					errorPayload := map[string]interface{}{
-						"chat_id":       input.ChatID,
-						"workflow_id":   workflowID,
-						"workflow_name": input.WorkflowName,
-						"error_message": humanizeRetryError(running.StepID, stepEvent.Error),
-						"error_type":    "retry_exhaustion",
-						"thread":        thread,
+					exhaustion := retryExhaustionError{
+						ChatID:       input.ChatID,
+						WorkflowID:   workflowID,
+						WorkflowName: input.WorkflowName,
+						Message:      humanizeRetryError(running.StepID, stepEvent.Error),
+						Thread:       thread,
+						Err:          stepEvent.Error,
 					}
 					if summary := extractLLMErrorSummary(errStr); summary != "" {
-						errorPayload["error_summary"] = summary + ". Workflow paused — send a message to retry."
+						exhaustion.Summary = summary + ". Workflow paused — send a message to retry."
 					}
-					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", errorPayload).Get(ctx, &errorResult)
+					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", exhaustion.payload()).Get(ctx, &errorResult)
 
 					// Update DB status to paused so the UI reflects it and SendMessage
 					// routes through the resume path instead of starting a new workflow.
@@ -2645,8 +2680,31 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 // isTransientSpawnExecutionError returns true for errors that should trigger a retry
 // in the spawn execution loop (e.g., worker restarts, heartbeat timeouts).
 // Terminal errors (auth failures, validation errors) are not transient.
+//
+// The retry loop this feeds is UNBOUNDED by design — a spawn must survive any
+// number of worker restarts — which makes this classifier the only thing
+// standing between a deterministic failure and a run that never ends. It must
+// therefore recognize a terminal error in BOTH shapes the runtime produces:
+// a *TerminalError raised directly by in-workflow code, and the
+// temporal.ApplicationError an activity's failure arrives as. Checking only
+// the latter (as this did) silently classified every plain in-workflow error
+// as transient, so a spawn whose SETUP could never succeed — "project path not
+// set, cannot load presets" is the observed one — was retried forever at the
+// 30s backoff ceiling. It never reached completeDetachedSpawn, so the parent
+// loop stayed parked in awaitLiveDetachedSpawns even after its `while`
+// condition had correctly gone false, and the whole workflow hung.
+//
+// This mirrors registry.go's isTerminal, which has always checked both; the
+// two classifiers disagreeing was the defect.
 func isTransientSpawnExecutionError(err error) bool {
 	if err == nil {
+		return false
+	}
+	// A *TerminalError raised in-workflow never becomes an ApplicationError —
+	// nothing marshals it across an activity boundary — so it must be matched
+	// on its own type or it reads as transient.
+	var terminalErr *TerminalError
+	if errors.As(err, &terminalErr) {
 		return false
 	}
 	// Non-retryable ApplicationErrors are terminal

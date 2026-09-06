@@ -84,8 +84,7 @@ events:
       tool_calls:
         - id: call_0
           name: glob
-          input:
-            pattern: "**/*.go"
+          input: '{"pattern":"**/*.go"}'
   # Tool result
   - node: demo_step
     output:
@@ -140,8 +139,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "/nonexistent/path.go"
+          input: '{"file_path":"/nonexistent/path.go"}'
   - node: demo_step
     output:
       message:

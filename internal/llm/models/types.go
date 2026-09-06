@@ -56,6 +56,7 @@ type ModelSelector struct {
 	// if no perfect match exists.
 	//
 	// Built-in tags:
+	//   - powerful: Frontier tier, chosen when capability outweighs cost
 	//   - flagship: Best overall quality for complex tasks
 	//   - moderate: Balanced quality and cost
 	//   - fast: Optimized for quick responses
@@ -215,6 +216,7 @@ type ModelDefinition struct {
 	// scoring to find models that match as many requested tags as possible.
 	//
 	// Built-in tags:
+	//   - powerful: Frontier tier, chosen when capability outweighs cost
 	//   - flagship: Best overall quality for complex tasks
 	//   - moderate: Balanced quality and cost
 	//   - fast: Optimized for quick responses
@@ -692,11 +694,30 @@ const (
 type ResolvedModel struct {
 	Definition ModelDefinition
 	Provider   ProviderMapping
+
+	// ThinkingLevel is the thinking default carried by the TAG that selected
+	// this model, already clamped to the model's declared thinking_levels.
+	// Empty when the selector named a model by ID, when no matching tag
+	// declares a default, or when the model cannot reason.
+	//
+	// This is a property of HOW the model was chosen, not of the model: the
+	// same model selected by `id:` deliberately gets an empty value here, so
+	// only tag-based selection picks up the tier's effort. Callers layer it
+	// under an explicit per-call thinking_level and over the model's own
+	// DefaultThinkingLevel.
+	ThinkingLevel string
 }
 
 // ModelTag constants for common tags.
 // These are the system-defined tags that presets should use.
 const (
+	// TagPowerful sits above flagship: the frontier tier, chosen when capability
+	// matters more than cost or latency. It also carries a thinking default
+	// (see the tag_defaults section of models.yaml), so selecting a model via
+	// `tags: [powerful]` means "think hard" without every caller spelling out
+	// thinking_level. The per-model default_thinking_level still applies when
+	// the same model is selected by explicit id.
+	TagPowerful  = "powerful"  // Frontier tier, capability over cost
 	TagFlagship  = "flagship"  // Best overall for complex tasks
 	TagModerate  = "moderate"  // Good balance of quality/cost
 	TagFast      = "fast"      // Quick responses
@@ -709,6 +730,38 @@ const (
 // ModelsConfig is the root structure for the embedded models.yaml file.
 type ModelsConfig struct {
 	Models []ModelDefinition `yaml:"models" json:"models"`
+
+	// TagDefaults declares per-tag defaults that apply when a request selects
+	// a model BY that tag. Keyed by tag name.
+	//
+	// Example YAML:
+	//
+	//	tag_defaults:
+	//	  powerful:
+	//	    thinking_level: xhigh
+	//
+	// YAML key: tag_defaults
+	TagDefaults map[string]TagDefaults `yaml:"tag_defaults,omitempty" json:"tag_defaults,omitempty"`
+}
+
+// TagDefaults are the request defaults a tag contributes when it is the tag
+// that selected the model.
+//
+// These are deliberately data in models.yaml rather than a Go map: a tag whose
+// behavior lives in code would require a code change to retune.
+type TagDefaults struct {
+	// ThinkingLevel is the thinking/reasoning effort a model selected via this
+	// tag should use when the caller supplied none.
+	//
+	// It is an ASPIRATION, not a requirement: it is clamped down to the
+	// resolved model's declared thinking_levels, so `xhigh` on a model that
+	// tops out at `high` yields `high` rather than an error or an unsupported
+	// value on the wire.
+	//
+	// Must name a level in KnownThinkingLevels; parsing fails otherwise.
+	//
+	// YAML key: thinking_level
+	ThinkingLevel string `yaml:"thinking_level,omitempty" json:"thinking_level,omitempty" mapstructure:"thinking_level"`
 }
 
 // UserModelsConfig is the structure for user-defined model configuration.

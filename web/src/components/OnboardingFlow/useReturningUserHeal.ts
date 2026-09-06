@@ -60,25 +60,40 @@ const IN_PROGRESS_KEY_PREFIX = "reliant:onboarding:in-progress:";
 /**
  * Whether this user has been seen mid-onboarding with no usable daemon.
  *
- * Reads and writes are wrapped because storage throws in private mode and
- * sandboxed iframes. Failing closed there means falling back to the daemon
- * evidence alone, which is the pre-existing behavior.
+ * Storage throws in Safari private mode, in sandboxed iframes, and under the
+ * `app://bundle` origin the packaged Electron renderer runs on — an origin
+ * whose storage partitioning has already caused one bug in this repo
+ * (`3fcd9f79`).
+ *
+ * When it throws, the answer is UNKNOWN, not false. This distinction is the
+ * whole defence: the mark is what stops onboarding's own freshly-provisioned
+ * daemon being read as evidence of a past completion, and treating a failed
+ * read as "not seen mid-flow" silently restores exactly that bug. So an
+ * unavailable store reports `unknown` and the caller declines to heal —
+ * ending a flow wrongly is unrecoverable for the user, while declining costs
+ * them one extra pass through onboarding.
  */
+type InProgressMark = "seen" | "not-seen" | "unknown";
+
 const inProgress = {
-  get(userId: string | undefined): boolean {
-    if (!userId) return false;
+  get(userId: string | undefined): InProgressMark {
+    if (!userId) return "not-seen";
     try {
-      return sessionStorage.getItem(IN_PROGRESS_KEY_PREFIX + userId) === "true";
+      return sessionStorage.getItem(IN_PROGRESS_KEY_PREFIX + userId) === "true"
+        ? "seen"
+        : "not-seen";
     } catch {
-      return false;
+      return "unknown";
     }
   },
-  set(userId: string | undefined): void {
-    if (!userId) return;
+  /** Returns false when the mark could not be persisted. */
+  set(userId: string | undefined): boolean {
+    if (!userId) return false;
     try {
       sessionStorage.setItem(IN_PROGRESS_KEY_PREFIX + userId, "true");
+      return true;
     } catch {
-      /* storage unavailable */
+      return false;
     }
   },
 };
@@ -111,6 +126,11 @@ export function useReturningUserHeal<T extends DatedDaemon>({
   onHeal,
 }: ReturningUserHealDeps<T>): void {
   const healedRef = useRef(false);
+  // Sticky: once storage has failed we can never again distinguish "this
+  // user's daemon predates the flow" from "this flow just made it", and a
+  // later successful read would be answering from an empty store rather than
+  // from a genuine absence of the mark.
+  const storageBrokenRef = useRef(false);
 
   // Both queries must have settled. They run in parallel and the daemon list
   // (a fast local call) routinely wins, so acting on it alone would judge the
@@ -133,12 +153,17 @@ export function useReturningUserHeal<T extends DatedDaemon>({
 
     if (hasDaemon) {
       // Proof of a PRIOR completion only if we have not already watched this
-      // user start from nothing in this session.
-      arrivedWithDaemon = !inProgress.get(userId);
+      // user start from nothing in this session — and only if we can still
+      // trust the record of that.
+      const mark = inProgress.get(userId);
+      if (mark === "unknown") storageBrokenRef.current = true;
+      arrivedWithDaemon = mark === "not-seen" && !storageBrokenRef.current;
     } else {
       // Mid-flow with no daemon yet. Remember it, so a later remount cannot
-      // reinterpret the daemon this flow creates as a past completion.
-      inProgress.set(userId);
+      // reinterpret the daemon this flow creates as a past completion. If the
+      // write failed there is nothing to remember it WITH, so the heal must
+      // stay off for the rest of this mount.
+      if (!inProgress.set(userId)) storageBrokenRef.current = true;
     }
   }
 

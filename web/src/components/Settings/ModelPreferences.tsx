@@ -12,10 +12,17 @@ import { cn } from "../../lib/utils";
 // Types & constants
 // ---------------------------------------------------------------------------
 
-const PREFERENCE_TAGS = ["flagship", "moderate", "fast", "cheap"] as const;
+const PREFERENCE_TAGS = [
+  "powerful",
+  "flagship",
+  "moderate",
+  "fast",
+  "cheap",
+] as const;
 type PreferenceTag = (typeof PREFERENCE_TAGS)[number];
 
 const TAG_DESCRIPTIONS: Record<PreferenceTag, string> = {
+  powerful: "Most capable — the hardest, longest-running work",
   flagship: "Best overall — complex tasks, deep reasoning",
   moderate: "Balanced — implementation, review",
   fast: "Speed optimized — research, simple tasks",

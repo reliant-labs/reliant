@@ -13,10 +13,19 @@ let initialized = false;
 export function initOTelTracing() {
   if (initialized) return;
 
-  // Only enable if OTLP endpoint is configured
-  const otlpEndpoint = (import.meta as any).env?.VITE_OTEL_EXPORTER_OTLP_ENDPOINT;
+  // Only enable if OTLP endpoint is configured.
+  //
+  // The variable is VITE_OTEL_ENDPOINT, which is what forge's FrontendConfig
+  // `otel_endpoint` knob actually emits (kcl/schema.k, internal/cli/run.go's
+  // frontendEnvPrefix + "OTEL_ENDPOINT", the frontend-env linter, and the
+  // scaffold templates all agree on that name). This file previously read
+  // VITE_OTEL_EXPORTER_OTLP_ENDPOINT — the OTel SDK's own server-side spelling —
+  // which nothing in the deploy path ever sets. Setting the documented forge
+  // knob therefore did nothing at all, silently: no error, no warning, just
+  // tracing that stayed off while the config looked correct.
+  const otlpEndpoint = (import.meta as any).env?.VITE_OTEL_ENDPOINT;
   if (!otlpEndpoint) {
-    console.log('[OTel] No VITE_OTEL_EXPORTER_OTLP_ENDPOINT configured, tracing disabled');
+    console.log('[OTel] No VITE_OTEL_ENDPOINT configured, tracing disabled');
     return;
   }
 

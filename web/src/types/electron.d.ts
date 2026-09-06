@@ -132,6 +132,14 @@ export interface ElectronAPI {
   ) => Promise<{ code: string; state: string; redirectUri: string }>;
   cancelProviderOAuth?: (flowId: string) => Promise<unknown>;
 
+  // Stripe checkout in a controlled window, so the desktop app can observe the
+  // return instead of losing the purchase to the system browser. Optional: a
+  // build without it falls back to the plain redirect (see lib/stripeCheckout).
+  openStripeCheckout?: (args: {
+    checkoutUrl: string;
+    returnUrl: string;
+  }) => Promise<{ outcome: "success" | "cancelled" | "dismissed" }>;
+
   // Auth storage
   authLoad: () => Promise<{
     success: boolean;

@@ -3,6 +3,7 @@ import { useAuthStore } from '@/store/authStore'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useAuthMode } from '@/hooks/useAuthMode'
 import { ApiKeyLogin } from './ApiKeyLogin'
+import { LoadingSpinner } from './Layout/LoadingSpinner'
 
 const allowAnonymousAutoSignIn = import.meta.env.VITE_AUTO_ANON_SIGN_IN === 'true'
 
@@ -70,19 +71,24 @@ export function AuthGuard({
     }
   }, [user, loading, initialized, requireAuth, requireEmailVerification, navigate, search, authMode, authModeLoading, signInAnonymously])
 
+  // Auth is still resolving, or an effect above is about to redirect. These are
+  // never instant: authMode alone costs a /health round-trip, so returning null
+  // renders a blank white page for ~1s and the subsequent redirect reads as
+  // "the page just refreshed and nothing happened". Show the same spinner the
+  // app boots with instead, so the wait looks like loading rather than a fault.
   if (!initialized || loading || authModeLoading) {
-    return null
+    return <LoadingSpinner />
   }
 
   if (requireAuth && !user) {
     // Show API key login inline for apikey mode
     if (authMode === 'apikey') return <ApiKeyLogin />
-    // Show nothing while anonymous sign-in is in progress
-    return null
+    // Anonymous sign-in is in progress, or we're navigating to /auth.
+    return <LoadingSpinner />
   }
 
   if (!requireAuth && user) {
-    return null
+    return <LoadingSpinner />
   }
 
   // Check email verification requirement (skip for anonymous users and apikey mode)

@@ -30,6 +30,23 @@ type WorkflowErrorInput struct {
 	// recovered. An error is an event on one thread, not a property of the
 	// whole conversation.
 	Thread string `json:"thread,omitempty"`
+	// ErrorID, when set, IS the chat_update entity id this error is written
+	// under, replacing the uuid that would otherwise be minted here.
+	//
+	// It exists so a retry-exhaustion error can land on the SAME row the
+	// failing activity's own retry series already occupies. The activity
+	// wrapper keys every attempt of one activity under
+	// activity-error-<workflowID>-<activityID> (see runtime.activityErrorEventID),
+	// and both the frontend's dedup-by-id and the server's
+	// GetLatestNonMessageUpdatesPerEntity collapse per entity id — so a fresh
+	// uuid here could not dedup against the series it duplicates, and the final
+	// attempt rendered TWICE: once from the wrapper, once from the exhaustion
+	// handler, 19ms apart, describing one failure.
+	//
+	// Leave it empty when there is no activity to key on. The reconciler does
+	// exactly that: a hard Temporal termination has no failing activity, so its
+	// error is its own event and a minted uuid is the correct id.
+	ErrorID string `json:"error_id,omitempty"`
 }
 
 // WorkflowErrorOutput is the output from WorkflowError activity
@@ -84,8 +101,13 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 // shapes drift the first time a field is added, and the UI would silently
 // render one of them wrong.
 func WriteWorkflowError(ctx context.Context, repo db.Repository, input WorkflowErrorInput) (string, error) {
-	// Generate unique error ID
-	errorID := uuid.New().String()
+	// An explicit id means this error REPLACES an existing row rather than
+	// adding one — see WorkflowErrorInput.ErrorID. Absent it, the error is its
+	// own event and gets its own id.
+	errorID := input.ErrorID
+	if errorID == "" {
+		errorID = uuid.New().String()
+	}
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
 	// See web/src/types/streaming.ts ErrorUpdate interface

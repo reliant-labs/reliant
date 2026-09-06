@@ -4,6 +4,29 @@
 # Model order determines tag resolution priority (first match wins).
 # Models are grouped by primary provider for organization.
 
+# Per-tag request defaults, applied when a selector picks a model BY that tag.
+#
+# Precedence, highest first: an explicit node/preset thinking_level, then the
+# tag default below, then the model's own default_thinking_level, then the
+# registry capability floor. Selecting the same model by explicit `id:` does
+# NOT pick up a tag default — the default describes how the model was chosen.
+#
+# When a selector lists several tags, the winner is the EARLIEST tag in the
+# selector's list that the resolved model actually carries and that declares a
+# default. That matches tag-scoring weights, where earlier tags already rank
+# higher.
+#
+# A thinking_level here is an aspiration: it is clamped down to the resolved
+# model's declared thinking_levels, so `xhigh` on gemini-3.8-flash (which tops
+# out at high) yields `high`. Every tag named here must be carried by at least
+# one model and name a known level, or the registry fails to parse.
+tag_defaults:
+  # `powerful` is the frontier tier — selecting it means "spend capability on
+  # this", so it also means "think hard" without every caller writing
+  # thinking_level by hand.
+  powerful:
+    thinking_level: xhigh
+
 models:
   # ============================================================================
   # FLAGSHIP MODELS - Best overall for complex tasks
@@ -40,6 +63,41 @@ models:
     driver_settings:
       thinking_mode: adaptive
     default_thinking_level: high
+
+  # Claude 5.1 Fable is the first `powerful` model and is deliberately placed
+  # ahead of the other powerful-tagged entries (gpt-5.6-sol, gemini-3.8-flash)
+  # so a bare [powerful] selector resolves here. It sits AFTER claude-5-opus so
+  # that [flagship] keeps resolving to claude-5-opus as it did before.
+  - id: claude-5.1-fable
+    name: Claude 5.1 Fable
+    tags: [powerful, flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 10.0
+      output_per_1m: 50.0
+      cached_input_per_1m: 1.0
+    providers:
+      - driver: anthropic
+        api_model: claude-fable-5-1
+      - driver: openrouter
+        api_model: anthropic/claude-fable-5-1
+      - driver: reliant
+        api_model: claude-fable-5-1
+      - driver: vertexai
+        api_model: claude-fable-5-1
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: xhigh
 
   - id: claude-4.8-opus
     name: Claude 4.8 Opus
@@ -241,7 +299,7 @@ models:
   # is no visible thinking to stream for these models.
   - id: gpt-5.6-sol
     name: GPT-5.6 Sol
-    tags: [flagship, reasoning]
+    tags: [powerful, reasoning]
     visibility: user
     capabilities:
       can_reason: true
@@ -264,11 +322,18 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
-    default_thinking_level: low
+    # Powerful tier: sol gets its top practical effort. `max`/`ultra` are
+    # supported but reserved for explicit opt-in rather than the default.
+    default_thinking_level: xhigh
 
+  # Terra is the faster/cheaper member of the 5.6 family, but it is deliberately
+  # NOT tagged `fast`: that tag routes @fast for the whole codex driver — chat
+  # titling and compaction resolve it too — and it stays pointed at
+  # gpt-5.3-codex-spark. Terra carries `moderate` instead, so it is picked on
+  # cost/quality balance rather than by repointing a latency-critical path.
   - id: gpt-5.6-terra
     name: GPT-5.6 Terra
-    tags: [flagship, moderate, reasoning]
+    tags: [moderate, reasoning]
     visibility: user
     capabilities:
       can_reason: true
@@ -293,13 +358,14 @@ models:
       use_max_completion_tokens: true
     default_thinking_level: medium
 
-  # Luna is the small/fast member of the family (the backend also names it as the
-  # safety-buffering "faster model"). It is deliberately NOT tagged `fast`:
-  # that tag routes @fast for the whole codex driver, and repointing it off
-  # gpt-5.3-codex-spark is a separate product decision from adding these models.
+  # Luna is the ChatGPT-family flagship. It is deliberately NOT tagged `fast`,
+  # even though the backend names it as the safety-buffering "faster model":
+  # luna's job is to be the default good-quality pick, not the latency-optimized
+  # one. `fast` routes @fast for the whole codex driver and stays on
+  # gpt-5.3-codex-spark.
   - id: gpt-5.6-luna
     name: GPT-5.6 Luna
-    tags: [reasoning]
+    tags: [flagship, reasoning]
     visibility: user
     capabilities:
       can_reason: true
@@ -478,6 +544,71 @@ models:
       use_max_completion_tokens: true
       reasoning_summary_mode: detailed_only
     default_thinking_level: xhigh
+
+  # Gemini 3.5–3.8 Flash. Pricing for all four is not public to us; the figures
+  # below are PROVISIONAL — they reuse gemini-3-flash-preview's published rates
+  # (0.15 in / 0.60 out) rather than invent per-model numbers. Revisit when
+  # Google publishes real pricing.
+  #
+  # 3.8 Flash is the Gemini flagship and is `powerful`; it is placed after
+  # claude-5.1-fable and gpt-5.6-sol so a bare [powerful] selector still
+  # resolves to fable, and after the Claude/GPT flagships so [flagship] is
+  # unchanged. The other three live in the FAST/MODERATE section below.
+  - id: gemini-3.8-flash
+    name: Gemini 3.8 Flash
+    tags: [powerful, flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1048576
+      max_output_tokens: 65536
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
+    cost:
+      # Provisional — see note above.
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: gemini
+        api_model: gemini-3.8-flash
+      - driver: openrouter
+        api_model: google/gemini-3.8-flash
+      - driver: reliant
+        api_model: gemini-3.8-flash
+    default_thinking_level: high
+    default_temperature: 1.0
+
+  - id: gemini-3.7-flash
+    name: Gemini 3.7 Flash
+    tags: [flagship, moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1048576
+      max_output_tokens: 65536
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
+    cost:
+      # Provisional — see note above.
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: gemini
+        api_model: gemini-3.7-flash
+      - driver: openrouter
+        api_model: google/gemini-3.7-flash
+      - driver: reliant
+        api_model: gemini-3.7-flash
+    default_thinking_level: medium
+    default_temperature: 1.0
 
   - id: gemini-3.1-pro-preview
     name: Gemini 3.1 Pro Preview
@@ -694,6 +825,61 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
     default_thinking_level: xhigh
+
+  # 3.6 and 3.5 Flash. Costs are provisional — see the note on gemini-3.8-flash.
+  # Both are placed here rather than in the FAST section so that adding them
+  # does not move which model a bare [fast] selector resolves to.
+  - id: gemini-3.6-flash
+    name: Gemini 3.6 Flash
+    tags: [moderate, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1048576
+      max_output_tokens: 65536
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
+    cost:
+      # Provisional — see gemini-3.8-flash.
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: gemini
+        api_model: gemini-3.6-flash
+      - driver: openrouter
+        api_model: google/gemini-3.6-flash
+    default_thinking_level: medium
+    default_temperature: 1.0
+
+  - id: gemini-3.5-flash
+    name: Gemini 3.5 Flash
+    tags: [moderate, fast, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1048576
+      max_output_tokens: 65536
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
+    cost:
+      # Provisional — see gemini-3.8-flash.
+      input_per_1m: 0.15
+      output_per_1m: 0.60
+    providers:
+      - driver: gemini
+        api_model: gemini-3.5-flash
+      - driver: openrouter
+        api_model: google/gemini-3.5-flash
+    default_thinking_level: low
+    default_temperature: 1.0
 
   - id: gemini-2.5-pro
     name: Gemini 2.5 Pro
@@ -1017,6 +1203,31 @@ models:
     driver_settings:
       thinking_mode: adaptive
     default_thinking_level: high
+
+  - id: vertex-claude-5.1-fable
+    name: Vertex Claude 5.1 Fable
+    tags: [powerful, flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 64000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 10.0
+      output_per_1m: 50.0
+      cached_input_per_1m: 1.0
+    providers:
+      - driver: vertexai
+        api_model: claude-fable-5-1
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: xhigh
 
   - id: vertex-claude-5-fable
     name: Vertex Claude 5 Fable

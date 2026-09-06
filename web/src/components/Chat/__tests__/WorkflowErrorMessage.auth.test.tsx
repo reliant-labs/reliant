@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { WorkflowErrorMessage } from '../WorkflowErrorMessage';
 import type { ErrorUpdate } from '../../../types/streaming';
@@ -46,5 +45,66 @@ describe('WorkflowErrorMessage auth fallback', () => {
     expect(
       screen.getByText('Codex session expired. Please reconnect Codex. Workflow paused — send a message to retry.'),
     ).toBeInTheDocument();
+  });
+
+  it('renders Codex reconnect guidance for an expired Codex OAuth token 401', () => {
+    render(
+      <WorkflowErrorMessage
+        error={buildError({
+          activity_type: 'CallLLM',
+          error_message: `failed to stream LLM response: LLM streaming error: POST "https://chatgpt.com/backend-api/codex/responses": 401 Unauthorized {
+    "message": "Provided authentication token is expired.",
+    "type": null,
+    "code": "token_expired",
+    "param": null
+  }`,
+        })}
+      />,
+    );
+
+    expect(
+      screen.getByText('Codex session expired. Please reconnect Codex. Workflow paused — send a message to retry.'),
+    ).toBeInTheDocument();
+  });
+});
+
+describe('WorkflowErrorMessage generic activity label', () => {
+  it('keeps acronyms in one word for CallLLM', () => {
+    render(
+      <WorkflowErrorMessage
+        error={buildError({
+          activity_type: 'CallLLM',
+          error_message: 'some completely unrecognized failure',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Workflow error in Call LLM')).toBeInTheDocument();
+  });
+
+  it('strips the V2_ prefix and keeps acronyms in one word', () => {
+    render(
+      <WorkflowErrorMessage
+        error={buildError({
+          activity_type: 'V2_CallLLM',
+          error_message: 'some completely unrecognized failure',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Workflow error in Call LLM')).toBeInTheDocument();
+  });
+
+  it('still splits ordinary CamelCase activity names', () => {
+    render(
+      <WorkflowErrorMessage
+        error={buildError({
+          activity_type: 'SaveMessage',
+          error_message: 'some completely unrecognized failure',
+        })}
+      />,
+    );
+
+    expect(screen.getByText('Workflow error in Save Message')).toBeInTheDocument();
   });
 });

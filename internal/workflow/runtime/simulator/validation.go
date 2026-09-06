@@ -3,11 +3,13 @@ package simulator
 
 import (
 	"fmt"
+	"reflect"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // ValidationResult contains the results of scenario validation.
@@ -286,6 +288,175 @@ func validateOutputFields(result *ValidationResult, event SimulatedEvent, workfl
 				eventIndex, fieldName, nodeType, strings.Join(names, ", "))
 		}
 	}
+
+	// Raw-output mode only: the map IS the activity result, so its value shapes
+	// must match the activity's proto output. A typed event (llm_response,
+	// tool_result) carries a shorthand payload that the engine converts, so its
+	// `output:` is not an activity output and must not be checked here.
+	if event.Type == "" {
+		if md, ok := registry.OutputForNodeType(nodeType); ok {
+			validateOutputValueTypes(result, event.Output, md, eventIndex, "")
+		}
+	}
+}
+
+// validateOutputValueTypes checks a raw mock output against the activity's proto
+// output descriptor, recursively.
+//
+// This exists because a mock is only useful if it is a shape the real activity
+// could actually produce. The corpus previously wrote call_llm's
+// tool_calls[].input as a nested YAML mapping, but every LLM driver assigns it
+// the provider's JSON arguments STRING (e.g. openai/driver.go's
+// call.Function.Arguments), message.ToolCall.Input is a string, and
+// ToolCallMsg.input is `string`. The fast simulator tolerated the map because it
+// never reaches the activity layer; the Temporal-backed lane failed in
+// save_message's convertToToolCalls. Catching it here means a bad mock is
+// rejected where it is written, on BOTH lanes, instead of silently exercising a
+// path the product cannot reach.
+//
+// Unknown field names stay warnings (handled above); a wrong VALUE SHAPE is an
+// error, because it makes the scenario assert against a fiction.
+func validateOutputValueTypes(
+	result *ValidationResult,
+	output map[string]interface{},
+	md protoreflect.MessageDescriptor,
+	eventIndex int,
+	path string,
+) {
+	fields := md.Fields()
+	for name, value := range output {
+		fd := fields.ByName(protoreflect.Name(name))
+		if fd == nil || value == nil {
+			continue // unknown names are reported by the name check above
+		}
+		validateFieldValue(result, fd, value, eventIndex, joinFieldPath(path, name))
+	}
+}
+
+// validateFieldValue checks one value against one proto field, handling
+// repeated and map cardinality before the element type.
+func validateFieldValue(
+	result *ValidationResult,
+	fd protoreflect.FieldDescriptor,
+	value interface{},
+	eventIndex int,
+	path string,
+) {
+	if fd.IsMap() {
+		return // map fields accept any YAML mapping
+	}
+	if fd.IsList() {
+		// Reflect rather than asserting []interface{}: YAML decodes lists to
+		// []interface{}, but Go-constructed scenarios (and test helpers) build
+		// []map[string]interface{} for the same field, and both are valid.
+		items, ok := asSlice(value)
+		if !ok {
+			result.AddError("event[%d]: output %s: expected a list, got %T", eventIndex, path, value)
+			return
+		}
+		for i, item := range items {
+			validateElementValue(result, fd, item, eventIndex, fmt.Sprintf("%s[%d]", path, i))
+		}
+		return
+	}
+	validateElementValue(result, fd, value, eventIndex, path)
+}
+
+// validateElementValue checks a single (non-repeated) value against a field's type.
+func validateElementValue(
+	result *ValidationResult,
+	fd protoreflect.FieldDescriptor,
+	value interface{},
+	eventIndex int,
+	path string,
+) {
+	if value == nil {
+		return
+	}
+	switch fd.Kind() {
+	case protoreflect.MessageKind, protoreflect.GroupKind:
+		nested := fd.Message()
+		// Well-known types (Struct, Value, Timestamp, ...) accept arbitrary
+		// JSON shapes; checking them would produce false positives.
+		if strings.HasPrefix(string(nested.FullName()), "google.protobuf.") {
+			return
+		}
+		m, ok := asStringKeyedMap(value)
+		if !ok {
+			result.AddError("event[%d]: output %s: expected an object, got %T", eventIndex, path, value)
+			return
+		}
+		validateOutputValueTypes(result, m, nested, eventIndex, path)
+	case protoreflect.StringKind, protoreflect.BytesKind:
+		if _, ok := value.(string); !ok {
+			result.AddError(
+				"event[%d]: output %s: expected string, got %T "+
+					"(proto declares this field as string — encode structured values as a JSON string)",
+				eventIndex, path, value)
+		}
+	case protoreflect.BoolKind:
+		if _, ok := value.(bool); !ok {
+			result.AddError("event[%d]: output %s: expected bool, got %T", eventIndex, path, value)
+		}
+	case protoreflect.EnumKind:
+		switch value.(type) {
+		case string, int, int32, int64, float64:
+		default:
+			result.AddError("event[%d]: output %s: expected enum name or number, got %T", eventIndex, path, value)
+		}
+	default: // numeric kinds
+		switch value.(type) {
+		case int, int32, int64, uint, uint32, uint64, float32, float64:
+		default:
+			result.AddError("event[%d]: output %s: expected number, got %T", eventIndex, path, value)
+		}
+	}
+}
+
+// asSlice normalizes any slice or array to []interface{}, so a mock built in Go
+// with a concrete element type validates the same as one decoded from YAML.
+// Strings and byte slices are deliberately not treated as sequences.
+func asSlice(value interface{}) ([]interface{}, bool) {
+	if items, ok := value.([]interface{}); ok {
+		return items, true
+	}
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.Slice && rv.Kind() != reflect.Array {
+		return nil, false
+	}
+	if rv.Kind() == reflect.Slice && rv.Type().Elem().Kind() == reflect.Uint8 {
+		return nil, false
+	}
+	items := make([]interface{}, rv.Len())
+	for i := range items {
+		items[i] = rv.Index(i).Interface()
+	}
+	return items, true
+}
+
+// asStringKeyedMap normalizes a mapping to map[string]interface{}, covering
+// Go-constructed mocks whose value type is concrete rather than interface{}.
+func asStringKeyedMap(value interface{}) (map[string]interface{}, bool) {
+	if m, ok := value.(map[string]interface{}); ok {
+		return m, true
+	}
+	rv := reflect.ValueOf(value)
+	if rv.Kind() != reflect.Map || rv.Type().Key().Kind() != reflect.String {
+		return nil, false
+	}
+	m := make(map[string]interface{}, rv.Len())
+	for _, k := range rv.MapKeys() {
+		m[k.String()] = rv.MapIndex(k).Interface()
+	}
+	return m, true
+}
+
+// joinFieldPath builds a dotted field path for error messages.
+func joinFieldPath(prefix, name string) string {
+	if prefix == "" {
+		return name
+	}
+	return prefix + "." + name
 }
 
 // getNodeType returns the node type for a qualified node ID.
@@ -451,6 +622,221 @@ func validateInputValue(input *reliantv1.Input, value interface{}) error {
 func ValidateScenarioNodes(scenario *Scenario, workflow *reliantv1.Workflow) []string {
 	result := ValidateScenario(scenario, workflow)
 	return result.Errors
+}
+
+// WorkflowRefLoader resolves a workflow ref (e.g. "builtin://agent") to its
+// definition. Declared here, at the consumer, so the analysis can report how
+// much of a black-boxed sub-workflow went unexecuted.
+type WorkflowRefLoader func(ref string) (*reliantv1.Workflow, error)
+
+// AnalyzeFalsePasses inspects a COMPLETED simulation and reports the ways this
+// run could have passed green without testing what the scenario author thinks
+// it tested. These are warnings, never errors: both patterns are sometimes
+// exactly what the author wants.
+//
+// Two detections, both of which are silent today:
+//
+//  1. Black-box sub-workflow. A ref-mode `workflow` node with no
+//     internally-qualified events is replaced wholesale by a scenario literal.
+//     The entire sub-workflow — every node in it — never runs.
+//  2. Defaulted node router. An unmocked node router silently selects its first
+//     candidate, so a routing test asserts a path the router was never asked to
+//     choose.
+//
+// routerMocks must come from SnapshotRouterMocks taken BEFORE the run — see
+// that function for why the scenario itself cannot be trusted afterwards.
+func AnalyzeFalsePasses(scenario *Scenario, workflow *reliantv1.Workflow, exec *ExecutionDetails, loader WorkflowRefLoader, routerMocks map[string]bool) []string {
+	if scenario == nil || workflow == nil || exec == nil {
+		return nil
+	}
+
+	internalPrefixes := internalEventPrefixes(scenario.Events)
+	blackBoxed := explicitBlackBoxNodes(scenario.Events)
+
+	var warnings []string
+	seen := make(map[string]bool, len(exec.NodesReached))
+	for _, qualifiedID := range exec.NodesReached {
+		if seen[qualifiedID] {
+			continue // loop bodies revisit the same qualified id per iteration
+		}
+		seen[qualifiedID] = true
+
+		node := findNodeByPath(strings.Split(qualifiedID, "."), workflow, loader)
+		if node == nil {
+			continue // inside a ref we cannot resolve; nothing to say about it
+		}
+
+		if w := blackBoxWorkflowWarning(qualifiedID, node, internalPrefixes, blackBoxed, loader); w != "" {
+			warnings = append(warnings, w)
+		}
+		if w := defaultedRouterWarning(qualifiedID, node, routerMocks, exec.NodeOutputs[qualifiedID]); w != "" {
+			warnings = append(warnings, w)
+		}
+	}
+
+	return warnings
+}
+
+// blackBoxWorkflowWarning reports a ref-mode workflow node whose internals were
+// never simulated. Inline sub-workflows always execute, so they are exempt.
+//
+// The warning is for ACCIDENTAL opacity. An author who wrote `black_box: true`
+// against this node has said the sub-workflow's body is not what the scenario
+// tests, so warning them anyway leaves no way to silence it — which is how a
+// corpus learns to ignore its own warnings.
+func blackBoxWorkflowWarning(qualifiedID string, node *reliantv1.Node, internalPrefixes, blackBoxed map[string]bool, loader WorkflowRefLoader) string {
+	swa := model.GetSubWorkflowArgs(node)
+	if swa == nil || swa.GetInline() != nil {
+		return ""
+	}
+	ref := model.CelStringRaw(swa.GetRef())
+	if ref == "" {
+		return ""
+	}
+	if internalPrefixes[qualifiedID+"."] {
+		return "" // scenario targets its internals — the sub-workflow really ran
+	}
+	if blackBoxed[qualifiedID] {
+		return "" // the author opted into opacity for this node, deliberately
+	}
+
+	scope := "its nodes"
+	example := qualifiedID + ".<inner_node>"
+	if loader != nil {
+		if sub, err := loader(ref); err == nil && sub != nil {
+			if n := len(sub.GetNodes()); n > 0 {
+				scope = fmt.Sprintf("all %d of its nodes", n)
+				example = qualifiedID + "." + sub.GetNodes()[0].GetId()
+			}
+		}
+	}
+
+	return fmt.Sprintf(
+		"black-box sub-workflow: node %q (ref %q) did NOT execute — its output came from the scenario, so %s were skipped. "+
+			"To exercise it, mock its internals with qualified ids (e.g. `node: %s`).",
+		qualifiedID, ref, scope, example)
+}
+
+// defaultedRouterWarning reports a node router that fell back to its first
+// candidate because the scenario never supplied selected_node — meaning the
+// routing decision under test was never actually made.
+func defaultedRouterWarning(qualifiedID string, node *reliantv1.Node, routerMocks map[string]bool, output map[string]interface{}) string {
+	if !model.IsNodeRouterMode(node) {
+		return ""
+	}
+	candidates := model.GetRouterArgs(node).GetNodes()
+	if len(candidates) == 0 {
+		return ""
+	}
+	if routerMocks[qualifiedID] {
+		return "" // the scenario made the routing decision itself
+	}
+
+	// The node router ran without a mocked selection, so the default fired.
+	// Confirm against the recorded output so a node that never actually
+	// dispatched stays silent.
+	first := candidates[0].GetId()
+	if selected, _ := output["selected_node"].(string); selected != first {
+		return ""
+	}
+
+	names := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		names = append(names, c.GetId())
+	}
+	return fmt.Sprintf(
+		"unmocked node router: %q defaulted to its first candidate %q — routing was NOT tested. Candidates: %s. "+
+			"To test the decision, mock it (e.g. `- node: %s` / `output: {selected_node: %s}`).",
+		qualifiedID, first, strings.Join(names, ", "), qualifiedID, names[len(names)-1])
+}
+
+// SnapshotRouterMocks records which nodes the scenario supplies a non-empty
+// selected_node for. It MUST be called before the simulation runs.
+//
+// Raw-mode events hand their Output map to the simulator by reference, and the
+// simulator writes its first-candidate default straight into that map. After a
+// run, a defaulted router is therefore indistinguishable from a mocked one by
+// inspecting the scenario — the scenario has been mutated to look mocked. This
+// snapshot is the only reliable record of what the author actually wrote.
+func SnapshotRouterMocks(events []SimulatedEvent) map[string]bool {
+	mocked := make(map[string]bool)
+	for _, event := range events {
+		if event.Node == "" {
+			continue
+		}
+		if selected, ok := event.Output["selected_node"].(string); ok && selected != "" {
+			mocked[event.Node] = true
+		}
+	}
+	return mocked
+}
+
+// explicitBlackBoxNodes returns the nodes the scenario opted out of body
+// execution for with `black_box: true` — the same set buildBlackBoxed feeds the
+// simulator, read here so deliberate opacity is silent while accidental opacity
+// still warns.
+func explicitBlackBoxNodes(events []SimulatedEvent) map[string]bool {
+	opted := make(map[string]bool)
+	for _, event := range events {
+		if event.BlackBox && event.Node != "" {
+			opted[event.Node] = true
+		}
+	}
+	return opted
+}
+
+// internalEventPrefixes returns every "a.", "a.b." prefix implied by the
+// scenario's qualified event node refs — the same prefixes the simulator uses
+// to decide whether to descend into a referenced sub-workflow.
+func internalEventPrefixes(events []SimulatedEvent) map[string]bool {
+	prefixes := make(map[string]bool)
+	for _, event := range events {
+		if event.Node == "" || !strings.Contains(event.Node, ".") {
+			continue
+		}
+		parts := strings.Split(event.Node, ".")
+		for i := 1; i < len(parts); i++ {
+			prefixes[strings.Join(parts[:i], ".")+"."] = true
+		}
+	}
+	return prefixes
+}
+
+// findNodeByPath resolves a qualified node id to its proto node, descending
+// through inline loop/workflow bodies and, when a loader is available, through
+// referenced ones.
+func findNodeByPath(path []string, workflow *reliantv1.Workflow, loader WorkflowRefLoader) *reliantv1.Node {
+	if len(path) == 0 || workflow == nil {
+		return nil
+	}
+
+	for _, node := range workflow.GetNodes() {
+		if node.GetId() != path[0] {
+			continue
+		}
+		if len(path) == 1 {
+			return node
+		}
+
+		var inline *reliantv1.Workflow
+		var ref string
+		if la := model.GetLoopArgs(node); la != nil {
+			inline, ref = la.GetInline(), model.CelStringRaw(la.GetRef())
+		} else if swa := model.GetSubWorkflowArgs(node); swa != nil {
+			inline, ref = swa.GetInline(), model.CelStringRaw(swa.GetRef())
+		}
+		if inline != nil {
+			return findNodeByPath(path[1:], inline, loader)
+		}
+		if ref != "" && loader != nil {
+			if sub, err := loader(ref); err == nil {
+				return findNodeByPath(path[1:], sub, loader)
+			}
+		}
+		return nil
+	}
+
+	return nil
 }
 
 // validateMockingConsistency checks that scenarios don't mix black-box and internal

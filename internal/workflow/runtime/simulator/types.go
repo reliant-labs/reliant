@@ -84,6 +84,21 @@ type SimulatedEvent struct {
 	// content with is_error set, and response_data[tool] stays null — a failed
 	// response tool call does NOT count as a structured response.
 	IsError bool `json:"is_error,omitempty" yaml:"is_error,omitempty"`
+
+	// BlackBox mocks a loop or workflow node AS A UNIT: its body is not
+	// entered, and this event's output stands for the whole invocation.
+	//
+	// It exists because the default is the opposite. A loop with an inline body
+	// executes that body, evaluating each inner node's config, so a broken
+	// expression fails the scenario. That default is what makes the fast lane
+	// able to catch bugs like `iter.item.num` failing to resolve — the defect
+	// that shipped in parallel-compete.yaml green because the body was never
+	// entered and the failing expression was never compiled.
+	//
+	// Mocking a sub-workflow as a unit is sometimes exactly right. Setting this
+	// keeps that available as a VISIBLE choice by the scenario author rather
+	// than a silent property of the simulator.
+	BlackBox bool `json:"black_box,omitempty" yaml:"black_box,omitempty"`
 }
 
 // SimToolCall represents a tool call in a simulated LLM response.
@@ -314,7 +329,15 @@ type ScenarioResult struct {
 	Execution  ExecutionDetails `json:"execution"`
 	Expected   *Expectation     `json:"expected,omitempty"`
 	Mismatches []string         `json:"mismatches,omitempty"`
-	RunAt      time.Time        `json:"run_at"`
+
+	// Warnings describe ways this run could have passed without testing what
+	// the author intended — a black-boxed sub-workflow that never executed, or
+	// a node router that defaulted instead of being asked to route. They never
+	// affect Status: both patterns are legitimate when deliberate. See
+	// AnalyzeFalsePasses.
+	Warnings []string `json:"warnings,omitempty"`
+
+	RunAt time.Time `json:"run_at"`
 }
 
 // ToJSON converts a scenario to JSON

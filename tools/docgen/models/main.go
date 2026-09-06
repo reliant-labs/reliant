@@ -69,6 +69,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 
 | Tag | Description |
 |-----|-------------|
+| ` + "`powerful`" + ` | Most capable models for the hardest work |
 | ` + "`flagship`" + ` | Most capable models, best quality |
 | ` + "`moderate`" + ` | Balance of capability and cost |
 | ` + "`fast`" + ` | Optimized for speed |
@@ -321,6 +322,7 @@ Find models by capability. Use these tables to answer "what are my options for X
 		name string
 		desc string
 	}{
+		{models.TagPowerful, "Powerful", "Maximum capability for the hardest, longest-horizon work"},
 		{models.TagFlagship, "Flagship", "Most capable models for complex tasks"},
 		{models.TagModerate, "Moderate", "Balance of capability and cost"},
 		{models.TagFast, "Fast", "Optimized for quick responses"},

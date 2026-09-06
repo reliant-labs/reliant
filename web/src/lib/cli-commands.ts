@@ -4,9 +4,9 @@
  *
  * In production the `reliant` CLI binary is built with the right server,
  * gateway, admin, and auth defaults compiled in (see internal/builddefaults
- * in the Go repo), so we return a bare command. In non-prod — staging,
- * preprod, local dev, OSS self-hosted — the user needs explicit env-var
- * overrides so the daemon dials the same hosts the web frontend is using.
+ * in the Go repo), so we return a bare command. In non-prod — local dev,
+ * OSS self-hosted — the user needs explicit env-var overrides so the daemon
+ * dials the same hosts the web frontend is using.
  */
 
 // ---------------------------------------------------------------------------
@@ -74,9 +74,9 @@ export const GATEWAY_URL_PLACEHOLDER = "<your-daemon-gateway-url>";
  * server / gateway / auth defaults baked into internal/builddefaults via
  * -X ldflags, so the command needs no overrides.
  *
- * Everything without the flag — OSS self-hosted builds, a local dev stack,
- * preprod — is non-managed and gets explicit overrides so the daemon dials the
- * right hosts. No hosted hostname is hardcoded here.
+ * Everything without the flag — OSS self-hosted builds, a local dev stack —
+ * is non-managed and gets explicit overrides so the daemon dials the right
+ * hosts. No hosted hostname is hardcoded here.
  *
  * DO NOT ADD A SECOND CONDITION. This used to short-circuit on
  * `import.meta.env.DEV` before reading the flag, which made Vite's dev/prod

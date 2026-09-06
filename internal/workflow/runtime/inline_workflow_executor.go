@@ -49,6 +49,16 @@ type InlineWorkflowExecutor struct {
 	loopNodeID           string                    // Parent loop node ID (if executing within a loop)
 	loopIteration        int                       // Parent loop iteration (if executing within a loop)
 
+	// nodePathPrefix is the fully-qualified dotted path of the scope CONTAINING
+	// this workflow: node, empty at the top level. This node's own path is that
+	// prefix plus nodeID, and the sub-workflow's nodes hang off that.
+	//
+	// It is separate from loopNodeID because loopNodeID is loop-scoped identity
+	// (a persisted column) that deliberately holds a single id: composing this
+	// into it would change what the DB rows mean. See
+	// types.RuntimeContext.NodePath.
+	nodePathPrefix string
+
 	// threadTracker tracks threads for runtime thread mapping
 	threadTracker *ThreadTracker
 
@@ -69,6 +79,19 @@ type InlineWorkflowExecutor struct {
 	threadInterrupt *ThreadInterrupt
 	// makeThreadInterrupt creates per-thread interrupt handles for spawned/nested threads.
 	makeThreadInterrupt func(string) *ThreadInterrupt
+}
+
+// threadForError is the thread this inline workflow's failures belong to, or ""
+// when there is no execution context to read one from.
+//
+// "" is a real answer, not a placeholder: an error carrying no thread is
+// chat-scoped and renders in every thread, so the caller must be able to tell
+// "unknown" apart from a known thread and must not substitute the chat id.
+func (e *InlineWorkflowExecutor) threadForError() string {
+	if e.execContext == nil {
+		return ""
+	}
+	return e.execContext.Thread
 }
 
 // NewInlineWorkflowExecutor creates a new executor for inline workflow execution.
@@ -121,6 +144,19 @@ func NewInlineWorkflowExecutor(
 func (e *InlineWorkflowExecutor) WithThreadTracker(tracker *ThreadTracker) *InlineWorkflowExecutor {
 	e.threadTracker = tracker
 	return e
+}
+
+// WithNodePathPrefix sets the dotted graph path of the scope containing this
+// workflow: node. Unset at the top level, where this node's path is just its id.
+func (e *InlineWorkflowExecutor) WithNodePathPrefix(prefix string) *InlineWorkflowExecutor {
+	e.nodePathPrefix = prefix
+	return e
+}
+
+// nodePath is this workflow: node's own fully-qualified path, and the prefix
+// its sub-workflow's nodes compose against.
+func (e *InlineWorkflowExecutor) nodePath() string {
+	return joinNodePath(e.nodePathPrefix, e.nodeID)
 }
 
 // WithExecContext sets the unified execution context.
@@ -202,14 +238,21 @@ func (e *InlineWorkflowExecutor) GetThread() string {
 // - "default": params are applied directly to top-level inputs
 // - "GroupName": params are applied as "GroupName.param" keys
 func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interface{}) error {
-	if e.projectPath == "" {
-		return fmt.Errorf("project path not set, cannot load presets")
-	}
-
 	wfArgs := model.GetSubWorkflowArgs(e.node)
 	presets := wfArgs.GetPresets()
+	// Check for work BEFORE demanding the input that work would need. A node
+	// with no presets needs no project path, and failing it here made the
+	// project path a precondition of sub-workflow execution generally rather
+	// than of preset loading specifically.
 	if len(presets) == 0 {
 		return nil
+	}
+
+	// Terminal, not transient: no amount of retrying supplies a project path
+	// that was never set. The spawn retry loop is unbounded, so an error that
+	// cannot resolve itself has to say so in its type or it is retried forever.
+	if e.projectPath == "" {
+		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 
 	e.logger.Info("[InlineWorkflow] Loading presets for sub-workflow",
@@ -634,8 +677,13 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	// Create state machine for sub-workflow
 	stateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow)
 
-	// Create step executor for sub-workflow
-	// Use parent's loopNodeID if set, otherwise use this node's ID
+	// Create step executor for sub-workflow.
+	//
+	// loopNodeID keeps the OUTERMOST id on purpose: it is loop-scoped identity,
+	// persisted to the loop_node_id column under a unique index over
+	// (workflow_id, loop_node_id, loop_iteration), and it must stay a single
+	// id. The graph POSITION of these nodes is carried separately by
+	// nodePathPrefix below, which composes at every boundary.
 	stepLoopNodeID := e.loopNodeID
 	if stepLoopNodeID == "" {
 		stepLoopNodeID = e.nodeID
@@ -649,6 +697,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		subNodeOutputs,
 		e.childTracker,
 	).WithLoopContext(stepLoopNodeID, e.loopIteration).
+		WithNodePathPrefix(e.nodePath()).
 		WithExecContext(e.execContext).
 		WithProjectPath(e.projectPath).
 		WithWorkflow(e.subWorkflow).
@@ -727,6 +776,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				e.ctx, node, subNodeOutputs, subInputs,
 				e.workflowID, e.chatID, e.subWorkflowName, e.logger,
 				nil,
+				e.nodePath(),
 			)
 			if condErr != nil {
 				return nil, condErr
@@ -759,7 +809,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				// Pass exec context, project path, and activity ID prefix
 				// The activity ID prefix ensures uniqueness when multiple inline workflows
 				// run in parallel (e.g., impl_1, impl_2, impl_3 all running agent loops)
-				loopExecutor = loopExecutor.WithActivityIDPrefix(uniqueActivityIDBase)
+				loopExecutor = loopExecutor.WithActivityIDPrefix(uniqueActivityIDBase).
+					WithNodePathPrefix(e.nodePath())
 				if e.execContext != nil {
 					loopExecutor = loopExecutor.WithExecContext(e.execContext)
 				}
@@ -998,22 +1049,18 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					})
 					var errorResult map[string]interface{}
 					errStr := stepEvent.Error.Error()
-					errorPayload := map[string]interface{}{
-						"chat_id":       e.chatID,
-						"workflow_id":   e.workflowID,
-						"workflow_name": e.workflowName,
-						"error_message": errStr,
-						"error_type":    "retry_exhaustion",
-					}
-					// Scope the error to the thread that produced it; an
-					// unscoped error renders in every thread of the chat.
-					if e.execContext != nil && e.execContext.Thread != "" {
-						errorPayload["thread"] = e.execContext.Thread
+					exhaustion := retryExhaustionError{
+						ChatID:       e.chatID,
+						WorkflowID:   e.workflowID,
+						WorkflowName: e.workflowName,
+						Message:      errStr,
+						Thread:       e.threadForError(),
+						Err:          stepEvent.Error,
 					}
 					if summary := extractLLMErrorSummary(errStr); summary != "" {
-						errorPayload["error_summary"] = summary + ". Workflow paused — send a message to retry."
+						exhaustion.Summary = summary + ". Workflow paused — send a message to retry."
 					}
-					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", errorPayload).Get(e.ctx, &errorResult)
+					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", exhaustion.payload()).Get(e.ctx, &errorResult)
 
 					// Update DB status to paused
 					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
@@ -1059,157 +1106,33 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	}
 }
 
-// executeApproval handles approval nodes inline using a signal-based wait pattern
-// (matching a signal-based system). It creates an approval record via the ApprovalCreate
-// activity, then waits for a Temporal signal from the gRPC approval service.
+// executeApproval handles approval nodes inline using the signal-based wait in
+// approval_flow.go, which is the same path a loop body takes.
 func (e *InlineWorkflowExecutor) executeApproval(
 	triggered *core.TriggeredNode,
 	nodeOutputs map[string]interface{},
 	workflowInputs map[string]interface{},
-	activityIDBase string,
+	_ string,
 ) (map[string]interface{}, error) {
-	node := triggered.Node
-	event := triggered.Event
-
-	const defaultApprovalTimeout = 1 * time.Hour
-
-	// Evaluate node config to resolve CEL expressions (title, timeout)
-	iterCtx := model.BuildIterContext(e.loopIteration)
-	evalResult, err := EvaluateNodeConfig(
-		node, nodeOutputs, e.workflowID, event.WorkflowName,
-		workflowInputs, iterCtx, nil, e.execContext,
+	exec, err := approvalExecutionFromNode(
+		triggered.Node,
+		nodeOutputs,
+		workflowInputs,
+		e.workflowID,
+		triggered.Event.WorkflowName,
+		model.BuildIterContext(e.loopIteration),
+		nil,
+		e.execContext,
+		e.chatID,
+		e.loopNodeID,
+		e.loopIteration,
+		joinNodePath(e.nodePath(), triggered.Node.GetId()),
+		e.logger,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to evaluate approval node config: %w", err)
+		return nil, err
 	}
-
-	// Extract approval args
-	args := model.GetApprovalArgs(evalResult)
-	if args == nil {
-		return nil, fmt.Errorf("expected approval node, got %s", model.NodeType(node))
-	}
-
-	title := model.CelStringValue(args.GetTitle())
-	timeoutStr := model.CelStringValue(args.GetTimeout())
-
-	timeout := defaultApprovalTimeout
-	if timeoutStr != "" {
-		if parsed, parseErr := time.ParseDuration(timeoutStr); parseErr == nil {
-			timeout = parsed
-		}
-	}
-
-	// Get the Temporal workflow execution ID for signal routing
-	temporalWorkflowID := workflow.GetInfo(e.ctx).WorkflowExecution.ID
-
-	// STEP 1: Call ApprovalCreate activity (fast DB write)
-	createCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
-		StartToCloseTimeout: 30 * time.Second,
-		RetryPolicy: &temporal.RetryPolicy{
-			MaximumAttempts: 3,
-		},
-	})
-
-	threadID := ""
-	if e.execContext != nil {
-		threadID = e.execContext.Thread
-	}
-
-	createInput := map[string]interface{}{
-		"chat_id":              e.chatID,
-		"workflow_id":          e.workflowID,
-		"temporal_workflow_id": temporalWorkflowID,
-		"thread_id":            threadID,
-		"step_id":              node.GetId(),
-		"title":                title,
-		"timeout":              timeoutStr,
-	}
-
-	var createOutput struct {
-		ApprovalID      string `json:"approval_id"`
-		AlreadyResolved bool   `json:"already_resolved"`
-		Status          string `json:"status"`
-		ActionTaken     string `json:"action_taken"`
-	}
-	if err := workflow.ExecuteActivity(createCtx, "ApprovalCreate", createInput).Get(e.ctx, &createOutput); err != nil {
-		return nil, fmt.Errorf("ApprovalCreate activity failed: %w", err)
-	}
-
-	// STEP 2: If already resolved (idempotency on replay), return immediately
-	if createOutput.AlreadyResolved {
-		return map[string]interface{}{
-			"approval_id":  createOutput.ApprovalID,
-			"status":       createOutput.Status,
-			"action_taken": createOutput.ActionTaken,
-		}, nil
-	}
-
-	// STEP 3: Wait for signal or timeout
-	signalName := "signal.approval." + createOutput.ApprovalID
-	signalCh := workflow.GetSignalChannel(e.ctx, signalName)
-
-	timeoutCtx, cancelTimer := workflow.WithCancel(e.ctx)
-	timeoutFuture := workflow.NewTimer(timeoutCtx, timeout)
-
-	selector := workflow.NewSelector(e.ctx)
-
-	var status, actionTaken, denialReason string
-
-	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
-		var signalData map[string]interface{}
-		ch.Receive(e.ctx, &signalData)
-		if s, ok := signalData["status"].(string); ok {
-			status = s
-		} else {
-			status = "approved" // default if signal data is missing status
-		}
-		if at, ok := signalData["action_taken"].(string); ok {
-			actionTaken = at
-		}
-		if dr, ok := signalData["denial_reason"].(string); ok {
-			denialReason = dr
-		}
-		cancelTimer()
-	})
-
-	selector.AddFuture(timeoutFuture, func(f workflow.Future) {
-		status = "timeout"
-	})
-
-	selector.Select(e.ctx)
-
-	// STEP 4: On timeout, resolve the approval in DB
-	if status == "timeout" {
-		resolveCtx := workflow.WithActivityOptions(e.ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: 30 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 3,
-			},
-		})
-		resolveInput := map[string]interface{}{
-			"approval_id": createOutput.ApprovalID,
-			"status":      "timeout",
-		}
-		var resolveOutput map[string]interface{}
-		if err := workflow.ExecuteActivity(resolveCtx, "ApprovalResolve", resolveInput).Get(e.ctx, &resolveOutput); err != nil {
-			e.logger.Warn("[InlineWorkflow] Failed to resolve approval as timeout in DB",
-				"approvalID", createOutput.ApprovalID,
-				"error", err,
-			)
-		}
-	}
-
-	// Build output matching ApprovalOutput proto shape
-	output := map[string]interface{}{
-		"approval_id":  createOutput.ApprovalID,
-		"status":       status,
-		"action_taken": actionTaken,
-	}
-	if denialReason != "" {
-		output["denial_reason"] = denialReason
-	}
-
-	return output, nil
+	return executeApprovalSignalFlow(e.ctx, exec)
 }
 
 // executeAskQuestion handles ask_question nodes inline using a signal-based wait pattern
@@ -1255,6 +1178,7 @@ func (e *InlineWorkflowExecutor) executeAskQuestion(
 		StepID:        node.GetId(),
 		LoopNodeID:    e.loopNodeID,
 		LoopIteration: e.loopIteration,
+		NodePath:      joinNodePath(e.nodePath(), node.GetId()),
 		Metadata:      metadata,
 		Unattended:    IsUnattended(workflowInputs),
 		Logger:        e.logger,
@@ -1360,6 +1284,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 
 	// Pass thread tracker, exec context, and spawn config to nested executor
 	nestedExecutor = nestedExecutor.WithThreadTracker(e.threadTracker).
+		WithNodePathPrefix(e.nodePath()).
 		WithInvocationContract(contract)
 	if e.execContext != nil {
 		childExecCtx := e.execContext.ForChild(nid, model.NodeThreadMode(evalResult), nestedWorkflowName, true)
@@ -1489,6 +1414,7 @@ func (e *InlineWorkflowExecutor) executeNestedRouter(
 	}
 	routerExec = routerExec.
 		WithThreadTracker(e.threadTracker).
+		WithNodePathPrefix(e.nodePath()).
 		WithPauseController(e.pauseCtrl).
 		WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
 		WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, routerExec.GetThread())).

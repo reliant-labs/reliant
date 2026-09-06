@@ -4,22 +4,39 @@ description: >
   The markdown checklist is completed successfully on the first implement-review cycle.
 
 events:
-  - node: complete_checklist
+  # complete_checklist EXECUTES (not black-boxed): mocking implement-review's
+  # inner loop nodes with qualified ids makes the ref transparent, so its
+  # project.path ({{inputs.working_directory}}) and the injected checklist
+  # prompt are actually compiled and evaluated.
+  - node: complete_checklist.attempt.implement
     output:
-      verdict: "pass"
-      issues: []
-      summary: "All checklist items in TASKS.md are complete and the underlying work is implemented."
-      iterations: 1
+      response_text: "Implemented every unchecked task in TASKS.md and ticked the boxes."
+  - node: complete_checklist.attempt.review
+    output:
+      response:
+        verdict: "pass"
+        issues: []
+        summary: "All checklist items in TASKS.md are complete and the underlying work is implemented."
 
 expect:
   outcome: completed
   reached:
     - complete_checklist
     - complete
+  # `reached` also holds for SKIPPED nodes, so it cannot prove the sub-workflow
+  # body ran. `completed` can, and is the point of this scenario.
+  completed:
+    - complete_checklist
+    - complete_checklist.attempt
+    - complete_checklist.attempt.implement
+    - complete_checklist.attempt.review
+    - complete
   node_outputs:
     complete_checklist:
       verdict: "pass"
       summary: "All checklist items in TASKS.md are complete and the underlying work is implemented."
+      # Now DERIVED from the loop actually running once, not asserted as a literal.
+      iterations: 1
 
 ---
 name: retry_then_pass
@@ -27,19 +44,41 @@ description: >
   First review finds remaining unchecked checklist items. A later attempt completes them and passes.
 
 events:
-  - node: complete_checklist
+  # Iteration 1: review finds remaining unchecked items -> loop continues.
+  - node: complete_checklist.attempt.implement
     output:
-      verdict: "pass"
-      issues: []
-      summary: "Previously unchecked items were completed, TASKS.md was updated, and no remaining checklist tasks are open."
-      iterations: 2
+      response_text: "Completed part of TASKS.md; some items still open."
+  - node: complete_checklist.attempt.review
+    output:
+      response:
+        verdict: "fail"
+        issues: ["TASKS.md still has unchecked items under 'API'."]
+        summary: "Remaining unchecked checklist items."
+  # Iteration 2: the rest is finished and review passes.
+  - node: complete_checklist.attempt.implement
+    output:
+      response_text: "Finished the remaining TASKS.md items and updated the file."
+  - node: complete_checklist.attempt.review
+    output:
+      response:
+        verdict: "pass"
+        issues: []
+        summary: "Previously unchecked items were completed, TASKS.md was updated, and no remaining checklist tasks are open."
 
 expect:
   outcome: completed
   reached:
     - complete_checklist
     - complete
+  completed:
+    - complete_checklist
+    - complete_checklist.attempt
+    - complete_checklist.attempt.implement
+    - complete_checklist.attempt.review
+    - complete
   node_outputs:
     complete_checklist:
       verdict: "pass"
+      # iterations: 2 was previously a scenario LITERAL — the loop never ran.
+      # It is now produced by the loop genuinely taking two iterations.
       iterations: 2

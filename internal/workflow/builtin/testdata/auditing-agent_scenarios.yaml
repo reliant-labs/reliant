@@ -34,9 +34,7 @@ events:
       tool_calls:
         - id: call_0
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   # execute_audit tool result
   - node: audited_loop.execute_audit
     output:
@@ -77,8 +75,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "/path/to/file.go"
+          input: '{"file_path":"/path/to/file.go"}'
   # audit_check approves
   - node: audited_loop.audit_check
     output:
@@ -89,9 +86,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   # execute_audit result
   - node: audited_loop.execute_audit
     output:
@@ -134,9 +129,7 @@ events:
       tool_calls:
         - id: call_2
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -175,8 +168,7 @@ events:
       tool_calls:
         - id: call_0
           name: bash
-          input:
-            command: "rm -rf tests/"
+          input: '{"command":"rm -rf tests/"}'
   # audit_check rejects
   - node: audited_loop.audit_check
     output:
@@ -187,9 +179,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: false
-            guidance: "Do not delete test files. Please suggest an alternative approach."
+          input: '{"approved":false,"guidance":"Do not delete test files. Please suggest an alternative approach."}'
   # execute_audit result with rejection
   - node: audited_loop.execute_audit
     output:
@@ -225,9 +215,7 @@ events:
       tool_calls:
         - id: call_2
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -266,9 +254,7 @@ events:
       tool_calls:
         - id: call_0
           name: grep
-          input:
-            pattern: "TODO"
-            path: "."
+          input: '{"pattern":"TODO","path":"."}'
   # audit_check approves BUT provides guidance
   - node: audited_loop.audit_check
     output:
@@ -279,9 +265,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: true
-            guidance: "Consider limiting search scope to specific directories to avoid slow performance."
+          input: '{"approved":true,"guidance":"Consider limiting search scope to specific directories to avoid slow performance."}'
   # execute_audit result with approval AND guidance
   - node: audited_loop.execute_audit
     output:
@@ -324,9 +308,7 @@ events:
       tool_calls:
         - id: call_2
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -395,9 +377,7 @@ events:
       tool_calls:
         - id: call_0
           name: grep
-          input:
-            pattern: "TODO"
-            path: "."
+          input: '{"pattern":"TODO","path":"."}'
   - node: audited_loop.audit_check
     output:
       message:
@@ -407,9 +387,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -442,8 +420,7 @@ events:
       tool_calls:
         - id: call_2
           name: view
-          input:
-            file_path: "main.go"
+          input: '{"file_path":"main.go"}'
   - node: audited_loop.audit_check
     output:
       message:
@@ -453,9 +430,7 @@ events:
       tool_calls:
         - id: call_3
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -495,9 +470,7 @@ events:
       tool_calls:
         - id: call_4
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -545,9 +518,7 @@ events:
       tool_calls:
         - id: call_0
           name: grep
-          input:
-            pattern: "TODO"
-            path: "."
+          input: '{"pattern":"TODO","path":"."}'
   - node: audited_loop.audit_check
     output:
       message:
@@ -557,9 +528,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -592,8 +561,7 @@ events:
       tool_calls:
         - id: call_2
           name: view
-          input:
-            file_path: "main.go"
+          input: '{"file_path":"main.go"}'
   - node: audited_loop.audit_check
     output:
       message:
@@ -603,9 +571,7 @@ events:
       tool_calls:
         - id: call_3
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -645,9 +611,7 @@ events:
       tool_calls:
         - id: call_4
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -687,8 +651,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "/path/to/large_file.go"
+          input: '{"file_path":"/path/to/large_file.go"}'
   # audit_check approves
   - node: audited_loop.audit_check
     output:
@@ -699,9 +662,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   # execute_audit result
   - node: audited_loop.execute_audit
     output:
@@ -750,9 +711,7 @@ events:
       tool_calls:
         - id: call_2
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:
@@ -794,8 +753,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "/path/to/small_file.go"
+          input: '{"file_path":"/path/to/small_file.go"}'
   # audit_check approves
   - node: audited_loop.audit_check
     output:
@@ -806,9 +764,7 @@ events:
       tool_calls:
         - id: call_1
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   # execute_audit result
   - node: audited_loop.execute_audit
     output:
@@ -852,9 +808,7 @@ events:
       tool_calls:
         - id: call_2
           name: audit
-          input:
-            approved: true
-            guidance: ""
+          input: '{"approved":true,"guidance":""}'
   - node: audited_loop.execute_audit
     output:
       message:

@@ -3,6 +3,7 @@ package db
 
 import (
 	"database/sql"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -112,22 +113,17 @@ func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
 	}
 }
 
-// singleConnCopy opens a second pool against the same test database, pinned to
-// one connection so a session-level SET applies to every subsequent query on it.
-func singleConnCopy(t *testing.T, _ *sql.DB) *sql.DB {
+// singleConnCopy opens a second pool against the SAME database the given test
+// pool is connected to, pinned to one connection so a session-level SET applies
+// to every subsequent query on it.
+//
+// The DSN is read back from the live connection rather than recomputed: each
+// test now owns a private database, so there is no package-wide DSN to look up,
+// and pointing this pool anywhere else would silently test a different database.
+func singleConnCopy(t *testing.T, db *sql.DB) *sql.DB {
 	t.Helper()
 
-	baseDSN := os.Getenv("DATABASE_URL")
-	if baseDSN == "" {
-		t.Skip("DATABASE_URL not set, skipping database test")
-	}
-
-	dsn, err := ensurePkgTestDB(baseDSN)
-	if err != nil {
-		t.Fatalf("resolve package test database: %v", err)
-	}
-
-	conn, err := sql.Open("pgx", dsn)
+	conn, err := sql.Open("pgx", dsnForOpenDB(t, db))
 	if err != nil {
 		t.Fatalf("open second connection: %v", err)
 	}
@@ -135,4 +131,26 @@ func singleConnCopy(t *testing.T, _ *sql.DB) *sql.DB {
 	t.Cleanup(func() { _ = conn.Close() })
 
 	return conn
+}
+
+// dsnForOpenDB rebuilds a DSN addressing the database that db is connected to,
+// by asking the server which database that is.
+func dsnForOpenDB(t *testing.T, db *sql.DB) string {
+	t.Helper()
+
+	var name string
+	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
+		t.Fatalf("resolve current database: %v", err)
+	}
+
+	base := strings.TrimSpace(os.Getenv("DATABASE_URL"))
+	if base == "" {
+		base = defaultTestDSN
+	}
+	u, err := url.Parse(base)
+	if err != nil {
+		t.Fatalf("parse DATABASE_URL: %v", err)
+	}
+	u.Path = "/" + name
+	return u.String()
 }

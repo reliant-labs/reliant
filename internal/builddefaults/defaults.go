@@ -45,7 +45,7 @@
 // linker flag silently does nothing and a release build ships whatever is
 // written here — with no build error to catch it. Value() is the accessor; the
 // vars are the injection site. (A non-empty initializer does NOT block -X;
-// the linker overwrites it, which is how preprod builds retarget these.)
+// the linker overwrites it, which is how a build retargets these.)
 package builddefaults
 
 import "os"
@@ -57,8 +57,8 @@ import "os"
 const NeutralServerURL = "http://localhost:8080"
 
 // The hosted defaults, projected from control-plane's KCL (see package doc).
-// A release build overwrites them via -X to retarget an environment (preprod);
-// prod injects the same values these already carry.
+// A release build can overwrite them via -X to retarget a deployment; prod
+// injects the same values these already carry.
 var (
 	// ServerURL is the hosted API server: the daemon's --server target and the
 	// origin daemon credentials are keyed by.

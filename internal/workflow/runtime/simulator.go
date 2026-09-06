@@ -36,14 +36,63 @@ func skippedOutputForNode(node *reliantv1.Node) map[string]interface{} {
 	return model.SkippedOutputMap()
 }
 
+// nodeStateSet records what actually happened to a node across the whole run.
+//
+// A node inside a loop can genuinely both run and be skipped — get-it-right's
+// `attempt.implement` executes on iteration 0 and is skipped on iteration 1 when
+// the human answers a stuck review. Those are two true facts about one node, so
+// a single-valued state would have to throw one away and silently break either
+// `completed:` or `skipped:`. Recording them independently keeps both assertions
+// meaningful, matching how `reached` is already a list rather than a verdict.
+type nodeStateSet struct {
+	completed bool
+	skipped   bool
+	errored   bool
+}
+
+// summary collapses the set into the single state reported through GetNodeStates,
+// for consumers that need one verdict per node. An error is terminal so it wins;
+// otherwise having run at all outranks having been skipped on some iteration.
+func (n nodeStateSet) summary() NodeState {
+	switch {
+	case n.errored:
+		return NodeStateError
+	case n.completed:
+		return NodeStateCompleted
+	default:
+		return NodeStateSkipped
+	}
+}
+
+// markCompleted records that a node executed successfully at least once.
+func (s *WorkflowSimulator) markCompleted(nodeID string) {
+	state := s.nodeStates[nodeID]
+	state.completed = true
+	s.nodeStates[nodeID] = state
+}
+
+// markSkipped records that a node was scheduled but skipped by a false condition.
+func (s *WorkflowSimulator) markSkipped(nodeID string) {
+	state := s.nodeStates[nodeID]
+	state.skipped = true
+	s.nodeStates[nodeID] = state
+}
+
+// markError records that a node failed. An error aborts the run, so it is terminal.
+func (s *WorkflowSimulator) markError(nodeID string) {
+	state := s.nodeStates[nodeID]
+	state.errored = true
+	s.nodeStates[nodeID] = state
+}
+
 // WorkflowSimulator simulates workflow execution WITHOUT Temporal
 // It's a lightweight event-driven engine for testing workflow logic
 type WorkflowSimulator struct {
 	protoWorkflow  *reliantv1.Workflow
 	stateMachine   *SimplifiedStateMachine
 	nodeOutputs    map[string]interface{}
-	nodeStates     map[string]NodeState // Explicit state tracking for each node
-	visitedSteps   []string             // All scheduled nodes (for backward compatibility)
+	nodeStates     map[string]nodeStateSet // What happened to each node across the run
+	visitedSteps   []string                // All scheduled nodes (for backward compatibility)
 	events         []*core.WorkflowEvent
 	eventSequence  []string
 	workflowInputs map[string]interface{}
@@ -54,6 +103,11 @@ type WorkflowSimulator struct {
 	// hasInternalEvents checks if there are scenario events with qualified IDs
 	// starting with the given prefix (e.g., "impl_1." for "impl_1.agent_loop.call_llm")
 	hasInternalEvents func(prefix string) bool
+
+	// blackBoxed reports whether the scenario author explicitly asked for this
+	// node to be mocked as a unit (an event with black_box: true). Nil means
+	// nothing was opted out. See SimulatorConfig.BlackBoxed.
+	blackBoxed func(nodePath string) bool
 
 	// workflowLoader loads referenced workflows (e.g., builtin://agent)
 	// If nil, workflow nodes are treated as black boxes
@@ -88,6 +142,13 @@ type SimulatorConfig struct {
 
 	// WorkflowLoader loads referenced workflows. If nil, workflow nodes are black boxes.
 	WorkflowLoader SimWorkflowLoader
+
+	// BlackBoxed reports whether the scenario explicitly mocks the given node
+	// as a unit. A loop with an inline body executes that body by default, so
+	// that a broken inner expression fails the scenario instead of being
+	// skipped over; this is how an author opts back out of that deliberately.
+	// If nil, nothing is opted out.
+	BlackBoxed func(nodePath string) bool
 
 	// CanonicalWorkflowRef is the core semantic identity used for workflow.name.
 	// Inline sub-workflows inherit this identity.
@@ -183,7 +244,7 @@ func NewWorkflowSimulator(protoWf *reliantv1.Workflow, config SimulatorConfig) *
 		protoWorkflow:        protoWf,
 		stateMachine:         NewSimplifiedStateMachine("sim-workflow", protoWf),
 		nodeOutputs:          nodeOutputs,
-		nodeStates:           make(map[string]NodeState),
+		nodeStates:           make(map[string]nodeStateSet),
 		visitedSteps:         make([]string, 0),
 		events:               []*core.WorkflowEvent{initialEvent},
 		eventSequence:        []string{initialEvent.StepID},
@@ -192,6 +253,7 @@ func NewWorkflowSimulator(protoWf *reliantv1.Workflow, config SimulatorConfig) *
 		iteration:            0,
 		joinState:            joinState,
 		hasInternalEvents:    config.HasInternalEvents,
+		blackBoxed:           config.BlackBoxed,
 		workflowLoader:       config.WorkflowLoader,
 		compiledSemantics:    compiledSemantics,
 		canonicalWorkflowRef: canonicalWorkflowRef,
@@ -531,6 +593,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 				// Only add to visited if join is satisfied (has output)
 				if _, ok := s.nodeOutputs[stepID]; ok {
 					s.visitedSteps = append(s.visitedSteps, stepID)
+					s.markCompleted(stepID)
 				}
 				continue
 			}
@@ -547,6 +610,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 					} else {
 						loopOutput, err = s.executeLoop(stepID, triggered.Node, mocker)
 						if err != nil {
+							s.markError(stepID)
 							return fmt.Errorf("execute loop %s: %w", stepID, err)
 						}
 						s.nodeOutputs[stepID] = loopOutput
@@ -554,11 +618,13 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 				} else {
 					loopOutput, err = s.executeLoop(stepID, triggered.Node, mocker)
 					if err != nil {
+						s.markError(stepID)
 						return fmt.Errorf("execute loop %s: %w", stepID, err)
 					}
 					s.nodeOutputs[stepID] = loopOutput
 				}
 				s.visitedSteps = append(s.visitedSteps, stepID)
+				s.markCompleted(stepID)
 
 				// Create loop completion event
 				completionEvent := &core.WorkflowEvent{
@@ -590,12 +656,13 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 					nil,
 				)
 				if err != nil {
+					s.markError(stepID)
 					return fmt.Errorf("node condition evaluation failed for %s: %w", stepID, err)
 				}
 
 				if !shouldExecute {
 					// Mark as skipped (not visited - skipped nodes don't count as "reached")
-					s.nodeStates[stepID] = NodeStateSkipped
+					s.markSkipped(stepID)
 
 					// Create skip output - skipped: true tells joins this source is done
 					skippedOutput := skippedOutputForNode(triggered.Node)
@@ -621,13 +688,15 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 			// Check for workflow nodes that should be simulated as sub-workflows.
 			// - Inline workflows are always simulated to preserve nested condition/skip semantics.
 			// - Referenced workflows are simulated when scenarios target internal nodes via qualified IDs.
-			if triggered.Node.GetType() == model.NodeTypeWorkflow && (s.invocationMode(stepID, triggered.Node) == core.InvocationModeInline || (s.hasInternalEvents != nil && s.hasInternalEvents(stepID+"."))) {
+			if s.workflowNodeIsTransparent(stepID, triggered.Node) {
 				workflowOutput, err := s.executeWorkflowNode(stepID, triggered.Node, mocker)
 				if err != nil {
+					s.markError(stepID)
 					return fmt.Errorf("failed to execute workflow node %s: %w", stepID, err)
 				}
 
 				s.visitedSteps = append(s.visitedSteps, stepID)
+				s.markCompleted(stepID)
 				s.nodeOutputs[stepID] = workflowOutput
 
 				// Create completion event
@@ -646,7 +715,9 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 
 			s.visitedSteps = append(s.visitedSteps, stepID)
 
-			// Evaluate node config using EXPLICIT NAMESPACES:
+			// Evaluate node config using EXPLICIT NAMESPACES.
+			// Completion is recorded after config evaluation and mocking succeed —
+			// a node that fails to evaluate is an error, not a completion.
 			// - workflow.*: Workflow context
 			// - nodes.*: All step outputs
 			evalResult, err := EvaluateNodeConfig(
@@ -660,6 +731,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 				nil,                      // No execContext in simulation
 			)
 			if err != nil {
+				s.markError(stepID)
 				return fmt.Errorf("failed to evaluate config for node %s: %w", stepID, err)
 			}
 			evaluatedInputs, _ := model.NodeArgsAsMap(evalResult)
@@ -689,6 +761,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 
 			// Store step output
 			s.nodeOutputs[stepID] = normalizedOutput
+			s.markCompleted(stepID)
 
 			// Create completion event
 			completionEvent := &core.WorkflowEvent{
@@ -763,14 +836,34 @@ func (s *WorkflowSimulator) executeParallelLoop(nodePath string, protoNode *reli
 		return nil, fmt.Errorf("parallel loop %s: %w", nodePath, err)
 	}
 
+	// A parallel loop with an inline body EXECUTES that body, once per item,
+	// evaluating each inner node's config against this iteration's `iter`.
+	// Black-box mocking the loop as a unit is what hid a production defect:
+	// parallel-compete.yaml's body referenced iter.item.num, which never
+	// resolved at runtime, and no scenario noticed because the expression was
+	// never compiled. An author can still opt out per node via black_box: true.
+	inlineBody := la.GetInline()
+	executeBody := inlineBody != nil && len(inlineBody.GetNodes()) > 0 && !s.isBlackBoxed(nodePath)
+
 	for i, item := range items {
 		key := iterationKeys[i]
 		iterItem := s.parallelLoopIterItem(item)
+		iterCtx := model.BuildParallelIterContext(i, iterItem, key)
+
+		if executeBody {
+			iterOutputs, err := s.executeLoopIteration(nodePath, inlineBody, protoNode, mocker, i, nil, iterCtx)
+			if err != nil {
+				return nil, fmt.Errorf("parallel loop %s iteration %d (key %q): %w", nodePath, i, key, err)
+			}
+			results[key] = iterOutputs
+			completed++
+			continue
+		}
 
 		// Build inputs for this iteration
 		iterInputs := s.assembleSubWorkflowInputs(nodePath, protoNode)
 		iterInputs["loop"] = map[string]interface{}{"iteration": i}
-		iterInputs["iter"] = model.BuildParallelIterContext(i, iterItem, key)
+		iterInputs["iter"] = iterCtx
 
 		mockOutput := mocker(mockID, iterInputs)
 		results[key] = mockOutput
@@ -778,6 +871,64 @@ func (s *WorkflowSimulator) executeParallelLoop(nodePath string, protoNode *reli
 	}
 
 	return model.ParallelLoopOutputToMap(len(items), results, completed, 0), nil
+}
+
+// isBlackBoxed reports whether the scenario explicitly asked for this node to
+// be mocked as a unit rather than having its body executed.
+func (s *WorkflowSimulator) isBlackBoxed(nodePath string) bool {
+	return s.blackBoxed != nil && s.blackBoxed(nodePath)
+}
+
+// workflowNodeIsTransparent reports whether a `workflow` node's body should be
+// simulated instead of mocked as a unit.
+//
+// An inline body always executes, so nested condition/skip semantics survive.
+// A REF is descended into only when the scenario targets its internals with
+// qualified ids — that gate is load-bearing, not conservatism: executing an
+// unmocked `builtin://agent` ref spins forever, because the agent loop waits on
+// a completion signal that no mock supplies and `max_turns: 0` means unlimited.
+// An explicit `black_box: true` opts out either way, matching how loop nodes
+// already treat the flag.
+func (s *WorkflowSimulator) workflowNodeIsTransparent(nodePath string, node *reliantv1.Node) bool {
+	if node.GetType() != model.NodeTypeWorkflow {
+		return false
+	}
+	if s.isBlackBoxed(nodePath) {
+		return false
+	}
+	if s.invocationMode(nodePath, node) == core.InvocationModeInline {
+		return true
+	}
+	return s.hasInternalEvents != nil && s.hasInternalEvents(nodePath+".")
+}
+
+// executeLoopBodyWorkflowNode runs a `workflow` node found inside a loop body.
+// It runs through a child simulator whose workflowInputs are the ITERATION's
+// inputs, for the same reason executeWorkflowNode does it for nested loops: an
+// inline sub-workflow inside a loop body inherits that body's inputs, not the
+// root workflow's.
+func (s *WorkflowSimulator) executeLoopBodyWorkflowNode(
+	qualifiedID string,
+	node *reliantv1.Node,
+	mocker StepMocker,
+	subInputs map[string]interface{},
+) (map[string]interface{}, error) {
+	childSim := &WorkflowSimulator{
+		protoWorkflow:        s.protoWorkflow,
+		nodeOutputs:          s.nodeOutputs,
+		nodeStates:           s.nodeStates,
+		visitedSteps:         s.visitedSteps,
+		workflowInputs:       subInputs,
+		hasInternalEvents:    s.hasInternalEvents,
+		blackBoxed:           s.blackBoxed,
+		workflowLoader:       s.workflowLoader,
+		compiledSemantics:    s.compiledSemantics,
+		canonicalWorkflowRef: s.canonicalWorkflowRef,
+	}
+	output, err := childSim.executeWorkflowNode(qualifiedID, node, mocker)
+	// Slice appends don't propagate to the parent.
+	s.visitedSteps = childSim.visitedSteps
+	return output, err
 }
 
 func (s *WorkflowSimulator) parallelLoopItems(rawItems interface{}) ([]interface{}, error) {
@@ -924,7 +1075,7 @@ func (s *WorkflowSimulator) executeInlineLoop(nodePath string, protoNode *relian
 	const maxSimulationIterations = 1000
 
 	for iterations < maxSimulationIterations {
-		iterOutputs, err := s.executeLoopIteration(nodePath, subWorkflow, protoNode, mocker, iterations, lastIterOutputs)
+		iterOutputs, err := s.executeLoopIteration(nodePath, subWorkflow, protoNode, mocker, iterations, lastIterOutputs, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -954,6 +1105,33 @@ func (s *WorkflowSimulator) executeInlineLoop(nodePath string, protoNode *relian
 // executeLoopIteration runs all nodes in the sub-workflow for a single loop iteration.
 // It mirrors the event-driven execution pattern of the main Run() loop.
 // Inner nodes are mocked with qualified IDs: "loopID.innerNodeID".
+// iterScopeFromMap converts the iteration's `iter` map into the LoopScope a
+// node condition is evaluated against, so a condition sees the same item and
+// key that the node's config does. Mirrors EvaluateNodeConfig's own conversion.
+func iterScopeFromMap(iterCtx map[string]interface{}, iteration int, prevIterOutputs map[string]interface{}) *LoopScope {
+	iter := &model.IterContext{Iteration: iteration, Index: iteration}
+	if iterationVal, ok := iterCtx["iteration"].(int); ok {
+		iter.Iteration = iterationVal
+		iter.Index = iterationVal
+	}
+	if indexVal, ok := iterCtx["index"].(int); ok {
+		iter.Index = indexVal
+	}
+	if itemVal, ok := iterCtx["item"]; ok {
+		iter.Item = itemVal
+	}
+	if keyVal, ok := iterCtx["key"].(string); ok {
+		iter.Key = keyVal
+	}
+	return &LoopScope{Iter: iter, Outputs: prevIterOutputs}
+}
+
+// iterCtx is the authoritative `iter` namespace for this iteration. Only the
+// caller can build it, because only the caller resolved the items expression —
+// a parallel loop supplies item and key, a while loop supplies the counter
+// alone. Threading it through to EvaluateNodeConfig is what makes `iter.item`
+// resolve for inner nodes; passing nil here is precisely the bug that let
+// `iter.item.num` fail in production while its scenario stayed green.
 func (s *WorkflowSimulator) executeLoopIteration(
 	loopID string,
 	subWorkflow *reliantv1.Workflow,
@@ -961,6 +1139,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 	mocker StepMocker,
 	iteration int,
 	prevIterOutputs map[string]interface{},
+	iterCtx map[string]interface{},
 ) (map[string]interface{}, error) {
 	// Create state machine for sub-workflow
 	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow)
@@ -968,12 +1147,16 @@ func (s *WorkflowSimulator) executeLoopIteration(
 	// Inner node outputs for this iteration (local to sub-workflow for edge evaluation)
 	innerOutputs := make(map[string]interface{})
 
+	if iterCtx == nil {
+		iterCtx = model.BuildIterContext(iteration)
+	}
+
 	// Sub-workflow inputs include loop iteration context
 	subInputs := s.assembleSubWorkflowInputs(loopID, loopNode)
 	subInputs["loop"] = map[string]interface{}{
 		"iteration": iteration,
 	}
-	subInputs["iter"] = model.BuildIterContext(iteration)
+	subInputs["iter"] = iterCtx
 
 	// Initialize join state for sub-workflow
 	joinState := NewJoinState()
@@ -1030,6 +1213,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 				// Only add to visited if join is satisfied (has output from processJoinEvents)
 				if output, ok := innerOutputs[innerNodeID]; ok {
 					s.visitedSteps = append(s.visitedSteps, qualifiedID)
+					s.markCompleted(qualifiedID)
 					s.nodeOutputs[qualifiedID] = output
 				}
 				continue
@@ -1041,11 +1225,13 @@ func (s *WorkflowSimulator) executeLoopIteration(
 				// Create a temporary sub-simulator context for the nested loop
 				nestedOutput, err := s.executeNestedLoop(nestedQualifiedID, triggered.Node, mocker)
 				if err != nil {
+					s.markError(nestedQualifiedID)
 					return nil, fmt.Errorf("execute nested loop %s: %w", nestedQualifiedID, err)
 				}
 				innerOutputs[innerNodeID] = nestedOutput
 				s.nodeOutputs[nestedQualifiedID] = nestedOutput
 				s.visitedSteps = append(s.visitedSteps, nestedQualifiedID)
+				s.markCompleted(nestedQualifiedID)
 
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("event-%s-%d", nestedQualifiedID, innerIter),
@@ -1077,14 +1263,15 @@ func (s *WorkflowSimulator) executeLoopIteration(
 					// A node condition inside a loop sees the same `iter` and previous-iteration
 					// `outputs` the real loop executor gives it — otherwise a scenario would take
 					// a different branch than the run it is meant to simulate.
-					&LoopScope{Iter: &model.IterContext{Iteration: iteration, Index: iteration}, Outputs: prevIterOutputs},
+					iterScopeFromMap(iterCtx, iteration, prevIterOutputs),
 				)
 				if err != nil {
+					s.markError(qualifiedID)
 					return nil, fmt.Errorf("node condition evaluation failed for %s: %w", qualifiedID, err)
 				}
 				if !shouldExecute {
 					// Mark as skipped (not visited - skipped nodes don't count as "reached")
-					s.nodeStates[qualifiedID] = NodeStateSkipped
+					s.markSkipped(qualifiedID)
 
 					// Create skip output - skipped: true tells joins this source is done
 					skippedOutput := skippedOutputForNode(triggered.Node)
@@ -1107,19 +1294,50 @@ func (s *WorkflowSimulator) executeLoopIteration(
 				}
 			}
 
-			// Evaluate node config
+			// A `workflow` node in a loop body is transparent under the same
+			// rule as one at the top level: inline bodies always execute, refs
+			// execute only when the scenario mocks their internals. Without
+			// this branch a ref nested in a loop was opaque no matter what the
+			// scenario wrote, so qualified events like
+			// "implementations.impl.agent_loop.call_llm" were never consumed.
+			if s.workflowNodeIsTransparent(qualifiedID, triggered.Node) {
+				workflowOutput, err := s.executeLoopBodyWorkflowNode(qualifiedID, triggered.Node, mocker, subInputs)
+				if err != nil {
+					s.markError(qualifiedID)
+					return nil, fmt.Errorf("execute workflow node %s: %w", qualifiedID, err)
+				}
+
+				innerOutputs[innerNodeID] = workflowOutput
+				s.nodeOutputs[qualifiedID] = workflowOutput
+				s.visitedSteps = append(s.visitedSteps, qualifiedID)
+				s.markCompleted(qualifiedID)
+
+				events = append(events, &core.WorkflowEvent{
+					ID:           fmt.Sprintf("event-%s-iter%d-%d", qualifiedID, iteration, innerIter),
+					WorkflowID:   "sim-workflow",
+					ChatID:       "sim-chat",
+					WorkflowName: workflowIdentity,
+					StepID:       innerNodeID,
+					Data:         workflowOutput,
+				})
+				continue
+			}
+
+			// Evaluate node config with this iteration's `iter` namespace, so an
+			// inner node's reference to iter.item resolves — or fails loudly.
 			evalResult, err := EvaluateNodeConfig(
 				triggered.Node,
 				innerOutputs,
 				"sim-workflow",
 				workflowIdentity,
 				subInputs,
-				nil,             // loop context handled via subInputs
+				iterCtx,
 				prevIterOutputs, // previous iteration outputs for outputs.* namespace
 				nil,             // no execContext in simulation
 			)
 
 			if err != nil {
+				s.markError(qualifiedID)
 				return nil, fmt.Errorf("failed to evaluate config for node %s: %w", qualifiedID, err)
 			}
 			evaluatedInputs, _ := model.NodeArgsAsMap(evalResult)
@@ -1135,6 +1353,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 			// Store in parent simulator state (for expectations)
 			s.nodeOutputs[qualifiedID] = normalizedOutput
 			s.visitedSteps = append(s.visitedSteps, qualifiedID)
+			s.markCompleted(qualifiedID)
 
 			// Create completion event for sub-workflow edges
 			events = append(events, &core.WorkflowEvent{
@@ -1154,7 +1373,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 			"id":     "sim-workflow",
 			"name":   workflowIdentity,
 			"inputs": subInputs,
-			"iter":   map[string]interface{}{"iteration": iteration}, // Pass iter context for output evaluation
+			"iter":   iterCtx, // this iteration's full context (item/key included)
 		}
 		evaluatedOutputs, err := EvaluateWorkflowOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext)
 		if err != nil {
@@ -1171,9 +1390,13 @@ func (s *WorkflowSimulator) executeLoopIteration(
 func (s *WorkflowSimulator) executeNestedLoop(qualifiedPrefix string, protoNode *reliantv1.Node, mocker StepMocker) (map[string]interface{}, error) {
 	la := model.GetLoopArgs(protoNode)
 
-	// Parallel loops are always treated as black boxes in simulation.
-	// The mocker provides the complete output (including _iterations, _results, etc.).
+	// A nested parallel loop follows the same rule as a top-level one: execute
+	// its inline body so inner config is evaluated, and fall back to whole-node
+	// mocking only when there is no body or the author opted out.
 	if model.CelBoolValue(la.GetParallel()) {
+		if inline := la.GetInline(); inline != nil && len(inline.GetNodes()) > 0 && !s.isBlackBoxed(qualifiedPrefix) {
+			return s.executeParallelLoop(qualifiedPrefix, protoNode, mocker)
+		}
 		mockOutput := mocker(qualifiedPrefix, s.assembleSubWorkflowInputs(qualifiedPrefix, protoNode))
 		return mockOutput, nil
 	}
@@ -1193,7 +1416,7 @@ func (s *WorkflowSimulator) executeNestedLoop(qualifiedPrefix string, protoNode 
 	const maxSimulationIterations = 1000
 
 	for iterations < maxSimulationIterations {
-		iterOutputs, err := s.executeNestedLoopIteration(qualifiedPrefix, inlineWf, protoNode, mocker, iterations, lastIterOutputs)
+		iterOutputs, err := s.executeNestedLoopIteration(qualifiedPrefix, inlineWf, protoNode, mocker, iterations, lastIterOutputs, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -1272,13 +1495,18 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 	mocker StepMocker,
 	iteration int,
 	prevIterOutputs map[string]interface{},
+	iterCtx map[string]interface{},
 ) (map[string]interface{}, error) {
 	subSM := NewSimplifiedStateMachine("sim-workflow", subWorkflow)
 	innerOutputs := make(map[string]interface{})
 
+	if iterCtx == nil {
+		iterCtx = model.BuildIterContext(iteration)
+	}
+
 	subInputs := s.assembleSubWorkflowInputs(qualifiedPrefix, loopNode)
 	subInputs["loop"] = map[string]interface{}{"iteration": iteration}
-	subInputs["iter"] = model.BuildIterContext(iteration)
+	subInputs["iter"] = iterCtx
 
 	joinState := NewJoinState()
 	joinState.InitializeJoins(subWorkflow)
@@ -1327,6 +1555,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 				// Only add to visited if join is satisfied (has output from processJoinEvents)
 				if output, ok := innerOutputs[innerNodeID]; ok {
 					s.visitedSteps = append(s.visitedSteps, qualifiedID)
+					s.markCompleted(qualifiedID)
 					s.nodeOutputs[qualifiedID] = output
 				}
 				continue
@@ -1337,11 +1566,13 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 				nestedQualifiedID := qualifiedPrefix + "." + innerNodeID
 				nestedOutput, err := s.executeNestedLoop(nestedQualifiedID, triggered.Node, mocker)
 				if err != nil {
+					s.markError(nestedQualifiedID)
 					return nil, fmt.Errorf("execute nested loop %s: %w", nestedQualifiedID, err)
 				}
 				innerOutputs[innerNodeID] = nestedOutput
 				s.nodeOutputs[nestedQualifiedID] = nestedOutput
 				s.visitedSteps = append(s.visitedSteps, nestedQualifiedID)
+				s.markCompleted(nestedQualifiedID)
 
 				events = append(events, &core.WorkflowEvent{
 					ID:         fmt.Sprintf("event-%s-%d", nestedQualifiedID, innerIter),
@@ -1370,14 +1601,15 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 					// A node condition inside a loop sees the same `iter` and previous-iteration
 					// `outputs` the real loop executor gives it — otherwise a scenario would take
 					// a different branch than the run it is meant to simulate.
-					&LoopScope{Iter: &model.IterContext{Iteration: iteration, Index: iteration}, Outputs: prevIterOutputs},
+					iterScopeFromMap(iterCtx, iteration, prevIterOutputs),
 				)
 				if err != nil {
+					s.markError(qualifiedID)
 					return nil, fmt.Errorf("node condition evaluation failed for %s: %w", qualifiedID, err)
 				}
 				if !shouldExecute {
 					// Mark as skipped (not visited - skipped nodes don't count as "reached")
-					s.nodeStates[qualifiedID] = NodeStateSkipped
+					s.markSkipped(qualifiedID)
 
 					// Create skip output - skipped: true tells joins this source is done
 					skippedOutput := skippedOutputForNode(triggered.Node)
@@ -1400,12 +1632,38 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 				}
 			}
 
+			// Same transparency rule as the outer loop-iteration path — see
+			// workflowNodeIsTransparent.
+			if s.workflowNodeIsTransparent(qualifiedID, triggered.Node) {
+				workflowOutput, err := s.executeLoopBodyWorkflowNode(qualifiedID, triggered.Node, mocker, subInputs)
+				if err != nil {
+					s.markError(qualifiedID)
+					return nil, fmt.Errorf("execute workflow node %s: %w", qualifiedID, err)
+				}
+
+				innerOutputs[innerNodeID] = workflowOutput
+				s.nodeOutputs[qualifiedID] = workflowOutput
+				s.visitedSteps = append(s.visitedSteps, qualifiedID)
+				s.markCompleted(qualifiedID)
+
+				events = append(events, &core.WorkflowEvent{
+					ID:           fmt.Sprintf("event-%s-iter%d-%d", qualifiedID, iteration, innerIter),
+					WorkflowID:   "sim-workflow",
+					ChatID:       "sim-chat",
+					WorkflowName: workflowIdentity,
+					StepID:       innerNodeID,
+					Data:         workflowOutput,
+				})
+				continue
+			}
+
 			evalResult, err := EvaluateNodeConfig(
 				triggered.Node, innerOutputs,
 				"sim-workflow", workflowIdentity, subInputs,
-				nil, prevIterOutputs, nil,
+				iterCtx, prevIterOutputs, nil,
 			)
 			if err != nil {
+				s.markError(qualifiedID)
 				return nil, fmt.Errorf("failed to evaluate config for node %s: %w", qualifiedID, err)
 			}
 			evaluatedInputs, _ := model.NodeArgsAsMap(evalResult)
@@ -1417,6 +1675,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput
 			s.visitedSteps = append(s.visitedSteps, qualifiedID)
+			s.markCompleted(qualifiedID)
 
 			events = append(events, &core.WorkflowEvent{
 				ID:           fmt.Sprintf("event-%s-iter%d-%d", qualifiedID, iteration, innerIter),
@@ -1435,7 +1694,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 			"id":     "sim-workflow",
 			"name":   workflowIdentity,
 			"inputs": subInputs,
-			"iter":   map[string]interface{}{"iteration": iteration}, // Pass iter context for output evaluation
+			"iter":   iterCtx, // this iteration's full context (item/key included)
 		}
 		evaluatedOutputs, err := EvaluateWorkflowOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext)
 		if err != nil {
@@ -1478,31 +1737,38 @@ func (s *WorkflowSimulator) GetWorkflowOutputs() (map[string]interface{}, error)
 	return EvaluateWorkflowOutputs(declared, s.nodeOutputs, workflowContext)
 }
 
-// GetNodeStates returns the execution state of each node
+// GetNodeStates returns one summary state per node. A node that both ran and was
+// skipped on different iterations appears in GetCompletedSteps AND GetSkippedSteps;
+// this map necessarily reports only the summary.
 func (s *WorkflowSimulator) GetNodeStates() map[string]NodeState {
-	return s.nodeStates
+	states := make(map[string]NodeState, len(s.nodeStates))
+	for nodeID, state := range s.nodeStates {
+		states[nodeID] = state.summary()
+	}
+	return states
 }
 
-// GetCompletedSteps returns only the nodes that completed successfully
+// GetCompletedSteps returns the nodes that executed successfully at least once.
 func (s *WorkflowSimulator) GetCompletedSteps() []string {
-	var completed []string
-	for nodeID, state := range s.nodeStates {
-		if state == NodeStateCompleted {
-			completed = append(completed, nodeID)
-		}
-	}
-	return completed
+	return s.nodesMatching(func(state nodeStateSet) bool { return state.completed })
 }
 
-// GetSkippedSteps returns only the nodes that were skipped
+// GetSkippedSteps returns the nodes that were skipped by a false condition.
 func (s *WorkflowSimulator) GetSkippedSteps() []string {
-	var skipped []string
+	return s.nodesMatching(func(state nodeStateSet) bool { return state.skipped })
+}
+
+// nodesMatching returns matching node IDs in a stable order, so scenario output
+// and mismatch messages don't reshuffle between otherwise identical runs.
+func (s *WorkflowSimulator) nodesMatching(match func(nodeStateSet) bool) []string {
+	var nodes []string
 	for nodeID, state := range s.nodeStates {
-		if state == NodeStateSkipped {
-			skipped = append(skipped, nodeID)
+		if match(state) {
+			nodes = append(nodes, nodeID)
 		}
 	}
-	return skipped
+	sort.Strings(nodes)
+	return nodes
 }
 
 // executeWorkflowNode runs a sub-simulation for a workflow-type node with internal events.
@@ -1560,14 +1826,6 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 	joinState.InitializeJoins(subWorkflow)
 	workflowIdentity := s.workflowIdentityForNodePath(nodePath)
 
-	// Create hasInternalEvents for the sub-workflow (strip prefix)
-	var subHasInternalEvents func(string) bool
-	if s.hasInternalEvents != nil {
-		subHasInternalEvents = func(subPrefix string) bool {
-			return s.hasInternalEvents(prefix + "." + subPrefix)
-		}
-	}
-
 	// Track inner outputs
 	innerOutputs := make(map[string]interface{})
 	logger := &simLogger{}
@@ -1616,6 +1874,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			if triggered.Node.GetType() == model.NodeTypeJoin {
 				if _, ok := innerOutputs[innerNodeID]; ok {
 					s.visitedSteps = append(s.visitedSteps, qualifiedID)
+					s.markCompleted(qualifiedID)
 				}
 				continue
 			}
@@ -1636,10 +1895,11 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 					nil,
 				)
 				if err != nil {
+					s.markError(qualifiedID)
 					return nil, fmt.Errorf("node condition evaluation failed for %s: %w", qualifiedID, err)
 				}
 				if !shouldExecute {
-					s.nodeStates[qualifiedID] = NodeStateSkipped
+					s.markSkipped(qualifiedID)
 
 					skippedOutput := skippedOutputForNode(triggered.Node)
 					innerOutputs[innerNodeID] = skippedOutput
@@ -1670,6 +1930,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 					visitedSteps:         s.visitedSteps,
 					workflowInputs:       subInputs,
 					hasInternalEvents:    s.hasInternalEvents,
+					blackBoxed:           s.blackBoxed,
 					workflowLoader:       s.workflowLoader,
 					compiledSemantics:    s.compiledSemantics,
 					canonicalWorkflowRef: s.canonicalWorkflowRef,
@@ -1678,12 +1939,14 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 				// Sync visited steps back (slice appends don't propagate to the parent)
 				s.visitedSteps = loopSim.visitedSteps
 				if err != nil {
+					s.markError(qualifiedID)
 					return nil, fmt.Errorf("execute nested loop %s: %w", qualifiedID, err)
 				}
 
 				innerOutputs[innerNodeID] = loopOutput
 				s.nodeOutputs[qualifiedID] = loopOutput
 				s.visitedSteps = append(s.visitedSteps, qualifiedID)
+				s.markCompleted(qualifiedID)
 
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("event-%s-%d", qualifiedID, innerIter),
@@ -1697,36 +1960,25 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			}
 
 			// Check for nested workflow nodes.
-			if triggered.Node.GetType() == model.NodeTypeWorkflow && (s.invocationMode(qualifiedID, triggered.Node) == core.InvocationModeInline || (subHasInternalEvents != nil && subHasInternalEvents(innerNodeID+"."))) {
-				// Create a temporary simulator with the nested prefix
-				nestedSim := &WorkflowSimulator{
-					protoWorkflow:        s.protoWorkflow,
-					nodeOutputs:          s.nodeOutputs,
-					nodeStates:           s.nodeStates,
-					visitedSteps:         s.visitedSteps,
-					workflowInputs:       s.workflowInputs,
-					hasInternalEvents:    subHasInternalEvents,
-					workflowLoader:       s.workflowLoader,
-					compiledSemantics:    s.compiledSemantics,
-					canonicalWorkflowRef: s.canonicalWorkflowRef,
-				}
-
-				// Create a nested mocker with the right prefix
-				nestedMocker := func(stepID string, inputs map[string]interface{}) map[string]interface{} {
-					return mocker(prefix+"."+stepID, inputs)
-				}
-
-				nestedOutput, err := nestedSim.executeWorkflowNode(qualifiedID, triggered.Node, nestedMocker)
+			//
+			// qualifiedID is already the full root-relative path, and
+			// executeWorkflowNode composes each inner id from the nodePath it
+			// is given. So the child gets the ROOT mocker and the ROOT
+			// hasInternalEvents — anything that re-applies `prefix` here would
+			// compose the path a second time and produce ids like
+			// "planning.planning.plan.agent_loop.call_llm", which no event can
+			// ever match.
+			if s.workflowNodeIsTransparent(qualifiedID, triggered.Node) {
+				nestedOutput, err := s.executeLoopBodyWorkflowNode(qualifiedID, triggered.Node, mocker, subInputs)
 				if err != nil {
+					s.markError(qualifiedID)
 					return nil, fmt.Errorf("execute nested workflow node %s: %w", qualifiedID, err)
 				}
-
-				// Sync visited steps back
-				s.visitedSteps = nestedSim.visitedSteps
 
 				innerOutputs[innerNodeID] = nestedOutput
 				s.nodeOutputs[qualifiedID] = nestedOutput
 				s.visitedSteps = append(s.visitedSteps, qualifiedID)
+				s.markCompleted(qualifiedID)
 
 				events = append(events, &core.WorkflowEvent{
 					ID:           fmt.Sprintf("event-%s-%d", qualifiedID, innerIter),
@@ -1751,6 +2003,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 				nil, // execContext
 			)
 			if err != nil {
+				s.markError(qualifiedID)
 				return nil, fmt.Errorf("failed to evaluate config for node %s: %w", qualifiedID, err)
 			}
 			evaluatedInputs, _ := model.NodeArgsAsMap(evalResult)
@@ -1763,6 +2016,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput
 			s.visitedSteps = append(s.visitedSteps, qualifiedID)
+			s.markCompleted(qualifiedID)
 
 			events = append(events, &core.WorkflowEvent{
 				ID:           fmt.Sprintf("event-%s-%d", qualifiedID, innerIter),

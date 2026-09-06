@@ -19,6 +19,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -37,6 +38,23 @@ func NewApprovalService(database db.Repository, pauseService *workflow.PauseServ
 		database:     database,
 		pauseService: pauseService,
 	}
+}
+
+// chatBelongsToUser verifies the chat exists and is owned by the caller.
+// Approvals gate tool execution, so acting on one is acting on the chat —
+// ownership is transitive through Approval.ChatID. A foreign chat is
+// NotFound, never PermissionDenied, so the check cannot be used as a
+// cross-tenant existence oracle.
+func (s *ApprovalService) chatBelongsToUser(ctx context.Context, chatID string) error {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+	chat, err := s.database.GetChat(ctx, chatID)
+	if err != nil || chat == nil || chat.UserID != userID {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
+	}
+	return nil
 }
 
 // approvalToProto converts a db.Approval to proto Approval
@@ -93,6 +111,10 @@ func (s *ApprovalService) ListApprovalsByChat(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
 	}
 
+	if err := s.chatBelongsToUser(ctx, req.Msg.ChatId); err != nil {
+		return nil, err
+	}
+
 	approvals, err := s.database.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		logging.Error("Failed to list approvals", "error", err, "chatID", req.Msg.ChatId)
@@ -123,6 +145,10 @@ func (s *ApprovalService) Approve(
 	approval, err := s.database.GetApproval(ctx, req.Msg.RequestId)
 	if err != nil || approval == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
+	}
+
+	if err := s.chatBelongsToUser(ctx, approval.ChatID); err != nil {
+		return nil, err
 	}
 
 	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
@@ -206,6 +232,10 @@ func (s *ApprovalService) Deny(
 	if err != nil || approval == nil {
 		logging.Error("Failed to get approval", "error", err, "requestID", req.Msg.RequestId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
+	}
+
+	if err := s.chatBelongsToUser(ctx, approval.ChatID); err != nil {
+		return nil, err
 	}
 
 	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
@@ -315,9 +345,14 @@ func (s *ApprovalService) BatchApprove(
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
 		}
 
-		// Validate all approvals belong to the same chat
+		// Validate all approvals belong to the same chat, and that the chat is
+		// the caller's (checked once, on first resolution — the same-chat rule
+		// makes that check cover every id in the batch).
 		if chatID == "" {
 			chatID = approval.ChatID
+			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
+				return nil, err
+			}
 		} else if chatID != approval.ChatID {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("all approvals must belong to the same chat"))
 		}
@@ -416,9 +451,14 @@ func (s *ApprovalService) BatchDeny(
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
 		}
 
-		// Validate all approvals belong to the same chat
+		// Validate all approvals belong to the same chat, and that the chat is
+		// the caller's (checked once, on first resolution — the same-chat rule
+		// makes that check cover every id in the batch).
 		if chatID == "" {
 			chatID = approval.ChatID
+			if err := s.chatBelongsToUser(ctx, chatID); err != nil {
+				return nil, err
+			}
 		} else if chatID != approval.ChatID {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("all approvals must belong to the same chat"))
 		}

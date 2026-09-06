@@ -16,10 +16,17 @@ export function OAuthCallback() {
 
   // Return the user to where they came from (their still-intact anon session),
   // honoring only same-origin relative paths to avoid open-redirect issues.
+  //
+  // Client-side navigation, matching UpgradeAccount.goToReturnTo. Every
+  // returnTo we honor is a route in THIS app, and window.location.assign tore
+  // down the SPA for a full cold boot — which is what made returning from
+  // /upgrade look like a page refresh that did nothing. `href` takes an
+  // already-built path, so a returnTo carrying a query string (?tab=plans&plan=…,
+  // the intent the billing flow now threads through) round-trips unchanged.
   const goBack = () => {
     const rt = search.returnTo
     if (rt && rt.startsWith('/') && !rt.startsWith('//')) {
-      window.location.assign(rt)
+      void navigate({ href: rt })
       return
     }
     navigate({ to: '/', search: {} })
@@ -87,9 +94,11 @@ export function OAuthCallback() {
         })
 
         if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
-          // Restore the originating URL (preserves onboarding plan param).
-          // Only honor same-origin relative paths to avoid open-redirect issues.
-          window.location.assign(returnTo)
+          // Restore the originating URL (preserves the onboarding plan param,
+          // and the billing flow's ?tab=plans&plan=… intent). Only same-origin
+          // relative paths, to avoid open-redirect issues. See goBack above for
+          // why this is a client-side navigate and not window.location.assign.
+          void navigate({ href: returnTo })
           return
         }
 

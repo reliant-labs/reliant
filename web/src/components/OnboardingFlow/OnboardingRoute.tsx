@@ -25,22 +25,8 @@ import {
   useCompleteOnboarding,
 } from "@/hooks/useOnboardingQueries";
 import { useReturningUserHeal } from "./useReturningUserHeal";
+import { leaveOnboarding } from "./leaveOnboarding";
 import { GITHUB_CREDENTIAL_QUERY_KEY } from "@/hooks/useGitHubCredential";
-
-/**
- * Search params to carry when leaving /onboarding for the app.
- *
- * These redirects used to pass `search: {}`, which erases everything —
- * including `?tour=<step-id>`, the ONLY thing that starts the post-onboarding
- * tour (see useTourNavigation). A redirect that raced the handoff therefore
- * ended the tour before it rendered, silently.
- *
- * `tour` is the only param worth forwarding: the rest of onboarding's search
- * (`plan`, the `github_*` return params) is flow-local and must not leak into
- * the app, so this deliberately whitelists rather than spreading `prev`.
- */
-const keepTourHandoff = (prev: Record<string, unknown>) =>
-  prev.tour ? { tour: prev.tour } : {};
 
 export function OnboardingRoute() {
   const navigate = useNavigate();
@@ -62,7 +48,7 @@ export function OnboardingRoute() {
     // the next visit retries.
     completeOnboarding.mutate(
       { source: "returning_user_with_daemon" },
-      { onSettled: () => navigate({ to: "/", search: keepTourHandoff }) },
+      { onSettled: () => void leaveOnboarding("returning_user_heal", navigate) },
     );
   }, [completeOnboarding, navigate]);
 
@@ -86,7 +72,7 @@ export function OnboardingRoute() {
   useEffect(() => {
     if (isUserLoading) return;
     if (isComplete) {
-      navigate({ to: "/", search: keepTourHandoff });
+      void leaveOnboarding("already_complete", navigate);
     }
   }, [isUserLoading, isComplete, navigate]);
 

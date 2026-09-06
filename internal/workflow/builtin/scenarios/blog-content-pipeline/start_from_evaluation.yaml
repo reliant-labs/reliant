@@ -7,10 +7,16 @@ name: start_from_evaluation
 description: Router routes to evaluation, skipping discovery/research/writing phases
 
 events:
+  # Phase agents below are EXECUTED, not black-boxed: the qualified id makes the
+  # builtin://agent ref transparent so each node's own args CEL is compiled.
   # Context intake: existing edited draft should be enough
-  - node: context_intake
+  - node: context_intake.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Existing edited draft artifact is the relevant context."
       response_text: "Existing edited draft artifact is the relevant context."
+      tool_calls: []
 
   # Router selects evaluation as starting point
   - node: classify
@@ -18,24 +24,54 @@ events:
       selected_node: evaluation
       reasoning: "Edited draft ready — evaluate quality and fact-check."
 
-  - node: evaluation
+  - node: evaluation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Evaluation complete."
       response_text: "Evaluation complete."
-  - node: visual_generation
+      tool_calls: []
+  - node: visual_generation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Visuals generated."
       response_text: "Visuals generated."
-  - node: distribution
+      tool_calls: []
+  - node: distribution.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Assembly complete."
       response_text: "Assembly complete."
-  - node: de_ai
+      tool_calls: []
+  # de_ai EXECUTES its get-it-right body rather than standing in for it.
+  - node: de_ai.attempt.implement
     output:
-      response_text: "De-AI pass complete."
-      review_grade: pass
-      eval_strategy: pass
-      iterations: 1
-  - node: reddit_summary
+      response_text: "Applied the de-AI edits to the assembled post."
+  - node: de_ai.attempt.review
     output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Reads like genuine practitioner writing."
+  - node: reddit_summary.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Reddit post written."
       response_text: "Reddit post written."
+      tool_calls: []
+
+  # handoff EXECUTES: it previously had NO event, so it silently fell through to
+  # the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Handoff complete; posted the result."
+      response_text: "Handoff complete; posted the result."
+      tool_calls: []
 
 expect:
   outcome: completed

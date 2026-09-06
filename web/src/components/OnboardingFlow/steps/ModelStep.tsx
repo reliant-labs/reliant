@@ -23,7 +23,6 @@ import { trackEvent } from "@/lib/analytics";
 import { getEventBus } from "@/lib/events";
 import type { ModelProvider, StepProps } from "../types";
 import { getForcedEligibility } from "../forcedEligibility";
-import { useGoToBilling } from "@/hooks/useGoToBilling";
 
 const PROVIDERS = [
   {
@@ -119,7 +118,6 @@ function parseErrorMessage(errorText: string, provider: string): string {
 }
 
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
-  const goToBilling = useGoToBilling();
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
   const copilotOAuth = useCopilotOAuth();
@@ -166,15 +164,24 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const saving = saveKeyMutation.isPending;
   const validating = validateKeyMutation.isPending;
 
-  // Wallet balance is the WHOLE gate for managed Reliant, because it is the
-  // only thing the LLM proxy actually enforces: AuthorizeUsage reserves
-  // against the org wallet and rejects a zero balance outright, so a user who
-  // gets past this step unfunded strands at their FIRST message.
+  // Wallet balance still decides what this step SAYS — managed Reliant draws
+  // on the org wallet and the LLM proxy rejects a zero balance outright — but
+  // it no longer decides whether the user may proceed.
   //
-  // Compute eligibility (useCloudEligibility) is deliberately NOT consulted.
-  // It answers "may this account run a cloud daemon" — a different product,
-  // bought separately. Gating model access on it denied LLM credit to anyone
-  // without compute minutes, which is the same category error as granting
+  // THE INVERSION: this used to block. "Start with Reliant" was `disabled` on
+  // an empty wallet and `finishOnboarding` refused the choice outright, because
+  // committing `reliant_credits` unfunded sent the user into the app to fail on
+  // their first message. That was the right call while the only remedy was a
+  // link out to /settings/billing — blocking beat stranding. Now that a
+  // checkout step exists inside the flow, blocking IS the stranding: the user
+  // is refused at the one screen that could have taken their money. So the
+  // choice is recorded, and `deriveStep` routes an unfunded wallet to
+  // `checkout`, which is where the wallet gets funded.
+  //
+  // Compute eligibility (useCloudEligibility) is deliberately NOT consulted
+  // here. It answers "may this account run a cloud machine" — a different
+  // product, bought separately. Gating model access on it denied LLM credit to
+  // anyone without compute minutes, the same category error as granting
   // compute because someone had LLM credit.
   const walletQ = useWalletOverview();
   const walletLoading = forcedEligibility == null && walletQ.isLoading;
@@ -191,32 +198,19 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
         return;
       }
 
-      // Managed Reliant needs a funded wallet. The button that calls this is
-      // already `disabled` without one, but `disabled` is a rendering concern —
-      // a stale render, a keyboard activation racing the wallet refetch, or
-      // devtools all reach the handler anyway. Committing the choice here would
-      // send the user into the app with a provider that fails on their very
-      // first message (the LLM proxy rejects a zero balance outright).
+      // NOTE: there is deliberately NO `!hasFunds` refusal here any more.
       //
-      // Bring-your-own-key providers are unaffected: they carry their own
-      // credentials and never touch the wallet.
-      // Keyed on hasFunds, NOT creditsAvailable: `?onboarding-credits=eligible`
-      // is a dev escape hatch for exercising the enabled-looking UI, and it
-      // must not authorize a real unfunded account to commit. The wallet
-      // balance is the only authority the LLM proxy respects.
-      if (modelProvider === "reliant_credits" && !hasFunds) {
-        setError(
-          "Redeem a coupon code or set up billing before continuing with Reliant.",
-        );
-        return;
-      }
-
+      // An unfunded wallet is not a reason to reject the choice; it is the
+      // reason the checkout step exists. `deriveStep` reads the same wallet
+      // balance this step does and routes an unfunded `reliant_credits` plan
+      // to `checkout`, so the user who lands in the app has necessarily paid.
+      // Refusing here would only stop them reaching the screen that fixes it.
       setError(null);
       trackEvent("onboarding_model_selected", { provider: modelProvider });
       await updatePlan({ modelProvider });
       onNext();
     },
-    [hasFunds, onNext, plan, updatePlan],
+    [onNext, plan, updatePlan],
   );
 
   const handleConnectOAuth = useCallback(async () => {
@@ -401,9 +395,9 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  No API key needed — add credit with a code or a card. If you
-                  already pay for Claude, ChatGPT or Copilot, pick it above
-                  instead and this is free.
+                  No API key needed — we&apos;ll ask for credit on the next
+                  step. If you already pay for Claude, ChatGPT or Copilot, pick
+                  it above instead and this is free.
                 </p>
               )}
               {/* Always offered, never gated on the current balance: a user
@@ -414,37 +408,29 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                   the only path that keeps "Start with Reliant" from
                   succeeding into a first message that fails on zero balance. */}
               <RedeemCouponForm variant="open" size="sm" />
-              {!walletLoading && !creditsAvailable && (
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  No code?{" "}
-                  <button
-                    type="button"
-                    onClick={goToBilling}
-                    className="underline underline-offset-2 hover:text-foreground"
-                  >
-                    Set up billing
-                  </button>{" "}
-                  to add credit, or pick another provider above.
-                </p>
-              )}
+              {/* No "Set up billing" link. It navigated to /settings/billing,
+                  which is a full exit from a wizard whose entire state lives
+                  in a URL search param, and it existed only because this step
+                  had nowhere in-flow to send an unfunded user. It has one
+                  now — the next step. */}
               <button
                 type="button"
                 onClick={() => finishOnboarding("reliant_credits")}
-                disabled={saving || walletLoading || !creditsAvailable}
-                title={
-                  !creditsAvailable && !walletLoading
-                    ? "Redeem a coupon code or set up billing to continue with Reliant"
-                    : undefined
-                }
+                // Disabled ONLY while saving. An unfunded wallet no longer
+                // disables it: that was a dead end wearing a `title` attribute
+                // that apologised for itself. The user proceeds and pays.
+                disabled={saving}
                 className={cn(
                   "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold transition-colors",
-                  !saving && !walletLoading && creditsAvailable
-                    ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                    : "cursor-not-allowed bg-muted text-muted-foreground",
+                  saving
+                    ? "cursor-not-allowed bg-muted text-muted-foreground"
+                    : "bg-primary text-primary-foreground hover:bg-primary/90",
                 )}
               >
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                Start with Reliant
+                {walletLoading || creditsAvailable
+                  ? "Start with Reliant"
+                  : "Continue with Reliant"}
               </button>
             </div>
           ) : provider.usesOAuth === "copilot" ? (

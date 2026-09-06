@@ -64,7 +64,10 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 
 vi.mock("../useOnboardingComplete", () => ({
   finalizeOnboardingSideEffects: vi.fn(async () => undefined),
-  navigateAfterOnboarding: vi.fn(async () => undefined),
+}));
+
+vi.mock("../leaveOnboarding", () => ({
+  leaveOnboarding: vi.fn(async () => undefined),
 }));
 
 vi.mock("../analytics", () => ({ markOnboardingFinalized: vi.fn() }));

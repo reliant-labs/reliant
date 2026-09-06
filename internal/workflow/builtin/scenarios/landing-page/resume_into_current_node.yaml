@@ -35,10 +35,13 @@ events:
       stuck: false
       iterations: 4
 
-  - node: handoff
+  - node: handoff.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Your landing page is live at the preview URL."
       response_text: "Your landing page is live at the preview URL."
-
+      tool_calls: []
 expect:
   outcome: completed
   reached:

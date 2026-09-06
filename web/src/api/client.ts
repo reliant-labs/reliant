@@ -364,15 +364,11 @@ export const api = {
         workflow_params?: Record<string, unknown>;
         target_thread?: string;
         selected_presets?: Record<string, string>;
-        systemMessages?: Array<{ content: string }>; // Optional system messages to prepend
+
         discuss?: boolean; // If true, chat with LLM without resuming paused workflow
       }
     ) => {
-      // Build messages array: system messages first, then user message
       const messages: Array<{ role: MessageRole; content: string }> = [];
-      if (options?.systemMessages) {
-        messages.push(...options.systemMessages.map(m => ({ role: MessageRole.SYSTEM, content: m.content })));
-      }
       if (content) {
         messages.push({ role: MessageRole.USER, content });
       }

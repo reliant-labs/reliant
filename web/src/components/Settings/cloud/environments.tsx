@@ -82,6 +82,9 @@ import {
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+// The plan/size rule and the overage formatter, shared with the billing
+// purchase grid so the two surfaces cannot disagree about what a plan allows.
+import { formatOverageRate, isSizeAllowedByPlan } from "./billingUtils";
 
 // ── Query keys ──────────────────────────────────────────────────────────────
 const QK = {
@@ -149,11 +152,18 @@ export function daemonDisplayName(d: Pick<Daemon, "id" | "name" | "hostname">): 
 }
 
 // ── Size tiers (plan-gated) ─────────────────────────────────────────────────
+//
+// Specs only. These four carried a per-minute price — $0.02 / $0.04 / $0.08 /
+// $0.16 — which was a client-side table of what machines cost, sitting on the
+// button that creates one. Nothing on the wire states a per-size rate: the
+// server states a per-PLAN overage rate, and that is the only number here
+// anyone can reconcile against a charge. Same defect as the per-plan-id price
+// tables that were deleted from billingUtils, one step closer to the money.
 const SIZE_TIERS = [
-  { value: DaemonSize.SMALL, label: "Small", specs: "1 CPU · 2GB RAM", price: "$0.02/min" },
-  { value: DaemonSize.MEDIUM, label: "Medium", specs: "2 CPU · 4GB RAM", price: "$0.04/min" },
-  { value: DaemonSize.LARGE, label: "Large", specs: "4 CPU · 8GB RAM", price: "$0.08/min" },
-  { value: DaemonSize.XL, label: "XL", specs: "8 CPU · 16GB RAM", price: "$0.16/min" },
+  { value: DaemonSize.SMALL, name: "small", label: "Small", specs: "1 CPU · 2GB RAM" },
+  { value: DaemonSize.MEDIUM, name: "medium", label: "Medium", specs: "2 CPU · 4GB RAM" },
+  { value: DaemonSize.LARGE, name: "large", label: "Large", specs: "4 CPU · 8GB RAM" },
+  { value: DaemonSize.XL, name: "xl", label: "XL", specs: "8 CPU · 16GB RAM" },
 ] as const;
 
 const sizeLabel: Record<number, string> = {
@@ -171,32 +181,25 @@ const IDLE_TIMEOUT_OPTIONS = [
   { value: "4h", label: "4 hours" },
 ] as const;
 
-// Maps the lowercase names stored in the plan's `limits` JSON blob
-// (allowed_daemon_sizes) to the DaemonSize enum. Kept aligned with the
-// backend's checkDaemonSizeAllowed. Returns null when no plan / malformed.
-const SIZE_NAME_TO_ENUM: Record<string, DaemonSize> = {
-  small: DaemonSize.SMALL,
-  medium: DaemonSize.MEDIUM,
-  large: DaemonSize.LARGE,
-  xl: DaemonSize.XL,
-};
-
-function parseAllowedDaemonSizes(rawLimits?: string): DaemonSize[] | null {
-  if (!rawLimits) return null;
-  try {
-    const parsed = JSON.parse(rawLimits) as Record<string, unknown>;
-    const sizes = parsed.allowed_daemon_sizes;
-    if (!Array.isArray(sizes)) return null;
-    const enums: DaemonSize[] = [];
-    for (const s of sizes) {
-      if (typeof s !== "string") continue;
-      const e = SIZE_NAME_TO_ENUM[s.toLowerCase()];
-      if (e !== undefined) enums.push(e);
-    }
-    return enums;
-  } catch {
-    return null;
-  }
+/**
+ * Which sizes may this plan run?
+ *
+ * The rule is `isSizeAllowedByPlan`, shared with the billing purchase grid, so
+ * the two surfaces cannot disagree about what a plan unlocks. Billing asks
+ * "which plan buys me a Medium?"; this asks "which sizes may I run now?" —
+ * different questions, one answer.
+ *
+ * It is a membership test, not a ladder: a plan allowing `[small, large]` and
+ * not `medium` offers exactly that. Returns null when there is no plan at all,
+ * which the caller reads as "not subscribed".
+ */
+function allowedSizeTiers(
+  plan?: Parameters<typeof isSizeAllowedByPlan>[0],
+): DaemonSize[] | null {
+  if (!plan) return null;
+  return SIZE_TIERS.filter((t) => isSizeAllowedByPlan(plan, t.name)).map(
+    (t) => t.value,
+  );
 }
 
 const accessModeLabel: Record<number, string> = {
@@ -378,10 +381,8 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
     queryFn: () => getComputeSubscription(),
     staleTime: 30_000,
   });
-  const allowedSizes = useMemo(
-    () => parseAllowedDaemonSizes(computeSubQ.data?.plan?.limits),
-    [computeSubQ.data?.plan?.limits],
-  );
+  const plan = computeSubQ.data?.plan;
+  const allowedSizes = useMemo(() => allowedSizeTiers(plan), [plan]);
   const hasActivePlan = !!computeSubQ.data && allowedSizes !== null && allowedSizes.length > 0;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: QK.daemons });
@@ -505,6 +506,9 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         allowedSizes={allowedSizes}
+        overageCentsPerMinute={
+          plan?.structuredLimits?.daemonOveragePerMinuteCents ?? 0
+        }
         onCreated={() => { setCreateOpen(false); invalidate(); }}
       />
 
@@ -701,17 +705,23 @@ function CreateEnvironmentModal({
   open,
   onClose,
   allowedSizes,
+  overageCentsPerMinute,
   onCreated,
 }: {
   open: boolean;
   onClose: () => void;
   allowedSizes: DaemonSize[] | null;
+  overageCentsPerMinute: number;
   onCreated: () => void;
 }) {
   const [name, setName] = useState("");
   const [gitRepo, setGitRepo] = useState("");
   const [idleTimeout, setIdleTimeout] = useState("30m");
-  const [size, setSize] = useState<DaemonSize>(DaemonSize.MEDIUM);
+  // No hardcoded default. MEDIUM used to be it, so a small-only plan opened
+  // this modal with a size the server would refuse already selected. null
+  // means "not yet chosen"; `effectiveSize` resolves it to the first size the
+  // plan actually allows.
+  const [size, setSize] = useState<DaemonSize | null>(null);
   const [error, setError] = useState("");
 
   const tiers = useMemo(
@@ -719,15 +729,24 @@ function CreateEnvironmentModal({
     [allowedSizes],
   );
 
-  // Keep the selected size within the plan's allowed set.
-  const effectiveSize = useMemo(() => {
-    if (!allowedSizes || allowedSizes.length === 0) return size;
-    return allowedSizes.includes(size) ? size : allowedSizes[0];
+  // Keep the selection inside the plan's allowed set, and default to the
+  // first allowed size rather than to a constant. Undefined when the plan
+  // allows nothing at all, which is what makes Create unclickable.
+  const effectiveSize = useMemo((): DaemonSize | undefined => {
+    if (!allowedSizes || allowedSizes.length === 0) return undefined;
+    return size !== null && allowedSizes.includes(size) ? size : allowedSizes[0];
   }, [allowedSizes, size]);
 
   const createMut = useMutation({
-    mutationFn: () =>
-      createEnvironment({ name: name.trim(), size: effectiveSize, idleTimeout, gitRepo: gitRepo.trim() || undefined }),
+    mutationFn: () => {
+      // Refuse rather than guess. A size the plan does not allow is one the
+      // server rejects at CreateDaemon time, and guessing here would surface
+      // that as a mysterious failure after the user pressed Create.
+      if (effectiveSize === undefined) {
+        throw new Error("Your plan does not allow any machine sizes.");
+      }
+      return createEnvironment({ name: name.trim(), size: effectiveSize, idleTimeout, gitRepo: gitRepo.trim() || undefined });
+    },
     onSuccess: () => {
       setName("");
       setGitRepo("");
@@ -779,13 +798,17 @@ function CreateEnvironmentModal({
         </Field>
 
         <Field label={<span className="inline-flex items-center gap-1.5"><Cpu className="h-4 w-4 text-muted-foreground" /> Size</span>}>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          {/* A real radiogroup, not a row of styled buttons: this is a
+              single-choice control and assistive tech should be told so. */}
+          <div role="radiogroup" aria-label="Size" className="grid grid-cols-2 gap-2 md:grid-cols-4">
             {tiers.map((t) => {
               const selected = effectiveSize === t.value;
               return (
                 <button
                   key={t.value}
                   type="button"
+                  role="radio"
+                  aria-checked={selected}
                   onClick={() => setSize(t.value)}
                   className={cn(
                     "rounded-lg border-2 p-3 text-left transition-colors",
@@ -794,7 +817,6 @@ function CreateEnvironmentModal({
                 >
                   <div className="text-sm font-semibold text-foreground">{t.label}</div>
                   <div className="mt-1 text-xs text-muted-foreground">{t.specs}</div>
-                  <div className="mt-1 text-xs font-medium text-primary">{t.price}</div>
                 </button>
               );
             })}
@@ -804,6 +826,17 @@ function CreateEnvironmentModal({
           )}
           {tiers.length > 0 && tiers.length < SIZE_TIERS.length && (
             <p className="mt-2 text-xs text-muted-foreground">Larger sizes are gated by your compute plan.</p>
+          )}
+          {/* The one rate the server actually states. It replaces four
+              per-size rates the client invented; every size on a plan draws
+              from the same bucket of included minutes and overflows at the
+              same plan rate, so a per-size price implied a weighting the
+              metering does not do. */}
+          {tiers.length > 0 && overageCentsPerMinute > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Included hours are shared across machines. Beyond them, usage is
+              billed at {formatOverageRate(overageCentsPerMinute)}.
+            </p>
           )}
         </Field>
 

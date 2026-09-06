@@ -30,6 +30,51 @@ const mutation = () => ({
 // is required because `vi.mock`'s factory is hoisted above normal `const`s.
 const usageState = vi.hoisted(() => ({ current: undefined as unknown }))
 
+/**
+ * Stand-in router. The billing sub-tab moved out of `useState` and into the URL
+ * (`?tab=`) so a link can target it, which means these tests need somewhere for
+ * that param to live — and it has to be STATEFUL, because the tab-switch tests
+ * click a tab and then assert on what rendered. So `navigate` writes to a tiny
+ * store and every `useSearch` consumer subscribes to it.
+ */
+const routerState = vi.hoisted(() => {
+  const listeners = new Set<() => void>()
+  const state = {
+    search: {} as Record<string, unknown>,
+    subscribe(fn: () => void) {
+      listeners.add(fn)
+      return () => listeners.delete(fn)
+    },
+    get() {
+      return state.search
+    },
+    navigate({ search }: { search?: unknown }) {
+      const next =
+        typeof search === 'function'
+          ? (search as (p: Record<string, unknown>) => Record<string, unknown>)(
+              state.search,
+            )
+          : (search as Record<string, unknown>) ?? {}
+      state.search = next
+      listeners.forEach((fn) => fn())
+    },
+    reset() {
+      state.search = {}
+      listeners.clear()
+    },
+  }
+  return state
+})
+
+vi.mock('@tanstack/react-router', async () => {
+  const { useSyncExternalStore } = await import('react')
+  return {
+    useNavigate: () => routerState.navigate,
+    useSearch: () =>
+      useSyncExternalStore(routerState.subscribe, routerState.get, routerState.get),
+  }
+})
+
 // Only `redeemCoupon` is replaced; the rest of the service module (notably the
 // `RedeemedCouponKind` re-export and the `reliantAIAvailable` flag) stays real,
 // so the mock cannot drift from the module's actual shape.
@@ -82,44 +127,50 @@ function renderSection() {
 describe('BillingSection', () => {
   beforeEach(() => {
     usageState.current = undefined
+    routerState.reset()
   })
 
-  it('renders the section header and the four sub-tabs', () => {
+  it('renders the section header and the three sub-tabs', () => {
     renderSection()
 
     expect(
       screen.getByRole('heading', { level: 1, name: /billing/i }),
     ).toBeInTheDocument()
 
-    for (const label of ['Overview', 'Plans', 'Invoices', 'Usage']) {
-      expect(screen.getByRole('button', { name: new RegExp(label, 'i') })).toBeInTheDocument()
-    }
+    // Exactly three, in order. An inclusion-only check would still pass if a
+    // fourth tab came back, and the whole point of the merge was that the
+    // strip stops being a filing cabinet.
+    expect(screen.getAllByRole('tab').map((t) => t.textContent?.trim())).toEqual([
+      'Overview',
+      'Change plan',
+      'Usage & invoices',
+    ])
   })
 
   it('shows the plans empty state when no plans are configured', () => {
     renderSection()
 
-    fireEvent.click(screen.getByRole('button', { name: /plans/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /change plan/i }))
 
     expect(
       screen.getByRole('heading', { level: 3, name: /no plans available/i }),
     ).toBeInTheDocument()
   })
 
-  it('shows the invoices empty state when there are no invoices', () => {
+  it('shows the invoices empty state on the merged tab', () => {
     renderSection()
 
-    fireEvent.click(screen.getByRole('button', { name: /invoices/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
     expect(
       screen.getByRole('heading', { level: 3, name: /no invoices yet/i }),
     ).toBeInTheDocument()
   })
 
-  it('shows the usage empty state when there is no usage data', () => {
+  it('shows the usage empty state on the merged tab', () => {
     renderSection()
 
-    fireEvent.click(screen.getByRole('button', { name: /^usage$/i }))
+    fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
     expect(
       screen.getByRole('heading', { level: 3, name: /no usage data/i }),
@@ -154,7 +205,7 @@ describe('BillingSection', () => {
       usageState.current = usage(90)
       renderSection()
 
-      fireEvent.click(screen.getByRole('button', { name: /^usage$/i }))
+      fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
       expect(screen.getByText(/coupon minutes remaining/i)).toBeInTheDocument()
       expect(screen.getByText('90 min (1.5 h)')).toBeInTheDocument()
@@ -168,7 +219,7 @@ describe('BillingSection', () => {
 
       expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
 
-      fireEvent.click(screen.getByRole('button', { name: /^usage$/i }))
+      fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
       expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
     })

@@ -9,45 +9,47 @@
  * run out of credits" and "can I upgrade," not full account admin.
  *
  * Reuses the same `useComputeSubscription` / `useWalletOverview` /
- * `useComputeUsage` / `useCreateCheckoutSession` hooks and `billingUtils`
- * formatters as desktop `billing.tsx`, so a balance or plan name never
- * disagrees between the two surfaces. "Upgrade" reuses the exact
- * `handleSubscribe` pattern from `PlansTab`: create a checkout session for
- * the cheapest compute plan and redirect to the hosted Stripe URL — Stripe
- * Checkout is mobile-native, so this needs no mobile-specific UI of its own.
+ * `useComputeUsage` hooks and `billingUtils` formatters as desktop
+ * `billing.tsx`, so a balance or plan name never disagrees between the two
+ * surfaces.
+ *
+ * "Upgrade" mounts `EmbeddedCheckoutPanel` in place rather than redirecting to
+ * a hosted Stripe URL. Mobile here is mobile WEB — the same React app at
+ * `/m/settings`, on the same registered origin — so embedded checkout needs no
+ * mobile-specific work at all; it is the narrowest container, not a different
+ * integration. The redirect was also the worst version of this flow on a
+ * phone, where returning to a backgrounded tab is least reliable.
  *
  * This whole screen only renders when `hasControlPlane` (see
  * `MobileSettingsScreen`'s row list) — billing has no meaning without a
  * control-plane backend.
  */
 
-import { useMemo, useState } from "react";
-import { CreditCard, Cpu, Wallet } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { Cpu, Wallet } from "lucide-react";
 import {
   useComputeSubscription,
   useComputeUsage,
-  useCreateCheckoutSession,
   usePlans,
   useWalletOverview,
 } from "../../hooks/useCloudBillingQueries";
+import { CheckoutPanelWithIdentity } from "../Billing/CheckoutPanelWithIdentity";
 import {
-  COMPUTE_PLAN_IDS,
   derivePlanDisplay,
-  formatBillingError,
+  isPurchasableComputePlan,
+  sortPlansForDisplay,
+  formatAllowedSizes,
+  formatCentsAsDollars,
   formatCurrencyFromWalletFields,
   getWalletBalanceState,
   getWalletWarning,
-  isBackendModalError,
   nanosFromFields,
+  // The two-band derivations, shared with desktop so a phone and a laptop can
+  // never disagree about whether a plan's detail loaded.
+  deriveComputeCapacity,
+  isPlanDetailUnavailable,
 } from "../Settings/cloud/billingUtils";
 import { MobileSettingsSectionHeader } from "./MobileSettingsSectionHeader";
-
-function redirectToStripe(url: string): boolean {
-  if (!url) return false;
-  if (url.startsWith(window.location.origin)) return false;
-  window.location.href = url;
-  return true;
-}
 
 function Card({ children }: { children: React.ReactNode }) {
   return (
@@ -57,13 +59,75 @@ function Card({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * The two products, as two SHAPES — the same distinction desktop makes, at a
+ * phone's width.
+ *
+ * Credit is a filled, borderless reservoir; compute is a bordered contract.
+ * They differ by container, by primary number (dollars remaining vs hours used
+ * of hours included) and by time axis, not by colour: the styling contract
+ * permits no invented palette, and a colour split would not survive a theme
+ * change anyway. Two identically-drawn cards are exactly as monotone here as
+ * they were on desktop, and the smaller screen leaves less room for the copy
+ * that would otherwise disambiguate them.
+ */
+function Band({
+  id,
+  title,
+  icon: Icon,
+  variant,
+  children,
+}: {
+  id: string;
+  title: string;
+  icon: typeof Wallet;
+  variant: "reservoir" | "contract";
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      aria-labelledby={id}
+      // The shape is DECLARED, not merely styled.
+      //
+      // "Distinguish the two products by shape rather than colour" is the
+      // design decision this screen exists to carry, and a test can only pin a
+      // class string — which pins styling, breaks on every visual tweak, and
+      // still would not say WHICH product got which treatment. Naming the
+      // choice makes it a contract: swapping both bands to one container is
+      // then a detectable regression rather than an invisible one.
+      data-band-shape={variant}
+      className={
+        variant === "reservoir"
+          ? "rounded-2xl bg-muted/40 p-4"
+          : "rounded-lg border border-border bg-card p-4"
+      }
+    >
+      <div className="mb-2 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-muted-foreground" />
+        <h3
+          id={id}
+          className="text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        >
+          {title}
+        </h3>
+      </div>
+      {children}
+    </section>
+  );
+}
+
 export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   const subQ = useComputeSubscription();
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
   const plansQ = usePlans();
-  const checkoutMutation = useCreateCheckoutSession();
-  const [error, setError] = useState("");
+  // The purchase in flight, or null. Holding the REQUEST (not a boolean) is
+  // what lets the panel key its session off it — reopening the same purchase
+  // reuses the session instead of minting another.
+  const [checkout, setCheckout] = useState<{
+    kind: "compute_plan";
+    planId: string;
+  } | null>(null);
 
   const subscription = subQ.data?.subscription ?? null;
   const wallet = walletQ.data?.overview?.wallet ?? null;
@@ -87,49 +151,55 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   }, [wallet]);
 
   const planUi = useMemo(() => {
-    const d = derivePlanDisplay(subscription?.plan);
+    const plan = subscription?.plan;
+    const d = derivePlanDisplay(plan);
     return {
-      planName: subscription?.plan?.name ?? "No compute plan",
+      // null, not "No compute plan": absence is a different state from a plan
+      // whose detail failed to load, and the two get different copy.
+      planName: plan?.name ?? null,
       includedHours:
         d.includedMinutes < 0 ? -1 : Math.round(d.includedMinutes / 60),
+      // The screenshot's `0 h` state. On a phone a bare zero is MORE alarming,
+      // not less — there is no surrounding detail to contradict it.
+      detailUnavailable: isPlanDetailUnavailable(plan),
     };
   }, [subscription]);
 
   const usageUi = useMemo(() => {
-    const includedHours = (usage?.includedMinutes ?? 0) / 60;
-    const usedHours = (usage?.usedMinutes ?? 0) / 60;
-    const pct =
-      includedHours > 0 ? Math.min((usedHours / includedHours) * 100, 100) : 0;
-    return { includedHours, usedHours, pct };
+    const includedMinutes = usage?.includedMinutes ?? 0;
+    const usedMinutes = usage?.usedMinutes ?? 0;
+    return {
+      includedHours: includedMinutes / 60,
+      usedHours: usedMinutes / 60,
+      capacity: deriveComputeCapacity({
+        usedMinutes,
+        includedMinutes,
+        overageMinutes: usage?.overageMinutes ?? 0,
+      }),
+    };
   }, [usage]);
 
-  // The cheapest compute plan — a one-tap "Upgrade" needs a single target,
-  // not the desktop plan-comparison grid. A user who wants a specific tier
-  // still has the full picker on desktop.
-  const cheapestPlan = (plansQ.data?.plans ?? [])
-    .filter((plan) => (COMPUTE_PLAN_IDS as readonly string[]).includes(plan.id))
-    .sort(
-      (a, b) =>
-        (COMPUTE_PLAN_IDS as readonly string[]).indexOf(a.id) -
-        (COMPUTE_PLAN_IDS as readonly string[]).indexOf(b.id),
-    )[0];
+  // Every plan the catalog sells, in the catalog's own order. This screen
+  // used to take the FIRST of these and buy it on one tap — a purchase
+  // decision made for the user, who saw no alternative and (originally) no
+  // price at all. A phone is a smaller screen, not a reason to remove the
+  // choice; the plans are a short list and each one fits on a row.
+  //
+  // Which plans exist, what they cost and what order they come in are all
+  // server facts (price_cents, display_order), not a client allowlist.
+  const purchasablePlans = sortPlansForDisplay(
+    (plansQ.data?.plans ?? []).filter(isPurchasableComputePlan),
+  );
 
-  const handleUpgrade = () => {
-    if (!cheapestPlan) return;
-    setError("");
-    const returnUrl = window.location.href;
-    checkoutMutation.mutate(
-      { planId: cheapestPlan.id, successUrl: returnUrl, cancelUrl: returnUrl },
-      {
-        onSuccess: (res) => redirectToStripe(res.checkoutUrl),
-        onError: (err) => {
-          if (!isBackendModalError(err)) {
-            setError(formatBillingError(err, "Failed to start checkout"));
-          }
-        },
-      },
-    );
-  };
+  // The panel reports done only after the SERVER confirmed the purchase (or
+  // after the dev no-Stripe path completed it outright), never off Stripe's
+  // in-page onComplete. So refetching here is safe: there is something to
+  // fetch.
+  const handleCheckoutDone = useCallback(() => {
+    setCheckout(null);
+    void subQ.refetch();
+    void walletQ.refetch();
+  }, [subQ, walletQ]);
 
   const loading = subQ.isLoading || walletQ.isLoading || usageQ.isLoading;
 
@@ -142,76 +212,154 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
           <p className="text-sm text-muted-foreground">Loading billing…</p>
         ) : (
           <div className="space-y-4">
-            {error && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                {error}
-              </div>
+            {checkout && (
+              <Card>
+                <CheckoutPanelWithIdentity
+                  request={checkout}
+                  onDone={handleCheckoutDone}
+                  // "Open Settings on desktop" was the old advice because this
+                  // screen had no way to link an identity. It has one now — the
+                  // same modal every other surface uses — so the phone is no
+                  // longer a dead end.
+                  returnTo="/settings/billing"
+                />
+                <button
+                  type="button"
+                  onClick={() => setCheckout(null)}
+                  className="mt-3 min-h-[44px] w-full text-sm text-muted-foreground"
+                >
+                  Cancel
+                </button>
+              </Card>
             )}
 
-            <Card>
-              <div className="mb-2 flex items-center gap-2">
-                <Wallet className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">
-                  Credit balance
-                </h3>
-              </div>
+            {/* AI credit: a meter that drains. */}
+            <Band
+              id="m-credit-band"
+              title="AI credit"
+              icon={Wallet}
+              variant="reservoir"
+            >
               <p className="text-2xl font-semibold text-foreground">
                 {walletUi.balance}
               </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                credit remaining
+              </p>
               {walletUi.warning && (
-                <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-600 dark:text-amber-400">
+                // Semantic `warning` tokens, not a hardcoded amber pair. The
+                // literal `amber-500` here was a brand colour by another name:
+                // it ignored the theme and needed a `dark:` twin to stay legible.
+                <div className="mt-3 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
                   <p className="font-semibold">{walletUi.warning.title}</p>
                   <p>{walletUi.warning.message}</p>
                 </div>
               )}
-            </Card>
+            </Band>
 
-            <Card>
-              <div className="mb-2 flex items-center gap-2">
-                <Cpu className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold text-foreground">
-                  Compute plan
-                </h3>
-              </div>
+            {/* Compute: a capacity with a ceiling. */}
+            <Band
+              id="m-compute-band"
+              title="Compute"
+              icon={Cpu}
+              variant="contract"
+            >
               <p className="text-lg font-semibold text-foreground">
-                {planUi.planName}
+                {planUi.planName ?? "No compute plan"}
               </p>
-              <div className="mt-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Hours used</span>
-                  <span className="text-muted-foreground">
-                    {usageUi.usedHours.toFixed(1)} h /{" "}
-                    {planUi.includedHours < 0
-                      ? "unlimited"
-                      : `${usageUi.includedHours.toFixed(0)} h`}
-                  </span>
+              {planUi.planName === null ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Machines run on a plan — pick one below to get started.
+                </p>
+              ) : planUi.detailUnavailable ? (
+                // ONE line, not a confident `0 h`. Naming the cause is what
+                // stops someone auditing config that is already correct.
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Plan details are unavailable — the control plane may not have
+                  restarted since the plan catalog changed.
+                </p>
+              ) : (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {usageUi.usedHours.toFixed(1)} h used
+                    </span>
+                    <span className="text-muted-foreground">
+                      {planUi.includedHours < 0
+                        ? "unlimited"
+                        : `${usageUi.includedHours.toFixed(0)} h included`}
+                    </span>
+                  </div>
+                  {/* `bg-primary/10` track, not `bg-muted` — in dark mode
+                      `--surface-raised` resolves to `--muted`, so a `bg-muted`
+                      track vanishes into the surface around it. */}
+                  <div className="mt-1.5 h-2 rounded-full bg-primary/10">
+                    <div
+                      className={
+                        "h-2 rounded-full " +
+                        (usageUi.capacity.state === "under"
+                          ? "bg-primary"
+                          : "bg-warning")
+                      }
+                      style={{ width: `${usageUi.capacity.usedPct}%` }}
+                    />
+                  </div>
                 </div>
-                {/* `bg-primary/10` track, not `bg-muted` — this card now uses
-                    `elevation-1`, and in dark mode `--surface-raised` (the
-                    card's own background) resolves to `--muted`, so a
-                    `bg-muted` track would vanish into the card around it. */}
-                <div className="mt-1.5 h-2 rounded-full bg-primary/10">
-                  <div
-                    className={
-                      "h-2 rounded-full " +
-                      (usageUi.pct >= 90 ? "bg-amber-500" : "bg-primary")
-                    }
-                    style={{ width: `${usageUi.pct}%` }}
-                  />
-                </div>
-              </div>
-              {cheapestPlan && (
-                <button
-                  type="button"
-                  onClick={handleUpgrade}
-                  disabled={checkoutMutation.isPending}
-                  className="mt-4 flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-primary text-sm font-medium text-primary-foreground active:opacity-80 disabled:opacity-60"
-                >
-                  <CreditCard className="h-4 w-4" />
-                  {checkoutMutation.isPending ? "Opening checkout…" : "Upgrade"}
-                </button>
               )}
-            </Card>
+              {purchasablePlans.length > 0 && !checkout && (
+                <div className="mt-4 space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {subscription ? "Switch plan" : "Choose a plan"}
+                  </p>
+                  {purchasablePlans.map((plan) => {
+                    const d = derivePlanDisplay(plan);
+                    const isCurrent = subscription?.plan?.id === plan.id;
+                    const hours =
+                      d.includedMinutes < 0
+                        ? "unlimited hours"
+                        : `${Math.round(d.includedMinutes / 60)} h/mo`;
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        disabled={isCurrent}
+                        onClick={() =>
+                          setCheckout({ kind: "compute_plan", planId: plan.id })
+                        }
+                        className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left active:opacity-80 disabled:opacity-60"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-medium text-foreground">
+                            {plan.name}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {/* Sizes are the reason to pick one plan over
+                                another, so they are on the row rather than a
+                                tap away on desktop. */}
+                            {formatAllowedSizes(d.allowedSizes)} · {hours}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-sm font-semibold text-foreground">
+                          {isCurrent
+                            ? "Current"
+                            : `${formatCentsAsDollars(d.monthlyPriceCents ?? 0)}/mo`}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <p className="pt-1 text-center text-xs text-muted-foreground">
+                    {/* Says what now happens — payment opens on this screen and
+                        never leaves it. The previous copy promised a round trip
+                        ("you'll come back here"), which stopped being true when
+                        the redirect went away. Deliberately names no payment
+                        methods: which ones appear depends on the browser and on
+                        domain registration, so Stripe's own form is the only
+                        honest place that list can come from. */}
+                    Pay securely with Stripe, right here.
+                  </p>
+                </div>
+              )}
+            </Band>
 
             <p className="text-center text-xs text-muted-foreground">
               For invoices, usage charts, and plan comparisons, use desktop.

@@ -41,6 +41,16 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	// For sk-ant-oat keys, we DON'T use WithAPIKey (which sets X-Api-Key header)
 	// Instead, we use Bearer authentication with exact header casing to match Claude Code
 
+	// The SDK must still be HANDED a credential, even though the exact-cased
+	// `authorization` header below is what actually authenticates the request.
+	//
+	// WithAuthToken is the honest way to satisfy it — the same bearer token the
+	// header carries, not a placeholder. lowercaseHeaderTransport Del()s the
+	// canonicalized "Authorization" the SDK sets and re-adds the exact-cased
+	// "authorization", so the wire format is byte-identical and the header is
+	// never duplicated.
+	clientOptions = append(clientOptions, option.WithAuthToken(opts.ApiKey))
+
 	// Ensure we always have a stable session ID so the header and payload user_id
 	// carry the same value. Generate one if the caller didn't provide one.
 	if opts.SessionID == nil || *opts.SessionID == "" {
@@ -103,6 +113,13 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		Transport: &decompressingTransport{base: llm.WrapWithIdleTimeout(finalTransport)},
 	}
 
+	// The claude-cli release this model is fingerprinted against. The User-Agent,
+	// the bundled-SDK version below, the billing header's cc_version and the
+	// embedded prompt bodies must all come from the SAME release — a mixed
+	// combination is one no real client emits. Today that is 2.1.204 for every
+	// model except fable-5.1, which is 2.1.261.
+	profile := claudeCodeProfileFor(opts.Model.APIModel)
+
 	clientOptions = append(clientOptions,
 		option.WithHTTPClient(customHTTPClient),
 		// Headers with standard casing (these get canonicalized but match Claude Code)
@@ -110,12 +127,12 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		option.WithHeader("X-Stainless-Retry-Count", "0"),
 		option.WithHeader("X-Stainless-Timeout", "600"),
 		option.WithHeader("X-Stainless-Lang", "js"),
-		option.WithHeader("X-Stainless-Package-Version", "0.94.0"),
+		option.WithHeader("X-Stainless-Package-Version", profile.stainlessVersion),
 		option.WithHeader("X-Stainless-OS", "MacOS"),
 		option.WithHeader("X-Stainless-Arch", "arm64"),
 		option.WithHeader("X-Stainless-Runtime", "node"),
 		option.WithHeader("X-Stainless-Runtime-Version", "v26.3.0"),
-		option.WithHeader("User-Agent", "claude-cli/2.1.204 (external, cli)"),
+		option.WithHeader("User-Agent", fmt.Sprintf("claude-cli/%s (external, cli)", profile.cliVersion)),
 	)
 
 	// Support validate (short timeout for validation requests)
@@ -418,7 +435,7 @@ func (c *ClaudeCodeClient) convertTools(tools []toolsPkg.Tool) []anthropic.ToolU
 }
 
 // callerSystemBlocks converts Reliant's own system prompts into text blocks that
-// are appended AFTER the 4 Claude Code base blocks. Only the final caller block is
+// are appended AFTER the Claude Code base blocks. Only the final caller block is
 // cached (ephemeral), which never disturbs the base blocks' exact cache treatment.
 func (c *ClaudeCodeClient) callerSystemBlocks(prompts []string) []anthropic.TextBlockParam {
 	blocks := []anthropic.TextBlockParam{}
@@ -467,11 +484,17 @@ func (c *ClaudeCodeClient) applyClaudeCodeExtras(params *anthropic.MessageNewPar
 			},
 		}
 	}
-	// fable-5 falls back to opus-4.8 server-side.
-	if c.options.Model.APIModel == "claude-fable-5" {
+	// Server-side fallback selection. The two shapes are not interchangeable and
+	// both are captured verbatim: fable-5 names its fallback model explicitly,
+	// while fable-5.1 (2.1.261) sends the plain string "default" and lets the
+	// server pick.
+	switch c.options.Model.APIModel {
+	case "claude-fable-5":
 		extras["fallbacks"] = []any{
 			map[string]any{"model": "claude-opus-4-8"},
 		}
+	case apiModelFable51:
+		extras["fallbacks"] = "default"
 	}
 	params.SetExtraFields(extras)
 }
@@ -655,10 +678,28 @@ func (c *ClaudeCodeClient) streamResponseInternal(ctx context.Context, params an
 	return eventChan
 }
 
+// thinkingDisplayUpdates is the thinking.display value the 2.1.261 capture sends.
+// It postdates the SDK, whose declared ThinkingConfigAdaptiveDisplay constants are
+// only "summarized" and "omitted"; the type is a plain string, so the conversion
+// is the supported escape hatch rather than a workaround.
+const thinkingDisplayUpdates = anthropic.ThinkingConfigAdaptiveDisplay("updates")
+
+// claudeCodeThinkingConfig returns the base thinking config, adding the
+// display:"updates" field that only the fable-5.1 (2.1.261) fingerprint carries.
+// Every other adaptive model keeps emitting a bare {"type":"adaptive"}, so the
+// shared base.go builder stays untouched for the plain Anthropic driver.
+func (c *ClaudeCodeClient) claudeCodeThinkingConfig() anthropic.ThinkingConfigParamUnion {
+	thinking := c.getThinkingConfig()
+	if c.options.Model.APIModel == apiModelFable51 && thinking.OfAdaptive != nil {
+		thinking.OfAdaptive.Display = thinkingDisplayUpdates
+	}
+	return thinking
+}
+
 func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthropic.MessageParam, tools []anthropic.ToolUnionParam) anthropic.MessageNewParams {
-	// Build the exact 4-block Claude Code base system prompt (same for every
-	// request — compaction/title-gen differ only by their user message), then
-	// append the caller's own system prompts after it.
+	// Build the exact Claude Code base system prompt — 4 blocks, or 5 for the
+	// 2.1.261 fingerprint (same for every request; compaction/title-gen differ
+	// only by their user message) — then append the caller's own system prompts.
 	system := claudeCodeBaseSystemBlocks(c.options.Model.APIModel, c.options.DisableCache)
 	system = append(system, c.callerSystemBlocks(prompts)...)
 
@@ -668,7 +709,7 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 		Messages:   messages,
 		Tools:      tools,
 		ToolChoice: c.toolChoice(c.mcpToolName(c.options.ForceToolChoice)),
-		Thinking:   c.getThinkingConfig(),
+		Thinking:   c.claudeCodeThinkingConfig(),
 		System:     system,
 	}
 
@@ -677,7 +718,7 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 		params.OutputConfig = oc
 	}
 
-	// context_management (every request), fallbacks (fable-5), diagnostics (TODO).
+	// context_management (every request), fallbacks (fable-5/5.1), diagnostics (TODO).
 	c.applyClaudeCodeExtras(&params)
 
 	// Attach user metadata for Claude Code keys using stored OAuth account data

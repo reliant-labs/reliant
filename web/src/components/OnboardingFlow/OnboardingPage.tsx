@@ -3,7 +3,8 @@ import { cn } from '@/lib/utils';
 import { ProgressBar } from './ProgressBar';
 import { OnboardingEscapeHatch } from './OnboardingEscapeHatch';
 import { useOnboardingPlan } from './useOnboardingPlan';
-import { BACK_CLEARS, deriveStep, getStepsForPlan, stepMaxWidth, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
+import { useOnboardingFacts } from './useOnboardingFacts';
+import { BACK_CLEARS, deriveStep, stepMaxWidth, visibleStepsForPlan, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
 import { useOnboardingTracking } from './analytics';
 import { useTitleBarChrome } from '@/hooks/useTitleBarChrome';
 import type { LaunchPlan } from './types';
@@ -18,30 +19,29 @@ export function OnboardingPage() {
   // the title-bar area while onboarding is open. No-op in web.
   const { isElectron, dragRegionStyle } = useTitleBarChrome();
 
-  // Current step is derived purely from plan state. No URL `step` param,
-  // no sessionStorage flags, no useEffect to sync. See ./stepConfig.ts.
-  const actualStep = deriveStep(plan);
-  const allSteps = getStepsForPlan(plan);
-
-
-  // A compute step that auto-skipped is hidden from the flow entirely.
+  // Current step is derived purely from (plan, facts). No URL `step` param, no
+  // sessionStorage flags, no useEffect to sync. See ./stepConfig.ts.
   //
-  // The user was never asked anything: they already had a running daemon, so
-  // the step resolved itself and advanced. Showing "1 Daemon" in the progress
-  // bar implies a choice they never made, and numbers every later step from a
-  // question that did not happen.
-  const steps = plan.computeAutoSkipped
-    ? allSteps.filter(id => id !== 'compute')
-    : allSteps;
+  // The facts — compute eligibility and wallet balance — are the ONLY inputs
+  // that are not in the URL, and they are here rather than in the plan because
+  // they are server-owned and change under us. They read pessimistic while
+  // loading, so a still-settling query lands the user on the checkout step
+  // rather than past it.
+  const facts = useOnboardingFacts();
+  const actualStep = deriveStep(plan, facts);
+  // Hides an auto-skipped compute step, but never the step the user is on —
+  // see visibleStepsForPlan. That guarantee is what makes the index below a
+  // plain lookup rather than a -1 swallowed by Math.max.
+  const steps = visibleStepsForPlan(plan, facts);
 
-  const safeIndex = Math.max(0, steps.indexOf(actualStep));
+  const currentIndex = steps.indexOf(actualStep);
   const StepComponent = STEP_COMPONENTS[actualStep];
 
   // Back is suppressed on the first VISIBLE step, which after an auto-skip is
   // the model step. Without this the button renders and does nothing you can
   // see: BACK_CLEARS['model'] clears `compute`, derivation returns to the
   // compute step, and its auto-skip effect immediately advances again.
-  const isFirst = safeIndex === 0;
+  const isFirst = currentIndex <= 0;
   const progressSteps = steps.map(id => ({ id, label: STEP_LABELS[id] }));
 
   useOnboardingTracking(actualStep);
@@ -61,8 +61,15 @@ export function OnboardingPage() {
     void updatePlan(updates);
   };
 
-  if (!StepComponent) return null;
-
+  // A missing step component is a bug either way — the registry is filled by a
+  // module-scope side effect of importing './steps' and is typed through an
+  // assertion, so nothing type-checks it being complete. What must not happen
+  // is returning null here: that skips the card, and the card is what holds
+  // Back, Settings and Sign out. Onboarding suppresses the app Header and
+  // renders above every other surface, so a user who lands on an unregistered
+  // step would have no route to settings and no way to sign out — the exact
+  // dead end the escape hatch exists to close. Render the chrome; say so in
+  // the step slot.
   return (
     <div
       className="fixed inset-0 z-40 flex items-center justify-center overflow-hidden p-4"
@@ -109,7 +116,7 @@ export function OnboardingPage() {
             complete has no route to settings and no way to sign out. */}
         <div className="relative flex items-center justify-between gap-4 border-b border-white/10 bg-white/[0.035] px-6 py-4">
           <div className="flex-1">
-            <ProgressBar steps={progressSteps} currentStepIndex={safeIndex} />
+            <ProgressBar steps={progressSteps} currentStepIndex={currentIndex} />
           </div>
           <OnboardingEscapeHatch className="flex-shrink-0" />
         </div>
@@ -117,12 +124,24 @@ export function OnboardingPage() {
         {/* Step content */}
         <div className="relative flex-1 overflow-y-auto bg-[linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0)_28%),hsl(var(--surface-modal))]">
           <div className="px-8 py-8">
-            <StepComponent
-              plan={plan}
-              updatePlan={updatePlan}
-              onNext={onNext}
-              onBack={onBack}
-            />
+            {StepComponent ? (
+              <StepComponent
+                plan={plan}
+                updatePlan={updatePlan}
+                onNext={onNext}
+                onBack={onBack}
+              />
+            ) : (
+              <div className="space-y-3 text-center" role="alert">
+                <h2 className="text-lg font-semibold text-foreground">
+                  This step didn&apos;t load
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Something went wrong setting up this part of onboarding. Try
+                  going back, or open Settings to continue.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 

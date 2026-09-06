@@ -198,6 +198,7 @@ func skipNodeIfConditionFalse(
 	workflowName string,
 	logger log.Logger,
 	scope *LoopScope,
+	nodePathPrefix string,
 ) (skipped bool, skipEvent *core.WorkflowEvent, err error) {
 	condExpr := model.ConditionExpr(node)
 	if condExpr == "" {
@@ -231,7 +232,11 @@ func skipNodeIfConditionFalse(
 		"workflow_id": workflowID,
 		"chat_id":     chatID,
 		"step_id":     node.GetId(),
-		"condition":   condExpr,
+		// node_path is the node's fully-qualified graph position, which is what
+		// identifies a skipped node inside a nested sub-workflow. step_id stays
+		// the bare id it has always been.
+		"node_path": joinNodePath(nodePathPrefix, node.GetId()),
+		"condition": condExpr,
 	}).Get(ctx, &skipResult)
 
 	var skippedOutput map[string]interface{}

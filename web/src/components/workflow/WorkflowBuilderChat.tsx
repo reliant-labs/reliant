@@ -437,6 +437,11 @@ export function WorkflowBuilderChat({
   const lastProcessedSeqRef = useRef<number>(-1);
   // Track if we've applied the initial workflow for restored chats
   const hasAppliedRestoredWorkflowRef = useRef(false);
+  // Last draft version we applied to the canvas. Any tool result triggers a
+  // refetch, but the canvas is only replaced when the draft actually moved —
+  // so a read-only tool (view, grep, get_workflow) costs one cheap fetch and
+  // never clobbers unsaved canvas edits.
+  const lastAppliedVersionRef = useRef<number>(-1);
 
   useEffect(() => {
     if (!storeMessages.length) return;
@@ -465,6 +470,9 @@ export function WorkflowBuilderChat({
           if (version && onVersionChange) {
             onVersionChange(version);
           }
+          if (version != null) {
+            lastAppliedVersionRef.current = Number(version);
+          }
         })
         .catch((error) => {
           logger.error("[WorkflowBuilderChat] Failed to refetch workflow:", error);
@@ -473,8 +481,10 @@ export function WorkflowBuilderChat({
       return;
     }
 
-    // Watch for NEW successful edit_workflow/write_workflow tool results
-    // When detected, refetch the workflow (by draft ID or by name when draftId is missing)
+    // Any new, successful tool result may have mutated the draft. Rather than
+    // enumerate which tools those are — a list that silently rots every time a
+    // workflow or scenario tool is added — refetch on any of them and let the
+    // draft's version decide whether the canvas actually changes.
 
     for (let i = storeMessages.length - 1; i >= 0; i--) {
       const msg = storeMessages[i];
@@ -491,13 +501,6 @@ export function WorkflowBuilderChat({
       for (const block of blocks) {
         if (block.type !== ContentBlockType.TOOL_RESULT) continue;
 
-        // Check if this is an edit_workflow or write_workflow tool result
-        const toolName = block.toolName;
-        const isWorkflowTool =
-          toolName === "edit_workflow" || toolName === "write_workflow";
-
-        if (!isWorkflowTool) continue;
-
         // Check if the tool call was successful (not an error)
         if (block.isError) {
           continue;
@@ -506,16 +509,31 @@ export function WorkflowBuilderChat({
         // Mark as processed BEFORE refetching to prevent loops
         lastProcessedSeqRef.current = seq;
 
+        const applyIfChanged = (
+          updatedWorkflow: Workflow | undefined,
+          version: number | undefined,
+        ) => {
+          const nextVersion = version == null ? undefined : Number(version);
+          // Unknown version: we cannot tell whether anything moved, so apply.
+          if (nextVersion !== undefined && nextVersion === lastAppliedVersionRef.current) {
+            return;
+          }
+          if (nextVersion !== undefined) {
+            lastAppliedVersionRef.current = nextVersion;
+          }
+          if (updatedWorkflow) {
+            onWorkflowChange(updatedWorkflow);
+          }
+          if (nextVersion != null && onVersionChange) {
+            onVersionChange(nextVersion);
+          }
+        };
+
         if (draftId) {
           // Refetch by draft ID
           getWorkflowByDraftId(projectId, draftId)
             .then(({ workflow: updatedWorkflow, version }) => {
-              if (updatedWorkflow) {
-                onWorkflowChange(updatedWorkflow);
-              }
-              if (version && onVersionChange) {
-                onVersionChange(version);
-              }
+              applyIfChanged(updatedWorkflow, version);
             })
             .catch((error) => {
               logger.error("[WorkflowBuilderChat] Failed to refetch workflow:", error);
@@ -524,14 +542,9 @@ export function WorkflowBuilderChat({
           // No draftId (e.g. builtin/unsaved): refetch by workflow name and adopt draftId if returned
           getWorkflowWithDraftId(projectId, workflow.name)
             .then(({ workflow: updatedWorkflow, draftId: newDraftId, version }) => {
-              if (updatedWorkflow) {
-                onWorkflowChange(updatedWorkflow);
-              }
+              applyIfChanged(updatedWorkflow, version);
               if (newDraftId && onDraftIdChange) {
                 onDraftIdChange(newDraftId);
-              }
-              if (version != null && onVersionChange) {
-                onVersionChange(version);
               }
             })
             .catch((error) => {
@@ -548,22 +561,6 @@ export function WorkflowBuilderChat({
     if (!inputValue.trim() || isLoading) return;
 
     const userContent = inputValue.trim();
-    // Build system message for draft ID context (properly hidden from UI)
-    const systemMessageContent = draftId
-      ? `You are operating on workflow ${draftId}. Use this ID for all workflow operations.`
-      : null;
-    const systemInputMessage = systemMessageContent
-      ? {
-          role: MessageRole.SYSTEM,
-          content: systemMessageContent,
-        }
-      : null;
-    const systemStoreMessage = systemMessageContent
-      ? {
-          role: "system" as const,
-          content: systemMessageContent,
-        }
-      : null;
 
     setInputValue("");
     setSendError(null);
@@ -571,13 +568,9 @@ export function WorkflowBuilderChat({
 
     try {
       if (!chatId) {
-        // First message: create chat (LLM will use view_workflow tool to read current state)
-        // Build messages array with optional system message first, then user message
-        const messages: Array<{ role: MessageRole; content: string }> = [];
-        if (systemInputMessage) {
-          messages.push(systemInputMessage);
-        }
-        messages.push({ role: MessageRole.USER, content: userContent });
+        // First message: create chat. The workflow tools resolve the draft from
+        // the chat association, so nothing about the draft is injected here.
+        const messages = [{ role: MessageRole.USER, content: userContent }];
 
         const result = await chatGrpc.create({
           project_id: projectId,
@@ -623,8 +616,6 @@ export function WorkflowBuilderChat({
         await sendMessage(chatId, userContent, undefined, {
           selectedPresets: { "": WORKFLOW_BUILDER_PRESET },
           workflowParams: buildWorkflowBuilderParams(thinkingLevel, selectedModelId),
-          // Pass system message separately for proper handling (hidden from UI)
-          ...(systemStoreMessage && { systemMessages: [systemStoreMessage] }),
         });
       }
     } catch (error) {

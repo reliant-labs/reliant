@@ -46,7 +46,13 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
       return extracted;
     }
     // Generic fallback
-    const activityName = error.activity_type.replace(/^V2_/, '').replace(/([A-Z])/g, ' $1').trim();
+    const activityName = error.activity_type
+      .replace(/^V2_/, '')
+      // Split CamelCase without exploding acronyms: "CallLLM" -> "Call LLM",
+      // "LLMCallHandler" -> "LLM Call Handler".
+      .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+      .trim();
     return `Workflow error in ${activityName}`;
   };
 
@@ -93,58 +99,60 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
   };
 
   const summary = getDisplaySummary();
+  const timestampLabel = formatTimestamp(error.timestamp);
   const retryLabel = getRetryLabel();
   const Icon = isRetrying ? RotateCw : AlertTriangle;
 
   return (
     <div className={cn(
-      "rounded-md border overflow-hidden my-2",
+      "rounded-md border overflow-hidden my-1",
       isRetrying
         ? "border-warning/30 bg-warning/5"
         : "border-destructive/30 bg-destructive/5"
     )}>
-      {/* Error Header - Always visible */}
-      <div className={cn(
-        "px-3 py-2 border-b cursor-pointer hover:elevation-1 transition-colors duration-200",
-        isRetrying
-          ? "border-warning/30 bg-warning/10"
-          : "border-destructive/30 bg-destructive/10"
-      )}>
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className="flex items-center gap-2 w-full text-left"
+      {/* Error header — one line, always visible. The border-b only appears
+          when expanded; collapsed, the background shift already separates it. */}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        aria-expanded={isExpanded}
+        aria-label={`${summary} at ${timestampLabel}. Click for details`}
+        className={cn(
+          "flex items-center gap-1.5 w-full text-left px-2 py-1 transition-colors duration-200 hover:elevation-1",
+          isExpanded && "border-b",
+          isRetrying
+            ? "border-warning/30 bg-warning/10"
+            : "border-destructive/30 bg-destructive/10"
+        )}
+      >
+        <Icon className={cn(
+          "w-3.5 h-3.5 flex-shrink-0",
+          isRetrying ? "text-warning animate-spin" : "text-destructive"
+        )} data-testid={isRetrying ? "rotate-cw" : "alert-triangle"} />
+        <span className="text-xs font-medium text-foreground truncate min-w-0 flex-1">
+          {summary}
+        </span>
+        {retryLabel && (
+          <span className={cn(
+            "text-xs font-normal px-1.5 rounded-full whitespace-nowrap flex-shrink-0",
+            isRetrying
+              ? "bg-warning/20 text-warning"
+              : "bg-destructive/20 text-destructive"
+          )}>
+            {isRetrying ? `Retrying (${retryLabel})` : retryLabel}
+          </span>
+        )}
+        <span
+          className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0"
+          data-testid="workflow-error-timestamp"
         >
-          <Icon className={cn(
-            "w-4 h-4 flex-shrink-0",
-            isRetrying ? "text-warning animate-spin" : "text-destructive"
-          )} data-testid={isRetrying ? "rotate-cw" : "alert-triangle"} />
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-foreground flex items-center gap-2">
-              <span className="truncate">{summary}</span>
-              {retryLabel && (
-                <span className={cn(
-                  "text-xs font-normal px-1.5 py-0.5 rounded-full whitespace-nowrap",
-                  isRetrying
-                    ? "bg-warning/20 text-warning"
-                    : "bg-destructive/20 text-destructive"
-                )}>
-                  {isRetrying ? `Retrying (${retryLabel})` : retryLabel}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {formatTimestamp(error.timestamp)} · Click for details
-            </div>
-          </div>
-          <div className="ml-auto flex items-center gap-1 flex-shrink-0">
-            {isExpanded ? (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            )}
-          </div>
-        </button>
-      </div>
+          {timestampLabel}
+        </span>
+        {isExpanded ? (
+          <ChevronDown className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" data-testid="workflow-error-chevron" />
+        ) : (
+          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" data-testid="workflow-error-chevron" />
+        )}
+      </button>
 
       {/* Expandable Error Details */}
       {isExpanded && (
@@ -224,11 +232,66 @@ const KNOWN_ERROR_PATTERNS: Array<[string, string]> = [
   ['bad gateway', 'The AI provider returned a bad gateway error'],
   ['gateway timeout', 'The AI provider timed out'],
   ['timeout', 'Request to the AI provider timed out'],
-  ['connection refused', 'Could not connect to the AI provider'],
-  ['connection reset', 'Connection to the AI provider was reset'],
+  // 'connection refused' / 'connection reset' are absent deliberately: they are
+  // transport failures, matched earlier by NETWORK_FAILURE_SIGNALS.
 ];
 
+// A 401 against Codex's responses API is a Codex credential problem however the
+// body is worded. Matching the host (rather than a bare "401") keeps another
+// provider's unauthorized error from being labelled as Codex's.
+const CODEX_BACKEND_HOST = 'chatgpt.com/backend-api/codex';
+
+// Mirrors networkFailureSummary in internal/workflow/runtime/error_summary.go,
+// with the paused-workflow suffix every summary on this path carries.
+const NETWORK_FAILURE_SUMMARY =
+  'Cannot reach the AI provider — check your network connection. Workflow paused — send a message to retry.';
+
+// These appear only when the request failed below HTTP — the socket was never
+// opened, or died before a response arrived. Any one alone is conclusive.
+const NETWORK_FAILURE_SIGNALS = [
+  'no such host',
+  'dial tcp',
+  'dial udp',
+  'connection refused',
+  'connection reset',
+  'broken pipe',
+  'i/o timeout',
+  'network is unreachable',
+  'no route to host',
+  'tls handshake timeout',
+];
+
+// These name the syscall that failed. They qualify errors that are ambiguous on
+// their own — "context deadline exceeded" is a plain request timeout elsewhere.
+const TRANSPORT_LAYER_SIGNALS = ['dial tcp', 'dial udp', 'read tcp', 'write tcp'];
+
+// Reports whether the transport never produced a usable HTTP response. Must be
+// consulted before any provider-specific matching: a provider's hostname
+// appears in the URL of every failed request to it, so matching on the hostname
+// alone reports DNS and connectivity outages as expired credentials and sends
+// users to re-authenticate for no reason.
+function isNetworkFailure(lower: string): boolean {
+  if (NETWORK_FAILURE_SIGNALS.some((signal) => lower.includes(signal))) {
+    return true;
+  }
+
+  // A truncated stream reads as EOF. Anchor on the delimiter so an unrelated
+  // word that merely ends in those three letters cannot match.
+  if (lower.includes('unexpected eof') || lower.includes(': eof') || lower.endsWith(' eof')) {
+    return true;
+  }
+
+  if (lower.includes('context deadline exceeded')) {
+    return TRANSPORT_LAYER_SIGNALS.some((signal) => lower.includes(signal));
+  }
+
+  return false;
+}
+
 function extractProviderReconnectSummary(lower: string): string | null {
+  const unauthorized = lower.includes('401 unauthorized');
+  const tokenExpired = lower.includes('token_expired');
+
   if (lower.includes('claude session expired') || lower.includes('please reconnect claude')) {
     return 'Claude session expired. Please reconnect Claude. Workflow paused — send a message to retry.';
   }
@@ -246,6 +309,9 @@ function extractProviderReconnectSummary(lower: string): string | null {
   ) {
     return 'Codex session expired. Please reconnect Codex. Workflow paused — send a message to retry.';
   }
+  if (lower.includes(CODEX_BACKEND_HOST) && (unauthorized || tokenExpired)) {
+    return 'Codex session expired. Please reconnect Codex. Workflow paused — send a message to retry.';
+  }
   if (
     lower.includes('api.anthropic.com') ||
     lower.includes('authentication_error') ||
@@ -253,11 +319,24 @@ function extractProviderReconnectSummary(lower: string): string | null {
   ) {
     return 'Claude session expired. Please reconnect Claude. Workflow paused — send a message to retry.';
   }
+  if (tokenExpired) {
+    return 'Authentication token expired. Please reconnect your AI provider. Workflow paused — send a message to retry.';
+  }
+  if (unauthorized) {
+    return 'Authentication failed with the AI provider. Workflow paused — send a message to retry.';
+  }
   return null;
 }
 
 function extractErrorSummaryClientSide(errMsg: string): string | null {
   const lower = errMsg.toLowerCase();
+
+  // Before anything else: if the request never reached the provider, no
+  // provider-specific claim about it can be true.
+  if (isNetworkFailure(lower)) {
+    return NETWORK_FAILURE_SUMMARY;
+  }
+
   const reconnectSummary = extractProviderReconnectSummary(lower);
   if (reconnectSummary) {
     return reconnectSummary;

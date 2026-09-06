@@ -1,14 +1,25 @@
 /**
- * ModelStep funding-gate tests.
+ * ModelStep funding tests — the INVERTED gate.
  *
- * "Start with Reliant" must not be reachable without funding. Managed Reliant
- * draws on the org wallet, and the LLM proxy rejects a zero balance outright —
- * so finishing onboarding on an empty wallet strands the user at their FIRST
- * message, past the point where onboarding could have helped them.
+ * ── What changed, and why the old assertions had to go ────────────────
  *
- * The gate is on funds, not eligibility: eligibility only says the account
- * COULD use managed Reliant. We mock the wallet + eligibility hooks because the
- * contract under test is exactly their return shapes, not the transport.
+ * This file used to assert that "Start with Reliant" is `disabled` on an empty
+ * wallet and that `finishOnboarding` refuses the choice. That was correct while
+ * the only remedy on offer was a link out to `/settings/billing`: committing
+ * `reliant_credits` unfunded sent the user into the app to fail at their first
+ * message (the LLM proxy rejects a zero balance outright), so blocking beat
+ * stranding.
+ *
+ * A checkout step now exists INSIDE the flow, and that inverts the argument.
+ * Blocking here is the stranding: the user is refused at the one screen that
+ * could take their money, on the way to the one screen that could fix it. So
+ * the step records the choice, and `deriveStep` routes an unfunded
+ * `reliant_credits` plan to `checkout`.
+ *
+ * The guarantee is NOT weakened, it MOVED — from a disabled button to step
+ * derivation, where it is enumerated over the whole state space in
+ * `deriveStep.enumeration.test.ts`. This file pins the half that lives here:
+ * the choice is recorded, and no billing exit remains.
  */
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -107,8 +118,11 @@ function renderStep(
   );
 }
 
+/** The Reliant CTA, under either label. */
 function startButton() {
-  return screen.getByRole("button", { name: /start with reliant/i });
+  return screen.getByRole("button", {
+    name: /(start|continue) with reliant/i,
+  });
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────
@@ -118,25 +132,26 @@ describe("ModelStep funding gate", () => {
     vi.clearAllMocks();
   });
 
-  it("blocks Start with Reliant on a zero balance", () => {
+  // THE INVERSION. Each of these three used to assert `toBeDisabled()`.
+  it("lets the user proceed on a zero balance — checkout catches them", () => {
     mockUseWalletOverview.mockReturnValue({
       data: { wallet: { balanceUsdNanos: 0n } },
       isLoading: false,
     });
     renderStep();
-    expect(startButton()).toBeDisabled();
+    expect(startButton()).toBeEnabled();
   });
 
-  it("blocks Start with Reliant when no wallet exists yet", () => {
+  it("lets the user proceed when no wallet exists yet", () => {
     mockUseWalletOverview.mockReturnValue({ data: undefined, isLoading: false });
     renderStep();
-    expect(startButton()).toBeDisabled();
+    expect(startButton()).toBeEnabled();
   });
 
-  it("blocks while the balance is still loading, rather than flashing enabled", () => {
+  it("does not flicker disabled while the balance is still loading", () => {
     mockUseWalletOverview.mockReturnValue({ data: undefined, isLoading: true });
     renderStep();
-    expect(startButton()).toBeDisabled();
+    expect(startButton()).toBeEnabled();
   });
 
   it("allows Start with Reliant once the wallet is funded", () => {
@@ -169,13 +184,31 @@ describe("ModelStep funding gate", () => {
     expect(screen.queryByText(/compute is not available/i)).toBeNull();
   });
 
-  it("offers a billing route when unfunded", () => {
+  // The owner's ask, at this step: onboarding must not leave the flow. The
+  // "Set up billing" link navigated to /settings/billing, needing a `returnTo`
+  // round-trip to get the user back into a wizard whose entire state is a URL
+  // search param.
+  it("offers no route out to the billing settings page when unfunded", () => {
     mockUseWalletOverview.mockReturnValue({
       data: { wallet: { balanceUsdNanos: 0n } },
       isLoading: false,
     });
     renderStep();
-    expect(screen.getByRole("button", { name: /set up billing/i })).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: /set up billing/i }),
+    ).toBeNull();
+  });
+
+  // The coupon field is what remains, and it must not have been removed along
+  // with the exit — a user holding a code can still fund the wallet here and
+  // skip the checkout step entirely.
+  it("still offers coupon redemption when unfunded", () => {
+    mockUseWalletOverview.mockReturnValue({
+      data: { wallet: { balanceUsdNanos: 0n } },
+      isLoading: false,
+    });
+    renderStep();
+    expect(screen.getByLabelText(/coupon code/i)).toBeVisible();
   });
 
   it("does not put a real coupon code in the input placeholder", () => {
@@ -188,28 +221,21 @@ describe("ModelStep funding gate", () => {
     expect(input.getAttribute("placeholder")).not.toMatch(/launch/i);
   });
 
-  // THE USER'S REPORT: "I was able to select reliant as an ai provider with no
-  // coupon specified, and no billing setup."
+  // THE ORIGINAL USER REPORT: "I was able to select reliant as an ai provider
+  // with no coupon specified, and no billing setup."
   //
-  // `disabled` is a RENDERING concern. A stale render, a keyboard activation
-  // racing the wallet refetch, or devtools all reach the handler anyway, and
-  // committing the choice sends the user into the app with a provider that
-  // fails on their FIRST message (the LLM proxy rejects a zero balance).
+  // Still a real complaint, still answered — but no longer here. Selecting
+  // Reliant unfunded is now ALLOWED, because what comes next is the checkout
+  // step rather than the app. The guarantee that such a user cannot reach a
+  // first message unfunded moved into `deriveStep`, where it is enumerated over
+  // the whole state space rather than resting on one button's `disabled`
+  // attribute.
   //
-  // jsdom/React will not dispatch a click on a button React still considers
-  // disabled, so the DOM cannot express "the handler ran anyway" — asserting
-  // through it passes even with the guard deleted, which makes it a test of
-  // nothing. Instead drive the SAME path the button's onClick drives, with the
-  // attribute out of the picture entirely: render with the escape hatch that
-  // enables the button, then flip the wallet to empty so the click lands while
-  // `creditsAvailable` is false. That is precisely the stale-render race.
-  it("does not commit Reliant when the handler runs on an empty wallet", async () => {
-    // ?onboarding-credits=eligible forces the button enabled...
-    const search = new URL(window.location.href);
-    search.searchParams.set("onboarding-credits", "eligible");
-    window.history.replaceState({}, "", search.toString());
-
-    // ...while the wallet is genuinely empty.
+  // What must hold HERE is that the click actually records the choice, because
+  // that is what derivation routes on. A step that swallowed the click would
+  // leave the user pressing a button that does nothing — a worse failure than
+  // the `disabled` it replaced, since at least that one admitted to itself.
+  it("records the Reliant choice on an empty wallet so checkout can pick it up", async () => {
     mockUseWalletOverview.mockReturnValue({
       data: { wallet: { balanceUsdNanos: 0n } },
       isLoading: false,
@@ -219,18 +245,14 @@ describe("ModelStep funding gate", () => {
     const onNext = vi.fn();
     renderStep({ updatePlan, onNext });
 
-    const btn = startButton();
-    expect(btn).toBeEnabled(); // the forced-eligible path
     await act(async () => {
-      fireEvent.click(btn);
+      fireEvent.click(startButton());
     });
 
-    // The forced flag is a DEV escape hatch for exercising the UI; it must not
-    // let a real unfunded account commit. Balance is the only real authority.
-    expect(updatePlan).not.toHaveBeenCalled();
-    expect(onNext).not.toHaveBeenCalled();
-
-    window.history.replaceState({}, "", "/");
+    expect(updatePlan).toHaveBeenCalledWith({
+      modelProvider: "reliant_credits",
+    });
+    expect(onNext).toHaveBeenCalled();
   });
 
   // A funded wallet must still be able to proceed, or the guard is just a wall.

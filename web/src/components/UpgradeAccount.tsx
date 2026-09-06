@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useAuthStore, type LinkableProvider } from '@/store/authStore'
-import { validatePassword } from '../utils/passwordValidation'
-import { OAuthButton } from './OAuthButton'
-import { PasswordInput, ConfirmPasswordInput } from './PasswordInput'
+import { useAuthStore } from '@/store/authStore'
+// The same-origin guard, shared: only relative paths are honored, so a crafted
+// `returnTo` cannot bounce the user to an attacker-controlled origin.
+import { isSafeReturnTo } from '@/lib/returnTo'
 import { EmailVerification } from './EmailVerification'
-import { AuthLayout, AuthHeader, AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
+import { LinkIdentityForm } from './LinkIdentityForm'
+import { AuthLayout, AuthHeader, AuthError } from './AuthLayout'
 import { BillingService } from '@/gen/controlplane/v1/public/billing_service_pb'
 import { getControlPlaneClient } from '../services/controlPlane/client'
 
@@ -30,22 +31,25 @@ import { getControlPlaneClient } from '../services/controlPlane/client'
  *
  * `?returnTo=<path>` is where we send the user once they have an email. It is
  * validated to a same-origin relative path before any redirect (same predicate
- * the OAuth callback uses) to avoid open-redirect abuse.
+ * the OAuth callback uses) to avoid open-redirect abuse, then followed as a
+ * client-side navigation.
  */
 
-// Mirror OAuthCallback's same-origin guard: only honor relative paths so a
-// crafted `returnTo` can't bounce the user to an attacker-controlled origin.
-const isSafeReturnTo = (returnTo: string | undefined): returnTo is string =>
-  !!returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')
-
-const goToReturnTo = (returnTo: string | undefined, fallback: () => void) => {
+const goToReturnTo = (
+  returnTo: string | undefined,
+  navigate: ReturnType<typeof useNavigate>,
+) => {
   if (isSafeReturnTo(returnTo)) {
-    // Full navigation (not the router) because returnTo is frequently a
-    // different app under the same origin — e.g. /admin/billing.
-    window.location.assign(returnTo)
+    // Client-side navigation. Every returnTo we send here is a route in THIS
+    // app (/settings/billing, or wherever the user was standing) — the old
+    // window.location.assign tore down the SPA and paid a full cold boot,
+    // which is what made returning from /upgrade look like a page refresh
+    // that did nothing. `href` takes an already-built path, so a returnTo
+    // carrying a query string round-trips unchanged.
+    void navigate({ href: returnTo })
     return
   }
-  fallback()
+  void navigate({ to: '/', search: {} })
 }
 
 export function UpgradeAccount() {
@@ -56,21 +60,14 @@ export function UpgradeAccount() {
     initialized,
     loading: authLoading,
     initialize,
-    linkOAuthIdentity,
-    signUp,
     sendEmailVerificationOTP,
     verifyEmailOTP,
   } = useAuthStore()
 
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
+  // The link form owns its own email/password/provider state. What stays here
+  // is this route's two extra jobs: the full-screen OTP screen, and the
+  // billing-email fallback for a provider that yielded no usable address.
   const [verificationEmail, setVerificationEmail] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-  // Which provider's link is starting, or null. Cleared only on failure — a
-  // success navigates away to the provider.
-  const [pendingProvider, setPendingProvider] = useState<LinkableProvider | null>(null)
 
   // No-email-after-upgrade fallback (e.g. GitHub with a private email): the
   // user enters a billing email, verifies it via OTP, and only then do we
@@ -99,76 +96,9 @@ export function UpgradeAccount() {
   useEffect(() => {
     if (!initialized || authLoading) return
     if (alreadyUpgraded) {
-      goToReturnTo(returnTo, () => navigate({ to: '/', search: {} }))
+      goToReturnTo(returnTo, navigate)
     }
   }, [initialized, authLoading, alreadyUpgraded, returnTo, navigate])
-
-  const handleLink = async (provider: LinkableProvider) => {
-    setError(null)
-    // Only the clicked provider gets the pending state; the rest are disabled.
-    // A shared flag lit every button at once, which reads as the app linking an
-    // account the user never picked.
-    setPendingProvider(provider)
-    setSubmitting(true)
-    try {
-      // Thread returnTo through the OAuth state so /auth/callback lands the
-      // user back at the originating surface (e.g. /admin/billing) after the
-      // provider round-trip. linkOAuthIdentity performs the redirect itself —
-      // control does not return here on web.
-      const state = isSafeReturnTo(returnTo)
-        ? { source: 'link' as const, returnTo }
-        : { source: 'link' as const }
-      await linkOAuthIdentity(provider, state)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to link ${provider}`)
-      setSubmitting(false)
-      setPendingProvider(null)
-    }
-  }
-
-  const handleEmailSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError(null)
-
-    const passwordValidation = validatePassword(password)
-    if (!passwordValidation.valid) {
-      setError(
-        `Password must meet all requirements: ${passwordValidation.unmetRequirements
-          .map((r) => r.label.toLowerCase())
-          .join(', ')}`,
-      )
-      return
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      // signUp on an anonymous user upgrades it in place (adds the email/password
-      // identity). With email confirmation enabled Supabase returns no session
-      // until the OTP is verified — hand off to EmailVerification in that case.
-      const { session } = await signUp(email, password)
-      if (!session) {
-        setVerificationEmail(email)
-        return
-      }
-      // Rare: confirmation disabled → email is live immediately. The
-      // alreadyUpgraded effect will pick up the new user and honor returnTo,
-      // but redirect eagerly here too so there's no perceptible gap.
-      goToReturnTo(returnTo, () => navigate({ to: '/', search: {} }))
-    } catch (err) {
-      let message = 'Failed to upgrade account'
-      if (err instanceof Error) message = err.message
-      if (message.includes('already registered') || message.includes('already in use')) {
-        message =
-          'That email is already attached to another account. Sign in with it instead, or use a different email.'
-      }
-      setError(message)
-      setSubmitting(false)
-    }
-  }
 
   // Step 1 of the billing-email fallback: ship an OTP to the address the user
   // typed. We pass it as an override so the OTP primitives don't key off the
@@ -243,7 +173,7 @@ export function UpgradeAccount() {
       return
     }
 
-    goToReturnTo(returnTo, () => navigate({ to: '/', search: {} }))
+    goToReturnTo(returnTo, navigate)
   }
 
   // ---- Render states -------------------------------------------------------
@@ -373,6 +303,10 @@ export function UpgradeAccount() {
   // yields an email. Providers and the email form are shown together (same
   // shape as the sign-in screen) rather than behind a toggle: there is no
   // "Skip for now" escape here, so hiding half the options only adds a click.
+  //
+  // The form itself is `LinkIdentityForm`, shared with the in-checkout modal so
+  // the two surfaces cannot drift into offering different providers — or, worse,
+  // into one of them growing a guest escape hatch.
   return (
     <AuthLayout>
       <div className="p-8 space-y-6">
@@ -381,82 +315,14 @@ export function UpgradeAccount() {
           description="You're working in a temporary account. Attach an email or a provider to keep it — your chats and workspaces stay exactly as they are, and you'll be able to sign back in from anywhere."
         />
 
-        <form className="space-y-5" onSubmit={handleEmailSubmit} autoComplete="on">
-          {error && <AuthError message={error} />}
+        <LinkIdentityForm
+          returnTo={returnTo}
+          onLinked={() => goToReturnTo(returnTo, navigate)}
+          // This route has a full-screen verification step of its own and the
+          // room to show it; the modal verifies inline instead.
+          onVerificationRequired={setVerificationEmail}
+        />
 
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="upgrade-email" className="block text-sm font-medium mb-1.5">
-                Email address
-              </label>
-              <input
-                id="upgrade-email"
-                name="email"
-                type="email"
-                autoComplete="username email"
-                autoFocus
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={submitting}
-                className="block w-full px-3 py-2.5 border border-border rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary transition-colors"
-                placeholder="you@example.com"
-              />
-            </div>
-
-            <PasswordInput
-              id="upgrade-password"
-              name="password"
-              label="Password"
-              value={password}
-              onChange={setPassword}
-              autoComplete="new-password"
-              required
-              disabled={submitting}
-              showStrengthIndicator
-              showRequirements
-            />
-
-            <ConfirmPasswordInput
-              id="upgrade-confirm-password"
-              name="confirmPassword"
-              label="Confirm Password"
-              value={confirmPassword}
-              password={password}
-              onChange={setConfirmPassword}
-              autoComplete="new-password"
-              required
-              disabled={submitting}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="w-full flex justify-center py-2.5 px-4 border border-border rounded-lg text-sm font-medium text-primary-foreground bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {submitting ? 'Processing...' : 'Save my account'}
-          </button>
-
-          <AuthDivider label="Or attach a provider" />
-
-          <div className="space-y-3">
-            <OAuthButton
-              provider="github"
-              onClick={() => handleLink('github')}
-              loading={pendingProvider === 'github'}
-              disabled={submitting}
-            />
-            <OAuthButton
-              provider="google"
-              onClick={() => handleLink('google')}
-              loading={pendingProvider === 'google'}
-              disabled={submitting}
-            />
-          </div>
-
-          <AuthLegalLinks />
-        </form>
       </div>
     </AuthLayout>
   )

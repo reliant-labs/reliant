@@ -15,11 +15,57 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { BillingService } from "@/gen/controlplane/v1/public/billing_service_pb";
-import type { GetCurrentUserComputeUsageResponse } from "@/gen/controlplane/v1/public/billing_service_pb";
+import type {
+  CheckoutUiMode,
+  GetCurrentUserComputeUsageResponse,
+} from "@/gen/controlplane/v1/public/billing_service_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
+import { useAuthStore } from "@/store/authStore";
 
 function billingClient() {
   return getControlPlaneClient(BillingService);
+}
+
+/**
+ * Thrown instead of minting a Stripe session for a session that has no real
+ * identity behind it.
+ *
+ * WHY IT LIVES HERE and not at the buttons: a subscription bought against an
+ * anonymous browser session belongs to nobody reachable, and losing the session
+ * loses the purchase along with the work. That rule used to be enforced by
+ * `useGoToBilling` refusing to NAVIGATE an anonymous user to billing — one
+ * chokepoint, but the wrong one: it guarded five navigation call sites, and a
+ * sixth added without it would have dead-ended silently. Gating the mutation
+ * gates the only thing that actually spends money, so no call site can bypass
+ * it by construction.
+ *
+ * Callers render the identity-link affordance; they do not decide the rule.
+ */
+export class CheckoutIdentityRequiredError extends Error {
+  constructor() {
+    super(
+      "Before we take payment we need an account we can reach — a subscription tied to this browser session would be lost with it.",
+    );
+    this.name = "CheckoutIdentityRequiredError";
+  }
+}
+
+export function isCheckoutIdentityRequired(err: unknown): boolean {
+  return err instanceof CheckoutIdentityRequiredError;
+}
+
+/**
+ * Only genuine anonymous Supabase sessions carry `is_anonymous === true`;
+ * api-key / mock / dev synthetic users set it false and must not be pushed
+ * through an identity link they cannot complete. Read imperatively (not via the
+ * hook selector) so the check runs against the session as it stands at the
+ * moment of purchase, not whatever was current when the component mounted.
+ */
+function assertPurchaseIdentity(): void {
+  const user = useAuthStore.getState().user;
+  if (user && (user as { is_anonymous?: boolean }).is_anonymous === true) {
+    throw new CheckoutIdentityRequiredError();
+  }
 }
 
 export const cloudBillingKeys = {
@@ -108,11 +154,30 @@ export function useBillingEmail() {
 
 // ── Mutations ─────────────────────────────────────────────────────────
 
+/**
+ * The caller's whole overage decision: whether machines may run past included
+ * hours, and the monthly ceiling on what that may cost.
+ *
+ * `budgetCents` omitted (or 0) means NO CAP, matching the server's `> 0` test.
+ * The request REPLACES the stored cap rather than patching it, so send the
+ * user's current choice on every call — not only when the number changes.
+ *
+ * Both halves travel together so "overage on, no ceiling" has to be picked
+ * rather than passed through on the way to setting a limit.
+ *
+ * This mutation authorizes additional spend. Call it only from an explicit
+ * user action — never from an effect or from session setup.
+ */
+export interface ComputeOverageSettings {
+  enabled: boolean;
+  budgetCents?: bigint;
+}
+
 export function useSetComputeOverage() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (enabled: boolean) =>
-      billingClient().setCurrentUserComputeOverage({ enabled }),
+    mutationFn: ({ enabled, budgetCents }: ComputeOverageSettings) =>
+      billingClient().setCurrentUserComputeOverage({ enabled, budgetCents }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: cloudBillingKeys.computeSubscription,
@@ -123,15 +188,29 @@ export function useSetComputeOverage() {
 
 export interface CheckoutArgs {
   planId: string;
+  /**
+   * Hosted mode only — Stripe REJECTS these outright when ui_mode is embedded.
+   * Send empty strings alongside `uiMode: EMBEDDED`.
+   */
   successUrl: string;
   cancelUrl: string;
+  /** Unset means HOSTED, so existing call sites are unchanged. */
+  uiMode?: CheckoutUiMode;
+  /**
+   * Embedded mode only, and almost always omitted: only bank-redirect payment
+   * methods consult it, never cards or wallets. Leaving it out keeps embedded
+   * checkout off the ALLOWED_REDIRECT_HOSTS path entirely.
+   */
+  returnUrl?: string;
 }
 
 export function useCreateCheckoutSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: CheckoutArgs) =>
-      billingClient().createCurrentUserCheckoutSession(args),
+    mutationFn: (args: CheckoutArgs) => {
+      assertPurchaseIdentity();
+      return billingClient().createCurrentUserCheckoutSession(args);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: cloudBillingKeys.computeSubscription,
@@ -142,15 +221,20 @@ export function useCreateCheckoutSession() {
 
 export interface TopupArgs {
   amountCents: bigint;
+  /** Hosted mode only; see CheckoutArgs. */
   successUrl: string;
   cancelUrl: string;
+  uiMode?: CheckoutUiMode;
+  returnUrl?: string;
 }
 
 export function useCreateWalletTopupSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (args: TopupArgs) =>
-      billingClient().createCurrentUserWalletTopupSession(args),
+    mutationFn: (args: TopupArgs) => {
+      assertPurchaseIdentity();
+      return billingClient().createCurrentUserWalletTopupSession(args);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: cloudBillingKeys.walletOverview,

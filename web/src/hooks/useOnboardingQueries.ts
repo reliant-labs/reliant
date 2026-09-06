@@ -90,6 +90,21 @@ export const computeEligibilityQueryKey = ['onboarding', 'computeEligibility'] a
 // NO_SUBSCRIPTION is the common case now that the signup auto-grant is gone —
 // every new account starts here — so it leads with the coupon, which is the
 // path most people arriving with a code actually have.
+/**
+ * One definition of what an ineligibility reason means to a user.
+ *
+ * Exported because the onboarding commit point reports the same reasons while
+ * it waits for entitlement, and a second copy of this table would drift — a
+ * user would be told two different things about the same server fact depending
+ * on which screen they were looking at.
+ */
+export function computeIneligibleCopy(
+  reason: ComputeIneligibleReason | undefined,
+): string {
+  if (reason === undefined) return "Compute is not available yet";
+  return INELIGIBLE_REASON_COPY[reason] ?? "Compute is not available yet";
+}
+
 const INELIGIBLE_REASON_COPY: Partial<Record<ComputeIneligibleReason, string>> = {
   [ComputeIneligibleReason.TRIAL_EXPIRED]:
     'Your free trial has ended — redeem a coupon code or choose a plan to keep running machines.',

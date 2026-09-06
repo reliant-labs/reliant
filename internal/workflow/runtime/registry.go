@@ -294,6 +294,31 @@ const (
 	// few extra seconds of dead-worker recovery time. No evidence motivates
 	// shortening it, so it stays.
 	activityHeartbeatTimeout = 30 * time.Second
+
+	// stepActivityMaxAttempts is the retry ladder every GRAPH STEP is
+	// dispatched with (StepExecutor.activityOptions). It lives here, next to
+	// the wrapper that reports attempt progress to the UI, because the wrapper
+	// has to know the ladder's length and cannot always learn it from Temporal.
+	//
+	// ActivityInfo.RetryPolicy is documented nil-able ("If the value is nil, it
+	// means the server didn't send information about retry policy … but it may
+	// still be defined server-side", sdk activity.go), and in practice it IS
+	// nil for these activities — measured DB-wide, 582 error rows carried
+	// is_retrying:false against 13 true, because a nil policy meant
+	// max_attempts was never written and the is_retrying guard short-circuited
+	// to false. Every mid-ladder attempt then rendered as a terminal red error
+	// instead of the calm "Retrying (Attempt 4/5)" the UI was built for.
+	//
+	// One constant, referenced by both the dispatch site and the reporter, is
+	// what keeps the reported denominator honest: change the ladder and the
+	// badge follows, with no second literal to forget.
+	stepActivityMaxAttempts int32 = 5
+
+	// routerActivityStartToClose is the router's own CallLLM dispatch timeout
+	// (router_executor.go). The router shares activityHeartbeatTimeout with
+	// graph steps but runs a 3-attempt ladder, so this is what tells the two
+	// dispatch signatures apart in resolveMaxAttempts.
+	routerActivityStartToClose = 5 * time.Minute
 )
 
 // spuriousHeartbeatCancel reports whether ctx was cancelled by a heartbeat RPC
@@ -436,10 +461,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	activityID := info.ActivityID
 	attemptNumber := int(info.Attempt)
 	workflowID := info.WorkflowExecution.ID
-	var maxAttempts int32
-	if info.RetryPolicy != nil {
-		maxAttempts = info.RetryPolicy.MaximumAttempts
-	}
+	maxAttempts := resolveMaxAttempts(info)
 
 	// Worker shutdown (air hot-reload, k8s rollout) must unwind the activity
 	// NOW, not when the activity context is cancelled.
@@ -788,6 +810,89 @@ func activityErrorEventID(workflowID, activityID string) string {
 	return fmt.Sprintf("activity-error-%s-%s", workflowID, activityID)
 }
 
+// exhaustionErrorEventID is the id a retry-exhaustion error must be written
+// under so it REPLACES the failing activity's error row instead of adding a
+// second one beside it.
+//
+// When the ladder is exhausted the workflow emits its own error through the
+// WorkflowError activity, describing the same failure the wrapper already
+// recorded under activityErrorEventID. Minting a fresh uuid there opted out of
+// every dedup path — the frontend's dedup-by-id and the server's
+// GetLatestNonMessageUpdatesPerEntity both collapse per entity id — so the
+// final attempt rendered TWICE, 19ms apart, as two stacked banners for one
+// failure. Reusing the series id makes the exhaustion row the last write to
+// that entity, which is exactly what "last write per entity wins" should
+// resolve to: the terminal state of that activity.
+//
+// The activity id comes from Temporal's own *ActivityError, which carries the
+// id the SERVER assigned ("1", "2", …). It is deliberately NOT taken from
+// RunningStep.ActivityID: that field is set to node.GetId() for backwards
+// compat (step_executor.go), so keying on it would produce a step-named id that
+// no wrapper row ever used, and the duplicate would survive.
+//
+// Returns "" when the error is not an activity failure (so no series row
+// exists to replace) — the caller then leaves the id unset and WriteWorkflowError
+// mints one, which is right for an error that is its own event.
+func exhaustionErrorEventID(workflowID string, err error) string {
+	var activityErr *temporal.ActivityError
+	if !errors.As(err, &activityErr) {
+		return ""
+	}
+	activityID := activityErr.ActivityID()
+	if activityID == "" {
+		return ""
+	}
+	return activityErrorEventID(workflowID, activityID)
+}
+
+// resolveMaxAttempts is the length of the retry ladder this activity is running
+// on, or 0 when it genuinely cannot be determined.
+//
+// The server's answer wins whenever there is one: it is authoritative, and it
+// may differ from what the workflow asked for. When it is absent — the nil case
+// the SDK documents, and the case that actually occurs here — fall back to the
+// ladder the dispatch site configured.
+//
+// The fallback is deliberately narrow, and it is a SIGNATURE MATCH on the
+// dispatch options rather than a blanket default. Only StepExecutor.activityOptions
+// dispatches the 5-attempt ladder; every infrastructure dispatch (WorkflowError,
+// SaveMessage, ValidateThreadOwnership, …) configures MaximumAttempts: 3. A
+// blanket default would report a confident WRONG denominator for those — worse
+// than reporting none, because "Attempt 2/5" on a 3-attempt ladder tells the
+// user there is headroom that does not exist, and "Attempt 3/5" on an exhausted
+// one renders a dead failure as still-retrying.
+//
+// Two options make up the step signature. The heartbeat alone is not enough:
+// the router dispatches CallLLM with the same HeartbeatTimeout but its own
+// 3-attempt ladder and a fixed 5-minute StartToCloseTimeout, so that pair is
+// excluded explicitly. A graph node that happens to declare `timeout: 5m` falls
+// out of the match too — it reports unknown rather than wrong, which is the
+// direction this is built to fail in.
+//
+// 0 means unknown, and unknown must stay unknown: the caller omits max_attempts
+// and leaves is_retrying false rather than guessing a failure is recoverable.
+// activityIsRetrying reports whether this failure still has an attempt coming,
+// which is what decides between the calm "Retrying (Attempt 4/5)" affordance
+// and a terminal red error in the transcript.
+//
+// An unknown ladder length (0, see resolveMaxAttempts) means NOT retrying. That
+// is the conservative direction on purpose: claiming a dead failure is still
+// retrying leaves the user waiting for a turn that will never come, whereas the
+// reverse merely under-sells a recovery that speaks for itself when it lands.
+func activityIsRetrying(attemptNumber int, maxAttempts int32, err error) bool {
+	return maxAttempts > 0 && int32(attemptNumber) < maxAttempts && !isTerminal(err)
+}
+
+func resolveMaxAttempts(info activity.Info) int32 {
+	if info.RetryPolicy != nil && info.RetryPolicy.MaximumAttempts > 0 {
+		return info.RetryPolicy.MaximumAttempts
+	}
+	if info.HeartbeatTimeout == activityHeartbeatTimeout && info.StartToCloseTimeout != routerActivityStartToClose {
+		return stepActivityMaxAttempts
+	}
+	return 0
+}
+
 // writeErrorEvent writes an error event to chat_updates when an activity fails.
 // This is a best-effort write - it will not fail the activity if the write fails.
 // Only writes errors if chat_id can be extracted from the input.
@@ -829,7 +934,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
 	// See web/src/types/streaming.ts ErrorUpdate interface
-	isRetrying := maxAttempts > 0 && int32(attemptNumber) < maxAttempts && !isTerminal(err)
+	isRetrying := activityIsRetrying(attemptNumber, maxAttempts, err)
 	errorData := map[string]interface{}{
 		"update_type":    "error",
 		"id":             errorID,

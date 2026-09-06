@@ -71,6 +71,44 @@ func TestLoadTool_SearchByQuery_ReturnsMatches(t *testing.T) {
 	assert.Contains(t, resp.Content, "Found")
 }
 
+// TestLoadTool_GeneralPresetAgentCanReachWorkflowTools pins the requirement
+// that a plain chat gets the same workflow-building capability as the
+// dedicated workflow-builder UI. Workflow tools carry only TagWorkflow — they
+// are absent from tag:default and thus never in a general-preset agent's
+// initial tool set — so the only path to them is load_tool. This asserts that
+// path is not blocked by permission gating (general runs at "mutating", not
+// "orchestrator") and that the tools are actually loadable, not just named in
+// a search result.
+func TestLoadTool_GeneralPresetAgentCanReachWorkflowTools(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	// "general" (internal/workflow/builtin/presets/general.yaml) runs its
+	// call_llm node at mutating permission - it is not an orchestrator preset.
+	ctx := newLoadToolTestCtx(t, PermissionMutating)
+
+	searchResp, err := tool.Execute(ctx, LoadToolParams{Query: "workflow"})
+	require.NoError(t, err)
+	require.False(t, searchResp.IsError, "search must succeed: %s", searchResp.Content)
+	for _, name := range []string{ToolCreateWorkflow, ToolEditWorkflow, ToolListWorkflows, ToolGetWorkflow} {
+		assert.Contains(t, searchResp.Content, name,
+			"load_tool(query=\"workflow\") must surface %q to a default/mutating agent", name)
+		assert.NotContains(t, searchResp.Content, name+"** [workflow] (requires orchestrator permission)",
+			"%q must not report itself as gated above what general's mutating tier can reach", name)
+	}
+
+	for _, name := range []string{ToolCreateWorkflow, ToolEditWorkflow, ToolListWorkflows, ToolGetWorkflow} {
+		loadResp, err := tool.Execute(ctx, LoadToolParams{Name: name})
+		require.NoError(t, err)
+		assert.False(t, loadResp.IsError,
+			"a mutating-permission agent must be able to load %q via load_tool: %s", name, loadResp.Content)
+	}
+
+	loaded := GetLoadedToolsStore().Get(ctx.ChatID)
+	for _, name := range []string{ToolCreateWorkflow, ToolEditWorkflow, ToolListWorkflows, ToolGetWorkflow} {
+		assert.Contains(t, loaded, name, "%q should be recorded as loaded for this chat", name)
+	}
+}
+
 func TestLoadTool_SearchByQuery_NoMatches(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}

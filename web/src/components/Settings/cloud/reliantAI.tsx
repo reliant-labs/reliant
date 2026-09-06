@@ -16,7 +16,6 @@
  */
 
 import { useMemo, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
 import {
   CreditCard,
   KeyRound,
@@ -50,7 +49,8 @@ import {
   type LLMKey,
   type LLMSpendEntry,
 } from "../../../services/controlPlane/reliantAI";
-import { RedeemCouponForm } from "@/components/RedeemCouponForm";
+import { formatCurrencyFromWalletFields } from "./billingUtils";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
 import {
   useReliantOverview,
   useWalletOverview,
@@ -75,7 +75,11 @@ const usd = (value: number): string =>
     maximumFractionDigits: 2,
   }).format(Number.isFinite(value) ? value : 0);
 
-const usdFromNanos = (nanos?: bigint): string => usd(Number(nanos ?? 0n) / 1e9);
+// The wallet balance is ONE number and billing already renders it. This page
+// had its own nanos formatter, so a single balance was formatted by two
+// independent functions that were free to disagree (they did, over $1,000:
+// Intl groups thousands, the shared helper does not). Reuse, don't re-derive.
+const usdFromNanos = formatCurrencyFromWalletFields;
 const usdFromCents = (cents?: bigint): string => usd(Number(cents ?? 0n) / 100);
 
 const formatModelLabel = (model?: string | null): string => {
@@ -169,7 +173,7 @@ function ReliantAIPanel() {
     kind: "created" | "rotated";
   } | null>(null);
 
-  const navigate = useNavigate();
+  const goToBilling = useGoToBilling();
   const overviewQ = useReliantOverview();
   const walletQ = useWalletOverview();
 
@@ -273,19 +277,18 @@ function ReliantAIPanel() {
           </p>
           <p className="mt-1 text-muted-foreground">
             Redeem a coupon code below, or{" "}
+            {/* Through the shared helper, not a bare navigate. The two bare
+                ones this replaced reached billing without `tab=plans`, without
+                `from`, and without `returnTo` — so a user sent from here
+                landed on a dashboard with no memory of why they came. */}
             <button
               type="button"
-              onClick={() =>
-                navigate({
-                  to: "/settings/$section",
-                  params: { section: "billing" },
-                })
-              }
+              onClick={goToBilling}
               className="underline underline-offset-2 hover:text-foreground"
             >
-              set up billing
+              add credit
             </button>{" "}
-            to add credit. Until then, requests through Reliant will be
+            on the billing page. Until then, requests through Reliant will be
             declined.
           </p>
         </div>
@@ -337,30 +340,31 @@ function ReliantAIPanel() {
                     </div>
                   </div>
                 )}
-                {/* Secondary by design. Billing owns the canonical redemption
-                    card — it explains that one code covers credit OR machine
-                    minutes, and shows both balances. This one stays because a
-                    user staring at an empty AI balance should not have to
-                    navigate away to fix it, but it points at the fuller
-                    surface rather than competing with it. */}
+                {/* READ-ONLY. This used to carry its own RedeemCouponForm as a
+                    deliberate "secondary" — reasonable while billing's own
+                    redemption sat behind a disclosure inside a usage card.
+                    Billing's credit band now leads with a redeem action at
+                    equal prominence to "Add credit", so a second box here is
+                    duplication and, worse, a second answer to "where do I put
+                    my code" that reports only half the outcome: a code can land
+                    as machine minutes, and this page has no machine minutes to
+                    show it in.
+
+                    The balance stays, because a user staring at an empty AI
+                    balance should not have to navigate away to learn why. Only
+                    the ACTION moved. */}
                 <div className="mt-6 border-t border-border pt-4">
-                  <RedeemCouponForm size="sm" />
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Coupons can add account credit or machine minutes — the same
-                    code works either way.{" "}
+                  <p className="text-xs text-muted-foreground">
+                    Credit is added on{" "}
                     <button
                       type="button"
-                      onClick={() =>
-                        navigate({
-                          to: "/settings/$section",
-                          params: { section: "billing" },
-                        })
-                      }
+                      onClick={goToBilling}
                       className="underline underline-offset-2 hover:text-foreground"
                     >
                       Billing
-                    </button>{" "}
-                    has the full view.
+                    </button>
+                    , which is also where coupon codes are redeemed — one code
+                    can add credit or machine minutes, and that page shows both.
                   </p>
                 </div>
               </CardContent>

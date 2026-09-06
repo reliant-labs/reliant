@@ -27,33 +27,52 @@ description: >
   The workflow completes end-to-end through verify_report and complete.
 
 events:
-  - node: discuss
+  # EXECUTED, not black-boxed: the qualified id makes the builtin://agent ref
+  # transparent, so this node's own args CEL is compiled and evaluated.
+  - node: discuss.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "The request is clear. We'll add a new REST endpoint for user preferences with JSON validation."
       response_text: "The request is clear. We'll add a new REST endpoint for user preferences with JSON validation."
-
-  - node: research
+      tool_calls: []
+  - node: research.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Found the router in src/routes/index.ts, existing endpoint patterns in src/routes/users.ts, and validation middleware in src/middleware/validate.ts. Tests follow the pattern in tests/routes/."
       response_text: "Found the router in src/routes/index.ts, existing endpoint patterns in src/routes/users.ts, and validation middleware in src/middleware/validate.ts. Tests follow the pattern in tests/routes/."
-
+      tool_calls: []
   - node: compress_research
     output:
       message:
         role: assistant
         text: "Files: src/routes/index.ts (router), src/routes/users.ts (pattern). Patterns: REST endpoints in routes/, validation in middleware/. Constraints: follow existing test patterns in tests/routes/."
 
-  - node: plan
+  - node: plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          Wave 1 (parallel):
+          - Task 1.1: Create src/routes/preferences.ts with GET/PUT endpoints — verify: unit tests pass
+          - Task 1.2: Add JSON schema in src/schemas/preferences.json — verify: schema validates sample data
+          Wave 2 (depends on Wave 1):
+          - Task 2.1: Register routes in src/routes/index.ts — verify: integration test hits endpoint
       response_text: |
         Wave 1 (parallel):
         - Task 1.1: Create src/routes/preferences.ts with GET/PUT endpoints — verify: unit tests pass
         - Task 1.2: Add JSON schema in src/schemas/preferences.json — verify: schema validates sample data
         Wave 2 (depends on Wave 1):
         - Task 2.1: Register routes in src/routes/index.ts — verify: integration test hits endpoint
-
-  - node: implement
+      tool_calls: []
+  - node: implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "All tasks complete. Created preferences endpoint, JSON schema, and registered routes. Unit and integration tests added."
       response_text: "All tasks complete. Created preferences endpoint, JSON schema, and registered routes. Unit and integration tests added."
-
+      tool_calls: []
   - node: verify_lint
     output:
       exit_code: 0
@@ -88,33 +107,50 @@ description: >
   Build passes. The workflow still completes (verifications don't block completion).
 
 events:
-  - node: discuss
+  - node: discuss.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Confirmed: refactoring the auth module to use JWT tokens instead of sessions."
       response_text: "Confirmed: refactoring the auth module to use JWT tokens instead of sessions."
-
-  - node: research
+      tool_calls: []
+  - node: research.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Auth module at src/auth/session.ts. Token utilities in src/utils/token.ts. 12 files import the session module. Test coverage is sparse."
       response_text: "Auth module at src/auth/session.ts. Token utilities in src/utils/token.ts. 12 files import the session module. Test coverage is sparse."
-
+      tool_calls: []
   - node: compress_research
     output:
       message:
         role: assistant
         text: "Files: src/auth/session.ts (replace), src/utils/token.ts (extend), 12 importers. Patterns: session-based auth. Constraints: sparse test coverage, 12 files need import updates."
 
-  - node: plan
+  - node: plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          Wave 1 (parallel):
+          - Task 1.1: Create src/auth/jwt.ts with sign/verify helpers — verify: unit tests
+          - Task 1.2: Add JWT config to src/config/auth.ts — verify: config loads
+          Wave 2 (depends on Wave 1):
+          - Task 2.1: Replace session imports across 12 files — verify: build passes
       response_text: |
         Wave 1 (parallel):
         - Task 1.1: Create src/auth/jwt.ts with sign/verify helpers — verify: unit tests
         - Task 1.2: Add JWT config to src/config/auth.ts — verify: config loads
         Wave 2 (depends on Wave 1):
         - Task 2.1: Replace session imports across 12 files — verify: build passes
-
-  - node: implement
+      tool_calls: []
+  - node: implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Replaced session-based auth with JWT across all 12 files. Some lint warnings remain from unused session imports in test files."
       response_text: "Replaced session-based auth with JWT across all 12 files. Some lint warnings remain from unused session imports in test files."
-
+      tool_calls: []
   - node: verify_lint
     output:
       exit_code: 1

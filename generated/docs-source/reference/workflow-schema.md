@@ -19,10 +19,10 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | - |
-| `nodes` | Node[] | No | *Use list_node_types and get_node_type tools for node type details.* |
+| `nodes` | Node[] | No | *Use get_schema(name="<type>") for node type details (e.g. "call_llm", "router").* |
 | `edges` | Edge[] | No | *See Edge type below.* |
 | `description` | string | No | - |
-| `inputs` | map[string]Input | No | *Use list_input_types and get_input_type tools for input type details.* |
+| `inputs` | map[string]Input | No | *Use get_schema(name="<type>") for input type details (e.g. "string", "enum", "model").* |
 | `outputs` | map[string]string | No | *CEL expressions mapping output names to values. Use get_cel_reference for CEL syntax.* |
 | `presets` | PresetsConfig | No | - |
 | `entry` | string[] | No | - |

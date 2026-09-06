@@ -19,7 +19,7 @@ import (
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
-	HTTPRequestsTotal = prometheus.NewCounterVec(
+	HTTPRequestsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "http",
@@ -28,7 +28,7 @@ var (
 		},
 		[]string{"method", "path", "status"},
 	)
-	HTTPRequestDuration = prometheus.NewHistogramVec(
+	HTTPRequestDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "http",
@@ -51,7 +51,7 @@ var (
 // ─── gRPC / ConnectRPC Metrics ──────────────────────────────────────────────
 
 var (
-	GRPCRequestsTotal = prometheus.NewCounterVec(
+	GRPCRequestsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "grpc",
@@ -60,7 +60,7 @@ var (
 		},
 		[]string{"service", "method", "code"},
 	)
-	GRPCRequestDuration = prometheus.NewHistogramVec(
+	GRPCRequestDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "grpc",
@@ -78,7 +78,7 @@ var (
 			Help:      "Number of in-flight gRPC/ConnectRPC requests.",
 		},
 	)
-	SlowRPCTotal = prometheus.NewCounterVec(
+	SlowRPCTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "grpc",
@@ -92,7 +92,7 @@ var (
 // ─── NATS Metrics ───────────────────────────────────────────────────────────
 
 var (
-	NATSPublishTotal = prometheus.NewCounterVec(
+	NATSPublishTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "nats",
@@ -101,7 +101,7 @@ var (
 		},
 		[]string{"subject"},
 	)
-	NATSReceiveTotal = prometheus.NewCounterVec(
+	NATSReceiveTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "nats",
@@ -110,7 +110,7 @@ var (
 		},
 		[]string{"subject"},
 	)
-	NATSRequestDuration = prometheus.NewHistogramVec(
+	NATSRequestDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "nats",
@@ -120,7 +120,7 @@ var (
 		},
 		[]string{"subject"},
 	)
-	NATSErrorsTotal = prometheus.NewCounterVec(
+	NATSErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "nats",
@@ -134,7 +134,7 @@ var (
 // ─── Database Metrics ───────────────────────────────────────────────────────
 
 var (
-	DBQueryDuration = prometheus.NewHistogramVec(
+	DBQueryDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "db",
@@ -144,7 +144,7 @@ var (
 		},
 		[]string{"operation", "driver"},
 	)
-	DBErrorsTotal = prometheus.NewCounterVec(
+	DBErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "db",
@@ -174,7 +174,7 @@ var (
 // ─── LLM Metrics ────────────────────────────────────────────────────────────
 
 var (
-	LLMRequestsTotal = prometheus.NewCounterVec(
+	LLMRequestsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "llm",
@@ -183,7 +183,7 @@ var (
 		},
 		[]string{"provider", "status"},
 	)
-	LLMRequestDuration = prometheus.NewHistogramVec(
+	LLMRequestDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "llm",
@@ -193,7 +193,7 @@ var (
 		},
 		[]string{"provider"},
 	)
-	LLMTokensTotal = prometheus.NewCounterVec(
+	LLMTokensTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "llm",
@@ -202,7 +202,7 @@ var (
 		},
 		[]string{"provider", "direction"}, // direction: "input" or "output"
 	)
-	LLMStreamDuration = prometheus.NewHistogramVec(
+	LLMStreamDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "llm",
@@ -217,7 +217,7 @@ var (
 // ─── Dead-End Error Metrics ─────────────────────────────────────────────────
 
 var (
-	DeadEndErrorsTotal = prometheus.NewCounterVec(
+	DeadEndErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Name:      "dead_end_errors_total",
@@ -225,7 +225,7 @@ var (
 		},
 		[]string{"level", "package", "message"},
 	)
-	StreamingErrorsTotal = prometheus.NewCounterVec(
+	StreamingErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "streaming",
@@ -234,7 +234,7 @@ var (
 		},
 		[]string{"error_type"},
 	)
-	ToolExecutionErrorsTotal = prometheus.NewCounterVec(
+	ToolExecutionErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "tool_execution",
@@ -271,7 +271,7 @@ var (
 	//                              it; DB repaired and the user notified
 	// Every increment is paired with a Sentry-visible ERROR log; alert on any
 	// sustained non-zero rate.
-	ReconcilerAnomaliesTotal = prometheus.NewCounterVec(
+	ReconcilerAnomaliesTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "reconciler",
@@ -314,7 +314,7 @@ var (
 	// Every increment is paired with a structured log carrying the same
 	// outcome label, so the same ratio is recoverable from logs alone where
 	// Prometheus is not scraped (single-user desktop installs).
-	WorkflowResumeOutcomeTotal = prometheus.NewCounterVec(
+	WorkflowResumeOutcomeTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "workflow",
@@ -328,7 +328,7 @@ var (
 // ─── Temporal Metrics ───────────────────────────────────────────────────────
 
 var (
-	TemporalWorkflowsTotal = prometheus.NewCounterVec(
+	TemporalWorkflowsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "temporal",
@@ -337,7 +337,7 @@ var (
 		},
 		[]string{"workflow_type", "status"},
 	)
-	TemporalActivityDuration = prometheus.NewHistogramVec(
+	TemporalActivityDuration = newHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: "reliant",
 			Subsystem: "temporal",
