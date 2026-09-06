@@ -331,6 +331,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 		iterNodeOutputs,
 		e.childTracker,
 	).WithLoopContext(e.loopID, index).
+		WithNodePathPrefix(e.nodePath()).
 		WithExecContext(iterExecContext).
 		WithProjectPath(e.projectPath).
 		WithWorkflow(e.subWorkflow).
@@ -393,6 +394,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 				// Parallel iterations run concurrently, so there is no "previous
 				// iteration" to expose as `outputs` — only `iter`.
 				&LoopScope{Iter: &model.IterContext{Iteration: index, Index: index, Item: resolvedItem, Key: key}},
+				e.nodePath(),
 			)
 			if condErr != nil {
 				result.Error = condErr
@@ -420,6 +422,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 				}
 				nestedExecutor = nestedExecutor.
 					WithActivityIDPrefix(activityPrefix).
+					WithNodePathPrefix(e.nodePath()).
 					WithThreadTracker(e.threadTracker).
 					WithExecContext(iterExecContext).
 					WithProjectPath(e.projectPath).
@@ -541,7 +544,12 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 				}
 
 				inlineExecutor = inlineExecutor.
-					WithProjectPath(e.projectPath).
+					// The node's own project.path wins over the loop's
+					// inherited one — see subWorkflowProjectPath. This is what
+					// lets each parallel candidate run in the worktree its own
+					// iteration just created.
+					WithProjectPath(subWorkflowProjectPath(e.projectPath, evalResult, childExecCtx)).
+					WithNodePathPrefix(e.nodePath()).
 					WithPauseController(e.pauseCtrl).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
 					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, inlineExecutor.GetThread())).
@@ -573,6 +581,43 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 					WorkflowName: e.workflowIdentity(),
 					StepID:       step.Node.GetId(),
 					Data:         inlineOutput,
+				})
+				continue
+			}
+
+			// Handle approval nodes inline (signal-based), as the sequential
+			// loop and InlineWorkflowExecutor do. gCtx — not e.ctx — is this
+			// iteration's goroutine context, so each concurrent iteration
+			// schedules its own ApprovalCreate and waits on its own signal
+			// channel; see executeApprovalSignalFlow's identity note.
+			if step.Node.GetType() == model.NodeTypeApproval {
+				exec, err := approvalExecutionFromNode(
+					step.Node, iterNodeOutputs, iterInputs,
+					e.workflowID, e.workflowIdentity(),
+					model.BuildParallelIterContext(index, resolvedItem, key),
+					nil, // concurrent iterations have no "previous iteration" outputs
+					iterExecContext, e.chatID,
+					e.loopID, index,
+					joinNodePath(e.nodePath(), step.Node.GetId()),
+					e.logger,
+				)
+				if err != nil {
+					result.Error = fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
+					return result
+				}
+				approvalOutput, err := executeApprovalSignalFlow(gCtx, exec)
+				if err != nil {
+					result.Error = fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
+					return result
+				}
+				iterNodeOutputs[step.Node.GetId()] = approvalOutput
+				events = append(events, &core.WorkflowEvent{
+					ID:           fmt.Sprintf("ploop-%s-iter%d-approval-%s", e.loopID, index, step.Node.GetId()),
+					WorkflowID:   e.workflowID,
+					ChatID:       e.chatID,
+					WorkflowName: e.workflowIdentity(),
+					StepID:       step.Node.GetId(),
+					Data:         approvalOutput,
 				})
 				continue
 			}

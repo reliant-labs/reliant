@@ -132,10 +132,7 @@ type columnKey struct {
 func loadSchemaSQLIntoScratchDB(t *testing.T) (*sql.DB, func()) {
 	t.Helper()
 
-	baseDSN := os.Getenv("DATABASE_URL")
-	if baseDSN == "" {
-		t.Skip("DATABASE_URL not set, skipping database test")
-	}
+	baseDSN := resolveTestDSN(t)
 
 	// go test runs with the package directory as the working directory.
 	schemaPath := filepath.Join("postgres", "schema.sql")
@@ -158,13 +155,16 @@ func loadSchemaSQLIntoScratchDB(t *testing.T) (*sql.DB, func()) {
 	}
 	defer admin.Close()
 
-	// Name it after this package's own test database so concurrent package
-	// binaries running this same guard cannot collide.
-	base := strings.TrimPrefix(u.Path, "/")
-	if base == "" {
-		base = "postgres"
-	}
-	name := base + "_schemasql"
+	// The name must be unique per PROCESS, not per package. It used to be
+	// derived from the base DSN, which is the SAME for every run — so two
+	// concurrent runs of this package raced on one scratch database and one of
+	// them died on a duplicate-key error from CREATE DATABASE (or, worse, had
+	// its database dropped mid-comparison by the other). Including the pid is
+	// what makes the "cannot collide" claim actually true.
+	//
+	// testDBPrefix marks it as this harness's property so reapStaleTestDBs
+	// collects it if a crash skips the deferred drop.
+	name := fmt.Sprintf("%sschemasql_%d", testDBPrefix, os.Getpid())
 
 	if _, err := admin.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS %s`, quoteIdent(name))); err != nil {
 		t.Fatalf("drop scratch database: %v", err)

@@ -5,8 +5,10 @@
 # Workflow structure:
 #   get_it_right (type: workflow, ref: builtin://get-it-right, BLACK BOX)
 #
-# The get_it_right node is treated as a black box since it references an external workflow.
-# The simulator mocks its output directly. The outputs mapped back are:
+# The get_it_right node EXECUTES: each scenario mocks get-it-right's inner loop
+# nodes with qualified ids (get_it_right.attempt.*), so the retry loop really
+# runs and `iterations` is DERIVED rather than asserted as a scenario literal.
+# The outputs mapped back are:
 #   review_strategy ← get_it_right.eval_strategy
 #   review_feedback ← get_it_right.review_feedback
 #   iterations      ← get_it_right.iterations
@@ -18,20 +20,29 @@ description: >
   on the first iteration. No retry needed.
 
 events:
-  - node: get_it_right
+  - node: get_it_right.attempt.implement
     output:
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Implementation is correct and complete. Code follows existing patterns."
-      iterations: 1
+      response_text: "Implemented the change."
+  - node: get_it_right.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is correct and complete. Code follows existing patterns."
 
 expect:
   outcome: completed
   reached:
     - get_it_right
+  completed:
+    - get_it_right
+    - get_it_right.attempt.implement
+    - get_it_right.attempt.review
   node_outputs:
     get_it_right:
       eval_strategy: "pass"
+      # Derived from the loop running once, not supplied by the scenario.
+      iterations: 1
 
 ---
 name: retry_then_pass
@@ -40,20 +51,38 @@ description: >
   before succeeding. Returns eval_strategy="pass" with iterations=2.
 
 events:
-  - node: get_it_right
+  - node: get_it_right.attempt.implement
     output:
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Implementation is correct. Repository layer usage follows codebase conventions."
-      iterations: 2
+      response_text: "First attempt: partial implementation."
+  - node: get_it_right.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Repository layer usage does not follow codebase conventions."
+  - node: get_it_right.attempt.implement
+    output:
+      response_text: "Second attempt: reworked against the repository layer."
+  - node: get_it_right.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Implementation is correct. Repository layer usage follows codebase conventions."
 
 expect:
   outcome: completed
   reached:
     - get_it_right
+  completed:
+    - get_it_right
+    - get_it_right.attempt.implement
+    - get_it_right.attempt.review
   node_outputs:
     get_it_right:
       eval_strategy: "pass"
+      # Derived: the loop genuinely took two iterations.
+      iterations: 2
 
 ---
 name: max_iterations_exhausted
@@ -66,17 +95,35 @@ inputs:
   max_retries: 2
 
 events:
-  - node: get_it_right
+  - node: get_it_right.attempt.implement
     output:
-      eval_strategy: "continue"
-      review_grade: "fail"
-      review_feedback: "Still incomplete. The websocket layer maintains its own auth state that conflicts with the changes."
-      iterations: 2
+      response_text: "First attempt at the auth change."
+  - node: get_it_right.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Websocket layer still holds conflicting auth state."
+  - node: get_it_right.attempt.implement
+    output:
+      response_text: "Second attempt; the conflict remains."
+  - node: get_it_right.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Still incomplete. The websocket layer maintains its own auth state that conflicts with the changes."
 
 expect:
   outcome: completed
   reached:
     - get_it_right
+  completed:
+    - get_it_right
+    - get_it_right.attempt.implement
+    - get_it_right.attempt.review
   node_outputs:
     get_it_right:
       eval_strategy: "continue"
+      # Derived: max_retries=2 stops the loop after two iterations.
+      iterations: 2

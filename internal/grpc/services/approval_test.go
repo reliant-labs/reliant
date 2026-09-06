@@ -13,9 +13,17 @@ import (
 	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	workflowpkg "github.com/reliant-labs/reliant/internal/workflow"
 )
+
+// approvalTestCtx returns a context authenticated as the user who owns the
+// chats createApprovalTestData creates. Approve/Deny/Batch* now verify chat
+// ownership, so a bare context is Unauthenticated by design.
+func approvalTestCtx() context.Context {
+	return context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+}
 
 type mockTemporalSignalClient struct {
 	client.Client
@@ -138,7 +146,7 @@ func TestApprovalService_Approve_SignalsApproval(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
-	resp, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
+	resp, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
 		RequestId: approvalID,
 	}))
 	require.NoError(t, err)
@@ -172,7 +180,7 @@ func TestApprovalService_Deny_SignalsDenial(t *testing.T) {
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
 
 	denialReason := "Not ready for production"
-	resp, err := service.Deny(context.Background(), connect.NewRequest(&reliantv1.DenyRequest{
+	resp, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{
 		RequestId:    approvalID,
 		DenialReason: &denialReason,
 	}))
@@ -206,7 +214,7 @@ func TestApprovalService_Approve_AlreadyProcessed(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED))
 
-	_, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
 		RequestId: approvalID,
 	}))
 
@@ -224,7 +232,7 @@ func TestApprovalService_Deny_AlreadyProcessed(t *testing.T) {
 	chatID, workflowID := createApprovalTestData(t, repo)
 	approvalID := createTestApproval(t, repo, chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED))
 
-	_, err := service.Deny(context.Background(), connect.NewRequest(&reliantv1.DenyRequest{
+	_, err := service.Deny(approvalTestCtx(), connect.NewRequest(&reliantv1.DenyRequest{
 		RequestId: approvalID,
 	}))
 
@@ -238,7 +246,7 @@ func TestApprovalService_Deny_AlreadyProcessed(t *testing.T) {
 func TestApprovalService_Approve_NotFound(t *testing.T) {
 	service, _ := setupTestApprovalService(t)
 
-	_, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
 		RequestId: "nonexistent-approval-id",
 	}))
 
@@ -252,7 +260,7 @@ func TestApprovalService_Approve_NotFound(t *testing.T) {
 func TestApprovalService_Approve_MissingRequestID(t *testing.T) {
 	service, _ := setupTestApprovalService(t)
 
-	_, err := service.Approve(context.Background(), connect.NewRequest(&reliantv1.ApproveRequest{
+	_, err := service.Approve(approvalTestCtx(), connect.NewRequest(&reliantv1.ApproveRequest{
 		RequestId: "",
 	}))
 

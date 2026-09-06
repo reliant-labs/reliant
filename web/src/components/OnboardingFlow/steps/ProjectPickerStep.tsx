@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, GitBranch, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -6,15 +7,15 @@ import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
 import { ProjectPickerModal } from "@/components/Projects/ProjectPickerModal";
-import {
-  finalizeOnboardingSideEffects,
-  navigateAfterOnboarding,
-} from "../useOnboardingComplete";
+import { finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";
-import { DaemonConnectingGate } from "../DaemonConnectingGate";
+import { ProvisioningGate } from "../ProvisioningGate";
+import { useCommitLaunchPlan } from "../useCommitLaunchPlan";
 import type { StepProps } from "../types";
 
-export function ProjectPickerStep({ plan, onBack }: StepProps) {
+export function ProjectPickerStep({ plan, updatePlan, onBack }: StepProps) {
+  const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
 
   const projects = useProjectStore((state) => state.projects);
@@ -25,11 +26,9 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
   const [completing, setCompleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  // After completeOnboarding succeeds for a cloud user we render the daemon
-  // gate instead of navigating immediately, so the user gets a clear signal
-  // whether the daemon came online. For local daemons ComputeStep already
-  // gates on activeDaemon, so we skip the gate.
-  const [showDaemonGate, setShowDaemonGate] = useState(false);
+  // The commit point. Nothing is created until this runs, and it runs once,
+  // here, after completeOnboarding — never from an effect.
+  const { commit, runCommit, retry } = useCommitLaunchPlan(updatePlan);
   // `isLoading` is false before the first fetch has even started, so it can't
   // by itself distinguish "no projects" from "haven't looked yet". This flips
   // when the initial load settles — success or failure — and is what the
@@ -69,15 +68,12 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
     );
   }, [projects]);
 
-  const isCloud = plan.compute === "cloud_free_trial";
-
-  // Leave /onboarding for the home route, starting the post-onboarding tour.
-  // The cloud path's finalize ran with `navigate: false` so this gate could
-  // render, which means it never put ?tour=<first-step> in the URL — so this
-  // sets it rather than trying to preserve it from `prev`.
+  // The exit: the gate's Continue is the ONLY way out, which is what makes it
+  // impossible to leave while the machine is still provisioning — or to leave
+  // without seeing that provisioning failed.
   const goToChat = useCallback(() => {
-    void navigateAfterOnboarding();
-  }, []);
+    void leaveOnboarding("completed_cloud_gate_continue", navigate);
+  }, [navigate]);
 
   const finalize = useCallback(
     async (source: "existing" | "new") => {
@@ -93,23 +89,15 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
           modelProvider: plan.modelProvider,
         });
         markOnboardingFinalized(plan, source === "existing" ? "existing" : "new");
-        // finalizeOnboardingSideEffects navigates to `/?tour=<first-step>`
-        // for the local-daemon path; the wizard takes it from there. For
-        // cloud we still need the daemon-connecting gate, which renders
-        // here and hands control to goToChat() on continue.
-        await finalizeOnboardingSideEffects(plan.modelProvider, {
-          navigate: !isCloud,
-        });
-        if (isCloud) {
-          setShowDaemonGate(true);
-        }
+        await finalizeOnboardingSideEffects();
+        await runCommit(plan);
       } catch (err) {
         logger.warn("[ProjectPickerStep] finalize failed", err);
         setError(err instanceof Error ? err.message : "Failed to finish onboarding");
         setCompleting(false);
       }
     },
-    [completeOnboardingMutation, isCloud, plan],
+    [completeOnboardingMutation, plan, runCommit],
   );
 
   const handleSelectExisting = useCallback(
@@ -149,10 +137,14 @@ export function ProjectPickerStep({ plan, onBack }: StepProps) {
     [finalize, loadProjects, selectProject],
   );
 
-  if (showDaemonGate) {
+  if (commit) {
     return (
       <div className="space-y-6">
-        <DaemonConnectingGate onContinue={goToChat} />
+        <ProvisioningGate
+          commit={commit}
+          onContinue={goToChat}
+          onRetry={() => void retry(plan)}
+        />
       </div>
     );
   }

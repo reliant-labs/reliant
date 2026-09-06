@@ -210,6 +210,32 @@ func (s *settingStore) SetCodexAuthTokens(ctx context.Context, userID string, to
 	return err
 }
 
+// CompareAndSwapCodexAuthTokens persists tokens only if the stored refresh
+// token still equals expectedRefreshToken. See core.SettingStore for semantics.
+// The conditional UPDATE is atomic, so two processes racing to persist a
+// rotation cannot both win.
+func (s *settingStore) CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.CodexAuthTokens) (bool, error) {
+	now := time.Now().UTC()
+	query := s.bind(`UPDATE codex_auth_tokens SET
+		   access_token = ?,
+		   refresh_token = ?,
+		   id_token = ?,
+		   account_id = ?,
+		   updated_at = ?
+		 WHERE user_id = ? AND refresh_token = ?`)
+	res, err := s.db.ExecContext(ctx, query,
+		tokens.AccessToken, tokens.RefreshToken, tokens.IDToken, tokens.AccountID,
+		now, userID, expectedRefreshToken)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
 func (s *settingStore) DeleteCodexAuthTokens(ctx context.Context, userID string) error {
 	query := s.bind("DELETE FROM codex_auth_tokens WHERE user_id = ?")
 	_, err := s.db.ExecContext(ctx, query, userID)

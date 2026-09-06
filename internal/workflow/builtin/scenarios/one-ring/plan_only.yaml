@@ -10,6 +10,13 @@ inputs:
   steps: [plan]
 
 events:
+  # Router: this scenario is NAMED for the planning branch — route there
+  # explicitly rather than relying on the router's default candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Planning-only request — enter the pipeline at the planning phase."
+
   - node: planning.plan
     output:
       response_text: "Here is the plan for the task."
@@ -17,6 +24,12 @@ events:
 expect:
   outcome: completed
   reached:
+    - classify
+    - planning
+    - planning.plan
+    - success
+  # The planning branch really EXECUTED, not merely got scheduled.
+  completed:
     - planning
     - planning.plan
     - success

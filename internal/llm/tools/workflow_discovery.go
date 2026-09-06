@@ -38,7 +38,10 @@ WHEN TO USE:
 - Before using get_workflow to view details
 
 RETURNS:
-List of workflow names with descriptions and source (builtin, project, or user).`
+A table of workflows with their descriptions and source (builtin, project, or user).
+User workflows also list their draft UUID; builtin and project workflows have none.
+
+Any handle in the Workflow column can be passed straight to get_workflow as id.`
 )
 
 func NewListWorkflowsTool(repo db.Repository) Tool {
@@ -63,6 +66,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 
 	type workflowInfo struct {
 		name        string
+		id          string // draft UUID; empty for builtin and project workflows, which have no row
 		description string
 		source      string
 		isValid     bool
@@ -158,6 +162,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 
 					workflows = append(workflows, workflowInfo{
 						name:        wf.Slug,
+						id:          wf.ID,
 						description: desc,
 						source:      "user",
 						isValid:     wf.IsValid,
@@ -180,8 +185,8 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		return NewTextResponse(sb.String()), nil
 	}
 
-	sb.WriteString("| Workflow | Source | Valid | Description |\n")
-	sb.WriteString("|----------|--------|-------|-------------|\n")
+	sb.WriteString("| Workflow | ID | Source | Valid | Description |\n")
+	sb.WriteString("|----------|----|--------|-------|-------------|\n")
 	for _, wf := range workflows {
 		desc := wf.description
 		if len(desc) > 200 {
@@ -191,10 +196,19 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		if !wf.isValid {
 			valid = "✗"
 		}
-		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", wf.name, wf.source, valid, desc)
+		id := "—"
+		if wf.id != "" {
+			id = "`" + wf.id + "`"
+		}
+		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s | %s |\n", wf.name, id, wf.source, valid, desc)
 	}
 
-	sb.WriteString("\nUse `get_workflow(name=\"...\")` to view the full workflow YAML.\n")
+	// The Workflow column holds whatever handle that source has — a draft slug,
+	// a project slug, or a builtin name — and get_workflow's `id` accepts all
+	// three, so anything in this table can be pasted straight into it.
+	sb.WriteString("\nUse `get_workflow` with the `id` parameter to view the full YAML. " +
+		"`id` accepts the Workflow name/slug above or the UUID; omit it entirely to get the workflow this chat is editing.\n" +
+		"Builtin and project workflows are read-only — copy one with `create_workflow` to make an editable draft.\n")
 
 	return NewTextResponse(sb.String()), nil
 }
@@ -204,7 +218,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 // =============================================================================
 
 type GetWorkflowParams struct {
-	ID string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 }
 
 type getWorkflowTool struct {
@@ -213,18 +227,25 @@ type getWorkflowTool struct {
 
 const (
 	GetWorkflowToolName        = "get_workflow"
-	getWorkflowToolDescription = `Gets the full YAML definition of a workflow draft.
+	getWorkflowToolDescription = `Gets the full YAML definition of a workflow.
 
 WHEN TO USE:
 - To view the current state of the workflow you're editing
 - Before making edits to understand the structure
+- To read a builtin or project workflow as a starting point
 
 PARAMETERS:
-- id: (required) Workflow draft UUID
+- id: (optional) Workflow UUID, slug, or name — including a builtin or project
+  workflow name straight out of list_workflows. Omit it to get the workflow this
+  chat is editing.
 
 RETURNS:
-The complete workflow YAML definition with validation status, version, and timestamps.
-Use the version for conflict detection in edit_workflow/write_workflow.`
+The complete workflow YAML with validation status. For editable drafts it also
+returns the version and timestamp; pass that version as expected_version to
+edit_workflow/write_workflow for conflict detection.
+
+Builtin and project workflows are read-only and have no version — copy one into
+create_workflow to get an editable draft.`
 )
 
 func NewGetWorkflowTool(repo db.Repository) Tool {
@@ -249,18 +270,104 @@ func (t *getWorkflowTool) Execute(ctx *rctx.ToolContext, args GetWorkflowParams)
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
-	if args.ID == "" {
-		return NewTextErrorResponse("id parameter is required"), nil
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
+	if err == nil {
+		return formatWorkflowDraftResponse(draft)
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	// list_workflows advertises builtin and project workflows alongside drafts,
+	// but neither has a row in workflow_drafts — so without this fallback every
+	// builtin name in that table is a dead end. They are read-only: there is
+	// nothing to edit and no version to pass back.
+	if args.ID != "" {
+		if yamlContent, source, found := t.findReadOnlyWorkflow(ctx, args.ID); found {
+			return formatReadOnlyWorkflowResponse(args.ID, source, yamlContent), nil
+		}
+	}
+
+	return NewTextErrorResponse(err.Error()), nil
+}
+
+// findReadOnlyWorkflow looks up a workflow that exists as YAML rather than as a
+// draft row: a builtin from the embedded FS, or a project workflow synced into
+// the project config by the daemon. Matches on the file/slug handle and on the
+// `name:` inside the YAML, because list_workflows shows the former for project
+// workflows and the latter for builtins.
+func (t *getWorkflowTool) findReadOnlyWorkflow(ctx *rctx.ToolContext, idOrName string) (yamlContent string, source string, found bool) {
+	handle := strings.TrimSpace(idOrName)
+
+	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+				continue
+			}
+			fileName := strings.TrimSuffix(entry.Name(), ".yaml")
+			if builtin.IsInternalWorkflow(fileName) {
+				continue
+			}
+			data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
+			if err != nil {
+				continue
+			}
+			var wf struct {
+				Name string `yaml:"name"`
+			}
+			if err := yaml.Unmarshal(data, &wf); err != nil {
+				continue
+			}
+			if handle == fileName || handle == wf.Name {
+				return string(data), "builtin", true
+			}
+		}
+	}
+
+	if t.repo == nil || ctx == nil || ctx.Project == nil || ctx.Project.ID == "" {
+		return "", "", false
+	}
+	record, err := t.repo.GetProjectConfigRecord(ctx, ctx.Project.ID)
+	if err != nil || record == nil {
+		return "", "", false
+	}
+	storedWorkflows, err := config.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return "", "", false
 	}
-	if draft == nil {
-		return NewTextErrorResponse(fmt.Sprintf("Workflow draft %s not found", args.ID)), nil
+	for _, sw := range storedWorkflows {
+		if handle == sw.Slug || handle == sw.Name {
+			return sw.YAMLContent, "project", true
+		}
 	}
-	return formatWorkflowDraftResponse(draft)
+
+	return "", "", false
+}
+
+// formatReadOnlyWorkflowResponse renders a builtin or project workflow. It
+// deliberately omits ID and version — there is no draft to edit and nothing to
+// pass to expected_version — and points at the one action that does work.
+func formatReadOnlyWorkflowResponse(name, source, yamlContent string) ToolResponse {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "# Workflow: %s\n\n", name)
+	fmt.Fprintf(&sb, "**Source:** %s (read-only)\n", source)
+
+	if _, validationErr := v2.ParseWorkflowProtoBytes([]byte(yamlContent)); validationErr != nil {
+		fmt.Fprintf(&sb, "\n**⚠ Validation Errors:**\n```\n%s\n```\n", validationErr.Error())
+	} else {
+		sb.WriteString("**Validation:** ✓ Valid\n")
+	}
+
+	sb.WriteString("\n```yaml\n")
+	sb.WriteString(yamlContent)
+	if !strings.HasSuffix(yamlContent, "\n") {
+		sb.WriteString("\n")
+	}
+	sb.WriteString("```\n\n")
+	sb.WriteString("---\n")
+	sb.WriteString("This workflow is not an editable draft, so `edit_workflow` and `write_workflow` do not apply to it.\n" +
+		"Pass this YAML to `create_workflow` as `content` to start an editable copy.\n")
+
+	return NewTextResponse(sb.String())
 }
 
 func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) {
@@ -295,8 +402,13 @@ func formatWorkflowDraftResponse(draft *db.WorkflowDraft) (ToolResponse, error) 
 	}
 	sb.WriteString("```\n\n")
 	sb.WriteString("---\n")
+	// The version is the only way to obtain the value that edit_workflow and
+	// write_workflow take as expected_version, which is what stops an agent
+	// write from silently clobbering a user's unsaved canvas edits.
+	fmt.Fprintf(&sb, "**Version:** `%d`\n", draft.Version)
 	fmt.Fprintf(&sb, "**Updated at:** `%s`\n", draft.UpdatedAt.Format(time.RFC3339))
-	sb.WriteString("\nUse `edit_workflow` for small changes or `write_workflow` to replace entirely.\n")
+	sb.WriteString("\nUse `edit_workflow` for small changes or `write_workflow` to replace entirely.\n" +
+		"Pass `expected_version` with the version above to be told about conflicting edits instead of overwriting them.\n")
 
 	return NewTextResponse(sb.String()), nil
 }

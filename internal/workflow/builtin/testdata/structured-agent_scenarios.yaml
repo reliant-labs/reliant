@@ -33,9 +33,7 @@ events:
       tool_calls:
         - id: call_0
           name: submit_response
-          input:
-            choice: complete
-            value: "The task has been completed successfully. Analysis shows no issues."
+          input: '{"choice":"complete","value":"The task has been completed successfully. Analysis shows no issues."}'
   # Response tool executes - response_data is populated
   - node: agent_loop.execute_tools
     output:
@@ -80,8 +78,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "config.yaml"
+          input: '{"file_path":"config.yaml"}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -103,9 +100,7 @@ events:
       tool_calls:
         - id: call_1
           name: grep
-          input:
-            pattern: "database"
-            path: "."
+          input: '{"pattern":"database","path":"."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -127,9 +122,7 @@ events:
       tool_calls:
         - id: call_2
           name: submit_response
-          input:
-            choice: complete
-            value: "Database is configured for localhost:5432. Found 2 related files."
+          input: '{"choice":"complete","value":"Database is configured for localhost:5432. Found 2 related files."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -183,9 +176,7 @@ events:
       tool_calls:
         - id: call_0
           name: submit_response
-          input:
-            choice: complete
-            value: "Analysis complete. The code follows best practices."
+          input: '{"choice":"complete","value":"Analysis complete. The code follows best practices."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -228,8 +219,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "main.go"
+          input: '{"file_path":"main.go"}'
   # Approval is required in manual mode
   - node: agent_loop.approval
     output:
@@ -259,9 +249,7 @@ events:
       tool_calls:
         - id: call_1
           name: submit_response
-          input:
-            choice: complete
-            value: "File contains a Go main package."
+          input: '{"choice":"complete","value":"File contains a Go main package."}'
   # Approval for response tool
   - node: agent_loop.approval
     output:
@@ -311,8 +299,7 @@ events:
       tool_calls:
         - id: call_0
           name: bash
-          input:
-            command: "rm -rf /important"
+          input: '{"command":"rm -rf /important"}'
   # Approval is denied
   - node: agent_loop.approval
     output:
@@ -331,9 +318,7 @@ events:
       tool_calls:
         - id: call_1
           name: submit_response
-          input:
-            choice: complete
-            value: "Task completed without file deletion as requested."
+          input: '{"choice":"complete","value":"Task completed without file deletion as requested."}'
   # Approval granted for response tool
   - node: agent_loop.approval
     output:
@@ -403,9 +388,7 @@ events:
       tool_calls:
         - id: call_0
           name: submit_response
-          input:
-            choice: complete
-            value: "Final analysis complete."
+          input: '{"choice":"complete","value":"Final analysis complete."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -449,8 +432,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "docs/api.md"
+          input: '{"file_path":"docs/api.md"}'
   # Large tool result triggers compaction
   - node: agent_loop.execute_tools
     output:
@@ -479,9 +461,7 @@ events:
       tool_calls:
         - id: call_1
           name: submit_response
-          input:
-            choice: complete
-            value: "API documentation is comprehensive and well-structured."
+          input: '{"choice":"complete","value":"API documentation is comprehensive and well-structured."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -526,8 +506,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "src/main.go"
+          input: '{"file_path":"src/main.go"}'
   # Tool result with low token count (below threshold)
   - node: agent_loop.execute_tools
     output:
@@ -550,9 +529,7 @@ events:
       tool_calls:
         - id: call_1
           name: submit_response
-          input:
-            choice: complete
-            value: "Simple Go main package."
+          input: '{"choice":"complete","value":"Simple Go main package."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -597,9 +574,7 @@ events:
       tool_calls:
         - id: call_0
           name: finish_task
-          input:
-            choice: complete
-            value: "All items have been verified."
+          input: '{"choice":"complete","value":"All items have been verified."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -713,8 +688,7 @@ events:
       tool_calls:
         - id: call_0
           name: bash
-          input:
-            command: "git diff HEAD~1"
+          input: '{"command":"git diff HEAD~1"}'
   # execute_tools runs for bash — response_data does NOT contain submit_review
   - node: agent_loop.execute_tools
     output:
@@ -737,9 +711,7 @@ events:
       tool_calls:
         - id: call_1
           name: submit_review
-          input:
-            grade: "pass"
-            summary: "Implementation looks clean and follows best practices."
+          input: '{"grade":"pass","summary":"Implementation looks clean and follows best practices."}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -796,9 +768,7 @@ events:
       tool_calls:
         - id: call_0
           name: grep
-          input:
-            pattern: "TODO"
-            path: "src/"
+          input: '{"pattern":"TODO","path":"src/"}'
   - node: agent_loop.execute_tools
     output:
       message:
@@ -825,13 +795,10 @@ events:
       tool_calls:
         - id: call_spawn
           name: spawn
-          input:
-            preset: researcher
-            prompt: "Investigate TODO items"
+          input: '{"preset":"researcher","prompt":"Investigate TODO items"}'
         - id: call_view
           name: view
-          input:
-            file_path: "src/main.go"
+          input: '{"file_path":"src/main.go"}'
   # response_data is ABSENT — this is the bug trigger.
   # Without the null guard fix, CEL evaluates "submit_response" in null → crash.
   - node: agent_loop.execute_tools
@@ -856,9 +823,7 @@ events:
       tool_calls:
         - id: call_response
           name: submit_response
-          input:
-            choice: complete
-            value: "Found 1 TODO item. Spawned researcher for deeper analysis."
+          input: '{"choice":"complete","value":"Found 1 TODO item. Spawned researcher for deeper analysis."}'
   - node: agent_loop.execute_tools
     output:
       message:

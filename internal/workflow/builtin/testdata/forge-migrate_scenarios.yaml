@@ -47,16 +47,17 @@ events:
     output:
       status: approved
 
-  - node: scaffold_baseline
+  # scaffold_baseline EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: scaffold_baseline.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Scaffold green, contracts floor set."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
+      response_text: "Implementation attempt for scaffold_baseline."
+  - node: scaffold_baseline.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Scaffold green, contracts floor set."
   - node: port_loop.port
     output:
       strategy: "pass"
@@ -79,17 +80,17 @@ events:
       build_exit: 0
       test_exit: 0
 
-  - node: converge
+  # converge EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: converge.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Wiring complete, parity checklist satisfied."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-      test_exit: 0
-
+      response_text: "Implementation attempt for converge."
+  - node: converge.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Wiring complete, parity checklist satisfied."
 expect:
   outcome: completed
   reached:
@@ -177,17 +178,17 @@ events:
     output:
       status: approved
 
-  - node: scaffold_baseline
+  # scaffold_baseline EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: scaffold_baseline.attempt.implement
     output:
-      strategy: "stuck"
-      eval_strategy: "stuck"
-      review_grade: "fail"
-      review_feedback: "forge binary crashes on startup — environment issue."
-      iterations: 2
-      lint_exit: 1
-      build_exit: 1
-      stuck: true
-
+      response_text: "Implementation attempt for scaffold_baseline."
+  - node: scaffold_baseline.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "stuck"
+        feedback: "forge binary crashes on startup — environment issue."
 expect:
   outcome: completed
   reached:
@@ -238,16 +239,17 @@ events:
     output:
       status: approved
 
-  - node: scaffold_baseline
+  # scaffold_baseline EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: scaffold_baseline.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Scaffold green."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
+      response_text: "Implementation attempt for scaffold_baseline."
+  - node: scaffold_baseline.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Scaffold green."
   - node: port_loop.port
     output:
       strategy: "pass"
@@ -314,16 +316,17 @@ events:
     output:
       status: approved
 
-  - node: scaffold_baseline
+  # scaffold_baseline EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: scaffold_baseline.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Scaffold green."
-      iterations: 1
-      lint_exit: 0
-      build_exit: 0
-
+      response_text: "Implementation attempt for scaffold_baseline."
+  - node: scaffold_baseline.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Scaffold green."
   - node: port_loop.port
     output:
       strategy: "pass"
@@ -335,17 +338,54 @@ events:
       build_exit: 0
       test_exit: 0
 
-  - node: converge
+  # converge EXECUTES its get-it-right body. forge-migrate sets max_retries: 5
+  # for converge, so the failure premise needs a verdict for EVERY attempt: a
+  # single mock is consumed once and the loop then defaults to a green exit.
+  - node: converge.attempt.implement
     output:
-      strategy: "continue"
-      eval_strategy: "continue"
-      review_grade: "fail"
-      review_feedback: "Two source entrypoints unaccounted for in the plan."
-      iterations: 5
-      lint_exit: 0
-      build_exit: 0
-      test_exit: 0
-
+      response_text: "Converge attempt 1."
+  - node: converge.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Two source entrypoints unaccounted for in the plan."
+  - node: converge.attempt.implement
+    output:
+      response_text: "Converge attempt 2."
+  - node: converge.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Two source entrypoints unaccounted for in the plan."
+  - node: converge.attempt.implement
+    output:
+      response_text: "Converge attempt 3."
+  - node: converge.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Two source entrypoints unaccounted for in the plan."
+  - node: converge.attempt.implement
+    output:
+      response_text: "Converge attempt 4."
+  - node: converge.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Two source entrypoints unaccounted for in the plan."
+  - node: converge.attempt.implement
+    output:
+      response_text: "Converge attempt 5."
+  - node: converge.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Two source entrypoints unaccounted for in the plan."
 expect:
   outcome: completed
   reached:

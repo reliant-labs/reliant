@@ -19,72 +19,128 @@ description: >
   implements it, and the workflow completes with a summary.
 
 events:
-  - node: ideate
+  # EXECUTED, not black-boxed: the qualified id makes the builtin://agent ref
+  # transparent, so this node's own args CEL is compiled and evaluated.
+  # Router: this scenario walks the FULL persona pipeline from the top, so the
+  # ideate entry is chosen explicitly rather than inherited from the router's
+  # default candidate.
+  - node: classify
     output:
+      selected_node: ideate
+      reasoning: "Greenfield project — start from PM vision and ideation."
+
+  - node: ideate.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: |
+          **Problem Statement:** Small development teams waste hours context-switching between chat apps, issue trackers, and documentation tools. They need a unified workspace.
+          **Vision:** A single-pane developer workspace that combines real-time chat, task tracking, and documentation with deep code integration.
+          **Key Value Propositions:**
+          - Eliminate context-switching between 3+ tools
+          - Code-aware task tracking that auto-links commits to issues
+          - Searchable conversation history tied to project context
+          **Scope Boundaries:**
+          - In scope: Chat, task board, markdown docs, GitHub integration
+          - Out of scope: CI/CD pipelines, deployment, code review
+          **Risks & Open Questions:**
+          - Will teams adopt yet another tool? Need strong migration story.
+          - Real-time sync complexity across distributed teams.
       response_text: |
         **Problem Statement:** Small development teams waste hours context-switching between chat apps, issue trackers, and documentation tools. They need a unified workspace.
-
         **Vision:** A single-pane developer workspace that combines real-time chat, task tracking, and documentation with deep code integration.
-
         **Key Value Propositions:**
         - Eliminate context-switching between 3+ tools
         - Code-aware task tracking that auto-links commits to issues
         - Searchable conversation history tied to project context
-
         **Scope Boundaries:**
         - In scope: Chat, task board, markdown docs, GitHub integration
         - Out of scope: CI/CD pipelines, deployment, code review
-
         **Risks & Open Questions:**
         - Will teams adopt yet another tool? Need strong migration story.
         - Real-time sync complexity across distributed teams.
-
-  - node: requirements
+      tool_calls: []
+  - node: requirements.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          **User Stories:**
+          1. As a developer, I want to send messages in project channels, so that I can discuss work in context.
+             - AC: Messages appear within 500ms for all channel members
+             - AC: Markdown and code blocks render correctly
+             - Priority: Must-have
+          2. As a team lead, I want to create and assign tasks from chat, so that action items aren't lost.
+             - AC: `/task` command creates a card on the board with assignee
+             - AC: Task status updates post back to the originating channel
+             - Priority: Must-have
+          3. As a developer, I want commits auto-linked to tasks, so that progress is tracked without manual effort.
+             - AC: Commits mentioning task IDs update task status
+             - AC: Task detail view shows linked commits
+             - Priority: Should-have
+          **Constraints:**
+          - WebSocket-based real-time messaging
+          - PostgreSQL for persistence, Redis for pub/sub
+          - Must support 50 concurrent users in beta
+          **Out of Scope:** CI/CD integration, file sharing beyond markdown, mobile apps.
       response_text: |
         **User Stories:**
-
         1. As a developer, I want to send messages in project channels, so that I can discuss work in context.
            - AC: Messages appear within 500ms for all channel members
            - AC: Markdown and code blocks render correctly
            - Priority: Must-have
-
         2. As a team lead, I want to create and assign tasks from chat, so that action items aren't lost.
            - AC: `/task` command creates a card on the board with assignee
            - AC: Task status updates post back to the originating channel
            - Priority: Must-have
-
         3. As a developer, I want commits auto-linked to tasks, so that progress is tracked without manual effort.
            - AC: Commits mentioning task IDs update task status
            - AC: Task detail view shows linked commits
            - Priority: Should-have
-
         **Constraints:**
         - WebSocket-based real-time messaging
         - PostgreSQL for persistence, Redis for pub/sub
         - Must support 50 concurrent users in beta
-
         **Out of Scope:** CI/CD integration, file sharing beyond markdown, mobile apps.
-
-  - node: architecture
+      tool_calls: []
+  - node: architecture.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          **Technical Approach:** Monorepo with a Go backend API, React frontend, and WebSocket layer for real-time events.
+          **Component Design:**
+          - `api/` — REST endpoints for CRUD operations on channels, tasks, docs
+          - `ws/` — WebSocket hub managing connections, rooms, and broadcast
+          - `integrations/github/` — Webhook receiver and commit-to-task linker
+          - `frontend/` — React SPA with channel view, board view, and doc editor
+          **File Changes:**
+          - Create: `internal/chat/handler.go`, `internal/chat/service.go`
+          - Create: `internal/tasks/handler.go`, `internal/tasks/service.go`
+          - Create: `internal/ws/hub.go`, `internal/ws/client.go`
+          - Create: `frontend/src/views/Channel.tsx`, `frontend/src/views/Board.tsx`
+          **Data Flow:** Client → WebSocket → Hub → Service → PostgreSQL → broadcast to subscribers via Redis pub/sub.
+          **Task Breakdown:**
+          1. Database schema and migrations (channels, messages, tasks)
+          2. Chat service + REST endpoints
+          3. WebSocket hub with room management
+          4. Task service with `/task` command parsing
+          5. GitHub webhook integration
+          6. Frontend channel and board views
+          **Risks:** WebSocket scaling beyond single instance requires Redis pub/sub from day one.
       response_text: |
         **Technical Approach:** Monorepo with a Go backend API, React frontend, and WebSocket layer for real-time events.
-
         **Component Design:**
         - `api/` — REST endpoints for CRUD operations on channels, tasks, docs
         - `ws/` — WebSocket hub managing connections, rooms, and broadcast
         - `integrations/github/` — Webhook receiver and commit-to-task linker
         - `frontend/` — React SPA with channel view, board view, and doc editor
-
         **File Changes:**
         - Create: `internal/chat/handler.go`, `internal/chat/service.go`
         - Create: `internal/tasks/handler.go`, `internal/tasks/service.go`
         - Create: `internal/ws/hub.go`, `internal/ws/client.go`
         - Create: `frontend/src/views/Channel.tsx`, `frontend/src/views/Board.tsx`
-
         **Data Flow:** Client → WebSocket → Hub → Service → PostgreSQL → broadcast to subscribers via Redis pub/sub.
-
         **Task Breakdown:**
         1. Database schema and migrations (channels, messages, tasks)
         2. Chat service + REST endpoints
@@ -92,26 +148,42 @@ events:
         4. Task service with `/task` command parsing
         5. GitHub webhook integration
         6. Frontend channel and board views
-
         **Risks:** WebSocket scaling beyond single instance requires Redis pub/sub from day one.
-
-  - node: implement
+      tool_calls: []
+  - node: implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          Implementation complete. All 6 tasks from the architecture breakdown have been executed:
+          1. **Database:** Created migrations for channels, messages, and tasks tables. Foreign keys and indexes in place.
+          2. **Chat service:** REST endpoints for channel CRUD and message posting. Service layer handles validation and persistence.
+          3. **WebSocket hub:** Connection manager with room-based broadcasting. Handles join/leave and message relay.
+          4. **Task service:** `/task` command parser creates task cards. Status updates broadcast to originating channel.
+          5. **GitHub integration:** Webhook receiver parses push events, matches commit messages to task IDs, updates status.
+          6. **Frontend:** Channel view with real-time message rendering. Board view with drag-and-drop task management.
+          All tests pass. 47 unit tests, 12 integration tests covering the WebSocket flow and GitHub webhook processing.
       response_text: |
         Implementation complete. All 6 tasks from the architecture breakdown have been executed:
-
         1. **Database:** Created migrations for channels, messages, and tasks tables. Foreign keys and indexes in place.
         2. **Chat service:** REST endpoints for channel CRUD and message posting. Service layer handles validation and persistence.
         3. **WebSocket hub:** Connection manager with room-based broadcasting. Handles join/leave and message relay.
         4. **Task service:** `/task` command parser creates task cards. Status updates broadcast to originating channel.
         5. **GitHub integration:** Webhook receiver parses push events, matches commit messages to task IDs, updates status.
         6. **Frontend:** Channel view with real-time message rendering. Board view with drag-and-drop task management.
-
         All tests pass. 47 unit tests, 12 integration tests covering the WebSocket flow and GitHub webhook processing.
-
+      tool_calls: []
 expect:
   outcome: completed
   reached:
+    - classify
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete
+  # Every persona really EXECUTED — `reached` would also hold for skipped nodes.
+  completed:
     - ideate
     - requirements
     - architecture
@@ -126,76 +198,135 @@ description: >
   showing how the PM vision flows into requirements, architecture, and implementation.
 
 events:
-  - node: ideate
+  # Router: this scenario walks the FULL persona pipeline from the top, so the
+  # ideate entry is chosen explicitly rather than inherited from the router's
+  # default candidate.
+  - node: classify
     output:
+      selected_node: ideate
+      reasoning: "Greenfield project — start from PM vision and ideation."
+
+  - node: ideate.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: |
+          **Problem Statement:** Junior developers spend 40% of their first 6 months deciphering undocumented legacy codebases. Onboarding is slow and tribal knowledge is lost when senior devs leave.
+          **Vision:** An AI-powered codebase narrator that generates living documentation by analyzing code, git history, and team conversations — making any codebase self-explaining.
+          **Key Value Propositions:**
+          - Reduce onboarding time from months to days
+          - Capture tribal knowledge before it walks out the door
+          - Documentation that updates itself as code changes
+          **Scope Boundaries:**
+          - In scope: Code analysis engine, narrative generation, search interface
+          - Out of scope: IDE plugins, CI integration, multi-language support (Go only for v1)
+          **Risks & Open Questions:**
+          - LLM hallucination risk in generated documentation — need confidence scoring
+          - How to handle proprietary code privacy concerns?
+          - Git history analysis may be expensive for large repos (100k+ commits)
       response_text: |
         **Problem Statement:** Junior developers spend 40% of their first 6 months deciphering undocumented legacy codebases. Onboarding is slow and tribal knowledge is lost when senior devs leave.
-
         **Vision:** An AI-powered codebase narrator that generates living documentation by analyzing code, git history, and team conversations — making any codebase self-explaining.
-
         **Key Value Propositions:**
         - Reduce onboarding time from months to days
         - Capture tribal knowledge before it walks out the door
         - Documentation that updates itself as code changes
-
         **Scope Boundaries:**
         - In scope: Code analysis engine, narrative generation, search interface
         - Out of scope: IDE plugins, CI integration, multi-language support (Go only for v1)
-
         **Risks & Open Questions:**
         - LLM hallucination risk in generated documentation — need confidence scoring
         - How to handle proprietary code privacy concerns?
         - Git history analysis may be expensive for large repos (100k+ commits)
-
-  - node: requirements
+      tool_calls: []
+  - node: requirements.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          **User Stories:**
+          1. As a new developer, I want to search "how does authentication work?" and get a narrative explanation with code references, so that I can understand the system without bothering teammates.
+             - AC: Natural language query returns a structured explanation within 5 seconds
+             - AC: Every claim links to the specific file and line range
+             - AC: Confidence score displayed for each section (high/medium/low)
+             - Priority: Must-have
+          2. As a tech lead, I want documentation to regenerate when files change, so that docs never go stale.
+             - AC: File watcher triggers re-analysis within 60 seconds of save
+             - AC: Changed sections are highlighted in the UI with diff markers
+             - Priority: Must-have
+          3. As a senior developer, I want to annotate generated docs with corrections, so that the AI learns from human feedback.
+             - AC: Inline annotation UI on any generated paragraph
+             - AC: Corrections are incorporated in next regeneration cycle
+             - Priority: Should-have
+          **Constraints:**
+          - Go codebases only for v1
+          - Must work offline (local LLM option)
+          - Analysis must handle repos up to 500 files without degradation
+          **Out of Scope:** Multi-language support, IDE extensions, real-time pair programming features.
       response_text: |
         **User Stories:**
-
         1. As a new developer, I want to search "how does authentication work?" and get a narrative explanation with code references, so that I can understand the system without bothering teammates.
            - AC: Natural language query returns a structured explanation within 5 seconds
            - AC: Every claim links to the specific file and line range
            - AC: Confidence score displayed for each section (high/medium/low)
            - Priority: Must-have
-
         2. As a tech lead, I want documentation to regenerate when files change, so that docs never go stale.
            - AC: File watcher triggers re-analysis within 60 seconds of save
            - AC: Changed sections are highlighted in the UI with diff markers
            - Priority: Must-have
-
         3. As a senior developer, I want to annotate generated docs with corrections, so that the AI learns from human feedback.
            - AC: Inline annotation UI on any generated paragraph
            - AC: Corrections are incorporated in next regeneration cycle
            - Priority: Should-have
-
         **Constraints:**
         - Go codebases only for v1
         - Must work offline (local LLM option)
         - Analysis must handle repos up to 500 files without degradation
-
         **Out of Scope:** Multi-language support, IDE extensions, real-time pair programming features.
-
-  - node: architecture
+      tool_calls: []
+  - node: architecture.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          **Technical Approach:** Local-first CLI tool with a web dashboard. Analysis runs as a background daemon, results served via embedded HTTP server.
+          **Component Design:**
+          - `analyzer/` — AST parser + git log processor, builds a code knowledge graph
+          - `narrator/` — LLM prompt pipeline that converts knowledge graph into narratives
+          - `index/` — Vector store (SQLite + embeddings) for semantic search
+          - `server/` — Embedded HTTP server serving the search UI and API
+          - `watcher/` — File system watcher triggering incremental re-analysis
+          **File Changes:**
+          - Create: `internal/analyzer/parser.go`, `internal/analyzer/git.go`
+          - Create: `internal/narrator/pipeline.go`, `internal/narrator/prompts.go`
+          - Create: `internal/index/store.go`, `internal/index/embeddings.go`
+          - Create: `internal/server/handler.go`, `internal/server/routes.go`
+          - Create: `internal/watcher/daemon.go`
+          **Data Flow:** Watcher detects change → Analyzer updates knowledge graph → Narrator regenerates affected sections → Index updates embeddings → Server serves fresh results.
+          **Task Breakdown:**
+          1. AST parser for Go files (functions, types, interfaces, call graph)
+          2. Git log analyzer (blame, commit frequency, authorship)
+          3. Knowledge graph data model and storage
+          4. LLM narrative pipeline with confidence scoring
+          5. Vector index with semantic search
+          6. File watcher daemon with incremental updates
+          7. Web server and search UI
+          **Risks:** LLM latency for large codebases — mitigate with incremental analysis and caching. Embedding model size for offline use — use quantized models.
       response_text: |
         **Technical Approach:** Local-first CLI tool with a web dashboard. Analysis runs as a background daemon, results served via embedded HTTP server.
-
         **Component Design:**
         - `analyzer/` — AST parser + git log processor, builds a code knowledge graph
         - `narrator/` — LLM prompt pipeline that converts knowledge graph into narratives
         - `index/` — Vector store (SQLite + embeddings) for semantic search
         - `server/` — Embedded HTTP server serving the search UI and API
         - `watcher/` — File system watcher triggering incremental re-analysis
-
         **File Changes:**
         - Create: `internal/analyzer/parser.go`, `internal/analyzer/git.go`
         - Create: `internal/narrator/pipeline.go`, `internal/narrator/prompts.go`
         - Create: `internal/index/store.go`, `internal/index/embeddings.go`
         - Create: `internal/server/handler.go`, `internal/server/routes.go`
         - Create: `internal/watcher/daemon.go`
-
         **Data Flow:** Watcher detects change → Analyzer updates knowledge graph → Narrator regenerates affected sections → Index updates embeddings → Server serves fresh results.
-
         **Task Breakdown:**
         1. AST parser for Go files (functions, types, interfaces, call graph)
         2. Git log analyzer (blame, commit frequency, authorship)
@@ -204,14 +335,24 @@ events:
         5. Vector index with semantic search
         6. File watcher daemon with incremental updates
         7. Web server and search UI
-
         **Risks:** LLM latency for large codebases — mitigate with incremental analysis and caching. Embedding model size for offline use — use quantized models.
-
-  - node: implement
+      tool_calls: []
+  - node: implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          Implementation complete across all 7 architecture tasks:
+          1. **AST Parser:** Parses Go files into a structured representation — functions, types, interfaces, and call relationships. Handles 500-file repos in under 10 seconds.
+          2. **Git Analyzer:** Extracts blame data, commit frequency heatmaps, and authorship graphs. Incremental updates process only new commits.
+          3. **Knowledge Graph:** SQLite-backed graph with nodes for code entities and edges for relationships (calls, implements, imports).
+          4. **Narrator Pipeline:** Prompt chain that walks the knowledge graph to generate section-by-section narratives. Confidence scoring based on code coverage and git activity.
+          5. **Vector Index:** SQLite FTS5 + embedding vectors for hybrid keyword/semantic search. Sub-second query times on 500-file repos.
+          6. **File Watcher:** fsnotify-based daemon with debouncing. Triggers targeted re-analysis of changed files and their dependents.
+          7. **Web Server:** Embedded HTTP server with search endpoint and annotation API. Clean UI with code references and confidence indicators.
+          All tests pass. 63 unit tests, 8 integration tests covering the full pipeline from file change to updated search results. Tested against 3 real Go repos (50, 200, and 500 files).
       response_text: |
         Implementation complete across all 7 architecture tasks:
-
         1. **AST Parser:** Parses Go files into a structured representation — functions, types, interfaces, and call relationships. Handles 500-file repos in under 10 seconds.
         2. **Git Analyzer:** Extracts blame data, commit frequency heatmaps, and authorship graphs. Incremental updates process only new commits.
         3. **Knowledge Graph:** SQLite-backed graph with nodes for code entities and edges for relationships (calls, implements, imports).
@@ -219,12 +360,19 @@ events:
         5. **Vector Index:** SQLite FTS5 + embedding vectors for hybrid keyword/semantic search. Sub-second query times on 500-file repos.
         6. **File Watcher:** fsnotify-based daemon with debouncing. Triggers targeted re-analysis of changed files and their dependents.
         7. **Web Server:** Embedded HTTP server with search endpoint and annotation API. Clean UI with code references and confidence indicators.
-
         All tests pass. 63 unit tests, 8 integration tests covering the full pipeline from file change to updated search results. Tested against 3 real Go repos (50, 200, and 500 files).
-
+      tool_calls: []
 expect:
   outcome: completed
   reached:
+    - classify
+    - ideate
+    - requirements
+    - architecture
+    - implement
+    - complete
+  # Every persona really EXECUTED — `reached` would also hold for skipped nodes.
+  completed:
     - ideate
     - requirements
     - architecture

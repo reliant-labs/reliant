@@ -7,6 +7,12 @@ name: default_steps
 description: Default steps (plan, implement) all pass on first try
 
 events:
+  # Router: default configuration takes the full pipeline from the top.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Multi-step feature — plan before implementing."
+
   - node: planning.plan
     output:
       response_text: "Plan: implement the feature with modular design."
@@ -31,6 +37,13 @@ expect:
     - impl_loop.attempt.implement
     - impl_loop.attempt.join_checks
     - impl_loop.attempt.review
+    - success
+  # The planning branch really EXECUTED — reached would also hold for skipped
+  # nodes, so the routing outcome is pinned with completed.
+  completed:
+    - planning
+    - planning.plan
+    - impl_loop
     - success
   not_reached:
     - write_tests

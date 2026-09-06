@@ -34,6 +34,7 @@ import type {
 import type { WorkflowExecution, StepExecution, ThreadOrigin } from "../ExecutionSidebar/types";
 import { cn } from "../../../lib/utils";
 import { sortMessagesForDisplay } from "../../../lib/messageOrder";
+import { cleanTemporalErrorMessage } from "../../../lib/temporalErrors";
 import { getActivitySteps } from "./activityIndicators";
 import { ActivityIndicator } from "./ActivityIndicator";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads, resolveRouterDecisionFromActiveThreads, isSpawnOrigin } from "./threadUtils";
@@ -111,7 +112,13 @@ type TimelineItem =
   | { type: "thread-start"; workflow: WorkflowDisplay; parentName: string }
   | { type: "handoff"; toName: string; color: string }
   | { type: "activity"; step: StepExecution; workflow: WorkflowDisplay; workflowName: string }
-  | { type: "error"; error: ErrorUpdate }
+  /**
+   * `error` is the representative (earliest) failure and is what renders.
+   * `errors` is every failure collapsed into this row — length 1 in the normal
+   * case, N when several threads failed the same way at the same time. See
+   * groupVisibleErrors.
+   */
+  | { type: "error"; error: ErrorUpdate; errors: ErrorUpdate[] }
   | { type: "info"; info: InfoUpdate }
   | { type: "run_output"; runOutput: RunOutputUpdate };
 
@@ -137,13 +144,195 @@ function timelineItemKey(item: TimelineItem, index: number): string {
     case "activity":
       return `activity-${item.step.id}`;
     case "error":
-      return `error-${item.error.id}`;
+      // Keyed on the representative plus the group size: a row that absorbs a
+      // late sibling must remount rather than reuse the ungrouped row's key.
+      return `error-${item.error.id}-${item.errors.length}`;
     case "info":
       return `info-${item.info.id}`;
     case "run_output":
       return `run-${item.runOutput.id}`;
   }
 }
+
+/**
+ * How far apart two identical failures may be and still read as ONE incident.
+ *
+ * When a provider goes down, every thread that happens to be mid-LLM-call
+ * fails independently, and each failure is a genuinely separate row in the
+ * database — different activity, different thread, different attempt number.
+ * They are not duplicates and must never be merged in the store or the DB.
+ * But to the user they are one outage, and N stacked identical banners read
+ * as N problems.
+ *
+ * 60s is chosen from the observed data: a real chat produced three such rows
+ * within 15 seconds and another produced five within the same minute, while
+ * genuinely distinct incidents in those chats were minutes apart. The window
+ * is anchored to the FIRST error in a group rather than sliding off the most
+ * recent one, so a long stream of failures cannot chain into one unbounded
+ * row that claims a five-minute outage was a single moment.
+ */
+export const CONCURRENT_ERROR_WINDOW_MS = 60_000;
+
+/**
+ * One rendered error row: the representative failure plus every failure
+ * collapsed into it. `errors` always contains `error` and is length 1 unless
+ * a collapse happened.
+ */
+export interface ErrorGroup {
+  error: ErrorUpdate;
+  errors: ErrorUpdate[];
+}
+
+/**
+ * Whether a thread is currently on screen, given the thread filter.
+ *
+ * The main thread ships under three encodings — the chat id itself, "0", and
+ * the empty string — and an absent thread means main. Extracted from the
+ * timeline memo so error scoping and message scoping cannot drift, and so the
+ * main-thread-id-equals-chat-id case can be pinned by a test.
+ */
+export function createThreadVisibilityCheck(
+  chatId: string,
+  selectedThreads: Set<string> | null | undefined,
+): (thread: string | undefined) => boolean {
+  const showAll = !selectedThreads || selectedThreads.size === 0;
+  return (thread: string | undefined) => {
+    // Treat undefined/empty thread as main thread
+    const effectiveThread = thread || chatId;
+    if (showAll) return true;
+    if (selectedThreads?.has(effectiveThread)) return true;
+    const isMain =
+      effectiveThread === chatId || effectiveThread === "0" || effectiveThread === "";
+    const selectedMain =
+      selectedThreads?.has(chatId) ||
+      selectedThreads?.has("0") ||
+      selectedThreads?.has("");
+    return isMain && selectedMain;
+  };
+}
+
+/**
+ * The user-visible identity of a failure: what the row will actually say.
+ *
+ * Grouping on the DISPLAYED text is deliberate — two rows the user cannot tell
+ * apart are what makes a stack of banners feel like a bug, and two rows that
+ * read differently must stay separate however similar their internals are.
+ * Prefers the backend's `error_summary`, falling back to the same cleaned
+ * message the row renders when there is none.
+ */
+function errorDisplayIdentity(error: ErrorUpdate): string {
+  return error.error_summary?.trim() || cleanTemporalErrorMessage(error.error_message);
+}
+
+/**
+ * Filter errors to the visible threads and collapse concurrent identical
+ * failures into single rows.
+ *
+ * Pure and derived: the input array and its entries are never mutated. Two
+ * errors collapse only when ALL of these hold:
+ *   - several threads are visible (`collapseAcrossThreads`). When the user has
+ *     one thread selected they are looking AT that thread and want its own
+ *     error, so nothing collapses.
+ *   - same chat. Errors from different chats are never merged.
+ *   - same displayed summary (see errorDisplayIdentity).
+ *   - within CONCURRENT_ERROR_WINDOW_MS of the group's first error.
+ *   - DIFFERENT threads. Two failures on one thread are two things that
+ *     happened to that thread; a retry series of one failure is already folded
+ *     store-side by id (see applyErrorUpdates).
+ *
+ * An error with NO thread predates thread scoping. It stays visible everywhere
+ * rather than being guessed into a thread, and it is never absorbed into
+ * another thread's group — a guess about which threads it covers would be the
+ * same mistake in a new place.
+ */
+export function groupVisibleErrors(
+  errors: readonly ErrorUpdate[],
+  opts: {
+    isVisible: (thread: string | undefined) => boolean;
+    collapseAcrossThreads: boolean;
+  },
+): ErrorGroup[] {
+  const visible = errors.filter((error) => !error.thread || opts.isVisible(error.thread));
+
+  if (!opts.collapseAcrossThreads) {
+    return visible.map((error) => ({ error, errors: [error] }));
+  }
+
+  // Ascending by time so a group's first entry is its earliest, which is what
+  // anchors the window and what represents the row on the timeline. Sorted on
+  // a copy — `errorEvents` belongs to the store.
+  const ordered = [...visible].sort(
+    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(),
+  );
+
+  const groups: Array<{
+    group: ErrorGroup;
+    anchorTime: number;
+    identity: string;
+    threads: Set<string>;
+  }> = [];
+
+  for (const error of ordered) {
+    if (!error.thread) {
+      // Legacy, chat-wide: stands alone.
+      groups.push({
+        group: { error, errors: [error] },
+        anchorTime: Number.NaN,
+        identity: "",
+        threads: new Set(),
+      });
+      continue;
+    }
+
+    const identity = errorDisplayIdentity(error);
+    const time = new Date(error.timestamp).getTime();
+    const open = groups.find(
+      (candidate) =>
+        candidate.identity === identity &&
+        candidate.group.error.chat_id === error.chat_id &&
+        !candidate.threads.has(error.thread as string) &&
+        time - candidate.anchorTime <= CONCURRENT_ERROR_WINDOW_MS,
+    );
+
+    if (open) {
+      open.group.errors.push(error);
+      open.threads.add(error.thread);
+      continue;
+    }
+
+    groups.push({
+      group: { error, errors: [error] },
+      anchorTime: time,
+      identity,
+      threads: new Set([error.thread]),
+    });
+  }
+
+  return groups.map((entry) => entry.group);
+}
+
+/**
+ * An error row, with the count when several threads failed the same way at the
+ * same time. A thin wrapper rather than a prop on WorkflowErrorMessage: the
+ * count is a fact about this timeline's grouping, not about the error itself,
+ * and the presentational component stays unaware of it.
+ */
+const GroupedErrorRow = memo(function GroupedErrorRow({
+  error,
+  errors,
+}: ErrorGroup) {
+  const affectedThreads = errors.length;
+  return (
+    <div className="mb-2">
+      {affectedThreads > 1 && (
+        <div className="px-2 pb-1 text-xs text-muted-foreground">
+          ×{affectedThreads} — the same failure hit {affectedThreads} threads at once
+        </div>
+      )}
+      <WorkflowErrorMessage error={error} />
+    </div>
+  );
+});
 
 const TIMELINE_VARIANTS: ChatTimelineVariant[] = ["compact", "card", "minimal"];
 
@@ -476,15 +665,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
 
     // Thread visibility check
     const showAll = !selectedThreads || selectedThreads.size === 0;
-    const isVisible = (thread: string | undefined) => {
-      // Treat undefined/empty thread as main thread
-      const effectiveThread = thread || chatId;
-      if (showAll) return true;
-      if (selectedThreads?.has(effectiveThread)) return true;
-      const isMain = effectiveThread === chatId || effectiveThread === "0" || effectiveThread === "";
-      const selectedMain = selectedThreads?.has(chatId) || selectedThreads?.has("0") || selectedThreads?.has("");
-      return isMain && selectedMain;
-    };
+    const isVisible = createThreadVisibilityCheck(chatId, selectedThreads);
 
     const items: TimelineItem[] = [];
     const seenThreads = new Set<string>();
@@ -695,8 +876,18 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     // An error with no thread predates thread scoping. It stays visible
     // everywhere rather than being assigned to a thread we'd have to guess —
     // the guess is what produced the wrong-thread render in the first place.
-    for (const error of errorEvents) {
-      if (error.thread && !isVisible(error.thread)) continue;
+    //
+    // Concurrent identical failures across SEVERAL visible threads collapse to
+    // one row carrying a count. They stay separate rows in the store and the
+    // database, where they really are separate events; this is derived render
+    // state only. See groupVisibleErrors.
+    const errorGroups = groupVisibleErrors(errorEvents, {
+      isVisible,
+      collapseAcrossThreads: showAll || (selectedThreads?.size ?? 0) > 1,
+    });
+
+    for (const group of errorGroups) {
+      const error = group.error;
       const errorTime = new Date(error.timestamp).getTime();
 
       // Find insertion point: after last item with timestamp <= error time
@@ -716,6 +907,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       items.splice(insertIdx, 0, {
         type: "error",
         error,
+        errors: group.errors,
       });
     }
 
@@ -1401,11 +1593,7 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     }
 
     if (item.type === "error") {
-      return (
-        <div className="mb-2">
-          <WorkflowErrorMessage error={item.error} />
-        </div>
-      );
+      return <GroupedErrorRow error={item.error} errors={item.errors} />;
     }
 
     if (item.type === "info") {

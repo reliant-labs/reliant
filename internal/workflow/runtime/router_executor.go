@@ -57,6 +57,10 @@ type RouterExecutor struct {
 	projectPath string
 	pauseCtrl   *PauseController
 
+	// nodePathPrefix is the dotted graph path of the scope containing this
+	// router node, empty at the top level. See types.RuntimeContext.NodePath.
+	nodePathPrefix string
+
 	// Thread tracker
 	threadTracker       *ThreadTracker
 	makeThreadPauseCtrl func(string) *PauseController
@@ -100,6 +104,18 @@ func (r *RouterExecutor) WithExecContext(ctx *ExecutionContext) *RouterExecutor 
 func (r *RouterExecutor) WithProjectPath(path string) *RouterExecutor {
 	r.projectPath = path
 	return r
+}
+
+// WithNodePathPrefix sets the dotted graph path of the scope containing this
+// router node.
+func (r *RouterExecutor) WithNodePathPrefix(prefix string) *RouterExecutor {
+	r.nodePathPrefix = prefix
+	return r
+}
+
+// nodePath is this router node's own fully-qualified path.
+func (r *RouterExecutor) nodePath() string {
+	return joinNodePath(r.nodePathPrefix, r.node.GetId())
 }
 
 // WithPauseController sets the pause controller.
@@ -281,6 +297,7 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 		Thread:             routerThread,
 		WorkflowID:         r.workflowID,
 		StepID:             callLLMNode.GetId(),
+		NodePath:           joinNodePath(r.nodePathPrefix, callLLMNode.GetId()),
 		AssistantMessageID: preallocatedID,
 	}
 
@@ -292,7 +309,9 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 	// Dispatch the CallLLM activity
 	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
 	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute,
+		// routerActivityStartToClose, not a literal: resolveMaxAttempts tells a
+		// router dispatch apart from a graph step by this value.
+		StartToCloseTimeout: routerActivityStartToClose,
 		HeartbeatTimeout:    activityHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -551,6 +570,7 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 		Thread:             routerThread,
 		WorkflowID:         r.workflowID,
 		StepID:             callLLMNode.GetId(),
+		NodePath:           joinNodePath(r.nodePathPrefix, callLLMNode.GetId()),
 		AssistantMessageID: preallocatedID,
 	}
 
@@ -562,7 +582,10 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	// Dispatch the CallLLM activity using pause-aware context
 	baseCtx := r.pauseCtrl.GetActivityCtx(r.ctx)
 	activityCtx := workflow.WithActivityOptions(baseCtx, workflow.ActivityOptions{
-		StartToCloseTimeout: 5 * time.Minute, // Routing should be fast but give it some room
+		// Routing should be fast but give it some room. routerActivityStartToClose,
+		// not a literal: resolveMaxAttempts tells a router dispatch apart from a
+		// graph step by this value.
+		StartToCloseTimeout: routerActivityStartToClose,
 		HeartbeatTimeout:    activityHeartbeatTimeout,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval:    time.Second,
@@ -762,6 +785,9 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 	inlineExecutor = inlineExecutor.
 		WithInvocationContract(contract).
 		WithExecContext(childExecCtx).
+		// The synthetic node carries the ROUTER's id, so its path is the
+		// router's own path; the dispatched workflow's nodes hang off that.
+		WithNodePathPrefix(r.nodePathPrefix).
 		WithProjectPath(r.projectPath)
 	if r.threadTracker != nil {
 		inlineExecutor = inlineExecutor.WithThreadTracker(r.threadTracker)

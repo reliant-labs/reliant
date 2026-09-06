@@ -35,22 +35,28 @@ events:
       selected_node: build_integrations
       reasoning: "Plan includes a custom Slack notification script that needs to be built."
 
-  - node: build_integrations
+  # build_integrations EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_integrations.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Slack notification script works. Parameterized webhook URL via env var. Test passes."
-      iterations: 1
-
-  - node: build_workflow
+      response_text: "Implementation attempt for build_integrations."
+  - node: build_integrations.attempt.review
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Workflow matches plan. Integration script correctly referenced. Scenarios cover happy and failure paths."
-      iterations: 1
-
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Slack notification script works. Parameterized webhook URL via env var. Test passes."
+  # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_workflow.attempt.implement
+    output:
+      response_text: "Implementation attempt for build_workflow."
+  - node: build_workflow.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Workflow matches plan. Integration script correctly referenced. Scenarios cover happy and failure paths."
 expect:
   outcome: completed
   reached:
@@ -79,14 +85,17 @@ events:
       selected_node: build_workflow
       reasoning: "No custom integrations identified in the plan. Only off-the-shelf tools needed."
 
-  - node: build_workflow
+  # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_workflow.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
-      iterations: 1
-
+      response_text: "Implementation attempt for build_workflow."
+  - node: build_workflow.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
 expect:
   outcome: completed
   reached:
@@ -114,22 +123,28 @@ events:
       selected_node: build_integrations
       reasoning: "Plan requires a custom CSV-to-JSON transform script."
 
-  - node: build_integrations
+  # build_integrations EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_integrations.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Script handles headers, edge cases covered by tests. Good to go."
-      iterations: 2
-
-  - node: build_workflow
+      response_text: "Implementation attempt for build_integrations."
+  - node: build_integrations.attempt.review
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Workflow correctly references the transform script. Scenarios cover success and transform-failure paths."
-      iterations: 1
-
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Script handles headers, edge cases covered by tests. Good to go."
+  # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_workflow.attempt.implement
+    output:
+      response_text: "Implementation attempt for build_workflow."
+  - node: build_workflow.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Workflow correctly references the transform script. Scenarios cover success and transform-failure paths."
 expect:
   outcome: completed
   reached:
@@ -156,14 +171,17 @@ events:
       selected_node: build_workflow
       reasoning: "No custom integrations needed per the plan."
 
-  - node: build_workflow
+  # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_workflow.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
-      iterations: 2
-
+      response_text: "Implementation attempt for build_workflow."
+  - node: build_workflow.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
 expect:
   outcome: completed
   reached:

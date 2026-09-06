@@ -250,6 +250,26 @@ jobs:
         working-directory: web
         run: npm run build
 
+      # ── The artifact gate. Asserts on the BUILT BUNDLE, not the source. ────
+      #
+      # This runs HERE, in prepare, deliberately: it is one job that precedes
+      # the three-platform matrix, so a bad bundle stops all three builds
+      # instead of being packaged into a macOS, a Linux and a Windows
+      # installer. `00a8698a` unthrottled that matrix specifically to save ~7
+      # minutes; failing before it is worth more than failing inside it.
+      #
+      # Everything it checks is invisible in source review and produces a
+      # green build — a missing VITE_* injection (the v1.7.5 coupon outage), a
+      # leaked NODE_ENV=development, a relative asset base that white-screens
+      # every 2+-segment OAuth and billing return URL. The expected endpoints
+      # are DERIVED from electron/release.config.json, the same file exported
+      # into the build env above, so there is no second list to keep in sync.
+      #
+      # Cost is a grep over dist/assets: sub-second, on a build already paid
+      # for.
+      - name: Verify the built bundle
+        run: node .github/scripts/verify-bundle.mjs --dist web/dist
+
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
         with:

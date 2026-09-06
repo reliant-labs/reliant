@@ -38,9 +38,13 @@ description: >
   Refactor is skipped (conditional edge). Loop exits after 1 iteration.
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implemented the feature. Tests pass, code looks correct."
       response_text: "Implemented the feature. Tests pass, code looks correct."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -54,6 +58,10 @@ expect:
   reached:
     - attempt
     - attempt.implement
+    # implement is a `type: workflow` ref to builtin://agent. Mocking its
+    # internals makes the agent body execute; under black-box mocking this
+    # inner node is never entered no matter what the scenario writes.
+    - attempt.implement.agent_loop.call_llm
     - attempt.join_checks
     - attempt.review
   not_reached:
@@ -76,9 +84,13 @@ inputs:
     Only fail if the API surface is fundamentally wrong.
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Scaffolded the project. All services and packages created. Build passes."
       response_text: "Scaffolded the project. All services and packages created. Build passes."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -115,9 +127,13 @@ inputs:
 
 events:
   # Iteration 1: implement succeeds but build fails; reviewer sees it and says continue
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implemented the feature but introduced a compile error."
       response_text: "Implemented the feature but introduced a compile error."
+      tool_calls: []
 
   - node: attempt.build
     output:
@@ -131,9 +147,13 @@ events:
         feedback: "The build is failing — fix the compile error on the next attempt."
 
   # Iteration 2: implement fixes the build; reviewer passes
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Fixed the compile error. Build passes now."
       response_text: "Fixed the compile error. Build passes now."
+      tool_calls: []
 
   - node: attempt.build
     output:
@@ -169,9 +189,13 @@ description: >
   Second attempt starts fresh with review insights and succeeds (strategy="pass").
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Attempted the feature but tests fail. The data model doesn't match expectations."
       response_text: "Attempted the feature but tests fail. The data model doesn't match expectations."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -184,9 +208,13 @@ events:
     output:
       response_text: "Reverted the direct SQL queries and flat data model code. Workspace is clean for the next attempt to use the repository layer instead."
 
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built using the repository layer as suggested by the review. All tests pass, implementation is clean."
       response_text: "Built using the repository layer as suggested by the review. All tests pass, implementation is clean."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -216,9 +244,13 @@ description: >
   and succeeds.
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built a custom event system to handle notifications. Tests pass but the implementation is 400 lines and duplicates existing functionality."
       response_text: "Built a custom event system to handle notifications. Tests pass but the implementation is 400 lines and duplicates existing functionality."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -231,9 +263,13 @@ events:
     output:
       response_text: "Deleted the entire custom event system (400 lines removed). Workspace is clean for the next attempt to use the existing internal/broker pub/sub system."
 
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built on the existing broker infrastructure. Implementation is 50 lines, all tests pass, and it integrates cleanly with the existing notification flow."
       response_text: "Built on the existing broker infrastructure. Implementation is 50 lines, all tests pass, and it integrates cleanly with the existing notification flow."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -265,9 +301,13 @@ inputs:
   max_retries: 2
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "First attempt. Tried to refactor the auth module but broke session handling."
       response_text: "First attempt. Tried to refactor the auth module but broke session handling."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -280,9 +320,13 @@ events:
     output:
       response_text: "Reverted auth module changes. Workspace is clean for the next attempt to try the middleware-first approach with an event bus."
 
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Second attempt. Event bus approach works for auth/sessions but the websocket layer also has coupling issues."
       response_text: "Second attempt. Event bus approach works for auth/sessions but the websocket layer also has coupling issues."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -315,9 +359,13 @@ description: >
   on the very first try. Refactor is skipped via conditional edge.
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Added the new endpoint. Followed the existing pattern from the adjacent routes. All tests pass."
       response_text: "Added the new endpoint. Followed the existing pattern from the adjacent routes. All tests pass."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -352,9 +400,13 @@ inputs:
   max_retries: 2
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "First attempt using the full context bridge. Made changes but missed a critical pattern."
       response_text: "First attempt using the full context bridge. Made changes but missed a critical pattern."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -363,9 +415,13 @@ events:
         strategy: "continue"
         feedback: "Implementation missed the service layer pattern. The next attempt should use the existing service abstractions."
 
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Second attempt with accumulated context. Used the service layer as suggested. All tests pass."
       response_text: "Second attempt with accumulated context. Used the service layer as suggested. All tests pass."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -400,9 +456,13 @@ inputs:
   max_retries: 2
 
 events:
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "First brute force attempt. Took wrong approach — used raw SQL."
       response_text: "First brute force attempt. Took wrong approach — used raw SQL."
+      tool_calls: []
 
   - node: attempt.review
     output:
@@ -411,9 +471,13 @@ events:
         strategy: "continue"
         feedback: "Wrong approach. Should use repository pattern."
 
-  - node: attempt.implement
+  - node: attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Second brute force attempt from scratch. Found the repository layer and used it. Tests pass."
       response_text: "Second brute force attempt from scratch. Found the repository layer and used it. Tests pass."
+      tool_calls: []
 
   - node: attempt.review
     output:

@@ -333,6 +333,12 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return NewTextErrorResponse(refusal), nil
 	}
 
+	// Refuse `rg -r`, which is --replace and silently corrupts the output it
+	// prints. See shell_search_guard.go.
+	if refusal := ripgrepReplaceRefusal(params.Command); refusal != "" {
+		return NewTextErrorResponse(refusal), nil
+	}
+
 	// params.Timeout is in milliseconds per the JSON schema
 	maxTimeoutMs := int(MaxShellTimeout.Milliseconds())
 	defaultTimeoutMs := int(DefaultShellTimeout.Milliseconds())

@@ -262,6 +262,7 @@ type Repository interface {
 
 	GetCodexAuthTokens(ctx context.Context, userID string) (*core.CodexAuthTokens, error)
 	SetCodexAuthTokens(ctx context.Context, userID string, tokens core.CodexAuthTokens) error
+	CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.CodexAuthTokens) (bool, error)
 	DeleteCodexAuthTokens(ctx context.Context, userID string) error
 
 	GetCopilotAuthTokens(ctx context.Context, userID string) (*core.CopilotAuthTokens, error)

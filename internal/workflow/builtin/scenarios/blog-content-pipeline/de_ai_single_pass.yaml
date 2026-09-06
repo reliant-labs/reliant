@@ -9,9 +9,15 @@ name: de_ai_single_pass
 description: De-AI editor runs once, reviewer passes immediately, loop exits
 
 events:
-  - node: context_intake
+  # EXECUTED (not black-boxed): a qualified id makes the ref transparent, so
+  # this node's own args CEL — e.g. tools: {{inputs.tools + ['ask_user']}} — is compiled.
+  - node: context_intake.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Existing final blog post artifact is the relevant context."
       response_text: "Existing final blog post artifact is the relevant context."
+      tool_calls: []
 
   - node: classify
     output:
@@ -31,9 +37,13 @@ events:
         strategy: "pass"
         feedback: "Post reads like genuine practitioner writing. Authenticity 4/5."
 
-  - node: reddit_summary
+  - node: reddit_summary.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Reddit post written."
       response_text: "Reddit post written."
+      tool_calls: []
 
 expect:
   outcome: completed
@@ -43,6 +53,15 @@ expect:
     - de_ai.attempt.review
     - reddit_summary
     - validate_artifacts
+    - complete
+  completed:
+    - context_intake
+    - context_intake.agent_loop.call_llm
+    - de_ai
+    - de_ai.attempt.implement
+    - de_ai.attempt.review
+    - reddit_summary
+    - reddit_summary.agent_loop.call_llm
     - complete
   not_reached:
     - de_ai.attempt.refactor

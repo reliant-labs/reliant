@@ -1,0 +1,84 @@
+# Notices when a CI gate has gone dark.
+#
+# WHY THIS EXISTS
+# ===============
+#
+# `pr-ci.yml`'s own comment records the incident: the Playwright job "was
+# cancelled at 15m in every one of the last 50 runs that reached the test step,"
+# and "was never a slow-but-passing job; the Playwright suite itself was
+# genuinely failing." Fifty consecutive runs producing no signal at all, and
+# nothing noticed. Regressions shipped during that window that the gate existed
+# to catch.
+#
+# A red job is loud exactly once — on the PR that turned it red. A PERMANENTLY
+# red job is silent: people learn it is always red and stop reading it. A
+# CANCELLED job is quieter still, because a timeout looks like infrastructure
+# noise rather than a product defect. Nothing in GitHub Actions distinguishes
+# "this gate is protecting us" from "this gate has not passed since March."
+#
+# WHY IT IS A SCHEDULED JOB READING HISTORY
+# =========================================
+#
+# Actions cannot express "red for N consecutive runs" — a workflow run only ever
+# sees itself. Branch protection knows required vs not-required, never healthy
+# vs permanently broken; a required check that always fails just blocks every
+# merge, which is what gets it marked not-required and sent fully dark.
+#
+# So the check has to read run history back out of the API after the fact, which
+# is what `.github/scripts/check-gate-health.mjs` does with `gh run list` +
+# `gh run view --json jobs`. That needs no new infrastructure, no external
+# monitoring service, and no secret beyond the automatic GITHUB_TOKEN.
+#
+# WHAT IT DELIBERATELY DOES NOT DO
+# ================================
+#
+# It does not fix, retry, or disable anything, and it does not gate merges. Its
+# entire job is to convert silence into one failing run somebody sees. Fixing a
+# dark gate — or deciding to delete it, which is also a legitimate answer — is a
+# human call.
+
+name: Gate health
+
+on:
+  schedule:
+    # Mondays 14:00 UTC. Weekly is the right cadence: the failure mode took
+    # ~50 runs to go unnoticed, so a week is early, and a daily run for a
+    # condition that changes this slowly is how an alert gets muted.
+    - cron: "0 14 * * 1"
+  workflow_dispatch:
+    inputs:
+      workflow:
+        description: Workflow file to audit
+        required: false
+        default: pr-ci.yml
+      threshold:
+        description: Consecutive bad runs that count as dark
+        required: false
+        default: "5"
+
+permissions:
+  # actions:read is what `gh run list` / `gh run view` need. Nothing is written.
+  actions: read
+  contents: read
+
+jobs:
+  gate-health:
+    name: No CI gate has gone dark
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      # No --branch on purpose. pr-ci.yml is triggered by `pull_request` only, so
+      # it has ZERO runs on the default branch; a main-scoped audit would find
+      # nothing and pass, which is precisely the do-nothing gate this workflow
+      # exists to catch. The script treats "no runs found" as a failure for the
+      # same reason.
+      - name: Audit recent runs for permanently-dark jobs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node .github/scripts/check-gate-health.mjs \
+            --workflow "${{ github.event.inputs.workflow || 'pr-ci.yml' }}" \
+            --runs 20 \
+            --threshold "${{ github.event.inputs.threshold || '5' }}"

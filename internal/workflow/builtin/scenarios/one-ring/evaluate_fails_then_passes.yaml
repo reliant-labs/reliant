@@ -7,6 +7,14 @@ inputs:
   steps: [implement]
 
 events:
+  # Router: This scenario exercises the review -> refactor -> retry cycle, not routing.
+  # Its assertions require the full-pipeline entry, so that decision is made
+  # explicitly here instead of falling out of the router's default candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   - node: impl_loop.attempt.implement
     output:
       response_text: "Initial implementation attempt."

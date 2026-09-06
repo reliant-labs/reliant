@@ -16,9 +16,12 @@ type askQuestionExecution struct {
 	StepID        string
 	LoopNodeID    string
 	LoopIteration int
-	Metadata      string
-	Unattended    bool
-	Logger        log.Logger
+	// NodePath is the fully-qualified dotted graph position of the
+	// ask_question node. Observability only; never written to loop_node_id.
+	NodePath   string
+	Metadata   string
+	Unattended bool
+	Logger     log.Logger
 }
 
 // autoResolveUnattendedQuestion is what an ask_question node returns when the run
@@ -77,6 +80,7 @@ func executeAskQuestionSignalFlow(ctx workflow.Context, input askQuestionExecuti
 		"step_id":              input.StepID,
 		"loop_node_id":         input.LoopNodeID,
 		"loop_iteration":       input.LoopIteration,
+		"node_path":            input.NodePath,
 		"metadata":             input.Metadata,
 	}
 

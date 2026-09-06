@@ -839,7 +839,6 @@ interface ChatStoreState {
       workflowParams?: Record<string, unknown>;
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
-      systemMessages?: Array<{ role: "system"; content: string }>; // System messages to prepend
       discuss?: boolean; // If true, chat with LLM without resuming paused workflow
     },
   ) => Promise<void>;
@@ -1410,7 +1409,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       workflowParams?: Record<string, unknown>;
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
-      systemMessages?: Array<{ role: "system"; content: string }>; // System messages to prepend
       discuss?: boolean;
     },
   ) => {
@@ -1477,10 +1475,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         ...(options?.selectedPresets &&
           Object.keys(options.selectedPresets).length > 0 && {
             selected_presets: options.selectedPresets,
-          }),
-        ...(options?.systemMessages &&
-          options.systemMessages.length > 0 && {
-            systemMessages: options.systemMessages,
           }),
         ...(isDiscuss && { discuss: true }),
       };

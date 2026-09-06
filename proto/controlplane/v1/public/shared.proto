@@ -260,6 +260,22 @@ message PlanLimits {
   int32 max_llm_keys = 4;
   int32 requests_per_min = 7;
 
+  // Compute allowances. These come from the same plans.limits blob as the
+  // fields above and are what a compute plan actually sells, so a client
+  // that renders a plan needs them on the wire — before these existed the
+  // deprecated `limits` JSON string was the only way to get them, and when
+  // that stopped being populated every plan silently rendered zero hours
+  // and no sizes.
+
+  // Machine sizes this plan may run. EMPTY MEANS DENY ALL, including
+  // "small" — it is not "no restriction".
+  repeated string allowed_daemon_sizes = 9;
+  // Monthly included compute minutes. -1 means unlimited.
+  int32 daemon_compute_included_minutes = 10;
+  // Per-minute charge once included minutes are exhausted. Fractional
+  // cents are normal (0.2 = a fifth of a cent per minute), hence double.
+  double daemon_overage_per_minute_cents = 11;
+
   reserved 5, 6;
   reserved "ip_restricted", "max_ips_per_key";
 }
@@ -274,6 +290,22 @@ message Plan {
   google.protobuf.Timestamp created_at = 7;
   PlanLimits structured_limits = 8;
   // 9 previously reserved for stripe_slot_price_id (removed with compute slots)
+
+  // Monthly price in cents, from the plan catalog. This is THE price a
+  // client may display: the alternative is a client-side price table, which
+  // is a second declaration of what a plan costs that nothing reconciles
+  // against what Stripe charges.
+  //
+  // ZERO MEANS "NO MONTHLY PRICE", NOT "FREE". Wallet-billed code plans and
+  // the compute free trial have no monthly price at all; a client must
+  // render that as unavailable rather than as $0.00, and must not offer a
+  // purchase button for it.
+  int64 price_cents = 10;
+
+  // Sort key for a plan grid, ascending. Replaces client-side allowlists
+  // that both ordered and filtered the grid, which made a newly added plan
+  // invisible until the frontend was edited.
+  int32 display_order = 11;
 }
 
 message Subscription {
@@ -289,6 +321,18 @@ message Subscription {
   google.protobuf.Timestamp updated_at = 10;
   // Whether workspace compute overage billing is enabled for this subscription.
   bool overage_enabled = 11;
+
+  // Monthly ceiling, in cents, on compute overage spend for this subscription.
+  //
+  // Unset or 0 both mean NO CAP — the enforcement gate tests `> 0`, so a
+  // subscription whose column is already 0 keeps behaving exactly as it did
+  // before this field existed. `optional` is here so a client can tell "the
+  // server did not send a cap" from "the cap is zero"; both are uncapped, but
+  // only one of them is a value the user chose.
+  //
+  // The cap gates STARTING a machine (CreateDaemon / ResumeDaemon). It does
+  // not stop a machine that is already running.
+  optional int64 budget_cents = 12;
 }
 
 message ReliantEntitlement {

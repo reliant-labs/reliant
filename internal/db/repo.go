@@ -30,8 +30,36 @@ const (
 	txKey          transactionKey = `tx`
 	afterCommitKey transactionKey = `after-commit`
 
-	// Retry configuration
-	maxRetries     = 3
+	// Retry configuration.
+	//
+	// maxRetries is sized for the contention the product actually generates,
+	// not for an idle database. Update sequences are allocated from ONE
+	// counter row per user (update_stream_counters), so every concurrent chat
+	// belonging to a user contends on that single row — and a user running
+	// many chats at once is the normal case, not the edge case.
+	//
+	// Measured on the dev Postgres, 5 writes per writer, all on one counter:
+	//
+	//	writers   failure rate at maxRetries=3
+	//	2         0%
+	//	4         0%
+	//	8         5%
+	//	16        8.8%
+	//
+	// A failed allocation surfaces to the user as a lost update event, so this
+	// was a real defect above ~8 concurrent chats and not merely a flaky test.
+	// The same measurement shows the work always completes with a little more
+	// headroom: at 32 writers every write succeeded within one additional
+	// outer attempt. 6 retries (7 attempts) covers 32-way contention with
+	// margin, and the ladder is capped by maxRetryDelay so the added budget
+	// costs nothing when there is no conflict — a transaction that does not
+	// conflict never sleeps at all.
+	//
+	// This is a budget increase, not a fix for the underlying design: one
+	// counter row per user is a hot spot that sharding (or moving allocation
+	// off the serializable path) would remove. That is a larger change; this
+	// makes the current design behave correctly at realistic concurrency.
+	maxRetries     = 6
 	baseRetryDelay = 50 * time.Millisecond
 	maxRetryDelay  = 1 * time.Second
 
@@ -909,6 +937,24 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// out the way it does for tool calls. The timestamp suffix has no '-' of
 	// its own, so stripping the final '-' segment yields "question-<uuid>" —
 	// stable across both transitions, and distinct per question.
+	//
+	// Thread updates need it for a different reason: their entity_id is the
+	// WORKFLOW id, not the thread id (emitThreadUpdate keys on input.WorkflowID).
+	// An inline fork reuses its parent's workflow id, so one workflow id can own
+	// several threads AND is shared with that workflow's workflow_status rows.
+	// Under entity_id dedup those all land in one bucket and the newest wins:
+	// completing a run wrote a workflow_status that EVICTED the fork's only
+	// announcement, so the snapshot carried no origin for the thread,
+	// InterleavedTimeline could not classify it, and every message on it was
+	// dropped from the timeline. Measured on a real database: 3,196 announcements
+	// across 180 chats. The bug hid behind the live stream, which carries origin
+	// directly — the thread rendered fine while running and vanished on reload.
+	//
+	// The payload's `thread` is the identity actually being deduped, so key on
+	// it. The 'thread:' prefix keeps that key in its own namespace: thread ids
+	// and workflow ids are both bare UUIDs, and an inline fork's workflow id IS
+	// the main thread's id, which would otherwise collide with the main thread's
+	// own bucket.
 	query := `
 		SELECT DISTINCT ON (dedup_key)
 			id,
@@ -930,6 +976,7 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 				CASE
 					WHEN update_type = ? THEN COALESCE(NULLIF(data::jsonb->>'tool_call_id', ''), entity_id)
 					WHEN update_type = ? THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
+					WHEN update_type = ? THEN 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
 					ELSE entity_id
 				END AS dedup_key
 			FROM chat_updates
@@ -942,6 +989,7 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	rows, err := r.DB.DB(ctx).QueryContext(ctx, query,
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_TOOL_CALL),
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION),
+		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD),
 		chatID,
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE),
 		int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_STREAM_FINALIZED))

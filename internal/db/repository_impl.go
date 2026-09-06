@@ -2344,6 +2344,20 @@ func (r *Repo) SetCodexAuthTokens(ctx context.Context, userID string, tokens Cod
 	return r.settings.SetCodexAuthTokens(ctx, userID, tokens)
 }
 
+// CompareAndSwapCodexAuthTokens persists refreshed tokens only when the
+// stored refresh token still equals expectedRefreshToken (i.e. no concurrent
+// rotation was persisted in between). Returns true when the write happened.
+func (r *Repo) CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens CodexAuthTokens) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user_id cannot be empty")
+	}
+	if strings.TrimSpace(tokens.AccessToken) == "" {
+		return false, fmt.Errorf("access token cannot be empty")
+	}
+
+	return r.settings.CompareAndSwapCodexAuthTokens(ctx, userID, expectedRefreshToken, tokens)
+}
+
 func (r *Repo) DeleteCodexAuthTokens(ctx context.Context, userID string) error {
 	if userID == "" {
 		return fmt.Errorf("user_id cannot be empty")

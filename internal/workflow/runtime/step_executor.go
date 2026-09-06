@@ -39,6 +39,14 @@ type StepExecutor struct {
 	loopNodeID string
 	// loopIteration is the 0-indexed iteration within the loop.
 	loopIteration int
+	// nodePathPrefix is the fully-qualified dotted path of the scope this
+	// executor runs nodes in ("impl_loop.attempt" for a sub-workflow body
+	// inside a loop). A node's own NodePath is this prefix plus its id.
+	//
+	// Distinct from loopNodeID on purpose: loopNodeID is loop-scoped identity
+	// and is persisted; this is graph position and is not. See
+	// types.RuntimeContext.NodePath.
+	nodePathPrefix string
 	// threadTracker tracks threads for runtime thread mapping
 	threadTracker *ThreadTracker
 	// execContext is the unified execution context (thread, message, loop, parent).
@@ -87,6 +95,39 @@ func (e *StepExecutor) WithLoopContext(loopID string, iteration int) *StepExecut
 	e.loopNodeID = loopID
 	e.loopIteration = iteration
 	return e
+}
+
+// WithNodePathPrefix sets the fully-qualified dotted path of the scope whose
+// nodes this executor runs. Callers compose it with joinNodePath so nesting
+// accumulates instead of being overwritten.
+func (e *StepExecutor) WithNodePathPrefix(prefix string) *StepExecutor {
+	e.nodePathPrefix = prefix
+	return e
+}
+
+// iterContext builds the `iter` namespace for node config evaluation.
+//
+// The loop executors already publish the authoritative iteration context into
+// the iteration inputs they hand this executor — including `item` and `key`,
+// which only they can know because only they resolved the items expression.
+// Preferring that map is what makes `iter.item` work for ORDINARY nodes.
+// Rebuilding it from the iteration counter alone yielded a two-key map of
+// iteration and index, so `iter.item.num` failed to resolve with
+// "no such key: num" (docs/workflows/patterns.mdx:436 documents the contract).
+//
+// Falls back to the counter-only context when there is no loop context to read:
+// a top-level step has no `iter` in its inputs, and a loop body whose items
+// were never resolved (a `while` loop) has no item to expose.
+func (e *StepExecutor) iterContext() map[string]interface{} {
+	if iter, ok := e.workflowInputs["iter"].(map[string]interface{}); ok {
+		// Trust the loop's iteration/index over the published map only if the
+		// map omits them; the executor and its inputs are built together, so a
+		// disagreement means the inputs were assembled for a different scope.
+		if _, hasIteration := iter["iteration"]; hasIteration {
+			return iter
+		}
+	}
+	return model.BuildIterContext(e.loopIteration)
 }
 
 // WithThreadTracker sets the thread tracker for recording thread resolutions.
@@ -256,7 +297,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 	event := triggeredStep.Event
 
 	// Use helpers for consistent context building
-	iterCtx := model.BuildIterContext(e.loopIteration)
+	iterCtx := e.iterContext()
 
 	// Evaluate node config (resolves all CEL expressions in-place)
 	evalResult, err := EvaluateNodeConfig(
@@ -739,6 +780,7 @@ func (e *StepExecutor) startAskQuestion(node *reliantv1.Node, evalResult *relian
 			StepID:        node.GetId(),
 			LoopNodeID:    e.loopNodeID,
 			LoopIteration: e.loopIteration,
+			NodePath:      joinNodePath(e.nodePathPrefix, node.GetId()),
 			Metadata:      metadata,
 			Unattended:    IsUnattended(e.workflowInputs),
 			Logger:        workflow.GetLogger(gCtx),
@@ -766,6 +808,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 	runInputs["workflow_id"] = e.workflowID
 	runInputs["chat_id"] = e.chatID
 	runInputs["step_id"] = node.GetId()
+	runInputs["node_path"] = joinNodePath(e.nodePathPrefix, node.GetId())
 	if e.loopNodeID != "" {
 		runInputs["loop_node_id"] = e.loopNodeID
 		runInputs["loop_iteration"] = e.loopIteration
@@ -856,7 +899,7 @@ func (e *StepExecutor) activityOptions(node *reliantv1.Node) workflow.Context {
 			InitialInterval:    time.Second,
 			BackoffCoefficient: 2.0,
 			MaximumInterval:    time.Minute,
-			MaximumAttempts:    5,
+			MaximumAttempts:    stepActivityMaxAttempts,
 		},
 	})
 }
@@ -930,6 +973,7 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		ChatID:     e.chatID,
 		WorkflowID: e.workflowID,
 		StepID:     node.GetId(),
+		NodePath:   joinNodePath(e.nodePathPrefix, node.GetId()),
 	}
 
 	// Thread from execution context

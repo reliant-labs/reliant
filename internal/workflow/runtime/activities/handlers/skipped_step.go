@@ -17,7 +17,10 @@ type SkippedStepInput struct {
 	WorkflowID string `json:"workflow_id"`
 	ChatID     string `json:"chat_id" reliant:"-"`
 	StepID     string `json:"step_id"`
-	Condition  string `json:"condition"` // The condition that evaluated to false
+	// NodePath is the node's fully-qualified dotted graph position. Carried for
+	// observability alongside the bare StepID; not persisted.
+	NodePath  string `json:"node_path,omitempty"`
+	Condition string `json:"condition"` // The condition that evaluated to false
 }
 
 // SkippedStepOutput is the output from SkippedStep activity

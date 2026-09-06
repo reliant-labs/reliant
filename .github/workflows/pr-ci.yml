@@ -34,18 +34,29 @@ jobs:
   # that empties an endpoint, or points one at localhost, cannot reach a
   # release — the failure mode that shipped v1.7.5 with no control-plane URL.
   #
-  # control-plane is private, so a fork cannot render the KCL to diff against.
-  # The script detects that and validates the committed values instead of
-  # failing on something an outside contributor cannot fix; the authoritative
-  # drift comparison runs in control-plane's own CI, where the KCL lives.
+  # WHAT THIS JOB DOES AND DOES NOT DO — the name used to overstate it.
+  #
+  # control-plane is private and this repo's CI has no checkout of it, so this
+  # job can NEVER render the KCL and therefore NEVER compares against it. It
+  # takes the skip branch on every single run. What it does verify is real but
+  # narrower: that the committed values are shippable — every required VITE_*
+  # and RELIANT_* key present, non-empty, and not pointed at localhost.
+  #
+  # The drift comparison — "does this file still match the KCL it was generated
+  # from" — happens in control-plane's `ci.yml`, which checks this repo out as a
+  # sibling and runs the same script with `--check --require`. `--require`
+  # makes the skip branch a hard failure there, so that invocation cannot pass
+  # by doing nothing the way this one structurally must.
   release-config:
-    name: Release config (generated from KCL)
+    name: Release config values are shippable (drift checked in control-plane CI)
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
 
-      - name: Validate electron/release.config.json
+      # Deliberately NOT --require: there is no control-plane checkout here and
+      # a fork could not supply one. The skip is the expected path.
+      - name: Validate committed electron/release.config.json values
         run: node .github/scripts/sync-release-config.mjs --check
 
   # The generators moved OFF the critical path, and this job is what keeps

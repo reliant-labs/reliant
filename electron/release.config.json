@@ -12,6 +12,8 @@
     "VITE_APP_URL": "https://app.reliantlabs.io",
     "VITE_SENTRY_DSN": "https://c84a8011e134e0b905db7ba5f10dbc8f@o4509000353447936.ingest.us.sentry.io/4509933645856778",
     "VITE_SENTRY_ENABLED": "true",
+    "VITE_STATSIG_CLIENT_KEY": "client-uAMxcftbx55c1rBoKgUhEzaqVrHdx44qS1AJQtD0r4j",
+    "VITE_STRIPE_PUBLISHABLE_KEY": "pk_live_51SHoUnPVGOBSO8GiRqnmbDusPSpL70lw1ac5cN1qmrzbNIScnqZdpRekg4CdsGEhmtyKtvyxX6D6qO7gmwpOmaRI00uAf2gIXT",
     "VITE_CLI_DEFAULTS_BAKED": "true"
   },
   "main": {

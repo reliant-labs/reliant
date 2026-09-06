@@ -3,7 +3,9 @@ package tools
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -21,59 +23,34 @@ import (
 )
 
 // =============================================================================
-// SHARED TYPES FOR SCENARIOS
+// SCENARIO SCHEMA
 // =============================================================================
 //
-// These types mirror the simulator types but include jsonschema tags for LLM tool interfaces.
-// The scenario system is type-agnostic - Output is passed through directly to nodes.
-// =============================================================================
-
-// SimulatedEventParam represents a single event in the simulation.
-// The Output field contains the mock output that will be returned by the node,
-// matching the activity's output structure directly (no translation needed).
-type SimulatedEventParam struct {
-	// Node targets a specific node (supports qualified IDs for inner loops and workflows).
-	// Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
-	// If omitted, events are applied sequentially.
-	Node string `json:"node,omitempty" yaml:"node,omitempty" jsonschema:"description=Target specific node. Use dot-notation for inner loops and workflows: loop_id.inner_node_id. If omitted events are applied sequentially."`
-
-	// Output is the mock output returned by the node.
-	// This should match the activity's output structure directly:
-	//   - call_llm: {message: {role text} response_text tool_calls input_tokens ...}
-	//   - execute_tools: {message tool_results thread_token_count response_data ...}
-	//   - approval: {approval_id status action_taken data}
-	//   - run: {exit_code stdout stderr}
-	Output map[string]interface{} `json:"output" yaml:"output" jsonschema:"required,description=Mock output returned by the node. Must match the activity output structure (e.g. call_llm needs message/response_text/tool_calls)."`
-}
-
-// ExpectationParam defines expected outcomes for scenario validation.
-type ExpectationParam struct {
-	Outcome       string                            `json:"outcome,omitempty" yaml:"outcome,omitempty" jsonschema:"description=Expected outcome: completed or error"`
-	Reached       []string                          `json:"reached,omitempty" yaml:"reached,omitempty" jsonschema:"description=Nodes that should be executed. Supports qualified IDs (e.g. loop_id.inner_node_id)"`
-	NotReached    []string                          `json:"not_reached,omitempty" yaml:"not_reached,omitempty" jsonschema:"description=Nodes that should NOT be executed"`
-	ErrorContains string                            `json:"error_contains,omitempty" yaml:"error_contains,omitempty" jsonschema:"description=Substring that should appear in error message"`
-	ErrorNode     string                            `json:"error_node,omitempty" yaml:"error_node,omitempty" jsonschema:"description=Node where error should occur"`
-	NodeOutputs   map[string]map[string]interface{} `json:"node_outputs,omitempty" yaml:"node_outputs,omitempty" jsonschema:"description=Expected output values for specific nodes"`
-}
-
-// ScenarioParam represents a scenario definition for testing workflows.
-type ScenarioParam struct {
-	Name        string                            `json:"name" yaml:"name" jsonschema:"required,description=Human-readable scenario name"`
-	ApiVersion  string                            `json:"apiVersion,omitempty" yaml:"apiVersion,omitempty" jsonschema:"description=Schema version for the scenario format"`
-	Description string                            `json:"description,omitempty" yaml:"description,omitempty" jsonschema:"description=What this scenario tests"`
-	Events      []SimulatedEventParam             `json:"events" yaml:"events" jsonschema:"required,description=Sequence of simulated events with mock outputs"`
-	Expect      *ExpectationParam                 `json:"expect,omitempty" yaml:"expect,omitempty" jsonschema:"description=Expected outcome and assertions"`
-	Inputs      map[string]interface{}            `json:"inputs,omitempty" yaml:"inputs,omitempty" jsonschema:"description=Override workflow inputs for this scenario"`
-	StartAt     string                            `json:"start_at,omitempty" yaml:"start_at,omitempty" jsonschema:"description=Start execution at a specific node (for partial testing)"`
-	State       map[string]map[string]interface{} `json:"state,omitempty" yaml:"state,omitempty" jsonschema:"description=Pre-populate node outputs (for partial testing)"`
-}
-
+// There is exactly ONE definition of the scenario format:
+// simulator.Scenario / Expectation / SimulatedEvent. The tools parse stored
+// YAML straight into it.
+//
+// This file used to declare a private mirror (ScenarioParam / ExpectationParam
+// / SimulatedEventParam) and copy it field-by-field onto the simulator types.
+// The mirror drifted, and every field it forgot was silently DISCARDED —
+// Expectation.Completed, Expectation.Skipped and Expectation.Outputs, plus the
+// whole typed-event mode on SimulatedEvent. A scenario asserting
+// `completed: [x]` for a node that was merely skipped therefore reported PASS
+// through the tools while CI (which unmarshals into simulator.Scenario
+// directly) enforced the assertion for real.
+//
+// The mirror existed only to hang jsonschema tags off, and nothing ever
+// reflected over it: write_scenario takes the scenario as a raw YAML string
+// (WriteScenarioParams.Content), so no tool's ParamSchema ever reached these
+// types. Deleting it removes the drift mechanism outright rather than patching
+// this round of dropped fields.
+//
 // =============================================================================
 // LIST SCENARIOS TOOL
 // =============================================================================
 
 type ListScenariosParams struct {
-	ID string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 }
 
 type listScenariosTool struct {
@@ -87,7 +64,9 @@ const (
 Returns a summary of each scenario including name, description, and last run status.
 Use this to see what scenarios exist and their current state.
 
-No parameters needed - the workflow is determined from the current chat context.`
+No parameters are required. The workflow defaults to the one this chat is
+editing. Pass id (a workflow UUID, slug, or name) only to list scenarios for a
+different workflow.`
 )
 
 func NewListScenariosTool(repo db.Repository) Tool {
@@ -112,9 +91,9 @@ func (t *listScenariosTool) Execute(ctx *rctx.ToolContext, args ListScenariosPar
 		return NewTextErrorResponse("This tool requires a database connection and is not available in daemon-only mode"), nil
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	scenarios, err := t.repo.ListWorkflowScenariosByDraft(ctx, draft.ID)
@@ -161,7 +140,7 @@ func (t *listScenariosTool) Execute(ctx *rctx.ToolContext, args ListScenariosPar
 // =============================================================================
 
 type ViewScenarioParams struct {
-	ID   string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID   string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 	Name string `json:"name" jsonschema:"required,description=Name of the scenario to view"`
 }
 
@@ -174,7 +153,10 @@ const (
 	viewScenarioToolDescription = `View a specific test scenario's full definition.
 
 Returns the complete scenario YAML including events, expectations, and last run results.
-Use this to examine a scenario's configuration or debug test failures.`
+Use this to examine a scenario's configuration or debug test failures.
+
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to view a scenario on a different workflow.`
 )
 
 func NewViewScenarioTool(repo db.Repository) Tool {
@@ -203,9 +185,9 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 		return NewTextErrorResponse("name is required"), nil
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	scenario, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
@@ -261,7 +243,7 @@ func (t *viewScenarioTool) Execute(ctx *rctx.ToolContext, args ViewScenarioParam
 // =============================================================================
 
 type EditScenarioParams struct {
-	ID              string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID              string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 	Name            string `json:"name" jsonschema:"required,description=Name of the scenario to edit"`
 	OldString       string `json:"old_string" jsonschema:"required,description=The exact text to find and replace"`
 	NewString       string `json:"new_string" jsonschema:"required,description=The replacement text"`
@@ -278,6 +260,9 @@ const (
 
 Use this for small changes like updating expected values or modifying events.
 The old_string must match exactly (including whitespace and indentation).
+
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to edit a scenario on a different workflow.
 
 **Example:**
 {
@@ -316,9 +301,9 @@ func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParam
 		return NewTextErrorResponse("old_string is required"), nil
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	scenario, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
@@ -382,7 +367,7 @@ func (t *editScenarioTool) Execute(ctx *rctx.ToolContext, args EditScenarioParam
 // =============================================================================
 
 type WriteScenarioParams struct {
-	ID              string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID              string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 	Name            string `json:"name" jsonschema:"required,description=Name of the scenario to create/update"`
 	Content         string `json:"content" jsonschema:"required,description=Complete scenario definition as YAML"`
 	ExpectedVersion *int64 `json:"expected_version,omitempty" jsonschema:"description=Optional version number for conflict detection"`
@@ -409,18 +394,44 @@ events:
         text: "Hello!"
       response_text: "Hello!"
 expect:
-  outcome: completed         # or "error"
+  outcome: completed         # or "error" / "failed"
   reached: ["node1", "node2"]
   not_reached: ["node3"]
+
+**Events — typed mode (usually shorter than a raw output map):**
+  - node: call_llm
+    type: llm_response       # llm_response | tool_result | tool_error | llm_error | user_input
+    text: "Hello!"
+    tool_calls: [{name: bash, input: {command: ls}}]
+  - node: execute_tools
+    type: tool_result
+    tool: bash
+    tool_output: {result: "file.txt"}
+    is_error: false          # marks the tool result as failed
+
+**Assertions — all optional:**
+- outcome: completed | error | failed
+- reached / not_reached: whether a node was SCHEDULED. reached includes nodes
+  that were skipped or errored, so it does NOT prove a node ran.
+- completed: nodes that must have EXECUTED successfully. This is the assertion
+  that excludes skipped nodes — use it, not reached, to prove a branch ran.
+- skipped: nodes that must have been scheduled but skipped by a false condition.
+- error_contains / error_node: for outcome: error
+- node_outputs: {node_id: {field: expected}} — partial match on a node's output
+- outputs: {name: expected} — the workflow's declared outputs. Keys support
+  dotted paths (e.g. "response.choice": "complete").
 
 **Targeting nodes:**
 - Top-level nodes: node: "call_llm"
 - Inner loop nodes: node: "agent_loop.call_llm" (dot-separated)
 - Nested loops: node: "outer_loop.inner_loop.call_llm"
 
+**Workflow selection:**
+Defaults to the workflow this chat is editing. Pass id (a workflow UUID, slug,
+or name) only to write a scenario on a different workflow.
+
 **Example:**
 {
-  "id": "workflow-uuid",
   "name": "happy_path",
   "content": "name: happy_path\ndescription: Test happy path\nevents:\n  - output:\n      message:\n        role: assistant\n        text: Hello!\n      response_text: Hello!\nexpect:\n  outcome: completed"
 }`
@@ -455,9 +466,9 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 		return NewTextErrorResponse("content is required"), nil
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	// Check if scenario already exists
@@ -532,7 +543,7 @@ func (t *writeScenarioTool) Execute(ctx *rctx.ToolContext, args WriteScenarioPar
 // =============================================================================
 
 type DeleteScenarioParams struct {
-	ID   string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID   string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 	Name string `json:"name" jsonschema:"required,description=Name of the scenario to delete"`
 }
 
@@ -544,7 +555,10 @@ const (
 	DeleteScenarioToolName        = "delete_scenario"
 	deleteScenarioToolDescription = `Delete a test scenario.
 
-Permanently removes the scenario from the workflow.`
+Permanently removes the scenario from the workflow.
+
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to delete a scenario on a different workflow.`
 )
 
 func NewDeleteScenarioTool(repo db.Repository) Tool {
@@ -573,9 +587,9 @@ func (t *deleteScenarioTool) Execute(ctx *rctx.ToolContext, args DeleteScenarioP
 		return NewTextErrorResponse("name is required"), nil
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	scenario, err := t.repo.GetWorkflowScenarioByName(ctx, draft.ID, args.Name)
@@ -598,7 +612,7 @@ func (t *deleteScenarioTool) Execute(ctx *rctx.ToolContext, args DeleteScenarioP
 // =============================================================================
 
 type RunScenarioParams struct {
-	ID   string `json:"id" jsonschema:"required,description=Workflow draft UUID"`
+	ID   string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
 	Name string `json:"name" jsonschema:"required,description=Name of the scenario to run"`
 }
 
@@ -613,7 +627,10 @@ const (
 Executes the scenario against the current workflow and returns the results.
 Use this after making changes to verify scenarios still pass.
 
-Use list_scenarios to see available scenario names.`
+Use list_scenarios to see available scenario names.
+
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to run a scenario on a different workflow.`
 )
 
 func NewRunScenarioTool(repo db.Repository) Tool {
@@ -642,9 +659,9 @@ func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams)
 		return NewTextErrorResponse("name is required"), nil
 	}
 
-	draft, err := t.repo.GetWorkflowDraft(ctx, args.ID)
+	draft, err := resolveWorkflowDraft(ctx, t.repo, args.ID)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get workflow draft: %v", err)), nil
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	return runScenarioByName(ctx, t.repo, draft, args.Name)
@@ -802,18 +819,44 @@ func loadScenarioProjectWorkflow(ctx *rctx.ToolContext, repo db.Repository, proj
 	return wf, nil
 }
 
-// dbScenarioToSimulatorInternal converts a database scenario to simulator types
+// dbScenarioToSimulatorInternal parses a stored scenario into the simulator's
+// own type. This is the same unmarshal the builtin-scenario CI suite performs
+// (internal/workflow/builtin/scenarios_test.go), so the tools and CI cannot
+// disagree about what a scenario file means.
 func dbScenarioToSimulatorInternal(s *db.WorkflowScenario) (*simulator.Scenario, error) {
-	var scenarioParam ScenarioParam
-	if err := yaml.Unmarshal([]byte(s.Events), &scenarioParam); err != nil {
+	var scenario simulator.Scenario
+	if err := yaml.Unmarshal([]byte(s.Events), &scenario); err != nil {
 		return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
 	}
-	return convertScenarioParam(&scenarioParam), nil
+	return &scenario, nil
 }
 
-// formatScenarioResultInternal formats the result for display
+// Budgets for the scenario result text. This string is fed straight into a
+// model's context window alongside the workflow YAML the model is trying to
+// fix, so a verbose result is its own failure mode: it evicts the very thing
+// being debugged. A passing run therefore prints a few lines, and detail is
+// spent only where something actually diverged.
+const (
+	scenarioNodeOutputBudget  = 220 // per-node output, characters
+	scenarioTotalOutputBudget = 8   // number of nodes whose outputs are printed
+)
+
+// formatScenarioResultInternal renders a simulation result for an LLM.
+//
+// The simulator already knows far more than "which nodes were reached" — it
+// distinguishes completed from skipped nodes, records each node's actual
+// output, and evaluates the workflow's declared outputs. Without that, a failed
+// routing assertion is undebuggable: "handle_question was not completed" reads
+// identically whether the node was skipped by a false condition or never
+// scheduled at all, and those have completely different fixes.
+//
+// This only changes the text returned to the model. The persisted JSON
+// (result.ToJSON, read by the UI) is untouched.
 func formatScenarioResultInternal(result *simulator.ScenarioResult) string {
-	var status string
+	var sb strings.Builder
+	exec := &result.Execution
+
+	status := string(result.Status)
 	switch result.Status {
 	case simulator.StatusPassed:
 		status = "✓ PASSED"
@@ -823,67 +866,203 @@ func formatScenarioResultInternal(result *simulator.ScenarioResult) string {
 		status = "⚠ ERROR"
 	}
 
-	output := fmt.Sprintf("## Scenario: %s\n\n", result.Scenario)
-	output += fmt.Sprintf("**Status:** %s\n\n", status)
+	fmt.Fprintf(&sb, "## Scenario: %s — %s\n\n", result.Scenario, status)
 
-	output += "### Execution\n"
-	output += fmt.Sprintf("- **Outcome:** %s\n", result.Execution.Outcome)
-	output += fmt.Sprintf("- **Nodes reached:** %v\n", result.Execution.NodesReached)
-	output += fmt.Sprintf("- **Duration:** %dms\n", result.Execution.DurationMs)
+	// Outcome, expected vs actual. The expectation is only worth printing when
+	// it disagrees with what happened.
+	expectedOutcome := ""
+	if result.Expected != nil {
+		expectedOutcome = string(result.Expected.Outcome)
+	}
+	if expectedOutcome != "" && expectedOutcome != exec.Outcome {
+		fmt.Fprintf(&sb, "outcome: %s (expected %s) · %dms\n", exec.Outcome, expectedOutcome, exec.DurationMs)
+	} else {
+		fmt.Fprintf(&sb, "outcome: %s · %dms\n", exec.Outcome, exec.DurationMs)
+	}
 
-	if result.Execution.Error != nil {
-		output += "\n### Error\n"
-		output += fmt.Sprintf("- **Node:** %s\n", result.Execution.Error.Node)
-		if result.Execution.Error.Step != "" {
-			output += fmt.Sprintf("- **Step:** %s\n", result.Execution.Error.Step)
+	// The single most useful missing signal: which nodes ran vs which were
+	// scheduled and skipped by a false condition.
+	fmt.Fprintf(&sb, "completed: %s\n", joinNodesOrNone(exec.NodesCompleted))
+	if len(exec.NodesSkipped) > 0 {
+		fmt.Fprintf(&sb, "skipped:   %s\n", joinNodesOrNone(exec.NodesSkipped))
+	}
+	if errored := scenarioNodesInState(exec, simulator.StateError); len(errored) > 0 {
+		fmt.Fprintf(&sb, "errored:   %s\n", joinNodesOrNone(errored))
+	}
+	// Anything scheduled but classified as neither completed nor skipped would
+	// otherwise vanish from the summary, which is exactly the ambiguity this
+	// formatter exists to remove.
+	if other := scenarioUnaccountedNodes(exec); len(other) > 0 {
+		fmt.Fprintf(&sb, "reached:   %s\n", joinNodesOrNone(other))
+	}
+
+	if exec.Error != nil {
+		fmt.Fprintf(&sb, "\n### Error at %s\n", exec.Error.Node)
+		if exec.Error.Step != "" {
+			fmt.Fprintf(&sb, "step: %s\n", exec.Error.Step)
 		}
-		output += fmt.Sprintf("- **Message:** %s\n", result.Execution.Error.Message)
-		if result.Execution.Error.Expression != "" {
-			output += fmt.Sprintf("- **Expression:** `%s`\n", result.Execution.Error.Expression)
+		fmt.Fprintf(&sb, "%s\n", exec.Error.Message)
+		if exec.Error.Expression != "" {
+			fmt.Fprintf(&sb, "expression: `%s`\n", exec.Error.Expression)
 		}
+	}
+
+	// Warnings print even on a PASS. A run that passed while black-boxing a
+	// sub-workflow or defaulting a router is precisely the case where the
+	// author needs telling, and by definition there are no mismatches to carry
+	// the message.
+	if len(result.Warnings) > 0 {
+		sb.WriteString("\n### Warnings — this run may not have tested what you think\n")
+		for _, w := range result.Warnings {
+			fmt.Fprintf(&sb, "- %s\n", w)
+		}
+	}
+
+	// On success there is nothing left to say — stop here and leave the
+	// context window to the workflow itself.
+	if len(result.Mismatches) == 0 && exec.Error == nil {
+		return sb.String()
 	}
 
 	if len(result.Mismatches) > 0 {
-		output += "\n### Expectation Mismatches\n"
+		sb.WriteString("\n### Failed expectations\n")
 		for _, m := range result.Mismatches {
-			output += fmt.Sprintf("- %s\n", m)
+			fmt.Fprintf(&sb, "- %s\n", annotateMismatchWithNodeState(m, exec))
 		}
 	}
 
-	return output
+	if len(exec.WorkflowOutputs) > 0 {
+		sb.WriteString("\n### Workflow outputs\n")
+		for _, key := range sortedKeys(exec.WorkflowOutputs) {
+			fmt.Fprintf(&sb, "- %s: %s\n", key, truncateScenarioValue(exec.WorkflowOutputs[key]))
+		}
+	}
+
+	if len(exec.NodeOutputs) > 0 {
+		sb.WriteString("\n### Node outputs\n")
+		nodes := sortedNodeOutputKeys(exec.NodeOutputs)
+		shown := nodes
+		if len(shown) > scenarioTotalOutputBudget {
+			shown = shown[:scenarioTotalOutputBudget]
+		}
+		for _, node := range shown {
+			fmt.Fprintf(&sb, "- %s: %s\n", node, truncateScenarioValue(exec.NodeOutputs[node]))
+		}
+		if len(nodes) > len(shown) {
+			fmt.Fprintf(&sb, "- … %d more node(s) truncated\n", len(nodes)-len(shown))
+		}
+	}
+
+	return sb.String()
 }
 
-// convertScenarioParam converts tool params to simulator types.
-// The conversion is straightforward since both use the same structure.
-func convertScenarioParam(p *ScenarioParam) *simulator.Scenario {
-	scenario := &simulator.Scenario{
-		Name:        p.Name,
-		ApiVersion:  p.ApiVersion,
-		Description: p.Description,
-		Inputs:      p.Inputs,
-		StartAt:     p.StartAt,
-		State:       p.State,
+// annotateMismatchWithNodeState appends the actual execution state of any node
+// the mismatch names. The engine's messages quote node ids, so a mismatch about
+// a node that was skipped gets "(handle_question was skipped)" attached —
+// turning "it wasn't completed" into an actionable statement about which
+// condition to look at.
+func annotateMismatchWithNodeState(mismatch string, exec *simulator.ExecutionDetails) string {
+	if len(exec.NodeStates) == 0 {
+		return mismatch
 	}
 
-	// Convert events (types match, just copy)
-	for _, e := range p.Events {
-		scenario.Events = append(scenario.Events, simulator.SimulatedEvent{
-			Node:   e.Node,
-			Output: e.Output,
-		})
+	var notes []string
+	seen := make(map[string]bool)
+	for _, node := range sortedStateKeys(exec.NodeStates) {
+		if seen[node] || !strings.Contains(mismatch, `"`+node+`"`) {
+			continue
+		}
+		seen[node] = true
+		notes = append(notes, fmt.Sprintf("%s was %s", node, exec.NodeStates[node]))
 	}
+	if len(notes) == 0 {
+		return mismatch
+	}
+	return fmt.Sprintf("%s [%s]", mismatch, strings.Join(notes, "; "))
+}
 
-	// Convert expectations
-	if p.Expect != nil {
-		scenario.Expect = &simulator.Expectation{
-			Outcome:       simulator.ExpectedOutcome(p.Expect.Outcome),
-			Reached:       p.Expect.Reached,
-			NotReached:    p.Expect.NotReached,
-			ErrorContains: p.Expect.ErrorContains,
-			ErrorNode:     p.Expect.ErrorNode,
-			NodeOutputs:   p.Expect.NodeOutputs,
+// scenarioNodesInState collects nodes sitting in a given execution state.
+func scenarioNodesInState(exec *simulator.ExecutionDetails, want simulator.NodeExecutionState) []string {
+	var nodes []string
+	for _, node := range sortedStateKeys(exec.NodeStates) {
+		if exec.NodeStates[node] == want {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
+}
+
+// scenarioUnaccountedNodes returns nodes that were scheduled but appear in
+// neither the completed nor the skipped list.
+func scenarioUnaccountedNodes(exec *simulator.ExecutionDetails) []string {
+	accounted := make(map[string]bool, len(exec.NodesCompleted)+len(exec.NodesSkipped))
+	for _, node := range exec.NodesCompleted {
+		accounted[node] = true
+	}
+	for _, node := range exec.NodesSkipped {
+		accounted[node] = true
+	}
+	for node, state := range exec.NodeStates {
+		if state == simulator.StateError {
+			accounted[node] = true
 		}
 	}
 
-	return scenario
+	var rest []string
+	for _, node := range exec.NodesReached {
+		if !accounted[node] {
+			accounted[node] = true
+			rest = append(rest, node)
+		}
+	}
+	return rest
+}
+
+// truncateScenarioValue renders a value as compact JSON, clipped to a budget
+// with an explicit marker so the model knows the value continues rather than
+// concluding the field is genuinely short.
+func truncateScenarioValue(value interface{}) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		encoded = []byte(fmt.Sprintf("%v", value))
+	}
+	text := string(encoded)
+	if len(text) <= scenarioNodeOutputBudget {
+		return text
+	}
+	return fmt.Sprintf("%s… (truncated, %d chars total)", text[:scenarioNodeOutputBudget], len(text))
+}
+
+func joinNodesOrNone(nodes []string) string {
+	if len(nodes) == 0 {
+		return "(none)"
+	}
+	return strings.Join(nodes, ", ")
+}
+
+func sortedKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedNodeOutputKeys(m map[string]map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedStateKeys(m map[string]simulator.NodeExecutionState) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

@@ -43,7 +43,7 @@ const FULLY_POPULATED_PLAN: Required<LaunchPlan> = {
   workflowId: "forge-one-shot",
   modelProvider: "anthropic",
   workflowParams: { prompt: "hello" },
-  daemonProvisioning: true,
+  commitKey: "1f0d1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
   computeAutoSkipped: true,
 };
 

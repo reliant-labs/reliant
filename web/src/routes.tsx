@@ -12,6 +12,7 @@ import {
   onboardingSearchSchema,
   proxyAuthSearchSchema,
   settingsParamsSchema,
+  settingsSearchSchema,
   upgradeSearchSchema,
   workflowSearchSchema,
 } from './routeSchemas'
@@ -55,6 +56,10 @@ const UpgradeAccount = lazyRouteComponent(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const DesignSandboxPage = lazyRouteComponent(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
+// Lazy for the usual reason AND one specific to it: this is the only route
+// that pulls in Stripe.js, which no other screen should pay for.
+const CheckoutEmbedPage = lazyRouteComponent(
+  () => import('./components/Billing/CheckoutEmbedPage'), 'CheckoutEmbedPage')
 const SettingsPage = lazyRouteComponent(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRouteComponent(
@@ -339,12 +344,32 @@ const designSandboxRoute = createRoute({
   component: DesignSandboxPage,
 })
 
+// `/checkout/embed` — Stripe's embedded form with no app chrome, loaded in the
+// Electron checkout window (see components/Billing/CheckoutEmbedPage.tsx for
+// why that window still exists now that app://bundle is known to run Stripe.js
+// fine: payment-method domains are registered by HOSTNAME, and app://bundle
+// cannot be one).
+//
+// A direct child of rootRoute, NOT of authenticatedLayoutRoute: this renders in
+// a bare BrowserWindow with its own session partition, so the app's auth
+// chrome has nothing to work with. The purchase is still gated — the checkout
+// mutation refuses an anonymous caller before any Stripe session exists.
+//
+// Search params are read from window.location inside the component rather than
+// through validateSearch, so this route adds nothing to routeSchemas.ts.
+const checkoutEmbedRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/checkout/embed',
+  component: CheckoutEmbedPage,
+})
+
 // Settings routes — replace the old viewerStore.isSettingsMode + settingsSection
 // flags. `/settings` is the bare entry (defaults to the page's first section).
 // `/settings/$section` deep-links to a specific section.
 const settingsRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
   path: '/settings',
+  validateSearch: settingsSearchSchema,
   component: SettingsPage,
 })
 
@@ -368,6 +393,9 @@ const settingsSectionRoute = createRoute({
   // silently rendering a default section.
   parseParams: (params) => settingsParamsSchema.parse(params),
   stringifyParams: (params) => ({ section: params.section }),
+  // Billing's sub-tab and Stripe's return marker live here, not in component
+  // state — see settingsSearchSchema for why the tab had to become addressable.
+  validateSearch: settingsSearchSchema,
   component: SettingsPage,
 })
 
@@ -541,6 +569,7 @@ const routeTree = rootRoute.addChildren([
   verifyEmailRoute,
   upgradeRoute,
   designSandboxRoute,
+  checkoutEmbedRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([

@@ -1,9 +1,13 @@
+import { isCloudCompute } from './types';
+import { requiresPayment } from './requiresPayment';
+import type { PaymentFacts } from './requiresPayment';
 import type { LaunchPlan, StepProps } from './types';
 import type { ComponentType } from 'react';
 
 export const ONBOARDING_STEPS = [
   'compute',
   'model',
+  'checkout',
   'project-choice',
   'github-connect',
   'project-picker',
@@ -20,8 +24,9 @@ export function registerStepComponents(map: Record<string, ComponentType<StepPro
 }
 
 export const STEP_LABELS: Record<OnboardingStepId, string> = {
-  'compute': 'Daemon',
+  'compute': 'Machine',
   'model': 'Model',
+  'checkout': 'Payment',
   'project-choice': 'Project',
   'github-connect': 'GitHub',
   'project-picker': 'Project',
@@ -44,18 +49,53 @@ export function stepMaxWidth(_step: OnboardingStepId): string {
   return STEP_MAX_WIDTH_DEFAULT;
 }
 
+/**
+ * The server facts step derivation depends on.
+ *
+ * `deriveStep` widened from a pure function of the plan to a pure function of
+ * `(plan, facts)` when the checkout step landed, and that is a real cost — the
+ * enumeration test's state space multiplied by four. It stays PURE, which is
+ * what makes the cost acceptable. The alternative, writing eligibility and
+ * wallet balance into the URL plan, puts a server-owned time-varying fact into
+ * user-editable state: precisely the hazard that let `cloud_paid` route to the
+ * local project picker.
+ *
+ * Callers get these from {@link useOnboardingFacts}, which reads them
+ * pessimistically while loading.
+ */
+export type OnboardingFactsInput = PaymentFacts;
+
+/**
+ * Facts for a caller that only wants the plan-shaped answer — the progress bar
+ * building a step list before the queries have settled, and every test that
+ * predates the checkout step.
+ *
+ * PESSIMISTIC, matching {@link useOnboardingFacts}: "nothing is entitled yet",
+ * so a paid plan's checkout step is listed rather than silently omitted.
+ */
+export const UNKNOWN_FACTS: OnboardingFactsInput = {
+  computeEligible: false,
+  walletFunded: false,
+};
+
 /** All steps that *would* appear in the user's onboarding given the plan
  *  branch they're on. Used only by the progress bar; current-step
  *  selection is via `deriveStep` below.
  */
-export function getStepsForPlan(plan: Partial<LaunchPlan>): OnboardingStepId[] {
+export function getStepsForPlan(
+  plan: Partial<LaunchPlan>,
+  facts: OnboardingFactsInput = UNKNOWN_FACTS,
+): OnboardingStepId[] {
   if (!plan.compute) return ['compute'];
-
-  const isCloud = plan.compute === 'cloud_free_trial';
 
   const steps: OnboardingStepId[] = ['compute', 'model'];
 
-  if (isCloud) {
+  // Listed only when money is genuinely owed, and only once both choices that
+  // could cost money have been made — the same condition `deriveStep` uses, so
+  // the bar can never show a step derivation will not route to.
+  if (checkoutIsOwed(plan, facts)) steps.push('checkout');
+
+  if (isCloudCompute(plan.compute)) {
     steps.push('project-choice');
     if (plan.intent === 'existing_codebase') {
       steps.push('github-connect');
@@ -65,6 +105,47 @@ export function getStepsForPlan(plan: Partial<LaunchPlan>): OnboardingStepId[] {
   }
 
   return steps;
+}
+
+/** The steps the progress bar actually shows.
+ *
+ *  A compute step that auto-skipped is hidden from the flow entirely: the user
+ *  was never asked anything, so showing "1 Daemon" implies a choice they never
+ *  made and numbers every later step from a question that did not happen.
+ *
+ *  It is hidden only while it is genuinely behind the user. `computeAutoSkipped`
+ *  outlives the field it describes — Back from `model` clears `compute` but
+ *  leaves the flag set — so filtering unconditionally removed the step the user
+ *  was standing on. `indexOf` then returned -1 and `OnboardingPage`'s
+ *  `Math.max(0, …)` silently highlighted the wrong step: a swallowed error
+ *  rather than a default. Never hide the current step.
+ */
+export function visibleStepsForPlan(
+  plan: Partial<LaunchPlan>,
+  facts: OnboardingFactsInput = UNKNOWN_FACTS,
+): OnboardingStepId[] {
+  const all = getStepsForPlan(plan, facts);
+  if (!plan.computeAutoSkipped) return all;
+  const current = deriveStep(plan, facts);
+  return all.filter(id => id !== 'compute' || id === current);
+}
+
+/**
+ * Is the checkout step owed right now?
+ *
+ * Shared by `deriveStep` and `getStepsForPlan` rather than written twice: the
+ * one thing that must never happen is the bar listing a step derivation will
+ * not route to (or vice versa), and two copies of this condition is how that
+ * happens. `plan.paid` short-circuits it — see {@link LaunchPlan.paid}, which
+ * is written only from a server-confirmed purchase.
+ */
+function checkoutIsOwed(
+  plan: Partial<LaunchPlan>,
+  facts: OnboardingFactsInput,
+): boolean {
+  if (!plan.compute || !plan.modelProvider) return false;
+  if (plan.paid) return false;
+  return requiresPayment(plan, facts).any;
 }
 
 /** Derive the single step the user should be on right now from plan state.
@@ -77,12 +158,20 @@ export function getStepsForPlan(plan: Partial<LaunchPlan>): OnboardingStepId[] {
  *  its built-in reconnect UI. Gating step derivation on a credential check
  *  would re-route the user mid-flow if a token check transiently fails.
  */
-export function deriveStep(plan: Partial<LaunchPlan>): OnboardingStepId {
+export function deriveStep(
+  plan: Partial<LaunchPlan>,
+  facts: OnboardingFactsInput = UNKNOWN_FACTS,
+): OnboardingStepId {
   if (!plan.compute) return 'compute';
   if (!plan.modelProvider) return 'model';
 
-  const isCloud = plan.compute === 'cloud_free_trial';
-  if (!isCloud) return 'project-picker';
+  // Both choices that can cost money are made. If either does and it has not
+  // been paid, this is the ONE place onboarding asks — and it is absent
+  // entirely when nothing is owed. Two steps used to eject the user to
+  // /settings/billing here instead; that is what this clause replaces.
+  if (checkoutIsOwed(plan, facts)) return 'checkout';
+
+  if (!isCloudCompute(plan.compute)) return 'project-picker';
 
   if (!plan.intent) return 'project-choice';
   if (plan.intent === 'existing_codebase') return 'github-connect';
@@ -99,6 +188,11 @@ export function deriveStep(plan: Partial<LaunchPlan>): OnboardingStepId {
 export const BACK_CLEARS: Record<OnboardingStepId, (keyof LaunchPlan)[]> = {
   'compute': [],
   'model': ['compute'],
+  // Back from payment returns to the decision that created the cost. It must
+  // also drop the purchase selections made ON this step, or derivation lands
+  // the user back here with a plan chosen for a compute option they just
+  // rejected.
+  'checkout': ['modelProvider', 'computePlanId', 'aiCreditCents'],
   'project-choice': ['modelProvider'],
   'project-picker': ['modelProvider'],
   'github-connect': ['intent'],

@@ -54,7 +54,12 @@ func TestBuildAvailableDrivers_CodexUsesPersistedAccessToken(t *testing.T) {
 	assert.True(t, cfg.Enabled)
 }
 
-func TestBuildAvailableDrivers_CodexExpiredTokenIsSkipped(t *testing.T) {
+// An expired access token is NOT a reason to drop Codex: the driver's
+// transport refreshes it before the request, exactly as it does for Claude.
+// Dropping the provider here is what made an expired token fail the whole
+// workflow ("401 token_expired") while a perfectly good refresh token sat
+// unused in the database.
+func TestBuildAvailableDrivers_CodexExpiredTokenIsRefreshable(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -73,12 +78,40 @@ func TestBuildAvailableDrivers_CodexExpiredTokenIsSkipped(t *testing.T) {
 	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
 	require.NoError(t, err)
 
-	_, hasCodex := availableDrivers.Drivers["codex"]
-	assert.False(t, hasCodex, "codex should be skipped when access token is expired")
+	cfg, hasCodex := availableDrivers.Drivers["codex"]
+	require.True(t, hasCodex, "codex must stay available when an expired token can be refreshed")
+	assert.Equal(t, "refresh-token", cfg.RefreshToken,
+		"the refresh token must reach the driver or the transport cannot refresh")
+	assert.False(t, cfg.TokenExpiresAt.IsZero(),
+		"expiry must be derived from the JWT so the transport knows to refresh")
 
 	openAI, hasOpenAI := availableDrivers.Drivers["openai"]
 	require.True(t, hasOpenAI, "non-codex provider should still be available")
 	assert.Equal(t, "sk-openai-test", openAI.APIKey)
+}
+
+// Without a refresh token there is nothing to recover with, so an expired
+// session is genuinely unusable and Codex is dropped.
+func TestBuildAvailableDrivers_CodexExpiredWithoutRefreshTokenIsSkipped(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := "test-user"
+	expiredToken := makeCodexJWT(t, time.Now().Add(-10*time.Minute))
+
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
+	require.NoError(t, repo.SetCodexAuthTokens(ctx, userID, db.CodexAuthTokens{
+		AccessToken:  expiredToken,
+		RefreshToken: "",
+		AccountID:    "test-account-id",
+	}))
+
+	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+
+	_, hasCodex := availableDrivers.Drivers["codex"]
+	assert.False(t, hasCodex, "codex should be skipped when expired and unrecoverable")
 }
 
 func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) {

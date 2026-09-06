@@ -17,9 +17,10 @@ var modelsYAML embed.FS
 // ModelRegistry holds the parsed models and provides lookup capabilities.
 // It preserves the order from the YAML file for deterministic tag resolution.
 type ModelRegistry struct {
-	models []ModelDefinition             // Preserves order from YAML
-	byID   map[string]*ModelDefinition   // Fast lookup by model ID
-	byTag  map[string][]*ModelDefinition // tag -> models with that tag (in order)
+	models      []ModelDefinition             // Preserves order from YAML
+	byID        map[string]*ModelDefinition   // Fast lookup by model ID
+	byTag       map[string][]*ModelDefinition // tag -> models with that tag (in order)
+	tagDefaults map[string]TagDefaults        // tag -> defaults applied on tag selection
 }
 
 // ProviderPriority defines the resolution priority for providers.
@@ -160,7 +161,7 @@ func ParseRegistry() (*ModelRegistry, error) {
 		return nil, fmt.Errorf("failed to parse models.yaml: %w", err)
 	}
 
-	return buildRegistry(config.Models)
+	return buildRegistry(config.Models, config.TagDefaults)
 }
 
 // ParseRegistryFromBytes parses a YAML byte slice into a ModelRegistry.
@@ -170,15 +171,17 @@ func ParseRegistryFromBytes(data []byte) (*ModelRegistry, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse models YAML: %w", err)
 	}
-	return buildRegistry(config.Models)
+	return buildRegistry(config.Models, config.TagDefaults)
 }
 
-// buildRegistry creates a ModelRegistry from a slice of model definitions.
-func buildRegistry(models []ModelDefinition) (*ModelRegistry, error) {
+// buildRegistry creates a ModelRegistry from a slice of model definitions and
+// the per-tag defaults that apply when a model is selected via that tag.
+func buildRegistry(models []ModelDefinition, tagDefaults map[string]TagDefaults) (*ModelRegistry, error) {
 	reg := &ModelRegistry{
-		models: models,
-		byID:   make(map[string]*ModelDefinition, len(models)),
-		byTag:  make(map[string][]*ModelDefinition),
+		models:      models,
+		byID:        make(map[string]*ModelDefinition, len(models)),
+		byTag:       make(map[string][]*ModelDefinition),
+		tagDefaults: make(map[string]TagDefaults, len(tagDefaults)),
 	}
 
 	for i := range models {
@@ -215,7 +218,65 @@ func buildRegistry(models []ModelDefinition) (*ModelRegistry, error) {
 		}
 	}
 
+	// Validate tag defaults against the vocabulary and the catalog. Both
+	// checks fail the parse rather than warning: a tag default that names a
+	// level nothing understands, or a tag no model carries, does nothing at
+	// runtime and looks exactly like a working config. Failing loudly at
+	// startup is the only way that typo is ever noticed.
+	for tag, defaults := range tagDefaults {
+		if defaults.ThinkingLevel != "" && !IsKnownThinkingLevel(defaults.ThinkingLevel) {
+			return nil, fmt.Errorf("tag_defaults[%q]: unknown thinking level %q (must be one of: %s)",
+				tag, defaults.ThinkingLevel, strings.Join(KnownThinkingLevels, ", "))
+		}
+		if len(reg.byTag[tag]) == 0 {
+			return nil, fmt.Errorf("tag_defaults[%q]: no model carries this tag", tag)
+		}
+		reg.tagDefaults[tag] = defaults
+	}
+
 	return reg, nil
+}
+
+// TagDefaultsFor returns the declared defaults for a tag.
+func (r *ModelRegistry) TagDefaultsFor(tag string) (TagDefaults, bool) {
+	defaults, ok := r.tagDefaults[tag]
+	return defaults, ok
+}
+
+// tagThinkingDefaultFor picks the thinking default a TAG-based selection
+// contributes, and clamps it to what the resolved model can actually do.
+//
+// The winner among the selector's tags is the EARLIEST one that both (a) the
+// resolved model actually carries and (b) declares a thinking default. That
+// rule matches the weighting already used for candidate scoring — earlier tags
+// are higher priority — so a selector's tag order means one thing throughout,
+// and it is deterministic for a selector like [powerful, reasoning] where more
+// than one tag could otherwise claim the answer. A tag the resolved model does
+// not carry never contributes: the model was not chosen for it.
+//
+// Returns "" when no tag qualifies, or when the model cannot reason.
+func (r *ModelRegistry) tagThinkingDefaultFor(model *ModelDefinition, selectorTags []string) string {
+	if len(r.tagDefaults) == 0 {
+		return ""
+	}
+
+	modelTags := make(map[string]bool, len(model.Tags))
+	for _, t := range model.Tags {
+		modelTags[t] = true
+	}
+
+	for _, tag := range selectorTags {
+		if !modelTags[tag] {
+			continue
+		}
+		defaults, ok := r.tagDefaults[tag]
+		if !ok || defaults.ThinkingLevel == "" {
+			continue
+		}
+		return ClampThinkingLevel(ResolveThinkingCapability(model.Capabilities), defaults.ThinkingLevel)
+	}
+
+	return ""
 }
 
 // GetDefinition returns the model definition for the given ID.
@@ -288,6 +349,13 @@ func (r *ModelRegistry) ListAllTags() []string {
 //  4. If selector.Providers is set, try each in order (first available wins)
 //  5. Return error if no match found
 //
+// Tag-carried thinking defaults: when resolution went through TAGS, the result's
+// ThinkingLevel carries the default declared by the earliest selector tag that
+// the resolved model actually carries (see tagThinkingDefaultFor), clamped to
+// the model's declared levels. Resolution by explicit ID leaves it empty even
+// when the model carries a defaulted tag — the default is a property of how the
+// model was chosen, not of the model.
+//
 // Provider priority: native drivers (anthropic, openai, gemini, xai, vertexai) have
 // priority 1, openrouter has priority 10. Within candidates, pick the model that
 // appears first in the YAML (definition order).
@@ -348,8 +416,9 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 		provider, err := r.findBestProvider(model, selector.Providers, availableSet, false)
 		if err == nil {
 			return &ResolvedModel{
-				Definition: *model,
-				Provider:   *provider,
+				Definition:    *model,
+				Provider:      *provider,
+				ThinkingLevel: r.tagThinkingDefaultFor(model, selector.Tags),
 			}, nil
 		}
 	}
@@ -520,9 +589,13 @@ func (r *ModelRegistry) ResolveWithFallback(primary, fallback ModelSelector, ava
 // This is useful for applying user configurations without modifying the global registry.
 func (r *ModelRegistry) Clone() *ModelRegistry {
 	cloned := &ModelRegistry{
-		models: make([]ModelDefinition, len(r.models)),
-		byID:   make(map[string]*ModelDefinition, len(r.byID)),
-		byTag:  make(map[string][]*ModelDefinition),
+		models:      make([]ModelDefinition, len(r.models)),
+		byID:        make(map[string]*ModelDefinition, len(r.byID)),
+		byTag:       make(map[string][]*ModelDefinition),
+		tagDefaults: make(map[string]TagDefaults, len(r.tagDefaults)),
+	}
+	for tag, defaults := range r.tagDefaults {
+		cloned.tagDefaults[tag] = defaults
 	}
 
 	// Deep copy models

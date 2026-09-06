@@ -102,3 +102,45 @@ func ReconcileThinkingLevel(cap ThinkingCapability, level string) string {
 
 	return cap.DefaultLevel
 }
+
+// ClampThinkingLevel downgrades an ASPIRATIONAL level to the highest level the
+// capability actually supports at or below it.
+//
+// This differs from ReconcileThinkingLevel, and the difference is the point.
+// Reconcile answers "this level is invalid here, what should I use instead?"
+// and returns the model's preferred default (typically medium) — right for a
+// stale or mistyped per-call level, where guessing upward would spend the
+// user's money on an effort they never asked for.
+//
+// A tag default is a different kind of input: `powerful` means "think as hard
+// as this model can, up to xhigh", so a model that tops out at high must land
+// on high, not fall back to medium. Falling back would make the tier's whole
+// promise silently untrue on exactly the models that need clamping.
+//
+// Levels are ordered by KnownThinkingLevels. If nothing at or below the
+// requested level is supported (or the level is unknown), this defers to
+// ReconcileThinkingLevel so the result is still always a level the model
+// declares.
+func ClampThinkingLevel(cap ThinkingCapability, level string) string {
+	if !cap.SupportsThinking || len(cap.Levels) == 0 {
+		return ""
+	}
+	if level == "" {
+		return cap.DefaultLevel
+	}
+	if slices.Contains(cap.Levels, level) {
+		return level
+	}
+
+	requested := slices.Index(KnownThinkingLevels, level)
+	if requested < 0 {
+		return ReconcileThinkingLevel(cap, level)
+	}
+	for i := requested - 1; i >= 0; i-- {
+		if slices.Contains(cap.Levels, KnownThinkingLevels[i]) {
+			return KnownThinkingLevels[i]
+		}
+	}
+
+	return ReconcileThinkingLevel(cap, level)
+}

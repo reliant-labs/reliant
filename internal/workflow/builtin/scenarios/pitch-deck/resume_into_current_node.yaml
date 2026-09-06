@@ -17,6 +17,10 @@ description: Pausing during the slides (style) loop resumes into slides_loop, no
 start_at: slides_loop
 
 events:
+  # The builtin://agent phase nodes below are EXECUTED rather than black-boxed:
+  # a qualified id (`<node>.agent_loop.call_llm`) makes the ref transparent, so
+  # each node's own args CEL — tools, and scrape_website's website_url-dependent
+  # system prompt — is compiled and evaluated.
   - node: slides_loop.build_slides
     output:
       response_text: "Rebuilt React slides after resume."
@@ -47,9 +51,13 @@ events:
       stderr: ""
 
   # Phase 7: Handoff — serve the deck and post the preview URL
-  - node: handoff
+  - node: handoff.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Deck started; posted the preview URL."
       response_text: "Deck started; posted the preview URL."
+      tool_calls: []
 
 expect:
   outcome: completed

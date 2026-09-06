@@ -22,14 +22,14 @@ import (
 // config without an import cycle (config -> logging -> telemetry).
 //
 // A NoopReporter is returned (Sentry stays dark) when ANY of the following hold:
-//   - devOrTest is true (dev/staging/preprod/test)
+//   - devOrTest is true (dev/test)
 //   - SENTRY_ENABLED is explicitly "false"
 //   - SENTRY_DSN is empty
 //
 // Otherwise a live SentryReporter is returned. This mirrors the gating the
 // Electron main process (app.isPackaged) and web frontend (isDev) already use.
 func NewReporterFromEnv(devOrTest bool) ErrorReporter {
-	// Never report from dev/staging/preprod or test runs.
+	// Never report from dev or test runs.
 	if devOrTest {
 		return NewNoopReporter()
 	}

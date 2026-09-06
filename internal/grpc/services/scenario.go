@@ -327,6 +327,11 @@ func (s *ScenarioService) RunScenario(
 			if err != nil || dbScenario == nil {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
 			}
+			// Scenarios are user-owned rows; a foreign one is NotFound (no
+			// cross-tenant existence oracle), matching DeleteScenario's check.
+			if dbScenario.UserID != userID {
+				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
+			}
 
 			// Get the workflow
 			if dbScenario.WorkflowDraftID.Valid {
@@ -560,6 +565,11 @@ func (s *ScenarioService) ExportScenario(
 	// Get the DB scenario
 	dbScenario, err := s.database.GetWorkflowScenario(ctx, req.Msg.ScenarioId)
 	if err != nil || dbScenario == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
+	}
+	// Scenarios are user-owned rows; a foreign one is NotFound (no
+	// cross-tenant existence oracle), matching DeleteScenario's check.
+	if dbScenario.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", req.Msg.ScenarioId))
 	}
 

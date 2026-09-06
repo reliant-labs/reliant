@@ -132,6 +132,17 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		if effectiveTemperature == nil {
 			effectiveTemperature = resolvedDef.DefaultTemperature
 		}
+		// Thinking level precedence, highest first:
+		//   1. explicit node/preset/request thinking_level (spec.ThinkingLevel)
+		//   2. the default carried by the TAG that selected this model —
+		//      set only on tag-based resolution, already clamped to the
+		//      model's levels (see ModelRegistry.Resolve)
+		//   3. the model's own default_thinking_level
+		// The registry capability floor sits under all three, applied in
+		// buildRegistry.
+		if effectiveThinkingLevel == "" {
+			effectiveThinkingLevel = resolved.ThinkingLevel
+		}
 		if effectiveThinkingLevel == "" {
 			effectiveThinkingLevel = resolvedDef.DefaultThinkingLevel
 		}

@@ -21,9 +21,10 @@ type ModelTab = "tag" | "explicit";
 // Constants
 // ---------------------------------------------------------------------------
 
-const TAGS = ["flagship", "moderate", "fast", "cheap"] as const;
+const TAGS = ["powerful", "flagship", "moderate", "fast", "cheap"] as const;
 
 const tagDescriptions: Record<string, string> = {
+  powerful: "Maximum capability — the hardest work",
   flagship: "Best reasoning — complex tasks",
   moderate: "Balanced — implementation, review",
   fast: "Speed optimized — research, simple tasks",

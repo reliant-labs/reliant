@@ -90,6 +90,81 @@ func unscopedSearchRefusal(command string) string {
 	return ""
 }
 
+// In ripgrep, -r is --replace, not --recursive. Every neighbouring tool an agent
+// uses reaches the other way (`grep -r`, `cp -r`, `rm -r`, `ls -R`), and
+// `grep -rn 'pattern' .` is common enough to be emitted as one token, so `rg -rn`
+// gets typed out of habit.
+//
+// It cannot be left to correct itself, because it does not fail. `rg -rn 'pat' .`
+// binds "n" as the replacement and searches for "pat" in the right files: correct
+// paths, correct line numbers, and the matched text in every printed line
+// rewritten to "n". It exits 0. A measured case printed
+// `forgecli.n(projectPath)` for a line whose real content was
+// `forgecli.RenderProjectMemory(projectPath)`. With no match it exits 1 — the same
+// code as an honest no-match, so the exit status cannot separate them either.
+// That makes it the one search mistake with no corrective signal at all: a wrong
+// answer that looks exactly like a right one.
+//
+// So refuse the SHORT spelling only. `--replace` is untouched, which keeps the
+// capability whole — capture-group extraction (`rg -o --replace '$1' 'func (\w+)'`)
+// still works verbatim. The split holds because the two spellings differ in
+// intent, not in power: `-r` is what muscle memory produces, while nobody reaches
+// for `--replace` without already knowing what it does. Searched across reliant,
+// control-plane and forge, real `--replace` uses: zero.
+func ripgrepReplaceRefusal(command string) string {
+	for _, seg := range splitShellSegments(command) {
+		argv := stripLeadingAssignments(tokenizeShell(seg))
+		if len(argv) == 0 || path.Base(argv[0]) != "rg" {
+			continue
+		}
+		for _, a := range argv[1:] {
+			if a == "--" {
+				break // everything after is an operand
+			}
+			if len(a) < 2 || a[0] != '-' || strings.HasPrefix(a, "--") {
+				continue
+			}
+			if bundlesShortReplace(a[1:]) {
+				return fmt.Sprintf(replaceRefusalTemplate, seg, a)
+			}
+		}
+	}
+	return ""
+}
+
+// shortFlagsTakingValue are rg's short flags that consume an argument. In a
+// bundled run the first of them ends the flags and takes the rest of the token.
+const shortFlagsTakingValue = "ABCEefgjMmtT"
+
+// bundlesShortReplace reports whether a run of bundled short flags uses -r as a
+// FLAG. Reading left to right is what makes this precise rather than a substring
+// test: in `-epattern` the 'r' is part of the pattern -e already claimed, so a
+// naive strings.ContainsRune would refuse a legitimate search.
+func bundlesShortReplace(flags string) bool {
+	for i := 0; i < len(flags); i++ {
+		switch c := flags[i]; {
+		case c == 'r':
+			return true
+		case strings.IndexByte(shortFlagsTakingValue, c) >= 0:
+			return false
+		}
+	}
+	return false
+}
+
+const replaceRefusalTemplate = `refused: %q uses rg's short -r flag, which is --replace, NOT --recursive.
+
+This is refused because it does not fail on its own. %[2]q binds the next characters as REPLACEMENT text and rewrites the matched text in every line it prints, then exits 0 — so the output looks like a normal search result while the content is corrupted. Reading it costs you the answer, not just the command.
+
+If you meant to search recursively, drop the flag entirely — rg already recurses:
+  - rg 'pattern' .            — search file contents from the worktree root
+  - rg -n 'pattern' internal/ — with line numbers, scoped to a subdirectory
+
+If you did mean substitution, spell it in full and it will run unchanged:
+  - rg -o --replace '$1' 'func (\w+)' .   — print capture groups only
+
+Note that --replace only rewrites rg's OUTPUT; it never edits files. To change files on disk, use the edit tool.`
+
 const refusalTemplate = `refused: %q would recursively scan %s. A scan rooted there reads the whole machine, takes minutes, and starves every other agent sharing this disk.
 
 To search the PROJECT, scope the search to a relative path instead of an absolute root:

@@ -29,6 +29,14 @@ description: >
   Review says "pass", refactor skipped.
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   - node: planning.plan
     output:
       response_text: "Plan: implement the feature with modular design."
@@ -68,6 +76,14 @@ inputs:
   steps: [plan]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   - node: planning.plan
     output:
       response_text: "Here is the plan for the task."
@@ -91,6 +107,14 @@ inputs:
   steps: [plan, tdd, implement, lint, test, build]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   - node: planning.plan
     output:
       response_text: "Comprehensive plan for the feature."
@@ -149,6 +173,13 @@ inputs:
   steps: [implement]
 
 events:
+  # Router: this scenario is NAMED for a routing outcome — "straight to
+  # implementation" — so the decision is made explicitly here.
+  - node: classify
+    output:
+      selected_node: impl_loop
+      reasoning: "Simple, well-defined task — go straight to implementation."
+
   - node: impl_loop.attempt.implement
     output:
       response_text: "Minimal implementation done."
@@ -156,13 +187,25 @@ events:
 expect:
   outcome: completed
   reached:
-    - planning
+    - classify
     - impl_loop
     - impl_loop.attempt.implement
     - impl_loop.attempt.join_checks
     - impl_loop.attempt.review
     - success
+  # The implement branch really EXECUTED — `reached` alone would also hold for
+  # skipped nodes, so the routing outcome is pinned with `completed`.
+  completed:
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.review
+    - success
   not_reached:
+    # The router dispatched straight to impl_loop, so the planning branch is
+    # never scheduled. (`planning` was previously asserted REACHED — true only
+    # because the unmocked router defaulted to refine_prompt.)
+    - refine_prompt
+    - planning
     - planning.plan
     - write_tests
     - impl_loop.attempt.refactor
@@ -177,6 +220,14 @@ inputs:
   steps: [implement]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   # Iteration 0 — review fails, says refactor, refactor fixes
   - node: impl_loop.attempt.implement
     output:
@@ -229,6 +280,14 @@ inputs:
   steps: [implement, build]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   # Iteration 0 — build fails
   - node: impl_loop.attempt.implement
     output:
@@ -290,6 +349,14 @@ inputs:
   steps: [implement, lint]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   # Iteration 0 — lint fails
   - node: impl_loop.attempt.implement
     output:
@@ -351,6 +418,14 @@ inputs:
   steps: [implement, test]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   # Iteration 0 — test fails
   - node: impl_loop.attempt.implement
     output:
@@ -412,6 +487,14 @@ inputs:
   steps: [implement, lint, test, build]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   # Iteration 0 — all checks fail, review says refactor
   - node: impl_loop.attempt.implement
     output:
@@ -492,6 +575,14 @@ inputs:
   max_retries: 2
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   # Iteration 0
   - node: impl_loop.attempt.implement
     output:
@@ -549,6 +640,14 @@ inputs:
   steps: [plan, tdd, implement, lint, test, build, start_app]
 
 events:
+  # Router: this scenario's assertions require the full-pipeline entry
+  # (planning branch), so make that decision explicitly rather than letting the
+  # router silently default to its first candidate.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Enter at the top of the pipeline."
+
   - node: planning.plan
     output:
       response_text: "Plan: build full-stack feature with UX validation."

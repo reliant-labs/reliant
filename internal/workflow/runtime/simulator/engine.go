@@ -103,6 +103,10 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 	// Build hasInternalEvents function from scenario events
 	hasInternalEvents := e.buildHasInternalEvents(scenario.Events)
 
+	// Snapshot which routers the author mocked. Must happen before the run:
+	// the simulator writes its default into the event's own output map.
+	routerMocks := SnapshotRouterMocks(scenario.Events)
+
 	// Create simulator config
 	config := v2.SimulatorConfig{
 		WorkflowInputs:    inputs,
@@ -110,6 +114,7 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 		StartAt:           scenario.StartAt,
 		InitialState:      scenario.State,
 		HasInternalEvents: hasInternalEvents,
+		BlackBoxed:        buildBlackBoxed(scenario.Events),
 		WorkflowLoader:    e.workflowLoader,
 	}
 
@@ -177,6 +182,10 @@ func (e *Engine) RunScenario(scenario *Scenario) *ScenarioResult {
 		Expected:  scenario.Expect,
 		RunAt:     time.Now(),
 	}
+
+	// Surface false-pass hazards regardless of status: the whole point is that
+	// the run may have passed while never exercising what it claims to.
+	result.Warnings = AnalyzeFalsePasses(scenario, e.workflow, &execution, WorkflowRefLoader(e.workflowLoader), routerMocks)
 
 	// Check for unconsumed events - indicates misconfigured scenario
 	unconsumed := mockerState.UnconsumedEvents()
@@ -292,6 +301,14 @@ func (e *Engine) buildMocker(events []SimulatedEvent) (v2.StepMocker, *mockerSta
 // field is the tool's result payload (the documented shorthand for `tool_output:`),
 // NOT a raw activity output. Raw output mode only applies to events without a type.
 func (e *Engine) eventToOutput(event SimulatedEvent) map[string]interface{} {
+	return EventOutput(event)
+}
+
+// EventOutput converts a SimulatedEvent into the activity output shape it
+// stands for. Shared with the Temporal scenario backend so one scenario event
+// means the same mock output on both backends.
+func EventOutput(event SimulatedEvent) map[string]interface{} {
+	var e Engine
 	// Typed mode - convert to proper output structure
 	switch event.Type {
 	case "llm_response":
@@ -423,6 +440,18 @@ func (e *Engine) buildToolResultOutput(event SimulatedEvent) map[string]interfac
 
 // checkExpectations compares execution results against expectations
 func (e *Engine) checkExpectations(expect *Expectation, execution *ExecutionDetails) []string {
+	return CheckExpectations(expect, execution)
+}
+
+// CheckExpectations compares execution results against expectations and returns
+// one message per mismatch (empty means the expectation held).
+//
+// This is deliberately free of any backend: it reads only ExecutionDetails, so
+// the fast simulator and the real-Temporal backend assert through the SAME
+// code. A second evaluator would drift, and a scenario that passes on one
+// backend and fails on the other would then be indistinguishable from an
+// assertion bug.
+func CheckExpectations(expect *Expectation, execution *ExecutionDetails) []string {
 	var mismatches []string
 
 	// Check outcome
@@ -658,6 +687,26 @@ func (e *Engine) RunScenarios(scenarios []*Scenario) []*ScenarioResult {
 // buildHasInternalEvents creates a function that checks if there are events
 // with qualified IDs starting with the given prefix.
 // This enables internal node mocking for workflow nodes.
+// buildBlackBoxed collects the nodes the scenario explicitly opted out of body
+// execution with `black_box: true`. Executing a loop body is the default, so
+// this is the author's visible way to say "mock this whole thing as a unit" —
+// the case where the body genuinely is not what the scenario tests.
+func buildBlackBoxed(events []SimulatedEvent) func(string) bool {
+	var opted map[string]bool
+	for _, event := range events {
+		if event.BlackBox && event.Node != "" {
+			if opted == nil {
+				opted = make(map[string]bool)
+			}
+			opted[event.Node] = true
+		}
+	}
+	if opted == nil {
+		return nil
+	}
+	return func(nodePath string) bool { return opted[nodePath] }
+}
+
 func (e *Engine) buildHasInternalEvents(events []SimulatedEvent) func(string) bool {
 	// Pre-compute all event prefixes for efficient lookup
 	prefixes := make(map[string]bool)

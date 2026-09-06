@@ -15,7 +15,7 @@ import { logger } from "./lib/logger";
 import { Root } from "./components/Root";
 import { STARTUP_SPINNER_MARKUP } from "./components/icons/StartupSpinnerMark";
 
-// Initialize OpenTelemetry tracing (no-op if VITE_OTEL_EXPORTER_OTLP_ENDPOINT is not set)
+// Initialize OpenTelemetry tracing (no-op if VITE_OTEL_ENDPOINT is not set)
 initOTelTracing();
 import { monacoManager } from "./lib/monacoManager";
 import { shouldPreloadMonaco } from "./lib/monacoPreload";

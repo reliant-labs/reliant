@@ -12,6 +12,7 @@ const (
 	Claude48Opus   ModelID = "claude-4.8-opus"
 	Claude5Sonnet  ModelID = "claude-5-sonnet"
 	Claude5Fable   ModelID = "claude-5-fable"
+	Claude51Fable  ModelID = "claude-5.1-fable"
 	Claude5Opus    ModelID = "claude-5-opus"
 )
 
@@ -39,6 +40,10 @@ const (
 	Gemini31FlashLitePreview      ModelID = "gemini-3.1-flash-lite-preview"
 	Gemini3ProPreview             ModelID = "gemini-3-pro-preview"
 	Gemini3FlashPreview           ModelID = "gemini-3-flash-preview"
+	Gemini38Flash                 ModelID = "gemini-3.8-flash"
+	Gemini37Flash                 ModelID = "gemini-3.7-flash"
+	Gemini36Flash                 ModelID = "gemini-3.6-flash"
+	Gemini35Flash                 ModelID = "gemini-3.5-flash"
 	Gemini25Pro                   ModelID = "gemini-2.5-pro"
 	Gemini25Flash                 ModelID = "gemini-2.5-flash"
 	Gemini25FlashLite             ModelID = "gemini-2.5-flash-lite"
@@ -64,6 +69,7 @@ const (
 	VertexClaude48Opus   ModelID = "vertex-claude-4.8-opus"
 	VertexClaude5Sonnet  ModelID = "vertex-claude-5-sonnet"
 	VertexClaude5Fable   ModelID = "vertex-claude-5-fable"
+	VertexClaude51Fable  ModelID = "vertex-claude-5.1-fable"
 	VertexClaude5Opus    ModelID = "vertex-claude-5-opus"
 )
 

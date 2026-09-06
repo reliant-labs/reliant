@@ -71,6 +71,13 @@ type JWTHeader struct {
 // JWTValidator validates Supabase JWT tokens using ECDSA public key (ES256)
 type JWTValidator struct {
 	publicKey *ecdsa.PublicKey
+	// keysByKid holds every EC key the JWKS published, indexed by kid, so a
+	// token is verified against the key its header names rather than always
+	// the document's first key. Nil for PEM-constructed validators (single
+	// key, no kid to match). During an IdP key rotation a JWKS carries both
+	// the old and new key; picking Keys[0] unconditionally rejects every
+	// token signed with the other one.
+	keysByKid map[string]*ecdsa.PublicKey
 }
 
 // NewJWTValidator creates a new JWT validator with ECDSA public key from PEM format
@@ -119,45 +126,57 @@ func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
 		return nil, fmt.Errorf("%w: no keys in JWKS", ErrInvalidPublicKey)
 	}
 
-	// Use the first key
-	key := jwks.Keys[0]
-	if key.Kty != "EC" {
-		return nil, fmt.Errorf("%w: key type must be EC, got %s", ErrInvalidPublicKey, key.Kty)
+	// Parse every EC key, indexed by kid, so validation can honor the token
+	// header's kid. Non-EC entries are skipped (a JWKS may also publish RSA
+	// keys for other consumers); at least one EC key is required.
+	keysByKid := make(map[string]*ecdsa.PublicKey)
+	var firstKey *ecdsa.PublicKey
+	for _, key := range jwks.Keys {
+		if key.Kty != "EC" {
+			continue
+		}
+
+		var curve elliptic.Curve
+		switch key.Crv {
+		case "P-256":
+			curve = elliptic.P256()
+		case "P-384":
+			curve = elliptic.P384()
+		case "P-521":
+			curve = elliptic.P521()
+		default:
+			return nil, fmt.Errorf("%w: unsupported curve %s", ErrInvalidPublicKey, key.Crv)
+		}
+
+		xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to decode X coordinate: %v", ErrInvalidPublicKey, err)
+		}
+		yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to decode Y coordinate: %v", ErrInvalidPublicKey, err)
+		}
+
+		ecdsaPub := &ecdsa.PublicKey{
+			Curve: curve,
+			X:     new(big.Int).SetBytes(xBytes),
+			Y:     new(big.Int).SetBytes(yBytes),
+		}
+		if firstKey == nil {
+			firstKey = ecdsaPub
+		}
+		if key.Kid != "" {
+			keysByKid[key.Kid] = ecdsaPub
+		}
 	}
 
-	// Determine curve
-	var curve elliptic.Curve
-	switch key.Crv {
-	case "P-256":
-		curve = elliptic.P256()
-	case "P-384":
-		curve = elliptic.P384()
-	case "P-521":
-		curve = elliptic.P521()
-	default:
-		return nil, fmt.Errorf("%w: unsupported curve %s", ErrInvalidPublicKey, key.Crv)
-	}
-
-	// Decode X coordinate
-	xBytes, err := base64.RawURLEncoding.DecodeString(key.X)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to decode X coordinate: %v", ErrInvalidPublicKey, err)
-	}
-
-	// Decode Y coordinate
-	yBytes, err := base64.RawURLEncoding.DecodeString(key.Y)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to decode Y coordinate: %v", ErrInvalidPublicKey, err)
-	}
-
-	ecdsaPub := &ecdsa.PublicKey{
-		Curve: curve,
-		X:     new(big.Int).SetBytes(xBytes),
-		Y:     new(big.Int).SetBytes(yBytes),
+	if firstKey == nil {
+		return nil, fmt.Errorf("%w: no EC keys in JWKS", ErrInvalidPublicKey)
 	}
 
 	return &JWTValidator{
-		publicKey: ecdsaPub,
+		publicKey: firstKey,
+		keysByKid: keysByKid,
 	}, nil
 }
 
@@ -211,8 +230,22 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 		return nil, fmt.Errorf("%w: unsupported algorithm %s, expected ES256", ErrInvalidToken, header.Alg)
 	}
 
+	// Pick the verification key. When the JWKS published multiple keys and the
+	// token names one by kid, verify against exactly that key — never fall
+	// back to another on a named-but-unknown kid, which would let a token
+	// shop for a more favorable key. Tokens without a kid, and validators
+	// built from a single PEM key, use the default key as before.
+	verifyKey := v.publicKey
+	if header.Kid != "" && len(v.keysByKid) > 0 {
+		key, ok := v.keysByKid[header.Kid]
+		if !ok {
+			return nil, fmt.Errorf("%w: unknown key id %q", ErrInvalidToken, header.Kid)
+		}
+		verifyKey = key
+	}
+
 	// Verify signature
-	if err := v.verifySignature(parts[0], parts[1], parts[2]); err != nil {
+	if err := v.verifySignatureWithKey(verifyKey, parts[0], parts[1], parts[2]); err != nil {
 		return nil, err
 	}
 
@@ -236,8 +269,15 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	return &claims, nil
 }
 
-// verifySignature verifies the JWT signature using ECDSA (ES256)
+// verifySignature verifies the JWT signature using ECDSA (ES256) against the
+// validator's default key.
 func (v *JWTValidator) verifySignature(header, payload, signature string) error {
+	return v.verifySignatureWithKey(v.publicKey, header, payload, signature)
+}
+
+// verifySignatureWithKey verifies the JWT signature using ECDSA (ES256)
+// against the given key (selected by kid when the JWKS published several).
+func (v *JWTValidator) verifySignatureWithKey(publicKey *ecdsa.PublicKey, header, payload, signature string) error {
 	// Create the message that was signed
 	message := header + "." + payload
 
@@ -272,7 +312,7 @@ func (v *JWTValidator) verifySignature(header, payload, signature string) error 
 	}
 
 	// Verify the signature
-	if !ecdsa.Verify(v.publicKey, hash[:], r, s) {
+	if !ecdsa.Verify(publicKey, hash[:], r, s) {
 		return ErrInvalidSignature
 	}
 

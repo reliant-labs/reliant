@@ -160,6 +160,119 @@ func TestGetLatestNonMessageUpdatesPerEntity_DedupsToolCallsByJSONToolCallID(t *
 	}, statusesByToolCallID)
 }
 
+func TestGetLatestNonMessageUpdatesPerEntity_ThreadAnnouncementSurvivesWorkflowStatus(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+
+	// An INLINE fork reuses its parent's workflow id (see
+	// inline_workflow_executor.go: "Inline workflows use parent's workflow
+	// ID"), and both thread and workflow_status updates key their entity_id on
+	// that workflow id. So the fork's one-and-only announcement shares an
+	// entity_id with every workflow_status row of the run that created it.
+	//
+	// Deduping on entity_id alone therefore collapses two DIFFERENT KINDS of
+	// update into one bucket, and the last write wins. When the run finishes it
+	// writes a workflow_status, which evicts the announcement — the snapshot
+	// then has no origin for the thread, InterleavedTimeline cannot classify
+	// it, and every message on it is dropped from the timeline.
+	//
+	// The tell is that this only breaks on a COMPLETED run: while streaming,
+	// and on a run whose last write happened to be the announcement, the same
+	// chat renders correctly.
+	workflowID := uuid.New().String()
+	threadID := uuid.New().String()
+
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, workflowID,
+		`{"update_type":"workflow_status","workflow_id":"`+workflowID+`","status":"started"}`))
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeThread, workflowID,
+		`{"update_type":"thread","id":"`+workflowID+`","thread":"`+threadID+`","origin":"fork","thread_title":"implement #1"}`))
+	// The run completes. This is the row that used to evict the announcement.
+	require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeWorkflowStatus, workflowID,
+		`{"update_type":"workflow_status","workflow_id":"`+workflowID+`","status":"completed"}`))
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+
+	var threadUpdate *ChatUpdate
+	var workflowStatus *ChatUpdate
+	for i := range updates {
+		switch updates[i].UpdateType {
+		case UpdateTypeThread:
+			threadUpdate = &updates[i]
+		case UpdateTypeWorkflowStatus:
+			workflowStatus = &updates[i]
+		}
+	}
+
+	require.NotNil(t, threadUpdate,
+		"the thread announcement must survive: it is the only record of the thread's origin, "+
+			"and without it the timeline drops every message on that thread")
+	require.Contains(t, string(threadUpdate.Data), `"origin":"fork"`)
+	require.Contains(t, string(threadUpdate.Data), threadID)
+
+	// Deduping thread updates by thread id must not weaken workflow_status
+	// dedup: its own latest-wins collapse still has to hold.
+	require.NotNil(t, workflowStatus, "the latest workflow_status must still be delivered")
+	require.Contains(t, string(workflowStatus.Data), `"status":"completed"`,
+		"workflow_status must still collapse to its newest row")
+}
+
+func TestGetLatestNonMessageUpdatesPerEntity_CollapsesThreadToLatestStatus(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	chatID := seedChatForUpdates(t, repo, ctx)
+
+	// Two threads under ONE inline workflow id — the shape the entity_id key
+	// could not represent. Each must survive independently, and each must
+	// collapse to its own latest status rather than replaying its history.
+	workflowID := uuid.New().String()
+	forkThread := uuid.New().String()
+	nodeThread := uuid.New().String()
+
+	for _, u := range []struct{ thread, origin, status string }{
+		{forkThread, "fork", "running"},
+		{nodeThread, "node", "running"},
+		{forkThread, "fork", "completed"},
+	} {
+		require.NoError(t, repo.CreateChatUpdate(ctx, chatID, UpdateTypeThread, workflowID,
+			`{"update_type":"thread","id":"`+workflowID+`","thread":"`+u.thread+
+				`","origin":"`+u.origin+`","status":"`+u.status+`"}`))
+	}
+
+	updates, err := repo.GetLatestNonMessageUpdatesPerEntity(ctx, chatID)
+	require.NoError(t, err)
+
+	statusByThread := map[string]string{}
+	originByThread := map[string]string{}
+	for _, update := range updates {
+		require.Equal(t, UpdateTypeThread, update.UpdateType)
+		var payload struct {
+			Thread string `json:"thread"`
+			Origin string `json:"origin"`
+			Status string `json:"status"`
+		}
+		require.NoError(t, json.Unmarshal(update.Data, &payload))
+		statusByThread[payload.Thread] = payload.Status
+		originByThread[payload.Thread] = payload.Origin
+	}
+
+	require.Equal(t, map[string]string{
+		forkThread: "completed",
+		nodeThread: "running",
+	}, statusByThread, "each thread keeps its own latest status")
+	// Origin is what separates a spawned sub-agent from a node/fork thread in
+	// the UI, so it must survive per-thread rather than be smeared together.
+	require.Equal(t, map[string]string{
+		forkThread: "fork",
+		nodeThread: "node",
+	}, originByThread)
+}
+
 func TestGetLatestNonMessageUpdatesPerEntity_ExcludesStreamFinalized(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()

@@ -130,6 +130,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   cancelProviderOAuth: (flowId) => ipcRenderer.invoke('oauth:provider-login-cancel', flowId),
 
+  // Stripe checkout, kept inside the app. Resolves with the outcome Stripe
+  // reported ('success' / 'cancelled'), or 'dismissed' if the user just closed
+  // the window. Optional in electron.d.ts like every bridge here: a build that
+  // predates it falls back to the plain redirect.
+  openStripeCheckout: async ({ checkoutUrl, returnUrl }) => {
+    const result = await ipcRenderer.invoke('billing:open-checkout', {
+      checkoutUrl,
+      returnUrl,
+    });
+    if (!result?.success) {
+      throw new Error(result?.error || 'Could not open checkout');
+    }
+    return { outcome: result.outcome };
+  },
+
   // Auth storage
   authLoad: () => ipcRenderer.invoke('auth:load'),
   authSave: (session) => ipcRenderer.invoke('auth:save', session),

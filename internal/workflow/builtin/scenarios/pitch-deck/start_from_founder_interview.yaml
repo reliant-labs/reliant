@@ -18,6 +18,10 @@ inputs:
   deck_purpose: seed
 
 events:
+  # The builtin://agent phase nodes below are EXECUTED rather than black-boxed:
+  # a qualified id (`<node>.agent_loop.call_llm`) makes the ref transparent, so
+  # each node's own args CEL — tools, and scrape_website's website_url-dependent
+  # system prompt — is compiled and evaluated.
   # Router skips scrape + research: the user already has research on disk
   - node: classify
     output:
@@ -25,28 +29,52 @@ events:
       reasoning: "Research artifacts already exist — go straight to the interview."
 
   # Phase 3: Founder interview (guarded inject must evaluate with fallbacks)
-  - node: founder_interview
+  - node: founder_interview.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+          ## Founder Brief
+          Downloads: 3,200. WAU: 800. Raising $2M seed.
+
       response_text: |
         ## Founder Brief
         Downloads: 3,200. WAU: 800. Raising $2M seed.
 
+      tool_calls: []
   # Phase 4a: Plan deck
-  - node: plan_deck
+  # plan_deck EXECUTES its structured-agent body rather than being replaced by a
+  # literal. The response tool is `submit_deck_plan` (pitch-deck.yaml sets
+  # response_tool_name); using any other key leaves `completed` false and spins.
+  - node: plan_deck.agent_loop.call_llm
     output:
-      response_text: "Planned 1-slide deck."
-      response:
-        narrative_arc: "Traction-first."
-        slides:
-          - filename: "01-hook.md"
-            title: "3,200 downloads and climbing"
-            purpose: "Hook with traction"
-            key_content: "3,200 downloads, 800 WAU"
-            layout_hint: full-bleed-stat
-            sources: "phase-3-interview/founder-brief.md"
-
-  # Phase 4b: slide_pipeline — parallel loop (black box)
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_plan
+          name: submit_deck_plan
+          input: {}
+  - node: plan_deck.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_deck_plan:
+          narrative_arc: "Traction-first."
+          slides:
+            - filename: "01-hook.md"
+              title: "3,200 downloads and climbing"
+              purpose: "Hook with traction"
+              key_content: "3,200 downloads, 800 WAU"
+              layout_hint: full-bleed-stat
+              sources: "phase-3-interview/founder-brief.md"
   - node: slide_pipeline
+    # Deliberate black box: this scenario mocks the parallel loop's AGGREGATE
+    # result (_results/_completed) rather than exercising the per-slide body.
+    # Loop bodies execute by default; this opts out explicitly.
+    black_box: true
     output:
       _completed: 1
       _failed: 0
@@ -73,6 +101,16 @@ events:
   - node: slides_loop.stop_dev_server
     output:
       exit_code: 0
+
+  # handoff EXECUTES: it previously had NO event, so it silently fell through to
+  # the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Handoff complete; posted the result."
+      response_text: "Handoff complete; posted the result."
+      tool_calls: []
 
 expect:
   outcome: completed

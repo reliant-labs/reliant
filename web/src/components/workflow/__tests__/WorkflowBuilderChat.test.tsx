@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EventBusProvider } from "../../../lib/event-context";
 import { WorkflowBuilderChat } from "../WorkflowBuilderChat";
+import { ContentBlockType, MessageRole } from "../../../gen/reliant/v1/chat_pb";
 import type { Workflow } from "../../../types/workflow";
 
 const mocks = vi.hoisted(() => {
@@ -386,5 +387,146 @@ describe("WorkflowBuilderChat send workflow params", () => {
       expect(screen.getByTestId("workflow-chat-input")).toHaveValue("Build a workflow"),
     );
     expect(screen.getByTestId("send-button")).toBeEnabled();
+  });
+
+  // The draft used to be handed to the agent as an injected system message
+  // ("You are operating on workflow <uuid>"). The workflow tools now resolve it
+  // from the chat<->draft association, so nothing may be injected into the
+  // conversation on either the create or the send path.
+  it("sends no injected system message on the create path", async () => {
+    renderWorkflowBuilderChat({ isNewWorkflow: true, draftId: "draft-1" });
+
+    await enterAndSend("Build a workflow");
+
+    await waitFor(() => expect(mocks.chatGrpc.create).toHaveBeenCalledTimes(1));
+    const [createArgs] = mocks.chatGrpc.create.mock.calls[0] as [
+      { messages: Array<{ role: number; content: string }> },
+    ];
+    expect(createArgs.messages).toEqual([
+      { role: MessageRole.USER, content: "Build a workflow" },
+    ]);
+  });
+
+  it("sends no injected system message on the send path", async () => {
+    renderWorkflowBuilderChat({ builderChatId: "chat-existing", draftId: "draft-1" });
+
+    await waitFor(() => expect(mocks.chatGrpc.get).toHaveBeenCalledWith("chat-existing"));
+    await enterAndSend("Update the workflow");
+
+    await waitFor(() => expect(mocks.chatStoreState.sendMessage).toHaveBeenCalledTimes(1));
+    const sendOptions = mocks.chatStoreState.sendMessage.mock.calls[0][3] as Record<
+      string,
+      unknown
+    >;
+    expect(sendOptions).not.toHaveProperty("systemMessages");
+  });
+});
+
+// The canvas used to refetch only for a hardcoded ["edit_workflow",
+// "write_workflow"] allowlist, which silently omitted create_workflow and every
+// scenario tool. The rule is now generic: any successful tool result triggers a
+// refetch, and the draft's version decides whether the canvas is replaced.
+describe("WorkflowBuilderChat canvas sync", () => {
+  function toolResultMessage(seq: number, toolName: string) {
+    return {
+      role: MessageRole.TOOL,
+      seq,
+      contentBlocks: [
+        {
+          type: ContentBlockType.TOOL_RESULT,
+          toolName,
+          isError: false,
+        },
+      ],
+    };
+  }
+
+  // Creates a chat (so the component is not on the "restored chat" path), then
+  // delivers tool results and re-renders so the watcher effect observes them.
+  async function sendThenDeliver(
+    onWorkflowChange: ReturnType<typeof vi.fn>,
+    messages: unknown[],
+  ) {
+    renderWorkflowBuilderChat({
+      isNewWorkflow: true,
+      draftId: "draft-1",
+      onWorkflowChange,
+    });
+    await enterAndSend("Build a workflow");
+    await waitFor(() => expect(mocks.chatGrpc.create).toHaveBeenCalledTimes(1));
+
+    mocks.chatMessages["chat-new"] = messages;
+    // Any state change re-runs the effect with the new store messages.
+    await act(async () => {
+      fireEvent.change(await screen.findByTestId("workflow-chat-input"), {
+        target: { value: "x" },
+      });
+    });
+  }
+
+  it("refetches the draft for a tool that is not edit_workflow/write_workflow", async () => {
+    const onWorkflowChange = vi.fn();
+    mocks.getWorkflowByDraftId.mockResolvedValue({
+      workflow: { ...workflow, description: "updated by create_workflow" },
+      version: 2,
+    });
+
+    await sendThenDeliver(onWorkflowChange, [toolResultMessage(1, "create_workflow")]);
+
+    await waitFor(() =>
+      expect(mocks.getWorkflowByDraftId).toHaveBeenCalledWith("project-1", "draft-1"),
+    );
+    await waitFor(() =>
+      expect(onWorkflowChange).toHaveBeenCalledWith(
+        expect.objectContaining({ description: "updated by create_workflow" }),
+      ),
+    );
+  });
+
+  it("refetches the draft for a scenario tool", async () => {
+    const onWorkflowChange = vi.fn();
+    mocks.getWorkflowByDraftId.mockResolvedValue({
+      workflow: { ...workflow, description: "updated by write_scenario" },
+      version: 3,
+    });
+
+    await sendThenDeliver(onWorkflowChange, [toolResultMessage(1, "write_scenario")]);
+
+    await waitFor(() =>
+      expect(mocks.getWorkflowByDraftId).toHaveBeenCalledWith("project-1", "draft-1"),
+    );
+    await waitFor(() =>
+      expect(onWorkflowChange).toHaveBeenCalledWith(
+        expect.objectContaining({ description: "updated by write_scenario" }),
+      ),
+    );
+  });
+
+  // A read-only tool (view, grep, get_workflow) costs one cheap refetch but must
+  // NOT replace the canvas — otherwise the generic rule would clobber unsaved
+  // canvas edits on every turn.
+  it("does not replace the canvas when the draft version is unchanged", async () => {
+    const onWorkflowChange = vi.fn();
+    mocks.getWorkflowByDraftId.mockResolvedValue({
+      workflow: { ...workflow, description: "v2" },
+      version: 2,
+    });
+
+    await sendThenDeliver(onWorkflowChange, [toolResultMessage(1, "edit_workflow")]);
+    await waitFor(() => expect(onWorkflowChange).toHaveBeenCalledTimes(1));
+
+    // A later read-only tool result: refetch happens, canvas does not change.
+    mocks.chatMessages["chat-new"] = [
+      toolResultMessage(1, "edit_workflow"),
+      toolResultMessage(2, "get_workflow"),
+    ];
+    await act(async () => {
+      fireEvent.change(await screen.findByTestId("workflow-chat-input"), {
+        target: { value: "xy" },
+      });
+    });
+
+    await waitFor(() => expect(mocks.getWorkflowByDraftId).toHaveBeenCalledTimes(2));
+    expect(onWorkflowChange).toHaveBeenCalledTimes(1);
   });
 });

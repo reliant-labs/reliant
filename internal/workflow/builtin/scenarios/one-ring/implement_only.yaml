@@ -7,6 +7,13 @@ inputs:
   steps: [implement]
 
 events:
+  # Router: "straight to implementation" — this is the whole point of the
+  # scenario, so the routing decision is made explicitly here.
+  - node: classify
+    output:
+      selected_node: impl_loop
+      reasoning: "Simple, well-defined task — go straight to implementation."
+
   - node: impl_loop.attempt.implement
     output:
       response_text: "Minimal implementation done."
@@ -14,13 +21,25 @@ events:
 expect:
   outcome: completed
   reached:
-    - planning
+    - classify
     - impl_loop
     - impl_loop.attempt.implement
     - impl_loop.attempt.join_checks
     - impl_loop.attempt.review
     - success
+  # The implement branch really EXECUTED — reached alone would also be true of
+  # skipped nodes, so the routing outcome is pinned with completed.
+  completed:
+    - impl_loop
+    - impl_loop.attempt.implement
+    - impl_loop.attempt.review
+    - success
   not_reached:
+    # The router dispatched straight to impl_loop, so the planning branch is
+    # never scheduled at all. (Previously `planning` was asserted REACHED —
+    # true only because the unmocked router defaulted to refine_prompt.)
+    - refine_prompt
+    - planning
     - planning.plan
     - write_tests
     - impl_loop.attempt.refactor

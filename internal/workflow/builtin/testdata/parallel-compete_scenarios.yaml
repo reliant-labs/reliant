@@ -40,47 +40,70 @@ events:
       tool_calls: []
 
   # Per-iteration mocks for the parallel loop (one per candidate)
-  - node: implementations
+  # impl is a `type: workflow` ref to builtin://agent nested in the loop body.
+  # Mocking its INTERNALS (implementations.impl.agent_loop.call_llm) makes the
+  # agent body execute rather than being replaced by a scenario literal, so the
+  # ref's own arg expressions and its loop's exit condition are really tested.
+  # An empty tool_calls list is what ends the agent loop after one turn.
+  - node: implementations.create_wt
     output:
-      worktree_path: "/tmp/worktrees/compete-impl-1"
-      worktree_branch: "compete-impl-1"
-      response_text: "Candidate 1 implementation complete. Used basic password auth."
-  - node: implementations
-    output:
-      worktree_path: "/tmp/worktrees/compete-impl-2"
-      worktree_branch: "compete-impl-2"
-      response_text: "Candidate 2 implementation complete. Full OAuth + password with tests."
-  - node: implementations
-    output:
-      worktree_path: "/tmp/worktrees/compete-impl-3"
-      worktree_branch: "compete-impl-3"
-      response_text: "Candidate 3 implementation complete. OAuth only, minimal tests."
-
-  # Reviewer with structured response (use_winner strategy)
-  - node: review
+      path: "/tmp/worktrees/compete-impl-1"
+      branch: "compete-impl-1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: |
-          After reviewing all implementations:
+        text: "Candidate 1 implementation complete. Used basic password auth."
+      response_text: "Candidate 1 implementation complete. Used basic password auth."
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/tmp/worktrees/compete-impl-2"
+      branch: "compete-impl-2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+      response_text: "Candidate 2 implementation complete. Full OAuth + password with tests."
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/tmp/worktrees/compete-impl-3"
+      branch: "compete-impl-3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+      response_text: "Candidate 3 implementation complete. OAuth only, minimal tests."
+      tool_calls: []
 
-          - Candidate 1: Basic but incomplete
-          - Candidate 2: Complete with good test coverage
-          - Candidate 3: Missing password auth
-      response_text: |
-        After reviewing all implementations:
-
-        - Candidate 1: Basic but incomplete
-        - Candidate 2: Complete with good test coverage
-        - Candidate 3: Missing password auth
-      response:
-        winner: 2
-        strategy: "use_winner"
-        confidence: 8
-        rationale: "Candidate 2 has the most complete implementation with proper OAuth and password auth support, plus good test coverage."
-        synthesis_instructions: ""
-      completed: true
-
+  # Reviewer with structured response (use_winner strategy)
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 2
+          strategy: "use_winner"
+          confidence: 8
+          rationale: "Candidate 2 has the most complete implementation with proper OAuth and password auth support, plus good test coverage."
+          synthesis_instructions: ""
   # apply_winner runs rsync command
   - node: apply_winner
     output:
@@ -94,6 +117,10 @@ expect:
     - improve_prompt
     - save_improved_prompt
     - implementations
+    # The nested agent ref really executed — under black-box mocking this node
+    # is never entered no matter what the scenario writes.
+    - implementations.impl
+    - implementations.impl.agent_loop.call_llm
     - review
     - apply_winner
     - complete
@@ -113,56 +140,96 @@ events:
       response_text: "Build a cache layer with TTL support"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
-      response_text: "Created cache.go with excellent TTL implementation"
-  - node: implementations
-    output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "Created cache.go with great test coverage but basic TTL"
-  - node: implementations
-    output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
-      response_text: "Created cache.go with good API design but minimal tests"
-
-  # Reviewer chooses synthesize strategy
-  - node: review
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Each implementation has unique strengths that should be combined."
-      response_text: "Each implementation has unique strengths that should be combined."
-      response:
-        winner: 1
-        strategy: "synthesize"
-        confidence: 9
-        rationale: "Candidate 1 has the best TTL implementation, Candidate 2 has the best tests, and Candidate 3 has the best API design."
-        synthesis_instructions: |
-          1. Use Candidate 1's cache.go as the base (best TTL logic)
-          2. Copy Candidate 2's cache_test.go for test coverage
-          3. Update the public API in cache.go to match Candidate 3's cleaner interface
-      completed: true
-
-  # Synthesizer agent combines the implementations
-  - node: synthesizer
+        text: "Created cache.go with excellent TTL implementation"
+      response_text: "Created cache.go with excellent TTL implementation"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
+        role: assistant
+        text: "Created cache.go with great test coverage but basic TTL"
+      response_text: "Created cache.go with great test coverage but basic TTL"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go with good API design but minimal tests"
+      response_text: "Created cache.go with good API design but minimal tests"
+      tool_calls: []
+
+  # Reviewer chooses synthesize strategy
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 1
+          strategy: "synthesize"
+          confidence: 9
+          rationale: "Candidate 1 has the best TTL implementation, Candidate 2 has the best tests, and Candidate 3 has the best API design."
+          synthesis_instructions: |
+            1. Use Candidate 1's cache.go as the base (best TTL logic)
+            2. Copy Candidate 2's cache_test.go for test coverage
+            3. Update the public API in cache.go to match Candidate 3's cleaner interface
+  # Synthesizer agent combines the implementations
+  - node: synthesizer.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: |
+          role: assistant
+          text: |
+            Synthesis complete. I have:
+            1. Used Candidate 1's TTL implementation as the base
+            2. Added Candidate 2's comprehensive test suite
+            3. Refactored the API to match Candidate 3's cleaner design
+          Synthesis complete. I have:
+          1. Used Candidate 1's TTL implementation as the base
+          2. Added Candidate 2's comprehensive test suite
+          3. Refactored the API to match Candidate 3's cleaner design
+      response_text: |
         role: assistant
         text: |
           Synthesis complete. I have:
           1. Used Candidate 1's TTL implementation as the base
           2. Added Candidate 2's comprehensive test suite
           3. Refactored the API to match Candidate 3's cleaner design
-      response_text: |
         Synthesis complete. I have:
         1. Used Candidate 1's TTL implementation as the base
         2. Added Candidate 2's comprehensive test suite
         3. Refactored the API to match Candidate 3's cleaner design
-
+      tool_calls: []
 expect:
   outcome: completed
   reached:
@@ -205,37 +272,65 @@ events:
         Create a user management API endpoint
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
-      response_text: "Done"
-  - node: implementations
-    output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "Done"
-  - node: implementations
-    output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
-      response_text: "Done"
-
-  # Review with structured response
-  - node: review
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Candidate 1 is the best implementation"
-      response_text: "Candidate 1 is the best implementation"
-      response:
-        winner: 1
-        strategy: "use_winner"
-        confidence: 7
-        rationale: "Best implementation overall"
-        synthesis_instructions: ""
-      completed: true
+        text: "Done"
+      response_text: "Done"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Done"
+      response_text: "Done"
+      tool_calls: []
 
+  # Review with structured response
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 1
+          strategy: "use_winner"
+          confidence: 7
+          rationale: "Best implementation overall"
+          synthesis_instructions: ""
   - node: apply_winner
     output:
       exit_code: 0
@@ -265,37 +360,65 @@ events:
       response_text: "Build a cache layer"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
-      response_text: "Created cache.go with basic implementation"
-  - node: implementations
-    output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "Created cache.go and cache_test.go with full test coverage"
-  - node: implementations
-    output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
-      response_text: "Minimal cache implementation"
-
-  # Reviewer picks winner with structured response
-  - node: review
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Candidate 2 has the only implementation with tests"
-      response_text: "Candidate 2 has the only implementation with tests"
-      response:
-        winner: 2
-        strategy: "use_winner"
-        confidence: 9
-        rationale: "Only candidate with test coverage"
-        synthesis_instructions: ""
-      completed: true
+        text: "Created cache.go with basic implementation"
+      response_text: "Created cache.go with basic implementation"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Created cache.go and cache_test.go with full test coverage"
+      response_text: "Created cache.go and cache_test.go with full test coverage"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Minimal cache implementation"
+      response_text: "Minimal cache implementation"
+      tool_calls: []
 
+  # Reviewer picks winner with structured response
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 2
+          strategy: "use_winner"
+          confidence: 9
+          rationale: "Only candidate with test coverage"
+          synthesis_instructions: ""
   - node: apply_winner
     output:
       exit_code: 0
@@ -323,65 +446,65 @@ events:
       response_text: "Create REST API"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
-      response_text: "Implementation 1 done"
-  - node: implementations
-    output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "Implementation 2 done"
-  - node: implementations
-    output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
-      response_text: "Implementation 3 done"
-
-  # Thorough reviewer analysis with structured response
-  - node: review
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: |
-          ## Detailed Code Review
+        text: "Implementation 1 done"
+      response_text: "Implementation 1 done"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Implementation 2 done"
+      response_text: "Implementation 2 done"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Implementation 3 done"
+      response_text: "Implementation 3 done"
+      tool_calls: []
 
-          ### Candidate 1 Analysis
-          - Basic CRUD implementation
-          - Missing input validation
-          - No tests
-
-          ### Candidate 2 Analysis
-          - Complete REST implementation
-          - Proper error handling
-          - Unit tests included
-
-          ### Candidate 3 Analysis
-          - Incomplete, no tests
-      response_text: |
-        ## Detailed Code Review
-
-        ### Candidate 1 Analysis
-        - Basic CRUD implementation
-        - Missing input validation
-        - No tests
-
-        ### Candidate 2 Analysis
-        - Complete REST implementation
-        - Proper error handling
-        - Unit tests included
-
-        ### Candidate 3 Analysis
-        - Incomplete, no tests
-      response:
-        winner: 2
-        strategy: "use_winner"
-        confidence: 10
-        rationale: "Most complete implementation with proper structure and testing"
-        synthesis_instructions: ""
-      completed: true
-
+  # Thorough reviewer analysis with structured response
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 2
+          strategy: "use_winner"
+          confidence: 10
+          rationale: "Most complete implementation with proper structure and testing"
+          synthesis_instructions: ""
   - node: apply_winner
     output:
       exit_code: 0
@@ -410,47 +533,65 @@ events:
       response_text: "Implement error handling"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
-      response_text: "Implementation 1 complete with error handling"
-  - node: implementations
-    output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
-  - node: implementations
-    output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
-      response_text: "Implementation 3 complete with robust error handling"
-
-  # Reviewer notes impl 2 failed and picks from remaining
-  - node: review
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: |
-          ## Review Summary
+        text: "Implementation 1 complete with error handling"
+      response_text: "Implementation 1 complete with error handling"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "ERROR: Unable to complete implementation due to unforeseen issue"
+      response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Implementation 3 complete with robust error handling"
+      response_text: "Implementation 3 complete with robust error handling"
+      tool_calls: []
 
-          Candidate 1: Complete implementation
-          Candidate 2: FAILED - no implementation
-          Candidate 3: Complete implementation with robust error handling
-      response_text: |
-        ## Review Summary
-
-        Candidate 1: Complete implementation
-        Candidate 2: FAILED - no implementation
-        Candidate 3: Complete implementation with robust error handling
-      response:
-        winner: 3
-        strategy: "use_winner"
-        confidence: 8
-        rationale: "Only viable option with complete error handling. Candidate 2 failed to complete."
-        synthesis_instructions: ""
-      completed: true
-
+  # Reviewer notes impl 2 failed and picks from remaining
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 3
+          strategy: "use_winner"
+          confidence: 8
+          rationale: "Only viable option with complete error handling. Candidate 2 failed to complete."
+          synthesis_instructions: ""
   - node: apply_winner
     output:
       exit_code: 0
@@ -483,21 +624,39 @@ events:
       response_text: "Build a feature"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Implementation 1 done"
       response_text: "Implementation 1 done"
-  - node: implementations
+      tool_calls: []
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "ERROR: Failed"
-  - node: implementations
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
     output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
+      message:
+        role: assistant
+        text: "ERROR: Failed"
       response_text: "ERROR: Failed"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "ERROR: Failed"
+      response_text: "ERROR: Failed"
+      tool_calls: []
 
   # Review runs but response is null (no response tool called or incomplete)
   - node: review
@@ -526,48 +685,76 @@ events:
       response_text: "Build authentication system"
       tool_calls: []
 
-  - node: implementations
+  - node: implementations.create_wt
     output:
-      worktree_path: "/wt/1"
-      worktree_branch: "b1"
-      response_text: "OAuth implementation complete"
-  - node: implementations
-    output:
-      worktree_path: "/wt/2"
-      worktree_branch: "b2"
-      response_text: "Password auth implementation complete"
-  - node: implementations
-    output:
-      worktree_path: "/wt/3"
-      worktree_branch: "b3"
-      response_text: "JWT token handling complete"
-
-  # High confidence synthesis
-  - node: review
+      path: "/wt/1"
+      branch: "b1"
+  - node: implementations.impl.agent_loop.call_llm
     output:
       message:
         role: assistant
-        text: "Each candidate excels at different parts of the auth system"
-      response_text: "Each candidate excels at different parts of the auth system"
-      response:
-        winner: 2
-        strategy: "synthesize"
-        confidence: 10
-        rationale: "Candidate 1 has best OAuth, Candidate 2 has best password handling, Candidate 3 has best JWT management. Combining all three creates a comprehensive auth system."
-        synthesis_instructions: |
-          1. Start with Candidate 2's password auth as the base (most complete structure)
-          2. Integrate Candidate 1's OAuth provider setup from /wt/1/auth/oauth.go
-          3. Add Candidate 3's JWT token generation and validation from /wt/3/auth/jwt.go
-          4. Ensure all auth methods use consistent user session handling
-      completed: true
+        text: "OAuth implementation complete"
+      response_text: "OAuth implementation complete"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/2"
+      branch: "b2"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Password auth implementation complete"
+      response_text: "Password auth implementation complete"
+      tool_calls: []
+  - node: implementations.create_wt
+    output:
+      path: "/wt/3"
+      branch: "b3"
+  - node: implementations.impl.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "JWT token handling complete"
+      response_text: "JWT token handling complete"
+      tool_calls: []
 
-  - node: synthesizer
+  # High confidence synthesis
+  # review EXECUTES its structured-agent body. The response tool is
+  # `submit_review` (parallel-compete.yaml sets response_tool_name); any other
+  # key leaves the loop's `completed` false and it spins to max_turns.
+  - node: review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_review
+          name: submit_review
+          input: {}
+  - node: review.agent_loop.execute_tools
+    output:
+      tool_results: []
+      thread_token_count: 100
+      response_data:
+        submit_review:
+          winner: 2
+          strategy: "synthesize"
+          confidence: 10
+          rationale: "Candidate 1 has best OAuth, Candidate 2 has best password handling, Candidate 3 has best JWT management. Combining all three creates a comprehensive auth system."
+          synthesis_instructions: |
+            1. Start with Candidate 2's password auth as the base (most complete structure)
+            2. Integrate Candidate 1's OAuth provider setup from /wt/1/auth/oauth.go
+            3. Add Candidate 3's JWT token generation and validation from /wt/3/auth/jwt.go
+            4. Ensure all auth methods use consistent user session handling
+  - node: synthesizer.agent_loop.call_llm
     output:
       message:
         role: assistant
         text: "Successfully combined OAuth, password auth, and JWT handling into unified auth system"
       response_text: "Successfully combined OAuth, password auth, and JWT handling into unified auth system"
-
+      tool_calls: []
 expect:
   outcome: completed
   reached:

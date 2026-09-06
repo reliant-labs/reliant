@@ -9,9 +9,15 @@ description: Router routes to de_ai, skipping all phases through distribution
 
 events:
   # Context intake: existing final artifact should be enough
-  - node: context_intake
+  # EXECUTED (not black-boxed): a qualified id makes the ref transparent, so
+  # this node's own args CEL — e.g. tools: {{inputs.tools + ['ask_user']}} — is compiled.
+  - node: context_intake.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Existing final blog post artifact is the relevant context."
       response_text: "Existing final blog post artifact is the relevant context."
+      tool_calls: []
 
   # Router selects de_ai as starting point
   - node: classify
@@ -19,18 +25,37 @@ events:
       selected_node: de_ai
       reasoning: "Content is finalized and needs de-AI treatment."
 
-  # De-AI pass (get-it-right sub-workflow, black-box mocked)
-  - node: de_ai
+  # De-AI pass — EXECUTED. Mocking get-it-right's inner loop nodes means the
+  # `iterations` value below is produced by the loop rather than asserted as a
+  # scenario literal.
+  - node: de_ai.attempt.implement
     output:
-      response_text: "De-AI pass complete after 1 iteration."
-      review_grade: pass
-      eval_strategy: pass
-      iterations: 1
+      response_text: "Applied the de-AI edits to the assembled post."
+  - node: de_ai.attempt.review
+    output:
+      response:
+        grade: pass
+        strategy: "pass"
+        feedback: "Reads like genuine practitioner writing."
 
   # Reddit Summary
-  - node: reddit_summary
+  - node: reddit_summary.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Reddit post written."
       response_text: "Reddit post written."
+      tool_calls: []
+
+  # handoff EXECUTES: it previously had NO event, so it silently fell through to
+  # the default empty mock and its builtin://agent body never ran.
+  - node: handoff.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Handoff complete; posted the result."
+      response_text: "Handoff complete; posted the result."
+      tool_calls: []
 
 expect:
   outcome: completed
@@ -40,6 +65,15 @@ expect:
     - de_ai
     - reddit_summary
     - validate_artifacts
+    - complete
+  completed:
+    - context_intake
+    - context_intake.agent_loop.call_llm
+    - de_ai
+    - de_ai.attempt.implement
+    - de_ai.attempt.review
+    - reddit_summary
+    - reddit_summary.agent_loop.call_llm
     - complete
   not_reached:
     - topic_discovery

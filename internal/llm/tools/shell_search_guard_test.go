@@ -89,6 +89,80 @@ func TestUnscopedSearchRefusalNamesTheScopedAlternative(t *testing.T) {
 	}
 }
 
+// `rg -r` is --replace, not --recursive. Verified against ripgrep 14.1.1 on a
+// file containing "hello world": `rg -rn hello .` prints "./a.txt:n world" and
+// exits 0 — right file, right line, matched text replaced by the "n" that -r
+// consumed as its argument. Nothing downstream can tell that from a real result,
+// which is why this is a refusal and not a documentation note.
+func TestRipgrepReplaceRefusal(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name    string
+		command string
+		refuse  bool
+	}{
+		// --- the habit, in the spellings it actually appears in ---
+		{"bundled -rn", `rg -rn 'RenderProjectMemory' .`, true},
+		{"bundled -rl", `rg -rl 'pattern' internal/`, true},
+		{"bundled -rni", `rg -rni 'pattern' .`, true},
+		{"separate -r", `rg -r 'pattern' .`, true},
+		{"-r after another flag", `rg -n -r 'pattern' .`, true},
+		{"trailing -r in a bundle", `rg -nr 'pattern' .`, true},
+		{"rg in the second segment", `echo hi && rg -rn 'pattern' .`, true},
+		{"rg in a pipeline", `rg -rn 'pattern' . | head`, true},
+		{"rg behind an env prefix", `FOO=bar rg -rn 'pattern' .`, true},
+		{"rg by absolute path", `/opt/homebrew/bin/rg -rn 'pattern' .`, true},
+
+		// --- deliberate substitution: the escape hatch must stay open ---
+		{"long --replace", `rg -o --replace '$1' 'func (\w+)' .`, false},
+		{"long --replace with =", `rg --replace='$1' 'func (\w+)' .`, false},
+
+		// --- ordinary searches, must NOT be refused ---
+		{"plain search", `rg 'pattern' .`, false},
+		{"with line numbers", `rg -n 'pattern' internal/`, false},
+		{"files only", `rg -l 'pattern' .`, false},
+		{"type filter", `rg -t go 'pattern' .`, false},
+		{"case insensitive bundle", `rg -ni 'pattern' .`, false},
+		// -e takes the rest of the bundle as its value, so this 'r' is pattern
+		// text, not a flag. A substring test for 'r' would refuse it wrongly.
+		{"r inside an -e pattern", `rg -erecursive .`, false},
+		{"r inside a -t value", `rg -trust 'pattern' .`, false},
+		{"pattern containing r after --", `rg -n -- -rn .`, false},
+		// grep's -r IS recursive; this guard is about rg only.
+		{"grep -rn is untouched", `grep -rn 'pattern' .`, false},
+		{"a word ending in rg", `cargo build`, false},
+		{"pattern mentioning rg -rn in a string", `echo "rg -rn 'x' ."`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ripgrepReplaceRefusal(tt.command)
+			if tt.refuse && got == "" {
+				t.Fatalf("expected refusal for %q, got none", tt.command)
+			}
+			if !tt.refuse && got != "" {
+				t.Fatalf("expected %q to be allowed, got refusal:\n%s", tt.command, got)
+			}
+		})
+	}
+}
+
+// A refusal that only says "no" costs a turn and teaches nothing. This one has
+// to name the correct search AND the long spelling, so an agent that genuinely
+// wanted substitution is redirected rather than blocked.
+func TestRipgrepReplaceRefusalNamesBothWaysOut(t *testing.T) {
+	t.Parallel()
+	msg := ripgrepReplaceRefusal(`rg -rn 'RenderProjectMemory' .`)
+	if msg == "" {
+		t.Fatal("expected a refusal")
+	}
+	for _, want := range []string{"--replace", "rg 'pattern' .", "recurses"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("refusal does not mention %q; message:\n%s", want, msg)
+		}
+	}
+}
+
 // The guard must be reachable from the shell tool itself, not merely exist.
 // Execute returns the refusal as a tool error before touching the daemon, which
 // is why a nil-daemon context still has to be rejected first.

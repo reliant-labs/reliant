@@ -621,6 +621,14 @@ func populateSharedTypes() {
 			(&reliantv1.DeleteWorktreeOutput{}).ProtoReflect().Descriptor()},
 		{"SkippedOutput", "Output for nodes skipped due to conditions",
 			(&reliantv1.SkippedOutput{}).ProtoReflect().Descriptor()},
+		// Top-level structural types. get_schema advertises these by name, so
+		// they must resolve here or its own examples fail.
+		{"Workflow", "Top-level workflow definition: nodes, edges, inputs, and outputs",
+			(&reliantv1.Workflow{}).ProtoReflect().Descriptor()},
+		{"Edge", "Connects a source node to destination(s) with conditional routing",
+			(&reliantv1.Edge{}).ProtoReflect().Descriptor()},
+		{"EdgeCase", "One conditional routing path from an edge",
+			(&reliantv1.EdgeCase{}).ProtoReflect().Descriptor()},
 	}
 
 	for _, def := range sharedDefs {

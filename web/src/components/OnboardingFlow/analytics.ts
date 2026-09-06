@@ -9,6 +9,17 @@ import { codeSourceForCompute } from "./steps/ComputeStep";
 // completion would also fire onboarding_abandoned.
 let completedFlag = false;
 
+// How many distinct steps the user has seen this flow. Module-level for the
+// same reason as completedFlag: `leaveOnboarding` is called from handlers and
+// effects that have no access to OnboardingPage's render state, and an exit
+// reason is far more informative paired with how far the user actually got.
+let stepsViewed = new Set<string>();
+
+/** Distinct steps viewed in the current flow. */
+export function stepsViewedCount(): number {
+  return stepsViewed.size;
+}
+
 export function markOnboardingFinalized(
   plan: Partial<LaunchPlan>,
   source: "new" | "github" | "existing",
@@ -37,6 +48,7 @@ export function useOnboardingTracking(currentStep: string): void {
     stepStartRef.current = Date.now();
     lastStepRef.current = currentStep;
     completedFlag = false;
+    stepsViewed = new Set([currentStep]);
     trackEvent("onboarding_flow_started", { initial_step: currentStep });
     trackEvent("onboarding_flow_step_viewed", { step: currentStep });
 
@@ -66,6 +78,7 @@ export function useOnboardingTracking(currentStep: string): void {
       });
     }
     trackEvent("onboarding_flow_step_viewed", { step: currentStep });
+    stepsViewed.add(currentStep);
     lastStepRef.current = currentStep;
     stepStartRef.current = Date.now();
   }, [currentStep]);

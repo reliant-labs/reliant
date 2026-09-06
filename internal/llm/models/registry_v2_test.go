@@ -598,6 +598,10 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
 	reg := MustGetRegistry()
 
+	// TagFast stays on gpt-5.3-codex-spark. The 5.6 family's faster/cheaper
+	// member (terra) carries `moderate` rather than `fast` precisely to keep it
+	// off this path: @fast, chat titling and compaction all resolve TagFast for
+	// a codex user, so repointing it is a latency decision, not a catalog one.
 	for tag, want := range map[string]string{
 		TagFlagship:  "gpt-5.5",
 		TagModerate:  "gpt-5.5",

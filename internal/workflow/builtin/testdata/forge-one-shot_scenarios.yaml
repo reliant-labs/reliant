@@ -23,51 +23,72 @@ events:
   # One loop: scoped with the user, scaffolded the substrate green, fanned out
   # per-seam units, synthesized them, and passed the teethed review that opened
   # the live app.
-  - node: build_app
+  # build_app EXECUTES its get-it-right body. forge-one-shot sets max_retries: 7,
+  # so the "never reaches green" premise needs a verdict for EVERY attempt —
+  # one mock would be consumed once and the loop would then default to green.
+  - node: build_app.attempt.implement
     output:
-      strategy: "pass"
-      eval_strategy: "pass"
-      review_grade: "pass"
-      review_feedback: "Substrate green, per-seam frontend + backend fanned out and synthesized, verified live; build green."
-      iterations: 4
-      lint_exit: 0
-      test_exit: 0
-      build_exit: 0
-
-  # The finished app is launched and its URL posted as the last step of the run.
-  - node: launch_preview
+      response_text: "Attempt 1 for build_app."
+  - node: build_app.attempt.review
     output:
-      response_text: "Orders, billing, and the ops dashboard are live.\n\n**[Open your app](https://preview.example/3000)**"
-
-expect:
-  outcome: completed
-  reached:
-    - build_app
-    - build_done
-    - launch_preview
-    - success
-  not_reached:
-    - stuck
-    - failed
-
----
-name: build_fails
-description: The build never reaches a green, complete state. Fails loud, no preview.
-
-events:
-  # strategy != pass after the retries routes straight to the failed terminal;
-  # build_done and the preview never run.
-  - node: build_app
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
+  - node: build_app.attempt.implement
     output:
-      strategy: "continue"
-      eval_strategy: "continue"
-      review_grade: "fail"
-      review_feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
-      iterations: 7
-      lint_exit: 0
-      test_exit: 0
-      build_exit: 1
-
+      response_text: "Attempt 2 for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
+  - node: build_app.attempt.implement
+    output:
+      response_text: "Attempt 3 for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
+  - node: build_app.attempt.implement
+    output:
+      response_text: "Attempt 4 for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
+  - node: build_app.attempt.implement
+    output:
+      response_text: "Attempt 5 for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
+  - node: build_app.attempt.implement
+    output:
+      response_text: "Attempt 6 for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
+  - node: build_app.attempt.implement
+    output:
+      response_text: "Attempt 7 for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "continue"
+        feedback: "Scaffold landed but the fan-out left a build error I could not resolve."
 expect:
   outcome: completed
   reached:
@@ -84,18 +105,17 @@ name: build_stuck
 description: The loop escalates on a tooling/environment blocker, not a code defect.
 
 events:
-  - node: build_app
+  # build_app EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_app.attempt.implement
     output:
-      strategy: "stuck"
-      eval_strategy: "stuck"
-      stuck: true
-      review_grade: "fail"
-      review_feedback: "The app genuinely will not start — a forge command crashes. Not the protos or the code."
-      iterations: 3
-      lint_exit: 1
-      test_exit: 0
-      build_exit: 1
-
+      response_text: "Implementation attempt for build_app."
+  - node: build_app.attempt.review
+    output:
+      response:
+        grade: fail
+        strategy: "stuck"
+        feedback: "The app genuinely will not start — a forge command crashes. Not the protos or the code."
 expect:
   outcome: completed
   reached:

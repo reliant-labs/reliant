@@ -32,8 +32,18 @@ type ApprovalCreateInput struct {
 	TemporalWorkflowID string `json:"temporal_workflow_id" reliant:"-"`
 	ThreadID           string `json:"thread_id,omitempty" reliant:"-"`
 	StepID             string `json:"step_id" reliant:"-"`
-	Title              string `json:"title" reliant:"-"`
-	Timeout            string `json:"timeout,omitempty" reliant:"-"` // Duration string, e.g. "1h"
+	// LoopNodeID/LoopIteration identify the loop iteration that raised this
+	// approval, mirroring QuestionCreateInput. An approval inside a loop body
+	// is otherwise indistinguishable from the same node at the top level.
+	LoopNodeID    string `json:"loop_node_id,omitempty" reliant:"-"`
+	LoopIteration int    `json:"loop_iteration,omitempty" reliant:"-"`
+	// NodePath is the fully-qualified dotted graph position of the approval
+	// node. It is carried for observability and is deliberately NOT persisted:
+	// the approvals/questions rows key on LoopNodeID, which means loop-scoped
+	// identity, not graph path.
+	NodePath string `json:"node_path,omitempty" reliant:"-"`
+	Title    string `json:"title" reliant:"-"`
+	Timeout  string `json:"timeout,omitempty" reliant:"-"` // Duration string, e.g. "1h"
 }
 
 // ApprovalCreateOutput is the output from the ApprovalCreate activity.

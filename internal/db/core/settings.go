@@ -84,6 +84,13 @@ type SettingStore interface {
 
 	GetCodexAuthTokens(ctx context.Context, userID string) (*CodexAuthTokens, error)
 	SetCodexAuthTokens(ctx context.Context, userID string, tokens CodexAuthTokens) error
+	// CompareAndSwapCodexAuthTokens persists tokens only if the currently
+	// stored refresh token still equals expectedRefreshToken, i.e. no
+	// concurrent rotation has been persisted since the caller read it.
+	// Returns true when the row was updated. Codex OAuth refresh tokens are
+	// single-use (rotated on every exchange), so a plain last-writer-wins
+	// upsert would let a stale rotation clobber the live token lineage.
+	CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens CodexAuthTokens) (bool, error)
 	DeleteCodexAuthTokens(ctx context.Context, userID string) error
 
 	GetCopilotAuthTokens(ctx context.Context, userID string) (*CopilotAuthTokens, error)

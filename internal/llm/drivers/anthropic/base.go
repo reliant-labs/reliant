@@ -735,8 +735,10 @@ func (b *baseClient) getThinkingConfig() anthropic.ThinkingConfigParamUnion {
 
 // getOutputConfig returns output_config:{effort:<level>} for adaptive-thinking
 // models and (false) for budget-tier models, which must NOT send output_config.
-// The effort level uses the caller's ReasoningEffort when set, else "high" (the
-// value observed in every adaptive capture).
+// The effort level uses the caller's ReasoningEffort when set, else "high".
+// xhigh and max are passed through as-is: several models declare xhigh in their
+// thinking_levels and the captures send effort:"xhigh", so falling through to the
+// default here would silently downgrade those requests on the wire.
 func (b *baseClient) getOutputConfig() (anthropic.OutputConfigParam, bool) {
 	if !b.isAdaptiveThinking() {
 		return anthropic.OutputConfigParam{}, false
@@ -750,8 +752,12 @@ func (b *baseClient) getOutputConfig() (anthropic.OutputConfigParam, bool) {
 		effort = anthropic.OutputConfigEffortMedium
 	case "high":
 		effort = anthropic.OutputConfigEffortHigh
+	case "xhigh":
+		effort = anthropic.OutputConfigEffortXhigh
+	case "max":
+		effort = anthropic.OutputConfigEffortMax
 	default:
-		effort = anthropic.OutputConfigEffortHigh // captures always show effort:"high"
+		effort = anthropic.OutputConfigEffortHigh
 	}
 
 	return anthropic.OutputConfigParam{Effort: effort}, true

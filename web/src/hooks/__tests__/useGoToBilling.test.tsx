@@ -1,12 +1,15 @@
 /**
  * useGoToBilling — where "View plans" actually sends people.
  *
- * The case that matters is the ANONYMOUS one: free-tier users run on anonymous
- * Supabase sessions, and sending them straight to billing is a dead end. A
- * subscription bought against a browser-session identity belongs to nobody
- * reachable, and losing the session loses the purchase. They have to link a
- * real identity first, which is what /upgrade does — with returnTo pointing at
- * billing so they still arrive where they meant to go.
+ * This hook used to fork on anonymity and route anonymous sessions through
+ * /upgrade first. That guarantee (no subscription against a browser-session
+ * identity) has NOT been dropped — it moved into the checkout mutation, which
+ * is the only call that spends money and therefore the only chokepoint that
+ * cannot be bypassed by adding a sixth navigation call site. See
+ * `useCloudBillingQueries.identity.test.tsx`, which pins it there.
+ *
+ * What is left here is navigation, and it is the same for everyone: straight to
+ * billing, on the Plans tab, because that is what the user asked for.
  */
 import { renderHook, act } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,70 +19,94 @@ vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => mockNavigate,
 }));
 
-type MockUser = { is_anonymous?: boolean } | null;
-let mockUser: MockUser = null;
-
-vi.mock("@/store/authStore", () => ({
-  useAuthStore: (selector: (s: { user: MockUser }) => unknown) =>
-    selector({ user: mockUser }),
-}));
-
 import { useGoToBilling } from "../useGoToBilling";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockUser = null;
 });
 
 describe("useGoToBilling", () => {
-  it("sends an anonymous user through identity linking, returning to billing", () => {
-    mockUser = { is_anonymous: true };
-
-    const { result } = renderHook(() => useGoToBilling());
-    act(() => result.current());
-
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/upgrade",
-      search: { returnTo: "/settings/billing" },
-    });
-  });
-
-  it("sends a signed-in user straight to billing", () => {
-    mockUser = { is_anonymous: false };
-
+  it("sends an anonymous user straight to billing, no identity detour", () => {
     const { result } = renderHook(() => useGoToBilling());
     act(() => result.current());
 
     expect(mockNavigate).toHaveBeenCalledWith({
       to: "/settings/$section",
       params: { section: "billing" },
+      search: { tab: "plans", from: undefined, returnTo: undefined },
     });
+    // The /upgrade interstitial is gone: the ask now happens at purchase.
+    expect(mockNavigate).not.toHaveBeenCalledWith(
+      expect.objectContaining({ to: "/upgrade" }),
+    );
   });
 
-  // api-key / mock / dev synthetic users set is_anonymous: false and must not
-  // be pushed through identity linking they cannot complete. Same rule as
-  // useAnonSignInNudge: ONLY is_anonymous === true counts as anonymous.
-  it("treats a user with no is_anonymous flag as signed in", () => {
-    mockUser = {};
+  it("deep-links to the Plans tab, not the Overview dashboard", () => {
+    const { result } = renderHook(() => useGoToBilling());
+    act(() => result.current());
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({ search: expect.objectContaining({ tab: "plans" }) }),
+    );
+  });
+
+  it("carries the originating surface so billing can offer a route back", () => {
+    // Without this, a user who detoured from the compute step landed on billing
+    // with no way back into the wizard.
+    const { result } = renderHook(() => useGoToBilling("onboarding"));
+    act(() => result.current());
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "/settings/$section",
+        params: { section: "billing" },
+        search: expect.objectContaining({ tab: "plans", from: "onboarding" }),
+      }),
+    );
+  });
+
+  it("captures the FULL onboarding URL, so the detour is resumable", () => {
+    // The regression this pins is the one that made the billing detour feel
+    // punitive. Onboarding's entire state — every answer the user has given —
+    // lives in the `plan` search param (useOnboardingPlan). A route back that
+    // knows only "/onboarding" therefore lands on an EMPTY plan, and
+    // deriveStep's first line (`if (!plan.compute) return 'compute'`) restarts
+    // the wizard at step one. The user is punished for a detour the flow
+    // required of them.
+    //
+    // Asserting on the exact query string rather than just "returnTo is set" is
+    // the point: dropping the `search` half would still satisfy a truthiness
+    // check and would still lose every answer.
+    window.history.pushState(
+      {},
+      "",
+      "/onboarding?plan=%7B%22compute%22%3A%22cloud_free_trial%22%7D",
+    );
+
+    const { result } = renderHook(() => useGoToBilling("onboarding"));
+    act(() => result.current());
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: expect.objectContaining({
+          returnTo: "/onboarding?plan=%7B%22compute%22%3A%22cloud_free_trial%22%7D",
+        }),
+      }),
+    );
+  });
+
+  it("does not capture a return URL when the caller is not onboarding", () => {
+    // Settings and the chat shell are already where the user wants to be; a
+    // returnTo would be noise in the URL and a needless open-redirect surface.
+    window.history.pushState({}, "", "/settings/general");
 
     const { result } = renderHook(() => useGoToBilling());
     act(() => result.current());
 
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "billing" },
-    });
-  });
-
-  it("sends a session with no user at all to billing rather than dead-ending", () => {
-    mockUser = null;
-
-    const { result } = renderHook(() => useGoToBilling());
-    act(() => result.current());
-
-    expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "billing" },
-    });
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: expect.objectContaining({ returnTo: undefined }),
+      }),
+    );
   });
 });

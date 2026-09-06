@@ -634,6 +634,11 @@ func (s *ChatService) GetWorkflowExecutions(
 		allRootProtos = append(allRootProtos, rootProto)
 	}
 
+	// The tree above can only describe threads that a workflow row points at,
+	// and that is strictly fewer than the threads which exist. Fill the gap
+	// from the table that owns thread identity.
+	s.attachThreadsWithoutWorkflowRow(ctx, req.Msg.ChatId, allRootProtos)
+
 	// The most recent root is first (for backwards compat)
 	var latestRootProto *reliantv1.WorkflowExecution
 	if len(allRootProtos) > 0 {
@@ -719,6 +724,177 @@ func (s *ChatService) GetThreadWorkflowInputs(
 		Inputs:       inputsMap,
 		IsRunning:    isRunning,
 	}), nil
+}
+
+// attachThreadsWithoutWorkflowRow adds a node for every thread in the chat that
+// the workflow tree does not already describe.
+//
+// A `workflows` row carries ONE `thread`, but a thread does not always get a row
+// of its own. An INLINE sub-workflow node reuses its parent's workflow ID (see
+// inline_workflow_executor.go, "Inline workflows use parent's workflow ID"), and
+// CreateWorkflow is ON CONFLICT (id) DO NOTHING — so the second thread under
+// that ID silently gets no row, and the existing row keeps pointing at the
+// parent's thread. Nothing is wrong with the thread itself: it is created
+// correctly, with a NOT NULL origin. Only the projection is missing.
+//
+// The cost of that gap was total rather than cosmetic. InterleavedTimeline skips
+// any thread it cannot classify, so every message on such a thread disappeared
+// from the UI — measured on a real database, 185 threads holding real messages
+// across 55 chats, including one where the invisible thread held 230 of the
+// chat's 233 messages. Spawned sub-agents were unaffected (they get genuine
+// child workflow rows), which is what made this read as "forks vanish" rather
+// than as a general breakage.
+//
+// Every field here is READ from the thread row; nothing is inferred. That
+// matters most for origin: an earlier fallback guessed it, could not produce
+// "spawn", and so relabelled spawned sub-agents as node threads and dumped their
+// whole transcripts inline into the parent chat.
+func (s *ChatService) attachThreadsWithoutWorkflowRow(
+	ctx context.Context,
+	chatID string,
+	roots []*reliantv1.WorkflowExecution,
+) {
+	if len(roots) == 0 {
+		return
+	}
+
+	threads, err := s.database.ListThreadsByConversation(ctx, chatID)
+	if err != nil {
+		// Degrade to the workflow-only tree rather than failing the whole read:
+		// a partial timeline beats an error page. Logged loudly because the
+		// symptom (threads missing from the UI) is otherwise unattributable.
+		logging.Error("[WorkflowTree] Failed to list threads; threads without a workflow row will be missing from the timeline",
+			"error", err, "chatID", chatID)
+		return
+	}
+
+	// Index the nodes already in the tree, and remember which root each thread
+	// belongs to so a synthesized node is attached under the same root.
+	nodesByThread := make(map[string]*reliantv1.WorkflowExecution)
+	rootByThread := make(map[string]*reliantv1.WorkflowExecution)
+	var indexTree func(wf, root *reliantv1.WorkflowExecution)
+	indexTree = func(wf, root *reliantv1.WorkflowExecution) {
+		if _, seen := nodesByThread[wf.Thread]; !seen {
+			nodesByThread[wf.Thread] = wf
+			rootByThread[wf.Thread] = root
+		}
+		for _, child := range wf.Children {
+			indexTree(child, root)
+		}
+	}
+	for _, root := range roots {
+		indexTree(root, root)
+	}
+
+	// Parent-before-child, so a synthesized node can attach to a parent that is
+	// itself synthesized. Threads are created before their children, so
+	// creation order is a valid topological order.
+	missing := make([]*db.Thread, 0, len(threads))
+	for _, thread := range threads {
+		if thread == nil {
+			continue
+		}
+		if _, exists := nodesByThread[thread.ID]; exists {
+			continue
+		}
+		missing = append(missing, thread)
+	}
+	sort.SliceStable(missing, func(i, j int) bool {
+		return missing[i].CreatedAt.Before(missing[j].CreatedAt)
+	})
+
+	for _, thread := range missing {
+		// The thread's own workflow_id names the run it executed under, which
+		// is what the UI needs to group handoffs. It is the parent's ID for an
+		// inline fork — correct, and the reason no row of its own exists.
+		workflowID := ""
+		if thread.WorkflowID != nil {
+			workflowID = *thread.WorkflowID
+		}
+
+		state, stopReason := threadStatusToWorkflowStatus(thread.Status)
+		node := &reliantv1.WorkflowExecution{
+			Id:         workflowID,
+			Thread:     thread.ID,
+			CreatedAt:  thread.CreatedAt.Format(time.RFC3339),
+			Origin:     string(thread.Origin),
+			State:      state,
+			StopReason: stopReason,
+		}
+		if thread.Title != nil {
+			node.ThreadTitle = thread.Title
+		}
+		if thread.ParentThreadID != nil {
+			node.ParentThread = thread.ParentThreadID
+		}
+		if thread.OriginNodeID != nil {
+			node.OriginNodeId = thread.OriginNodeID
+		}
+		if thread.CompletedAt != nil {
+			completedAt := thread.CompletedAt.Format(time.RFC3339)
+			node.CompletedAt = &completedAt
+		}
+		// A fork inherits its parent's context; ForkedFromThread is what the UI
+		// reads to say so. Only forks may claim it — for a spawn or node thread
+		// the parent link is provenance, not context inheritance.
+		if thread.Origin == db.ThreadOriginFork && thread.ParentThreadID != nil {
+			node.ForkedFromThread = thread.ParentThreadID
+		}
+		// Name the workflow after the run it executed under, so a synthesized
+		// node reads the same as a real one in the UI's handoff labels.
+		if owner, ok := nodesByThread[thread.ID]; ok && owner != nil {
+			node.WorkflowName = owner.WorkflowName
+		} else if workflowID != "" {
+			if owner, ok := nodesByThread[workflowID]; ok && owner != nil {
+				node.WorkflowName = owner.WorkflowName
+			}
+		}
+
+		// Attach under the parent thread when it is known, otherwise under the
+		// root that owns this thread's workflow. A thread whose parent is in
+		// another root (or absent) still has to appear somewhere, so the newest
+		// root is the last resort — dropping it would reintroduce this bug.
+		parent := roots[0]
+		if thread.ParentThreadID != nil {
+			if parentNode, ok := nodesByThread[*thread.ParentThreadID]; ok {
+				parent = parentNode
+			}
+		} else if workflowID != "" {
+			if ownerRoot, ok := rootByThread[workflowID]; ok {
+				parent = ownerRoot
+			}
+		}
+		parent.Children = append(parent.Children, node)
+
+		nodesByThread[thread.ID] = node
+		if root, ok := rootByThread[parent.Thread]; ok {
+			rootByThread[thread.ID] = root
+		} else {
+			rootByThread[thread.ID] = parent
+		}
+	}
+}
+
+// threadStatusToWorkflowStatus maps a thread's flat lifecycle column onto the
+// (state, stop_reason) pair the UI reads, so a synthesized node reports itself
+// the same way a real workflow row does instead of defaulting to "unspecified".
+//
+// This is the inverse of core.ThreadStatusForStopReason, which projects a
+// workflow's stop reason onto its threads. Threads have no PENDING/ACTIVE
+// distinction to make, so running maps to ACTIVE.
+func threadStatusToWorkflowStatus(status int32) (reliantv1.WorkflowState, reliantv1.WorkflowStopReason) {
+	switch status {
+	case db.ThreadStatusRunning:
+		return reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_UNSPECIFIED
+	case db.ThreadStatusCompleted:
+		return reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_COMPLETED
+	case db.ThreadStatusFailed:
+		return reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_FAILED
+	case db.ThreadStatusCancelled:
+		return reliantv1.WorkflowState_WORKFLOW_STATE_STOPPED, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_CANCELLED
+	default:
+		return reliantv1.WorkflowState_WORKFLOW_STATE_UNSPECIFIED, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_UNSPECIFIED
+	}
 }
 
 // buildWorkflowExecutionTree recursively builds the workflow execution tree

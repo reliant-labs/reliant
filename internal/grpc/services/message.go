@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -40,6 +41,19 @@ func (s *MessageService) GetMessage(
 	msg, err := s.database.GetMessage(ctx, messageID)
 	if err != nil {
 		logging.Error("Failed to get message", "error", err, "messageID", messageID)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
+	}
+
+	// Ownership is transitive through the chat: a message id alone is not an
+	// authorization in the multi-tenant messages table. A foreign message is
+	// NotFound, never PermissionDenied, so this cannot be used as a
+	// cross-tenant existence oracle.
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+	chat, err := s.database.GetChat(ctx, msg.ChatID)
+	if err != nil || chat == nil || chat.UserID != userID {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
 	}
 

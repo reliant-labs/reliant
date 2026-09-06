@@ -45,8 +45,8 @@ type FieldInfo struct {
 
 // Complex types that should point to discovery tools
 var toolHints = map[string]string{
-	"inputs":  "Use list_input_types and get_input_type tools for input type details.",
-	"nodes":   "Use list_node_types and get_node_type tools for node type details.",
+	"inputs":  `Use get_schema(name="<type>") for input type details (e.g. "string", "enum", "model").`,
+	"nodes":   `Use get_schema(name="<type>") for node type details (e.g. "call_llm", "router").`,
 	"outputs": "CEL expressions mapping output names to values. Use get_cel_reference for CEL syntax.",
 	"edges":   "See Edge type below.",
 }

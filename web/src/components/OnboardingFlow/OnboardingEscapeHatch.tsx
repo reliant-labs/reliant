@@ -24,6 +24,7 @@ import { LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
 import { useAuthStore } from "@/store/authStore";
+import { leaveOnboarding } from "./leaveOnboarding";
 
 export function OnboardingEscapeHatch({ className }: { className?: string }) {
   const navigate = useNavigate();
@@ -37,11 +38,11 @@ export function OnboardingEscapeHatch({ className }: { className?: string }) {
     setError(null);
     try {
       await signOut();
-      // Navigate explicitly rather than leaving it to AuthGuard. The guard
-      // does bounce an unauthenticated user eventually, but there is a render
-      // gap in which this route's own "needs onboarding" logic can re-assert
-      // itself and put the user straight back here.
-      await navigate({ to: "/auth", search: { redirect: undefined } });
+      // An enumerated exit rather than an escape hatch racing AuthGuard: the
+      // guard does bounce an unauthenticated user eventually, but there is a
+      // render gap in which this route's own "needs onboarding" logic can
+      // re-assert itself and put the user straight back here.
+      await leaveOnboarding("signed_out", navigate);
     } catch (err) {
       logger.warn("[OnboardingEscapeHatch] sign out failed", err);
       setError(err instanceof Error ? err.message : "Could not sign out");

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 const (
@@ -152,6 +154,32 @@ func NewClient(opts llm.DriverOptions) (*CodexClient, error) {
 		option.WithAPIKey(bearerToken),
 		option.WithHeader("chatgpt-account-id", client.accountID),
 	)
+
+	// When the caller supplied OAuth refresh callbacks, install an interceptor
+	// that refreshes an expired access token before the request and retries
+	// once on a 401 caused by another process rotating the tokens. Without it
+	// an expired token is simply sent upstream and fails the whole workflow —
+	// which is exactly what a stored refresh token exists to prevent.
+	if tokenRefreshEnabled(opts) {
+		refreshOpts := opts
+		if refreshOpts.TokenExpiresAt.IsZero() {
+			refreshOpts.TokenExpiresAt = codexTokenExpiryOrZero(bearerToken)
+		}
+		refreshOpts.ApiKey = bearerToken
+
+		transport := &tokenRefreshTransport{
+			base: llm.WrapWithIdleTimeout(otelhttp.NewTransport(llm.ResilientTransport())),
+			opts: &refreshOpts,
+			mu:   &sync.RWMutex{},
+			headers: map[string]string{
+				"authorization":      "Bearer " + bearerToken,
+				"chatgpt-account-id": client.accountID,
+			},
+		}
+		// Last-wins: this replaces the SDK's default streaming client, so the
+		// idle timeout it would have installed is re-added above.
+		sdkOpts = append(sdkOpts, option.WithHTTPClient(&http.Client{Transport: transport}))
+	}
 
 	client.client = llm.NewOpenAISDKClient(sdkOpts...)
 

@@ -22,10 +22,17 @@ import {
   type TagModelConfig,
 } from "../Settings/ModelPreferences";
 
-const PREFERENCE_TAGS = ["flagship", "moderate", "fast", "cheap"] as const;
+const PREFERENCE_TAGS = [
+  "powerful",
+  "flagship",
+  "moderate",
+  "fast",
+  "cheap",
+] as const;
 type PreferenceTag = (typeof PREFERENCE_TAGS)[number];
 
 const TAG_LABELS: Record<PreferenceTag, string> = {
+  powerful: "Powerful",
   flagship: "Flagship",
   moderate: "Moderate",
   fast: "Fast",

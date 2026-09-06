@@ -8,6 +8,11 @@ const TEMPORAL_WRAPPED_ERROR =
   'activity error (type: CallLLM, scheduledEventID: 104, startedEventID: 105, identity: 53948@host): ' +
   'failed to stream LLM response: upstream connection reset';
 
+// The real incident: a DNS lookup failure whose URL happens to name
+// api.anthropic.com. Nothing about it is an auth problem.
+const DNS_FAILURE_ERROR =
+  'activity error (type: CallLLM, scheduledEventID: 11114, startedEventID: 11134, identity: 72192.24cadda2@Seans-MacBook-Pro-2.local): failed to stream LLM response: LLM streaming error: Post "https://api.anthropic.com/v1/messages?beta=true": dial tcp: lookup api.anthropic.com: no such host';
+
 function createErrorUpdate(overrides: Partial<ErrorUpdate> = {}): ErrorUpdate {
   return {
     update_type: 'error',
@@ -90,6 +95,39 @@ describe('WorkflowErrorMessage', () => {
     await user.click(screen.getByRole('button', { name: 'Show raw error' }));
 
     expect(screen.getByText(TEMPORAL_WRAPPED_ERROR)).toBeInTheDocument();
+  });
+
+  it('calls a DNS failure a network problem, not an expired Claude session', () => {
+    render(
+      <WorkflowErrorMessage
+        error={createErrorUpdate({
+          activity_type: 'CallLLM',
+          error_message: DNS_FAILURE_ERROR,
+        })}
+      />
+    );
+
+    expect(screen.queryByText(/session expired/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/reconnect/i)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Cannot reach the AI provider — check your network connection. Workflow paused — send a message to retry.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('keeps the timestamp and the expand control inside the header button row', () => {
+    render(<WorkflowErrorMessage error={createErrorUpdate()} />);
+
+    const header = screen.getByRole('button', { name: /Click for details/ });
+    const timestamp = screen.getByTestId('workflow-error-timestamp');
+    const chevron = screen.getByTestId('workflow-error-chevron');
+
+    expect(header).toContainElement(timestamp);
+    expect(header).toContainElement(chevron);
+    expect(header).toContainElement(screen.getByText('Rate limited by the AI provider'));
+    // One row: the summary, timestamp and chevron share a single flex parent.
+    expect(timestamp.parentElement).toBe(chevron.parentElement);
   });
 
   it('omits the raw toggle when there is no scaffolding to strip', async () => {

@@ -19,15 +19,19 @@ import (
 
 // QuestionCreateInput is the input for the QuestionCreate activity.
 type QuestionCreateInput struct {
-	ChatID             string  `json:"chat_id" reliant:"-"`
-	WorkflowID         string  `json:"workflow_id" reliant:"-"`
-	TemporalWorkflowID string  `json:"temporal_workflow_id" reliant:"-"`
-	ThreadID           string  `json:"thread_id" reliant:"-"`
-	StepID             string  `json:"step_id" reliant:"-"`
-	LoopNodeID         string  `json:"loop_node_id,omitempty" reliant:"-"`
-	LoopIteration      int     `json:"loop_iteration" reliant:"-"`
-	Metadata           *string `json:"metadata,omitempty" reliant:"-"`
-	ToolCallID         string  `json:"tool_call_id,omitempty" reliant:"-"`
+	ChatID             string `json:"chat_id" reliant:"-"`
+	WorkflowID         string `json:"workflow_id" reliant:"-"`
+	TemporalWorkflowID string `json:"temporal_workflow_id" reliant:"-"`
+	ThreadID           string `json:"thread_id" reliant:"-"`
+	StepID             string `json:"step_id" reliant:"-"`
+	LoopNodeID         string `json:"loop_node_id,omitempty" reliant:"-"`
+	LoopIteration      int    `json:"loop_iteration" reliant:"-"`
+	// NodePath is the fully-qualified dotted graph position of the
+	// ask_question node. Observability only; never persisted (the questions
+	// row keys on LoopNodeID, which is loop-scoped identity).
+	NodePath   string  `json:"node_path,omitempty" reliant:"-"`
+	Metadata   *string `json:"metadata,omitempty" reliant:"-"`
+	ToolCallID string  `json:"tool_call_id,omitempty" reliant:"-"`
 }
 
 // QuestionCreateOutput is the output from the QuestionCreate activity.

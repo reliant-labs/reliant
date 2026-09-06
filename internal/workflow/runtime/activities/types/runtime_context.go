@@ -38,6 +38,24 @@ type RuntimeContext struct {
 	LoopNodeID    string `json:"loop_node_id,omitempty"`
 	LoopIteration int    `json:"loop_iteration,omitempty"`
 
+	// NodePath is the fully-qualified dotted position of this node in the graph,
+	// composed through every nesting boundary: "impl_loop.attempt.review" for a
+	// node inside a sub-workflow inside a loop. A top-level node's path is just
+	// its own id.
+	//
+	// This is NOT LoopNodeID with dots. LoopNodeID means LOOP-SCOPED IDENTITY —
+	// which loop iteration a row belongs to — and it is a real column on
+	// step_executions, questions and yields with a unique index over
+	// (workflow_id, loop_node_id, loop_iteration). Composing a path into it
+	// would change what those rows mean. NodePath is observability and test
+	// assertion only, and is deliberately not persisted anywhere.
+	//
+	// The dotted convention matches what scenarios already use for `reached:` /
+	// `not_reached:` and what the fast simulator emits (simulator.go builds
+	// "loop_id.inner_node" the same way), which is what lets the Temporal-backed
+	// harness report the same node names the simulator does.
+	NodePath string `json:"node_path,omitempty"`
+
 	// Context sequence for compaction
 	ContextSequence *int `json:"context_sequence,omitempty"`
 

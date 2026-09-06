@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ArrowLeft, Check, RefreshCw } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { ComputeStep } from "../OnboardingFlow/steps/ComputeStep";
+import { isCloudCompute } from "../OnboardingFlow/types";
 import type { LaunchPlan } from "../OnboardingFlow/types";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
@@ -46,7 +47,7 @@ export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps)
     }
   }, [isOpen]);
 
-  const isCloud = plan.compute === "cloud_free_trial";
+  const isCloud = isCloudCompute(plan.compute);
 
   // Waiting is only meaningful in the wait phase and before a machine lands.
   const daemonWait = useDaemonWait({

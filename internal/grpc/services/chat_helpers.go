@@ -325,16 +325,6 @@ nodes: []`
 	return string(data)
 }
 
-// isWorkflowBuilderChat checks if the chat is using the workflow_builder preset
-func isWorkflowBuilderChat(selectedPresets map[string]string) bool {
-	for _, presetName := range selectedPresets {
-		if presetName == "workflow_builder" {
-			return true
-		}
-	}
-	return false
-}
-
 // extractMessagesFromInput separates user and system messages from the input messages array.
 // Returns: userContent (concatenated user messages), systemMessages slice, and whether any user content exists.
 func extractMessagesFromInput(messages []*reliantv1.InputMessage) (userContent string, systemMessages []*reliantv1.InputMessage, hasUserContent bool) {

@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,31 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 			expected: "Codex session expired. Please reconnect Codex",
 		},
 		{
+			name: "codex oauth access token expired 401",
+			errMsg: `activity error (type: CallLLM, scheduledEventID: 35, startedEventID: 36, identity: 82721@MacBook-Pro-5.local@): failed to stream LLM response: LLM streaming error: POST "https://chatgpt.com/backend-api/codex/responses": 401 Unauthorized {
+    "message": "Provided authentication token is expired.",
+    "type": null,
+    "code": "token_expired",
+    "param": null
+  }`,
+			expected: "Codex session expired. Please reconnect Codex",
+		},
+		{
+			name:     "codex backend unauthorized without token_expired code",
+			errMsg:   `POST "https://chatgpt.com/backend-api/codex/responses": 401 Unauthorized`,
+			expected: "Codex session expired. Please reconnect Codex",
+		},
+		{
+			name:     "expired token from an unnamed provider stays generic",
+			errMsg:   `POST "https://example.invalid/v1/chat": 401 Unauthorized {"code":"token_expired"}`,
+			expected: "Authentication token expired. Please reconnect your AI provider",
+		},
+		{
+			name:     "generic unauthorized stays generic",
+			errMsg:   `POST "https://example.invalid/v1/chat": 401 Unauthorized`,
+			expected: "Authentication failed with the AI provider",
+		},
+		{
 			name:     "unknown API error type in JSON",
 			errMsg:   `LLM streaming error: received error while streaming: {"type":"error","error":{"details":null,"type":"new_error_type","message":"Something new"},"request_id":"req_xyz"}`,
 			expected: "AI provider error: Something new",
@@ -67,9 +93,10 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 			expected: "Rate limited by the AI provider",
 		},
 		{
+			// Owned by the network classifier now, not knownErrorPatterns.
 			name:     "pattern match: connection refused",
 			errMsg:   "dial tcp: connection refused",
-			expected: "Could not connect to the AI provider",
+			expected: wantNetworkSummary,
 		},
 		{
 			name:     "no match - generic error",
@@ -88,6 +115,126 @@ func TestExtractLLMErrorSummary(t *testing.T) {
 			result := extractLLMErrorSummary(tt.errMsg)
 			if result != tt.expected {
 				t.Errorf("extractLLMErrorSummary() = %q, want %q", result, tt.expected)
+			}
+		})
+	}
+}
+
+// wantNetworkSummary is the message a transport-level failure must produce. It
+// is spelled out here rather than referencing the production constant so this
+// test pins the user-visible wording, not just internal consistency.
+const wantNetworkSummary = "Cannot reach the AI provider — check your network connection"
+
+func TestExtractLLMErrorSummaryNetworkFailures(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		errMsg   string
+		expected string
+	}{
+		{
+			// Verbatim from the worker log: the laptop lost DNS mid-run and the
+			// user was told to reconnect Claude. Nothing was wrong with the token.
+			name:     "anthropic DNS failure is not an expired session",
+			errMsg:   `activity error (type: CallLLM, scheduledEventID: 11114, startedEventID: 11134, identity: 72192.24cadda2@Seans-MacBook-Pro-2.local): failed to stream LLM response: LLM streaming error: Post "https://api.anthropic.com/v1/messages?beta=true": dial tcp: lookup api.anthropic.com: no such host`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "connection refused to anthropic",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": dial tcp 160.79.104.10:443: connect: connection refused`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "connection reset mid-stream",
+			errMsg:   `LLM streaming error: read tcp 10.0.0.4:52344->160.79.104.10:443: read: connection reset by peer`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "i/o timeout dialing the provider",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": dial tcp 160.79.104.10:443: i/o timeout`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "network is unreachable",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": dial tcp: network is unreachable`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "no route to host",
+			errMsg:   `Post "https://chatgpt.com/backend-api/codex/responses": dial tcp: no route to host`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "tls handshake timeout",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": net/http: TLS handshake timeout`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "broken pipe writing the request",
+			errMsg:   `LLM streaming error: write tcp 10.0.0.4:52344->160.79.104.10:443: write: broken pipe`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "unexpected EOF from the provider",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": unexpected EOF`,
+			expected: wantNetworkSummary,
+		},
+		{
+			name:     "context deadline exceeded while dialing",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": dial tcp 160.79.104.10:443: context deadline exceeded`,
+			expected: wantNetworkSummary,
+		},
+		{
+			// "context deadline exceeded" alone is an ordinary timeout, not a
+			// transport failure — it must keep its existing timeout summary.
+			name:     "context deadline exceeded without a transport signal stays a timeout",
+			errMsg:   "context deadline exceeded: timeout waiting for LLM response",
+			expected: "Request to the AI provider timed out",
+		},
+		{
+			// A word ending in "eof" must not be mistaken for a truncated stream.
+			name:     "the substring eof inside a word is not a network failure",
+			errMsg:   `{"type":"error","error":{"type":"invalid_request_error","message":"unknown model neofetch-1"}}`,
+			expected: "Invalid request sent to the AI provider (unknown model neofetch-1)",
+		},
+		{
+			// Regression: a real 401 against Codex must still send the user to reconnect.
+			name: "genuine codex 401 with token_expired still reconnects",
+			errMsg: `activity error (type: CallLLM, scheduledEventID: 35, startedEventID: 36, identity: 82721@MacBook-Pro-5.local@): failed to stream LLM response: LLM streaming error: POST "https://chatgpt.com/backend-api/codex/responses": 401 Unauthorized {
+    "message": "Provided authentication token is expired.",
+    "type": null,
+    "code": "token_expired",
+    "param": null
+  }`,
+			expected: "Codex session expired. Please reconnect Codex",
+		},
+		{
+			// Regression: a real Anthropic auth payload must still send the user to reconnect.
+			name:     "genuine anthropic authentication_error still reconnects",
+			errMsg:   `POST "https://api.anthropic.com/v1/messages": 401 Unauthorized {"type":"error","error":{"type":"authentication_error","message":"Invalid authentication credentials"}}`,
+			expected: "Claude session expired. Please reconnect Claude",
+		},
+		{
+			// Regression: an overloaded payload from the same host is still overloaded.
+			name:     "overloaded payload is unaffected",
+			errMsg:   `Post "https://api.anthropic.com/v1/messages": {"type":"error","error":{"details":null,"type":"overloaded_error","message":"Overloaded"},"request_id":"req_1"}`,
+			expected: "The AI provider is currently overloaded (Overloaded)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractLLMErrorSummary(tt.errMsg)
+			if result != tt.expected {
+				t.Errorf("extractLLMErrorSummary() = %q, want %q", result, tt.expected)
+			}
+			if tt.expected == wantNetworkSummary {
+				lower := strings.ToLower(result)
+				for _, forbidden := range []string{"reconnect", "session", "expired", "authenticat"} {
+					if strings.Contains(lower, forbidden) {
+						t.Errorf("network summary %q must not mention %q", result, forbidden)
+					}
+				}
 			}
 		})
 	}

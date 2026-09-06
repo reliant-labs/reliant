@@ -7,25 +7,30 @@ import (
 	"fmt"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/google/uuid"
 )
 
 // ============================================================================
 // CLAUDE CODE PROMPT HELPERS
 // ============================================================================
 //
-// Claude Code (sk-ant-oat keys) sends a 4-block `system` array, followed by the
-// caller's own system prompts. The four base blocks, in order, are:
+// Claude Code sends a base `system` array, followed by the caller's own system
+// prompts. The base array's shape depends on which claude-cli release the model
+// is fingerprinted against (see claudeCodeProfile).
+//
+// 2.1.204 (every model except fable-5.1) — 4 blocks:
 //   [0] billing header      (NOT cached)
 //   [1] identity            (NOT cached)   — "You are Claude Code, …"
 //   [2] agent instructions  (CACHED: ephemeral, ttl 1h, scope:global)
 //   [3] output instructions (CACHED: ephemeral, ttl 1h, no scope)
-// Blocks [2]/[3] are model-tuned into a verbose (haiku/sonnet-5) or lean
-// (opus-4.8/fable-5) variant; see claude_code_prompts_embed.go. The exact prompt
-// text is embedded byte-for-byte from real claude-cli/2.1.204 captures.
-
-// claudeCodeVersion is the CLI version reported in the billing header. It must
-// match the User-Agent's claude-cli version family used by the spoof.
-const claudeCodeVersion = "2.1.204.281"
+//
+// 2.1.261 (fable-5.1) — 5 blocks: an uncached "# Reporting outcomes" block is
+// inserted at index 2, pushing agent/output to 3/4 with their cache treatment
+// unchanged.
+//
+// Blocks are model-tuned into verbose, lean or fable-5.1 variants; see
+// claude_code_prompts_embed.go. The exact prompt text is embedded byte-for-byte
+// from real captures.
 
 // randomCCH returns a plausible 5-hex-character request hash for the billing
 // header's `cch=` segment. Real Claude Code varies this per request.
@@ -38,42 +43,58 @@ func randomCCH() string {
 }
 
 // claudeCodeBillingHeader builds block[0]: the (uncached) billing header.
-// Format: `x-anthropic-billing-header: cc_version=<v>; cc_entrypoint=cli; cch=<5hex>; [cc_prev_req=<req_…>;]`
 //
-// TODO(prev-id-chaining): chain `cc_prev_req=<previous req_… id>;` (the "request-id"
-// HTTP response header of the PRIOR turn). DEFERRED for the same reason as
-// diagnostics.previous_message_id (see applyClaudeCodeExtras): the client is built
-// fresh per turn, and the prior turn's req_ id is neither captured nor persisted.
-// The req_ id is not on the SDK response body — it must be read via
-// option.WithResponseInto(&resp) then resp.Header.Get("request-id") — then threaded
-// back on llm.DriverResponse, persisted on message.Message, and read next turn. That
-// plumbing lives outside internal/llm/drivers/anthropic; until it exists we omit just
-// this segment rather than send a stale/fabricated req_ id.
-func claudeCodeBillingHeader() string {
-	return fmt.Sprintf("x-anthropic-billing-header: cc_version=%s; cc_entrypoint=cli; cch=%s;",
-		claudeCodeVersion, randomCCH())
+// Format, 2.1.261: `x-anthropic-billing-header: cc_version=<v>; cc_entrypoint=cli; cch=<5hex>; cc_prompt_id=<uuid>;`
+// Format, 2.1.204: `x-anthropic-billing-header: cc_version=<v>; cc_entrypoint=cli; cch=<5hex>; [cc_prev_req=<req_…>;]`
+//
+// cc_prompt_id is a fresh per-request uuid in the 2.1.261 capture, so we mint one
+// the same way. It replaced the older cc_prev_req segment.
+//
+// TODO(prev-id-chaining): on the 2.1.204 profiles, chain `cc_prev_req=<previous
+// req_… id>;` (the "request-id" HTTP response header of the PRIOR turn). DEFERRED
+// for the same reason as diagnostics.previous_message_id (see
+// applyClaudeCodeExtras): the client is built fresh per turn, and the prior turn's
+// req_ id is neither captured nor persisted. The req_ id is not on the SDK
+// response body — it must be read via option.WithResponseInto(&resp) then
+// resp.Header.Get("request-id") — then threaded back on llm.DriverResponse,
+// persisted on message.Message, and read next turn. That plumbing lives outside
+// internal/llm/drivers/anthropic; until it exists we omit just this segment rather
+// than send a stale/fabricated req_ id.
+func claudeCodeBillingHeader(profile claudeCodeProfile) string {
+	header := fmt.Sprintf("x-anthropic-billing-header: cc_version=%s; cc_entrypoint=cli; cch=%s;",
+		profile.billingVersion, randomCCH())
+	if profile.billingPromptID {
+		header += fmt.Sprintf(" cc_prompt_id=%s;", uuid.New().String())
+	}
+	return header
 }
 
-// claudeCodeBaseSystemBlocks builds the 4 base Claude Code system blocks with the
+// claudeCodeBaseSystemBlocks builds the base Claude Code system blocks with the
 // exact cache_control treatment observed in real traffic. Caller prompts are
 // appended AFTER these by the driver.
 //
-// EVERY request — normal turns, compaction, title generation — sends the same 4
-// base blocks; requests are specialized by their USER message, not by varying the
-// base system prompt. This keeps all Reliant→Anthropic traffic shaped like
-// legitimate Claude Code (a 2-block request would be an anomalous fingerprint).
+// EVERY request — normal turns, compaction, title generation — sends the same base
+// blocks; requests are specialized by their USER message, not by varying the base
+// system prompt. This keeps all Reliant→Anthropic traffic shaped like legitimate
+// Claude Code (a 2-block request would be an anomalous fingerprint).
 func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool) []anthropic.TextBlockParam {
+	profile := claudeCodeProfileFor(apiModel)
+
 	blocks := []anthropic.TextBlockParam{
-		{Text: claudeCodeBillingHeader()}, // block[0] — not cached
-		{Text: ccIdentityPrompt},          // block[1] — not cached
+		{Text: claudeCodeBillingHeader(profile)}, // not cached
+		{Text: ccIdentityPrompt},                 // not cached
 	}
 
-	agent, output := claudeCodeAgentOutputBlocks(apiModel)
-	agentBlock := anthropic.TextBlockParam{Text: agent}
-	outputBlock := anthropic.TextBlockParam{Text: output}
+	// 2.1.261 only: an extra uncached block before the cached pair.
+	if profile.reportingOutcomes != "" {
+		blocks = append(blocks, anthropic.TextBlockParam{Text: profile.reportingOutcomes})
+	}
+
+	agentBlock := anthropic.TextBlockParam{Text: profile.agent}
+	outputBlock := anthropic.TextBlockParam{Text: profile.output}
 
 	if !disableCache {
-		// block[2]: ephemeral, ttl 1h, scope:global (scope via SetExtraFields).
+		// agent block: ephemeral, ttl 1h, scope:global (scope via SetExtraFields).
 		agentCC := anthropic.CacheControlEphemeralParam{
 			Type: "ephemeral",
 			TTL:  anthropic.CacheControlEphemeralTTLTTL1h,
@@ -81,7 +102,7 @@ func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool) []anthropic.
 		agentCC.SetExtraFields(map[string]any{"scope": "global"})
 		agentBlock.CacheControl = agentCC
 
-		// block[3]: ephemeral, ttl 1h, no scope.
+		// output block: ephemeral, ttl 1h, no scope.
 		outputBlock.CacheControl = anthropic.CacheControlEphemeralParam{
 			Type: "ephemeral",
 			TTL:  anthropic.CacheControlEphemeralTTLTTL1h,

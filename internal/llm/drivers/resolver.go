@@ -236,10 +236,22 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		// Previously this was gated on AccountUUID != "", so codex/copilot never
 		// received UserID and their derivations fell back to random values.
 		driverOpts = append(driverOpts, llm.WithAccountMetadata(userID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
+		// OAuth-backed providers refresh their access token transparently in
+		// the driver's transport. The refresher is provider-specific because
+		// each one has its own token endpoint, its own persistence row and its
+		// own rotation lineage — so it is selected by driver ID rather than
+		// assumed to be Claude's.
 		if driverConfig.RefreshToken != "" {
-			refresher := BuildClaudeTokenRefresher(ctx, userID)
-			reloader := BuildClaudeTokenReloader(ctx, userID)
-			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
+			switch driverConfig.DriverID {
+			case models.DriverID("codex"):
+				refresher := BuildCodexTokenRefresher(ctx, userID)
+				reloader := BuildCodexTokenReloader(ctx, userID)
+				driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
+			default:
+				refresher := BuildClaudeTokenRefresher(ctx, userID)
+				reloader := BuildClaudeTokenReloader(ctx, userID)
+				driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
+			}
 		}
 
 		// Add temperature if specified in preference AND supported by the model.

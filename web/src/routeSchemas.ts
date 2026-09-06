@@ -53,7 +53,18 @@ export const launchPlanSchema = z
       ])
       .optional(),
     workflowParams: z.record(z.string(), z.unknown()).optional(),
-    daemonProvisioning: z.boolean().optional(),
+    // Idempotency key for the onboarding commit point. See LaunchPlan.commitKey
+    // — it is in the URL so a reload mid-provision resumes the same commit.
+    // (`daemonProvisioning` was removed with the speculative provisioning it
+    // recorded.)
+    commitKey: z.string().optional(),
+    // The checkout step's selections, and the server-confirmed result. See
+    // LaunchPlan.computePlanId / aiCreditCents / paid — all three are in the
+    // URL so a reload mid-payment resumes the same purchase rather than
+    // restarting it.
+    computePlanId: z.string().optional(),
+    aiCreditCents: z.number().optional(),
+    paid: z.boolean().optional(),
     // The compute step resolved itself (the user already had a daemon), so it
     // is hidden from the progress bar and Back is suppressed on the next step.
     // See LaunchPlan.computeAutoSkipped.
@@ -220,6 +231,78 @@ export const DEFAULT_SETTINGS_SECTION: SettingsSection = "account";
 
 export const settingsParamsSchema = z.object({
   section: z.enum(SETTINGS_SECTION_IDS),
+});
+
+// Billing sub-navigation. This was `useState` inside BillingSection, with a
+// comment arguing the tab "never touches the router" so it composes under the
+// settings shell. That was right while nothing needed to link INTO a tab; it is
+// now the thing that drops the user's intent. A user who clicked "Set up
+// billing" wanted plans, and after a Stripe or OAuth round-trip unaddressable
+// state cannot carry that across.
+/**
+ * Every tab id the URL will ACCEPT. Wider than what the strip renders:
+ * `invoices` is a legacy inbound value kept because external links carry
+ * `?tab=invoices`, and dropping it from the enum would make the router strip
+ * the param and land those users on Overview with no sign anything was lost.
+ */
+export const BILLING_TAB_IDS = [
+  "overview",
+  "plans",
+  "invoices",
+  "usage",
+] as const;
+export type BillingTab = (typeof BILLING_TAB_IDS)[number];
+
+/**
+ * The tabs the strip actually renders. An invoice is the settled record of a
+ * period's usage — the same question, "what did I spend and when" — so the two
+ * were one tab pretending to be two, and reconciling a number meant checking
+ * both.
+ */
+export const VISIBLE_BILLING_TABS = ["overview", "plans", "usage"] as const;
+export type VisibleBillingTab = (typeof VISIBLE_BILLING_TABS)[number];
+
+/** Where an inbound `?tab=` lands now that invoices has been folded in. */
+export function resolveBillingTab(tab?: BillingTab): VisibleBillingTab {
+  return tab === "invoices" ? "usage" : (tab ?? "overview");
+}
+
+/**
+ * Search params for `/settings` and `/settings/$section`.
+ *
+ * `checkout` is what Stripe hands back. Both `successUrl` and `cancelUrl` used
+ * to be `window.location.href`, so a completed purchase and an abandoned one
+ * returned to the identical URL and the app could not tell them apart. It is a
+ * PRESENTATION signal only — a user can type it, and entitlement stays
+ * webhook-driven — which is why the success state it drives confirms the
+ * subscription against the server rather than asserting it.
+ */
+export const settingsSearchSchema = z.object({
+  tab: z.enum(BILLING_TAB_IDS).optional(),
+  checkout: z.enum(["success", "cancelled"]).optional(),
+  // Which plan the user was buying, so the return state can check the right one
+  // against the server. Named `planId` and NOT `plan` on purpose: `/` and
+  // `/onboarding` already carry a `plan` that is a LaunchPlan OBJECT, and
+  // tanstack-router types a `to: "."` search updater against the union of every
+  // route's params — a string `plan` here makes those updaters fail to compile
+  // across the app.
+  planId: z.string().optional(),
+  // Where the user came from, so billing can offer a route back. Onboarding
+  // previously had none: `returnTo` hard-coded /settings/billing and a user who
+  // detoured mid-wizard had no way home.
+  from: z.enum(["onboarding"]).optional(),
+  // The exact URL to return to, captured at the moment the user left. Carries
+  // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
+  // through billing (and Stripe, which is a full cold boot) is resumable.
+  // Without it the return navigates to a bare /onboarding, deriveStep sees an
+  // empty plan, and the user restarts from step one having already answered.
+  // Validated at the point of use, not here: it is a URL from the address bar,
+  // so it must be same-origin-checked before being navigated to.
+  returnTo: z.string().optional(),
+  // Environments deep-links to a specific daemon's detail view; the section
+  // reads it via useSearch({ strict: false }). Declared here because the route
+  // now validates its search and would otherwise strip it.
+  daemon: z.string().optional(),
 });
 
 // Search params for `/onboarding`. A strict subset of `indexSearchSchema` —

@@ -396,11 +396,14 @@ func TestResolveServerPrecedence(t *testing.T) {
 }
 
 func TestResolveGatewayPrecedence(t *testing.T) {
+	// Context names are user-chosen labels, not deployment environments; "eu"
+	// here just needs to be a host whose leading label is not the `api`
+	// service name, so derivation takes the prefixing branch.
 	cfg := &cliconfig.Config{
-		CurrentContext: "staging",
+		CurrentContext: "eu",
 		Contexts: map[string]*cliconfig.Context{
-			"staging": {Server: "https://staging.reliantapi.com"},
-			"local":   {Server: "http://localhost:3091"},
+			"eu":    {Server: "https://eu.reliantapi.com"},
+			"local": {Server: "http://localhost:3091"},
 		},
 	}
 
@@ -433,7 +436,7 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
-		const want = "https://gateway-staging.reliantapi.com"
+		const want = "https://gateway-eu.reliantapi.com"
 		if conn.GatewayURL != want || conn.GatewaySource != sourceDerived {
 			t.Errorf("gateway = %q (%v), want %q derived from the context server", conn.GatewayURL, conn.GatewaySource, want)
 		}
@@ -492,10 +495,12 @@ func TestDeriveGatewayURL(t *testing.T) {
 		// prefixed form of it. Verified live: gateway.reliantapi.com resolves,
 		// gateway-api.reliantapi.com is NXDOMAIN.
 		{"prod api host", "https://api.reliantapi.com", "https://gateway.reliantapi.com"},
-		// An environment label keeps the prefix form. Verified live:
-		// gateway-preprod.reliantapi.com resolves.
-		{"preprod env label", "https://preprod.reliantapi.com", "https://gateway-preprod.reliantapi.com"},
-		{"staging env label", "https://staging.reliantapi.com", "https://gateway-staging.reliantapi.com"},
+		// A leading label that is NOT the service name keeps the prefix form.
+		// This is the general rule the `api` case above is the exception to,
+		// so it stays covered even though the deployments that originally
+		// exercised it (staging, preprod) no longer exist.
+		{"non-service label", "https://eu.reliantapi.com", "https://gateway-eu.reliantapi.com"},
+		{"deep subdomain", "https://cell-1.reliantapi.com", "https://gateway-cell-1.reliantapi.com"},
 		{"apex", "https://reliantapi.com", "https://gateway.reliantapi.com"},
 		{"localhost untouched", "http://localhost:3091", "http://localhost:3091"},
 		{"loopback untouched", "http://127.0.0.1:8080", "http://127.0.0.1:8080"},

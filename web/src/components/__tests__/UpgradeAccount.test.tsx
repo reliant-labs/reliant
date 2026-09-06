@@ -104,7 +104,11 @@ describe('UpgradeAccount', () => {
     expect(linkOAuthIdentity).toHaveBeenCalledWith('google', { source: 'link' })
   })
 
-  it('sends an already-upgraded user to returnTo instead of rendering the form', () => {
+  // returnTo is followed through the ROUTER, not window.location. Every
+  // returnTo we generate is a route in this same app, and a full document load
+  // there costs a cold SPA boot — which the user reads as "the page refreshed
+  // and nothing happened" before the destination finally paints.
+  it('sends an already-upgraded user to returnTo without reloading the document', () => {
     const assign = vi.fn()
     Object.defineProperty(window, 'location', {
       value: { ...window.location, assign },
@@ -116,6 +120,16 @@ describe('UpgradeAccount', () => {
 
     render(<UpgradeAccount />)
 
-    expect(assign).toHaveBeenCalledWith('/settings/billing')
+    expect(mockNavigate).toHaveBeenCalledWith({ href: '/settings/billing' })
+    expect(assign).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the app root when returnTo is off-origin', () => {
+    mockUser = { is_anonymous: false, email: 'someone@example.com' }
+    mockSearch = { returnTo: '//evil.example.com/phish' }
+
+    render(<UpgradeAccount />)
+
+    expect(mockNavigate).toHaveBeenCalledWith({ to: '/', search: {} })
   })
 })

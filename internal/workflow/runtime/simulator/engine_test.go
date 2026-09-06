@@ -2,6 +2,7 @@
 package simulator
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -91,12 +92,21 @@ func llmOutputWithTools(text string, toolCalls ...map[string]interface{}) map[st
 	}
 }
 
-// Helper to create a tool call
+// Helper to create a tool call.
+//
+// input is JSON-encoded because that is what a real call_llm emits: every LLM
+// driver assigns the provider's arguments string, message.ToolCall.Input is a
+// string, and ToolCallMsg.input is `string`. A raw map here would describe a
+// response no driver can produce.
 func toolCall(id, name string, input map[string]interface{}) map[string]interface{} {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		panic("toolCall: marshal input: " + err.Error())
+	}
 	return map[string]interface{}{
 		"id":    id,
 		"name":  name,
-		"input": input,
+		"input": string(encoded),
 	}
 }
 

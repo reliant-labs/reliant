@@ -7,6 +7,12 @@ inputs:
   steps: [plan, tdd, implement, lint, test, build]
 
 events:
+  # Router: all steps enabled — enter at the top of the pipeline.
+  - node: classify
+    output:
+      selected_node: refine_prompt
+      reasoning: "Full pipeline requested — start from planning."
+
   - node: planning.plan
     output:
       response_text: "Comprehensive plan for the feature."
@@ -51,6 +57,12 @@ expect:
     - impl_loop.attempt.build
     - impl_loop.attempt.join_checks
     - impl_loop.attempt.review
+    - success
+  completed:
+    - planning
+    - planning.plan
+    - write_tests
+    - impl_loop
     - success
   not_reached:
     - impl_loop.attempt.refactor

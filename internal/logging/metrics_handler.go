@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"runtime"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -17,14 +18,22 @@ type metricsHandler struct {
 	inner slog.Handler
 }
 
-// deadEndCounter holds the Prometheus counter set via SetDeadEndErrorCounter.
-// If nil the handler is a no-op pass-through.
-var deadEndCounter *prometheus.CounterVec
+// labelledCounter is the only thing this handler needs from a metric: the
+// ability to increment one series identified by label values. Declared here,
+// at the consumer, so logging does not depend on the observability package or
+// on which concrete counter type it hands over.
+type labelledCounter interface {
+	WithLabelValues(values ...string) prometheus.Counter
+}
 
-// SetDeadEndErrorCounter sets the Prometheus counter used by the metrics handler.
+// deadEndCounter holds the counter set via SetDeadEndErrorCounter.
+// If nil the handler is a no-op pass-through.
+var deadEndCounter labelledCounter
+
+// SetDeadEndErrorCounter sets the counter used by the metrics handler.
 // Must be called before logging setup if you want metrics. If not called, the
 // handler is a no-op pass-through.
-func SetDeadEndErrorCounter(counter *prometheus.CounterVec) {
+func SetDeadEndErrorCounter(counter labelledCounter) {
 	deadEndCounter = counter
 }
 
@@ -64,14 +73,34 @@ func (h *metricsHandler) Handle(ctx context.Context, r slog.Record) error {
 		level = "warn"
 	}
 
-	// Truncate message to avoid high-cardinality.
-	msg := r.Message
-	if len(msg) > 80 {
-		msg = msg[:80]
-	}
-
-	counter.WithLabelValues(level, pkg, msg).Inc()
+	counter.WithLabelValues(level, pkg, messageLabel(r.Message)).Inc()
 	return err
+}
+
+// maxMessageLabelRunes caps the message label to keep counter cardinality and
+// series size bounded.
+const maxMessageLabelRunes = 80
+
+// messageLabel clamps msg to a Prometheus-safe label value.
+//
+// Prometheus PANICS on a label value that is not valid UTF-8, and this runs
+// inside slog.Handler.Handle — so any malformed value takes down the process
+// from inside a log call, at the exact moment something was already going
+// wrong. Two ways a message gets there:
+//
+//   - Slicing bytes cuts a multi-byte rune in half. call_llm.go's "…not by a
+//     real interrupt — failing the turn…" warning lands an em dash across byte
+//     80, and a []byte clamp emitted "\xe2\x80", killing the worker.
+//   - A message can be invalid before it arrives: raw command output, a
+//     filename, or a provider payload interpolated into the message.
+//
+// So clamp by runes, and coerce whatever survives — strings.ToValidUTF8
+// replaces malformed bytes rather than trusting the input.
+func messageLabel(msg string) string {
+	if utf8.RuneCountInString(msg) > maxMessageLabelRunes {
+		msg = string([]rune(msg)[:maxMessageLabelRunes])
+	}
+	return strings.ToValidUTF8(msg, "")
 }
 
 func (h *metricsHandler) WithAttrs(attrs []slog.Attr) slog.Handler {

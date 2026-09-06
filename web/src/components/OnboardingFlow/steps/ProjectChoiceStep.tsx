@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import { Github, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
@@ -7,36 +8,30 @@ import { trackEvent } from "@/lib/analytics";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useGitHubCredential } from "@/hooks/useGitHubCredential";
 import { gitService } from "@/services/controlPlane/git";
-import {
-  ensureProject,
-  finalizeOnboardingSideEffects,
-  navigateAfterOnboarding,
-} from "../useOnboardingComplete";
+import { ensureProject, finalizeOnboardingSideEffects } from "../useOnboardingComplete";
+import { leaveOnboarding } from "../leaveOnboarding";
 import { markOnboardingFinalized } from "../analytics";
-import { DaemonConnectingGate } from "../DaemonConnectingGate";
+import { ProvisioningGate } from "../ProvisioningGate";
+import { useCommitLaunchPlan } from "../useCommitLaunchPlan";
 import type { LaunchPlan, StepProps } from "../types";
 
 export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
+  const navigate = useNavigate();
   const completeOnboardingMutation = useCompleteOnboarding();
   const { hasToken: hasGithubCredential } = useGitHubCredential();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // After completeOnboarding succeeds for a cloud user we render the daemon
-  // gate instead of letting the post-onboarding tour fire immediately on top
-  // of unconnected daemon RPCs (empty chat list, empty file tree, etc). For
-  // local daemons ComputeStep already gated on activeDaemon, so we skip the
-  // gate. Mirrors the pattern in ProjectPickerStep / GitHubConnectStep.
-  const [showDaemonGate, setShowDaemonGate] = useState(false);
+  // The commit point. Onboarding creates nothing until this runs, and it runs
+  // once, here, after the server has confirmed onboarding — not from an effect
+  // and not from a step observing a state change.
+  const { commit, runCommit, retry } = useCommitLaunchPlan(updatePlan);
 
-  const isCloud = plan.compute === "cloud_free_trial";
-
-  // Leave /onboarding for the home route, starting the post-onboarding tour.
-  // The cloud path's finalize ran with `navigate: false` so this gate could
-  // render, which means it never put ?tour=<first-step> in the URL — so this
-  // sets it rather than trying to preserve it from `prev`.
+  // The exit: the gate's Continue is the ONLY way out of the terminal step,
+  // which is what makes it impossible to leave while the machine is still
+  // provisioning — or to leave without seeing that provisioning failed.
   const goToChat = useCallback(() => {
-    void navigateAfterOnboarding();
-  }, []);
+    void leaveOnboarding("completed_cloud_gate_continue", navigate);
+  }, [navigate]);
 
   const handleStartNew = useCallback(async () => {
     if (!plan.compute) {
@@ -69,25 +64,17 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
 
       markOnboardingFinalized(finalPlan, "new");
 
-      // finalizeOnboardingSideEffects sets ?tour=<first-step> so the wizard
-      // auto-starts. For cloud, we render the daemon-connecting gate first so
-      // the tour doesn't spotlight empty surfaces while the hosted daemon is
-      // still provisioning. The gate's "Continue" handoff navigates to / and
-      // preserves the tour param, so the wizard then kicks in normally.
-      // Cloud defers navigation to the gate's Continue — otherwise the router
-      // leaves /onboarding before the gate can render and the user lands on /
-      // with no ACTIVE daemon.
-      await finalizeOnboardingSideEffects(finalPlan.modelProvider, {
-        navigate: !isCloud,
-      });
-      if (isCloud) {
-        setShowDaemonGate(true);
-      }
+      await finalizeOnboardingSideEffects();
+
+      // Commit, then let the gate narrate it. A plan that asked for nothing
+      // (local compute, own key) commits instantly with no tasks and the gate
+      // falls through to Continue, so there is no wait to sit through.
+      await runCommit(finalPlan);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to finish onboarding");
       setBusy(false);
     }
-  }, [completeOnboardingMutation, isCloud, plan, updatePlan]);
+  }, [completeOnboardingMutation, plan, runCommit, updatePlan]);
 
   const handleConnectExisting = useCallback(async () => {
     setError(null);
@@ -114,10 +101,14 @@ export function ProjectChoiceStep({ plan, updatePlan }: StepProps) {
     }
   }, [hasGithubCredential, updatePlan]);
 
-  if (showDaemonGate) {
+  if (commit) {
     return (
       <div className="space-y-6">
-        <DaemonConnectingGate onContinue={goToChat} />
+        <ProvisioningGate
+          commit={commit}
+          onContinue={goToChat}
+          onRetry={() => void retry(plan)}
+        />
       </div>
     );
   }

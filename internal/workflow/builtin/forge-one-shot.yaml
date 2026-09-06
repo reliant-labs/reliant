@@ -790,6 +790,17 @@ nodes:
             units mid-wave — work discovered later can join an in-flight fan-out. Use
             `spawn_status` to check progress (or `wait: true` when you genuinely cannot
             proceed without an answer), and `spawn_send` to steer a running unit.
+          - **Keep AT MOST 6 sub-agents running at once — this is a hard ceiling.** Past six
+            the provider throttles, and a throttled agent's requests queue behind rate
+            limits, so the 7th does not run alongside the first six: it makes all seven
+            slower. Measured: an 11-agent fan-out hit throttling and finished slower than
+            the same work would have been six at a time.
+            More than six units is normal and correct — hold the extras as a QUEUE, not a
+            wider wave. Spawn six, then spawn the next one each time one finishes, until the
+            work list is empty. Use `spawn_status` with no agent_id to count what is still
+            running before each new spawn.
+            **Do NOT merge units to get under six.** An oversized unit sets the floor for the
+            whole wave, which is worse than a queued one — the split rule below still governs.
           The failure mode is dribbling spawns out one per turn and waiting on each before
           starting the next — that is fully SERIAL execution, precisely what this step exists
           to avoid. Author every brief first, then fan out. Writing ten briefs before the

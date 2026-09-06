@@ -67,6 +67,13 @@ type InlineLoopExecutor struct {
 	// when multiple inline workflows run in parallel. Set by parent executor.
 	activityIDPrefix string
 
+	// nodePathPrefix is the fully-qualified dotted path of the scope CONTAINING
+	// this loop node, empty at the top level. The loop's own path is that
+	// prefix plus loopID, and its body nodes hang off that — which is what
+	// makes a node two levels down report "outer.inner_loop.node" rather than
+	// only the outermost loop id.
+	nodePathPrefix string
+
 	// pauseCtrl bundles pause-checking and cancellable-context callbacks.
 	pauseCtrl *PauseController
 
@@ -101,6 +108,19 @@ type InlineLoopExecutor struct {
 	// continuing as new ends the whole execution, so a nested loop must never
 	// be able to trigger it.
 	continueAsNewCheck func(iteration int) error
+}
+
+// threadForError is the thread this loop's failures belong to, or "" when the
+// loop has no execution context to read one from.
+//
+// "" is a real answer, not a placeholder: an error carrying no thread is
+// chat-scoped and renders in every thread, so the caller must be able to tell
+// "unknown" apart from a known thread and must not substitute the chat id.
+func (e *InlineLoopExecutor) threadForError() string {
+	if e.execContext == nil {
+		return ""
+	}
+	return e.execContext.Thread
 }
 
 // NewInlineLoopExecutor creates a new executor for inline loop execution.
@@ -176,6 +196,19 @@ func (e *InlineLoopExecutor) WithProjectPath(projectPath string) *InlineLoopExec
 func (e *InlineLoopExecutor) WithActivityIDPrefix(prefix string) *InlineLoopExecutor {
 	e.activityIDPrefix = prefix
 	return e
+}
+
+// WithNodePathPrefix sets the dotted graph path of the scope containing this
+// loop node. Unset at the top level, where the loop's path is just its id.
+func (e *InlineLoopExecutor) WithNodePathPrefix(prefix string) *InlineLoopExecutor {
+	e.nodePathPrefix = prefix
+	return e
+}
+
+// nodePath is this loop node's own fully-qualified path, and the prefix its
+// body nodes compose against.
+func (e *InlineLoopExecutor) nodePath() string {
+	return joinNodePath(e.nodePathPrefix, e.loopID)
 }
 
 // WithPauseController sets the PauseController for pause-aware execution.
@@ -392,6 +425,33 @@ func (e *InlineLoopExecutor) workflowIdentity() string {
 	return e.workflowName
 }
 
+// subWorkflowProjectPath resolves the working directory a sub-workflow node
+// runs in: its own `project.path` when it declares one, otherwise the path
+// inherited from the enclosing scope.
+//
+// This is the rule workflow.go already applies to every top-level sub-workflow
+// node. Neither loop executor applied it, so a `project.path` on a node inside
+// a loop body was read, evaluated, and then thrown away — the node ran against
+// the parent's directory, and when the parent had none (the normal case for a
+// loop that creates its own worktrees) preset loading failed outright with
+// "project path not set". builtin/parallel-compete.yaml is the shape that
+// breaks: each candidate's `impl` node points at the worktree its own iteration
+// created, which is precisely the override being dropped.
+//
+// childExecCtx is updated in place when the node overrides, because tools and
+// any nested children read the directory from the context rather than from the
+// executor.
+func subWorkflowProjectPath(inherited string, evaluatedNode *reliantv1.Node, childExecCtx *ExecutionContext) string {
+	nodePath := model.NodeProjectPath(evaluatedNode)
+	if nodePath == "" {
+		return inherited
+	}
+	if childExecCtx != nil {
+		childExecCtx.ProjectPath = nodePath
+	}
+	return nodePath
+}
+
 // loadAndMergePresets loads presets specified on the loop node and merges their params into iterInputs.
 // Presets are merged as a base layer - explicit args will override these values later.
 //
@@ -403,13 +463,16 @@ func (e *InlineLoopExecutor) workflowIdentity() string {
 // provided evalCtx is used to resolve them per-iteration. If evalCtx is nil,
 // preset names are treated as literals.
 func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInputs map[string]interface{}, evalCtx wfcel.CELEvalContext) error {
-	if e.projectPath == "" {
-		return fmt.Errorf("project path not set, cannot load presets")
-	}
-
 	presets := model.GetLoopArgs(e.loopStep.Node).GetPresets()
+	// Check for work before demanding the input that work would need — see the
+	// matching guard in InlineWorkflowExecutor.loadAndMergePresets.
 	if len(presets) == 0 {
 		return nil
+	}
+
+	// Terminal, not transient: retrying never supplies an unset project path.
+	if e.projectPath == "" {
+		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 
 	e.logger.Info("[InlineLoop] Loading presets for loop iteration",
@@ -945,6 +1008,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		iterNodeOutputs,
 		e.childTracker,
 	).WithLoopContext(e.loopID, e.iteration).
+		WithNodePathPrefix(e.nodePath()).
 		WithExecContext(iterExecContext).
 		WithProjectPath(e.projectPath).
 		WithWorkflow(e.subWorkflow).
@@ -1040,6 +1104,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				e.ctx, step.Node, iterNodeOutputs, iterInputs,
 				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
 				&LoopScope{Iter: e.buildIterContextModel(), Outputs: e.prevIterOutputs},
+				e.nodePath(),
 			)
 			if condErr != nil {
 				return nil, condErr
@@ -1080,6 +1145,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				if e.activityIDPrefix != "" {
 					nestedExecutor = nestedExecutor.WithActivityIDPrefix(e.activityIDPrefix)
 				}
+				nestedExecutor = nestedExecutor.WithNodePathPrefix(e.nodePath())
 				nestedExecutor = nestedExecutor.WithThreadTracker(e.threadTracker)
 				if iterExecContext != nil {
 					nestedExecutor = nestedExecutor.WithExecContext(iterExecContext)
@@ -1314,10 +1380,15 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 					inlineExecutor = inlineExecutor.WithExecContext(childExecCtx)
 				}
-				if e.projectPath != "" {
-					inlineExecutor = inlineExecutor.WithProjectPath(e.projectPath)
+				// A sub-workflow node's own project.path wins over the path
+				// inherited from the loop, exactly as it does at the top level
+				// (workflow.go). Without this the node's project block was
+				// silently ignored inside a loop body.
+				if childProjectPath := subWorkflowProjectPath(e.projectPath, evalResult, childExecCtx); childProjectPath != "" {
+					inlineExecutor = inlineExecutor.WithProjectPath(childProjectPath)
 				}
 				inlineExecutor = inlineExecutor.WithPauseController(e.pauseCtrl).
+					WithNodePathPrefix(e.nodePath()).
 					WithMakeThreadPauseCtrl(e.makeThreadPauseCtrl).
 					WithThreadInterrupts(resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, inlineExecutor.GetThread())).
 					WithMakeThreadInterrupt(e.makeThreadInterrupt).
@@ -1401,6 +1472,38 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					WorkflowName: e.workflowIdentity(),
 					StepID:       step.Node.GetId(),
 					Data:         inlineOutput,
+				})
+				continue
+			}
+
+			// Handle approval nodes inline (signal-based), exactly as
+			// InlineWorkflowExecutor does for a sub-workflow body. Without this
+			// the node reaches StepExecutor, which fails it as a bug and pauses
+			// the run after retry exhaustion.
+			if step.Node.GetType() == model.NodeTypeApproval {
+				exec, err := approvalExecutionFromNode(
+					step.Node, iterNodeOutputs, iterInputs,
+					e.workflowID, e.workflowIdentity(), e.buildIterCtx(),
+					e.prevIterOutputs, iterExecContext, e.chatID,
+					e.loopID, e.iteration,
+					joinNodePath(e.nodePath(), step.Node.GetId()),
+					e.logger,
+				)
+				if err != nil {
+					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
+				}
+				approvalOutput, err := executeApprovalSignalFlow(e.ctx, exec)
+				if err != nil {
+					return nil, fmt.Errorf("approval %s failed: %w", step.Node.GetId(), err)
+				}
+				iterNodeOutputs[step.Node.GetId()] = approvalOutput
+				events = append(events, &core.WorkflowEvent{
+					ID:           fmt.Sprintf("loop-%s-iter%d-approval-%s", e.loopID, e.iteration, step.Node.GetId()),
+					WorkflowID:   e.workflowID,
+					ChatID:       e.chatID,
+					WorkflowName: e.workflowIdentity(),
+					StepID:       step.Node.GetId(),
+					Data:         approvalOutput,
 				})
 				continue
 			}
@@ -1510,22 +1613,18 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					})
 					var errorResult map[string]interface{}
 					errStr := stepEvent.Error.Error()
-					errorPayload := map[string]interface{}{
-						"chat_id":       e.chatID,
-						"workflow_id":   e.workflowID,
-						"workflow_name": e.workflowName,
-						"error_message": errStr,
-						"error_type":    "retry_exhaustion",
-					}
-					// Scope the error to the thread that produced it; an
-					// unscoped error renders in every thread of the chat.
-					if e.execContext != nil && e.execContext.Thread != "" {
-						errorPayload["thread"] = e.execContext.Thread
+					exhaustion := retryExhaustionError{
+						ChatID:       e.chatID,
+						WorkflowID:   e.workflowID,
+						WorkflowName: e.workflowName,
+						Message:      errStr,
+						Thread:       e.threadForError(),
+						Err:          stepEvent.Error,
 					}
 					if summary := extractLLMErrorSummary(errStr); summary != "" {
-						errorPayload["error_summary"] = summary + ". Workflow paused — send a message to retry."
+						exhaustion.Summary = summary + ". Workflow paused — send a message to retry."
 					}
-					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", errorPayload).Get(e.ctx, &errorResult)
+					_ = workflow.ExecuteActivity(errorCtx, "WorkflowError", exhaustion.payload()).Get(e.ctx, &errorResult)
 
 					// Update DB status to paused
 					notifyWorkflowStatus(e.ctx, e.chatID, e.workflowID, e.workflowName, "paused", "", "", nil)
