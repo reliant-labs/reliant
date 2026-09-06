@@ -20,6 +20,11 @@ import { useProjectStore } from "../../store/projectStore";
 import type { Project as StoreProject } from "../../store/projectStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { cn } from "../../lib/utils";
+import {
+  basename,
+  collapseHomePath,
+  splitPathForDisplay as splitDisplayPathAtLastSegment,
+} from "../../lib/pathUtils";
 import { ProjectPickerModal } from "./ProjectPickerModal";
 import { RemoveProjectsModal } from "./RemoveProjectsModal";
 import { DirectoryPicker } from "./DirectoryPicker";
@@ -105,11 +110,9 @@ function formatLastActive(iso: string): string {
   return `${Math.floor(days / 365)}y ago`;
 }
 
-// Collapse the user's home directory to "~". Matches both macOS (/Users/x)
-// and Linux (/home/x) layouts, which is all the daemon ever reports.
-function displayPath(path: string): string {
-  return path.replace(/^\/(?:Users|home)\/[^/]+/, "~");
-}
+// Collapse the user's home directory to "~". The daemon may be on any OS, so
+// this covers macOS/Linux (/Users/x, /home/x) and Windows (C:\Users\x) alike.
+const displayPath = collapseHomePath;
 
 /**
  * Split a path for middle-ellipsis rendering.
@@ -121,10 +124,7 @@ function displayPath(path: string): string {
  * giving "~/src/very/long/…/my-project".
  */
 function splitPathForDisplay(path: string): { head: string; tail: string } {
-  const shown = displayPath(path);
-  const lastSlash = shown.lastIndexOf("/");
-  if (lastSlash <= 0) return { head: "", tail: shown };
-  return { head: shown.slice(0, lastSlash + 1), tail: shown.slice(lastSlash + 1) };
+  return splitDisplayPathAtLastSegment(displayPath(path));
 }
 
 // Case-insensitive substring match over the fields a user would search by.
@@ -711,7 +711,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     
     if (selectedPath) {
       // Create a project for the selected directory
-      const projectName = selectedPath.split("/").pop() || selectedPath || "Untitled Project";
+      const projectName = basename(selectedPath) || selectedPath || "Untitled Project";
       const projectData = {
         name: projectName,
         path: selectedPath,
@@ -764,7 +764,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   };
 
   const handleDirectoryPickerSelect = async (selectedPath: string) => {
-    const projectName = selectedPath.split("/").pop() || selectedPath || "Untitled Project";
+    const projectName = basename(selectedPath) || selectedPath || "Untitled Project";
     const projectData = {
       name: projectName,
       path: selectedPath,

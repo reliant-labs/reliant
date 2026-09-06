@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -24,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -1123,11 +1123,11 @@ func (s *ToolsDaemonService) handleProjectDiscovery(ctx context.Context, conn *d
 
 	for _, path := range paths {
 		discovered := projectsByPath[path]
-		project, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered)
-		if err != nil {
-			return err
-		}
-		if project == nil {
+		// One unresolvable path must not abandon the rest of the daemon's
+		// projects, so this logs and moves on rather than returning.
+		if _, err := s.ensureOwnedProjectForPath(ctx, conn, path, discovered); err != nil {
+			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Skipped discovered project that could not be resolved",
+				"error", err, "projectPath", path, "daemonID", conn.daemonID, "userID", conn.userID)
 			continue
 		}
 
@@ -1235,9 +1235,6 @@ func (s *ToolsDaemonService) handleProjectConfigDelta(ctx context.Context, conn 
 	if err != nil {
 		return err
 	}
-	if project == nil {
-		return nil
-	}
 
 	applyUpdate, err := s.shouldApplyProjectConfigUpdate(ctx, project.ID, delta.DaemonTimestampUnixMs)
 	if err != nil {
@@ -1280,9 +1277,6 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 
 	project, err := s.ensureOwnedProjectForPath(ctx, conn, projectPath, nil)
 	if err != nil {
-		return err
-	}
-	if project == nil {
 		// Dropping a snapshot is NOT recoverable by waiting: runProjectWatcher
 		// suppresses any delta whose content hash matches the last one it SENT,
 		// so the daemon will not re-offer this snapshot until the files on disk
@@ -1291,10 +1285,11 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 		// the previous "project not found for path" wording sent debugging
 		// after a missing row when the row existed and was merely unresolvable.
 		logging.Error("[ToolsDaemon] Dropped project config snapshot — no project resolvable for this daemon's user",
+			"error", err,
 			"projectPath", projectPath,
 			"daemonID", conn.daemonID,
 			"userID", conn.userID)
-		return nil
+		return err
 	}
 
 	if !force {
@@ -1350,14 +1345,24 @@ func (s *ToolsDaemonService) persistProjectConfigSnapshot(ctx context.Context, c
 // every CallLLM against that project saw a 0-entry skill catalog and failed
 // preload with "the project config snapshot has not filled yet; retrying" — a
 // message that promises a transient condition the pipeline could never clear.
+// Both rejections below return an ERROR rather than (nil, nil). A (nil, nil)
+// return is what made the incident above silent: it obliged every caller to
+// invent its own meaning for a nil project, and two of the three chose to
+// return nil and move on, so a rejected path produced a dropped snapshot and
+// one Warn line nobody was looking for. An error cannot be ignored by
+// accident. Neither branch is reachable in normal operation — all three
+// callers pass a path through normalizeProjectPath first — so making them
+// loud costs nothing and turns a protocol violation into a visible failure.
 func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn *daemonConnection, path string, discovered *reliantv1.DiscoveredProject) (*db.Project, error) {
-	if !filepath.IsAbs(path) {
-		logging.Warn("[ToolsDaemon] Rejecting non-absolute project path", "path", path)
-		return nil, nil
+	// ospath, not filepath: this path names a directory on the DAEMON, which
+	// may be Windows while this server is Linux. Under filepath.IsAbs every
+	// `C:\...` path was judged relative, so a Windows daemon hit exactly the
+	// silent-drop path described above on every snapshot it ever sent.
+	if !ospath.IsAbs(path) {
+		return nil, fmt.Errorf("daemon reported a non-absolute project path %q", path)
 	}
 	if conn == nil || strings.TrimSpace(conn.userID) == "" {
-		logging.Warn("[ToolsDaemon] Rejecting project path from unidentified daemon connection", "path", path)
-		return nil, nil
+		return nil, fmt.Errorf("cannot resolve project %q: the daemon connection carries no user", path)
 	}
 
 	project, err := s.database.GetProjectByPathAndUser(ctx, path, conn.userID)
@@ -1366,7 +1371,10 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 			return nil, err
 		}
 
-		name := filepath.Base(path)
+		// ospath.Base, not filepath.Base: on a Linux server the latter returns
+		// `C:\Users\sean\src\proj` whole, so a Windows daemon's discovered
+		// project would be named after its entire path.
+		name := ospath.Base(path)
 		isGitRepo := false
 		if discovered != nil {
 			if strings.TrimSpace(discovered.Name) != "" {
@@ -2501,13 +2509,21 @@ func (s *ToolsDaemonService) listAllProjectPaths(ctx context.Context, userID str
 	return paths, nil
 }
 
+// normalizeProjectPath canonicalizes a project path reported by a daemon, or
+// returns "" when the daemon sent something that names no location.
+//
+// It uses ospath rather than path/filepath because the path describes the
+// DAEMON's filesystem. filepath.Clean on a Linux server leaves a Windows
+// path's backslashes untouched while filepath.IsAbs judges it relative, so
+// every Windows daemon's project path normalized to "" — and "" is a silent
+// drop at all three call sites.
 func normalizeProjectPath(path string) string {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
 		return ""
 	}
-	cleaned := filepath.Clean(trimmed)
-	if !filepath.IsAbs(cleaned) {
+	cleaned := ospath.Clean(trimmed)
+	if !ospath.IsAbs(cleaned) {
 		return "" // reject relative paths
 	}
 	return cleaned

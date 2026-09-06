@@ -80,6 +80,24 @@ message GetLLMSpendRequest {
 message GetLLMSpendResponse {
   repeated LLMSpendEntry entries = 1;
   double total_spend = 2;
+
+  // How many DISTINCT CALENDAR DAYS the returned spend was actually observed
+  // over, in UTC. total_spend divided by this is the observed burn rate, and
+  // it is the only denominator that produces an honest one.
+  //
+  // It has to be reported separately because `entries` cannot carry it:
+  // entries are aggregated per (key, model) across the WHOLE requested range,
+  // so a client counting entries counts one day billed across three models as
+  // three days and understates the burn rate threefold. There is no per-day
+  // row for a client to count even in principle — LLMSpendEntry.period_start
+  // is not populated by this RPC and a client must not infer days from it.
+  //
+  // ZERO MEANS "NO OBSERVED DAYS", which includes the case where the upstream
+  // spend logs carried no usable timestamps. A client must withhold any
+  // rate-derived estimate at zero rather than dividing by the range length —
+  // substituting a plausible denominator for a missing one is how a runway
+  // estimate becomes a confident number nobody measured.
+  int32 sample_days = 3;
 }
 
 message ListAvailableModelsRequest {

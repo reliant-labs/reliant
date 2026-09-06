@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { FolderOpen, GitBranch, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
+import { collapseHomePath } from "@/lib/pathUtils";
 import { useCompleteOnboarding } from "@/hooks/useOnboardingQueries";
 import { useProjectStore } from "@/store/projectStore";
 import type { Project } from "@/store/projectStore";
@@ -218,7 +219,7 @@ export function ProjectPickerStep({ plan, updatePlan, onBack }: StepProps) {
                   )}
                 </div>
                 <p className="truncate text-xs text-muted-foreground">
-                  {project.path.replace(/^\/(?:Users|home)\/[^/]+/, "~")}
+                  {collapseHomePath(project.path)}
                 </p>
               </div>
             </button>

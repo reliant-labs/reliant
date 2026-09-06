@@ -3,7 +3,7 @@
  *
  * Focus: the loading gate that blocks the radio + Continue button until the
  * first `listDaemons` query has settled. Before this gate existed, a fast
- * user could click "Use my own computer" before the auto-skip useEffect
+ * user could click "Use your own computer" before the auto-skip useEffect
  * ever read `hasUsableDaemonForOnboarding(daemons)`, leaving them stranded
  * on the local-daemon path even though a cloud daemon was already wired up.
  *
@@ -276,7 +276,7 @@ describe("ComputeStep loading gate", () => {
       screen.queryByRole("button", { name: /Use a Reliant machine/i }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /Use my own computer/i }),
+      screen.queryByRole("button", { name: /Use your own computer/i }),
     ).not.toBeInTheDocument();
   });
 
@@ -289,7 +289,7 @@ describe("ComputeStep loading gate", () => {
       screen.getByRole("button", { name: /Use a Reliant machine/i }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Use my own computer/i }),
+      screen.getByRole("button", { name: /Use your own computer/i }),
     ).toBeInTheDocument();
   });
 

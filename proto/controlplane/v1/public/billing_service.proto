@@ -374,6 +374,23 @@ message GetCurrentUserComputeUsageResponse {
   // that depletes and does not renew. Spent after included minutes, before
   // overage.
   int64 granted_minutes_remaining = 9;
+
+  // Whether the metered fields (used_minutes, overage_minutes,
+  // estimated_overage_cost_cents, by_workspace, by_day) carry a measurement.
+  //
+  // "This org ran nothing" and "the server did not measure" both arrived as
+  // used_minutes = 0 on a 200 response, so the client could not tell them
+  // apart and rendered the unmeasured case as a confident "0.0 h used" — an
+  // unknown shown as a known, in the direction that costs money: a user was
+  // told they had consumed nothing while the daemon start gate was refusing
+  // them against real metered usage.
+  //
+  // Defaults to FALSE, deliberately: proto3 gives an older or partial server
+  // the safe reading — withhold rather than assert.
+  //
+  // included_minutes and granted_minutes_remaining are unaffected; they come
+  // from the plan and the grant ledger, not from metering.
+  bool usage_measured = 10;
 }
 
 // === Compute eligibility ===

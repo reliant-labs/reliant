@@ -127,16 +127,31 @@ export interface GetLLMSpendArgs {
 }
 
 /** GetLLMSpend — per-key/per-model spend entries + total for a date range. */
-export async function getLLMSpend(
-  args: GetLLMSpendArgs,
-): Promise<{ entries: LLMSpendEntry[]; totalSpend: number }> {
+export async function getLLMSpend(args: GetLLMSpendArgs): Promise<{
+  entries: LLMSpendEntry[];
+  totalSpend: number;
+  /**
+   * Distinct calendar days the spend was observed over, per the server.
+   *
+   * Forwarded rather than derived. `entries` are aggregated per (key, model)
+   * across the whole range and carry no period, so the credit band's burn rate
+   * has no denominator without this — which is why its runway estimate
+   * silently never rendered before the server started sending it. Zero means
+   * "cannot say", and callers must withhold rather than substitute.
+   */
+  sampleDays: number;
+}> {
   const res = await getControlPlaneClient(LLMGatewayService).getLLMSpend({
     orgId: args.orgId,
     startDate: args.startDate,
     endDate: args.endDate,
     keyId: args.keyId,
   });
-  return { entries: res.entries, totalSpend: res.totalSpend };
+  return {
+    entries: res.entries,
+    totalSpend: res.totalSpend,
+    sampleDays: res.sampleDays,
+  };
 }
 /** Result of redeeming a coupon code. */
 export interface RedeemCouponResult {

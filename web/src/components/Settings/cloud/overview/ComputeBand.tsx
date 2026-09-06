@@ -141,8 +141,22 @@ export function ComputeBand({
             ) : usageUnavailable ? (
               // Partial failure degrades partially: the plan's own facts are
               // fine, so only the bar is replaced.
+              //
+              // The allowance is still stated, because it comes from the plan
+              // and is true whatever metering did. What is withheld is the
+              // one number that depends on measurement — and it is withheld
+              // by SAYING so, not by leaving a gap. A blank where hours used
+              // belongs reads as zero, which is the reading this exists to
+              // prevent.
               <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-                <span>Usage unavailable for this period.</span>
+                <div>
+                  <p>Usage unavailable for this period.</p>
+                  {includedHoursLabel && (
+                    <p className="mt-0.5 text-xs">
+                      Your plan includes {includedHoursLabel.replace(" included", "")}.
+                    </p>
+                  )}
+                </div>
                 <Button size="sm" variant="ghost" onClick={onRetryUsage}>
                   Retry
                 </Button>

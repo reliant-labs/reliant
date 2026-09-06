@@ -37,8 +37,16 @@ export interface ComputeOverageControlProps {
   budgetCents?: bigint;
   /** Plan's overage rate, server-supplied. 0 means the plan has no overage. */
   overageCentsPerMinute: number;
-  /** Overage spend so far this period, in cents. */
-  overageSpentCents: number;
+  /**
+   * Overage spend so far this period, in cents, or null when the server did
+   * not measure usage.
+   *
+   * Null rather than 0 on purpose. This is drawn as spend against a cap the
+   * user authorized, so an unmeasured zero tells them their whole limit is
+   * still available — the reassuring-and-wrong reading, in the currency they
+   * care about most.
+   */
+  overageSpentCents: number | null;
   /** Plan's monthly price in cents, used only to suggest a starting limit. */
   monthlyPriceCents: number | null;
   disabled?: boolean;
@@ -167,12 +175,22 @@ export function ComputeOverageControl({
   const spentAgainstCap =
     storedChoice === "capped" && budgetCents !== undefined
       ? {
-          spent: formatCentsAsDollars(overageSpentCents),
+          // The cap is a stored setting and is known regardless; only the
+          // spend depends on metering, so an unmeasured period still shows
+          // the user what they set — it just refuses to claim how much of it
+          // is left.
+          spent:
+            overageSpentCents === null
+              ? null
+              : formatCentsAsDollars(overageSpentCents),
           cap: formatCentsAsDollars(Number(budgetCents)),
-          pct: Math.min(
-            (overageSpentCents / Math.max(Number(budgetCents), 1)) * 100,
-            100,
-          ),
+          pct:
+            overageSpentCents === null
+              ? null
+              : Math.min(
+                  (overageSpentCents / Math.max(Number(budgetCents), 1)) * 100,
+                  100,
+                ),
         }
       : null;
 
@@ -270,18 +288,24 @@ export function ComputeOverageControl({
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Extra time used this period</span>
             <span>
-              {spentAgainstCap.spent} of {spentAgainstCap.cap}
+              {spentAgainstCap.spent === null
+                ? `Usage unavailable · limit ${spentAgainstCap.cap}`
+                : `${spentAgainstCap.spent} of ${spentAgainstCap.cap}`}
             </span>
           </div>
-          <div className="h-2 rounded-full bg-muted">
-            <div
-              className={cn(
-                "h-2 rounded-full",
-                spentAgainstCap.pct >= 75 ? "bg-warning" : "bg-primary",
-              )}
-              style={{ width: `${spentAgainstCap.pct}%` }}
-            />
-          </div>
+          {/* No bar when there is no measurement: an empty track reads as
+              "nothing spent", which is the claim we are refusing to make. */}
+          {spentAgainstCap.pct !== null && (
+            <div className="h-2 rounded-full bg-muted">
+              <div
+                className={cn(
+                  "h-2 rounded-full",
+                  spentAgainstCap.pct >= 75 ? "bg-warning" : "bg-primary",
+                )}
+                style={{ width: `${spentAgainstCap.pct}%` }}
+              />
+            </div>
+          )}
         </div>
       )}
 

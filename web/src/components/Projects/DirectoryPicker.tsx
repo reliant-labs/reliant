@@ -17,6 +17,14 @@ import {
   createDirectory,
   type DirectoryEntry,
 } from "../../api/filesystem-grpc";
+import { cn } from "../../lib/utils";
+import {
+  containsSeparator,
+  dirname,
+  isPathRoot,
+  joinPath,
+  pathCrumbs,
+} from "../../lib/pathUtils";
 
 interface DirectoryPickerProps {
   isOpen: boolean;
@@ -87,12 +95,19 @@ export function DirectoryPicker({
       setCreateError("Folder name is required");
       return;
     }
-    if (name.includes("/") || name === "." || name === "..") {
+    if (containsSeparator(name) || name === "." || name === "..") {
       setCreateError("Enter a single folder name (no slashes)");
       return;
     }
-    const parent = resolvedPath || "/";
-    const targetPath = parent === "/" ? `/${name}` : `${parent}/${name}`;
+    if (!resolvedPath) {
+      setCreateError("Open a directory first");
+      return;
+    }
+    // joinPath keeps the daemon's own separator style, so a Windows daemon
+    // gets `C:\a\new` rather than the mixed `C:\a/new` a template literal
+    // would have produced.
+    const parent = resolvedPath;
+    const targetPath = joinPath(parent, name);
     setIsSubmittingFolder(true);
     setCreateError(null);
     try {
@@ -110,10 +125,14 @@ export function DirectoryPicker({
     }
   };
 
+  // "Up" stops at the root of whatever volume we're on: `/` on POSIX, `C:\`
+  // or `\\server\share\` on Windows. Windows has no single filesystem root
+  // above the drives, so the drive IS the top as far as this picker goes.
+  const isAtRoot = !!resolvedPath && isPathRoot(resolvedPath);
+
   const navigateUp = () => {
-    if (!resolvedPath || resolvedPath === "/") return;
-    const parent = resolvedPath.substring(0, resolvedPath.lastIndexOf("/")) || "/";
-    navigateTo(parent);
+    if (!resolvedPath || isAtRoot) return;
+    navigateTo(dirname(resolvedPath));
   };
 
   const handleSelect = () => {
@@ -121,10 +140,11 @@ export function DirectoryPicker({
     onClose();
   };
 
-  // Parse path into breadcrumb segments
-  const pathSegments = resolvedPath
-    ? resolvedPath.split("/").filter(Boolean)
-    : [];
+  // Breadcrumbs, root first. The root crumb is the volume root as the daemon
+  // reports it, which is why it is derived rather than hardcoded to "/": on
+  // Windows the top of the tree is `C:\`, and a "/" button there would
+  // navigate to a path that does not exist.
+  const crumbs = pathCrumbs(resolvedPath);
 
   // Filter entries based on showHidden toggle, and sort: directories first, then alphabetically
   const filteredEntries = entries
@@ -145,27 +165,23 @@ export function DirectoryPicker({
       <div className="flex flex-col gap-4">
         {/* Breadcrumb navigation */}
         <div className="flex items-center gap-1 text-sm font-mono overflow-x-auto pb-1 min-h-[32px]">
-          <button
-            onClick={() => navigateTo("/")}
-            className="px-1.5 py-0.5 rounded hover:bg-muted/80 text-muted-foreground hover:text-foreground transition-colors flex-shrink-0"
-          >
-            /
-          </button>
-          {pathSegments.map((segment, index) => {
-            const segmentPath = "/" + pathSegments.slice(0, index + 1).join("/");
-            const isLast = index === pathSegments.length - 1;
+          {crumbs.map((crumb, index) => {
+            const isLast = index === crumbs.length - 1;
             return (
-              <span key={segmentPath} className="flex items-center gap-1 flex-shrink-0">
-                <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
+              <span key={crumb.path} className="flex items-center gap-1 flex-shrink-0">
+                {index > 0 && (
+                  <ChevronRight className="w-3 h-3 text-muted-foreground/50" />
+                )}
                 <button
-                  onClick={() => navigateTo(segmentPath)}
-                  className={`px-1.5 py-0.5 rounded transition-colors ${
+                  onClick={() => navigateTo(crumb.path)}
+                  className={cn(
+                    "px-1.5 py-0.5 rounded transition-colors",
                     isLast
                       ? "text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/80"
-                  }`}
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted/80",
+                  )}
                 >
-                  {segment}
+                  {crumb.name}
                 </button>
               </span>
             );
@@ -176,7 +192,7 @@ export function DirectoryPicker({
         <div className="flex items-center justify-between">
           <button
             onClick={navigateUp}
-            disabled={!resolvedPath || resolvedPath === "/"}
+            disabled={!resolvedPath || isAtRoot}
             className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ArrowUp className="w-3.5 h-3.5" />

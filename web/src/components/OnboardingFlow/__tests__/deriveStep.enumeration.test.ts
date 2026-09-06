@@ -1,12 +1,22 @@
 /**
  * Exhaustive enumeration of the onboarding step machine.
  *
- * `deriveStep` reads three plan fields plus the `paid` flag, each with a small
- * closed domain, and two server facts. The whole reachable space is 240 plan
- * states × 2 `paid` values × 4 fact combinations = 1920. That is still small
- * enough to enumerate in a loop, which is strictly better than hand-picking
- * fixtures: a hand-written test only covers the states someone thought of, and
- * every onboarding regression so far lived in one nobody did.
+ * `deriveStep` reads three plan fields plus the two per-leg settlement flags,
+ * each with a small closed domain, and two server facts. The whole reachable
+ * space is 240 plan states × 4 settlement combinations × 4 fact combinations
+ * = 3840. That is still small enough to enumerate in a loop, which is strictly
+ * better than hand-picking fixtures: a hand-written test only covers the states
+ * someone thought of, and every onboarding regression so far lived in one
+ * nobody did.
+ *
+ * ── What enumeration alone cannot do ─────────────────────────────────
+ *
+ * This file tests STATES. F2 was a bug about TRANSITIONS — a settlement that
+ * outlived the bill that produced it, so a state legitimately reachable by
+ * paying was also reachable by paying for something else and pressing Back.
+ * Every state involved is individually correct; only the path distinguishes
+ * them. `deriveStep.transitions.test.ts` walks the paths, and this file no
+ * longer pretends to cover that class.
  *
  * The state space grew when the consolidated checkout step landed — the price
  * of `deriveStep` widening from `(plan)` to `(plan, facts)`. It stays PURE,
@@ -90,7 +100,20 @@ const INTENT_VALUES: (OnboardingIntent | undefined)[] = [
 
 const AUTO_SKIPPED_VALUES = [false, true];
 
-const PAID_VALUES = [false, true];
+/**
+ * Every combination of the two per-leg settlements.
+ *
+ * This axis used to be a single `paid` boolean. Splitting it is what made F2
+ * expressible as a state at all: the mismatched combination — credit settled
+ * while a compute subscription is owed — has no spelling in a one-flag world,
+ * so no enumeration over it could have found the bug.
+ */
+const SETTLED_VALUES: { computeSettled: boolean; creditSettled: boolean }[] = [
+  { computeSettled: false, creditSettled: false },
+  { computeSettled: true, creditSettled: false },
+  { computeSettled: false, creditSettled: true },
+  { computeSettled: true, creditSettled: true },
+];
 
 /**
  * Every combination of the two server facts. They are NOT in the plan — they
@@ -136,20 +159,23 @@ function allStates(): EnumeratedState[] {
     for (const modelProvider of MODEL_PROVIDER_VALUES) {
       for (const intent of INTENT_VALUES) {
         for (const computeAutoSkipped of AUTO_SKIPPED_VALUES) {
-          for (const paid of PAID_VALUES) {
+          for (const settled of SETTLED_VALUES) {
             for (const facts of FACT_VALUES) {
               const plan: Partial<LaunchPlan> = {};
               if (compute) plan.compute = compute;
               if (modelProvider) plan.modelProvider = modelProvider;
               if (intent) plan.intent = intent;
               if (computeAutoSkipped) plan.computeAutoSkipped = true;
-              if (paid) plan.paid = true;
+              if (settled.computeSettled) plan.computeSettled = true;
+              if (settled.creditSettled) plan.creditSettled = true;
               states.push({
                 plan,
                 facts,
                 label:
                   `compute=${compute} provider=${modelProvider} intent=${intent} ` +
-                  `autoSkipped=${computeAutoSkipped} paid=${paid} ` +
+                  `autoSkipped=${computeAutoSkipped} ` +
+                  `computeSettled=${settled.computeSettled} ` +
+                  `creditSettled=${settled.creditSettled} ` +
                   `eligible=${facts.computeEligible} funded=${facts.walletFunded}`,
               });
             }
@@ -173,10 +199,10 @@ describe("onboarding state space", () => {
         MODEL_PROVIDER_VALUES.length *
         INTENT_VALUES.length *
         AUTO_SKIPPED_VALUES.length *
-        PAID_VALUES.length *
+        SETTLED_VALUES.length *
         FACT_VALUES.length,
     );
-    expect(STATES).toHaveLength(1920);
+    expect(STATES).toHaveLength(3840);
   });
 });
 
@@ -298,7 +324,8 @@ describe("invariant 4 — no state strands the user", () => {
         plan.compute,
         plan.modelProvider,
         plan.intent,
-        plan.paid,
+        plan.computeSettled,
+        plan.creditSettled,
       ]);
       if (seen.has(key)) continue;
       seen.add(key);
@@ -306,9 +333,17 @@ describe("invariant 4 — no state strands the user", () => {
       if (TERMINAL_STEPS.includes(deriveStep(plan, facts))) return true;
 
       // The moves the rendered steps can make: choose a compute, choose a
-      // provider, choose an intent, and — new with the checkout step — pay.
-      // Paying is a real move available from every state that owes money,
-      // which is what stops the checkout step being a trap.
+      // provider, choose an intent, and pay. Paying is a real move available
+      // from every state that owes money, which is what stops the checkout
+      // step being a trap.
+      //
+      // NOTE ON WHAT THIS PROVES, AND WHAT IT DOES NOT. Settling both legs is
+      // offered unconditionally, so this search demonstrates REACHABILITY —
+      // "no state strands the user" — and nothing about whether payment was
+      // genuinely owed for what the user ended up with. That second property
+      // needs a search whose paying move moves the SERVER FACTS, and it lives
+      // in `deriveStep.transitions.test.ts`. Reading this BFS as coverage of
+      // the payment guarantee is precisely the mistake that left F2 live.
       for (const compute of COMPUTE_VALUES) {
         if (compute) queue.push({ ...plan, compute });
       }
@@ -318,7 +353,7 @@ describe("invariant 4 — no state strands the user", () => {
       for (const intent of INTENT_VALUES) {
         if (intent) queue.push({ ...plan, intent });
       }
-      queue.push({ ...plan, paid: true });
+      queue.push({ ...plan, computeSettled: true, creditSettled: true });
     }
     return false;
   }
@@ -364,10 +399,52 @@ describe("invariant 4 — no state strands the user", () => {
 
 describe("the checkout step appears exactly when money is owed", () => {
   /**
+   * Is money owed? Stated INDEPENDENTLY of the code under test.
+   *
+   * ── Why this is spelled out rather than delegated ─────────────────────
+   *
+   * The oracle here used to be
+   *
+   *     Boolean(compute) && Boolean(provider) && !plan.paid &&
+   *     requiresPayment(plan, facts).any
+   *
+   * which asserts that `deriveStep` agrees with a formula CONTAINING THE SAME
+   * `!paid` short-circuit `deriveStep` used. That made it a tautology with
+   * respect to F2: `plan.paid` suppressed the checkout step for a bill it had
+   * never paid, and the oracle suppressed the expectation in exactly the same
+   * states, so the two agreed while both were wrong. A test cannot check a
+   * rule it borrows from the thing it is checking.
+   *
+   * So this is written from the raw inputs — the two server facts and the two
+   * per-leg settlements — and does not call `requiresPayment`, `deriveStep`,
+   * or `isCloudCompute`. The cloud tiers are named literally for the same
+   * reason: borrowing `isCloudCompute` would make a bug in cloud-ness
+   * invisible here, which is defect A all over again.
+   *
+   * The cost is a second declaration of the payment rule that must be kept in
+   * step by hand. That is the point — the oracle is a restatement of the
+   * PRODUCT rule ("cloud with no entitlement owes a subscription; Reliant's
+   * models on an empty wallet owe credit"), and when the code disagrees with
+   * it, one of the two is wrong and someone has to look.
+   */
+  function owesMoney(
+    plan: Partial<LaunchPlan>,
+    facts: OnboardingFactsInput,
+  ): boolean {
+    const onCloud =
+      plan.compute === "cloud_free_trial" || plan.compute === "cloud_paid";
+    const owesCompute =
+      onCloud && !facts.computeEligible && !plan.computeSettled;
+    const owesCredit =
+      plan.modelProvider === "reliant_credits" &&
+      !facts.walletFunded &&
+      !plan.creditSettled;
+    return owesCompute || owesCredit;
+  }
+
+  /**
    * The consolidation guarantee, stated over the whole state space: the ONE
-   * billing moment is present precisely when {@link requiresPayment} says
-   * something is owed and the plan has not already been paid — never
-   * otherwise.
+   * billing moment is present precisely when money is owed — never otherwise.
    *
    * The failure this catches in each direction is a real product failure. A
    * spurious checkout step asks a user for money they do not owe; a missing
@@ -381,8 +458,7 @@ describe("the checkout step appears exactly when money is owed", () => {
       const owes =
         Boolean(plan.compute) &&
         Boolean(plan.modelProvider) &&
-        !plan.paid &&
-        requiresPayment(plan, facts).any;
+        owesMoney(plan, facts);
       const isCheckout = deriveStep(plan, facts) === "checkout";
       if (owes !== isCheckout) {
         offenders.push(
@@ -391,6 +467,34 @@ describe("the checkout step appears exactly when money is owed", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+
+  // GUARDS THE GUARD, and it is the whole reason the oracle was rewritten.
+  //
+  // The old oracle shared `deriveStep`'s `!paid` short-circuit, so a
+  // settlement leaking across legs was invisible to it — both sides went
+  // silent in the same states. This proves the new oracle is INDEPENDENT: a
+  // credit settlement must not answer a compute bill, in the oracle itself,
+  // without consulting any of the code under test.
+  it("does not let one leg's settlement answer the other leg's bill", () => {
+    const cloudWithCreditPaid: Partial<LaunchPlan> = {
+      compute: "cloud_paid",
+      modelProvider: "anthropic",
+      creditSettled: true,
+    };
+    // The oracle must still say money is owed here. If it does not, it has
+    // reacquired a blanket short-circuit and the enumeration above is
+    // asserting nothing about F2.
+    expect(owesMoney(cloudWithCreditPaid, NEW_USER_FACTS)).toBe(true);
+
+    // And the settlement that DOES match the bill must clear it, or the
+    // oracle would simply demand payment forever and pass vacuously.
+    expect(
+      owesMoney(
+        { compute: "cloud_paid", modelProvider: "anthropic", computeSettled: true },
+        NEW_USER_FACTS,
+      ),
+    ).toBe(false);
   });
 
   // The free path, spelled out: local compute with your own key never sees a
@@ -440,16 +544,41 @@ describe("the checkout step appears exactly when money is owed", () => {
     ).toBe("project-choice");
   });
 
-  // `paid` is what stops the step recurring while the entitlement query is
+  // Settlement is what stops the step recurring while the entitlement query is
   // still catching up with the webhook. Without it a confirmed purchase
   // derives the user straight back to a payment they already made.
-  it("does not show checkout again once the plan is marked paid", () => {
+  it("does not show checkout again once the compute leg is settled", () => {
     expect(
       deriveStep(
-        { compute: "cloud_paid", modelProvider: "anthropic", paid: true },
+        { compute: "cloud_paid", modelProvider: "anthropic", computeSettled: true },
         NEW_USER_FACTS,
       ),
     ).toBe("project-choice");
+  });
+
+  // F2, pinned as a state assertion to complement the transition walk: a
+  // settlement may only silence its OWN leg. Credit bought for Reliant's
+  // models cannot pay for a cloud machine.
+  it("still charges for compute when only the credit leg was settled", () => {
+    expect(
+      deriveStep(
+        { compute: "cloud_paid", modelProvider: "anthropic", creditSettled: true },
+        NEW_USER_FACTS,
+      ),
+    ).toBe("checkout");
+  });
+
+  it("still charges for credit when only the compute leg was settled", () => {
+    expect(
+      deriveStep(
+        {
+          compute: "local_daemon",
+          modelProvider: "reliant_credits",
+          computeSettled: true,
+        },
+        NEW_USER_FACTS,
+      ),
+    ).toBe("checkout");
   });
 
   // Facts default to "nothing is entitled" so a caller that has not got them

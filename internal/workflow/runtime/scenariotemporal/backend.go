@@ -32,6 +32,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	// Imported for its init(), which registers every activity's input/output
@@ -43,6 +44,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/simulator"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -107,10 +109,46 @@ func newRecorder() *recorder {
 func (r *recorder) markReached(id string) {
 	// The stand-in node of a black-boxed sub-workflow is harness scaffolding,
 	// not a graph node a scenario can name. Reporting it would put an id in
-	// reached that no workflow contains.
-	if id == "" || strings.HasSuffix(id, blackBoxNodeID) {
+	// reached that no workflow contains. Its ANCESTORS are still real, and
+	// reaching the stand-in is precisely the proof that the ref node above it
+	// was entered — so strip the scaffolding and keep the path.
+	if id == "" {
 		return
 	}
+	if strings.HasSuffix(id, blackBoxNodeID) {
+		id = strings.TrimSuffix(strings.TrimSuffix(id, blackBoxNodeID), ".")
+		if id == "" {
+			return
+		}
+	}
+
+	// A qualified path is self-describing: "implementations.impl.agent_loop"
+	// could only have been produced by entering `implementations`, then `impl`,
+	// then `agent_loop`. Recording those ancestors is how a STRUCTURAL node —
+	// a loop or a `workflow` node — becomes observable at all, because it
+	// dispatches no activity of its own and so no mock can ever see it.
+	//
+	// This reads the path the REAL executors composed (types.RuntimeContext's
+	// NodePath, built at every nesting boundary); it does not walk the graph or
+	// decide what runs next, which is the line this package must not cross.
+	//
+	// WorkflowCheckpoint covers only some of these, and cannot be made to cover
+	// the rest: DynamicWorkflow checkpoints top-level non-loop nodes, and the
+	// SEQUENTIAL loop executor checkpoints per iteration — but the PARALLEL one
+	// has no iteration checkpoint at all (deliberately: a checkpoint means
+	// "resume here", and concurrent iterations have no single resume position).
+	// So parallel-compete's `implementations` announced itself nowhere, and its
+	// absence from `reached` read as "the loop never ran" when in fact all three
+	// iterations had completed.
+	for i, c := range id {
+		if c == '.' {
+			r.markReachedExact(id[:i])
+		}
+	}
+	r.markReachedExact(id)
+}
+
+func (r *recorder) markReachedExact(id string) {
 	if !r.seen[id] {
 		r.seen[id] = true
 		r.reached = append(r.reached, id)
@@ -234,7 +272,14 @@ func newEventTable(events []simulator.SimulatedEvent) *eventTable {
 // A node with NO events at all is left silent: never mocking a node is the
 // existing, deliberate "empty output" contract (an unmocked save_message must
 // stay free). Only exhausting a node the author DID mock is under-specification.
+// diagEnabled / diagHook: TEMPORARY diagnostic seam. Remove.
+var diagEnabled bool
+var diagHook func(string)
+
 func (t *eventTable) next(nodeID string) map[string]interface{} {
+	if diagEnabled && diagHook != nil {
+		diagHook(nodeID)
+	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -310,11 +355,14 @@ func (r *Runner) Run(scenario *simulator.Scenario) *Result {
 	rec := newRecorder()
 	events := newEventTable(scenario.Events)
 
-	if err := r.registerActivities(env, rec, events); err != nil {
+	if err := r.registerActivities(env, rec, events, scenario); err != nil {
 		return errorResult(scenario, err, start)
 	}
 
-	inputs := map[string]interface{}{}
+	// project_path is a real production input, not harness scaffolding: it is
+	// what ChatService.buildWorkflowInputs injects, and preset loading fails
+	// terminally without it. A scenario may override it like any other input.
+	inputs := map[string]interface{}{"project_path": scenarioProjectPath}
 	for k, v := range scenario.Inputs {
 		inputs[k] = v
 	}
@@ -448,8 +496,15 @@ func errorResult(scenario *simulator.Scenario, err error, start time.Time) *Resu
 // SaveMessage is always included: a node's inline `save_message:` block runs a
 // SaveMessage activity even when no save_message NODE exists anywhere in the
 // graph, and an unregistered activity fails the step rather than being skipped.
-func nodeActivityNames(wf *reliantv1.Workflow) map[string]bool {
+//
+// transparent names the referenced sub-workflows whose bodies this run executes
+// (see transparentRefs). Their activities must be registered too: a transparent
+// ref runs REAL nodes, and an activity nobody registered does not fail fast —
+// Temporal retries it until the step's ScheduleToClose deadline expires, which
+// surfaces as "deadline exceeded" with no clue which activity was missing.
+func nodeActivityNames(wf *reliantv1.Workflow, transparent map[string]bool) map[string]bool {
 	names := map[string]bool{"SaveMessage": true}
+	visited := map[string]bool{}
 	var walk func(nodes []*reliantv1.Node)
 	walk = func(nodes []*reliantv1.Node) {
 		for _, n := range nodes {
@@ -467,6 +522,17 @@ func nodeActivityNames(wf *reliantv1.Workflow) map[string]bool {
 			}
 			if inline := model.NodeInlineWorkflow(n); inline != nil {
 				walk(inline.GetNodes())
+				continue
+			}
+			if ref := model.NodeRef(n); ref != "" {
+				name := bareWorkflowName(ref)
+				if !transparent[name] || visited[name] {
+					continue
+				}
+				visited[name] = true
+				if sub, err := loadBuiltinWorkflowForScenario(name); err == nil {
+					walk(sub.GetNodes())
+				}
 			}
 		}
 	}
@@ -549,6 +615,131 @@ func bareWorkflowName(ref string) string {
 	return ref
 }
 
+// scenarioProjectPath is the working directory every scenario run executes in.
+//
+// It must be NON-EMPTY. Preset loading treats an unset project path as a
+// TerminalError ("project path not set, cannot load presets"), and it is
+// checked before any preset is fetched — so a node carrying `presets:` fails
+// during setup rather than executing. That is not a product defect: production
+// always supplies this, injected as the `project_path` workflow input by
+// ChatService.buildWorkflowInputs, which is exactly what this mirrors. The
+// harness simply never set it, so every ref node with presets — parallel-compete's
+// `review` and `synthesizer`, get-it-right's `attempt.review` — died in setup and
+// took the whole run's outcome with it.
+//
+// The path never has to exist on disk: LoadPresetParams is stubbed to an empty
+// map like every other infrastructure activity, so nothing reads it.
+const scenarioProjectPath = "/scenario/project"
+
+// transparentRefs decides, for one scenario, which referenced sub-workflows are
+// executed for real instead of being replaced by a black box.
+//
+// This is the Temporal-side twin of the fast simulator's
+// workflowNodeIsTransparent gate, and it must exist for the same load-bearing
+// reason: executing an UNMOCKED `builtin://structured-agent` does not merely
+// produce wrong output, it does not terminate. Its loop runs
+// `while: (outputs.completed != true || ...) && (inputs.max_turns == 0 || ...)`,
+// `completed` is computed from a response tool that an empty mock never reports,
+// and max_turns defaults to 0 meaning UNLIMITED. Opening every ref by default is
+// what previously produced a measured 766,072-iteration runaway.
+//
+// So the rule matches the simulator's, and matches docs/workflows/testing.mdx: a
+// ref is a black box unless the scenario targets its INTERNALS with a qualified
+// id. An event on the ref node itself ("review") mocks that node and leaves its
+// body opaque; an event strictly beneath it ("review.agent_loop.call_llm") is the
+// author saying the body is what is under test.
+//
+// The decision is keyed by sub-workflow NAME rather than by node path because
+// the loader activity is the only place a body can be substituted, and all the
+// runtime tells it is `workflow_name` — no node path reaches it. A name is
+// therefore opened when ANY node referencing it is targeted internally, which is
+// the direction that preserves the gate's purpose: it never opens a name no
+// scenario asked about.
+func transparentRefs(wf *reliantv1.Workflow, events []simulator.SimulatedEvent) map[string]bool {
+	targeted := make(map[string]bool, len(events))
+	for _, e := range events {
+		if e.Node != "" {
+			targeted[e.Node] = true
+		}
+	}
+	// A ref is transparent when some event names a node strictly inside it.
+	hasInternalEvent := func(nodePath string) bool {
+		prefix := nodePath + "."
+		for node := range targeted {
+			if strings.HasPrefix(node, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+
+	transparent := map[string]bool{}
+	// visited guards against a ref cycle; a workflow that (transitively)
+	// references itself would otherwise recurse forever.
+	visited := map[string]bool{}
+
+	var walk func(nodes []*reliantv1.Node, prefix string)
+	walk = func(nodes []*reliantv1.Node, prefix string) {
+		for _, n := range nodes {
+			nodePath := joinScenarioNodePath(prefix, n.GetId())
+
+			// An inline body is part of THIS graph: its nodes carry the parent's
+			// path prefix and it is always executed, so descend unconditionally.
+			if inline := model.NodeInlineWorkflow(n); inline != nil {
+				walk(inline.GetNodes(), nodePath)
+				continue
+			}
+
+			ref := model.NodeRef(n)
+			if ref == "" || !hasInternalEvent(nodePath) {
+				continue
+			}
+			name := bareWorkflowName(ref)
+			transparent[name] = true
+
+			// Descend into the ref's own graph so a body two levels down can be
+			// opened too — one-ring reaches `impl_loop.attempt.implement` only
+			// through get-it-right's body. Nodes inside the ref are addressed
+			// from the REFERRING node's path, which is how the real runtime
+			// composes NodePath at a sub-workflow boundary.
+			if visited[name] {
+				continue
+			}
+			visited[name] = true
+			if sub, err := loadBuiltinWorkflowForScenario(name); err == nil {
+				walk(sub.GetNodes(), nodePath)
+			}
+		}
+	}
+	walk(wf.GetNodes(), "")
+	return transparent
+}
+
+// joinScenarioNodePath mirrors the runtime's own node-path composition
+// (runtime.joinNodePath) so the ids computed here are the ids a scenario writes.
+func joinScenarioNodePath(prefix, nodeID string) string {
+	if prefix == "" {
+		return nodeID
+	}
+	if nodeID == "" {
+		return prefix
+	}
+	return prefix + "." + nodeID
+}
+
+// loadBuiltinWorkflowForScenario resolves a builtin sub-workflow by bare name.
+func loadBuiltinWorkflowForScenario(name string) (*reliantv1.Workflow, error) {
+	data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
+	if err != nil {
+		return nil, fmt.Errorf("read builtin workflow %q: %w", name, err)
+	}
+	wf, err := wfyaml.ParseWorkflow(data)
+	if err != nil {
+		return nil, fmt.Errorf("parse builtin workflow %q: %w", name, err)
+	}
+	return wf, nil
+}
+
 // blackBoxNodeID is the id of the single node an opaque sub-workflow runs. It
 // is deliberately not a name any scenario would write, and it is filtered out of
 // the reached set so a scenario can neither see nor assert on it.
@@ -571,7 +762,12 @@ func blackBoxWorkflow(wf *reliantv1.Workflow) *reliantv1.Workflow {
 	}
 }
 
-func (r *Runner) registerActivities(env *testsuite.TestWorkflowEnvironment, rec *recorder, events *eventTable) error {
+func (r *Runner) registerActivities(
+	env *testsuite.TestWorkflowEnvironment,
+	rec *recorder,
+	events *eventTable,
+	scenario *simulator.Scenario,
+) error {
 	wfJSON, err := protojson.Marshal(r.workflow)
 	if err != nil {
 		return fmt.Errorf("marshal workflow: %w", err)
@@ -594,19 +790,32 @@ func (r *Runner) registerActivities(env *testsuite.TestWorkflowEnvironment, rec 
 	// leaves its body opaque, and only an event naming a node strictly INSIDE
 	// the ref (a qualified id like `parent.inner`) makes the body transparent.
 	//
-	// Nothing here loads a real sub-workflow yet, so every ref is opaque. That
-	// is the safe default: a scenario that wants a body executed says so with a
-	// qualified event, and until this grows real ref loading, such a scenario
-	// fails visibly on an unconsumed event rather than hanging the lane.
+	// A ref the scenario DID target internally is loaded for real, so the body
+	// under test actually runs; see transparentRefs for why that gate is keyed
+	// by name and why opening every ref by default does not terminate.
+	transparent := transparentRefs(r.workflow, scenario.Events)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, in map[string]string) (runtime.LoadedWorkflow, error) {
 			// A ref is written "builtin://agent" while the loaded workflow is
 			// named "agent", so compare on the bare name — otherwise a workflow
 			// requesting ITSELF is misread as a sub-workflow, and vice versa.
-			if ref := in["workflow_name"]; ref != "" && bareWorkflowName(ref) != r.workflow.GetName() {
-				return runtime.LoadedWorkflow{WorkflowJSON: blackBoxJSON}, nil
+			ref := in["workflow_name"]
+			name := bareWorkflowName(ref)
+			if ref == "" || name == r.workflow.GetName() {
+				return runtime.LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 			}
-			return runtime.LoadedWorkflow{WorkflowJSON: wfJSON}, nil
+			if transparent[name] {
+				sub, err := loadBuiltinWorkflowForScenario(name)
+				if err != nil {
+					return runtime.LoadedWorkflow{}, err
+				}
+				subJSON, err := protojson.Marshal(sub)
+				if err != nil {
+					return runtime.LoadedWorkflow{}, fmt.Errorf("marshal sub-workflow %q: %w", name, err)
+				}
+				return runtime.LoadedWorkflow{WorkflowJSON: subJSON}, nil
+			}
+			return runtime.LoadedWorkflow{WorkflowJSON: blackBoxJSON}, nil
 		},
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)
@@ -775,7 +984,7 @@ func (r *Runner) registerActivities(env *testsuite.TestWorkflowEnvironment, rec 
 	// Without it a scenario that omits a field the workflow's CEL reads (e.g.
 	// call_llm's compaction_threshold) fails on a missing key here while
 	// passing in the simulator, which normalizes identically.
-	for name := range nodeActivityNames(r.workflow) {
+	for name := range nodeActivityNames(r.workflow, transparent) {
 		activityName := name
 		// ExecuteRunStep is dispatched with a FLAT map carrying step_id /
 		// loop_node_id (step_executor.go startRun), NOT the types.ActivityInput

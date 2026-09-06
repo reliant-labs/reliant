@@ -62,13 +62,12 @@ import {
   getWalletBalanceState,
   getWalletWarning,
   isBackendModalError,
-  isComputePlan,
+  isUnpricedComputePlan,
   nanosFromFields,
   normalizeInvoiceStatus,
   deriveComputeCapacity,
   estimateCreditRunwayDays,
   isPlanDetailUnavailable,
-  spendSampleDays,
   type DaemonSizeName,
 } from "./billingUtils";
 import { useLLMSpend } from "@/hooks/useReliantAIQueries";
@@ -492,11 +491,24 @@ function OverviewTab({
       wallet?.balanceUsdMicros,
       wallet?.balanceCents,
     );
-    const entries = spendQ.data?.entries ?? [];
+    // The day count comes from the SERVER, not from the entries.
+    //
+    // This used to be `spendSampleDays(entries)`, counting distinct
+    // `entry.periodStart` values — a field GetLLMSpend has never populated and
+    // structurally cannot, since entries are aggregated per (key, model)
+    // across the whole range. The count was therefore 0 on every real
+    // response, always below the minimum, and this headline feature rendered
+    // for nobody while its test passed against a fixture that invented the
+    // shape.
+    //
+    // 0 is the honest "we cannot say" and estimateCreditRunwayDays withholds
+    // on it, which is why no `?? entries.length` fallback belongs here: a
+    // plausible substitute denominator is exactly what turns a withheld
+    // estimate into a confident wrong one.
     const runwayDays = estimateCreditRunwayDays(
       nanos,
       spendQ.data?.totalSpend ?? 0,
-      spendSampleDays(entries),
+      spendQ.data?.sampleDays ?? 0,
     );
     return {
       balance: formatCurrencyFromWalletFields(
@@ -524,9 +536,20 @@ function OverviewTab({
     const plan = subscription?.plan;
     const d = derivePlanDisplay(plan);
     const degraded = isPlanDetailUnavailable(plan);
-    const usageFailed = !!usageQ.error && !usage;
+    // Two roads to "we don't know what you used", and they must converge.
+    //
+    // The query erroring was the only one the page recognised. But the server
+    // can also answer 200 with nothing to say — it did exactly that for
+    // months, from a stub — and `usedMinutes: 0` on a successful response is
+    // indistinguishable from a real zero unless the server states which it
+    // is. `usageMeasured` is that statement, and it is `false` by default, so
+    // a server too old to send it is read as "unknown" rather than as
+    // "measured zero" — the direction that withholds rather than asserts.
+    const usageFailed = (!!usageQ.error && !usage) || (!!usage && !usage.usageMeasured);
 
     const includedMinutes = usage?.includedMinutes ?? d.includedMinutes;
+    // Only ever read when `usageFailed` is false. Every consumer below is
+    // gated on it, so no unmeasured zero reaches a label.
     const usedMinutes = usage?.usedMinutes ?? 0;
 
     return {
@@ -544,7 +567,11 @@ function OverviewTab({
         degraded || includedMinutes < 0
           ? null
           : `${Math.round(includedMinutes / 60)} h included`,
-      usedHoursLabel: degraded ? null : `${(usedMinutes / 60).toFixed(1)} h`,
+      // null when unmeasured, NOT "0.0 h". Every consumer already treats null
+      // as "render nothing", which is the same discipline `includedHoursLabel`
+      // above uses for a plan whose detail did not load.
+      usedHoursLabel:
+        degraded || usageFailed ? null : `${(usedMinutes / 60).toFixed(1)} h`,
       allowedSizesLabel: degraded ? null : formatAllowedSizes(d.allowedSizes),
       overageRateLabel: formatOverageRate(d.overageCentsPerMinute),
       capacity:
@@ -555,8 +582,12 @@ function OverviewTab({
               includedMinutes,
               overageMinutes: usage?.overageMinutes ?? 0,
             }),
+      // Overage is metered too, so an unmeasured response must not produce a
+      // dollar figure. Gated on `usageFailed` as well as on the value: "$0.00
+      // so far" from a server that measured nothing is the same lie as
+      // "0.0 h used", in the currency the user actually cares about.
       estimatedOverageCostLabel:
-        usage && usage.overageMinutes > 0
+        !usageFailed && usage && usage.overageMinutes > 0
           ? formatCentsAsDollars(usage.estimatedOverageCostCents ?? 0)
           : null,
       grantedMinutesRemaining: usage?.grantedMinutesRemaining ?? 0,
@@ -566,7 +597,12 @@ function OverviewTab({
       // the cap. undefined budgetCents means no cap is stored.
       budgetCents: subscription?.budgetCents,
       overageCentsPerMinute: d.overageCentsPerMinute,
-      overageSpentCents: Number(usage?.estimatedOverageCostCents ?? 0),
+      // The overage control shows spend against the cap. null, not 0:
+      // unmeasured rendered as zero spent tells a user their whole limit is
+      // still available.
+      overageSpentCents: usageFailed
+        ? null
+        : Number(usage?.estimatedOverageCostCents ?? 0),
       monthlyPriceCents: d.monthlyPriceCents,
       planDetailUnavailable: degraded,
       usageUnavailable: usageFailed,
@@ -883,8 +919,13 @@ function PlansTab() {
   // How many compute plans the server sent that we had to drop for having no
   // price. Distinguishes "this env sells nothing" from "the catalog is there
   // but its prices never reached the database" — see the empty state below.
+  //
+  // Deliberately-unpriced plans are excluded: `plan_compute_free` carries no
+  // Stripe price in any environment because a free trial is never charged
+  // through checkout, so counting it told users to restart a control plane
+  // whose catalog was already correct.
   const unpricedPlanCount = (plansQ.data?.plans ?? []).filter(
-    (p) => isComputePlan(p) && !isPurchasableComputePlan(p),
+    isUnpricedComputePlan,
   ).length;
   const currentPlanId = subQ.data?.subscription?.plan?.id ?? null;
 

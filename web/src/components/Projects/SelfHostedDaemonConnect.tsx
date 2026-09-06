@@ -17,7 +17,11 @@ import {
   daemonStartCommandNeedsEditing,
   GATEWAY_URL_PLACEHOLDER,
 } from "@/lib/cli-commands";
-import { ReliantDownloadOptions } from "@/components/ReliantDownloadOptions";
+import {
+  ReliantDownloadOptions,
+  supportsHomebrewCask,
+  useDetectedOS,
+} from "@/components/ReliantDownloadOptions";
 
 
 /**
@@ -58,8 +62,8 @@ interface SelfHostedDaemonConnectProps {
  * This is the single source of truth for "how do I download and set up
  * Reliant on my own machine." Onboarding's ComputeStep, the ProjectPicker's
  * "Connect a new daemon" modal, and Settings → Machines all render this same
- * panel, so the download links, Homebrew cask, token step, and start command
- * only ever have to be right in one place.
+ * panel, so the download links, the platform-gated Homebrew cask, the token
+ * step, and the start command only ever have to be right in one place.
  */
 export function SelfHostedDaemonConnect({
   onConnected,
@@ -71,6 +75,7 @@ export function SelfHostedDaemonConnect({
   const [patCopied, setPatCopied] = useState(false);
   const [manualFeedback, setManualFeedback] = useState<string | null>(null);
   const { activeDaemon, daemons, loading: daemonLoading } = useDaemonStatus();
+  const detectedOS = useDetectedOS();
   const events = useEventBus();
   const notifiedConnectedRef = useRef(false);
 
@@ -364,8 +369,12 @@ export function SelfHostedDaemonConnect({
           {isElectron && cliInstalled === false && (
             <>
               {" "}
-              If you skip the CLI install, install it separately via Homebrew or
-              download the binary.
+              If you skip the CLI install, reopening the desktop app adds{" "}
+              <code className="font-mono">reliant</code> to your PATH
+              {supportsHomebrewCask(detectedOS)
+                ? ", or you can install the cask with Homebrew"
+                : ""}
+              .
             </>
           )}
         </p>

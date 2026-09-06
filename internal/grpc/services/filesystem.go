@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/filetree"
 	"github.com/reliant-labs/reliant/internal/localfs"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
 )
 
 // FileSystemService implements the FileSystemService RPC handlers
@@ -1160,7 +1161,15 @@ func (s *FileSystemService) ListDirectory(
 		path = home
 	}
 
-	if !filepath.IsAbs(path) {
+	// ospath, not filepath: this handler and FileSystemProxyService.ListDirectory
+	// are two implementations of ONE interface serving one picker UI, and the
+	// client cannot tell which is mounted. Judging absoluteness by the host OS
+	// here would make the same path legal or illegal depending on whether a
+	// daemon happens to be attached. The guard's job is only to refuse a path
+	// that would be resolved against this process's working directory; whether
+	// the path exists on this host is ReadDir's answer to give, and "no such
+	// directory" is a truer error than "path must be absolute".
+	if !ospath.IsAbs(path) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path must be absolute"))
 	}
 
@@ -1209,7 +1218,9 @@ func (s *FileSystemService) CreateDirectory(
 	if path == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path is required"))
 	}
-	if !filepath.IsAbs(path) {
+	// See ListDirectory: judged OS-agnostically so this handler and the
+	// daemon-routed one accept the same set of paths.
+	if !ospath.IsAbs(path) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path must be absolute"))
 	}
 

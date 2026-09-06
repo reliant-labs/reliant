@@ -44,10 +44,48 @@ const FULLY_POPULATED_PLAN: Required<LaunchPlan> = {
   modelProvider: "anthropic",
   workflowParams: { prompt: "hello" },
   commitKey: "1f0d1a2b-3c4d-5e6f-7a8b-9c0d1e2f3a4b",
+  computePlanId: "plan_compute_small",
+  aiCreditCents: 2000,
+  computeSettled: true,
+  creditSettled: true,
   computeAutoSkipped: true,
 };
 
+/**
+ * The fixture must name EVERY key on LaunchPlan, or the per-key scan below
+ * silently skips the ones it forgot.
+ *
+ * `Required<LaunchPlan>` above makes tsc reject a missing key — but
+ * `tsconfig.app.json` excludes `*.test.*`, so nothing type-checks this file
+ * and the annotation is decoration. The checkout step's own fields
+ * (`computePlanId`, `aiCreditCents`, the settlement pair) were in fact absent
+ * here for exactly that reason. This asserts the coverage at runtime, where it
+ * is actually enforced.
+ */
+const LAUNCH_PLAN_KEYS: (keyof LaunchPlan)[] = [
+  "intent",
+  "compute",
+  "repo",
+  "localPath",
+  "projectName",
+  "workflowId",
+  "modelProvider",
+  "workflowParams",
+  "commitKey",
+  "computePlanId",
+  "aiCreditCents",
+  "computeSettled",
+  "creditSettled",
+  "computeAutoSkipped",
+];
+
 describe("launchPlanSchema vs LaunchPlan", () => {
+  it("exercises every LaunchPlan field, so the per-key scan cannot skip one", () => {
+    expect(Object.keys(FULLY_POPULATED_PLAN).sort()).toEqual(
+      [...LAUNCH_PLAN_KEYS].sort(),
+    );
+  });
+
   it("parses a fully-populated plan without stripping or rejecting a field", () => {
     const parsed = launchPlanSchema.parse(FULLY_POPULATED_PLAN);
     expect(parsed).toEqual(FULLY_POPULATED_PLAN);

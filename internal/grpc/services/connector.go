@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -17,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
+	"github.com/reliant-labs/reliant/internal/ospath"
 )
 
 // ConnectorService is the JWT-authed surface for managing connector grants.
@@ -98,7 +98,12 @@ func (s *ConnectorService) buildGrant(userID string, msg *reliantv1.CreateConnec
 	if pathRoot == "" {
 		return nil, errors.New("a connector must specify a directory it may access")
 	}
-	if !filepath.IsAbs(pathRoot) {
+	// ospath, not filepath: the grant is bound to a specific daemon
+	// (daemonID above is required) and PathRoot names a directory on THAT
+	// machine, which may be Windows. The enforcement side is correct to use
+	// filepath — it runs on the daemon, where the host OS is the right
+	// authority — but this validation runs on the server.
+	if !ospath.IsAbs(pathRoot) {
 		// A relative root would be resolved against whatever the daemon's
 		// working directory happens to be, which is not a decision the user
 		// can reason about when granting access.
@@ -121,12 +126,16 @@ func (s *ConnectorService) buildGrant(userID string, msg *reliantv1.CreateConnec
 	}
 
 	grant := &connectorgrant.Grant{
-		ID:            uuid.New().String(),
-		UserID:        userID,
-		DaemonID:      daemonID,
-		Name:          name,
-		AllowedTools:  tools,
-		PathRoot:      filepath.Clean(pathRoot),
+		ID:           uuid.New().String(),
+		UserID:       userID,
+		DaemonID:     daemonID,
+		Name:         name,
+		AllowedTools: tools,
+		// ospath.Clean for the same reason: filepath.Clean on a Linux server
+		// leaves a Windows root's backslashes in place, and the confinement
+		// check downstream compares this stored prefix against paths the
+		// daemon builds.
+		PathRoot:      ospath.Clean(pathRoot),
 		ExecMode:      execMode,
 		ExecAllowlist: execAllowlist,
 	}

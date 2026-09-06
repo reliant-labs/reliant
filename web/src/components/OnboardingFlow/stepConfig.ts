@@ -136,15 +136,22 @@ export function visibleStepsForPlan(
  * Shared by `deriveStep` and `getStepsForPlan` rather than written twice: the
  * one thing that must never happen is the bar listing a step derivation will
  * not route to (or vice versa), and two copies of this condition is how that
- * happens. `plan.paid` short-circuits it — see {@link LaunchPlan.paid}, which
- * is written only from a server-confirmed purchase.
+ * happens.
+ *
+ * There is deliberately NO settlement short-circuit here. There used to be —
+ * `if (plan.paid) return false` — and because it sat above `requiresPayment`
+ * it cancelled the whole bill rather than the leg it had actually paid. AI
+ * credit bought on a local plan therefore satisfied a cloud subscription the
+ * user chose afterwards via Back, and derivation walked past the only screen
+ * that can charge. Settlement is now read per leg INSIDE `requiresPayment`,
+ * beside the server fact each one stands in for, so it can only ever cancel
+ * its own debt.
  */
 function checkoutIsOwed(
   plan: Partial<LaunchPlan>,
   facts: OnboardingFactsInput,
 ): boolean {
   if (!plan.compute || !plan.modelProvider) return false;
-  if (plan.paid) return false;
   return requiresPayment(plan, facts).any;
 }
 
@@ -187,7 +194,13 @@ export function deriveStep(
  */
 export const BACK_CLEARS: Record<OnboardingStepId, (keyof LaunchPlan)[]> = {
   'compute': [],
-  'model': ['compute'],
+  // `computeAutoSkipped` describes a PAST EVENT ("we resolved compute without
+  // asking"), and clearing `compute` un-does that event — so the flag has to go
+  // with it. Leaving it set made a field outlive the thing it describes, which
+  // is the same defect class as the old `paid` verdict surviving a Back that
+  // changed the bill. `visibleStepsForPlan` still tolerates a stale flag,
+  // because a hand-edited URL can carry one that no Back produced.
+  'model': ['compute', 'computeAutoSkipped'],
   // Back from payment returns to the decision that created the cost. It must
   // also drop the purchase selections made ON this step, or derivation lands
   // the user back here with a plan chosen for a compute option they just

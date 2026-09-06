@@ -162,6 +162,34 @@ export function isComputePlan(plan: { productId: string }): boolean {
   return plan.productId === COMPUTE_PRODUCT_ID;
 }
 
+/**
+ * A compute plan that SHOULD have a price and does not — the stale-catalog
+ * symptom, and the only thing the "Plan pricing unavailable … restart the
+ * control plane" message should ever be counted from.
+ *
+ * The Stripe price id is what separates the symptom from the healthy case.
+ * `plan_compute_free` is deliberately unpriced in every environment — a free
+ * trial is never charged through checkout, so it carries `stripe_price_id:
+ * null` and no `price_cents`. Counting it meant an environment seeded with
+ * only the free plan told the user to restart a control plane whose catalog
+ * was entirely correct: the alarming message this count exists to eliminate,
+ * fired on the healthy case.
+ *
+ * A plan that names a Stripe price but arrived with no amount is the real
+ * defect — Stripe knows what it costs and our row does not, which is exactly
+ * what a plansync that ran before the catalog gained `price_cents` produces.
+ */
+export function isUnpricedComputePlan(
+  plan: PlanPricing & { productId: string; stripePriceId: string },
+): boolean {
+  return (
+    isComputePlan(plan) &&
+    !isPurchasableComputePlan(plan) &&
+    // Intentionally unpriced: nothing to sell it with, so nothing is missing.
+    plan.stripePriceId !== ""
+  );
+}
+
 /** The catalog's product id for machine compute (control-plane plans.yaml). */
 const COMPUTE_PRODUCT_ID = "prod_compute";
 
@@ -328,27 +356,20 @@ export const MIN_RUNWAY_SAMPLE_DAYS = 3;
 /** Past this, the number is arithmetic rather than information. */
 const RUNWAY_CAP_DAYS = 90;
 
-/**
- * How many distinct days the spend sample actually covers.
- *
- * Counting ENTRIES would count one day billed across three models as three
- * days and understate the burn rate threefold — and the burn rate is the
- * denominator of a dollar figure on the page.
- */
-export function spendSampleDays(
-  entries: { periodStart?: TimestampLike }[],
-): number {
-  const days = new Set<string>();
-  for (const entry of entries) {
-    if (!entry.periodStart) continue;
-    days.add(
-      new Date(Number(entry.periodStart.seconds) * 1000)
-        .toISOString()
-        .slice(0, 10),
-    );
-  }
-  return days.size;
-}
+// spendSampleDays USED TO LIVE HERE, and its deletion is the fix, not tidying.
+//
+// It counted distinct `entry.periodStart` values to get the burn rate's
+// denominator. GetLLMSpend has never populated that field and structurally
+// cannot: entries are aggregated per (key, model) across the whole requested
+// range, so no per-day row exists to attach a period to. The function
+// therefore returned 0 for every real response, the runway was suppressed for
+// every user, and the suite reported the feature working because its fixture
+// synthesized a shape the wire does not carry.
+//
+// The count now arrives as GetLLMSpendResponse.sample_days, computed by the
+// only party that sees per-request timestamps. Reinstating a client-side
+// derivation would silently restore the bug, so there is deliberately no
+// function here to reach for.
 
 /**
  * Whole days of credit remaining at the observed rate, or null when we should

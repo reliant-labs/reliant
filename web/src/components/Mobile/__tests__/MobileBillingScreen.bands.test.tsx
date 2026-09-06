@@ -80,6 +80,11 @@ beforeEach(() => {
     byDay: [],
     byWorkspace: [],
     grantedMinutesRemaining: 0,
+    // Not optional. Omitting it makes the fixture describe a response no
+    // measuring server sends, and the screen would correctly refuse to draw
+    // hours for it — so a fixture without this flag tests the degraded path
+    // while claiming to test the healthy one.
+    usageMeasured: true,
   };
 });
 
@@ -173,6 +178,54 @@ describe("the phone distinguishes the two products too", () => {
     expect(compute.getByText(/no compute plan/i)).toBeInTheDocument();
     // Not the stale-catalog advice — a new user has nothing to restart.
     expect(compute.queryByText(/control plane/i)).toBeNull();
+  });
+
+  /**
+   * The phone shares billingUtils with desktop for the NUMBERS, so it shared
+   * the desktop defect too: a server that could not measure usage answered
+   * 200 with used_minutes = 0, and this screen printed "0.0 h used" as fact.
+   *
+   * On a phone that is worse, not better — there is no surrounding detail to
+   * contradict it, which is the same reasoning already written above the
+   * `detailUnavailable` branch.
+   *
+   * Paired assertions, deliberately: suppressing the number unconditionally
+   * would satisfy the first test alone while losing a genuine zero.
+   */
+  it("withholds hours used when the server did not measure", () => {
+    state.usage = {
+      includedMinutes: 2460,
+      usedMinutes: 0,
+      overageMinutes: 0,
+      estimatedOverageCostCents: 0,
+      byDay: [],
+      byWorkspace: [],
+      grantedMinutesRemaining: 0,
+      usageMeasured: false,
+    };
+    renderScreen();
+
+    const compute = within(screen.getByRole("region", { name: /^compute$/i }));
+    expect(compute.queryByText(/0\.0 h used/i)).toBeNull();
+    expect(compute.getByText(/usage unavailable/i)).toBeInTheDocument();
+  });
+
+  it("still prints 0.0 h used for a genuine zero", () => {
+    state.usage = {
+      includedMinutes: 2460,
+      usedMinutes: 0,
+      overageMinutes: 0,
+      estimatedOverageCostCents: 0,
+      byDay: [],
+      byWorkspace: [],
+      grantedMinutesRemaining: 0,
+      usageMeasured: true,
+    };
+    renderScreen();
+
+    const compute = within(screen.getByRole("region", { name: /^compute$/i }));
+    expect(compute.getByText(/0\.0 h used/i)).toBeInTheDocument();
+    expect(compute.queryByText(/usage unavailable/i)).toBeNull();
   });
 
   it("names no payment brand", () => {
