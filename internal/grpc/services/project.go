@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitref"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -195,7 +196,16 @@ func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 	logging.Info("project-dir-heal: ensuring project dirs on daemon",
 		"userID", userID, "daemonID", daemonID, "projects", len(projects))
 	for _, p := range projects {
-		if p == nil || p.Path == "" || !filepath.IsAbs(p.Path) {
+		// Judged with ospath because the mkdir runs on the daemon, not here.
+		// Under filepath.IsAbs this heal silently skipped every project
+		// belonging to a Windows daemon, so their directories were never
+		// created and the skip left no trace.
+		if p == nil {
+			continue
+		}
+		if p.Path == "" || !ospath.IsAbs(p.Path) {
+			logging.Warn("project-dir-heal: skipping project with a non-absolute path",
+				"userID", userID, "daemonID", daemonID, "projectID", p.ID, "path", p.Path)
 			continue
 		}
 		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
@@ -345,7 +355,10 @@ func (s *ProjectService) CreateProject(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("name and path are required"))
 	}
 
-	if req.Msg.Path != "" && !filepath.IsAbs(req.Msg.Path) {
+	// ospath, not filepath: the path names a directory on the user's DAEMON,
+	// which may run on Windows while this server runs on Linux. filepath.IsAbs
+	// compiles to the host's rules and judges every `C:\...` path relative.
+	if req.Msg.Path != "" && !ospath.IsAbs(req.Msg.Path) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project path must be absolute, got: %q", req.Msg.Path))
 	}
 

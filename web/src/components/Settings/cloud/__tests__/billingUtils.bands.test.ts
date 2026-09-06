@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import type { Plan, PlanLimits } from "@/gen/controlplane/v1/public/shared_pb";
@@ -7,7 +10,6 @@ import {
   estimateCreditRunwayDays,
   formatRunway,
   isPlanDetailUnavailable,
-  spendSampleDays,
 } from "../billingUtils";
 
 /**
@@ -92,30 +94,38 @@ describe("credit runway is estimated, or withheld — never guessed", () => {
   });
 });
 
-describe("the spend sample is measured, not assumed", () => {
-  const day = (iso: string) => ({
-    periodStart: { seconds: BigInt(Math.floor(Date.parse(iso) / 1000)) },
+describe("the spend sample comes from the server, not from the entries", () => {
+  /**
+   * `spendSampleDays` used to live in billingUtils and count distinct
+   * `entry.periodStart` values. GetLLMSpend has never populated that field
+   * and structurally cannot — entries are aggregated per (key, model) across
+   * the whole range — so it returned 0 for every real response and the runway
+   * silently never rendered. The tests that used to sit here passed because
+   * they fed it a shape only a fixture ever produced.
+   *
+   * The count now arrives as GetLLMSpendResponse.sample_days. This assertion
+   * is STRUCTURAL for the same reason billingUtils.price.test.ts reads the
+   * source: a behavioural test cannot fail if someone reintroduces a
+   * client-side derivation, because the derivation would look correct against
+   * any fixture that carries the invented field.
+   */
+  it("exports no client-side day-counting helper", async () => {
+    const utils = await import("../billingUtils");
+    expect("spendSampleDays" in utils).toBe(false);
   });
 
-  it("counts distinct days across entries, not entries", () => {
-    // Three models billed on the same two days is a TWO day sample. Counting
-    // rows would report six and understate the burn rate threefold.
-    const entries = [
-      day("2026-03-01T01:00:00Z"),
-      day("2026-03-01T09:00:00Z"),
-      day("2026-03-01T22:00:00Z"),
-      day("2026-03-02T04:00:00Z"),
-      day("2026-03-02T18:00:00Z"),
-      day("2026-03-02T23:00:00Z"),
-    ];
-    expect(spendSampleDays(entries)).toBe(2);
-  });
-
-  it("reports no sample when entries carry no period", () => {
-    // Without timestamps we cannot say how wide the window is, and a guess
-    // here becomes a dollar figure on the page.
-    expect(spendSampleDays([{}, {}])).toBe(0);
-    expect(spendSampleDays([])).toBe(0);
+  it("does not read periodStart anywhere in billingUtils", () => {
+    const source = readFileSync(
+      resolve(__dirname, "../billingUtils.ts"),
+      "utf8",
+    );
+    // Comments explaining the removal are fine; code that reads the field is
+    // not. Strip line comments before checking.
+    const code = source
+      .split("\n")
+      .filter((line) => !line.trim().startsWith("//") && !line.trim().startsWith("*"))
+      .join("\n");
+    expect(code).not.toMatch(/periodStart/);
   });
 });
 

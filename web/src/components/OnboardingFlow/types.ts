@@ -93,19 +93,53 @@ export interface LaunchPlan {
    */
   aiCreditCents?: number;
   /**
-   * Every purchase this plan owed has been confirmed BY THE SERVER.
+   * A compute subscription has been confirmed BY THE SERVER for this account.
+   *
+   * ── Why this is per-leg and not one `paid` verdict ────────────────────
+   *
+   * There used to be a single `paid?: boolean` meaning "every purchase this
+   * plan owed has been confirmed". It recorded a VERDICT without recording
+   * what was bought, and nothing invalidated it when the bill changed
+   * underneath — so this sequence, entirely through UI the flow renders,
+   * reached a provisioned cloud plan that was never paid for:
+   *
+   *   local compute + Reliant's models, empty wallet → pay for AI credit →
+   *   Back, Back → choose CLOUD compute → `requiresPayment` says a monthly
+   *   subscription is owed, the flag says the bills are settled, and
+   *   derivation walks past the only screen that can charge.
+   *
+   * Naming the leg fixes it at the root rather than at the symptom. A credit
+   * purchase cannot satisfy a compute bill because it does not write this
+   * field, so no Back sequence can make it appear to.
+   *
+   * ── Why it is not cleared on Back instead ─────────────────────────────
+   *
+   * Both legs are ACCOUNT-level entitlements — a subscription and a wallet
+   * balance, not properties of the plan branch that bought them — so a
+   * confirmed purchase stays true however the user edits their plan
+   * afterwards. Clearing it would re-charge someone who backs out of a choice
+   * and returns to it, which trades a money bug for a worse money bug.
+   *
+   * ── The rule these fields must never break ────────────────────────────
    *
    * Never written from Stripe's `onComplete`, which is a presentation signal:
    * the iframe reporting a finished payment and our webhook having granted
-   * entitlement can be seconds apart, and the second one can fail. It is
-   * written from `EmbeddedCheckoutPanel`'s `onDone`, which fires only after
-   * the server agrees, and after the facts have been re-read.
+   * entitlement can be seconds apart, and the second one can fail. Written
+   * from `CheckoutStep.finish`, which runs only after the facts have been
+   * re-read and the server agrees the debt is cleared.
    *
-   * Its job in the URL is to make the checkout step non-recurring: without it
-   * a webhook that has landed but a query that has not yet refetched would
-   * derive the user straight back to a payment they already made.
+   * Its job in the URL is to bridge the lag between a webhook landing and the
+   * entitlement query refetching: without it, a confirmed purchase derives the
+   * user straight back to a payment they already made.
    */
-  paid?: boolean;
+  computeSettled?: boolean;
+  /**
+   * Wallet credit has been confirmed BY THE SERVER for this account.
+   *
+   * The credit half of the pair. See {@link LaunchPlan.computeSettled} for why
+   * settlement is recorded per-leg and why it survives Back.
+   */
+  creditSettled?: boolean;
   /**
    * The compute step resolved itself — the user already had a usable daemon,
    * so it auto-advanced without ever asking a question.

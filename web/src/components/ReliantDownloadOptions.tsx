@@ -61,7 +61,22 @@ const DOWNLOAD_LINKS: DownloadLink[] = [
     url: `${DOWNLOAD_BASE}/Reliant-latest-linux-arm64.AppImage`,
     os: "linux",
   },
+  {
+    label: "Linux .deb (Debian/Ubuntu, x86_64)",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-linux-amd64.deb`,
+    os: "linux",
+  },
+  {
+    label: "Linux .deb (Debian/Ubuntu, ARM64)",
+    url: `${DOWNLOAD_BASE}/Reliant-latest-linux-arm64.deb`,
+    os: "linux",
+  },
 ];
+
+/** Homebrew casks are macOS-only, and we publish no Linux cask. */
+export function supportsHomebrewCask(os: DetectedOS): boolean {
+  return os === "mac-arm64" || os === "mac-x64";
+}
 
 // Synchronous best-guess from `navigator.platform`. Macs default to arm64 (the
 // overwhelming majority sold since 2020) and are refined asynchronously below.
@@ -143,7 +158,8 @@ export interface ReliantDownloadOptionsProps {
 
 /**
  * Platform-detected download button, an "Other platforms" disclosure with
- * every build, and the Homebrew one-liner as a secondary path.
+ * every build, and — on macOS only — the Homebrew one-liner as a secondary
+ * path.
  */
 export function ReliantDownloadOptions({
   size = "default",
@@ -218,14 +234,31 @@ export function ReliantDownloadOptions({
         </div>
       )}
 
-      <div className="space-y-1.5">
-        <span className="block text-xs text-muted-foreground">
-          Or install via Homebrew:
-        </span>
-        <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-          {HOMEBREW_CASK_INSTALL}
-        </code>
-      </div>
+      {/* Platform-neutral and true everywhere: the installer above is the
+          whole story on Windows and Linux, where there is no package manager
+          we publish to. */}
+      <p className="text-xs text-muted-foreground">
+        The installer ships the{" "}
+        <code className="font-mono text-foreground">reliant</code> CLI and adds
+        it to your PATH the first time you open the app — no separate download.
+      </p>
+
+      {/* Homebrew casks are macOS-only. Rendering this unconditionally sent
+          Windows and Linux users to a command that cannot work, on the one
+          screen meant to unblock them. On an unknown platform it is offered
+          as a labelled alternative rather than as *the* answer. */}
+      {supportsHomebrewCask(detectedOS) || detectedOS === "unknown" ? (
+        <div className="space-y-1.5">
+          <span className="block text-xs text-muted-foreground">
+            {detectedOS === "unknown"
+              ? "On macOS, you can install via Homebrew instead:"
+              : "Or install via Homebrew:"}
+          </span>
+          <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
+            {HOMEBREW_CASK_INSTALL}
+          </code>
+        </div>
+      ) : null}
     </div>
   );
 }

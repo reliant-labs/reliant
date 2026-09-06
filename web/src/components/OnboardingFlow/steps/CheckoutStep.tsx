@@ -174,12 +174,24 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
    * user has project questions to answer while it boots. It is keyed on the
    * plan's `commitKey`, so the terminal step's own `runCommit` returns THIS
    * commit rather than starting a second one.
+   *
+   * Settlement is recorded PER LEG, and only for legs this plan could owe.
+   * Writing one undifferentiated "paid" verdict is what let AI credit bought
+   * on a local plan pay for a cloud subscription chosen afterwards — see
+   * {@link LaunchPlan.computeSettled}. This runs only once the freshly-read
+   * facts agree the debt is cleared, so each flag it writes is a fact the
+   * server has confirmed, not a claim about one.
    */
   const finish = useCallback(
-    async (paidPlan: Partial<LaunchPlan>) => {
-      const commitKey = await ensureCommitKey(paidPlan, updatePlan);
-      void runCommit({ ...paidPlan, commitKey });
-      await updatePlan({ paid: true });
+    async (settledPlan: Partial<LaunchPlan>) => {
+      const commitKey = await ensureCommitKey(settledPlan, updatePlan);
+      void runCommit({ ...settledPlan, commitKey });
+      const settled: Partial<LaunchPlan> = {};
+      if (isCloudCompute(settledPlan.compute)) settled.computeSettled = true;
+      if (settledPlan.modelProvider === "reliant_credits") {
+        settled.creditSettled = true;
+      }
+      await updatePlan(settled);
       onNext();
     },
     [onNext, runCommit, updatePlan],

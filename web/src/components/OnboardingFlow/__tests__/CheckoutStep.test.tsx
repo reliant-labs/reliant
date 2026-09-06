@@ -234,7 +234,7 @@ describe("CheckoutStep — nothing fires from an effect", () => {
 });
 
 describe("CheckoutStep — after the server confirms", () => {
-  it("commits once, and marks the plan paid", async () => {
+  it("commits once, and records the compute leg as settled", async () => {
     const updatePlan = vi.fn();
     const onNext = vi.fn();
     renderStep(CLOUD_OWN_KEY, { updatePlan, onNext });
@@ -246,8 +246,60 @@ describe("CheckoutStep — after the server confirms", () => {
     });
 
     await waitFor(() => expect(mockRunCommit).toHaveBeenCalledTimes(1));
-    expect(updatePlan).toHaveBeenCalledWith({ paid: true });
+    expect(updatePlan).toHaveBeenCalledWith({ computeSettled: true });
     expect(onNext).toHaveBeenCalled();
+  });
+
+  // F2 AT THE WRITE SITE. Settlement names the leg it paid for, and a plan
+  // that never owed a leg must not claim to have settled it — a cloud plan on
+  // the user's own API key writes `computeSettled` and NOTHING about credit,
+  // so a later switch to Reliant's models still has to pay for it.
+  it("records only the legs this plan could owe", async () => {
+    const updatePlan = vi.fn();
+    renderStep(CLOUD_OWN_KEY, { updatePlan });
+
+    currentFacts = { computeEligible: true, walletFunded: true };
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("confirm-payment"));
+    });
+
+    await waitFor(() => expect(mockRunCommit).toHaveBeenCalled());
+    const settlement = updatePlan.mock.calls
+      .map(([u]) => u as Record<string, unknown>)
+      .find((u) => "computeSettled" in u || "creditSettled" in u);
+    expect(settlement).toEqual({ computeSettled: true });
+  });
+
+  it("records the credit leg for a plan that bought AI credit", async () => {
+    const updatePlan = vi.fn();
+    currentFacts = { computeEligible: true, walletFunded: false };
+    renderStep(LOCAL_RELIANT, { updatePlan });
+
+    currentFacts = { computeEligible: true, walletFunded: true };
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("confirm-payment"));
+    });
+
+    await waitFor(() => expect(mockRunCommit).toHaveBeenCalled());
+    expect(updatePlan).toHaveBeenCalledWith({ creditSettled: true });
+  });
+
+  // Both legs bought in one visit: both recorded, so neither can be re-charged
+  // and neither silently covers a bill it did not pay.
+  it("records both legs for a plan that bought both", async () => {
+    const updatePlan = vi.fn();
+    renderStep(CLOUD_AND_RELIANT, { updatePlan });
+
+    currentFacts = { computeEligible: true, walletFunded: true };
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("confirm-payment"));
+    });
+
+    await waitFor(() => expect(mockRunCommit).toHaveBeenCalled());
+    expect(updatePlan).toHaveBeenCalledWith({
+      computeSettled: true,
+      creditSettled: true,
+    });
   });
 
   it("commits under the plan's own key, so a later step does not commit again", async () => {
@@ -284,7 +336,9 @@ describe("CheckoutStep — after the server confirms", () => {
         await vi.advanceTimersByTimeAsync(70_000);
       });
 
-      expect(updatePlan).not.toHaveBeenCalledWith({ paid: true });
+      expect(updatePlan).not.toHaveBeenCalledWith(
+        expect.objectContaining({ computeSettled: true }),
+      );
       expect(mockRunCommit).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();

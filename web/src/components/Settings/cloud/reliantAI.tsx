@@ -477,7 +477,16 @@ function ReliantAIPanel() {
                       <Th>Model</Th>
                       <Th>Requests</Th>
                       <Th>Spend</Th>
-                      <Th>Period</Th>
+                      {/* No "Period" column. It rendered
+                          `formatTimestamp(e.periodStart)`, and GetLLMSpend
+                          does not populate period_start — entries are
+                          aggregated per (key, model) across the whole
+                          requested range, so there is no per-entry period to
+                          show. Every row printed an em dash under a heading
+                          promising a date, which reads as missing data rather
+                          than as a column that never had any. The range is
+                          the same for every row and belongs in the card
+                          header, not repeated down a column. */}
                     </Tr>
                   </Thead>
                   <Tbody>
@@ -493,9 +502,6 @@ function ReliantAIPanel() {
                           {Number(e.requests ?? 0n).toLocaleString("en-US")}
                         </Td>
                         <Td className="text-muted-foreground">{usd(e.spend)}</Td>
-                        <Td className="text-muted-foreground">
-                          {formatTimestamp(e.periodStart)}
-                        </Td>
                       </Tr>
                     ))}
                   </Tbody>

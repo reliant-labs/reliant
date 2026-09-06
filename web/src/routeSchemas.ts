@@ -58,13 +58,18 @@ export const launchPlanSchema = z
     // (`daemonProvisioning` was removed with the speculative provisioning it
     // recorded.)
     commitKey: z.string().optional(),
-    // The checkout step's selections, and the server-confirmed result. See
-    // LaunchPlan.computePlanId / aiCreditCents / paid — all three are in the
-    // URL so a reload mid-payment resumes the same purchase rather than
-    // restarting it.
+    // The checkout step's selections, and the server-confirmed results. All
+    // four are in the URL so a reload mid-payment resumes the same purchase
+    // rather than restarting it.
+    //
+    // Settlement is recorded PER LEG (see LaunchPlan.computeSettled): a single
+    // `paid` verdict recorded that the bills were settled without recording
+    // what was bought, so credit bought on a local plan silently satisfied a
+    // cloud subscription the user then chose via Back.
     computePlanId: z.string().optional(),
     aiCreditCents: z.number().optional(),
-    paid: z.boolean().optional(),
+    computeSettled: z.boolean().optional(),
+    creditSettled: z.boolean().optional(),
     // The compute step resolved itself (the user already had a daemon), so it
     // is hidden from the progress bar and Back is suppressed on the next step.
     // See LaunchPlan.computeAutoSkipped.

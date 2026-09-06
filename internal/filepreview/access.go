@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/ospath"
 )
 
 // ErrPathOutsideBase is returned when a RELATIVE path climbs out of its base
@@ -95,9 +96,24 @@ func ValidatePath(basePath, requestedPath string) (string, error) {
 //   - outside the base: allowed only under ScopeAllowAbsolute, otherwise
 //     refused with ErrAbsolutePathOutsideBase.
 func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string, error) {
-	absBasePath, err := filepath.Abs(basePath)
-	if err != nil {
-		return "", err
+	// The base names a workspace on the DAEMON, which may run Windows while
+	// this server runs Linux, so it is resolved in its own convention. Only a
+	// base that is absolute under NEITHER convention is a genuinely relative
+	// local path, and only then is filepath.Abs (which resolves against THIS
+	// process's working directory) the right thing to do.
+	//
+	// Getting this wrong failed open, not closed: filepath.Abs turned
+	// `C:\Users\sean\proj` into `/cwd/C:\Users\sean\proj`, filepath.IsAbs
+	// judged every requested path relative, and the join below then accepted
+	// `..\secret.txt` — the traversal this function exists to refuse.
+	absBasePath := basePath
+	if ospath.IsAbs(basePath) {
+		absBasePath = ospath.Clean(basePath)
+	} else {
+		var err error
+		if absBasePath, err = filepath.Abs(basePath); err != nil {
+			return "", err
+		}
 	}
 
 	// "" and "/" both mean "the workspace root itself" in this API, not the
@@ -113,8 +129,8 @@ func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string
 		return absBasePath, nil
 	}
 
-	if filepath.IsAbs(requestedPath) {
-		absRequested := filepath.Clean(requestedPath)
+	if ospath.IsAbs(requestedPath) {
+		absRequested := ospath.Clean(requestedPath)
 		if withinBase(absRequested, absBasePath) {
 			return absRequested, nil
 		}
@@ -124,10 +140,10 @@ func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string
 		return "", ErrAbsolutePathOutsideBase
 	}
 
-	absFullPath, err := filepath.Abs(filepath.Join(absBasePath, requestedPath))
-	if err != nil {
-		return "", err
-	}
+	// ospath.Join, not filepath.Join: joining with the host separator would
+	// emit `C:\proj/src\main.go`, which the daemon cannot resolve and which
+	// withinBase could not compare consistently.
+	absFullPath := ospath.Join(absBasePath, requestedPath)
 	if !withinBase(absFullPath, absBasePath) {
 		return "", ErrPathOutsideBase
 	}
@@ -136,6 +152,12 @@ func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string
 
 // withinBase reports whether path is base itself or a descendant of it. The
 // separator guards against /projects/app matching /projects/app-secrets.
+//
+// Both separators are accepted because base may be a Windows path: after
+// ospath.Clean a `C:/...` base keeps forward slashes while a `C:\...` base
+// keeps backslashes, and the two must confine identically.
 func withinBase(path, base string) bool {
-	return path == base || strings.HasPrefix(path, base+string(filepath.Separator))
+	return path == base ||
+		strings.HasPrefix(path, base+"/") ||
+		strings.HasPrefix(path, base+`\`)
 }

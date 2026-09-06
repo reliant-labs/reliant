@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -792,7 +793,10 @@ func (s *FileSystemProxyService) CreateDirectory(
 	if path == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path is required"))
 	}
-	if !filepath.IsAbs(path) {
+	// The path is executed on the daemon's filesystem, which may be Windows
+	// even when this server is Linux, so it is judged OS-agnostically and
+	// forwarded verbatim rather than being cleaned into the host's convention.
+	if !ospath.IsAbs(path) {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path must be absolute"))
 	}
 

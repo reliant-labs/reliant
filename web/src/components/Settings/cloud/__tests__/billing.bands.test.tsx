@@ -164,6 +164,11 @@ const USAGE = {
   byDay: [],
   byWorkspace: [],
   grantedMinutesRemaining: 0,
+  // Not optional. A response without this flag is one the server could not
+  // measure, and the band correctly refuses to draw hours for it — so a
+  // fixture that omits it silently tests the degraded path while claiming to
+  // test the healthy one.
+  usageMeasured: true,
 };
 
 function renderSection() {
@@ -274,15 +279,28 @@ describe("AI credit and compute are two regions, not two identical cards", () =>
 // ── Runway ────────────────────────────────────────────────────────────
 
 describe("the runway estimate is hedged, and withheld when it would mislead", () => {
+  /**
+   * The payload GetLLMSpend ACTUALLY returns.
+   *
+   * This fixture used to synthesize one entry per day, each carrying a
+   * `periodStart`, and the client counted those to get its sample size. No
+   * server has ever sent that: `spendEntryToProto` copies five fields and
+   * `period_start` is not among them, and entries are aggregated per
+   * (key, model) across the whole range, so there is no per-day row to hang a
+   * period on. The runway was therefore unreachable in production while this
+   * suite reported it working — the fixture was the only place the shape
+   * existed.
+   *
+   * So the day count now comes from the server as `sampleDays`, and this
+   * fixture emits exactly what the wire emits: aggregated entries with no
+   * period, plus that separate count.
+   */
   const spendOver = (days: number, totalSpend: number) => ({
     totalSpend,
-    entries: Array.from({ length: days }, (_, i) => ({
-      model: "m",
-      spend: totalSpend / days,
-      periodStart: {
-        seconds: BigInt(Math.floor(Date.parse(`2026-03-0${i + 1}`) / 1000)),
-      },
-    })),
+    sampleDays: days,
+    entries: [
+      { keyId: "k1", keyName: "default", model: "m", spend: totalSpend, requests: 10n },
+    ],
   });
 
   it("states days remaining, hedged, when the sample supports it", () => {

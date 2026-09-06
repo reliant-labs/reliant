@@ -5,6 +5,8 @@ import { Modal } from "../ui/Modal";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { useProjectStore } from "../../store/projectStore";
 import { toast } from "../../lib/toast-manager";
+import { basename, examplePathForPlatform, isAbsolutePath } from "../../lib/pathUtils";
+import { useDetectedOS } from "../ReliantDownloadOptions";
 
 interface Project {
   id: string;
@@ -40,10 +42,14 @@ export function ProjectPickerModal({
   const [isDirectoryPickerOpen, setIsDirectoryPickerOpen] = useState(false);
 
   const isElectron = !!window.electronAPI?.selectDirectory;
+  // Only used to pick the example path we show — a Windows user given a
+  // "/Users/you/..." example has been shown something they cannot type.
+  const detectedOS = useDetectedOS();
+  const examplePath = examplePathForPlatform(detectedOS);
 
-  // Last non-empty path segment, e.g. "/Users/you/projects/my-app/" -> "my-app".
-  const deriveName = (path: string) =>
-    path.replace(/\/+$/, "").split("/").pop() || "";
+  // Last non-empty path segment, e.g. "/Users/you/projects/my-app/" -> "my-app",
+  // "C:\Users\you\projects\my-app" -> "my-app".
+  const deriveName = (path: string) => basename(path);
 
   const applyPath = (selectedPath: string) => {
     setFormData((prev) => ({
@@ -80,8 +86,11 @@ export function ProjectPickerModal({
       return;
     }
 
-    if (!formData.path.startsWith("/")) {
-      setError("Path must be an absolute path starting with /");
+    // The daemon that owns this path may be on a different OS than this
+    // browser, so accept any platform's absolute form and send it through
+    // unchanged rather than rewriting it to local convention.
+    if (!isAbsolutePath(formData.path)) {
+      setError(`Enter a full path to the project folder, for example ${examplePath}`);
       return;
     }
 
@@ -168,7 +177,7 @@ export function ProjectPickerModal({
                 value={formData.path}
                 onChange={(e) => applyPath(e.target.value)}
                 className="flex-1 px-4 py-3 bg-background border border-border rounded-lg text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                placeholder="Enter full path (e.g., /Users/you/projects/my-app)"
+                placeholder={`Enter full path (e.g., ${examplePath})`}
                 required
                 autoFocus
               />

@@ -168,7 +168,15 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   const usageUi = useMemo(() => {
     const includedMinutes = usage?.includedMinutes ?? 0;
     const usedMinutes = usage?.usedMinutes ?? 0;
+    // A stubbed or unmeasurable period answers 200 with used_minutes = 0, so
+    // "ran nothing" and "we didn't measure" arrive identical. Rendering the
+    // second as "0.0 h used" told a user they had consumed nothing while the
+    // daemon start gate was refusing them against real metered usage — and a
+    // phone has no surrounding detail to contradict it. `usageMeasured` is
+    // false by default, so an older server is read as unknown, not as zero.
+    const measured = !!usage && usage.usageMeasured;
     return {
+      measured,
       includedHours: includedMinutes / 60,
       usedHours: usedMinutes / 60,
       capacity: deriveComputeCapacity({
@@ -278,6 +286,20 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                   Plan details are unavailable — the control plane may not have
                   restarted since the plan catalog changed.
                 </p>
+              ) : !usageUi.measured ? (
+                // The allowance is a plan fact and survives; only the metered
+                // half is withheld, and it is withheld by SAYING so. A blank
+                // where hours-used belongs reads as zero, which is the exact
+                // reading this branch exists to prevent. No bar either — an
+                // empty track is the same claim in another form.
+                <div className="mt-3 text-xs text-muted-foreground">
+                  <p>Usage unavailable for this period.</p>
+                  {planUi.includedHours >= 0 && (
+                    <p className="mt-0.5">
+                      Your plan includes {usageUi.includedHours.toFixed(0)} h.
+                    </p>
+                  )}
+                </div>
               ) : (
                 <div className="mt-3">
                   <div className="flex items-center justify-between text-xs">

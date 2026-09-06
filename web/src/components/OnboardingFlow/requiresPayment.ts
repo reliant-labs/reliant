@@ -68,13 +68,31 @@ export interface PaymentRequirement {
  * An unset `compute` or `modelProvider` cannot owe anything: the user has not
  * chosen the thing that would cost money yet, and derivation has them on an
  * earlier step regardless.
+ *
+ * ── Settlement is read per leg, at the same place the debt is computed ──
+ *
+ * `plan.computeSettled` / `plan.creditSettled` bridge the lag between a
+ * webhook landing and the entitlement queries refetching — a confirmed
+ * purchase must not derive the user back to a payment they already made.
+ *
+ * They are read HERE, next to the fact each one stands in for, rather than as
+ * a short-circuit wrapped around the whole answer. That is the actual fix for
+ * F2: the old single `paid` flag was checked in `checkoutIsOwed`, outside this
+ * function and above all per-leg reasoning, so it suppressed the checkout step
+ * for a bill it had never paid. A settlement that can only cancel its own leg
+ * cannot do that, whatever path the user walked to get here.
  */
 export function requiresPayment(
   plan: Partial<LaunchPlan>,
   facts: PaymentFacts,
 ): PaymentRequirement {
-  const needsCompute = isCloudCompute(plan.compute) && !facts.computeEligible;
+  const needsCompute =
+    isCloudCompute(plan.compute) &&
+    !facts.computeEligible &&
+    !plan.computeSettled;
   const needsCredit =
-    plan.modelProvider === "reliant_credits" && !facts.walletFunded;
+    plan.modelProvider === "reliant_credits" &&
+    !facts.walletFunded &&
+    !plan.creditSettled;
   return { needsCompute, needsCredit, any: needsCompute || needsCredit };
 }
