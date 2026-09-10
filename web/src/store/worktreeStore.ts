@@ -38,6 +38,15 @@ export interface Worktree {
   cleanup_metadata?: CleanupMetadata | null; // Tracks what was deleted during archive
 }
 
+// Create-only inputs. base_branches carries per-repo base-branch overrides
+// (key = repo_id) for multi-repo projects; the server resolves them into each
+// repo's checkout and does not echo them back on the Worktree.
+export type CreateWorktreeInput = Partial<Worktree> & {
+  force?: boolean;
+  source_worktree_id?: string;
+  base_branches?: Record<string, string>;
+};
+
 export interface DiscoveredWorktree {
   path: string;
   name: string;
@@ -102,8 +111,12 @@ interface WorktreeStore {
   lastLoadIncludedArchived: boolean;
 
   loadWorktrees: (projectId?: string, options?: { includeArchived?: boolean }) => Promise<void>;
+  // Like loadWorktrees, but never joins an in-flight request. Use after a
+  // mutation whose effects must be observed: a singleflight-deduplicated load
+  // can return data fetched BEFORE the mutation landed.
+  refreshWorktrees: (projectId?: string, options?: { includeArchived?: boolean }) => Promise<void>;
   selectWorktree: (worktree: Worktree | null, options?: { skipWorkspaceStateSave?: boolean }) => void;
-  createWorktree: (data: Partial<Worktree> & { force?: boolean; source_worktree_id?: string }) => Promise<Worktree>;
+  createWorktree: (data: CreateWorktreeInput) => Promise<Worktree>;
   importWorktree: (data: { path: string; name?: string; project_id: string }) => Promise<Worktree>;
   discoverWorktrees: (projectId: string) => Promise<void>;
   // ONLY archives (sets deleted_at). Never permanently deletes.
@@ -122,6 +135,88 @@ interface WorktreeStore {
 
 function getCurrentLoadOptions(): { includeArchived: boolean } {
   return { includeArchived: useWorktreeStore.getState().lastLoadIncludedArchived };
+}
+
+// Monotonic ticket per fetch, so a slow response cannot overwrite a newer one.
+// Responses can land out of order — a refresh issued after a mutation often
+// resolves before the pre-mutation load it raced — and applying them by
+// arrival order silently restores stale data.
+let loadTicket = 0;
+let lastAppliedTicket = 0;
+
+/**
+ * Fetch worktrees and apply them to the store.
+ *
+ * `dedupe` controls whether the request may join an identical in-flight one.
+ * Reads set it (cheap, and the common case is several components mounting at
+ * once); post-mutation refreshes must not, because an in-flight request that
+ * started before the mutation would resolve with pre-mutation data.
+ */
+async function fetchWorktreesInto(
+  projectId: string,
+  includeArchived: boolean,
+  dedupe: boolean
+): Promise<void> {
+  const set = useWorktreeStore.setState;
+  const ticket = ++loadTicket;
+  set({ isLoading: true, error: null });
+
+  // A response is stale if a later request has already been applied. Stale
+  // responses are dropped entirely, including their isLoading reset — the
+  // newer request still in flight owns that.
+  const isStale = () => ticket < lastAppliedTicket;
+
+  try {
+    const fetchWorktrees = async () => {
+      const response = await worktreeGrpc.list(projectId, { includeArchived });
+      return response.worktrees.map(grpcToStore);
+    };
+
+    const loadedWorktrees = dedupe
+      ? await singleflight(
+          `loadWorktrees:${projectId}:${includeArchived ? "with-archived" : "active"}`,
+          fetchWorktrees
+        )
+      : await fetchWorktrees();
+
+    if (isStale()) {
+      logger.info('[WorktreeStore] Dropping stale worktree load', {
+        projectId,
+        ticket,
+        lastAppliedTicket,
+      });
+      return;
+    }
+    lastAppliedTicket = ticket;
+
+    set({
+      worktrees: loadedWorktrees,
+      isLoading: false,
+      hasLoaded: true,
+      lastLoadIncludedArchived: includeArchived,
+    });
+
+    // Auto-select main worktree if no worktree is currently selected
+    const currentWorktree = useWorktreeStore.getState().currentWorktree;
+    if (!currentWorktree) {
+      const mainWorktree = loadedWorktrees.find(w => w.is_main && w.project_id === projectId);
+      if (mainWorktree) {
+        logger.info('[WorktreeStore] Auto-selecting main worktree after load', {
+          worktreeId: mainWorktree.id,
+          name: mainWorktree.name,
+        });
+        useWorktreeStore.getState().selectWorktree(mainWorktree, { skipWorkspaceStateSave: true });
+      }
+    }
+  } catch (error) {
+    if (isStale()) return;
+    lastAppliedTicket = ticket;
+    set({
+      error: getErrorMessage(error, 'Failed to load worktrees'),
+      isLoading: false,
+      hasLoaded: true,
+    });
+  }
 }
 
 type ArchivedWorktreeActiveChatSnapshot = {
@@ -186,41 +281,18 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       set({ worktrees: [], isLoading: false, hasLoaded: true, lastLoadIncludedArchived: false });
       return;
     }
-    set({ isLoading: true, error: null });
-    try {
-      // Use singleflight to deduplicate concurrent calls for the same project
-      // (e.g., selectProject + useWorkspaceRestore both calling loadWorktrees)
-      const includeArchived = options?.includeArchived ?? false;
-      const loadedWorktrees = await singleflight(`loadWorktrees:${projectId}:${includeArchived ? "with-archived" : "active"}`, async () => {
-        const response = await worktreeGrpc.list(projectId, { includeArchived });
-        return response.worktrees.map(grpcToStore);
-      });
-      set({
-        worktrees: loadedWorktrees,
-        isLoading: false,
-        hasLoaded: true,
-        lastLoadIncludedArchived: includeArchived,
-      });
-      
-      // Auto-select main worktree if no worktree is currently selected
-      const currentWorktree = useWorktreeStore.getState().currentWorktree;
-      if (!currentWorktree) {
-        const mainWorktree = loadedWorktrees.find(w => w.is_main && w.project_id === projectId);
-        if (mainWorktree) {
-          logger.info('[WorktreeStore] Auto-selecting main worktree after load', {
-            worktreeId: mainWorktree.id,
-            name: mainWorktree.name,
-          });
-          useWorktreeStore.getState().selectWorktree(mainWorktree, { skipWorkspaceStateSave: true });
-        }
-      }
-    } catch (error) {
-      set({
-        error: getErrorMessage(error, 'Failed to load worktrees'),
-        isLoading: false,
-        hasLoaded: true,
-      });
-    }
+    // Deduplicate concurrent calls for the same project (e.g. selectProject +
+    // useWorkspaceRestore both calling loadWorktrees).
+    await fetchWorktreesInto(projectId, options?.includeArchived ?? false, true);
+  },
+
+  refreshWorktrees: async (projectId?: string, options?: { includeArchived?: boolean }) => {
+    if (!projectId) return;
+    await fetchWorktreesInto(
+      projectId,
+      options?.includeArchived ?? useWorktreeStore.getState().lastLoadIncludedArchived,
+      false
+    );
   },
 
   selectWorktree: (worktree: Worktree | null, options?: { skipWorkspaceStateSave?: boolean }) => {
@@ -257,7 +329,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     }
   },
 
-  createWorktree: async (data: Partial<Worktree> & { force?: boolean; source_worktree_id?: string }) => {
+  createWorktree: async (data: CreateWorktreeInput) => {
     set({ isLoading: true, error: null });
     try {
       if (!data.project_id || !data.name || !data.branch) {
@@ -270,6 +342,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         data.branch,
         {
           baseBranch: data.base_branch,
+          baseBranches: data.base_branches,
           chatId: data.chat_id,
           copyFiles: data.copy_files,
           force: data.force,
@@ -679,6 +752,8 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   },
 
   reset: () => {
+    // Any in-flight load predates this reset, so let it be dropped on arrival.
+    lastAppliedTicket = loadTicket;
     set({
       worktrees: [],
       currentWorktree: null,

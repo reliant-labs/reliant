@@ -242,9 +242,24 @@ export function useUnarchiveChat() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (chatId: string) => api.chatsV2.unarchive(chatId),
-    onSuccess: () => {
+    onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
       queryClient.invalidateQueries({ queryKey: chatKeys.archived() });
+
+      // Unarchiving a chat also unarchives its workspace server-side. That
+      // lives in Zustand, which query invalidation cannot reach, and the
+      // sidebar hides any chat whose worktree is missing from the store — so
+      // without this the restored chat stays invisible until a page reload.
+      // Imported dynamically: both stores import this module for
+      // getChatFromCache, so a static import would close the cycle.
+      const [{ useProjectStore }, { useWorktreeStore }] = await Promise.all([
+        import("../store/projectStore"),
+        import("../store/worktreeStore"),
+      ]);
+      const projectId = useProjectStore.getState().currentProject?.id;
+      if (projectId) {
+        await useWorktreeStore.getState().refreshWorktrees(projectId);
+      }
     },
   });
 }

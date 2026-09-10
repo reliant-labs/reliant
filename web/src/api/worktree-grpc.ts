@@ -128,18 +128,6 @@ export interface PRInfo {
   state?: string;
 }
 
-export interface BatchCreateWorktreeResult {
-  repo_id: string;
-  worktree?: Worktree;
-  error?: string;
-}
-
-export interface BatchCreateResult {
-  results: BatchCreateWorktreeResult[];
-  all_succeeded: boolean;
-  rolled_back: boolean;
-}
-
 // Per-repo summary row used by the right-sidebar grouped view.
 // Mirrors reliant.v1.WorktreeRepoStatus.
 export interface WorktreeRepoStatus {
@@ -224,13 +212,19 @@ export const worktreeGrpc = {
   // CRUD Operations
   // =============================================================================
 
-  // Create a new worktree
+  // Create a new worktree.
+  //
+  // A worktree always spans every nested repo in the project — one RPC covers
+  // both the single- and multi-repo case. baseBranches pins a base branch per
+  // repo (key = repo_id); repos absent from the map fall back to baseBranch,
+  // then to per-repo default-branch detection on the daemon.
   async create(
     projectId: string,
     name: string,
     branch: string,
     options?: {
       baseBranch?: string;
+      baseBranches?: Record<string, string>;
       chatId?: string;
       copyFiles?: string[];
       force?: boolean;
@@ -243,6 +237,7 @@ export const worktreeGrpc = {
       name,
       branch,
       baseBranch: options?.baseBranch,
+      baseBranches: options?.baseBranches || {},
       chatId: options?.chatId,
       copyFiles: options?.copyFiles || [],
       force: options?.force || false,
@@ -251,48 +246,6 @@ export const worktreeGrpc = {
     const response = await client.createWorktree(request);
     if (!response.worktree) throw new Error("No worktree in response");
     return protoToFrontend(response.worktree);
-  },
-
-  // Create worktrees in multiple repos atomically (all-or-nothing).
-  // baseBranches lets the caller pin a specific base branch per repo (key =
-  // repo_id). Repos missing from the map fall back to baseBranch, then to
-  // per-repo default-branch detection on the daemon.
-  async batchCreate(
-    projectId: string,
-    repoIds: string[],
-    name: string,
-    branch: string,
-    options?: {
-      baseBranch?: string;
-      baseBranches?: Record<string, string>;
-      chatId?: string;
-      copyFiles?: string[];
-      force?: boolean;
-    }
-  ): Promise<BatchCreateResult> {
-    const client = grpcClient.worktree();
-    const request = create(CreateWorktreeRequestSchema, {
-      projectId,
-      name,
-      branch,
-      baseBranch: options?.baseBranch,
-      baseBranches: options?.baseBranches || {},
-      chatId: options?.chatId,
-      copyFiles: options?.copyFiles || [],
-      force: options?.force || false,
-    });
-    const response = await client.createWorktree(request);
-    if (!response.worktree) throw new Error("No worktree in response");
-
-    const worktree = protoToFrontend(response.worktree);
-    return {
-      results: repoIds.map((repoId) => ({
-        repo_id: repoId,
-        worktree,
-      })),
-      all_succeeded: true,
-      rolled_back: false,
-    };
   },
 
   // List worktrees for a project
