@@ -55,7 +55,7 @@ exists, use edit. If an old_string fails to match, re-read the exact region and
 retry the edit — falling back to a full rewrite is the most expensive move available.
 
 WHEN NOT TO USE:
-- Moving/renaming files: Use Bash mv command
+- Moving/renaming files: Use the shell tool's mv command
 
 COMMON MISTAKES TO AVOID:
 - Insufficient context in old_string (needs 3-5 lines)
@@ -116,7 +116,7 @@ replace_all: true
 - Verify edits don't break code
 
 # 🔄 WORKS WELL WITH
-- AFTER: Bash (test changes)
+- AFTER: shell (test changes)
 - ALTERNATIVE: Write (complete rewrite)
 
 # 📝 PARAMETERS

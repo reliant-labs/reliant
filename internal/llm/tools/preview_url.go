@@ -127,7 +127,7 @@ func proxyPreviewURL(env config.Environment, daemonID string, port int) string {
 //
 // This is the runtime mechanism by which the launch_preview agent obtains the
 // correct proxied URL: after starting the dev server in the background it calls
-// bash_list (or bash_output), and these lines appear in the tool result.
+// shell_list (or shell_output), and these lines appear in the tool result.
 func previewURLsForProcess(p *daemon.ProcessInfo) []string {
 	if p == nil || p.Status != "running" || len(p.Ports) == 0 {
 		return nil

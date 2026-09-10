@@ -38,13 +38,13 @@ type GlobOutput struct {
 	Truncated bool     `json:"truncated"`
 }
 
-// BashOutput is the structured output from the bash tool.
-type BashOutput struct {
+// ShellOutput is the structured output from the shell tool.
+type ShellOutput struct {
 	Stdout   string `json:"stdout"`
 	Stderr   string `json:"stderr"`
 	ExitCode int    `json:"exit_code"`
 	// Timing is set only when the wall-clock cost of the tool call and the
-	// command's own runtime disagree — see bashTransportTiming. Omitted
+	// command's own runtime disagree — see shellTransportTiming. Omitted
 	// otherwise, because a duration on every result is a number the reader
 	// learns to skip, while a duration that appears when two clocks contradict
 	// each other is a claim.

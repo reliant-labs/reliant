@@ -10,12 +10,12 @@ import (
 // testPreflightConfig creates a PreflightConfig for testing with known daemon tools.
 func testPreflightConfig() *PreflightConfig {
 	daemonTools := map[string]bool{
-		"bash":        true,
-		"bash_list":   true,
-		"bash_output": true,
-		"bash_kill":   true,
-		"fetch":       true,
-		"websearch":   true,
+		"shell":        true,
+		"shell_list":   true,
+		"shell_output": true,
+		"shell_kill":   true,
+		"fetch":        true,
+		"websearch":    true,
 	}
 	return &PreflightConfig{
 		IsDaemonTool: func(name string) bool {
@@ -27,8 +27,8 @@ func testPreflightConfig() *PreflightConfig {
 			for _, spec := range filter {
 				switch spec {
 				case "tag:default":
-					result = append(result, "bash", "view", "edit", "grep", "glob",
-						"bash_list", "bash_output", "bash_kill", "fetch", "websearch",
+					result = append(result, "shell", "view", "edit", "grep", "glob",
+						"shell_list", "shell_output", "shell_kill", "fetch", "websearch",
 						"create_plan", "update_plan", "get_plan")
 				case "tag:planning":
 					result = append(result, "create_plan", "update_plan", "get_plan",
@@ -36,7 +36,7 @@ func testPreflightConfig() *PreflightConfig {
 				case "tag:readonly":
 					result = append(result, "view", "grep", "glob")
 				case "tag:shell":
-					result = append(result, "bash")
+					result = append(result, "shell")
 				default:
 					result = append(result, spec) // plain tool name
 				}
@@ -272,7 +272,7 @@ func TestRequiresDaemon_NilConfig(t *testing.T) {
 							Filter: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
-										Values: []string{"bash"},
+										Values: []string{"shell"},
 									},
 								},
 							},

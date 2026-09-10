@@ -111,7 +111,7 @@ type SimulatedEvent struct {
 //	  - name: search
 //	    input: {query: "test results"}
 type SimToolCall struct {
-	// Name is the tool name (e.g., "bash", "search", "edit").
+	// Name is the tool name (e.g., "shell", "search", "edit").
 	Name string `json:"name" yaml:"name"`
 
 	// Input contains the tool's input parameters.

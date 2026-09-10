@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func shellInput(t *testing.T, command string) string {
+func shellToolInputJSON(t *testing.T, command string) string {
 	t.Helper()
 	b, err := json.Marshal(map[string]string{"command": command})
 	require.NoError(t, err)
@@ -77,30 +77,30 @@ func TestNudge_SilentForUnsupportedLanguages(t *testing.T) {
 // First qualifying call fires — that is when redirecting is cheapest.
 func TestNudge_FiresOnFirstQualifyingCall(t *testing.T) {
 	resetNudgeState()
-	got := maybeCodeContextNudge(names.ToolBash, shellInput(t, `rg -n 'ResolveDaemon' internal/`), "thread-1")
+	got := maybeCodeContextNudge(names.ToolShell, shellToolInputJSON(t, `rg -n 'ResolveDaemon' internal/`), "thread-1")
 	assert.Contains(t, got, `code_context(symbol: "ResolveDaemon")`)
 }
 
 func TestNudge_SuppressedDuringCooldown(t *testing.T) {
 	resetNudgeState()
-	in := shellInput(t, `rg -n 'ResolveDaemon' internal/`)
-	require.NotEmpty(t, maybeCodeContextNudge(names.ToolBash, in, "thread-1"))
+	in := shellToolInputJSON(t, `rg -n 'ResolveDaemon' internal/`)
+	require.NotEmpty(t, maybeCodeContextNudge(names.ToolShell, in, "thread-1"))
 
 	for i := 0; i < nudgeCooldownTurns-1; i++ {
-		assert.Empty(t, maybeCodeContextNudge(names.ToolBash, in, "thread-1"),
+		assert.Empty(t, maybeCodeContextNudge(names.ToolShell, in, "thread-1"),
 			"call %d is inside the cooldown", i+2)
 	}
-	assert.NotEmpty(t, maybeCodeContextNudge(names.ToolBash, in, "thread-1"),
+	assert.NotEmpty(t, maybeCodeContextNudge(names.ToolShell, in, "thread-1"),
 		"should fire again once the cooldown elapses")
 }
 
 // Ignored twice means it is being tuned out; a third is noise.
 func TestNudge_StopsAfterMaxPerThread(t *testing.T) {
 	resetNudgeState()
-	in := shellInput(t, `rg -n 'ResolveDaemon' internal/`)
+	in := shellToolInputJSON(t, `rg -n 'ResolveDaemon' internal/`)
 	fired := 0
 	for i := 0; i < nudgeCooldownTurns*5; i++ {
-		if maybeCodeContextNudge(names.ToolBash, in, "thread-1") != "" {
+		if maybeCodeContextNudge(names.ToolShell, in, "thread-1") != "" {
 			fired++
 		}
 	}
@@ -111,35 +111,35 @@ func TestNudge_StopsAfterMaxPerThread(t *testing.T) {
 // its own budget rather than inheriting an exhausted parent's.
 func TestNudge_BudgetIsPerThread(t *testing.T) {
 	resetNudgeState()
-	in := shellInput(t, `rg -n 'ResolveDaemon' internal/`)
+	in := shellToolInputJSON(t, `rg -n 'ResolveDaemon' internal/`)
 	for i := 0; i < nudgeCooldownTurns*5; i++ {
-		maybeCodeContextNudge(names.ToolBash, in, "parent")
+		maybeCodeContextNudge(names.ToolShell, in, "parent")
 	}
-	assert.Empty(t, maybeCodeContextNudge(names.ToolBash, in, "parent"), "parent exhausted")
-	assert.NotEmpty(t, maybeCodeContextNudge(names.ToolBash, in, "child"),
+	assert.Empty(t, maybeCodeContextNudge(names.ToolShell, in, "parent"), "parent exhausted")
+	assert.NotEmpty(t, maybeCodeContextNudge(names.ToolShell, in, "child"),
 		"a spawned thread starts with its own budget")
 }
 
 func TestNudge_OnlyForShellTool(t *testing.T) {
 	resetNudgeState()
-	in := shellInput(t, `rg -n 'ResolveDaemon' internal/`)
+	in := shellToolInputJSON(t, `rg -n 'ResolveDaemon' internal/`)
 	assert.Empty(t, maybeCodeContextNudge("view", in, "thread-1"))
 	assert.Empty(t, maybeCodeContextNudge(names.ToolCodeContext, in, "thread-1"))
-	assert.NotEmpty(t, maybeCodeContextNudge(names.ToolBash, in, "thread-1"))
+	assert.NotEmpty(t, maybeCodeContextNudge(names.ToolShell, in, "thread-1"))
 }
 
 func TestNudge_RequiresThreadID(t *testing.T) {
 	resetNudgeState()
-	assert.Empty(t, maybeCodeContextNudge(names.ToolBash,
-		shellInput(t, `rg -n 'ResolveDaemon' internal/`), ""))
+	assert.Empty(t, maybeCodeContextNudge(names.ToolShell,
+		shellToolInputJSON(t, `rg -n 'ResolveDaemon' internal/`), ""))
 }
 
 // The hint names the symbol just searched for; a generic rule reads as
 // boilerplate and gets skipped.
 func TestNudge_NamesTheSymbolAndStaysOneNote(t *testing.T) {
 	resetNudgeState()
-	got := maybeCodeContextNudge(names.ToolBash,
-		shellInput(t, `rg -n 'CancelChatToolCalls' internal/threads/`), "thread-1")
+	got := maybeCodeContextNudge(names.ToolShell,
+		shellToolInputJSON(t, `rg -n 'CancelChatToolCalls' internal/threads/`), "thread-1")
 
 	require.NotEmpty(t, got)
 	assert.Contains(t, got, "CancelChatToolCalls")

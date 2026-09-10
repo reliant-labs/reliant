@@ -172,7 +172,7 @@ const backgroundPollInterval = 100 * time.Millisecond
 //
 // Returns (result, true) when the command was adopted into the background
 // manager; the caller returns that result immediately and the process keeps
-// running under BashOutput / BashKill. Returns (_, false) when the command
+// running under shell_output / shell_kill. Returns (_, false) when the command
 // finished on its own, and the caller proceeds with the normal result path.
 func pollForBackgroundDetach(
 	ctx context.Context,
@@ -230,7 +230,7 @@ func pollForBackgroundDetach(
 				"processID", process.ID, "toolCallID", toolCallID)
 
 			out := fmt.Sprintf(
-				"Command detached into a background process.\nProcess ID: %s\nCommand: %s\nUse BashOutput to read its output and BashKill to stop it.",
+				"Command detached into a background process.\nProcess ID: %s\nCommand: %s\nUse shell_output to read its output and shell_kill to stop it.",
 				process.ID, req.Command)
 			resp := daemon.CommandResult{
 				Stdout:       out,

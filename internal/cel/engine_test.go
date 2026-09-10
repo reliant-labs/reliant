@@ -44,10 +44,10 @@ func TestEngine_BasicExpressions(t *testing.T) {
 		},
 		{
 			name:       "nested object",
-			expression: "tool.name == 'bash'",
+			expression: "tool.name == 'shell'",
 			vars: map[string]interface{}{
 				"tool": map[string]interface{}{
-					"name": "bash",
+					"name": "shell",
 				},
 			},
 			expected: true,
@@ -152,10 +152,10 @@ func TestEngine_ComplexConditions(t *testing.T) {
 	}{
 		{
 			name:       "workflow condition example",
-			expression: "tool.name == 'bash' && context.auto_approve == false",
+			expression: "tool.name == 'shell' && context.auto_approve == false",
 			vars: map[string]interface{}{
 				"tool": map[string]interface{}{
-					"name": "bash",
+					"name": "shell",
 				},
 				"context": map[string]interface{}{
 					"auto_approve": false,

@@ -76,6 +76,13 @@ export type OnboardingFactsInput = PaymentFacts;
 export const UNKNOWN_FACTS: OnboardingFactsInput = {
   computeEligible: false,
   walletFunded: false,
+  // NOT pessimistic, and deliberately so. The two above are server reads, where
+  // "unknown" must mean "might owe". This one is a build constant read from
+  // `capabilities.billing` — there is no unknown state for it to be in, so
+  // defaulting it false here would claim every caller of UNKNOWN_FACTS is on a
+  // deployment that cannot bill, which is the opposite of pessimistic: it would
+  // suppress the checkout step rather than list it.
+  reliantBillingAvailable: true,
 };
 
 /** All steps that *would* appear in the user's onboarding given the plan
@@ -155,6 +162,26 @@ function checkoutIsOwed(
   return requiresPayment(plan, facts).any;
 }
 
+/**
+ * NOTE — a compute bill with no `computePlanId` chosen.
+ *
+ * The checkout step has no size picker BY DESIGN (the machine is chosen on the
+ * compute step, beside its price), so such a bill is one nothing on that
+ * screen can settle: it renders "we couldn't load the machine plans", blaming
+ * the catalog for a missing field.
+ *
+ * It is NOT fixed by re-routing here, and the attempt is instructive. Making
+ * `checkoutIsOwed` return false says "nothing is owed" and derivation falls
+ * through to the PROJECT steps, walking an unpaid user into the app — the one
+ * invariant `deriveStep.transitions` exists to defend. Returning 'compute'
+ * from `deriveStep` instead makes the step non-monotonic and breaks the
+ * enumeration's "checkout appears exactly when money is owed" contract.
+ *
+ * The real fix is upstream, where the field goes missing: `BACK_CLEARS.checkout`
+ * now clears `compute` alongside `computePlanId`, so a Back that un-chooses the
+ * machine returns to the step that can re-choose it. See `backFromCheckout.trap`.
+ */
+
 /** Derive the single step the user should be on right now from plan state.
  *  This is the source of truth — there is no `step` URL param. Forward
  *  motion happens when a step updates the plan; backward motion happens
@@ -205,7 +232,43 @@ export const BACK_CLEARS: Record<OnboardingStepId, (keyof LaunchPlan)[]> = {
   // also drop the purchase selections made ON this step, or derivation lands
   // the user back here with a plan chosen for a compute option they just
   // rejected.
-  'checkout': ['modelProvider', 'computePlanId', 'aiCreditCents'],
+  //
+  // The settlement flags go too, and leaving them out was a real trap. They
+  // record "this leg's debt is cleared" — a COUPON sets one without any card,
+  // which is the common case here. A Back that keeps `computeSettled` sends
+  // derivation straight past the compute leg to the credit leg, so a user who
+  // redeemed a compute coupon could never return to change their machine size:
+  // Back landed on the model step, and the next forward move skipped compute
+  // entirely. Going back to reconsider a leg has to un-settle that leg,
+  // otherwise the flag outlives the decision it describes — the same defect
+  // class as the `computeAutoSkipped` note above.
+  //
+  // Re-settling is cheap and safe: a redeemed coupon still reads as
+  // `computeEligible` from the server, so `requiresPayment` owes nothing and
+  // the step is simply not derived again. The grant is not spent by this.
+  // `compute` goes too, and leaving it out was the second trap on this step.
+  // Back drops `computePlanId` — right, since a machine chosen for a bill the
+  // user is reconsidering should not survive — but the plan TILES live on the
+  // compute step. Clearing only `modelProvider` landed the user on the model
+  // step, which cannot set a plan id, and their next forward move derived
+  // straight back to checkout with none. That is the state that renders "we
+  // couldn't load the machine plans": the message blames the catalog for a
+  // field Back deleted.
+  //
+  // Going back from payment returns to the decision that CREATED the cost.
+  // Compute is one of the two legs of that bill, so reconsidering the bill has
+  // to be able to reconsider the machine. `computeAutoSkipped` goes with
+  // `compute` for the same reason it does on the model step — the flag
+  // describes an event that clearing `compute` un-does.
+  'checkout': [
+    'compute',
+    'computeAutoSkipped',
+    'modelProvider',
+    'computePlanId',
+    'aiCreditCents',
+    'computeSettled',
+    'creditSettled',
+  ],
   'project-choice': ['modelProvider'],
   'project-picker': ['modelProvider'],
   'github-connect': ['intent'],

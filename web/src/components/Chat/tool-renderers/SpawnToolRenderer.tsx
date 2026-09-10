@@ -75,7 +75,7 @@ function extractToolDetail(toolName: string, inputJson?: string): string {
         }
         return "";
       }
-      case "bash": {
+      case "shell": {
         const cmd = input.command || "";
         return cmd.length > 50 ? cmd.slice(0, 50) + "…" : cmd;
       }

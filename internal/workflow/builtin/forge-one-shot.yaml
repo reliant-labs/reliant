@@ -1310,8 +1310,8 @@ nodes:
 
           **Step 6: Get the preview URL for the port from Step 4.** Run
           `reliant preview-url <N>` — it prints the authoritative proxied URL for that port
-          (the same URL appears as a `Preview URL (port <N>): ...` line in the `bash_list` /
-          `bash_output` result from Step 4). Use it verbatim; do NOT invent one or post a raw
+          (the same URL appears as a `Preview URL (port <N>): ...` line in the `shell_list` /
+          `shell_output` result from Step 4). Use it verbatim; do NOT invent one or post a raw
           `http://localhost:<port>` link when a proxied URL is available. If `preview-url`
           reports none (a local run), fall back to `http://localhost:<N>/`.
 

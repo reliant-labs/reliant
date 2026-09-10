@@ -4,11 +4,12 @@ import { useAuthStore } from '@/store/authStore'
 // The same-origin guard, shared: only relative paths are honored, so a crafted
 // `returnTo` cannot bounce the user to an attacker-controlled origin.
 import { isSafeReturnTo } from '@/lib/returnTo'
-import { EmailVerification } from './EmailVerification'
+import { describeAuthError } from '@/lib/authErrors'
 import { LinkIdentityForm } from './LinkIdentityForm'
 import { AuthLayout, AuthHeader, AuthError } from './AuthLayout'
 import { BillingService } from '@/gen/controlplane/v1/public/billing_service_pb'
 import { getControlPlaneClient } from '../services/controlPlane/client'
+import { CheckSpamNote } from './CheckSpamNote'
 
 /**
  * Account-upgrade flow. Entry point for an anonymous Supabase user who needs a
@@ -20,10 +21,18 @@ import { getControlPlaneClient } from '../services/controlPlane/client'
  * attaching an identity to THAT account, not creating a second one:
  *   - GitHub / Google / Apple → supabase.auth.linkIdentity (round-trips through
  *     the provider and back to /auth/callback, which honors `returnTo`).
- *   - Email + password → supabase.auth.signUp, which upgrades the anonymous
- *     user in place. With email confirmation enabled this returns no session,
- *     so we drop into the existing EmailVerification OTP screen; once verified
- *     the account carries a confirmed email.
+ *   - Email + password → supabase.auth.updateUser, which upgrades the
+ *     anonymous user in place. With confirmations enabled the address stays
+ *     pending until the user types the emailed code or clicks the emailed
+ *     link; LinkIdentityForm owns that step inline.
+ *
+ * The email step is NOT delegated to the standalone `EmailVerification`
+ * screen. That screen verifies with `type: 'signup'`, which reads GoTrue's
+ * confirmation_token — but an anonymous user upgraded via updateUser has a
+ * pending EMAIL CHANGE, whose token lives in email_change_token_new. Verifying
+ * with the wrong type reports "Token has expired or is invalid" for a code
+ * that is perfectly valid, so this route uses the form's own step, which
+ * verifies with `type: 'email_change'`.
  *
  * A plain bounce to /auth does NOT work here: the anon user already has a
  * Supabase session, so /auth would just redirect them away — and signing in
@@ -60,15 +69,13 @@ export function UpgradeAccount() {
     initialized,
     loading: authLoading,
     initialize,
-    sendEmailVerificationOTP,
-    verifyEmailOTP,
+    sendEmailIdentityVerification,
+    verifyEmailIdentityOTP,
   } = useAuthStore()
 
-  // The link form owns its own email/password/provider state. What stays here
-  // is this route's two extra jobs: the full-screen OTP screen, and the
-  // billing-email fallback for a provider that yielded no usable address.
-  const [verificationEmail, setVerificationEmail] = useState<string | null>(null)
-
+  // The link form owns its own email/password/verification/provider state.
+  // What stays here is this route's one extra job: the billing-email fallback
+  // for a provider that yielded no usable address.
   // No-email-after-upgrade fallback (e.g. GitHub with a private email): the
   // user enters a billing email, verifies it via OTP, and only then do we
   // persist it through the control-plane UpdateBillingEmail RPC.
@@ -101,8 +108,17 @@ export function UpgradeAccount() {
   }, [initialized, authLoading, alreadyUpgraded, returnTo, navigate])
 
   // Step 1 of the billing-email fallback: ship an OTP to the address the user
-  // typed. We pass it as an override so the OTP primitives don't key off the
-  // (absent) account email.
+  // typed. We pass it explicitly because the account email is absent — that
+  // absence is the whole reason this branch renders.
+  //
+  // This goes through the EMAIL-CHANGE primitives, not the signup ones. The
+  // user here is non-anonymous but has no `users.email` (GitHub with a private
+  // address), so attaching one is an email change: GoTrue writes the pending
+  // address to `users.email_change` and the token to `email_change_token_new`.
+  // `resend`/`verifyOtp` with `type: 'signup'` look up `users.email` and
+  // `confirmation_token` respectively, so both missed — the send returned a
+  // bare 200 having mailed nothing, and a correct code reported "Token has
+  // expired or is invalid".
   const handleBillingSendCode = async (e: React.FormEvent) => {
     e.preventDefault()
     setBillingError(null)
@@ -115,13 +131,11 @@ export function UpgradeAccount() {
 
     setBillingSubmitting(true)
     try {
-      await sendEmailVerificationOTP(trimmed)
+      await sendEmailIdentityVerification(trimmed)
       setBillingEmail(trimmed)
       setBillingCodeSent(true)
     } catch (err) {
-      setBillingError(
-        err instanceof Error ? err.message : 'Failed to send verification code.',
-      )
+      setBillingError(describeAuthError(err, 'Failed to send verification code.'))
     } finally {
       setBillingSubmitting(false)
     }
@@ -141,19 +155,9 @@ export function UpgradeAccount() {
 
     setBillingSubmitting(true)
     try {
-      await verifyEmailOTP(billingCode, billingEmail)
+      await verifyEmailIdentityOTP(billingCode, billingEmail)
     } catch (err) {
-      let message = 'Failed to verify code. Please try again.'
-      if (err instanceof Error) {
-        if (err.message.includes('expired')) {
-          message = 'Verification code has expired. Please request a new one.'
-        } else if (err.message.includes('invalid')) {
-          message = 'Invalid verification code. Please check and try again.'
-        } else {
-          message = err.message || message
-        }
-      }
-      setBillingError(message)
+      setBillingError(describeAuthError(err, 'Failed to verify code. Please try again.'))
       setBillingSubmitting(false)
       return
     }
@@ -177,13 +181,6 @@ export function UpgradeAccount() {
   }
 
   // ---- Render states -------------------------------------------------------
-
-  // Email confirmation pending: reuse the existing OTP screen verbatim. Once it
-  // verifies, the user carries a confirmed email and the alreadyUpgraded effect
-  // (or EmailVerification's own navigation) takes over.
-  if (verificationEmail) {
-    return <EmailVerification autoSend email={verificationEmail} />
-  }
 
   // While auth is still resolving, or we're about to redirect an
   // already-upgraded user, render nothing rather than flash the upgrade form.
@@ -218,6 +215,8 @@ export function UpgradeAccount() {
           />
 
           {billingError && <AuthError message={billingError} />}
+
+          {billingCodeSent && <CheckSpamNote />}
 
           {!billingCodeSent ? (
               <form className="space-y-5" onSubmit={handleBillingSendCode} autoComplete="on">
@@ -318,9 +317,6 @@ export function UpgradeAccount() {
         <LinkIdentityForm
           returnTo={returnTo}
           onLinked={() => goToReturnTo(returnTo, navigate)}
-          // This route has a full-screen verification step of its own and the
-          // room to show it; the modal verifies inline instead.
-          onVerificationRequired={setVerificationEmail}
         />
 
       </div>

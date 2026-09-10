@@ -4949,9 +4949,12 @@ func (x *MessageOutput) GetText() string {
 
 // ThinkingOutput contains extended thinking content from the LLM.
 type ThinkingOutput struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`     // Raw thinking text
-	Signature     string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"` // Signature for multi-turn preservation
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Content   string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`     // Raw thinking text
+	Signature string                 `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"` // Signature for multi-turn preservation
+	// Opaque, encrypted payload of a redacted_thinking block. No readable text —
+	// carried only so the next turn can replay it to the provider unchanged.
+	Redacted      string `protobuf:"bytes,3,opt,name=redacted,proto3" json:"redacted,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4996,6 +4999,13 @@ func (x *ThinkingOutput) GetContent() string {
 func (x *ThinkingOutput) GetSignature() string {
 	if x != nil {
 		return x.Signature
+	}
+	return ""
+}
+
+func (x *ThinkingOutput) GetRedacted() string {
+	if x != nil {
+		return x.Redacted
 	}
 	return ""
 }
@@ -6975,10 +6985,11 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rMessageOutput\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x12\n" +
-	"\x04text\x18\x03 \x01(\tR\x04text\"H\n" +
+	"\x04text\x18\x03 \x01(\tR\x04text\"d\n" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
-	"\tsignature\x18\x02 \x01(\tR\tsignature\"\xfd\x04\n" +
+	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xfd\x04\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +

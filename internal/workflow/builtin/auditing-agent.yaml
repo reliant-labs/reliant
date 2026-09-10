@@ -94,7 +94,7 @@ inputs:
 
           # Hard DENY rules
           - Creating fallbacks which mask bugs
-          - No use of `pkill` command - use BashList and BashKill instead
+          - No use of `pkill` command - use shell_list and shell_kill instead
           - No private secrets in committed code
           - Don't allow view + edit in the same message
           - Skipping tests or writing fake tests

@@ -101,7 +101,7 @@ const (
 	transportGapMinShare = 10 // gap must be at least 1/10th of the whole call
 )
 
-// bashTransportTiming returns a timing block when the wall-clock cost of the
+// shellTransportTiming returns a timing block when the wall-clock cost of the
 // tool call materially exceeds the command's own runtime, and nil when the two
 // clocks agree.
 //
@@ -113,7 +113,7 @@ const (
 // to be noticed on the one call that mattered. A field that appears only when
 // two independently measured clocks contradict each other is self-selecting
 // evidence: its presence is the finding.
-func bashTransportTiming(wallMs, commandMs int64) *BashTiming {
+func shellTransportTiming(wallMs, commandMs int64) *BashTiming {
 	if commandMs <= 0 {
 		// Nothing to compare against: an executor that does not measure the
 		// command cannot support a claim about where the time went.
@@ -131,11 +131,12 @@ func bashTransportTiming(wallMs, commandMs int64) *BashTiming {
 	}
 }
 
-type shellTool struct{}
-
-// ShellToolName is defined in platform-specific files:
-// - shell_name_unix.go: "bash"
-// - shell_name_windows.go: "powershell"
+// shellTool is the unified shell tool. It carries the platform of the machine
+// that will RUN the command so its description can be written for that shell;
+// the name is the same everywhere (see ShellToolName).
+type shellTool struct {
+	platform ShellPlatform
+}
 
 const (
 	DefaultShellTimeout  = 1 * time.Minute
@@ -164,9 +165,8 @@ var safeReadOnlyShellCommands = []string{
 	"Get-Process", "Get-Service", "Test-Path", "Select-String", "Where-Object", "Select-Object",
 }
 
-// shellDescription is defined in platform-specific files:
-// - shell_name_unix.go: bash-specific description
-// - shell_name_windows.go: powershell-specific description
+// shellDescription and the platform preambles live in shell_platform.go —
+// selected at request time from the daemon's reported OS.
 
 func shellDescriptionCommon() string {
 	return `
@@ -252,7 +252,7 @@ nothing.
 Usage notes:
 - The command argument is required.
 - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
-- Use 'run_in_background: true' to run long-running commands in the background. You can then use BashOutput to check output, BashKill to terminate, and BashList to see all running processes.
+- Use 'run_in_background: true' to run long-running commands in the background. You can then use shell_output to check output, shell_kill to terminate, and shell_list to see all running processes.
 - Searching the codebase IS a use of this tool (prefer 'rg', scoped to a relative path — see above). For reading whole files, prefer the View tool over 'cat'/'head'/'tail'.
 - VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
 - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
@@ -276,17 +276,21 @@ Important:
 - Never update git config`
 }
 
-func NewShellTool() Tool {
-	tool := &shellTool{}
+// NewShellTool builds the shell tool described for the platform that will
+// execute its commands. Pass ShellPlatformUnknown when the executing machine's
+// OS is genuinely unknown; the description then tells the model to probe rather
+// than assume a dialect.
+func NewShellTool(platform ShellPlatform) Tool {
+	tool := &shellTool{platform: platform}
 	return NewToolWrapper(tool)
 }
 
 func (s *shellTool) Name() string {
-	return shellToolName()
+	return ShellToolName
 }
 
 func (s *shellTool) Description() string {
-	return shellDescription()
+	return shellDescription(s.platform)
 }
 
 func (s *shellTool) RequiresPermission(params ShellParams) (bool, error) {
@@ -444,9 +448,9 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	// Ensure the JSON-encoded result fits the global output budget. Otherwise the
 	// generic tool_wrapper truncation head+tail-cuts the JSON *string*, corrupting
 	// the envelope (and appending a misleading "use offset parameter" hint the
-	// foreground bash tool doesn't support). Fitting it here keeps the model's
+	// foreground shell tool doesn't support). Fitting it here keeps the model's
 	// tool result valid JSON.
-	stdout, stderr = fitBashOutputToBudget(stdout, stderr, exitCode, MaxOutputSize)
+	stdout, stderr = fitShellOutputToBudget(stdout, stderr, exitCode, MaxOutputSize)
 
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
 
@@ -460,11 +464,11 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		OriginalSize:      originalStdoutSize + originalStderrSize,
 	}
 
-	output := BashOutput{
+	output := ShellOutput{
 		Stdout:   stdout,
 		Stderr:   stderr,
 		ExitCode: exitCode,
-		Timing:   bashTransportTiming(endTime.Sub(startTime).Milliseconds(), result.DurationMs),
+		Timing:   shellTransportTiming(endTime.Sub(startTime).Milliseconds(), result.DurationMs),
 	}
 	outputJSON, _ := json.Marshal(output)
 
@@ -493,9 +497,9 @@ func truncateOutputWithLimit(content string, limit int) string {
 	return fmt.Sprintf("%s\n\n... [%d lines truncated] ...\n\n%s", start, truncatedLinesCount, end)
 }
 
-// fitBashOutputToBudget shrinks stdout/stderr (head+tail, always re-truncating
+// fitShellOutputToBudget shrinks stdout/stderr (head+tail, always re-truncating
 // from the passed-in strings so markers never compound) until the JSON-encoded
-// BashOutput fits within budget bytes.
+// ShellOutput fits within budget bytes.
 //
 // The per-stream caps applied earlier bound stdout and stderr individually, but
 // their sum plus the JSON envelope and escaping can still exceed MaxOutputSize —
@@ -506,9 +510,9 @@ func truncateOutputWithLimit(content string, limit int) string {
 // Encoded length grows monotonically with content length, so scaling content
 // down by the overflow ratio converges in a few iterations; the bounded loop and
 // 1-byte floor guarantee termination.
-func fitBashOutputToBudget(stdout, stderr string, exitCode, budget int) (string, string) {
+func fitShellOutputToBudget(stdout, stderr string, exitCode, budget int) (string, string) {
 	encodedLen := func(o, e string) int {
-		b, _ := json.Marshal(BashOutput{Stdout: o, Stderr: e, ExitCode: exitCode})
+		b, _ := json.Marshal(ShellOutput{Stdout: o, Stderr: e, ExitCode: exitCode})
 		return len(b)
 	}
 	if encodedLen(stdout, stderr) <= budget {

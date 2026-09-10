@@ -294,25 +294,34 @@ func evaluateSaveMessageConfig(
 			return nil, fmt.Errorf("thinking: expected map[string]interface{}, got %T", thinking)
 		}
 
-		// Content is required for thinking output
+		// Each field stands on its own. The signature used to be read only
+		// when content was non-empty, which silently discarded the exact case
+		// this fix exists for: a provider that signs a thinking block but
+		// returns no readable text for it. The signature is what lets the next
+		// turn replay the block, so it has to survive without the text.
 		content, hasContent := thinkingMap["content"]
 		if hasContent && content != nil {
 			contentStr, ok := content.(string)
 			if !ok {
 				return nil, fmt.Errorf("thinking.content: expected string, got %T", content)
 			}
-			if contentStr != "" {
-				thinkingOutput.Content = contentStr
+			thinkingOutput.Content = contentStr
+		}
 
-				// Signature is optional but should be present for Claude's extended thinking
-				if sig, hasSig := thinkingMap["signature"]; hasSig && sig != nil {
-					sigStr, ok := sig.(string)
-					if !ok {
-						return nil, fmt.Errorf("thinking.signature: expected string, got %T", sig)
-					}
-					thinkingOutput.Signature = sigStr
-				}
+		if sig, hasSig := thinkingMap["signature"]; hasSig && sig != nil {
+			sigStr, ok := sig.(string)
+			if !ok {
+				return nil, fmt.Errorf("thinking.signature: expected string, got %T", sig)
 			}
+			thinkingOutput.Signature = sigStr
+		}
+
+		if redacted, hasRedacted := thinkingMap["redacted"]; hasRedacted && redacted != nil {
+			redactedStr, ok := redacted.(string)
+			if !ok {
+				return nil, fmt.Errorf("thinking.redacted: expected string, got %T", redacted)
+			}
+			thinkingOutput.Redacted = redactedStr
 		}
 	}
 
@@ -650,12 +659,20 @@ func executeSaveMessageInline(
 	// assistant-tail yield, which HAS nothing to save. Declining the dispatch
 	// says that outright instead of expressing it as a failed write.
 	//
+	// A thinking signature or a sealed redacted block counts as content, and
+	// must mirror the write guard in threads.validateSaveMessageOpts exactly.
+	// If this predicate is stricter than that one, the row is dropped here
+	// without ever reaching the validator — which is precisely how a
+	// signature-bearing turn used to vanish with only a WARN to show for it.
+	//
 	// Deliberately not silent: a content-free assistant turn should be
 	// impossible upstream, so it stays greppable at WARN.
 	if strings.EqualFold(saveInput.Role, "assistant") &&
 		saveInput.Content == "" &&
 		len(saveInput.ToolCalls) == 0 &&
-		saveInput.Thinking.Content == "" {
+		saveInput.Thinking.Content == "" &&
+		saveInput.Thinking.Signature == "" &&
+		saveInput.Thinking.Redacted == "" {
 		logger.Warn("[SaveMessage] Skipping an assistant message with no content, tool calls or thinking — "+
 			"there is no row to write. Expected only for the assistant-tail yield in call_llm; "+
 			"anywhere else it means a turn reached save with nothing in it.",
@@ -763,10 +780,11 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 	}
 
 	// Convert thinking
-	if input.Thinking.Content != "" || input.Thinking.Signature != "" {
+	if input.Thinking.Content != "" || input.Thinking.Signature != "" || input.Thinking.Redacted != "" {
 		args.ResolvedThinking = &reliantv1.ThinkingOutput{
 			Content:   input.Thinking.Content,
 			Signature: input.Thinking.Signature,
+			Redacted:  input.Thinking.Redacted,
 		}
 	}
 

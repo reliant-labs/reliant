@@ -178,9 +178,9 @@ func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
 	canceler := newRecordingThreadInterruptCanceler()
 	svc := NewService(repo, WithTemporalSignaler(signaler), WithToolCanceler(canceler))
 
-	bashCall := "toolu_" + uuid.NewString()
+	shellCall := "toolu_" + uuid.NewString()
 	viewCall := "toolu_" + uuid.NewString()
-	insertInterruptToolCall(t, repo, bashCall, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusExecuting)
+	insertInterruptToolCall(t, repo, shellCall, fx.chatID, fx.rootThreadID, "bash", core.ToolCallStatusExecuting)
 	insertInterruptToolCall(t, repo, viewCall, fx.chatID, fx.rootThreadID, "view", core.ToolCallStatusExecuting)
 
 	result, err := svc.InterruptThread(ctx, InterruptThreadOpts{
@@ -190,7 +190,7 @@ func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
 
 	assert.Equal(t, 2, result.CancelledToolCalls)
 	assert.Empty(t, result.UndeliverableToolCalls)
-	assert.ElementsMatch(t, []string{bashCall, viewCall}, canceler.cancelledIDs(),
+	assert.ElementsMatch(t, []string{shellCall, viewCall}, canceler.cancelledIDs(),
 		"every executing tool on the thread must be asked to stop")
 
 	signals := signaler.recorded()

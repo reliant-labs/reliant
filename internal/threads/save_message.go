@@ -24,9 +24,29 @@ type ToolCall = message.ToolCall
 type ToolResult = message.ToolResult
 
 // ThinkingContent contains extended thinking content from the LLM.
+//
+// Content and Signature are independently optional. A turn can legitimately
+// produce a Signature with no Content — the provider streamed a signed thinking
+// block whose text it withheld — and that pairing MUST still be persisted: the
+// signature is what lets the next turn replay the block and continue, so
+// dropping it strands the thread on a prompt that can only reproduce itself.
 type ThinkingContent struct {
 	Content   string `json:"content"`
 	Signature string `json:"signature"`
+	// Redacted is the opaque, encrypted payload of a redacted_thinking block.
+	// No readable text; replayed to the provider unchanged.
+	Redacted string `json:"redacted,omitempty"`
+}
+
+// HasContent reports whether this carries anything worth a durable row —
+// readable reasoning, a replayable signature, or a sealed block. Used by the
+// write guard so "is there something to save" is defined in exactly one place
+// and cannot drift from what createAssistantContentBlocks actually emits.
+func (t *ThinkingContent) HasContent() bool {
+	if t == nil {
+		return false
+	}
+	return t.Content != "" || t.Signature != "" || t.Redacted != ""
 }
 
 // SaveMessageOpts contains options for saving a message to a thread.
@@ -340,8 +360,14 @@ func validateSaveMessageOpts(opts SaveMessageOpts) error {
 		// thinking block, so a thinking-only turn is NOT blockless and stays
 		// allowed. The condition below mirrors that function's inputs exactly,
 		// so this predicate and the block-creation logic cannot drift.
-		hasThinking := opts.Thinking != nil && opts.Thinking.Content != ""
-		if opts.Content == "" && len(opts.ToolCalls) == 0 && !hasThinking {
+		//
+		// "Thinking" here includes a signature or a sealed redacted payload
+		// with no readable text. That pairing used to be rejected as blockless,
+		// which was the bug: the provider had signed a real thinking block, and
+		// refusing the row threw away the one artifact that lets the next turn
+		// resume — so the retry replayed an identical prompt and stalled the
+		// same way, indefinitely.
+		if opts.Content == "" && len(opts.ToolCalls) == 0 && !opts.Thinking.HasContent() {
 			return fmt.Errorf(
 				"refusing to save an assistant message with no content, tool calls, or thinking "+
 					"(chat=%s, thread=%s): the row would have zero content blocks and would wedge "+
@@ -541,8 +567,13 @@ func (s *Service) createUserContentBlocks(ctx context.Context, messageID string,
 func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
 	position := 0
 
-	// Create thinking block if thinking content is provided
-	if opts.Thinking != nil && opts.Thinking.Content != "" {
+	// Create thinking block when there is readable reasoning OR a signature.
+	//
+	// The signature alone is worth a row: it is what the provider verifies to
+	// let the model resume its own reasoning next turn. Persisting text-only
+	// used to drop signature-bearing turns entirely, which is what wedged a
+	// thread into replaying the same prompt forever.
+	if opts.Thinking != nil && (opts.Thinking.Content != "" || opts.Thinking.Signature != "") {
 		var thinkingSig *string
 		if opts.Thinking.Signature != "" {
 			thinkingSig = &opts.Thinking.Signature
@@ -567,6 +598,30 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 		}
 		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
 			return fmt.Errorf("failed to create thinking content block: %w", err)
+		}
+		position++
+	}
+
+	// Create the redacted thinking block, if the provider sealed one. Its own
+	// block type, so nothing downstream can read the ciphertext as reasoning.
+	if opts.Thinking != nil && opts.Thinking.Redacted != "" {
+		slog.Info("[SaveMessage] Creating redacted thinking block",
+			"message_id", messageID,
+			"data_len", len(opts.Thinking.Redacted),
+			"position", position)
+
+		block := &db.MessageContentBlock{
+			ID:        uuid.New().String(),
+			MessageID: messageID,
+			Position:  position,
+			BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING,
+			Content:   &opts.Thinking.Redacted,
+			Version:   ptr.Of(1),
+			CreatedAt: timestamp,
+			UpdatedAt: timestamp,
+		}
+		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
+			return fmt.Errorf("failed to create redacted thinking content block: %w", err)
 		}
 		position++
 	}

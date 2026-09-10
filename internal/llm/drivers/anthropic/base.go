@@ -155,6 +155,20 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 						"msg_id", msg.ID,
 						"thinking_len", len(reasoning.Thinking))
 				}
+
+				// Redacted reasoning replays alongside it, and carries no
+				// signature of its own — the payload IS the sealed block, so
+				// the signature gate above must not be applied to it. Like a
+				// thinking block it has to precede text and tool_use.
+				for _, redacted := range msg.RedactedReasoningContent() {
+					if redacted.Data == "" {
+						continue
+					}
+					blocks = append(blocks, anthropic.NewRedactedThinkingBlock(redacted.Data))
+					logging.Info("[convertMessages] Added redacted thinking block",
+						"msg_id", msg.ID,
+						"data_len", len(redacted.Data))
+				}
 			}
 
 			if msg.Content().String() != "" {
@@ -446,6 +460,7 @@ func (b *baseClient) buildCompleteEvent(accumulatedMessage anthropic.Message, ma
 	content := ""
 	thinking := ""
 	thinkingSignature := ""
+	redactedThinking := ""
 	logging.Info("called build complete event with", "content_blocks", len(accumulatedMessage.Content))
 	for _, block := range accumulatedMessage.Content {
 		switch v := block.AsAny().(type) {
@@ -461,6 +476,13 @@ func (b *baseClient) buildCompleteEvent(accumulatedMessage anthropic.Message, ma
 			if v.Signature != "" {
 				thinkingSignature = v.Signature
 			}
+		case anthropic.RedactedThinkingBlock:
+			// Opaque and encrypted: Data is not readable thinking and must not
+			// be concatenated into `thinking`. Captured so the next request can
+			// replay it unchanged, as the API requires.
+			redactedThinking += v.Data
+			logging.Info("Found RedactedThinkingBlock in accumulated message",
+				"data_len", len(v.Data))
 		}
 	}
 
@@ -495,6 +517,7 @@ func (b *baseClient) buildCompleteEvent(accumulatedMessage anthropic.Message, ma
 			Content:           content,
 			Thinking:          thinking,
 			ThinkingSignature: thinkingSignature,
+			RedactedThinking:  redactedThinking,
 			ToolCalls:         toolCalls,
 			Usage:             b.usage(accumulatedMessage),
 			FinishReason:      finishReason,
@@ -530,6 +553,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 		accumulated := anthropic.Message{}
 		gotMessageStop := false
 		currentToolID := ""
+		currentToolName := ""
 
 		// Manual accumulation of thinking signature
 		// The SDK's Accumulate may not properly handle signature_delta in all cases
@@ -558,6 +582,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 				}
 				if e.ContentBlock.Type == "tool_use" {
 					currentToolID = e.ContentBlock.ID
+					currentToolName = e.ContentBlock.Name
 					eventChan <- llm.DriverEvent{
 						Type: llm.EventToolUseStart,
 						ToolCall: &message.ToolCall{
@@ -593,6 +618,7 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 						Type: llm.EventToolUseDelta,
 						ToolCall: &message.ToolCall{
 							ID:       currentToolID,
+							Name:     currentToolName,
 							Finished: false,
 							Input:    rawInput,
 						},
@@ -601,11 +627,16 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 
 			case anthropic.ContentBlockStopEvent:
 				if currentToolID != "" {
+					// Names the block that closed. The arguments arrived as
+					// separate input_json_delta chunks and are reassembled into
+					// the EventComplete response, so consumers must read them
+					// from there rather than from this event.
 					eventChan <- llm.DriverEvent{
 						Type:     llm.EventToolUseStop,
-						ToolCall: &message.ToolCall{ID: currentToolID},
+						ToolCall: &message.ToolCall{ID: currentToolID, Name: currentToolName},
 					}
 					currentToolID = ""
+					currentToolName = ""
 				} else {
 					eventChan <- llm.DriverEvent{Type: llm.EventContentStop}
 				}

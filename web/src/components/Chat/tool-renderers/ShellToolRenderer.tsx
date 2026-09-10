@@ -20,7 +20,7 @@ const SHORT_COMMAND_THRESHOLD = 80;
 // Max height for command input before scrolling (~3-4 lines)
 const COMMAND_MAX_HEIGHT = 64;
 
-interface ParsedBashOutput {
+interface ParsedStructuredOutput {
   stdout: string;
   stderr: string;
   exit_code: number;
@@ -33,7 +33,7 @@ interface ParsedBackgroundOutput {
 }
 
 type ParsedShellOutput =
-  | { type: 'structured'; data: ParsedBashOutput }
+  | { type: 'structured'; data: ParsedStructuredOutput }
   | { type: 'background'; data: ParsedBackgroundOutput }
   | { type: 'legacy' };
 
@@ -42,7 +42,7 @@ function parseShellOutput(content: string): ParsedShellOutput {
   try {
     const parsed = JSON.parse(content);
     if ('stdout' in parsed && 'exit_code' in parsed) {
-      return { type: 'structured', data: parsed as ParsedBashOutput };
+      return { type: 'structured', data: parsed as ParsedStructuredOutput };
     }
     if ('backgrounded' in parsed && 'process_id' in parsed) {
       return { type: 'background', data: parsed as ParsedBackgroundOutput };
@@ -154,12 +154,12 @@ function ShellToolRendererComponent({ ctx }: ToolContentProps) {
               <div className="px-2 py-1.5 text-xs text-muted-foreground font-mono">
                 Started background process <span className="text-foreground font-medium">{background.process_id}</span>
                 <br />
-                <span className="text-2xs">Use BashOutput to check output, BashKill to terminate</span>
+                <span className="text-2xs">Use shell_output to check output, shell_kill to terminate</span>
               </div>
             </div>
           )}
 
-          {/* Legacy plain text format (backwards compat for old results in DB, and bash_output tool) */}
+          {/* Legacy plain text format (backwards compat for old results in DB, and shell_output tool) */}
           {isLegacy && (
             <div className={showCommandInput ? "border-t border-border/50" : ""}>
               <div className="px-2 py-1 text-3xs text-muted-foreground uppercase tracking-wider bg-muted/40 border-b border-border/20 flex items-center justify-between">

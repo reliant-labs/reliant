@@ -145,7 +145,7 @@ func TestTruncationMessagesContainGuidance(t *testing.T) {
 	t.Run("Shell search truncation message indicates truncation", func(t *testing.T) {
 		// Need output larger than MaxOutputSize (16KB) to trigger truncation
 		largeOutput := strings.Repeat("some/path/to/file.go\n", 1500) // ~30KB
-		result := TruncateOutput("bash", largeOutput, true)
+		result := TruncateOutput(ShellToolName, largeOutput, true)
 
 		// The result should be truncated (smaller than original)
 		assert.Less(t, len(result), len(largeOutput),
@@ -214,7 +214,7 @@ func TestOutputLimitsConstants(t *testing.T) {
 		assert.LessOrEqual(t, MaxReadSize, outputCeilingFor(ViewToolName),
 			"a read that outgrows its delivery ceiling is truncated twice, and the second "+
 				"cut is the one nobody accounted for")
-		assert.Equal(t, MaxOutputSize, outputCeilingFor("bash"),
+		assert.Equal(t, MaxOutputSize, outputCeilingFor(ShellToolName),
 			"only the read tool gets the larger ceiling — shell output volume is not chosen by the agent")
 	})
 

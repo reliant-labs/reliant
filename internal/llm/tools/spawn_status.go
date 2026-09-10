@@ -31,10 +31,10 @@ type SpawnStatusParams struct {
 	// omitted, this lists ALL of the caller's own sub-agents.
 	AgentID string `json:"agent_id,omitempty" jsonschema:"description=The agent_id (thread id) of a sub-agent you spawned. Omit to list all of your sub-agents."`
 	// Wait blocks until agent_id reaches a terminal state, or the timeout
-	// budget elapses — mirrors bash_wait. Requires agent_id.
+	// budget elapses — mirrors shell_wait. Requires agent_id.
 	Wait bool `json:"wait,omitempty" jsonschema:"description=Block until the agent reaches a terminal state (completed/failed/cancelled/expired). Requires agent_id. Ignored when listing all agents."`
 	// TimeoutSeconds bounds THIS call, not the agent's total runtime.
-	// Timing out is not an error — see bash_wait's TimeoutSeconds doc.
+	// Timing out is not an error — see shell_wait's TimeoutSeconds doc.
 	TimeoutSeconds int `json:"timeout_seconds,omitempty" jsonschema:"description=Maximum seconds to block when wait is true (default: 1200, maximum: 1200). Timing out does NOT stop the agent — call again to keep waiting."`
 }
 
@@ -63,7 +63,7 @@ type spawnStatusTool struct {
 const (
 	SpawnStatusToolName = "spawn_status"
 
-	// spawnStatusDefaultTimeout/MaxTimeout are bash_wait's budget, shared via
+	// spawnStatusDefaultTimeout/MaxTimeout are shell_wait's budget, shared via
 	// MaxBlockingToolWait so the two blocking waiters cannot drift apart:
 	// toolexec.DefaultToolTimeout is derived from that constant with headroom,
 	// so both tools return "still running, call again" before the executor
@@ -100,7 +100,7 @@ WAITING:
 Set wait: true with agent_id to block server-side until that agent reaches a
 terminal state (completed/failed/cancelled/expired), instead of polling this
 tool yourself. One call, no round-trips, no lost work — the same shape as
-bash_wait.
+shell_wait.
 
 TIMEOUTS ARE NOT FAILURES:
 If the agent is still running when the budget elapses, this returns normally
@@ -296,7 +296,7 @@ func (s *spawnStatusTool) singleAgent(rctx *rctx.ToolContext, threadID string, p
 }
 
 // waitForTerminal polls the agent's thread status server-side until it goes
-// terminal or the budget elapses. Modeled directly on bash_wait's loop.
+// terminal or the budget elapses. Modeled directly on shell_wait's loop.
 func (s *spawnStatusTool) waitForTerminal(rctx *rctx.ToolContext, params SpawnStatusParams) (ToolResponse, error) {
 	budget := spawnStatusDefaultTimeout
 	if params.TimeoutSeconds > 0 {

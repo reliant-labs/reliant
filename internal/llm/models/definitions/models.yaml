@@ -252,6 +252,28 @@ models:
     default_thinking_level: high
     default_temperature: 1.0
 
+  # Which models the `codex` driver may declare
+  # -------------------------------------------
+  # The codex driver authenticates as a ChatGPT ACCOUNT against
+  # chatgpt.com/backend-api/codex, not as an OpenAI API key. That backend serves
+  # only a subset of the GPT catalog and refuses the rest with a 400 whose body
+  # is `{"detail":"The '<model>' model is not supported when using Codex with a
+  # ChatGPT account."}`.
+  #
+  # Verified live against the backend with a current ChatGPT account token,
+  # sending the same version/originator headers the driver sends (codex-tui
+  # 0.153.4):
+  #
+  #   ACCEPTED  gpt-5.5, gpt-6-astra, gpt-5.6-sol, gpt-5.6-luna, gpt-5.6-terra,
+  #             gpt-5.4-mini
+  #   REFUSED   gpt-5.4, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.2-codex
+  #
+  # The refused models stay in this catalog served by `openai`/`openrouter`,
+  # which reach them with an API key. Only their codex mapping was wrong.
+  #
+  # A codex mapping for a refused model is not cosmetic: tag resolution hands it
+  # to real callers and every request fails. TestCodexProvidersAreServedByThe
+  # ChatGPTAccountBackend enforces this list.
   - id: gpt-5.5
     name: GPT-5.5
     tags: [flagship, moderate, reasoning]
@@ -287,6 +309,68 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
+    default_thinking_level: xhigh
+
+  # GPT-6 Astra is OpenAI's frontier model. It uses the SAME request envelope as
+  # the GPT-5.6 family below (tools and system prompt ride inside `input`), plus
+  # two additions the 5.6 capture does not have: a `service_tier: priority` body
+  # field and an `x-codex-routing-hint` header. Ground truth for both is
+  # .dev/codex/astra.txt + astra.curl (codex-tui 0.153.4).
+  #
+  # Unlike sol/terra, astra tops out at `max` — it has no `ultra`. The capture's
+  # own spawn_agent tool description claims ultra for astra, but that string is
+  # authored by the client, and OpenAI's API reference
+  # (developers.openai.com/api/docs/models/gpt-6-astra) lists exactly
+  # low/medium/high/xhigh/max. The docs win; sending ultra would be guessing.
+  #
+  # It is placed AFTER gpt-5.5 deliberately. Tag resolution breaks ties by
+  # definition order, and the codex-provider winners for [flagship] / [moderate]
+  # / [reasoning] are pinned to gpt-5.5 by TestResolve_CodexTagTargetsArePinned.
+  # Ordering it earlier would repoint all three silently. It does take [powerful]
+  # ahead of gpt-5.6-sol for a codex-only user, which is intended: astra is the
+  # more capable frontier model, and that is what `powerful` is for.
+  - id: gpt-6-astra
+    name: GPT-6 Astra
+    tags: [powerful, flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    cost:
+      # List price. OpenAI bills prompts over 272k at 2x input / 1.5x output for
+      # the whole request; we do not model tiered pricing, so these are the base
+      # rates and a very long request is under-costed rather than mis-costed.
+      input_per_1m: 10.0
+      output_per_1m: 50.0
+      cached_input_per_1m: 1.0
+    providers:
+      - driver: codex
+        api_model: gpt-6-astra
+        # UNVERIFIED for astra specifically. The ChatGPT/Codex subscription
+        # backend caps every GPT-5.x model at ~272k (see the gpt-5.5 note), and
+        # the astra capture never grew a context large enough to prove whether
+        # that still applies to a 1M-window model. Inheriting the cap is the
+        # safe direction: too small only makes us compact early, while too large
+        # 400s the turn with context_length_exceeded. Raise this once someone
+        # runs a long astra session through the codex backend.
+        max_context_window: 272000
+      - driver: openai
+        api_model: gpt-6-astra
+      - driver: openrouter
+        api_model: openai/gpt-6-astra
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+    # Powerful tier: astra gets its top practical effort. `max` is supported but
+    # reserved for explicit opt-in, matching how sol treats max/ultra.
     default_thinking_level: xhigh
 
   # GPT-5.6 family. These are Codex-subscription-only and use a different request
@@ -411,10 +495,9 @@ models:
       output_per_1m: 15.0
       cached_input_per_1m: 0.25
     providers:
-      - driver: codex
-        api_model: gpt-5.4
-        # ChatGPT/Codex backend caps GPT-5.x at ~272k (see gpt-5.5 note).
-        max_context_window: 272000
+      # No codex provider: the ChatGPT-account Codex backend refuses this model
+      # with `not supported when using Codex with a ChatGPT account`. See the
+      # note above gpt-5.5 for the full accepted/refused list.
       - driver: openai
         api_model: gpt-5.4
       - driver: openrouter
@@ -470,10 +553,9 @@ models:
       output_per_1m: 14.0
       cached_input_per_1m: 0.175
     providers:
-      - driver: codex
-        api_model: gpt-5.3-codex
-        # ChatGPT/Codex backend caps GPT-5.x at ~272k (see gpt-5.5 note).
-        max_context_window: 272000
+      # No codex provider: the ChatGPT-account Codex backend refuses this model
+      # with `not supported when using Codex with a ChatGPT account`. See the
+      # note above gpt-5.5 for the full accepted/refused list.
       - driver: openai
         api_model: gpt-5.3-codex
       - driver: openrouter
@@ -485,31 +567,21 @@ models:
       reasoning_summary_mode: detailed_only
     default_thinking_level: xhigh
 
-  - id: gpt-5.3-codex-spark
-    name: GPT-5.3 Codex Spark
-    tags: [fast, reasoning]
-    visibility: user
-    capabilities:
-      can_reason: true
-      supports_tools: true
-      supports_attachments: false
-      supports_streaming: true
-      supports_caching: true
-      max_context_window: 128000
-      max_output_tokens: 10000
-      thinking_levels: [low, medium, high, xhigh]
-    cost:
-      input_per_1m: 1.75
-      output_per_1m: 14.0
-      cached_input_per_1m: 0.175
-    providers:
-      - driver: codex
-        api_model: gpt-5.3-codex-spark
-    driver_settings:
-      preferred_endpoint: responses
-      temperature_mode: omit
-      use_max_completion_tokens: true
-    default_thinking_level: high
+# gpt-5.3-codex-spark is deliberately absent. Codex was its ONLY provider, and
+# the ChatGPT-account Codex backend refuses it outright:
+#
+#   400 {"detail":"The 'gpt-5.3-codex-spark' model is not supported when using
+#        Codex with a ChatGPT account."}
+#
+# so the entry was unreachable by construction — every request it served failed.
+# It carried `fast`, which made it TagFast's winner, so chat titling and
+# compaction resolved to it for any codex user and 400'd on every call. Titling
+# then fell back to a truncated first message, which looks like a working title,
+# so the failure was invisible in the product.
+#
+# Do not re-add it without first confirming the backend serves it: probe
+# POST https://chatgpt.com/backend-api/codex/responses with a real ChatGPT
+# account token and read the response BODY, not just the status.
 
   - id: gpt-5.2-codex
     name: GPT-5.2 Codex
@@ -530,10 +602,9 @@ models:
       output_per_1m: 14.0
       cached_input_per_1m: 0.175
     providers:
-      - driver: codex
-        api_model: gpt-5.2-codex
-        # ChatGPT/Codex backend caps GPT-5.x at ~272k (see gpt-5.5 note).
-        max_context_window: 272000
+      # No codex provider: the ChatGPT-account Codex backend refuses this model
+      # with `not supported when using Codex with a ChatGPT account`. See the
+      # note above gpt-5.5 for the full accepted/refused list.
       - driver: openai
         api_model: gpt-5.2-codex
       - driver: openrouter

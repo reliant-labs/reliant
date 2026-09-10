@@ -241,6 +241,62 @@ func TestGenerateTitle_StreamsRatherThanSendMessages(t *testing.T) {
 	assert.Equal(t, "Debugging Workflows", title)
 }
 
+// anthropicShapedTitleDriver replays the event sequence the Anthropic drivers
+// actually emit: the arguments arrive as input_json_delta chunks and the
+// content_block_stop event names only the block that closed. The other drivers
+// in this file put the full arguments on the stop event, which no Anthropic
+// model does — and that difference hid a bug where the stop event's empty
+// Input overwrote the good tool call, failing every title generation on
+// claude-4.5-haiku with "unexpected end of JSON input" on every retry.
+type anthropicShapedTitleDriver struct {
+	titleDriver
+}
+
+func (d *anthropicShapedTitleDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tls []tools.Tool) <-chan llm.DriverEvent {
+	d.gotPrompts = prompts
+	d.gotMessages = messages
+	d.gotTools = tls
+
+	call := d.resp.ToolCalls[0]
+	ch := make(chan llm.DriverEvent, 8)
+	ch <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &message.ToolCall{ID: call.ID, Name: call.Name}}
+	for _, chunk := range splitForStreaming(call.Input) {
+		ch <- llm.DriverEvent{Type: llm.EventToolUseDelta, ToolCall: &message.ToolCall{ID: call.ID, Name: call.Name, Input: chunk}}
+	}
+	ch <- llm.DriverEvent{Type: llm.EventToolUseStop, ToolCall: &message.ToolCall{ID: call.ID, Name: call.Name}}
+	ch <- llm.DriverEvent{Type: llm.EventComplete, Response: d.resp}
+	close(ch)
+	return ch
+}
+
+// splitForStreaming cuts s in half, so the arguments arrive as more than one
+// delta the way a real provider sends them.
+func splitForStreaming(s string) []string {
+	if len(s) < 2 {
+		return []string{s}
+	}
+	mid := len(s) / 2
+	return []string{s[:mid], s[mid:]}
+}
+
+func TestGenerateTitle_ReadsArgumentsStreamedAsDeltas(t *testing.T) {
+	d := &anthropicShapedTitleDriver{
+		titleDriver: titleDriver{resp: setTitleCall(`{"title":"Debugging Workflows"}`)},
+	}
+	var opts llm.DriverOptions
+	a := &GenerateTitleActivity{driverResolver: titleResolver(&d.titleDriver, &opts)}
+	a.driverResolver = func(ctx context.Context, userID string, prefs models.Preferences, o ...llm.DriverOption) (llm.Driver, error) {
+		for _, apply := range o {
+			apply(&opts)
+		}
+		return d, nil
+	}
+
+	title, err := a.generateTitle(context.Background(), "user-1", "can you help me debug my workflows?")
+	require.NoError(t, err, "arguments streamed as deltas must still yield a title")
+	assert.Equal(t, "Debugging Workflows", title)
+}
+
 // The 60-char clamp counts runes: a byte slice would cut a multi-byte
 // character in half and persist invalid UTF-8.
 func TestTruncateRunes_DoesNotSplitMultiByteCharacters(t *testing.T) {

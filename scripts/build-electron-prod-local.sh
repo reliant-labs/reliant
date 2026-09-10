@@ -87,8 +87,31 @@ echo "==> Writing electron/src/build-config.js"
 # a bare `vite build` that type-checks nothing, and because electron's
 # build:web called it, the desktop path silently accumulated 20 type errors
 # while builds kept "succeeding". Release runs the real gate; so does this.
+#
+# NODE_ENV=production is scoped to THIS command, and it is not decoration.
+# Vite honours NODE_ENV even under `vite build`, so the ambient
+# NODE_ENV=development that every dev shell exports (and that the launcher
+# below already strips for the same reason) folds `import.meta.env.DEV` to TRUE
+# inside a PRODUCTION bundle. isSameOriginTransport() then survives
+# dead-code elimination and the packaged app POSTs its RPCs at app://bundle,
+# where no dev-server proxy exists — the SPA fallback answers with index.html,
+# Connect cannot parse HTML, and the app hangs with every request returning
+# 200. Verified locally: a build from a dev shell failed verify-bundle's
+# same-origin assertion; the identical build with NODE_ENV=production passed.
+#
+# Scoped to the build, never to an install: npm reads the same variable and
+# skips devDependencies when it is "production", which would remove the very
+# toolchain (vite, typescript) this line invokes.
 echo "==> Building the renderer (tsc -b && vite build)"
-( cd web && npm run build )
+( cd web && NODE_ENV=production npm run build )
+
+# The same gate the release and the web deploy run, on the artifact that is
+# about to be packaged. Without it this path could ship the leak above — a
+# packaged app that builds green and hangs on a user's machine. The desktop
+# release runs this in CI; a locally-packaged prod build has exactly as much
+# reason to.
+echo "==> Verifying the built bundle"
+node .github/scripts/verify-bundle.mjs --dist web/dist
 
 echo "==> Building the Go backend binaries (mac)"
 ./scripts/build-electron.sh mac

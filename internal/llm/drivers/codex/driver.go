@@ -34,15 +34,18 @@ const (
 	CodexBaseURL = "https://chatgpt.com/backend-api/codex"
 
 	// CodexVersion is the version header to send.
-	// Keep aligned with a current codex-tui (CLI) release; backend may gate on this.
-	// 0.146.0 is the release observed serving the gpt-5.6 family.
-	CodexVersion = "0.146.0"
+	// Keep aligned with a current codex-tui (CLI) release; backend DOES gate on
+	// this. OpenAI documents gpt-6-astra as requiring codex-tui 0.153.0 or
+	// newer, so the previous 0.146.0 pin (the release observed serving the
+	// gpt-5.6 family) is not sufficient to reach astra. 0.153.4 is the release
+	// in the astra capture, and it still serves the 5.6 family.
+	CodexVersion = "0.153.4"
 
 	// CodexOriginator identifies the client to the Codex backend.
 	CodexOriginator = "codex-tui"
 
 	// CodexUserAgent is the user agent string, matching the codex-tui CLI identity.
-	CodexUserAgent = "codex-tui/0.146.0 (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; 0.146.0)"
+	CodexUserAgent = "codex-tui/0.153.4 (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; 0.153.4)"
 
 	// CodexBetaFeatures advertises the beta features the codex-tui client opts into.
 	CodexBetaFeatures = "remote_compaction_v2"
@@ -556,11 +559,15 @@ func (c *CodexClient) newTurnContext() turnContext {
 // requestOptions returns the per-request SDK options (correlation header capture
 // plus the per-turn codex-tui headers) for a given turn.
 func (c *CodexClient) requestOptions(tc turnContext, into **http.Response) []option.RequestOption {
-	return []option.RequestOption{
+	opts := []option.RequestOption{
 		option.WithResponseInto(into),
 		option.WithHeader("x-client-request-id", tc.requestID),
 		option.WithHeader("x-codex-turn-metadata", tc.turnMetadataJSON),
 	}
+	if hint := routingHint(c.options.Model.ID, c.options.Model.APIModel); hint != "" {
+		opts = append(opts, option.WithHeader("x-codex-routing-hint", hint))
+	}
+	return opts
 }
 
 // applyClientMetadata attaches the Codex backend's client_metadata extension to the
@@ -655,16 +662,10 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 		}
 
 		switch {
-		case isGPT56(c.options.Model.ID):
-			params.Reasoning = newGPT56ReasoningParam(effort, summaryMode)
+		case usesAdditionalToolsEnvelope(c.options.Model.ID):
+			params.Reasoning = newAdditionalToolsReasoningParam(effort, summaryMode)
 			params.Include = []responses.ResponseIncludable{
 				responses.ResponseIncludableReasoningEncryptedContent,
-			}
-
-		case c.options.Model.ID == models.GPT53CodexSpark:
-			// Spark takes effort only — no summary and no encrypted-content include.
-			params.Reasoning = shared.ReasoningParam{
-				Effort: codexReasoningEffort(effort),
 			}
 
 		default:
@@ -678,13 +679,18 @@ func (c *CodexClient) buildParams(prompts []string, messages []message.Message, 
 		}
 	}
 
-	// GPT-5.6 delivers the system prompt and tools inside `input` rather than as
-	// top-level fields. Applied last, as a transform over the assembled params,
-	// so the two envelopes cannot drift apart.
-	if isGPT56(c.options.Model.ID) {
-		if err := applyGPT56Envelope(&params, instructions, convertedTools); err != nil {
-			return responses.ResponseNewParams{}, fmt.Errorf("failed to build gpt-5.6 request envelope: %w", err)
+	// GPT-5.6 and astra deliver the system prompt and tools inside `input`
+	// rather than as top-level fields. Applied last, as a transform over the
+	// assembled params, so the two envelopes cannot drift apart.
+	if usesAdditionalToolsEnvelope(c.options.Model.ID) {
+		if err := applyAdditionalToolsEnvelope(&params, instructions, convertedTools); err != nil {
+			return responses.ResponseNewParams{}, fmt.Errorf("failed to build codex request envelope: %w", err)
 		}
+	}
+
+	// Astra alone pins a service tier; see astraServiceTier.
+	if c.options.Model.ID == models.GPT6Astra {
+		params.ServiceTier = astraServiceTier
 	}
 
 	return params, nil

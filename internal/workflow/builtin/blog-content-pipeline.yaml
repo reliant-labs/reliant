@@ -1631,11 +1631,11 @@ nodes:
           cd blog-output/<slug>/final && python3 -m http.server 8000 --bind 0.0.0.0
           ```
 
-          **Step 4: Confirm it's serving** (`bash_list` / `bash_output` on the background pid;
+          **Step 4: Confirm it's serving** (`shell_list` / `shell_output` on the background pid;
           a `curl -sS -o /dev/null -w '%{http_code}' http://localhost:8000/` is a secondary
           check). Then get the preview URL: run `reliant preview-url 8000` — it prints the
           authoritative proxied URL for port 8000 (also surfaced as a `Preview URL (port 8000):
-          ...` line in the `bash_list` / `bash_output` result). Do NOT invent a URL. Post it as
+          ...` line in the `shell_list` / `shell_output` result). Do NOT invent a URL. Post it as
           a markdown link:
 
           **[Read your post](<the URL from `reliant preview-url 8000`>)**

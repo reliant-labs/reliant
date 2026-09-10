@@ -133,7 +133,7 @@ export function useCloudEligibility() {
   const eligible = !isLoading && Boolean(computeEligibility?.eligible);
 
   const reason = !user
-    ? 'Sign up required'
+    ? 'Sign in required'
     : computeEligibility && !computeEligibility.eligible
       ? (INELIGIBLE_REASON_COPY[computeEligibility.reason] ?? 'Compute is not available yet')
       : null;

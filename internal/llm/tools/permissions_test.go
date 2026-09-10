@@ -94,7 +94,7 @@ func TestInitialToolsForPermission_ReadOnly(t *testing.T) {
 	// to search a codebase now that the scoped grep/glob tools are gone. A
 	// readonly agent without it cannot search at all.
 	assert.True(t, containsAll(got,
-		ShellToolName, ToolBashList, ToolBashOutput, ToolBashKill,
+		ShellToolName, ToolShellList, ToolShellOutput, ToolShellKill,
 	), "readonly initial set missing the shell search path: %v", got)
 
 	// But must NOT get the file-mutating tools.
@@ -115,7 +115,7 @@ func TestInitialToolsForPermission_Mutating(t *testing.T) {
 	// ...plus all the mutating tools.
 	assert.True(t, containsAll(got,
 		ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode,
-		ToolBashList, ToolBashOutput, ToolBashKill,
+		ToolShellList, ToolShellOutput, ToolShellKill,
 	), "mutating initial set missing mutating tools: %v", got)
 }
 
@@ -127,7 +127,7 @@ func TestInitialToolsForPermission_Orchestrator(t *testing.T) {
 	assert.True(t, containsAll(got,
 		ToolSkill, ToolLoadTool, ToolView, ToolFetch, ToolWebSearch,
 		ToolWrite, ToolEdit, ShellToolName, ToolFindReplace, ToolMoveCode,
-		ToolBashList, ToolBashOutput, ToolBashKill,
+		ToolShellList, ToolShellOutput, ToolShellKill,
 	), "orchestrator initial set missing expected tools: %v", got)
 
 	// NOTE: The current implementation comment says "spawn is added separately",
@@ -164,7 +164,7 @@ func TestMinimumPermissionForTool_MutatingTools(t *testing.T) {
 // enforced below the tool layer.
 func TestMinimumPermissionForTool_ShellIsReadOnlyTier(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{ShellToolName, ToolBashList, ToolBashOutput, ToolBashKill} {
+	for _, name := range []string{ShellToolName, ToolShellList, ToolShellOutput, ToolShellKill} {
 		assert.Equal(t, PermissionReadOnly, MinimumPermissionForTool(name),
 			"tool %q must be loadable by a readonly agent so search still works", name)
 	}

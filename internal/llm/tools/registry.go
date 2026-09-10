@@ -19,11 +19,13 @@ const (
 	ToolReadAttachment = "read_attachment"
 
 	// Execution tools
-	// Note: ToolShell is not a constant - use ShellToolName from shell_name_*.go
-	ToolBashList   = "bash_list"
-	ToolBashOutput = "bash_output"
-	ToolBashWait   = "bash_wait"
-	ToolBashKill   = "bash_kill"
+	// Note: the shell tool's own name is ShellToolName, in shell_platform.go.
+	// It is one static name on every platform; the daemon's OS selects the
+	// tool's DESCRIPTION at request time, not its name.
+	ToolShellList   = "shell_list"
+	ToolShellOutput = "shell_output"
+	ToolShellWait   = "shell_wait"
+	ToolShellKill   = "shell_kill"
 
 	// Network tools
 	ToolFetch     = "fetch"
@@ -174,7 +176,7 @@ type ToolFilterResult struct {
 //   - tag:X - Expands to all tools with that tag (e.g., "tag:file", "tag:readonly")
 //   - glob patterns - Matches tool names (e.g., "mcp_*", "*search")
 //   - !name - Excludes a specific tool (must come after inclusions)
-//   - plain names - Direct tool names (e.g., "bash", "view")
+//   - plain names - Direct tool names (e.g., "shell", "view")
 //   - spawn:workflow(preset1,preset2) - Spawn tool configuration
 //
 // Examples:
@@ -278,7 +280,7 @@ func parseSpawnFilter(spec string) *SpawnFilterConfig {
 //   - tag:X - Expands to all tools with that tag (e.g., "tag:file", "tag:readonly")
 //   - glob patterns - Matches tool names (e.g., "mcp_*", "*search")
 //   - !name - Excludes a specific tool (must come after inclusions)
-//   - plain names - Direct tool names (e.g., "bash", "view")
+//   - plain names - Direct tool names (e.g., "shell", "view")
 //
 // Examples:
 //   - ["tag:default"] -> All default tools
@@ -445,21 +447,21 @@ func GetToolRegistry() []ToolDefinition {
 		//
 		// `tag:shell` carries the whole SHELL FAMILY, not just the shell tool. The
 		// shell tool's own description tells the model: "Use 'run_in_background: true'
-		// ... You can then use BashOutput to check output, BashKill to terminate, and
-		// BashList to see all running processes." Granting the shell without those
+		// ... You can then use shell_output to check output, shell_kill to terminate, and
+		// shell_list to see all running processes." Granting the shell without those
 		// three therefore hands an agent instructions for tools it does not have —
 		// which is exactly how a reviewer holding `tag:shell` was ordered to read a
-		// dev server's port out of `bash_output`, found no such tool, and filed an
+		// dev server's port out of `shell_output`, found no such tool, and filed an
 		// evidence-free `stuck`. They are also useless on their own: nothing can be
-		// in `bash_list` for an agent that cannot start a process. Keeping the tag
+		// in `shell_list` for an agent that cannot start a process. Keeping the tag
 		// whole is what stops the next prompt from drifting the same way — and
 		// `!tag:shell` correspondingly removes the family, which is what an author
 		// excluding the shell means.
 		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashList, (*ToolsFactory).BashList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashOutput, (*ToolsFactory).BashOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashWait, (*ToolsFactory).BashWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolBashKill, (*ToolsFactory).BashKill, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
+		{ToolShellList, (*ToolsFactory).ShellList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolShellOutput, (*ToolsFactory).ShellOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
 
 		// Network tools — routed to daemon so HTTP requests originate from the user's machine
 		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},

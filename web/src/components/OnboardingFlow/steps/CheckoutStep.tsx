@@ -31,7 +31,7 @@
  * ── The rule that shapes everything else ──────────────────────────────
  *
  * Entitlement is webhook-driven, so nothing here claims a purchase the server
- * has not confirmed. `EmbeddedCheckoutPanel.onDone` already means "the server
+ * has not confirmed. Each checkout's `onDone` already means "the server
  * agrees", and this step still re-reads eligibility and the wallet balance
  * afterwards before writing `paid` — because those are the two facts
  * `requiresPayment` reads, and a `paid: true` written against stale facts
@@ -41,25 +41,22 @@
  * commit runs from the confirmation handler, once.
  */
 import { useCallback, useMemo, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
-import { CheckoutPanelWithIdentity } from "@/components/Billing/CheckoutPanelWithIdentity";
-import type { CheckoutRequest } from "@/components/Billing/EmbeddedCheckoutPanel";
-import { isSafeReturnTo } from "@/lib/returnTo";
-import { RedeemCouponForm } from "@/components/RedeemCouponForm";
+import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import {
-  DAEMON_SIZE_ORDER,
+  OnboardingCheckout,
+  type CheckoutLine,
+} from "@/components/Billing/OnboardingCheckout";
+import { isSafeReturnTo } from "@/lib/returnTo";
+import { capabilities } from "@/services/controlPlane/capabilities";
+import {
   TOPUP_PRESETS_CENTS,
   derivePlanDisplay,
-  formatCentsAsDollars,
-  formatSizeLabel,
   isPurchasableComputePlan,
-  smallestPlanAllowingSize,
   sortPlansForDisplay,
-  type DaemonSizeName,
 } from "@/components/Settings/cloud/billingUtils";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
-import { cn } from "@/lib/utils";
 import { trackEvent } from "@/lib/analytics";
 
 import { ensureCommitKey } from "../commitLaunchPlan";
@@ -110,13 +107,15 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
   const [settling, setSettling] = useState(false);
   const [settleTimedOut, setSettleTimedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [chosenSize, setChosenSize] = useState<DaemonSizeName | null>(null);
+  // Bumped by a successful identity link, so the checkout remounts and mints a
+  // fresh intent — nothing else about the purchase changed, so nothing else
+  // would make it retry.
+  const [linkAttempt, setLinkAttempt] = useState(0);
 
   const requirement = requiresPayment(plan, facts);
 
   // Membership, order and price are all server facts. A client-side plan table
-  // would be a second declaration of what a plan costs, sitting next to a real
-  // card form.
+  // would be a second declaration of what a plan costs.
   const computePlans = useMemo(
     () =>
       sortPlansForDisplay(
@@ -125,46 +124,23 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
     [plansQ.data],
   );
 
-  // Which sizes to offer is the union of what the catalog sells, and plan and
-  // size are ONE axis — picking a size picks the cheapest plan that runs it.
-  const sizes = useMemo(() => {
-    const offered = new Set<string>();
-    for (const p of computePlans) {
-      for (const s of p.structuredLimits?.allowedDaemonSizes ?? []) {
-        offered.add(s.toLowerCase());
-      }
-    }
-    return DAEMON_SIZE_ORDER.filter((s) => offered.has(s));
-  }, [computePlans]);
-
-  const activeSize: DaemonSizeName | null =
-    chosenSize && sizes.includes(chosenSize) ? chosenSize : (sizes[0] ?? null);
-
-  const selectedPlan = useMemo(() => {
-    if (!activeSize) return undefined;
-    // A plan already recorded in the URL wins — it survived a reload, and
-    // re-deriving it from a size default would silently switch what the user
-    // is part-way through paying for.
-    const recorded = computePlans.find((p) => p.id === plan.computePlanId);
-    if (recorded) return recorded;
-    return smallestPlanAllowingSize(computePlans, activeSize);
-  }, [activeSize, computePlans, plan.computePlanId]);
+  /**
+   * The plan the user chose ON THE COMPUTE STEP.
+   *
+   * There is no size picker here any more, and no fallback to "the smallest
+   * plan we can find". The choice was made, with its price on screen, at the
+   * moment the user decided to use a hosted machine; re-deriving it here would
+   * be a second opinion about what they are buying.
+   *
+   * Absent means the user has no compute leg to pay for — either they chose
+   * their own machine, or they were already entitled.
+   */
+  const selectedPlan = useMemo(
+    () => computePlans.find((p) => p.id === plan.computePlanId),
+    [computePlans, plan.computePlanId],
+  );
 
   const creditCents = plan.aiCreditCents ?? DEFAULT_CREDIT_CENTS;
-
-  /**
-   * What the panel is buying right now.
-   *
-   * Compute first: it is the slower webhook and the one the machine waits on.
-   * `null` means there is nothing left to buy, which is the exit condition.
-   */
-  const request: CheckoutRequest | null = requirement.needsCompute
-    ? selectedPlan
-      ? { kind: "compute_plan", planId: selectedPlan.id }
-      : null
-    : requirement.needsCredit
-      ? { kind: "wallet_topup", amountCents: BigInt(creditCents) }
-      : null;
 
   /**
    * Finish: record the confirmed purchase and start the commit.
@@ -215,7 +191,16 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
         try {
           fresh = await facts.refetch();
         } catch {
-          fresh = { computeEligible: false, walletFunded: false };
+          // A failed refetch is pessimistic on the two SERVER reads only.
+          // Billing availability is a build constant, so carrying it through
+          // is not optimism: hardcoding it false here would report "nothing is
+          // owed" on a deployment that genuinely bills, and finish() would
+          // settle a debt the server never confirmed.
+          fresh = {
+            computeEligible: false,
+            walletFunded: false,
+            reliantBillingAvailable: capabilities.billing,
+          };
         }
         const still = requiresPayment(plan, fresh);
         if (!still.any) {
@@ -243,6 +228,122 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
     void settleAndAdvance();
   }, [requirement.needsCompute, settleAndAdvance]);
 
+  /**
+   * Has the credit actually landed, according to the SERVER?
+   *
+   * This is what stands between Stripe's client-side "succeeded" and this step
+   * believing a purchase happened. It re-reads the same wallet fact
+   * `requiresPayment` routes on, so a confirmation that satisfies this cannot
+   * derive the user straight back to the payment they just made.
+   *
+   * A failed refetch answers false rather than throwing: the caller polls, and
+   * one bad read is a reason to look again, not to declare the payment lost.
+   */
+  const creditHasLanded = useCallback(async () => {
+    try {
+      return (await facts.refetch()).walletFunded;
+    } catch {
+      return false;
+    }
+  }, [facts]);
+
+  /**
+   * Has the compute plan actually landed, according to the SERVER?
+   *
+   * The compute counterpart of `creditHasLanded`, and it reads the SAME fact
+   * this step routes on — eligibility, not the subscription query — so a
+   * confirmation that satisfies it cannot derive the user straight back to the
+   * payment they just made.
+   */
+  const computeHasLanded = useCallback(async () => {
+    try {
+      return (await facts.refetch()).computeEligible;
+    } catch {
+      return false;
+    }
+  }, [facts]);
+
+  /**
+   * Everything this plan buys, priced, in one summary.
+   *
+   * A leg already covered is SHOWN, marked covered, rather than dropped. The
+   * alternative — render only what is outstanding — makes a redeemed compute
+   * coupon disappear from the page at the exact moment the user is being asked
+   * for money, so the code reads as though it did nothing. Cost is a few lines;
+   * the confusion it prevents is a support ticket about a coupon that "didn't
+   * work".
+   */
+  const lines = useMemo<CheckoutLine[]>(() => {
+    const out: CheckoutLine[] = [];
+    if (isCloudCompute(plan.compute)) {
+      const display = derivePlanDisplay(selectedPlan);
+      out.push({
+        kind: "compute",
+        label: "Cloud machine",
+        detail: selectedPlan
+          ? `${selectedPlan.name} — a Reliant-hosted machine to run your work on.`
+          : "A Reliant-hosted machine to run your work on.",
+        amountCents: display.monthlyPriceCents ?? 0,
+        recurring: true,
+        covered: !requirement.needsCompute,
+        coveredBy: facts.computeEligible ? "already covered" : "paid",
+      });
+    }
+    if (plan.modelProvider === "reliant_credits") {
+      out.push({
+        kind: "credit",
+        label: "AI credit",
+        detail: "Pays for Reliant's models as you use them. Never expires.",
+        amountCents: creditCents,
+        recurring: false,
+        covered: !requirement.needsCredit,
+        coveredBy: facts.walletFunded ? "already covered" : "paid",
+      });
+    }
+    return out;
+  }, [
+    creditCents,
+    facts.computeEligible,
+    facts.walletFunded,
+    plan.compute,
+    plan.modelProvider,
+    requirement.needsCompute,
+    requirement.needsCredit,
+    selectedPlan,
+  ]);
+
+  /**
+   * A redeemed coupon finishes the same thing a payment finishes.
+   *
+   * This used to be `() => void facts.refetch()` — a refetch and nothing else
+   * — while the Stripe path went through `settleAndAdvance`. So a code that
+   * cleared the only outstanding leg left the user parked here reading
+   * "Added 100 hours" with no button to press: the debt was gone, but no
+   * settlement flag was written, no commit fired, and derivation was never
+   * re-run against anything.
+   *
+   * Both events mean the same thing — the server granted entitlement and the
+   * money question is closed — so both take the same path. Redemption is not a
+   * second way to finish paying; it is the same finish reached by a different
+   * instrument.
+   *
+   * It settles NO faster and on no weaker evidence than a card does. The
+   * poll still re-reads eligibility and the wallet from the server and still
+   * writes `computeSettled` / `creditSettled` only once they agree the debt is
+   * cleared — a redeem call returning ok is not entitlement, and a flag
+   * written from it would suppress the checkout requirement for money that
+   * never moved. Provisioning is untouched either way: it happens at the
+   * commit point, which asks the server for eligibility again before it will
+   * start a machine.
+   */
+  const handleRedeemed = useCallback(() => {
+    trackEvent("onboarding_checkout_confirmed", {
+      leg: requirement.needsCompute ? "compute" : "credit",
+      instrument: "coupon",
+    });
+    void settleAndAdvance();
+  }, [requirement.needsCompute, settleAndAdvance]);
+
   // Nothing is owed and yet we are rendered: derivation is about to move on.
   // Say so rather than showing an empty card.
   if (!requirement.any) {
@@ -256,62 +357,29 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
     );
   }
 
-  // Two-leg-ness is a property of the PLAN, not of what is outstanding right
-  // now. Deriving it from `requirement` alone made the header read "Step 1 of
-  // 2" and then, the instant the compute webhook landed, plain "AI credit" —
-  // renumbering the flow under a user who is mid-payment. A plan that buys
-  // both is a two-payment plan for as long as it is on screen.
   const bothLegs =
     isCloudCompute(plan.compute) && plan.modelProvider === "reliant_credits";
-  const legLabel = requirement.needsCompute
-    ? bothLegs
-      ? "Step 1 of 2 — your machine"
-      : "Your machine"
-    : bothLegs
-      ? "Step 2 of 2 — AI credit"
-      : "AI credit";
 
   return (
     <div className="space-y-6">
       <div className="space-y-2 text-center">
         <h2 className="text-2xl font-semibold tracking-tight text-foreground">
-          Set up billing
+          Confirm and pay
         </h2>
         <p className="mx-auto max-w-[52ch] text-sm leading-relaxed text-muted-foreground">
+          {/* No more "there are two payments". There is one, because the two
+              legs now bill the same Stripe customer and the second reuses the
+              card the first collected. The header says what the user is about
+              to do, and the summary below says exactly what for. */}
           {bothLegs
-            ? "You chose a Reliant machine and Reliant's models. They are billed separately, so there are two payments — the card you enter first is offered again for the second."
+            ? "Here's everything you picked. One card covers both."
             : requirement.needsCompute
-              ? "A Reliant machine runs on a monthly plan. Pick the size you need."
-              : "Reliant's models draw on credit in your account. Add some to get started."}
+              ? "Here's the machine you picked."
+              : "Here's the credit you picked."}
         </p>
       </div>
 
       <div className="mx-auto w-full max-w-[560px] space-y-5">
-        <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          {legLabel}
-        </p>
-
-        {requirement.needsCompute ? (
-          <ComputePlanPicker
-            sizes={sizes}
-            loading={plansQ.isLoading}
-            selectedPlanId={selectedPlan?.id}
-            planFor={(size) => smallestPlanAllowingSize(computePlans, size)}
-            onChoose={(size, planId) => {
-              setChosenSize(size);
-              // Recorded in the URL so the choice survives a reload
-              // mid-payment. Changing it re-keys the panel, which expires the
-              // session in flight and starts a new one.
-              void updatePlan({ computePlanId: planId });
-            }}
-          />
-        ) : (
-          <CreditAmountPicker
-            valueCents={creditCents}
-            onChoose={(cents) => void updatePlan({ aiCreditCents: cents })}
-          />
-        )}
-
         {settling ? (
           <div
             className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-4 py-3"
@@ -339,138 +407,35 @@ export function CheckoutStep({ plan, updatePlan, onNext }: StepProps) {
               Check again
             </button>
           </div>
-        ) : request ? (
-          <CheckoutPanelWithIdentity
-            // Re-keyed on what is being bought: changing the plan or the amount
-            // must start a new session rather than leaving a form that no
-            // longer matches the choice above it.
-            key={
-              request.kind === "compute_plan"
-                ? request.planId
-                : String(request.amountCents)
-            }
-            request={request}
-            onDone={handlePanelDone}
-            // OAuth-only: the email path links inside the modal, so onboarding
-            // is never navigated away from. A provider round-trip genuinely
-            // leaves, and the wizard's ENTIRE state is the `plan` object in the
-            // URL — so the way back is the live URL, not a rebuilt one. A
-            // fabricated path would return the user to an empty plan at step
-            // one, having already answered everything.
-            returnTo={currentOnboardingUrl()}
-          />
         ) : (
-          <p className="text-sm text-muted-foreground">
-            {plansQ.isLoading
-              ? "Loading plans…"
-              : "No plans are available in this setup. Go back and choose to run on your own computer."}
-          </p>
+          /* ONE summary, ONE card, covering every leg still owed. The plan
+             tiles and the credit amount are gone from this screen entirely —
+             they were decided on the steps that asked for them, with their
+             prices visible, before any card was involved. */
+          <OnboardingCheckout
+            key={`checkout:${linkAttempt}`}
+            lines={lines}
+            computePlanId={
+              requirement.needsCompute ? plan.computePlanId : undefined
+            }
+            creditCents={requirement.needsCredit ? creditCents : undefined}
+            confirmComputeSettled={computeHasLanded}
+            confirmCreditSettled={creditHasLanded}
+            onDone={handlePanelDone}
+            onRedeemed={handleRedeemed}
+            renderIdentityRequired={(message) => (
+              <LinkIdentityModal
+                message={message}
+                returnTo={currentOnboardingUrl()}
+                onLinked={() => setLinkAttempt((n) => n + 1)}
+                onDismiss={() => undefined}
+              />
+            )}
+          />
         )}
-
-        {/* Redeeming enough flips the requirement to false and derivation
-            advances the user with no button to press. */}
-        <RedeemCouponForm
-          variant="collapsed"
-          size="sm"
-          onRedeemed={() => void facts.refetch()}
-        />
 
         {error && <p className="text-center text-xs text-destructive">{error}</p>}
       </div>
-    </div>
-  );
-}
-
-function ComputePlanPicker({
-  sizes,
-  loading,
-  selectedPlanId,
-  planFor,
-  onChoose,
-}: {
-  sizes: DaemonSizeName[];
-  loading: boolean;
-  selectedPlanId: string | undefined;
-  planFor: (size: DaemonSizeName) => { id: string; priceCents: bigint; structuredLimits?: unknown } | undefined;
-  onChoose: (size: DaemonSizeName, planId: string) => void;
-}) {
-  if (loading) {
-    return (
-      <div className="flex items-center gap-2 px-1 text-sm text-muted-foreground">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading plans…
-      </div>
-    );
-  }
-  if (sizes.length === 0) return null;
-
-  return (
-    <div className="space-y-2">
-      {sizes.map((size) => {
-        const sizePlan = planFor(size);
-        if (!sizePlan) return null;
-        const display = derivePlanDisplay(sizePlan as never);
-        const selected = sizePlan.id === selectedPlanId;
-        return (
-          <button
-            key={size}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onChoose(size, sizePlan.id)}
-            className={cn(
-              "flex w-full items-center justify-between gap-4 rounded-xl border-2 px-4 py-3 text-left transition-all",
-              selected
-                ? "border-primary bg-primary/10"
-                : "border-border/50 bg-background hover:border-primary/40 hover:bg-muted/50",
-            )}
-          >
-            <span className="min-w-0">
-              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                {formatSizeLabel(size)}
-                {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {display.includedMinutes < 0
-                  ? "Unlimited hours included"
-                  : `${Math.round(display.includedMinutes / 60)} hours included each month`}
-              </span>
-            </span>
-            <span className="flex-shrink-0 text-sm font-semibold text-foreground">
-              {display.monthlyPriceCents == null
-                ? "—"
-                : `${formatCentsAsDollars(display.monthlyPriceCents)}/mo`}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function CreditAmountPicker({
-  valueCents,
-  onChoose,
-}: {
-  valueCents: number;
-  onChoose: (cents: number) => void;
-}) {
-  return (
-    <div className="grid grid-cols-4 gap-2">
-      {TOPUP_PRESETS_CENTS.map((cents) => (
-        <button
-          key={cents}
-          type="button"
-          aria-pressed={cents === valueCents}
-          onClick={() => onChoose(cents)}
-          className={cn(
-            "rounded-lg border-2 py-2.5 text-sm font-semibold transition-all",
-            cents === valueCents
-              ? "border-primary bg-primary/10 text-foreground"
-              : "border-border/50 bg-background text-muted-foreground hover:border-primary/40",
-          )}
-        >
-          {formatCentsAsDollars(cents)}
-        </button>
-      ))}
     </div>
   );
 }

@@ -21,6 +21,15 @@ type ToolsOptions struct {
 	// no doorbell, and delivery falls back to the recipient's next loop
 	// boundary (the daemon runtime has no Temporal connection).
 	AgentMessageNotifier AgentMessageNotifier
+	// ShellPlatform is the shell family of the DAEMON that will execute shell
+	// commands, which is frequently not this process's own platform: the
+	// server and worker run Linux while the daemon may be Windows. The shell
+	// tool's description is written for whatever runs the command, so it is
+	// resolved per request from the daemon record and carried here.
+	//
+	// The zero value (ShellPlatformUnknown) is the honest default — it yields
+	// portable, probe-first guidance rather than asserting bash.
+	ShellPlatform ShellPlatform
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -68,24 +77,34 @@ func (f *ToolsFactory) GetRepo() db.Repository {
 	return f.opts.Repo
 }
 
+// cloneOpts copies this factory's options so a With* helper can override one
+// field without restating the others.
+//
+// It copies the struct wholesale rather than listing fields. Hand-enumerated
+// clones silently drop any option added later — the new field is simply absent
+// from three call sites nobody thinks to revisit — and a dropped ShellPlatform
+// would reintroduce exactly the "description does not match the executing
+// machine" bug this field exists to fix, with no compile error to catch it.
+func (f *ToolsFactory) cloneOpts() *ToolsOptions {
+	if f == nil || f.opts == nil {
+		return &ToolsOptions{}
+	}
+	cloned := *f.opts
+	return &cloned
+}
+
 // WithMCPProjectPath returns a cloned factory scoped to the provided MCP project path.
 func (f *ToolsFactory) WithMCPProjectPath(projectPath string) *ToolsFactory {
 	if f == nil {
 		return nil
 	}
-	if f.opts == nil {
-		return NewToolsFactory(&ToolsOptions{MCPProjectPath: projectPath})
-	}
-	if f.opts.MCPProjectPath == projectPath {
+	if f.opts != nil && f.opts.MCPProjectPath == projectPath {
 		return f
 	}
 
-	return NewToolsFactory(&ToolsOptions{
-		Repo:                 f.opts.Repo,
-		MCPProjectPath:       projectPath,
-		Skills:               f.opts.Skills,
-		AgentMessageNotifier: f.opts.AgentMessageNotifier,
-	})
+	opts := f.cloneOpts()
+	opts.MCPProjectPath = projectPath
+	return NewToolsFactory(opts)
 }
 
 // WithSkills returns a cloned factory carrying the provided skills. Callers in
@@ -95,15 +114,39 @@ func (f *ToolsFactory) WithSkills(skills []config.StoredSkill) *ToolsFactory {
 	if f == nil {
 		return nil
 	}
-	if f.opts == nil {
-		return NewToolsFactory(&ToolsOptions{Skills: skills})
+	opts := f.cloneOpts()
+	opts.Skills = skills
+	return NewToolsFactory(opts)
+}
+
+// WithShellPlatform returns a cloned factory whose shell tool describes itself
+// for the given platform.
+//
+// This is the seam that carries the daemon's OS to where tool descriptions are
+// built. It rides on the factory rather than on GetToolRegistry() because the
+// registry is a static name→constructor table with 13 call sites, while the
+// factory is already the per-request dependency carrier that every one of those
+// sites funnels through when it actually instantiates a tool (def.Factory(f)).
+// Threading a parameter through the registry instead would have touched all 13
+// sites, most of which only want tool NAMES and have no daemon in scope.
+func (f *ToolsFactory) WithShellPlatform(platform ShellPlatform) *ToolsFactory {
+	if f == nil {
+		return nil
 	}
-	return NewToolsFactory(&ToolsOptions{
-		Repo:                 f.opts.Repo,
-		MCPProjectPath:       f.opts.MCPProjectPath,
-		Skills:               skills,
-		AgentMessageNotifier: f.opts.AgentMessageNotifier,
-	})
+	if f.opts != nil && f.opts.ShellPlatform == platform {
+		return f
+	}
+	opts := f.cloneOpts()
+	opts.ShellPlatform = platform
+	return NewToolsFactory(opts)
+}
+
+// ShellPlatform returns the platform this factory's shell tool describes.
+func (f *ToolsFactory) ShellPlatform() ShellPlatform {
+	if f == nil || f.opts == nil {
+		return ShellPlatformUnknown
+	}
+	return f.opts.ShellPlatform
 }
 
 // SetGlobalFactory sets a global factory instance for convenience
@@ -140,25 +183,27 @@ func (f *ToolsFactory) FindAndReplace() Tool {
 
 // Execution tools
 
-// Shell returns the unified shell tool (bash on Unix, PowerShell on Windows)
+// Shell returns the unified shell tool. Its description is written for the
+// DAEMON's platform (bash on Unix, PowerShell on Windows, portable guidance
+// when unknown) — not for whatever OS this process was compiled on.
 func (f *ToolsFactory) Shell() Tool {
-	return NewShellTool()
+	return NewShellTool(f.ShellPlatform())
 }
 
-func (f *ToolsFactory) BashList() Tool {
-	return NewBashListTool()
+func (f *ToolsFactory) ShellList() Tool {
+	return NewShellListTool()
 }
 
-func (f *ToolsFactory) BashOutput() Tool {
-	return NewBashOutputTool()
+func (f *ToolsFactory) ShellOutput() Tool {
+	return NewShellOutputTool()
 }
 
-func (f *ToolsFactory) BashKill() Tool {
-	return NewBashKillTool()
+func (f *ToolsFactory) ShellKill() Tool {
+	return NewShellKillTool()
 }
 
-func (f *ToolsFactory) BashWait() Tool {
-	return NewBashWaitTool()
+func (f *ToolsFactory) ShellWait() Tool {
+	return NewShellWaitTool()
 }
 
 // Network tools

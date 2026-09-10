@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useAuthStore, type LinkableProvider } from '@/store/authStore'
 import { isSafeReturnTo } from '@/lib/returnTo'
+import { describeAuthError, isRateLimitError } from '@/lib/authErrors'
 import { validatePassword } from '../utils/passwordValidation'
 import { OAuthButton } from './OAuthButton'
 import { PasswordInput, ConfirmPasswordInput } from './PasswordInput'
 import { AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
+import { CheckSpamNote } from './CheckSpamNote'
 
 /**
  * Every way to attach a real identity to an EXISTING anonymous account.
@@ -13,16 +15,28 @@ import { AuthError, AuthDivider, AuthLegalLinks } from './AuthLayout'
  * IN — a new session, a different account — which for an anonymous user means
  * abandoning the account their chats and projects live on. The mechanic here is
  * linking:
- *   - email + password → `signUp`, which upgrades the anonymous user in place;
+ *   - email + password → `updateUser`, which upgrades the anonymous user in
+ *     place (via the store's `linkEmailIdentity`);
  *   - GitHub / Google / Apple → `linkIdentity`.
+ *
+ * This used to say "email + password → `signUp`, which upgrades the anonymous
+ * user in place". That was FALSE, and it was the origin of a loop users could
+ * not escape: `signUp` hits /signup, which mints a separate user or returns
+ * one with no session, so the email never attached to the anonymous account.
+ * The user confirmed their address, came back still anonymous, and hit the
+ * same "Finish setting up your account" modal — forever. `updateUser` is the
+ * call that upgrades a session in place.
  *
  * It also has no "Skip for now". `AuthScreen`'s version calls
  * `signInAnonymously`, which CREATES the very session every caller of this form
  * is trying to escape — offering it here is a loop, not an escape hatch.
  *
- * Email is the prominent path because it is the only one that can complete
- * without leaving the page. OAuth redirects the whole window by nature, so it
- * carries `returnTo` to bring the user back; the email path never needs it.
+ * Email is the prominent path because it is the only one that CAN complete
+ * without leaving the page. It no longer always does: Supabase may send a
+ * 6-digit code or a link, depending on a dashboard template this repo cannot
+ * read, so the email path now carries `returnTo` as well — if the user
+ * completes via the link, /auth/callback needs it to put them back where they
+ * were standing.
  */
 
 export interface LinkIdentityFormProps {
@@ -32,15 +46,17 @@ export interface LinkIdentityFormProps {
    */
   onLinked: () => void
   /**
-   * Where the OAuth round-trip should land. Validated before use; an
-   * off-origin value is dropped rather than handed to the provider. Unused by
-   * the email path, which never leaves the page.
+   * Where a round-trip should land. Validated before use; an off-origin value
+   * is dropped rather than handed to the provider or embedded in an email
+   * link. Used by BOTH paths now: OAuth redirects the window, and the email
+   * path may complete by the user clicking a link in their inbox, which
+   * returns through /auth/callback the same way.
    */
   returnTo?: string
   /**
-   * Supabase returns no session when email confirmation is on. By default this
-   * form verifies the code inline. A caller that owns a fuller verification
-   * screen can take over instead by passing this.
+   * Supabase returns no session until the new address is confirmed. By default
+   * this form verifies inline. A caller that owns a fuller verification screen
+   * can take over instead by passing this.
    */
   onVerificationRequired?: (email: string) => void
   /** Label for the email submit button. */
@@ -56,11 +72,18 @@ export function LinkIdentityForm({
   autoFocus = true,
 }: LinkIdentityFormProps) {
   const {
+    user,
     linkOAuthIdentity,
-    signUp,
-    sendEmailVerificationOTP,
-    verifyEmailOTP,
+    linkEmailIdentity,
+    sendEmailIdentityVerification,
+    verifyEmailIdentityOTP,
   } = useAuthStore()
+
+  // The round-trip state both paths share. Computed once so the email link and
+  // the OAuth redirect cannot disagree about where the user came from.
+  const linkState = isSafeReturnTo(returnTo)
+    ? { source: 'link' as const, returnTo }
+    : { source: 'link' as const }
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -71,10 +94,33 @@ export function LinkIdentityForm({
   // success takes the window to the provider.
   const [pendingProvider, setPendingProvider] = useState<LinkableProvider | null>(null)
 
-  // Set once signUp comes back without a session: the address we are awaiting
-  // a code for. Its presence switches this form to the verification step.
-  const [awaitingCodeFor, setAwaitingCodeFor] = useState<string | null>(null)
+  // Set once the email is pending confirmation: the address we are waiting on.
+  // Its presence switches this form to the verification step. The user may
+  // finish there by typing a code, or by clicking the link in the same email —
+  // in which case they return through /auth/callback and never come back to
+  // this component at all.
+  //
+  // It SEEDS from `user.new_email`, which is how someone already stuck gets
+  // out. GoTrue serialises `users.email_change` as `new_email`, so its
+  // presence means "this account has a half-finished upgrade: the password
+  // landed, the address never got confirmed". Without this seed such a user
+  // was shown the blank email+password form again — and re-submitting it is
+  // exactly what produced the `422 same_password` dead end. Now they land
+  // directly on the verification step for the address already pending.
+  const [awaitingCodeFor, setAwaitingCodeFor] = useState<string | null>(
+    user?.new_email ?? null,
+  )
   const [code, setCode] = useState('')
+  // A non-error status line: "we sent it", or "wait N seconds". Kept apart
+  // from `error` because a rate limit is not a failure the user caused, and
+  // rendering it in red beside "Authentication Failed" is what made a normal
+  // cooldown read as a broken account.
+  const [notice, setNotice] = useState<string | null>(null)
+
+  // True when this form opened straight onto the verification step because the
+  // account already had a pending address — i.e. the user is the one already
+  // trapped, not someone who just submitted the form.
+  const resumedPending = !!user?.new_email && awaitingCodeFor === user.new_email
 
   const handleLink = async (provider: LinkableProvider) => {
     setError(null)
@@ -83,11 +129,8 @@ export function LinkIdentityForm({
     setPendingProvider(provider)
     setSubmitting(true)
     try {
-      const state = isSafeReturnTo(returnTo)
-        ? { source: 'link' as const, returnTo }
-        : { source: 'link' as const }
       // Performs the redirect itself — control does not come back here on web.
-      await linkOAuthIdentity(provider, state)
+      await linkOAuthIdentity(provider, linkState)
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to link ${provider}`)
       setSubmitting(false)
@@ -115,28 +158,43 @@ export function LinkIdentityForm({
 
     setSubmitting(true)
     try {
-      const { session } = await signUp(email, password)
-      if (!session) {
+      // updateUser under the hood: the email attaches to the CURRENT user id,
+      // so the org, redeemed coupons and onboarding progress all survive.
+      // `linkState` rides along as the emailed link's redirect target.
+      const { verificationRequired } = await linkEmailIdentity(
+        email,
+        password,
+        linkState,
+      )
+      if (verificationRequired) {
         if (onVerificationRequired) {
           onVerificationRequired(email)
         } else {
-          // signUp already sent the code; do not send a second one, which
+          // The update already sent the email; do not send a second one, which
           // would trip Supabase's rate limit before the user has typed.
           setAwaitingCodeFor(email)
         }
         setSubmitting(false)
         return
       }
-      // Confirmation disabled: the email is live immediately.
+      // Confirmation disabled on the project: the email is live immediately.
       onLinked()
     } catch (err) {
-      let message = 'Failed to save account'
-      if (err instanceof Error) message = err.message
-      if (message.includes('already registered') || message.includes('already in use')) {
-        message =
-          'That email is already attached to another account. Sign in with it instead, or use a different email.'
+      // describeAuthError owns every code→copy mapping, including the
+      // "already attached to another account" wording this used to inline and
+      // the rate limit that used to surface as a raw string.
+      //
+      // A rate limit here is NOT a failure to save the account: the update was
+      // accepted and only the mail send was throttled, so the user should be
+      // moved to the verification step (where they can wait and resend) rather
+      // than left staring at the form wondering if anything happened.
+      if (isRateLimitError(err)) {
+        setNotice(describeAuthError(err, 'Please wait a moment and try again.'))
+        setAwaitingCodeFor(email)
+        setSubmitting(false)
+        return
       }
-      setError(message)
+      setError(describeAuthError(err, 'Failed to save account'))
       setSubmitting(false)
     }
   }
@@ -152,19 +210,9 @@ export function LinkIdentityForm({
 
     setSubmitting(true)
     try {
-      await verifyEmailOTP(code, awaitingCodeFor ?? email)
+      await verifyEmailIdentityOTP(code, awaitingCodeFor ?? email)
     } catch (err) {
-      let message = 'Failed to verify code. Please try again.'
-      if (err instanceof Error) {
-        if (err.message.includes('expired')) {
-          message = 'Verification code has expired. Please request a new one.'
-        } else if (err.message.includes('invalid')) {
-          message = 'Invalid verification code. Please check and try again.'
-        } else {
-          message = err.message || message
-        }
-      }
-      setError(message)
+      setError(describeAuthError(err, 'Failed to verify code. Please try again.'))
       setSubmitting(false)
       return
     }
@@ -174,12 +222,23 @@ export function LinkIdentityForm({
 
   const handleResend = async () => {
     setError(null)
+    setNotice(null)
+    const target = awaitingCodeFor ?? email
     try {
-      await sendEmailVerificationOTP(awaitingCodeFor ?? email)
+      // Goes through updateUser, not supabase.auth.resend — see the store. A
+      // `resend` call cannot find a user whose address is still pending, so it
+      // returned 200 and mailed nothing, which is the "resend button does
+      // nothing" the owner reported.
+      await sendEmailIdentityVerification(target, linkState)
+      setNotice(`We sent another confirmation email to ${target}.`)
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to resend the code.',
-      )
+      // A throttle is expected here and is not the user's fault; say how long
+      // to wait rather than colouring it as a failure.
+      if (isRateLimitError(err)) {
+        setNotice(describeAuthError(err, 'Please wait a moment and try again.'))
+        return
+      }
+      setError(describeAuthError(err, 'Failed to resend the email.'))
     }
   }
 
@@ -188,14 +247,47 @@ export function LinkIdentityForm({
       <form className="space-y-5" onSubmit={handleVerify}>
         {error && <AuthError message={error} />}
 
+        {/* Status, not failure: "we sent another one", or "wait N seconds".
+            A cooldown shown in the red error box reads as a broken account. */}
+        {notice && (
+          <div className="rounded-lg bg-muted border border-border p-4">
+            <p className="text-sm text-muted-foreground">{notice}</p>
+          </div>
+        )}
+
+        {/* The account was ALREADY mid-upgrade when this form mounted — we
+            seeded from user.new_email. Say so explicitly: this user has been
+            told once already that their password was wrong for an account
+            they didn't think they had, so "we're still waiting on the email
+            you started earlier" is the sentence that ends that confusion. */}
+        {resumedPending && (
+          <p className="text-sm text-muted-foreground">
+            You already started setting up this account — we’re just waiting on
+            your email address to be confirmed. Your password is set; there’s
+            nothing to re-enter.
+          </p>
+        )}
+
+        {/* Honest about what we cannot know. The email template lives in the
+            hosted Supabase dashboard, so this code cannot tell whether the
+            message contains a 6-digit code, a link, or both — and promising a
+            code that is not there is what left users stuck at this step with
+            no way forward. Both routes finish the same link: the code below,
+            or the link, which returns through /auth/callback. */}
         <p className="text-sm text-muted-foreground">
-          Enter the 6-digit code we sent to{' '}
+          We sent a confirmation email to{' '}
           <span className="font-medium text-foreground">{awaitingCodeFor}</span>.
+          Click the link in it, or enter the 6-digit code below if the email has
+          one — either finishes setting up your account.
         </p>
+        <CheckSpamNote className="text-xs text-muted-foreground" />
 
         <div>
           <label htmlFor="link-identity-code" className="block text-sm font-medium mb-1.5">
-            Verification code
+            Verification code{' '}
+            <span className="font-normal text-muted-foreground">
+              (if your email has one)
+            </span>
           </label>
           <input
             id="link-identity-code"
@@ -231,7 +323,7 @@ export function LinkIdentityForm({
             disabled={submitting}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
           >
-            Resend the code
+            Resend the email
           </button>
         </div>
       </form>

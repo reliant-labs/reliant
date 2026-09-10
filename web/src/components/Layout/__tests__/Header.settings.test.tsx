@@ -42,6 +42,13 @@ vi.mock("../../../hooks/useTitleBarChrome", () => ({
 vi.mock("../ConfigHealthIndicator", () => ({
   ConfigHealthIndicator: () => null,
 }));
+// Reads the wallet through react-query, and this suite mounts the Header bare
+// (no QueryClientProvider). The real app always has one — App.tsx wraps the
+// whole router tree — so stubbing here matches the neighbours above rather than
+// papering over a missing provider.
+vi.mock("../../Billing/LowCreditSurface", () => ({
+  LowCreditSurface: () => null,
+}));
 vi.mock("../DaemonStatusDot", () => ({ DaemonStatusDot: () => null }));
 vi.mock("../DetectedPortsChip", () => ({ DetectedPortsChip: () => null }));
 

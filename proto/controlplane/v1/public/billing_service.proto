@@ -35,6 +35,30 @@ service BillingService {
   // (GrantCurrentUserWelcomeCredit removed: the signup wallet credit is now
   // auto-granted at first-login provisioning.)
   rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {}
+  // Mints a PaymentIntent for a top-up confirmed in OUR page via Stripe
+  // Elements. See control-plane's copy for the full contract; entitlement
+  // remains webhook-driven.
+  rpc CreateCurrentUserWalletTopupPaymentIntent(CreateCurrentUserWalletTopupPaymentIntentRequest) returns (CreateCurrentUserWalletTopupPaymentIntentResponse) {}
+
+  // Prices a top-up — credit, processing fee, total — without minting anything
+  // at Stripe, so checkout can disclose the fee before asking for a card.
+  // The fee is NEVER computed client-side: this returns it from the same
+  // server function the charge is built from.
+  rpc GetCurrentUserWalletTopupQuote(GetCurrentUserWalletTopupQuoteRequest) returns (GetCurrentUserWalletTopupQuoteResponse) {}
+
+  // Auto-recharge: refill the wallet from a saved card when the balance falls
+  // below a threshold the user set, never exceeding a monthly ceiling they
+  // also set. Three concerns, three RPCs, because saving a card and arming the
+  // rule are separate decisions.
+  rpc GetCurrentUserWalletAutoRecharge(GetCurrentUserWalletAutoRechargeRequest) returns (GetCurrentUserWalletAutoRechargeResponse) {}
+  rpc SetCurrentUserWalletAutoRecharge(SetCurrentUserWalletAutoRechargeRequest) returns (SetCurrentUserWalletAutoRechargeResponse) {}
+  // Begins saving a card for off-session use. Moves no money. Returns EITHER
+  // an already-saved method (the compute-subscriber path) OR a SetupIntent
+  // client secret to mount with Stripe.js — never both.
+  rpc CreateCurrentUserWalletPaymentMethodSetup(CreateCurrentUserWalletPaymentMethodSetupRequest) returns (CreateCurrentUserWalletPaymentMethodSetupResponse) {}
+  // Records a card the user just saved. The server reads the card's details
+  // back from Stripe; the client sends only the payment method ID.
+  rpc ConfirmCurrentUserWalletPaymentMethod(ConfirmCurrentUserWalletPaymentMethodRequest) returns (ConfirmCurrentUserWalletPaymentMethodResponse) {}
 
   // RedeemCoupon credits the caller's org wallet from a coupon code.
   // Idempotent per (coupon, org). Coupon MANAGEMENT (issue/list/adjust) is
@@ -70,6 +94,17 @@ service BillingService {
   // Workspace compute plan (per-user).
   rpc GetCurrentUserComputeSubscription(GetCurrentUserComputeSubscriptionRequest) returns (GetCurrentUserComputeSubscriptionResponse) {}
   rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {}
+
+  // CreateCurrentUserComputeSubscriptionIntent starts a compute subscription
+  // the user pays for with Stripe Elements in the client's own page, rather
+  // than in Stripe's hosted Checkout page inside an iframe. The subscription
+  // counterpart of CreateCurrentUserWalletTopupPaymentIntent.
+  //
+  // The subscription is created in `incomplete` status and moves no money
+  // until the browser confirms. It grants NO entitlement and cancels NO
+  // existing subscription: an abandoned payment leaves the caller exactly as
+  // they were, and Stripe expires the unpaid subscription on its own.
+  rpc CreateCurrentUserComputeSubscriptionIntent(CreateCurrentUserComputeSubscriptionIntentRequest) returns (CreateCurrentUserComputeSubscriptionIntentResponse) {}
   rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {}
 
   // GetCurrentUserComputeEligibility answers "can this caller start a managed
@@ -178,6 +213,25 @@ message GetCurrentUserComputeSubscriptionResponse {
   Subscription subscription = 1;
 }
 
+message CreateCurrentUserComputeSubscriptionIntentRequest {
+  // The compute plan to subscribe to.
+  string plan_id = 1;
+}
+
+message CreateCurrentUserComputeSubscriptionIntentResponse {
+  // The Stripe subscription, created in `incomplete` status. For correlation
+  // only — it is NOT an entitlement and must not be read as one.
+  string subscription_id = 1;
+  // Confirm this with Stripe Elements to pay the first invoice.
+  //
+  // Empty when the subscription needed no payment at all (full-coverage
+  // coupon, or a trial). That is a success, not a failure.
+  string payment_client_secret = 2;
+  // The first invoice's total, as Stripe computed it.
+  int64 amount_due_cents = 3;
+  string currency = 4;
+}
+
 message CreateCurrentUserWalletTopupSessionRequest {
   int64 amount_cents = 1;
   // Hosted mode only; see CreateCurrentUserCheckoutSessionRequest.
@@ -195,6 +249,123 @@ message CreateCurrentUserWalletTopupSessionResponse {
   string client_secret = 3;
   CheckoutUiMode ui_mode = 4;
   string session_id = 5;
+}
+
+// Field numbers MUST match control-plane's
+// proto/services/billing/v1/billing.proto — same wire package, hand-mirrored.
+message CreateCurrentUserWalletTopupPaymentIntentRequest {
+  int64 amount_cents = 1;
+}
+
+message CreateCurrentUserWalletTopupPaymentIntentResponse {
+  WalletTopup topup = 1;
+  // Mount this with Stripe Elements and confirm it client-side.
+  string payment_intent_client_secret = 2;
+  string payment_intent_id = 3;
+}
+
+// Field numbers MUST match control-plane's
+// proto/services/billing/v1/billing.proto — same wire package, hand-mirrored.
+message GetCurrentUserWalletTopupQuoteRequest {
+  // How much CREDIT the user wants. The $5 minimum applies to this, not to
+  // the charged total.
+  int64 credit_cents = 1;
+}
+
+// The itemised breakdown checkout must show before taking a card. All three
+// amounts are sent rather than the client deriving one from the others: a
+// client that recomputes any leg can render a total that disagrees with the
+// charge.
+message GetCurrentUserWalletTopupQuoteResponse {
+  int64 credit_cents = 1;
+  int64 fee_cents = 2;
+  // Always credit_cents + fee_cents. This is what the card is charged.
+  int64 total_cents = 3;
+  // The disclosed rate, so the UI never hardcodes a percentage next to a
+  // number the server computed at some other rate.
+  int64 fee_percent = 4;
+}
+
+// === Auto-recharge ===
+//
+// Field numbers MUST match control-plane's copy.
+
+// WalletAutoRecharge is the stored rule plus its health.
+message WalletAutoRecharge {
+  bool enabled = 1;
+  // Recharge when the balance falls below this.
+  int64 threshold_cents = 2;
+  // How much credit to add each time.
+  int64 amount_cents = 3;
+  // The MANDATORY monthly ceiling. Always > 0 on an enabled rule — there is no
+  // uncapped state for a charger that fires with nobody watching.
+  int64 max_per_month_cents = 4;
+
+  // Where the rule sits on the failure ladder: "ok", "declined",
+  // "requires_action", or "ceiling_reached". The rule stays ENABLED on every
+  // rung, so a client must render a degraded state from THIS field rather than
+  // inferring failure from enabled=false, which never happens.
+  string failure_state = 5;
+  string last_error = 6;
+  int64 last_error_at_ms = 7;
+  // Cents already committed by auto-recharge this billing month.
+  int64 spent_this_month_cents = 8;
+}
+
+// SavedPaymentMethod is the card on file, as Stripe reports it.
+//
+// brand is displayed as TEXT. Clients must never map it onto a hardcoded row
+// of card logos: what a customer can pay with is Stripe's decision, not a list
+// we ship.
+message SavedPaymentMethod {
+  string brand = 1;
+  string last4 = 2;
+  int64 exp_month = 3;
+  int64 exp_year = 4;
+}
+
+message GetCurrentUserWalletAutoRechargeRequest {}
+
+message GetCurrentUserWalletAutoRechargeResponse {
+  // Absent when never configured — NOT the same as a disabled rule, and must
+  // not be rendered as one.
+  optional WalletAutoRecharge auto_recharge = 1;
+  // Absent when no card is saved. Arming requires one.
+  optional SavedPaymentMethod payment_method = 2;
+}
+
+// Replaces the stored rule outright — it is not a patch. Enable, threshold,
+// amount and ceiling are one decision, so a UI must send the user's current
+// choice for every field on every call.
+message SetCurrentUserWalletAutoRechargeRequest {
+  bool enabled = 1;
+  int64 threshold_cents = 2;
+  int64 amount_cents = 3;
+  // REQUIRED when enabled. Unlike the compute overage cap, 0 is not
+  // "uncapped" here — it is rejected.
+  int64 max_per_month_cents = 4;
+}
+
+message SetCurrentUserWalletAutoRechargeResponse {
+  WalletAutoRecharge auto_recharge = 1;
+}
+
+message CreateCurrentUserWalletPaymentMethodSetupRequest {}
+
+message CreateCurrentUserWalletPaymentMethodSetupResponse {
+  // Set when a card was ALREADY on file at Stripe and has been adopted.
+  optional SavedPaymentMethod payment_method = 1;
+  // Set when a card must be collected: mount with Stripe.js. Exactly one of
+  // these two fields is populated.
+  string setup_intent_client_secret = 2;
+}
+
+message ConfirmCurrentUserWalletPaymentMethodRequest {
+  string payment_method_id = 1;
+}
+
+message ConfirmCurrentUserWalletPaymentMethodResponse {
+  SavedPaymentMethod payment_method = 1;
 }
 
 // Field numbers MUST match control-plane's

@@ -9,6 +9,9 @@ import (
 type ThinkingOutput struct {
 	Content   string `json:"content"`
 	Signature string `json:"signature"`
+	// Redacted is the opaque, encrypted payload of a redacted_thinking block.
+	// No readable text — replayed to the provider unchanged on the next turn.
+	Redacted string `json:"redacted,omitempty"`
 }
 
 // SaveMessageInput is the input for SaveMessage activity.

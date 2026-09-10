@@ -8,6 +8,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -99,6 +100,45 @@ func makeActivityFailed(eventID, scheduledEventID int64) *historypb.HistoryEvent
 		Attributes: &historypb.HistoryEvent_ActivityTaskFailedEventAttributes{
 			ActivityTaskFailedEventAttributes: &historypb.ActivityTaskFailedEventAttributes{
 				ScheduledEventId: scheduledEventID,
+			},
+		},
+	}
+}
+
+func makeWorkflowFailed(eventID int64, failure *failurepb.Failure) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventId:   eventID,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+			WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+				Failure: failure,
+			},
+		},
+	}
+}
+
+// activityErrorChain mirrors what the Go SDK records on WorkflowExecutionFailed
+// when workflow code returns fmt.Errorf("...: %w", activityErr): an application
+// failure wrapping the activity failure wrapping the activity's own error.
+func activityErrorChain(scheduledEventID int64, activityType, rootMessage string) *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: "step failed: activity error (type: " + activityType + ")",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "wrapError"},
+		},
+		Cause: &failurepb.Failure{
+			Message: "activity error",
+			FailureInfo: &failurepb.Failure_ActivityFailureInfo{
+				ActivityFailureInfo: &failurepb.ActivityFailureInfo{
+					ScheduledEventId: scheduledEventID,
+					ActivityType:     &commonpb.ActivityType{Name: activityType},
+				},
+			},
+			Cause: &failurepb.Failure{
+				Message: rootMessage,
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+				},
 			},
 		},
 	}
@@ -349,6 +389,123 @@ func TestResetExpiredWorkflow_SignalExcluded(t *testing.T) {
 }
 
 // --- findResumeResetPoint tests ---
+
+func TestFindResumeResetPoint_FailedActivityFollowedByTeardown_ResetsBeforeActivity(t *testing.T) {
+	// The 2026-09-08 incident shape. PreflightDaemonCheck (scheduled at 11 by
+	// WFT 10) failed at 13; the runtime's completion handler then ran
+	// WorkflowError (17→19), Cleanup (23→25) and WorkflowStatus (29→31), and
+	// the run closed at 35 with an error chain blaming activity 11.
+	//
+	// The teardown completions sit AFTER the failure, so the tail heuristic
+	// alone would pick WFT 34 and the resumed run would replay the recorded
+	// failure. The close event's chain must win: reset to 10 so the check
+	// re-executes against the now-available daemon.
+	events := []*historypb.HistoryEvent{
+		makeEvent(1, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED),
+		makeEvent(10, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED), // scheduled the preflight
+		makeActivityScheduled(11),                                 // PreflightDaemonCheck
+		makeActivityFailed(13, 11),
+		makeEvent(16, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(17), // WorkflowError
+		makeActivityCompleted(19, 17),
+		makeEvent(22, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(23), // Cleanup
+		makeActivityCompleted(25, 23),
+		makeEvent(28, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(29), // WorkflowStatus
+		makeActivityCompleted(31, 29),
+		makeEvent(34, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED), // returned the error
+		makeWorkflowFailed(35, activityErrorChain(11, "PreflightDaemonCheck",
+			"this workflow requires a daemon but none is available")),
+	}
+	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
+
+	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), eventID, "must reset to the decision that scheduled the activity the close event blames, not the post-teardown WFT")
+}
+
+func TestFindResumeResetPoint_FailedAfterPriorReplayedReset_StillResetsBeforeActivity(t *testing.T) {
+	// A run produced by an earlier (mis-targeted) reset: events 1–33 copied
+	// from the original, then the reset's WorkflowTaskFailed, a fresh WFT and
+	// an immediate close that replays the same failure. The chain still names
+	// activity 11, whose schedule event was copied along — so the second
+	// resume must land on 10 as well, not compound the mistake.
+	events := []*historypb.HistoryEvent{
+		makeEvent(1, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED),
+		makeEvent(10, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(11),
+		makeActivityFailed(13, 11),
+		makeEvent(16, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(17),
+		makeActivityCompleted(19, 17),
+		makeEvent(28, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(29),
+		makeActivityCompleted(31, 29),
+		makeEvent(33, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED),
+		makeEvent(34, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED), // the reset itself
+		makeEvent(36, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED),
+		makeEvent(38, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeWorkflowFailed(39, activityErrorChain(11, "PreflightDaemonCheck", "no daemon")),
+	}
+	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
+
+	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-2", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), eventID)
+}
+
+func TestFindResumeResetPoint_FailedChainNamesNoActivity_UsesTailHeuristic(t *testing.T) {
+	// A code-level failure: the chain is a plain application failure. The
+	// tail heuristic still governs, and with teardown completions after the
+	// only activity failure it lands on the last WFT.
+	events := []*historypb.HistoryEvent{
+		makeEvent(1, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED),
+		makeEvent(4, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(5),
+		makeActivityFailed(7, 5),
+		makeEvent(10, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(11),
+		makeActivityCompleted(14, 11),
+		makeEvent(16, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeWorkflowFailed(17, &failurepb.Failure{
+			Message: "workflow code panicked",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "PanicError"},
+			},
+		}),
+	}
+	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
+
+	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+	require.NoError(t, err)
+	assert.Equal(t, int64(16), eventID)
+}
+
+func TestFindResumeResetPoint_Terminated_IgnoresChain(t *testing.T) {
+	// The chain is only consulted for FAILED. A TERMINATED run keeps the safe
+	// last-decision point even if history happens to hold a failed close
+	// event from before (it cannot, but the status gate is the contract).
+	events := []*historypb.HistoryEvent{
+		makeEvent(1, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED),
+		makeEvent(4, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeActivityScheduled(5),
+		makeActivityFailed(7, 5),
+		makeEvent(10, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED),
+		makeWorkflowFailed(11, activityErrorChain(5, "X", "boom")),
+	}
+	mc := &mockTemporalClient{historyIter: &mockHistoryIterator{events: events}}
+
+	eventID, err := findResumeResetPoint(context.Background(), mc, "wf-1", "run-1", enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+	require.NoError(t, err)
+	assert.Equal(t, int64(10), eventID)
+}
+
+func TestFailedActivityScheduledEventID(t *testing.T) {
+	assert.Equal(t, int64(0), failedActivityScheduledEventID(nil))
+	assert.Equal(t, int64(11), failedActivityScheduledEventID(activityErrorChain(11, "A", "root")))
+	assert.Equal(t, int64(0), failedActivityScheduledEventID(&failurepb.Failure{Message: "plain"}))
+}
 
 func TestFindResumeResetPoint_FailedTailActivity_ResetsBeforeActivity(t *testing.T) {
 	// FAILED because activity A (scheduled at event 5 by WFT#1 at event 4) failed.

@@ -6,9 +6,11 @@ import {
 } from "../ToolCallSettings";
 
 describe("tool collapse defaults", () => {
-  it("collapses bash", () => {
-    expect(getToolCategory("bash")).toBe("execution");
-    expect(shouldToolBeCollapsed("bash")).toBe(true);
+  it("collapses the shell tool and its background-process family", () => {
+    for (const tool of ["shell", "shell_list", "shell_output", "shell_wait", "shell_kill"]) {
+      expect(getToolCategory(tool), tool).toBe("execution");
+      expect(shouldToolBeCollapsed(tool), tool).toBe(true);
+    }
   });
 
   it("collapses spawn, including the MCP-prefixed name the agent actually emits", () => {
@@ -63,7 +65,7 @@ describe("tool collapse defaults", () => {
         "view", // fileView
         "edit", // fileWrite — the only desktop-expanded category
         "grep", // searchRead
-        "bash", // execution
+        "shell", // execution
         "create_plan", // planning
         "some_server/some_tool", // mcp
         "spawn", // agent
@@ -81,7 +83,7 @@ describe("tool collapse defaults", () => {
       // Every existing call site omits the argument; none of them should
       // change behavior.
       expect(shouldToolBeCollapsed("edit")).toBe(shouldToolBeCollapsed("edit", "desktop"));
-      expect(shouldToolBeCollapsed("bash")).toBe(shouldToolBeCollapsed("bash", "desktop"));
+      expect(shouldToolBeCollapsed("shell")).toBe(shouldToolBeCollapsed("shell", "desktop"));
     });
   });
 });

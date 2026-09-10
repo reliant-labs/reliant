@@ -1139,7 +1139,7 @@ func validateResponseToolData(toolName, jsonStr string, schema map[string]interf
 var fileMutatingTools = map[string]bool{
 	"write":        true,
 	"edit":         true,
-	"bash":         true,
+	"shell":        true,
 	"move_code":    true,
 	"find_replace": true,
 	"insert_at":    true,

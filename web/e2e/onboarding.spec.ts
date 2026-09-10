@@ -134,6 +134,23 @@ async function mockGrpcRoutes(page: Page) {
       }),
   );
 
+  // Wallet overview — `requiresPayment`'s other leg (see
+  // useOnboardingFacts.ts). Funded by default, matching the funded compute
+  // eligibility above: a fresh, not-yet-onboarded, entitled user. A funded
+  // wallet keeps `reliant_credits` plans off the checkout step, same as an
+  // eligible account keeps cloud compute off it.
+  await page.route(
+    '**/controlplane.v1.BillingService/GetCurrentUserWalletOverview',
+    (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          overview: { wallet: { balanceUsdNanos: '1000000000' } },
+        }),
+      }),
+  );
+
   // Cloud daemon list/create — empty list, successful create.
   await page.route('**/controlplane.v1.DaemonService/ListDaemons', (route: Route) =>
     route.fulfill({
@@ -209,7 +226,7 @@ test.describe('Onboarding Flow', () => {
 
     // First step is Compute — verify the heading is visible.
     await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Start my machine' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toBeVisible();
   });
 
   test('landing on / redirects a not-yet-onboarded user to /onboarding', async ({ page }) => {
@@ -272,17 +289,21 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
 
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
-    await expect(page).toHaveURL(/cloud_free_trial/, { timeout: 10_000 });
+    // chooseCloud() records `compute: "cloud_paid"` — see ComputeStep.tsx.
+    // `cloud_free_trial` is a legacy ComputeChoice value nothing in the UI
+    // writes any more (kept only so isCloudCompute() and old bookmarked URLs
+    // still resolve).
+    await expect(page).toHaveURL(/cloud_paid/, { timeout: 10_000 });
   });
 
-  test('Compute: "I\'ll connect my own" shows self-hosted connect instructions inline', async ({ page }) => {
+  test('Compute: "Use your own computer" shows self-hosted connect instructions inline', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: /Use my own computer/i }).click();
+    await dialog.getByRole('button', { name: 'Use your own computer' }).click();
 
     // Stays on the compute step (URL keeps no `compute` plan field) — the
     // local-daemon instructions render inline rather than navigating.
@@ -349,6 +370,21 @@ test.describe('Onboarding Flow', () => {
   // ── Project-choice (cloud): Start new vs Connect GitHub ─────
 
   test('Project-choice: "Start something new" (cloud) creates a project and leaves onboarding', async ({ page }) => {
+    // A cloud plan's commit provisions a machine (see commitLaunchPlan.ts),
+    // so completing this step lands on ProvisioningGate -> DaemonConnectingGate
+    // rather than navigating immediately. Report the created daemon as
+    // already ACTIVE so the gate resolves to "connected" without waiting out
+    // its real 60s poll timeout.
+    await page.route('**/controlplane.v1.DaemonService/ListDaemons', (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          daemons: [{ id: 'daemon_1', name: 'onboarding-daemon', status: 2 }],
+        }),
+      }),
+    );
+
     await gotoOnboardingWithPlan(page, {
       compute: 'cloud_free_trial',
       modelProvider: 'anthropic',
@@ -358,8 +394,10 @@ test.describe('Onboarding Flow', () => {
 
     await dialog.getByRole('button', { name: /Start something new/i }).click();
 
-    // completeOnboarding + ensureProject succeed → navigates off /onboarding
-    // to the newly-selected project.
+    // completeOnboarding + ensureProject succeed, the commit provisions the
+    // machine, and the gate reports it connected — Continue is the only exit.
+    await expect(dialog.getByText('Your machine is ready')).toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Continue' }).click();
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
   });
 
@@ -412,6 +450,10 @@ test.describe('Onboarding Flow', () => {
 
     await dialog.getByRole('button', { name: /my-proj/i }).click();
 
+    // Local compute has nothing for the commit to provision, so
+    // ProvisioningGate renders its "nothing to do" Continue button rather
+    // than navigating immediately — see ProvisioningGate.tsx.
+    await dialog.getByRole('button', { name: 'Continue' }).click();
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
   });
 
@@ -424,7 +466,7 @@ test.describe('Onboarding Flow', () => {
     // First step (compute): no Back button.
     await expect(dialog.getByRole('button', { name: /Back/i })).not.toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     // Back button now visible in the footer, and returns to Compute.
@@ -469,12 +511,13 @@ test.describe('Onboarding Flow', () => {
  *
  * mockGrpcRoutes seeds `eligible: true`, which is the funded path every other
  * test here exercises. But the compute auto-grant at signup is gone, so an
- * actual brand-new account comes back NO_SUBSCRIPTION — and that was the one
- * state where the step's primary control, "Start my machine", could never be
- * clicked. It rendered greyed out with the two controls that fix it (redeem a
- * coupon, set up billing) demoted to small links underneath.
+ * actual brand-new account comes back NO_SUBSCRIPTION.
  *
- * These pin the first screen a new user actually sees.
+ * Unlike the earlier "dead grey button" behavior this used to pin, the cloud
+ * choice is now ALWAYS offered (see ComputeStep.tsx: "ENTITLEMENT NO LONGER
+ * GATES THE CHOICE") — an ineligible cloud pick simply routes to the
+ * checkout step instead of a dead end, so there is no billing exit left in
+ * this step to promote. The coupon field is still offered alongside it.
  */
 test.describe('Onboarding – Compute with no billing (the new-user default)', () => {
   test.beforeEach(async ({ page }) => {
@@ -499,21 +542,21 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await loginWithApiKey(page);
   });
 
-  test('offers no dead "Start my machine" button, and promotes coupon + billing instead', async ({
+  test('offers the cloud choice even when ineligible, alongside the coupon field', async ({
     page,
   }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    // The reported bug: a button that is always grey. It is now absent.
-    await expect(dialog.getByRole('button', { name: 'Start my machine' })).toHaveCount(0);
+    // No longer dead: an ineligible cloud choice records itself and routes
+    // to the checkout step, so the button stays enabled rather than absent.
+    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toBeEnabled();
 
-    // The two controls that CAN change this user's state are the ones on offer.
+    // A code still skips the checkout step, so it stays on offer too.
     await expect(dialog.getByRole('button', { name: /Have a coupon code/i })).toBeEnabled();
-    await expect(dialog.getByRole('button', { name: /Set up billing/i })).toBeEnabled();
 
     // And the self-hosted path — which needs no billing at all — is still here.
-    await expect(dialog.getByRole('button', { name: /Use my own computer/i })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: 'Use your own computer' })).toBeEnabled();
   });
 
   test('no control on the Compute step is disabled', async ({ page }) => {
@@ -574,25 +617,36 @@ test.describe('Onboarding – Failure Scenarios', () => {
     expect(childCount).toBeGreaterThan(0);
   });
 
-  test('Cloud daemon creation fails: shows the server error inline, stays on Compute', async ({ page }) => {
+  test('Cloud daemon creation fails: the provisioning gate reports it, and lets the user continue anyway', async ({ page }) => {
+    // ComputeStep no longer calls CreateDaemon at all — it only records the
+    // choice (see ComputeStep.tsx's chooseCloud). The billable call moved to
+    // the commit point (commitLaunchPlan.ts's provisionDaemon), which runs
+    // once, after completeOnboarding, from the terminal step. So a failure
+    // here surfaces on ProvisioningGate, not back on Compute.
     await page.route('**/controlplane.v1.DaemonService/CreateDaemon', (route: Route) =>
       route.fulfill({
         status: 500,
         contentType: 'application/json',
-        body: JSON.stringify({ message: 'Internal server error' }),
+        body: JSON.stringify({ code: 'internal', message: 'Internal server error' }),
       }),
     );
 
-    await gotoOnboarding(page);
-    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
-
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
-
-    // Stays on Compute and surfaces the server's error text.
-    await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
-      timeout: 5_000,
+    await gotoOnboardingWithPlan(page, {
+      compute: 'cloud_free_trial',
+      modelProvider: 'anthropic',
     });
-    await expect(dialog.getByText('Internal server error')).toBeVisible({ timeout: 10_000 });
+    const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
+    await expect(dialog.getByText('What do you want to work on?')).toBeVisible();
+
+    await dialog.getByRole('button', { name: /Start something new/i }).click();
+
+    // The machine task reports failed; the user is not trapped in the
+    // wizard for a provisioning failure — Continue stays enabled (see
+    // ProvisioningGate's "PARTIAL as well as COMPLETE" comment) alongside a
+    // Try again retry.
+    await expect(dialog.getByText('Your machine')).toBeVisible({ timeout: 10_000 });
+    await expect(dialog.getByRole('button', { name: 'Continue' })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: 'Try again' })).toBeEnabled();
   });
 
   test('Project creation fails during completion: shows an error, keeps the dialog open', async ({ page }) => {
@@ -655,14 +709,28 @@ test.describe('Onboarding – Project-choice branch selection', () => {
   });
 
   // Cloud + build_app -> stays on project-choice until completeOnboarding
-  // fires (it owns the terminal step for that branch).
+  // fires (it owns the terminal step for that branch), then the commit
+  // provisions a machine and ProvisioningGate/DaemonConnectingGate gate the
+  // actual exit — see commitLaunchPlan.ts and ProvisioningGate.tsx.
   test('Cloud + build_app: "Start something new" leaves onboarding directly', async ({ page }) => {
+    await page.route('**/controlplane.v1.DaemonService/ListDaemons', (route: Route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          daemons: [{ id: 'daemon_1', name: 'onboarding-daemon', status: 2 }],
+        }),
+      }),
+    );
+
     await gotoOnboardingWithPlan(page, {
       compute: 'cloud_free_trial',
       modelProvider: 'anthropic',
     });
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     await dialog.getByRole('button', { name: /Start something new/i }).click();
+    await expect(dialog.getByText('Your machine is ready')).toBeVisible({ timeout: 10_000 });
+    await dialog.getByRole('button', { name: 'Continue' }).click();
     await expect(page).not.toHaveURL(/\/onboarding/, { timeout: 10_000 });
   });
 
@@ -698,11 +766,11 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await loginWithApiKey(page);
   });
 
-  test('Rapid double-click on "Start my machine" does not skip past Model', async ({ page }) => {
+  test('Rapid double-click on "Use a Reliant machine" does not skip past Model', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).dblclick();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).dblclick();
 
     // Lands on Model, not further — a double-fire would otherwise race two
     // updatePlan calls and could land past it.
@@ -732,7 +800,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
@@ -740,7 +808,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
       timeout: 5_000,
     });
 
-    await dialog.getByRole('button', { name: /Use my own computer/i }).click();
+    await dialog.getByRole('button', { name: 'Use your own computer' }).click();
     await expect(
       dialog.getByText('Install Reliant Daemon and connect with a token'),
     ).toBeVisible({ timeout: 5_000 });

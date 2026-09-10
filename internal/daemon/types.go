@@ -253,10 +253,10 @@ type CommandResult struct {
 	OutputIncomplete bool `json:"output_incomplete,omitempty"`
 	// Backgrounded is true when the user detached this command mid-run into a
 	// background process. ExitCode is 0 and Stdout describes the handoff — the
-	// command is still running and its real output is read via BashOutput.
+	// command is still running and its real output is read via shell_output.
 	Backgrounded bool `json:"backgrounded,omitempty"`
 	// ProcessID identifies the background process a detached command became,
-	// for BashOutput / BashKill and for the durable tool_calls row.
+	// for shell_output / shell_kill and for the durable tool_calls row.
 	ProcessID string `json:"process_id,omitempty"`
 }
 

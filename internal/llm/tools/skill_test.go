@@ -62,7 +62,7 @@ func newSkillTestEnv(_ *testing.T) *skillTestEnv {
 			Description:  "How to create and run database migrations safely",
 			Scope:        "project",
 			Body:         "# Database Migration\n\nSteps for writing DB migrations.",
-			AllowedTools: []string{"bash", "view"},
+			AllowedTools: []string{"shell", "view"},
 		},
 		{
 			SkillPath:              "disabled-skill",
@@ -214,7 +214,7 @@ func TestSkillTool_Load_WithAllowedTools_AppendsToolsSection(t *testing.T) {
 
 	assert.Contains(t, resp.Content, "suggests loading these tools",
 		"allowed-tools should produce a suggestion section")
-	assert.Contains(t, resp.Content, "bash", "suggested tools should include bash")
+	assert.Contains(t, resp.Content, "shell", "suggested tools should include shell")
 	assert.Contains(t, resp.Content, "view", "suggested tools should include view")
 }
 

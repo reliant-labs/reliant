@@ -16,11 +16,17 @@
  *     that only checked the modal disappeared would pass against an
  *     implementation that navigated to `/upgrade` and unmounted everything.
  *
- *  3. **We LINK, we do not sign in.** `signUp` on an anonymous Supabase user
- *     upgrades it in place; `signIn` would strand the user's chats on the
- *     abandoned anonymous account. Pinned by asserting `signIn` is never
+ *  3. **We LINK, we do not sign in.** `linkEmailIdentity` (updateUser) upgrades
+ *     the anonymous user in place; `signIn` would strand the user's chats on
+ *     the abandoned anonymous account. Pinned by asserting `signIn` is never
  *     called — the rendered output of the two is identical, so text cannot
  *     tell them apart.
+ *
+ *     This used to assert `signUp`, on the belief that it "upgrades the
+ *     anonymous user in place". It does not — it mints a separate user, which
+ *     is what left users looping back to this very modal after confirming
+ *     their email. The test passed throughout, because it pinned the call the
+ *     code made rather than the outcome the user needed.
  *
  *  4. **OAuth still round-trips `returnTo`, and still refuses an off-origin
  *     one.** OAuth is the honest limit: it redirects the whole window by
@@ -42,11 +48,11 @@ vi.mock("@/lib/logger", () => ({
 }));
 
 const linkOAuthIdentity = vi.fn().mockResolvedValue(undefined);
-const signUp = vi.fn();
+const linkEmailIdentity = vi.fn();
 const signIn = vi.fn();
 const signInAnonymously = vi.fn();
-const sendEmailVerificationOTP = vi.fn().mockResolvedValue(undefined);
-const verifyEmailOTP = vi.fn().mockResolvedValue(undefined);
+const sendEmailIdentityVerification = vi.fn().mockResolvedValue(undefined);
+const verifyEmailIdentityOTP = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@/store/authStore", () => ({
   useAuthStore: () => ({
@@ -55,11 +61,11 @@ vi.mock("@/store/authStore", () => ({
     loading: false,
     initialize: vi.fn(),
     linkOAuthIdentity,
-    signUp,
+    linkEmailIdentity,
     signIn,
     signInAnonymously,
-    sendEmailVerificationOTP,
-    verifyEmailOTP,
+    sendEmailIdentityVerification,
+    verifyEmailIdentityOTP,
   }),
 }));
 
@@ -95,7 +101,12 @@ function fillEmailForm() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  signUp.mockResolvedValue({ session: { access_token: "t" }, user: {} });
+  // Confirmations off: the address lands on the account immediately, so the
+  // modal can dismiss without a verification step.
+  linkEmailIdentity.mockResolvedValue({
+    user: { id: "anon-user-0001", email: "someone@example.com" },
+    verificationRequired: false,
+  });
 });
 
 describe("LinkIdentityModal", () => {
@@ -139,15 +150,20 @@ describe("LinkIdentityModal", () => {
   });
 
   it("LINKS the email onto the current account rather than signing in", async () => {
-    // signUp on an anonymous Supabase user upgrades it in place. signIn would
-    // move them to a different account and strand the chats they came with —
-    // and the two render identically, so only the spy can tell them apart.
+    // linkEmailIdentity is updateUser, which upgrades the anonymous user in
+    // place. signIn would move them to a different account and strand the
+    // chats they came with — and the two render identically, so only the spy
+    // can tell them apart.
     renderModal();
     fillEmailForm();
     fireEvent.click(screen.getByRole("button", { name: /Save my account/i }));
 
-    await waitFor(() => expect(signUp).toHaveBeenCalled());
-    expect(signUp).toHaveBeenCalledWith("someone@example.com", "Sup3rSecret!pass");
+    await waitFor(() => expect(linkEmailIdentity).toHaveBeenCalled());
+    expect(linkEmailIdentity).toHaveBeenCalledWith(
+      "someone@example.com",
+      "Sup3rSecret!pass",
+      { source: "link", returnTo: "/settings/billing?tab=plans" },
+    );
     expect(signIn).not.toHaveBeenCalled();
   });
 
@@ -179,11 +195,14 @@ describe("LinkIdentityModal", () => {
   });
 
   it("verifies the emailed code in place, then dismisses — still no navigation", async () => {
-    // Supabase with confirmations on returns no session until the OTP is
-    // verified. The standalone EmailVerification screen navigates to "/" on
-    // success, which inside a modal would tear down the checkout behind it —
-    // so the modal owns this step.
-    signUp.mockResolvedValue({ session: null, user: {} });
+    // With confirmations on, the address stays pending until it is verified.
+    // The standalone EmailVerification screen navigates to "/" on success,
+    // which inside a modal would tear down the checkout behind it — so the
+    // modal owns this step.
+    linkEmailIdentity.mockResolvedValue({
+      user: { id: "anon-user-0001" },
+      verificationRequired: true,
+    });
 
     const onLinked = vi.fn();
     renderModal({ onLinked });
@@ -196,8 +215,11 @@ describe("LinkIdentityModal", () => {
     fireEvent.change(codeInput, { target: { value: "123456" } });
     fireEvent.click(screen.getByRole("button", { name: /Verify/i }));
 
-    await waitFor(() => expect(verifyEmailOTP).toHaveBeenCalled());
-    expect(verifyEmailOTP).toHaveBeenCalledWith("123456", "someone@example.com");
+    await waitFor(() => expect(verifyEmailIdentityOTP).toHaveBeenCalled());
+    expect(verifyEmailIdentityOTP).toHaveBeenCalledWith(
+      "123456",
+      "someone@example.com",
+    );
     await waitFor(() => expect(onLinked).toHaveBeenCalled());
     expect(mockNavigate).not.toHaveBeenCalled();
   });
@@ -205,7 +227,9 @@ describe("LinkIdentityModal", () => {
   it("does not dismiss when the link fails", async () => {
     // A modal that closes on failure drops the user back at a checkout that
     // will refuse them again, with no explanation of what went wrong.
-    signUp.mockRejectedValue(new Error("That email is already registered"));
+    linkEmailIdentity.mockRejectedValue(
+      new Error("A user with this email address has already been registered"),
+    );
 
     const onLinked = vi.fn();
     renderModal({ onLinked });

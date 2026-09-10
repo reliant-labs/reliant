@@ -13,14 +13,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// The GPT-5.6 family (sol / luna / terra) speaks a different request envelope
-// than GPT-5.5 and earlier. Both shapes are current and served by the same
-// backend; which one applies is decided by the MODEL, not the client version.
+// The GPT-5.6 family (sol / luna / terra) and GPT-6 Astra speak a different
+// request envelope than GPT-5.5 and earlier. Both shapes are current and served
+// by the same backend; which one applies is decided by the MODEL, not the
+// client version.
 //
-// Ground truth is a codex-tui 0.146.0 capture that switches between families on
-// a single connection (reliant/.dev/codex/, analyzed in SOL_PROTOCOL_NOTES.md):
+// Ground truth is two captures in reliant/.dev/codex/: a codex-tui 0.146.0
+// session that switches between families on a single connection (gpt-sol.txt,
+// analyzed in SOL_PROTOCOL_NOTES.md), and a 0.153.4 astra session (astra.txt,
+// astra.curl).
 //
-//	                        gpt-5.6-*            gpt-5.5 (same client)
+//	                        5.6 / astra          gpt-5.5 (same client)
 //	top-level instructions  absent               present
 //	top-level tools         absent               present
 //	input[0]                additional_tools     (none)
@@ -31,6 +34,10 @@ import (
 // Note the prompt TEXT is byte-identical across the two paths; only the
 // delivery mechanism differs. This is transport, not new prompt content.
 //
+// Astra adds two things on top of the 5.6 shape, and only astra: a
+// `service_tier: "priority"` body field and an `x-codex-routing-hint` header.
+// See astraServiceTier and routingHint below.
+//
 // On tools: the captured client declares a single `exec` tool of type "custom"
 // that takes JavaScript and proxies ~200 nested tools. We deliberately do not
 // do that. In the same tools body it also declares ordinary type:"function"
@@ -40,10 +47,14 @@ import (
 // ordinary function_call items back, so the existing streaming path applies
 // unchanged.
 
-// isGPT56 reports whether the model uses the GPT-5.6 request envelope.
-func isGPT56(id models.ModelID) bool {
+// usesAdditionalToolsEnvelope reports whether the model delivers its tools and
+// system prompt inside `input` rather than as top-level fields.
+//
+// Named for the wire shape rather than a model generation because it now spans
+// two families: an "isGPT56" that returns true for gpt-6-astra reads as a bug.
+func usesAdditionalToolsEnvelope(id models.ModelID) bool {
 	switch id {
-	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra:
+	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra:
 		return true
 	default:
 		return false
@@ -52,10 +63,34 @@ func isGPT56(id models.ModelID) bool {
 
 // envelopeName labels which request shape a model uses, for logging.
 func envelopeName(id models.ModelID) string {
-	if isGPT56(id) {
-		return "gpt-5.6"
+	if usesAdditionalToolsEnvelope(id) {
+		return "additional_tools"
 	}
 	return "legacy"
+}
+
+// astraServiceTier is the service_tier gpt-6-astra requests.
+//
+// Every response.create frame in the astra capture carries
+// `service_tier: "priority"`, and the request header pins the same tier
+// (`x-codex-routing-hint: model=gpt-6-astra;tier=priority`).
+//
+// This is deliberately NOT applied to the gpt-5.6 family. That capture sends no
+// service_tier at all and lets the server default it, so extending the field to
+// those models would be changing behavior we have direct contrary evidence
+// about, in exchange for nothing.
+const astraServiceTier = responses.ResponseNewParamsServiceTierPriority
+
+// routingHint returns the x-codex-routing-hint header value for a model, or ""
+// when the model does not use one.
+//
+// Only astra was observed sending it. The header names the api_model rather
+// than our catalog id, since it is the backend's own routing key.
+func routingHint(id models.ModelID, apiModel string) string {
+	if id != models.GPT6Astra {
+		return ""
+	}
+	return "model=" + apiModel + ";tier=" + string(astraServiceTier)
 }
 
 // modelSupportsReasoningSummaries reports whether we ask the model for reasoning
@@ -63,20 +98,20 @@ func envelopeName(id models.ModelID) string {
 //
 // GPT-5.3-Codex-Spark genuinely rejects them.
 //
-// GPT-5.6 is listed here provisionally, NOT because it is known to refuse them.
-// The reference client never sends `reasoning.summary` for ANY model — including
-// gpt-5.5, where we know summaries work — so the capture cannot distinguish
-// "model does not support summaries" from "client never asked". Until someone
-// sends a summary request to a 5.6 model and observes the result, asking would
-// be guessing against an untested field on a brand-new model family; not asking
-// costs only visible thinking, which the capture shows the reference client also
-// does without.
+// GPT-5.6 and GPT-6 Astra are listed here provisionally, NOT because they are
+// known to refuse them. The reference client never sends `reasoning.summary` for
+// ANY model — including gpt-5.5, where we know summaries work — so neither
+// capture can distinguish "model does not support summaries" from "client never
+// asked". Until someone sends a summary request to one of these models and
+// observes the result, asking would be guessing against an untested field on a
+// new model family; not asking costs only visible thinking, which both captures
+// show the reference client also does without.
 //
 // To flip this once tested, give the model a reasoning_summary_mode in
 // models.yaml and drop it from this list — no other code needs to change.
 func modelSupportsReasoningSummaries(id models.ModelID) bool {
 	switch id {
-	case models.GPT53CodexSpark, models.GPT56Sol, models.GPT56Luna, models.GPT56Terra:
+	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra:
 		return false
 	default:
 		return true
@@ -104,7 +139,8 @@ func codexReasoningEffort(effort string) shared.ReasoningEffort {
 	}
 }
 
-// newGPT56ReasoningParam builds the reasoning block for a 5.6 request.
+// newAdditionalToolsReasoningParam builds the reasoning block for a request in
+// the additional_tools envelope (the 5.6 family and astra).
 //
 // `context: "all_turns"` is not modeled by the SDK's ReasoningParam, so the
 // whole struct is constructed via param.Override to get the extra key onto the
@@ -113,7 +149,7 @@ func codexReasoningEffort(effort string) shared.ReasoningEffort {
 //
 // summary is included only when the caller asks for one, so enabling summaries
 // for this family later is a models.yaml change rather than a code change.
-func newGPT56ReasoningParam(effort string, summary shared.ReasoningSummary) shared.ReasoningParam {
+func newAdditionalToolsReasoningParam(effort string, summary shared.ReasoningSummary) shared.ReasoningParam {
 	fields := map[string]any{
 		"effort":  string(codexReasoningEffort(effort)),
 		"context": "all_turns",
@@ -277,12 +313,12 @@ func describeReasoning(reasoning shared.ReasoningParam) (effort, summary, contex
 	return effort, summary, context
 }
 
-// applyGPT56Envelope rewrites params from the 5.5 shape into the 5.6 shape.
+// applyAdditionalToolsEnvelope rewrites params from the 5.5 shape into the 5.6 shape.
 //
 // It is written as a transform over the already-built 5.5 params rather than a
 // parallel builder so the two paths cannot drift: everything that is not
 // explicitly moved here is shared by construction.
-func applyGPT56Envelope(
+func applyAdditionalToolsEnvelope(
 	params *responses.ResponseNewParams,
 	instructions string,
 	toolParams []responses.ToolUnionParam,

@@ -239,6 +239,13 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 				Signature: signature,
 			}
 		}
+
+	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING:
+		// The sealed payload lives in Content. It is not readable text and
+		// never becomes ReasoningContent — see RedactedReasoningContent.
+		if block.Content != nil && *block.Content != "" {
+			return message.RedactedReasoningContent{Data: *block.Content}
+		}
 	}
 	return nil
 }

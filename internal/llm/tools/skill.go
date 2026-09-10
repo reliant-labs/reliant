@@ -54,7 +54,7 @@ Every load ends with its total size and whether anything remains, so ONE call
 tells you if you have the whole skill. Do not page defensively — page only when
 a result says bytes remain, and it will name the exact call to continue with.
 
-A skill too large to deliver at once is read with these, mirroring bash_output:
+A skill too large to deliver at once is read with these, mirroring shell_output:
 - section: fetch one markdown section by heading. Preferred — every load lists
   the skill's sections, so this is usually one targeted call rather than
   guessing byte ranges.

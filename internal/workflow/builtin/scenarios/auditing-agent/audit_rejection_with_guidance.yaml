@@ -25,7 +25,7 @@ events:
     type: llm_response
     text: "I'm going to delete all the test files."
     tool_calls:
-      - name: bash
+      - name: shell
         input:
           command: "rm -rf tests/"
 

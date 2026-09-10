@@ -34,7 +34,8 @@ const signInWithGithub = vi.fn().mockResolvedValue(undefined)
 vi.mock('@/store/authStore', () => ({
   useAuthStore: () => ({
     signIn: vi.fn(),
-    signUp: vi.fn(),
+    sendEmailSignInCode: vi.fn(),
+    verifyEmailSignInCode: vi.fn(),
     signInAnonymously: vi.fn(),
     signInWithGoogle,
     signInWithGithub,

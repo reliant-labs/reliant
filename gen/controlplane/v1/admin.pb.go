@@ -574,6 +574,142 @@ func (x *ManagedReliantAccess) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// AccountDeletionBlocker is one reason control-plane refused the deletion.
+type AccountDeletionBlocker struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Machine-readable: "paid_subscription" or "wallet_balance".
+	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
+	// Human-readable sentence, safe to show the user verbatim.
+	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AccountDeletionBlocker) Reset() {
+	*x = AccountDeletionBlocker{}
+	mi := &file_controlplane_v1_admin_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccountDeletionBlocker) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountDeletionBlocker) ProtoMessage() {}
+
+func (x *AccountDeletionBlocker) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_admin_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountDeletionBlocker.ProtoReflect.Descriptor instead.
+func (*AccountDeletionBlocker) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *AccountDeletionBlocker) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *AccountDeletionBlocker) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+type DeleteCurrentUserAccountRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCurrentUserAccountRequest) Reset() {
+	*x = DeleteCurrentUserAccountRequest{}
+	mi := &file_controlplane_v1_admin_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCurrentUserAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCurrentUserAccountRequest) ProtoMessage() {}
+
+func (x *DeleteCurrentUserAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_admin_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCurrentUserAccountRequest.ProtoReflect.Descriptor instead.
+func (*DeleteCurrentUserAccountRequest) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{6}
+}
+
+type DeleteCurrentUserAccountResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Non-empty means REFUSED and nothing was destroyed.
+	Blockers      []*AccountDeletionBlocker `protobuf:"bytes,1,rep,name=blockers,proto3" json:"blockers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteCurrentUserAccountResponse) Reset() {
+	*x = DeleteCurrentUserAccountResponse{}
+	mi := &file_controlplane_v1_admin_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteCurrentUserAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteCurrentUserAccountResponse) ProtoMessage() {}
+
+func (x *DeleteCurrentUserAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_admin_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteCurrentUserAccountResponse.ProtoReflect.Descriptor instead.
+func (*DeleteCurrentUserAccountResponse) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DeleteCurrentUserAccountResponse) GetBlockers() []*AccountDeletionBlocker {
+	if x != nil {
+		return x.Blockers
+	}
+	return nil
+}
+
 type GetCurrentUserRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -582,7 +718,7 @@ type GetCurrentUserRequest struct {
 
 func (x *GetCurrentUserRequest) Reset() {
 	*x = GetCurrentUserRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[5]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +730,7 @@ func (x *GetCurrentUserRequest) String() string {
 func (*GetCurrentUserRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[5]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +743,7 @@ func (x *GetCurrentUserRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCurrentUserRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{5}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{8}
 }
 
 type GetCurrentUserResponse struct {
@@ -620,7 +756,7 @@ type GetCurrentUserResponse struct {
 
 func (x *GetCurrentUserResponse) Reset() {
 	*x = GetCurrentUserResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[6]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -632,7 +768,7 @@ func (x *GetCurrentUserResponse) String() string {
 func (*GetCurrentUserResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[6]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -645,7 +781,7 @@ func (x *GetCurrentUserResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCurrentUserResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{6}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetCurrentUserResponse) GetUser() *User {
@@ -672,7 +808,7 @@ type CreateOrgRequest struct {
 
 func (x *CreateOrgRequest) Reset() {
 	*x = CreateOrgRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[7]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -684,7 +820,7 @@ func (x *CreateOrgRequest) String() string {
 func (*CreateOrgRequest) ProtoMessage() {}
 
 func (x *CreateOrgRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[7]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -697,7 +833,7 @@ func (x *CreateOrgRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrgRequest.ProtoReflect.Descriptor instead.
 func (*CreateOrgRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{7}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateOrgRequest) GetName() string {
@@ -723,7 +859,7 @@ type CreateOrgResponse struct {
 
 func (x *CreateOrgResponse) Reset() {
 	*x = CreateOrgResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[8]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -735,7 +871,7 @@ func (x *CreateOrgResponse) String() string {
 func (*CreateOrgResponse) ProtoMessage() {}
 
 func (x *CreateOrgResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[8]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -748,7 +884,7 @@ func (x *CreateOrgResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateOrgResponse.ProtoReflect.Descriptor instead.
 func (*CreateOrgResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{8}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateOrgResponse) GetOrg() *Organization {
@@ -766,7 +902,7 @@ type ListOrgsRequest struct {
 
 func (x *ListOrgsRequest) Reset() {
 	*x = ListOrgsRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[9]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +914,7 @@ func (x *ListOrgsRequest) String() string {
 func (*ListOrgsRequest) ProtoMessage() {}
 
 func (x *ListOrgsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[9]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +927,7 @@ func (x *ListOrgsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgsRequest.ProtoReflect.Descriptor instead.
 func (*ListOrgsRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{9}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{12}
 }
 
 type ListOrgsResponse struct {
@@ -803,7 +939,7 @@ type ListOrgsResponse struct {
 
 func (x *ListOrgsResponse) Reset() {
 	*x = ListOrgsResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[10]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -815,7 +951,7 @@ func (x *ListOrgsResponse) String() string {
 func (*ListOrgsResponse) ProtoMessage() {}
 
 func (x *ListOrgsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[10]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -828,7 +964,7 @@ func (x *ListOrgsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOrgsResponse.ProtoReflect.Descriptor instead.
 func (*ListOrgsResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{10}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ListOrgsResponse) GetOrgs() []*Organization {
@@ -846,7 +982,7 @@ type IssueMyReliantAPIKeyRequest struct {
 
 func (x *IssueMyReliantAPIKeyRequest) Reset() {
 	*x = IssueMyReliantAPIKeyRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[11]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -858,7 +994,7 @@ func (x *IssueMyReliantAPIKeyRequest) String() string {
 func (*IssueMyReliantAPIKeyRequest) ProtoMessage() {}
 
 func (x *IssueMyReliantAPIKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[11]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -871,7 +1007,7 @@ func (x *IssueMyReliantAPIKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueMyReliantAPIKeyRequest.ProtoReflect.Descriptor instead.
 func (*IssueMyReliantAPIKeyRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{11}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{14}
 }
 
 type IssueMyReliantAPIKeyResponse struct {
@@ -885,7 +1021,7 @@ type IssueMyReliantAPIKeyResponse struct {
 
 func (x *IssueMyReliantAPIKeyResponse) Reset() {
 	*x = IssueMyReliantAPIKeyResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[12]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -897,7 +1033,7 @@ func (x *IssueMyReliantAPIKeyResponse) String() string {
 func (*IssueMyReliantAPIKeyResponse) ProtoMessage() {}
 
 func (x *IssueMyReliantAPIKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[12]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -910,7 +1046,7 @@ func (x *IssueMyReliantAPIKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IssueMyReliantAPIKeyResponse.ProtoReflect.Descriptor instead.
 func (*IssueMyReliantAPIKeyResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{12}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *IssueMyReliantAPIKeyResponse) GetPlaintextKey() string {
@@ -928,7 +1064,7 @@ type GetCurrentUserReliantStateRequest struct {
 
 func (x *GetCurrentUserReliantStateRequest) Reset() {
 	*x = GetCurrentUserReliantStateRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[13]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -940,7 +1076,7 @@ func (x *GetCurrentUserReliantStateRequest) String() string {
 func (*GetCurrentUserReliantStateRequest) ProtoMessage() {}
 
 func (x *GetCurrentUserReliantStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[13]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -953,7 +1089,7 @@ func (x *GetCurrentUserReliantStateRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetCurrentUserReliantStateRequest.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantStateRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{13}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{16}
 }
 
 type GetCurrentUserReliantStateResponse struct {
@@ -966,7 +1102,7 @@ type GetCurrentUserReliantStateResponse struct {
 
 func (x *GetCurrentUserReliantStateResponse) Reset() {
 	*x = GetCurrentUserReliantStateResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[14]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -978,7 +1114,7 @@ func (x *GetCurrentUserReliantStateResponse) String() string {
 func (*GetCurrentUserReliantStateResponse) ProtoMessage() {}
 
 func (x *GetCurrentUserReliantStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[14]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -991,7 +1127,7 @@ func (x *GetCurrentUserReliantStateResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetCurrentUserReliantStateResponse.ProtoReflect.Descriptor instead.
 func (*GetCurrentUserReliantStateResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{14}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetCurrentUserReliantStateResponse) GetEntitlement() *ReliantEntitlement {
@@ -1016,7 +1152,7 @@ type RepairCurrentUserReliantAccessRequest struct {
 
 func (x *RepairCurrentUserReliantAccessRequest) Reset() {
 	*x = RepairCurrentUserReliantAccessRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[15]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1028,7 +1164,7 @@ func (x *RepairCurrentUserReliantAccessRequest) String() string {
 func (*RepairCurrentUserReliantAccessRequest) ProtoMessage() {}
 
 func (x *RepairCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[15]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1041,7 +1177,7 @@ func (x *RepairCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RepairCurrentUserReliantAccessRequest.ProtoReflect.Descriptor instead.
 func (*RepairCurrentUserReliantAccessRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{15}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{18}
 }
 
 type RepairCurrentUserReliantAccessResponse struct {
@@ -1055,7 +1191,7 @@ type RepairCurrentUserReliantAccessResponse struct {
 
 func (x *RepairCurrentUserReliantAccessResponse) Reset() {
 	*x = RepairCurrentUserReliantAccessResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[16]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1067,7 +1203,7 @@ func (x *RepairCurrentUserReliantAccessResponse) String() string {
 func (*RepairCurrentUserReliantAccessResponse) ProtoMessage() {}
 
 func (x *RepairCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[16]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1080,7 +1216,7 @@ func (x *RepairCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use RepairCurrentUserReliantAccessResponse.ProtoReflect.Descriptor instead.
 func (*RepairCurrentUserReliantAccessResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{16}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *RepairCurrentUserReliantAccessResponse) GetEntitlement() *ReliantEntitlement {
@@ -1113,7 +1249,7 @@ type RotateCurrentUserReliantAccessRequest struct {
 
 func (x *RotateCurrentUserReliantAccessRequest) Reset() {
 	*x = RotateCurrentUserReliantAccessRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[17]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1125,7 +1261,7 @@ func (x *RotateCurrentUserReliantAccessRequest) String() string {
 func (*RotateCurrentUserReliantAccessRequest) ProtoMessage() {}
 
 func (x *RotateCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[17]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1138,7 +1274,7 @@ func (x *RotateCurrentUserReliantAccessRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use RotateCurrentUserReliantAccessRequest.ProtoReflect.Descriptor instead.
 func (*RotateCurrentUserReliantAccessRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{17}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *RotateCurrentUserReliantAccessRequest) GetGracePeriod() string {
@@ -1161,7 +1297,7 @@ type RotateCurrentUserReliantAccessResponse struct {
 
 func (x *RotateCurrentUserReliantAccessResponse) Reset() {
 	*x = RotateCurrentUserReliantAccessResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[18]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1173,7 +1309,7 @@ func (x *RotateCurrentUserReliantAccessResponse) String() string {
 func (*RotateCurrentUserReliantAccessResponse) ProtoMessage() {}
 
 func (x *RotateCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[18]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1186,7 +1322,7 @@ func (x *RotateCurrentUserReliantAccessResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use RotateCurrentUserReliantAccessResponse.ProtoReflect.Descriptor instead.
 func (*RotateCurrentUserReliantAccessResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{18}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *RotateCurrentUserReliantAccessResponse) GetEntitlement() *ReliantEntitlement {
@@ -1237,7 +1373,7 @@ type CreateLLMKeyRequest struct {
 
 func (x *CreateLLMKeyRequest) Reset() {
 	*x = CreateLLMKeyRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[19]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1249,7 +1385,7 @@ func (x *CreateLLMKeyRequest) String() string {
 func (*CreateLLMKeyRequest) ProtoMessage() {}
 
 func (x *CreateLLMKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[19]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1262,7 +1398,7 @@ func (x *CreateLLMKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateLLMKeyRequest.ProtoReflect.Descriptor instead.
 func (*CreateLLMKeyRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{19}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CreateLLMKeyRequest) GetOrgId() string {
@@ -1310,7 +1446,7 @@ type CreateLLMKeyResponse struct {
 
 func (x *CreateLLMKeyResponse) Reset() {
 	*x = CreateLLMKeyResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[20]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1322,7 +1458,7 @@ func (x *CreateLLMKeyResponse) String() string {
 func (*CreateLLMKeyResponse) ProtoMessage() {}
 
 func (x *CreateLLMKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[20]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1335,7 +1471,7 @@ func (x *CreateLLMKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateLLMKeyResponse.ProtoReflect.Descriptor instead.
 func (*CreateLLMKeyResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{20}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CreateLLMKeyResponse) GetKey() *LLMKey {
@@ -1361,7 +1497,7 @@ type ListLLMKeysRequest struct {
 
 func (x *ListLLMKeysRequest) Reset() {
 	*x = ListLLMKeysRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[21]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1373,7 +1509,7 @@ func (x *ListLLMKeysRequest) String() string {
 func (*ListLLMKeysRequest) ProtoMessage() {}
 
 func (x *ListLLMKeysRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[21]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1386,7 +1522,7 @@ func (x *ListLLMKeysRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLLMKeysRequest.ProtoReflect.Descriptor instead.
 func (*ListLLMKeysRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{21}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ListLLMKeysRequest) GetOrgId() string {
@@ -1405,7 +1541,7 @@ type ListLLMKeysResponse struct {
 
 func (x *ListLLMKeysResponse) Reset() {
 	*x = ListLLMKeysResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[22]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1417,7 +1553,7 @@ func (x *ListLLMKeysResponse) String() string {
 func (*ListLLMKeysResponse) ProtoMessage() {}
 
 func (x *ListLLMKeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[22]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1430,7 +1566,7 @@ func (x *ListLLMKeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListLLMKeysResponse.ProtoReflect.Descriptor instead.
 func (*ListLLMKeysResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{22}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ListLLMKeysResponse) GetKeys() []*LLMKey {
@@ -1450,7 +1586,7 @@ type RotateLLMKeyRequest struct {
 
 func (x *RotateLLMKeyRequest) Reset() {
 	*x = RotateLLMKeyRequest{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[23]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1462,7 +1598,7 @@ func (x *RotateLLMKeyRequest) String() string {
 func (*RotateLLMKeyRequest) ProtoMessage() {}
 
 func (x *RotateLLMKeyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[23]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1475,7 +1611,7 @@ func (x *RotateLLMKeyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateLLMKeyRequest.ProtoReflect.Descriptor instead.
 func (*RotateLLMKeyRequest) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{23}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *RotateLLMKeyRequest) GetKeyId() string {
@@ -1502,7 +1638,7 @@ type RotateLLMKeyResponse struct {
 
 func (x *RotateLLMKeyResponse) Reset() {
 	*x = RotateLLMKeyResponse{}
-	mi := &file_controlplane_v1_admin_proto_msgTypes[24]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1514,7 +1650,7 @@ func (x *RotateLLMKeyResponse) String() string {
 func (*RotateLLMKeyResponse) ProtoMessage() {}
 
 func (x *RotateLLMKeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_admin_proto_msgTypes[24]
+	mi := &file_controlplane_v1_admin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1527,7 +1663,7 @@ func (x *RotateLLMKeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RotateLLMKeyResponse.ProtoReflect.Descriptor instead.
 func (*RotateLLMKeyResponse) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{24}
+	return file_controlplane_v1_admin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RotateLLMKeyResponse) GetKey() *LLMKey {
@@ -1602,7 +1738,13 @@ const file_controlplane_v1_admin_proto_rawDesc = "" +
 	"created_at\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtB\x1f\n" +
-	"\x1d_entitlement_snapshot_version\"\x17\n" +
+	"\x1d_entitlement_snapshot_version\"H\n" +
+	"\x16AccountDeletionBlocker\x12\x16\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x16\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\"!\n" +
+	"\x1fDeleteCurrentUserAccountRequest\"g\n" +
+	" DeleteCurrentUserAccountResponse\x12C\n" +
+	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers\"\x17\n" +
 	"\x15GetCurrentUserRequest\"\x88\x01\n" +
 	"\x16GetCurrentUserResponse\x12)\n" +
 	"\x04user\x18\x01 \x01(\v2\x15.controlplane.v1.UserR\x04user\x12C\n" +
@@ -1661,9 +1803,10 @@ const file_controlplane_v1_admin_proto_rawDesc = "" +
 	"\x1aLLM_KEY_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15LLM_KEY_STATUS_ACTIVE\x10\x01\x12\x1a\n" +
 	"\x16LLM_KEY_STATUS_REVOKED\x10\x02\x12\x1a\n" +
-	"\x16LLM_KEY_STATUS_EXPIRED\x10\x032r\n" +
+	"\x16LLM_KEY_STATUS_EXPIRED\x10\x032\xf6\x01\n" +
 	"\vUserService\x12c\n" +
-	"\x0eGetCurrentUser\x12&.controlplane.v1.GetCurrentUserRequest\x1a'.controlplane.v1.GetCurrentUserResponse\"\x002\xb5\x01\n" +
+	"\x0eGetCurrentUser\x12&.controlplane.v1.GetCurrentUserRequest\x1a'.controlplane.v1.GetCurrentUserResponse\"\x00\x12\x81\x01\n" +
+	"\x18DeleteCurrentUserAccount\x120.controlplane.v1.DeleteCurrentUserAccountRequest\x1a1.controlplane.v1.DeleteCurrentUserAccountResponse\"\x002\xb5\x01\n" +
 	"\n" +
 	"OrgService\x12T\n" +
 	"\tCreateOrg\x12!.controlplane.v1.CreateOrgRequest\x1a\".controlplane.v1.CreateOrgResponse\"\x00\x12Q\n" +
@@ -1691,7 +1834,7 @@ func file_controlplane_v1_admin_proto_rawDescGZIP() []byte {
 }
 
 var file_controlplane_v1_admin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_controlplane_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_controlplane_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_controlplane_v1_admin_proto_goTypes = []any{
 	(LLMKeyStatus)(0),                              // 0: controlplane.v1.LLMKeyStatus
 	(*User)(nil),                                   // 1: controlplane.v1.User
@@ -1699,75 +1842,81 @@ var file_controlplane_v1_admin_proto_goTypes = []any{
 	(*LLMKey)(nil),                                 // 3: controlplane.v1.LLMKey
 	(*ReliantEntitlement)(nil),                     // 4: controlplane.v1.ReliantEntitlement
 	(*ManagedReliantAccess)(nil),                   // 5: controlplane.v1.ManagedReliantAccess
-	(*GetCurrentUserRequest)(nil),                  // 6: controlplane.v1.GetCurrentUserRequest
-	(*GetCurrentUserResponse)(nil),                 // 7: controlplane.v1.GetCurrentUserResponse
-	(*CreateOrgRequest)(nil),                       // 8: controlplane.v1.CreateOrgRequest
-	(*CreateOrgResponse)(nil),                      // 9: controlplane.v1.CreateOrgResponse
-	(*ListOrgsRequest)(nil),                        // 10: controlplane.v1.ListOrgsRequest
-	(*ListOrgsResponse)(nil),                       // 11: controlplane.v1.ListOrgsResponse
-	(*IssueMyReliantAPIKeyRequest)(nil),            // 12: controlplane.v1.IssueMyReliantAPIKeyRequest
-	(*IssueMyReliantAPIKeyResponse)(nil),           // 13: controlplane.v1.IssueMyReliantAPIKeyResponse
-	(*GetCurrentUserReliantStateRequest)(nil),      // 14: controlplane.v1.GetCurrentUserReliantStateRequest
-	(*GetCurrentUserReliantStateResponse)(nil),     // 15: controlplane.v1.GetCurrentUserReliantStateResponse
-	(*RepairCurrentUserReliantAccessRequest)(nil),  // 16: controlplane.v1.RepairCurrentUserReliantAccessRequest
-	(*RepairCurrentUserReliantAccessResponse)(nil), // 17: controlplane.v1.RepairCurrentUserReliantAccessResponse
-	(*RotateCurrentUserReliantAccessRequest)(nil),  // 18: controlplane.v1.RotateCurrentUserReliantAccessRequest
-	(*RotateCurrentUserReliantAccessResponse)(nil), // 19: controlplane.v1.RotateCurrentUserReliantAccessResponse
-	(*CreateLLMKeyRequest)(nil),                    // 20: controlplane.v1.CreateLLMKeyRequest
-	(*CreateLLMKeyResponse)(nil),                   // 21: controlplane.v1.CreateLLMKeyResponse
-	(*ListLLMKeysRequest)(nil),                     // 22: controlplane.v1.ListLLMKeysRequest
-	(*ListLLMKeysResponse)(nil),                    // 23: controlplane.v1.ListLLMKeysResponse
-	(*RotateLLMKeyRequest)(nil),                    // 24: controlplane.v1.RotateLLMKeyRequest
-	(*RotateLLMKeyResponse)(nil),                   // 25: controlplane.v1.RotateLLMKeyResponse
-	(*timestamppb.Timestamp)(nil),                  // 26: google.protobuf.Timestamp
+	(*AccountDeletionBlocker)(nil),                 // 6: controlplane.v1.AccountDeletionBlocker
+	(*DeleteCurrentUserAccountRequest)(nil),        // 7: controlplane.v1.DeleteCurrentUserAccountRequest
+	(*DeleteCurrentUserAccountResponse)(nil),       // 8: controlplane.v1.DeleteCurrentUserAccountResponse
+	(*GetCurrentUserRequest)(nil),                  // 9: controlplane.v1.GetCurrentUserRequest
+	(*GetCurrentUserResponse)(nil),                 // 10: controlplane.v1.GetCurrentUserResponse
+	(*CreateOrgRequest)(nil),                       // 11: controlplane.v1.CreateOrgRequest
+	(*CreateOrgResponse)(nil),                      // 12: controlplane.v1.CreateOrgResponse
+	(*ListOrgsRequest)(nil),                        // 13: controlplane.v1.ListOrgsRequest
+	(*ListOrgsResponse)(nil),                       // 14: controlplane.v1.ListOrgsResponse
+	(*IssueMyReliantAPIKeyRequest)(nil),            // 15: controlplane.v1.IssueMyReliantAPIKeyRequest
+	(*IssueMyReliantAPIKeyResponse)(nil),           // 16: controlplane.v1.IssueMyReliantAPIKeyResponse
+	(*GetCurrentUserReliantStateRequest)(nil),      // 17: controlplane.v1.GetCurrentUserReliantStateRequest
+	(*GetCurrentUserReliantStateResponse)(nil),     // 18: controlplane.v1.GetCurrentUserReliantStateResponse
+	(*RepairCurrentUserReliantAccessRequest)(nil),  // 19: controlplane.v1.RepairCurrentUserReliantAccessRequest
+	(*RepairCurrentUserReliantAccessResponse)(nil), // 20: controlplane.v1.RepairCurrentUserReliantAccessResponse
+	(*RotateCurrentUserReliantAccessRequest)(nil),  // 21: controlplane.v1.RotateCurrentUserReliantAccessRequest
+	(*RotateCurrentUserReliantAccessResponse)(nil), // 22: controlplane.v1.RotateCurrentUserReliantAccessResponse
+	(*CreateLLMKeyRequest)(nil),                    // 23: controlplane.v1.CreateLLMKeyRequest
+	(*CreateLLMKeyResponse)(nil),                   // 24: controlplane.v1.CreateLLMKeyResponse
+	(*ListLLMKeysRequest)(nil),                     // 25: controlplane.v1.ListLLMKeysRequest
+	(*ListLLMKeysResponse)(nil),                    // 26: controlplane.v1.ListLLMKeysResponse
+	(*RotateLLMKeyRequest)(nil),                    // 27: controlplane.v1.RotateLLMKeyRequest
+	(*RotateLLMKeyResponse)(nil),                   // 28: controlplane.v1.RotateLLMKeyResponse
+	(*timestamppb.Timestamp)(nil),                  // 29: google.protobuf.Timestamp
 }
 var file_controlplane_v1_admin_proto_depIdxs = []int32{
 	0,  // 0: controlplane.v1.LLMKey.status:type_name -> controlplane.v1.LLMKeyStatus
-	26, // 1: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
-	26, // 2: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
-	26, // 3: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
-	26, // 4: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
-	26, // 5: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
-	26, // 6: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
-	26, // 7: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 8: controlplane.v1.GetCurrentUserResponse.user:type_name -> controlplane.v1.User
-	2,  // 9: controlplane.v1.GetCurrentUserResponse.organizations:type_name -> controlplane.v1.Organization
-	2,  // 10: controlplane.v1.CreateOrgResponse.org:type_name -> controlplane.v1.Organization
-	2,  // 11: controlplane.v1.ListOrgsResponse.orgs:type_name -> controlplane.v1.Organization
-	4,  // 12: controlplane.v1.GetCurrentUserReliantStateResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	5,  // 13: controlplane.v1.GetCurrentUserReliantStateResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	4,  // 14: controlplane.v1.RepairCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	5,  // 15: controlplane.v1.RepairCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	4,  // 16: controlplane.v1.RotateCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
-	5,  // 17: controlplane.v1.RotateCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
-	3,  // 18: controlplane.v1.CreateLLMKeyResponse.key:type_name -> controlplane.v1.LLMKey
-	3,  // 19: controlplane.v1.ListLLMKeysResponse.keys:type_name -> controlplane.v1.LLMKey
-	3,  // 20: controlplane.v1.RotateLLMKeyResponse.key:type_name -> controlplane.v1.LLMKey
-	6,  // 21: controlplane.v1.UserService.GetCurrentUser:input_type -> controlplane.v1.GetCurrentUserRequest
-	8,  // 22: controlplane.v1.OrgService.CreateOrg:input_type -> controlplane.v1.CreateOrgRequest
-	10, // 23: controlplane.v1.OrgService.ListOrgs:input_type -> controlplane.v1.ListOrgsRequest
-	14, // 24: controlplane.v1.BillingService.GetCurrentUserReliantState:input_type -> controlplane.v1.GetCurrentUserReliantStateRequest
-	16, // 25: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:input_type -> controlplane.v1.RepairCurrentUserReliantAccessRequest
-	18, // 26: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:input_type -> controlplane.v1.RotateCurrentUserReliantAccessRequest
-	12, // 27: controlplane.v1.BillingService.IssueMyReliantAPIKey:input_type -> controlplane.v1.IssueMyReliantAPIKeyRequest
-	20, // 28: controlplane.v1.LLMGatewayService.CreateLLMKey:input_type -> controlplane.v1.CreateLLMKeyRequest
-	22, // 29: controlplane.v1.LLMGatewayService.ListLLMKeys:input_type -> controlplane.v1.ListLLMKeysRequest
-	24, // 30: controlplane.v1.LLMGatewayService.RotateLLMKey:input_type -> controlplane.v1.RotateLLMKeyRequest
-	7,  // 31: controlplane.v1.UserService.GetCurrentUser:output_type -> controlplane.v1.GetCurrentUserResponse
-	9,  // 32: controlplane.v1.OrgService.CreateOrg:output_type -> controlplane.v1.CreateOrgResponse
-	11, // 33: controlplane.v1.OrgService.ListOrgs:output_type -> controlplane.v1.ListOrgsResponse
-	15, // 34: controlplane.v1.BillingService.GetCurrentUserReliantState:output_type -> controlplane.v1.GetCurrentUserReliantStateResponse
-	17, // 35: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:output_type -> controlplane.v1.RepairCurrentUserReliantAccessResponse
-	19, // 36: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:output_type -> controlplane.v1.RotateCurrentUserReliantAccessResponse
-	13, // 37: controlplane.v1.BillingService.IssueMyReliantAPIKey:output_type -> controlplane.v1.IssueMyReliantAPIKeyResponse
-	21, // 38: controlplane.v1.LLMGatewayService.CreateLLMKey:output_type -> controlplane.v1.CreateLLMKeyResponse
-	23, // 39: controlplane.v1.LLMGatewayService.ListLLMKeys:output_type -> controlplane.v1.ListLLMKeysResponse
-	25, // 40: controlplane.v1.LLMGatewayService.RotateLLMKey:output_type -> controlplane.v1.RotateLLMKeyResponse
-	31, // [31:41] is the sub-list for method output_type
-	21, // [21:31] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	29, // 1: controlplane.v1.ReliantEntitlement.current_period_start:type_name -> google.protobuf.Timestamp
+	29, // 2: controlplane.v1.ReliantEntitlement.current_period_end:type_name -> google.protobuf.Timestamp
+	29, // 3: controlplane.v1.ReliantEntitlement.updated_at:type_name -> google.protobuf.Timestamp
+	29, // 4: controlplane.v1.ManagedReliantAccess.last_rotated_at:type_name -> google.protobuf.Timestamp
+	29, // 5: controlplane.v1.ManagedReliantAccess.last_provisioned_at:type_name -> google.protobuf.Timestamp
+	29, // 6: controlplane.v1.ManagedReliantAccess.created_at:type_name -> google.protobuf.Timestamp
+	29, // 7: controlplane.v1.ManagedReliantAccess.updated_at:type_name -> google.protobuf.Timestamp
+	6,  // 8: controlplane.v1.DeleteCurrentUserAccountResponse.blockers:type_name -> controlplane.v1.AccountDeletionBlocker
+	1,  // 9: controlplane.v1.GetCurrentUserResponse.user:type_name -> controlplane.v1.User
+	2,  // 10: controlplane.v1.GetCurrentUserResponse.organizations:type_name -> controlplane.v1.Organization
+	2,  // 11: controlplane.v1.CreateOrgResponse.org:type_name -> controlplane.v1.Organization
+	2,  // 12: controlplane.v1.ListOrgsResponse.orgs:type_name -> controlplane.v1.Organization
+	4,  // 13: controlplane.v1.GetCurrentUserReliantStateResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	5,  // 14: controlplane.v1.GetCurrentUserReliantStateResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	4,  // 15: controlplane.v1.RepairCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	5,  // 16: controlplane.v1.RepairCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	4,  // 17: controlplane.v1.RotateCurrentUserReliantAccessResponse.entitlement:type_name -> controlplane.v1.ReliantEntitlement
+	5,  // 18: controlplane.v1.RotateCurrentUserReliantAccessResponse.managed_access:type_name -> controlplane.v1.ManagedReliantAccess
+	3,  // 19: controlplane.v1.CreateLLMKeyResponse.key:type_name -> controlplane.v1.LLMKey
+	3,  // 20: controlplane.v1.ListLLMKeysResponse.keys:type_name -> controlplane.v1.LLMKey
+	3,  // 21: controlplane.v1.RotateLLMKeyResponse.key:type_name -> controlplane.v1.LLMKey
+	9,  // 22: controlplane.v1.UserService.GetCurrentUser:input_type -> controlplane.v1.GetCurrentUserRequest
+	7,  // 23: controlplane.v1.UserService.DeleteCurrentUserAccount:input_type -> controlplane.v1.DeleteCurrentUserAccountRequest
+	11, // 24: controlplane.v1.OrgService.CreateOrg:input_type -> controlplane.v1.CreateOrgRequest
+	13, // 25: controlplane.v1.OrgService.ListOrgs:input_type -> controlplane.v1.ListOrgsRequest
+	17, // 26: controlplane.v1.BillingService.GetCurrentUserReliantState:input_type -> controlplane.v1.GetCurrentUserReliantStateRequest
+	19, // 27: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:input_type -> controlplane.v1.RepairCurrentUserReliantAccessRequest
+	21, // 28: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:input_type -> controlplane.v1.RotateCurrentUserReliantAccessRequest
+	15, // 29: controlplane.v1.BillingService.IssueMyReliantAPIKey:input_type -> controlplane.v1.IssueMyReliantAPIKeyRequest
+	23, // 30: controlplane.v1.LLMGatewayService.CreateLLMKey:input_type -> controlplane.v1.CreateLLMKeyRequest
+	25, // 31: controlplane.v1.LLMGatewayService.ListLLMKeys:input_type -> controlplane.v1.ListLLMKeysRequest
+	27, // 32: controlplane.v1.LLMGatewayService.RotateLLMKey:input_type -> controlplane.v1.RotateLLMKeyRequest
+	10, // 33: controlplane.v1.UserService.GetCurrentUser:output_type -> controlplane.v1.GetCurrentUserResponse
+	8,  // 34: controlplane.v1.UserService.DeleteCurrentUserAccount:output_type -> controlplane.v1.DeleteCurrentUserAccountResponse
+	12, // 35: controlplane.v1.OrgService.CreateOrg:output_type -> controlplane.v1.CreateOrgResponse
+	14, // 36: controlplane.v1.OrgService.ListOrgs:output_type -> controlplane.v1.ListOrgsResponse
+	18, // 37: controlplane.v1.BillingService.GetCurrentUserReliantState:output_type -> controlplane.v1.GetCurrentUserReliantStateResponse
+	20, // 38: controlplane.v1.BillingService.RepairCurrentUserReliantAccess:output_type -> controlplane.v1.RepairCurrentUserReliantAccessResponse
+	22, // 39: controlplane.v1.BillingService.RotateCurrentUserReliantAccess:output_type -> controlplane.v1.RotateCurrentUserReliantAccessResponse
+	16, // 40: controlplane.v1.BillingService.IssueMyReliantAPIKey:output_type -> controlplane.v1.IssueMyReliantAPIKeyResponse
+	24, // 41: controlplane.v1.LLMGatewayService.CreateLLMKey:output_type -> controlplane.v1.CreateLLMKeyResponse
+	26, // 42: controlplane.v1.LLMGatewayService.ListLLMKeys:output_type -> controlplane.v1.ListLLMKeysResponse
+	28, // 43: controlplane.v1.LLMGatewayService.RotateLLMKey:output_type -> controlplane.v1.RotateLLMKeyResponse
+	33, // [33:44] is the sub-list for method output_type
+	22, // [22:33] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_admin_proto_init() }
@@ -1776,15 +1925,15 @@ func file_controlplane_v1_admin_proto_init() {
 		return
 	}
 	file_controlplane_v1_admin_proto_msgTypes[4].OneofWrappers = []any{}
-	file_controlplane_v1_admin_proto_msgTypes[17].OneofWrappers = []any{}
-	file_controlplane_v1_admin_proto_msgTypes[19].OneofWrappers = []any{}
+	file_controlplane_v1_admin_proto_msgTypes[20].OneofWrappers = []any{}
+	file_controlplane_v1_admin_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_admin_proto_rawDesc), len(file_controlplane_v1_admin_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   4,
 		},

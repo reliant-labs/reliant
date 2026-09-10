@@ -19,16 +19,25 @@ func TestCustomFunctions(t *testing.T) {
 		expected   bool
 	}{
 		{
-			name:       "toolRequiresApproval - bash",
-			expression: "toolRequiresApproval('bash')",
+			name:       "toolRequiresApproval - shell",
+			expression: "toolRequiresApproval('shell')",
 			vars:       map[string]interface{}{},
 			expected:   true,
 		},
 		{
-			name:       "toolRequiresApproval - powershell",
+			// The old per-OS names are gone entirely — no alias, so they must
+			// no longer resolve. This pins that the rename was a replacement
+			// rather than an addition.
+			name:       "toolRequiresApproval - retired bash name",
+			expression: "toolRequiresApproval('bash')",
+			vars:       map[string]interface{}{},
+			expected:   false,
+		},
+		{
+			name:       "toolRequiresApproval - retired powershell name",
 			expression: "toolRequiresApproval('powershell')",
 			vars:       map[string]interface{}{},
-			expected:   true,
+			expected:   false,
 		},
 		{
 			name:       "toolRequiresApproval - read",
@@ -92,7 +101,7 @@ func TestCustomFunctions_WithVariables(t *testing.T) {
 			expression: "toolRequiresApproval(tool.name)",
 			vars: map[string]interface{}{
 				"tool": map[string]interface{}{
-					"name": "bash",
+					"name": "shell",
 				},
 			},
 			expected: true,
@@ -113,7 +122,7 @@ func TestCustomFunctions_WithVariables(t *testing.T) {
 			expression: "toolRequiresApproval(tool.name) && context.auto_approve == false",
 			vars: map[string]interface{}{
 				"tool": map[string]interface{}{
-					"name": "bash",
+					"name": "shell",
 				},
 				"context": map[string]interface{}{
 					"auto_approve": false,

@@ -224,9 +224,13 @@ events:
           feedback: "Clear and direct ask."
 
   # Phase 5: slides_loop — while loop inner nodes
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built 3 React slide components in pitch-deck/src/slides/"
       response_text: "Built 3 React slide components in pitch-deck/src/slides/"
+      tool_calls: []
 
   - node: slides_loop.start_dev_server
     output:
@@ -234,18 +238,36 @@ events:
       stdout: "Dev server started on http://localhost:5174"
       stderr: ""
 
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     output:
-      response_text: "Slides pass visual review."
-      response:
-        verdict: pass
-        summary: "Clean, professional slides. Brand colors match. Good layout variety."
-        slide_issues: []
-        brand_consistency: "Colors match brand identity. Inter font used throughout."
-        layout_issues: []
-        ai_visual_tells: []
-        typography_issues: []
-      completed: true
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_visual_review
+          name: submit_visual_review
+          input:
+            verdict: pass
+            summary: "Clean, professional slides. Brand colors match. Good layout variety."
+            slide_issues: []
+            brand_consistency: "Colors match brand identity. Inter font used throughout."
+            layout_issues: []
+            ai_visual_tells: []
+            typography_issues: []
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_visual_review:
+          verdict: pass
+          summary: "Clean, professional slides. Brand colors match. Good layout variety."
+          slide_issues: []
+          brand_consistency: "Colors match brand identity. Inter font used throughout."
+          layout_issues: []
+          ai_visual_tells: []
+          typography_issues: []
+      tool_results: []
+      thread_token_count: 100
 
   - node: slides_loop.stop_dev_server
     output:
@@ -404,26 +426,49 @@ events:
           feedback: "Good."
 
   # Phase 5: slides_loop passes on first iteration
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built slides."
       response_text: "Built slides."
+      tool_calls: []
 
   - node: slides_loop.start_dev_server
     output:
       exit_code: 0
       stdout: "Dev server started"
 
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     output:
-      response:
-        verdict: pass
-        summary: "Slides pass."
-        slide_issues: []
-        brand_consistency: "Matches."
-        layout_issues: []
-        ai_visual_tells: []
-        typography_issues: []
-      completed: true
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_visual_review
+          name: submit_visual_review
+          input:
+            verdict: pass
+            summary: "Slides pass."
+            slide_issues: []
+            brand_consistency: "Matches."
+            layout_issues: []
+            ai_visual_tells: []
+            typography_issues: []
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_visual_review:
+          verdict: pass
+          summary: "Slides pass."
+          slide_issues: []
+          brand_consistency: "Matches."
+          layout_issues: []
+          ai_visual_tells: []
+          typography_issues: []
+      tool_results: []
+      thread_token_count: 100
 
   - node: slides_loop.stop_dev_server
     output:
@@ -585,27 +630,49 @@ events:
           feedback: "Missing specific use-of-funds breakdown. Just says '$2M seed' with no detail."
 
   # Phase 5: slides_loop passes on first try
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built 4 slide components."
       response_text: "Built 4 slide components."
+      tool_calls: []
 
   - node: slides_loop.start_dev_server
     output:
       exit_code: 0
       stdout: "Dev server started on http://localhost:5174"
 
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     output:
-      response_text: "Slides pass visual review."
-      response:
-        verdict: pass
-        summary: "Slides look professional. Brand consistent."
-        slide_issues: []
-        brand_consistency: "Matches brand identity."
-        layout_issues: []
-        ai_visual_tells: []
-        typography_issues: []
-      completed: true
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_visual_review
+          name: submit_visual_review
+          input:
+            verdict: pass
+            summary: "Slides look professional. Brand consistent."
+            slide_issues: []
+            brand_consistency: "Matches brand identity."
+            layout_issues: []
+            ai_visual_tells: []
+            typography_issues: []
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_visual_review:
+          verdict: pass
+          summary: "Slides look professional. Brand consistent."
+          slide_issues: []
+          brand_consistency: "Matches brand identity."
+          layout_issues: []
+          ai_visual_tells: []
+          typography_issues: []
+      tool_results: []
+      thread_token_count: 100
 
   - node: slides_loop.stop_dev_server
     output:
@@ -766,11 +833,14 @@ events:
           feedback: "Good."
 
   # Phase 5, Iteration 0: Build slides
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     iteration: 0
     output:
+      message:
+        role: assistant
+        text: "Built 3 slide components."
       response_text: "Built 3 slide components."
-
+      tool_calls: []
   - node: slides_loop.start_dev_server
     iteration: 0
     output:
@@ -778,45 +848,80 @@ events:
       stdout: "Dev server started"
 
   # Phase 5, Iteration 0: Visual reviewer FAILS
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     iteration: 0
     output:
-      response_text: "Slides fail visual review."
-      response:
-        verdict: fail
-        summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
-        slide_issues:
-          - slide_number: 1
-            description: "Title text too small for projection."
-            severity: warning
-          - slide_number: 3
-            description: "Content overflows the slide boundary."
-            severity: critical
-        brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
-        layout_issues:
-          - "Slides 1, 2, 3 all use identical card layout. Needs variety."
-        ai_visual_tells:
-          - "Purple gradient blob in top-right corner on every slide"
-          - "Emoji characters used as icons"
-        typography_issues:
-          - "Body text at 12px is unreadable when projected"
-        content_issues:
-          - slide_number: 2
-            severity: critical
-            description: "Slide shows '5,000 downloads' but founder-brief.md says 3,200. Use the real number and cite the source."
-      completed: true
-
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_visual_review
+          name: submit_visual_review
+          input:
+              verdict: fail
+              summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
+              slide_issues:
+                - slide_number: 1
+                  description: "Title text too small for projection."
+                  severity: warning
+                - slide_number: 3
+                  description: "Content overflows the slide boundary."
+                  severity: critical
+              brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
+              layout_issues:
+                - "Slides 1, 2, 3 all use identical card layout. Needs variety."
+              ai_visual_tells:
+                - "Purple gradient blob in top-right corner on every slide"
+                - "Emoji characters used as icons"
+              typography_issues:
+                - "Body text at 12px is unreadable when projected"
+              content_issues:
+                - slide_number: 2
+                  severity: critical
+                  description: "Slide shows '5,000 downloads' but founder-brief.md says 3,200. Use the real number and cite the source."
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    iteration: 0
+    output:
+      response_data:
+        submit_visual_review:
+            verdict: fail
+            summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
+            slide_issues:
+              - slide_number: 1
+                description: "Title text too small for projection."
+                severity: warning
+              - slide_number: 3
+                description: "Content overflows the slide boundary."
+                severity: critical
+            brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
+            layout_issues:
+              - "Slides 1, 2, 3 all use identical card layout. Needs variety."
+            ai_visual_tells:
+              - "Purple gradient blob in top-right corner on every slide"
+              - "Emoji characters used as icons"
+            typography_issues:
+              - "Body text at 12px is unreadable when projected"
+            content_issues:
+              - slide_number: 2
+                severity: critical
+                description: "Slide shows '5,000 downloads' but founder-brief.md says 3,200. Use the real number and cite the source."
+      tool_results: []
+      thread_token_count: 100
   - node: slides_loop.stop_dev_server
     iteration: 0
     output:
       exit_code: 0
 
   # Phase 5, Iteration 1: Rebuild
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     iteration: 1
     output:
+      message:
+        role: assistant
+        text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
       response_text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
-
+      tool_calls: []
   - node: slides_loop.start_dev_server
     iteration: 1
     output:
@@ -824,20 +929,38 @@ events:
       stdout: "Dev server started"
 
   # Phase 5, Iteration 1: Visual reviewer PASSES
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     iteration: 1
     output:
-      response_text: "Rebuilt slides pass visual review."
-      response:
-        verdict: pass
-        summary: "Brand colors correct, layout variety good, text readable at projection size."
-        slide_issues: []
-        brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
-        layout_issues: []
-        ai_visual_tells: []
-        typography_issues: []
-      completed: true
-
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_visual_review
+          name: submit_visual_review
+          input:
+              verdict: pass
+              summary: "Brand colors correct, layout variety good, text readable at projection size."
+              slide_issues: []
+              brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
+              layout_issues: []
+              ai_visual_tells: []
+              typography_issues: []
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    iteration: 1
+    output:
+      response_data:
+        submit_visual_review:
+            verdict: pass
+            summary: "Brand colors correct, layout variety good, text readable at projection size."
+            slide_issues: []
+            brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
+            layout_issues: []
+            ai_visual_tells: []
+            typography_issues: []
+      tool_results: []
+      thread_token_count: 100
   - node: slides_loop.stop_dev_server
     iteration: 1
     output:

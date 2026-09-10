@@ -520,6 +520,7 @@ func (c *ClaudeCodeClient) buildCompleteEvent(accumulatedMessage anthropic.Messa
 	content := ""
 	thinking := ""
 	thinkingSignature := ""
+	redactedThinking := ""
 
 	for _, block := range accumulatedMessage.Content {
 		switch v := block.AsAny().(type) {
@@ -530,6 +531,11 @@ func (c *ClaudeCodeClient) buildCompleteEvent(accumulatedMessage anthropic.Messa
 			if v.Signature != "" {
 				thinkingSignature = v.Signature
 			}
+		case anthropic.RedactedThinkingBlock:
+			// Opaque and encrypted: Data is not readable thinking and must not
+			// be concatenated into `thinking`. Captured so the next request can
+			// replay it unchanged, as the API requires.
+			redactedThinking += v.Data
 		}
 	}
 
@@ -560,6 +566,7 @@ func (c *ClaudeCodeClient) buildCompleteEvent(accumulatedMessage anthropic.Messa
 			Content:           content,
 			Thinking:          thinking,
 			ThinkingSignature: thinkingSignature,
+			RedactedThinking:  redactedThinking,
 			ToolCalls:         toolCalls,
 			Usage:             c.usage(accumulatedMessage),
 			FinishReason:      finishReason,

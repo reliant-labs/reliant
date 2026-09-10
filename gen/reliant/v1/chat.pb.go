@@ -384,6 +384,12 @@ const (
 	ContentBlockType_CONTENT_BLOCK_TYPE_THINKING       ContentBlockType = 5
 	ContentBlockType_CONTENT_BLOCK_TYPE_FILE_REFERENCE ContentBlockType = 6
 	ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT       ContentBlockType = 7 // Binary document (PDF) - sent natively to supporting LLMs
+	// Reasoning the provider's safety system withheld. The block carries an
+	// opaque, encrypted payload in `content` with NO readable text — it exists
+	// only to be replayed to the provider unchanged on the next turn, which the
+	// Anthropic API requires of a multi-turn exchange. Distinct from THINKING so
+	// that no renderer ever mistakes ciphertext for reasoning and shows it.
+	ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING ContentBlockType = 8
 )
 
 // Enum value maps for ContentBlockType.
@@ -397,16 +403,18 @@ var (
 		5: "CONTENT_BLOCK_TYPE_THINKING",
 		6: "CONTENT_BLOCK_TYPE_FILE_REFERENCE",
 		7: "CONTENT_BLOCK_TYPE_DOCUMENT",
+		8: "CONTENT_BLOCK_TYPE_REDACTED_THINKING",
 	}
 	ContentBlockType_value = map[string]int32{
-		"CONTENT_BLOCK_TYPE_UNSPECIFIED":    0,
-		"CONTENT_BLOCK_TYPE_TEXT":           1,
-		"CONTENT_BLOCK_TYPE_TOOL_CALL":      2,
-		"CONTENT_BLOCK_TYPE_TOOL_RESULT":    3,
-		"CONTENT_BLOCK_TYPE_IMAGE":          4,
-		"CONTENT_BLOCK_TYPE_THINKING":       5,
-		"CONTENT_BLOCK_TYPE_FILE_REFERENCE": 6,
-		"CONTENT_BLOCK_TYPE_DOCUMENT":       7,
+		"CONTENT_BLOCK_TYPE_UNSPECIFIED":       0,
+		"CONTENT_BLOCK_TYPE_TEXT":              1,
+		"CONTENT_BLOCK_TYPE_TOOL_CALL":         2,
+		"CONTENT_BLOCK_TYPE_TOOL_RESULT":       3,
+		"CONTENT_BLOCK_TYPE_IMAGE":             4,
+		"CONTENT_BLOCK_TYPE_THINKING":          5,
+		"CONTENT_BLOCK_TYPE_FILE_REFERENCE":    6,
+		"CONTENT_BLOCK_TYPE_DOCUMENT":          7,
+		"CONTENT_BLOCK_TYPE_REDACTED_THINKING": 8,
 	}
 )
 
@@ -5960,7 +5968,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12DISPLAY_STYLE_INFO\x10\x01\x12\x19\n" +
 	"\x15DISPLAY_STYLE_WARNING\x10\x02\x12\x19\n" +
 	"\x15DISPLAY_STYLE_SUCCESS\x10\x03\x12\x18\n" +
-	"\x14DISPLAY_STYLE_HIDDEN\x10\x04*\xa0\x02\n" +
+	"\x14DISPLAY_STYLE_HIDDEN\x10\x04*\xca\x02\n" +
 	"\x10ContentBlockType\x12\"\n" +
 	"\x1eCONTENT_BLOCK_TYPE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17CONTENT_BLOCK_TYPE_TEXT\x10\x01\x12 \n" +
@@ -5969,7 +5977,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x18CONTENT_BLOCK_TYPE_IMAGE\x10\x04\x12\x1f\n" +
 	"\x1bCONTENT_BLOCK_TYPE_THINKING\x10\x05\x12%\n" +
 	"!CONTENT_BLOCK_TYPE_FILE_REFERENCE\x10\x06\x12\x1f\n" +
-	"\x1bCONTENT_BLOCK_TYPE_DOCUMENT\x10\a*\x96\x01\n" +
+	"\x1bCONTENT_BLOCK_TYPE_DOCUMENT\x10\a\x12(\n" +
+	"$CONTENT_BLOCK_TYPE_REDACTED_THINKING\x10\b*\x96\x01\n" +
 	"\fChatActivity\x12\x16\n" +
 	"\x12CHAT_ACTIVITY_IDLE\x10\x00\x12\x19\n" +
 	"\x15CHAT_ACTIVITY_RUNNING\x10\x01\x12 \n" +

@@ -23,13 +23,23 @@ description: >
   Workflow is built and passes review.
 
 events:
-  - node: scope_conversation
+  # scope_conversation EXECUTES: it is a builtin://scope-conversation ref whose
+  # own `conversation` node is a builtin://agent ref, so the qualified id below
+  # makes BOTH transparent and compiles scope-conversation's prompt CEL
+  # (question_areas, plan_filename, max_questions, max_turns).
+  - node: scope_conversation.conversation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+            I've written WORKFLOW_PLAN.md. The workflow automates a deploy pipeline
+            with a Slack notification integration (custom script) and a standard
+            GitHub MCP server (off-the-shelf).
       response_text: |
-        I've written WORKFLOW_PLAN.md. The workflow automates a deploy pipeline
-        with a Slack notification integration (custom script) and a standard
-        GitHub MCP server (off-the-shelf).
-
+            I've written WORKFLOW_PLAN.md. The workflow automates a deploy pipeline
+            with a Slack notification integration (custom script) and a standard
+            GitHub MCP server (off-the-shelf).
+      tool_calls: []
   - node: integration_router
     output:
       selected_node: build_integrations
@@ -37,26 +47,66 @@ events:
 
   # build_integrations EXECUTES its get-it-right body rather than standing in for it, so the
   # loop's own iteration count and verdict are derived, not asserted literals.
-  - node: build_integrations.attempt.implement
+  - node: build_integrations.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_integrations."
       response_text: "Implementation attempt for build_integrations."
-  - node: build_integrations.attempt.review
+      tool_calls: []
+  - node: build_integrations.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Slack notification script works. Parameterized webhook URL via env var. Test passes."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Slack notification script works. Parameterized webhook URL via env var. Test passes."
+  - node: build_integrations.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Slack notification script works. Parameterized webhook URL via env var. Test passes."
+      tool_results: []
+      thread_token_count: 100
   # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
   # loop's own iteration count and verdict are derived, not asserted literals.
-  - node: build_workflow.attempt.implement
+  - node: build_workflow.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_workflow."
       response_text: "Implementation attempt for build_workflow."
-  - node: build_workflow.attempt.review
+      tool_calls: []
+  - node: build_workflow.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Workflow matches plan. Integration script correctly referenced. Scenarios cover happy and failure paths."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Workflow matches plan. Integration script correctly referenced. Scenarios cover happy and failure paths."
+  - node: build_workflow.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Workflow matches plan. Integration script correctly referenced. Scenarios cover happy and failure paths."
+      tool_results: []
+      thread_token_count: 100
 expect:
   outcome: completed
   reached:
@@ -73,13 +123,23 @@ description: >
   Workflow is built and passes review.
 
 events:
-  - node: scope_conversation
+  # scope_conversation EXECUTES: it is a builtin://scope-conversation ref whose
+  # own `conversation` node is a builtin://agent ref, so the qualified id below
+  # makes BOTH transparent and compiles scope-conversation's prompt CEL
+  # (question_areas, plan_filename, max_questions, max_turns).
+  - node: scope_conversation.conversation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+            I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+            just agents and built-in tools for a code review pipeline.
+            All integrations are off-the-shelf (GitHub MCP server, standard tools).
       response_text: |
-        I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
-        just agents and built-in tools for a code review pipeline.
-        All integrations are off-the-shelf (GitHub MCP server, standard tools).
-
+            I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+            just agents and built-in tools for a code review pipeline.
+            All integrations are off-the-shelf (GitHub MCP server, standard tools).
+      tool_calls: []
   - node: integration_router
     output:
       selected_node: build_workflow
@@ -87,15 +147,35 @@ events:
 
   # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
   # loop's own iteration count and verdict are derived, not asserted literals.
-  - node: build_workflow.attempt.implement
+  - node: build_workflow.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_workflow."
       response_text: "Implementation attempt for build_workflow."
-  - node: build_workflow.attempt.review
+      tool_calls: []
+  - node: build_workflow.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+  - node: build_workflow.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      tool_results: []
+      thread_token_count: 100
 expect:
   outcome: completed
   reached:
@@ -112,12 +192,21 @@ description: >
   (first attempt fails review). Second attempt passes. Workflow build passes on first try.
 
 events:
-  - node: scope_conversation
+  # scope_conversation EXECUTES: it is a builtin://scope-conversation ref whose
+  # own `conversation` node is a builtin://agent ref, so the qualified id below
+  # makes BOTH transparent and compiles scope-conversation's prompt CEL
+  # (question_areas, plan_filename, max_questions, max_turns).
+  - node: scope_conversation.conversation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+            I've written WORKFLOW_PLAN.md. The workflow needs a custom Python script
+            that transforms CSV data into JSON for a downstream API call.
       response_text: |
-        I've written WORKFLOW_PLAN.md. The workflow needs a custom Python script
-        that transforms CSV data into JSON for a downstream API call.
-
+            I've written WORKFLOW_PLAN.md. The workflow needs a custom Python script
+            that transforms CSV data into JSON for a downstream API call.
+      tool_calls: []
   - node: integration_router
     output:
       selected_node: build_integrations
@@ -125,26 +214,66 @@ events:
 
   # build_integrations EXECUTES its get-it-right body rather than standing in for it, so the
   # loop's own iteration count and verdict are derived, not asserted literals.
-  - node: build_integrations.attempt.implement
+  - node: build_integrations.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_integrations."
       response_text: "Implementation attempt for build_integrations."
-  - node: build_integrations.attempt.review
+      tool_calls: []
+  - node: build_integrations.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Script handles headers, edge cases covered by tests. Good to go."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Script handles headers, edge cases covered by tests. Good to go."
+  - node: build_integrations.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Script handles headers, edge cases covered by tests. Good to go."
+      tool_results: []
+      thread_token_count: 100
   # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
   # loop's own iteration count and verdict are derived, not asserted literals.
-  - node: build_workflow.attempt.implement
+  - node: build_workflow.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_workflow."
       response_text: "Implementation attempt for build_workflow."
-  - node: build_workflow.attempt.review
+      tool_calls: []
+  - node: build_workflow.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Workflow correctly references the transform script. Scenarios cover success and transform-failure paths."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Workflow correctly references the transform script. Scenarios cover success and transform-failure paths."
+  - node: build_workflow.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Workflow correctly references the transform script. Scenarios cover success and transform-failure paths."
+      tool_results: []
+      thread_token_count: 100
 expect:
   outcome: completed
   reached:
@@ -160,12 +289,21 @@ description: >
   Workflow build takes two iterations (first attempt missing scenarios, second adds them).
 
 events:
-  - node: scope_conversation
+  # scope_conversation EXECUTES: it is a builtin://scope-conversation ref whose
+  # own `conversation` node is a builtin://agent ref, so the qualified id below
+  # makes BOTH transparent and compiles scope-conversation's prompt CEL
+  # (question_areas, plan_filename, max_questions, max_turns).
+  - node: scope_conversation.conversation.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: |
+            I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+            just agents and built-in tools for a code review pipeline.
       response_text: |
-        I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
-        just agents and built-in tools for a code review pipeline.
-
+            I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+            just agents and built-in tools for a code review pipeline.
+      tool_calls: []
   - node: integration_router
     output:
       selected_node: build_workflow
@@ -173,15 +311,35 @@ events:
 
   # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
   # loop's own iteration count and verdict are derived, not asserted literals.
-  - node: build_workflow.attempt.implement
+  - node: build_workflow.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_workflow."
       response_text: "Implementation attempt for build_workflow."
-  - node: build_workflow.attempt.review
+      tool_calls: []
+  - node: build_workflow.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+  - node: build_workflow.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      tool_results: []
+      thread_token_count: 100
 expect:
   outcome: completed
   reached:

@@ -55,7 +55,7 @@ func TestShellDescriptionRoundTrips(t *testing.T) {
 // Real line breaks, not literal backslash-n, must reach the model.
 func TestShellDescriptionSchemaHasRealNewlines(t *testing.T) {
 	t.Parallel()
-	s := NewShellTool().ParamSchema()
+	s := NewShellTool(ShellPlatformUnix).ParamSchema()
 	prop, ok := s.Properties.Get("description")
 	if !ok {
 		t.Fatal("description property missing from schema")

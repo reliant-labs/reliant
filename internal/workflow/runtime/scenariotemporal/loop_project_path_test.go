@@ -65,9 +65,14 @@ func TestParallelCompete_ImplNodeHonorsItsOwnProjectPath(t *testing.T) {
 	// Counting matters: the loop declares on_failure: continue, so a run in
 	// which every candidate died still reports completion. Only the per-iteration
 	// evidence distinguishes the two, and there must be one per candidate.
+	// The prefix is the agent_loop INSIDE the sub-workflow, not `impl` itself,
+	// so this counts only the per-iteration activity evidence. `impl` and
+	// `impl.agent_loop` are structural nodes: each is now reported completed
+	// once, deduplicated by path, so counting them would add a fixed 2 to a
+	// number that is supposed to mean "how many candidates got this far".
 	implRuns := 0
 	for _, completedNode := range res.Execution.NodesCompleted {
-		if strings.HasPrefix(completedNode, "implementations.impl.") {
+		if strings.HasPrefix(completedNode, "implementations.impl.agent_loop.") {
 			implRuns++
 		}
 	}

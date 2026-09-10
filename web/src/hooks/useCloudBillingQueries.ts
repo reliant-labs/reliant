@@ -77,6 +77,9 @@ export const cloudBillingKeys = {
   plans: ["cloud-billing", "plans"] as const,
   invoices: ["cloud-billing", "invoices"] as const,
   billingEmail: ["cloud-billing", "billing-email"] as const,
+  topupQuote: (creditCents: number) =>
+    ["cloud-billing", "topup-quote", creditCents] as const,
+  autoRecharge: ["cloud-billing", "auto-recharge"] as const,
 };
 
 // ── Queries ───────────────────────────────────────────────────────────
@@ -238,6 +241,143 @@ export function useCreateWalletTopupSession() {
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: cloudBillingKeys.walletOverview,
+      });
+    },
+  });
+}
+
+/**
+ * Mint a PaymentIntent for a wallet top-up, to be confirmed on OUR page.
+ *
+ * The same `assertPurchaseIdentity` gate as the two session mutations above,
+ * for the same reason: this is a thing that spends money, and gating the
+ * mutation rather than the button means no call site can bypass it.
+ *
+ * Nothing is invalidated on success. Unlike the session mutations, minting an
+ * intent changes NO server-visible state a query reads — the wallet moves when
+ * the webhook credits it, which is a different moment and is what
+ * `useWalletSettlement` waits for. Invalidating here would refetch a balance
+ * that cannot have changed yet and teach the UI to expect it.
+ */
+export function useCreateWalletTopupPaymentIntent() {
+  return useMutation({
+    mutationFn: (amountCents: bigint) => {
+      assertPurchaseIdentity();
+      return billingClient().createCurrentUserWalletTopupPaymentIntent({
+        amountCents,
+      });
+    },
+  });
+}
+
+/**
+ * Mint a compute-subscription intent for our own Elements checkout.
+ *
+ * Deliberately does NOT invalidate the compute-subscription query, for the
+ * same reason the top-up intent does not invalidate the wallet: creating an
+ * intent changes no server state a query reads. The subscription exists at
+ * Stripe in `incomplete` status, which is not an entitlement — the plan moves
+ * when the webhook confirms payment. Invalidating here would refetch a
+ * subscription that cannot have changed yet and teach the UI to expect one.
+ */
+export function useCreateComputeSubscriptionIntent() {
+  return useMutation({
+    mutationFn: (planId: string) => {
+      assertPurchaseIdentity();
+      return billingClient().createCurrentUserComputeSubscriptionIntent({
+        planId,
+      });
+    },
+  });
+}
+
+/**
+ * What a top-up costs: credit, processing fee, and the charged total.
+ *
+ * THE FEE IS NEVER COMPUTED HERE. It arrives from the server, which derives it
+ * from the same function that builds the Stripe charge — so the number the user
+ * reads before paying and the number their card is charged cannot disagree. A
+ * percentage applied in this file would be a second implementation of the rule,
+ * free to drift, and one a user could edit.
+ *
+ * Quoting mints nothing at Stripe and writes no row, so the amount picker may
+ * call it on every preset the user clicks. Amounts below the $5 minimum are not
+ * quotable and the server rejects them; `enabled` keeps that out of the UI as a
+ * failed request.
+ */
+export function useWalletTopupQuote(creditCents: number, enabled = true) {
+  return useQuery({
+    queryKey: cloudBillingKeys.topupQuote(creditCents),
+    queryFn: () =>
+      billingClient().getCurrentUserWalletTopupQuote({
+        creditCents: BigInt(creditCents),
+      }),
+    enabled: enabled && creditCents > 0,
+    // A price, not a balance: it changes when we change the rate, which is a
+    // deploy, not a user action.
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** The caller's auto-recharge rule and saved card, if any. */
+export function useWalletAutoRecharge(enabled = true) {
+  return useQuery({
+    queryKey: cloudBillingKeys.autoRecharge,
+    queryFn: () => billingClient().getCurrentUserWalletAutoRecharge({}),
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
+/**
+ * Arm or disarm auto-recharge.
+ *
+ * The request REPLACES the stored rule — threshold, amount and ceiling travel
+ * together — so callers must send the user's whole current choice, not a patch.
+ */
+export function useSetWalletAutoRecharge() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rule: {
+      enabled: boolean;
+      thresholdCents: number;
+      amountCents: number;
+      maxPerMonthCents: number;
+    }) => {
+      assertPurchaseIdentity();
+      return billingClient().setCurrentUserWalletAutoRecharge({
+        enabled: rule.enabled,
+        thresholdCents: BigInt(rule.thresholdCents),
+        amountCents: BigInt(rule.amountCents),
+        maxPerMonthCents: BigInt(rule.maxPerMonthCents),
+      });
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: cloudBillingKeys.autoRecharge,
+      });
+    },
+  });
+}
+
+/**
+ * Begin saving a card for off-session use. Moves no money.
+ *
+ * Returns EITHER an already-saved card (adopted from Stripe — the path every
+ * compute subscriber takes, where this is a read rather than a collection) OR a
+ * SetupIntent client secret to mount with Stripe.js. Never both, so the caller
+ * branches on which one arrived.
+ */
+export function useCreateWalletPaymentMethodSetup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => {
+      assertPurchaseIdentity();
+      return billingClient().createCurrentUserWalletPaymentMethodSetup({});
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: cloudBillingKeys.autoRecharge,
       });
     },
   });

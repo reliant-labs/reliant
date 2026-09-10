@@ -65,6 +65,7 @@ func TestPowerfulTagMembership(t *testing.T) {
 
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
+		"gpt-6-astra",
 		"gpt-5.6-sol",
 		"gemini-3.8-flash",
 		"vertex-claude-5.1-fable",
@@ -77,11 +78,18 @@ func TestPowerfulTagMembership(t *testing.T) {
 func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 	reg := MustGetRegistry()
 
+	// TagFast was gpt-5.3-codex-spark, which sat earliest in definition order.
+	// That model was removed: codex was its only provider and the
+	// ChatGPT-account backend refuses it, so it was unreachable by
+	// construction. The next fast-tagged entry in definition order is
+	// gemini-3.5-flash. This is a per-user resolution in practice — it filters
+	// to the providers a user has configured — so this global pin is a canary
+	// for accidental reordering, not the model most users actually get.
 	for tag, want := range map[string]string{
 		TagFlagship: "claude-5-opus",
 		TagModerate: "claude-5-sonnet",
 		TagCheap:    "claude-4.5-haiku",
-		TagFast:     "gpt-5.3-codex-spark",
+		TagFast:     "gemini-3.5-flash",
 	} {
 		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}}, allTestProviders)
 		require.NoError(t, err, "resolving tag %q", tag)
@@ -115,6 +123,8 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 			[]string{"low", "medium", "high"}, "medium", 1048576, 65536},
 		{"gemini-3.5-flash", []string{TagModerate, TagFast, TagReasoning},
 			[]string{"low", "medium", "high"}, "low", 1048576, 65536},
+		{"gpt-6-astra", []string{TagPowerful, TagFlagship, TagReasoning},
+			[]string{"low", "medium", "high", "xhigh", "max"}, "xhigh", 1050000, 128000},
 	}
 
 	for _, tt := range tests {
@@ -132,6 +142,44 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 			require.NotEmpty(t, def.Providers)
 		})
 	}
+}
+
+// Astra tops out at `max`. The codex capture's own spawn_agent description
+// claims `ultra` for astra, but that string is written by the client, while
+// OpenAI's API reference lists low/medium/high/xhigh/max. Declaring ultra here
+// would send an effort the model does not accept, so the absence is pinned
+// rather than left to a reading of the table above.
+func TestAstraStopsAtMaxEffort(t *testing.T) {
+	reg := MustGetRegistry()
+
+	def, ok := reg.GetDefinition("gpt-6-astra")
+	require.True(t, ok)
+
+	assert.Contains(t, def.Capabilities.ThinkingLevels, "max")
+	assert.NotContains(t, def.Capabilities.ThinkingLevels, "ultra")
+}
+
+// Astra is served by the three providers that can actually reach it. Vertex AI
+// and the managed Reliant gateway are deliberately absent: Vertex's Model
+// Garden offers only OpenAI's open-weight gpt-oss models, and our gateway
+// routes every model through vertex_ai, so either mapping would put a picker
+// option in front of users that fails at request time.
+func TestAstraProviderMappings(t *testing.T) {
+	reg := MustGetRegistry()
+
+	def, ok := reg.GetDefinition("gpt-6-astra")
+	require.True(t, ok)
+
+	got := make(map[string]string, len(def.Providers))
+	for _, p := range def.Providers {
+		got[p.Driver] = p.APIModel
+	}
+
+	assert.Equal(t, map[string]string{
+		"codex":      "gpt-6-astra",
+		"openai":     "gpt-6-astra",
+		"openrouter": "openai/gpt-6-astra",
+	}, got)
 }
 
 // Fable 5.1 must be reachable on all four providers the product exposes, with

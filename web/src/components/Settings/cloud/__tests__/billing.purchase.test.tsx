@@ -143,20 +143,38 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
 });
 
 // Stubbed so this file tests the SURFACE — that the right purchase mounts in
-// place. The panel's own behaviour is covered in components/Billing.
-vi.mock("@/components/Billing/EmbeddedCheckoutPanel", () => ({
-  EmbeddedCheckoutPanel: ({
-    request,
+// place. The checkout's own behaviour (Elements, plan switching, 3DS,
+// settlement) is covered in components/Billing.
+vi.mock("@/components/Billing/ComputeSubscriptionCheckout", () => ({
+  ComputeSubscriptionCheckout: ({
+    selectedPlanId,
   }: {
-    request: { kind: string; planId?: string; amountCents?: bigint };
+    selectedPlanId?: string;
   }) => (
     <div
-      data-testid="embedded-checkout"
-      data-kind={request.kind}
-      data-plan-id={request.planId ?? ""}
-      data-amount={request.amountCents?.toString() ?? ""}
+      data-testid="compute-checkout"
+      data-kind="compute_plan"
+      data-plan-id={selectedPlanId ?? ""}
     >
-      embedded checkout
+      compute checkout
+    </div>
+  ),
+}));
+
+// Our own top-up page, stubbed for the same reason: this file is about which
+// purchase the SURFACE mounts, not about how the payment form behaves. Its
+// own behaviour — Elements, 3DS, settlement — is covered in components/Billing.
+vi.mock("@/components/Billing/WalletTopupCheckout", () => ({
+  WalletTopupCheckout: ({
+    defaultAmountCents,
+  }: {
+    defaultAmountCents?: number;
+  }) => (
+    <div
+      data-testid="wallet-topup-checkout"
+      data-amount={String(defaultAmountCents ?? "")}
+    >
+      wallet top-up
     </div>
   ),
 }));
@@ -309,7 +327,7 @@ describe("size selection is bounded by the plan", () => {
       }),
     );
 
-    expect(screen.queryByTestId("embedded-checkout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
     expect(checkoutCalls.mutate).not.toHaveBeenCalled();
   });
 });
@@ -318,7 +336,7 @@ describe("purchasing happens in place", () => {
   it("mounts the embedded panel for the chosen plan", async () => {
     const user = userEvent.setup();
     await openPlans(user);
-    expect(screen.queryByTestId("embedded-checkout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
 
     await user.click(
       within(screen.getByTestId("plan-card-tier_beta")).getByRole("button", {
@@ -326,7 +344,7 @@ describe("purchasing happens in place", () => {
       }),
     );
 
-    const panel = screen.getByTestId("embedded-checkout");
+    const panel = screen.getByTestId("compute-checkout");
     expect(panel).toHaveAttribute("data-kind", "compute_plan");
     expect(panel).toHaveAttribute("data-plan-id", "tier_beta");
   });
@@ -363,10 +381,10 @@ describe("purchasing happens in place", () => {
         name: /beta/i,
       }),
     );
-    expect(screen.getByTestId("embedded-checkout")).toBeInTheDocument();
+    expect(screen.getByTestId("compute-checkout")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /cancel/i }));
-    expect(screen.queryByTestId("embedded-checkout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
   });
 });
 
@@ -375,15 +393,18 @@ describe("adding AI credit", () => {
    * The other half of "one place to spend money": credit top-ups buy through
    * the same panel, so neither purchase leaves the page.
    */
-  it("mounts the embedded panel for a top-up amount", async () => {
+  it("mounts our own top-up page for the chosen amount", async () => {
     renderSection();
     const user = userEvent.setup();
 
     await user.click(screen.getByRole("button", { name: /^\$25$/ }));
 
-    const panel = screen.getByTestId("embedded-checkout");
-    expect(panel).toHaveAttribute("data-kind", "wallet_topup");
+    // OUR page now, not Stripe's whole checkout in an iframe. What matters to
+    // this file is unchanged and is what it still asserts: the purchase mounts
+    // IN PLACE, carrying the amount the user picked.
+    const panel = screen.getByTestId("wallet-topup-checkout");
     expect(panel).toHaveAttribute("data-amount", "2500");
+    expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
   });
 
   it("does not open a hosted top-up URL", async () => {

@@ -30,7 +30,7 @@ import (
 // and the chat stopped dead at 23:27:31 with no message and no error.
 
 func TestContentFreeTurn_RefusalIsExplained(t *testing.T) {
-	text, ok := contentFreeTurnExplanation(false, "", "", 0, message.FinishReasonRefusal)
+	text, ok := contentFreeTurnExplanation(false, "", "", "", "", 0, message.FinishReasonRefusal)
 
 	require.True(t, ok, "a refusal with no content must be reported — without it the chat dies silently")
 	assert.NotEmpty(t, strings.TrimSpace(text))
@@ -46,7 +46,7 @@ func TestContentFreeTurn_UnknownReasonIsStillExplained(t *testing.T) {
 		message.FinishReasonMaxTokens,
 		message.FinishReasonError,
 	} {
-		text, ok := contentFreeTurnExplanation(false, "", "", 0, reason)
+		text, ok := contentFreeTurnExplanation(false, "", "", "", "", 0, reason)
 		require.True(t, ok, "reason %q: an empty turn must be reported", reason)
 		assert.NotEmpty(t, strings.TrimSpace(text), "reason %q", reason)
 	}
@@ -54,17 +54,27 @@ func TestContentFreeTurn_UnknownReasonIsStillExplained(t *testing.T) {
 
 func TestContentFreeTurn_LeavesRealTurnsAlone(t *testing.T) {
 	t.Run("text", func(t *testing.T) {
-		_, ok := contentFreeTurnExplanation(false, "here you go", "", 0, message.FinishReasonEndTurn)
+		_, ok := contentFreeTurnExplanation(false, "here you go", "", "", "", 0, message.FinishReasonEndTurn)
 		assert.False(t, ok)
 	})
 	t.Run("tool calls only", func(t *testing.T) {
-		_, ok := contentFreeTurnExplanation(false, "", "", 2, message.FinishReasonToolUse)
+		_, ok := contentFreeTurnExplanation(false, "", "", "", "", 2, message.FinishReasonToolUse)
 		assert.False(t, ok)
 	})
 	t.Run("thinking only", func(t *testing.T) {
 		// A thinking-only turn is already persistable: SaveMessage counts
 		// thinking as content.
-		_, ok := contentFreeTurnExplanation(false, "", "reasoning...", 0, message.FinishReasonEndTurn)
+		_, ok := contentFreeTurnExplanation(false, "", "reasoning...", "", "", 0, message.FinishReasonEndTurn)
+		assert.False(t, ok)
+	})
+	t.Run("signature only", func(t *testing.T) {
+		// Signed reasoning with no readable text is recoverable work, not an
+		// empty turn — see call_llm_thinking_capture_test.go.
+		_, ok := contentFreeTurnExplanation(false, "", "", "sig-1456", "", 0, message.FinishReasonEndTurn)
+		assert.False(t, ok)
+	})
+	t.Run("redacted only", func(t *testing.T) {
+		_, ok := contentFreeTurnExplanation(false, "", "", "", "sealed==", 0, message.FinishReasonEndTurn)
 		assert.False(t, ok)
 	})
 }
@@ -73,7 +83,7 @@ func TestContentFreeTurn_InterruptIsNotReported(t *testing.T) {
 	// A stream the user cancelled before it produced anything is a turn they
 	// chose not to have. persistInterruptedTurn already declines to write a row
 	// for it; reporting it would flag the user's own cancel as a failure.
-	_, ok := contentFreeTurnExplanation(true, "", "", 0, message.FinishReasonRefusal)
+	_, ok := contentFreeTurnExplanation(true, "", "", "", "", 0, message.FinishReasonRefusal)
 	assert.False(t, ok)
 }
 
@@ -152,7 +162,7 @@ func TestReportContentFreeTurn_WritesTheErrorToTheChat(t *testing.T) {
 // recovery: say it paused, and do not claim it ended or that the cause is
 // unknown.
 func TestContentFreeTurn_PauseTurnIsNotDescribedAsEmptyOrUnknown(t *testing.T) {
-	text, ok := contentFreeTurnExplanation(false, "", "", 0, message.FinishReasonPauseTurn)
+	text, ok := contentFreeTurnExplanation(false, "", "", "", "", 0, message.FinishReasonPauseTurn)
 	require.True(t, ok, "a paused turn with no content still reaches the user with nothing to show")
 
 	lower := strings.ToLower(text)

@@ -150,7 +150,7 @@ func TestMatchGlob(t *testing.T) {
 		{"*search", "view", false},
 		{"mcp__serena__*", "mcp__serena__find", true},
 		{"mcp__serena__*", "mcp__chrome__click", false},
-		{"bas?", ShellToolName, true}, // "bash" matches "bas?" on Unix
+		{"shel?", ShellToolName, true}, // "shell" matches "shel?" on every platform
 		{"she?l", "shelf", false},
 		{"view", "view", true},
 		{"view", "viewer", false},
@@ -231,7 +231,7 @@ func TestTagDefault(t *testing.T) {
 		"fetch", "websearch", // web
 		"create_plan",                           // planning (update_plan, get_plan deferred)
 		"list_tasks", "add_task", "update_task", // tasks (dependency tools deferred)
-		"bash_list", "bash_output", "bash_kill", // background process management
+		"shell_list", "shell_output", "shell_kill", // background process management
 		"skill",     // skill loading
 		"load_tool", // dynamic tool loading
 	}
@@ -275,8 +275,8 @@ func TestTagReadOnly(t *testing.T) {
 
 	// Truly read-only tools that should be included
 	expectedReadOnly := []string{
-		"view",                     // file reading
-		"bash_list", "bash_output", // execution listing
+		"view",                       // file reading
+		"shell_list", "shell_output", // execution listing
 		"fetch", "websearch", // web reading
 		"get_plan", "list_tasks", // planning reading (not create/update)
 		"list_ready_tasks",  // dependency reading
@@ -287,7 +287,7 @@ func TestTagReadOnly(t *testing.T) {
 	// Non read-only tools that should NOT be included
 	notExpectedReadOnly := []string{
 		"write", "edit", "find_replace", "move_code", // file modification
-		ShellToolName, "bash_kill", // execution (shell is platform-specific)
+		ShellToolName, "shell_kill", // execution (shell is platform-specific)
 		"worktree",                   // git modification
 		"metadata_writer",            // metadata writing
 		"create_plan", "update_plan", // planning modification
@@ -323,8 +323,8 @@ func TestTagPlan(t *testing.T) {
 
 	// Tools that should be available in planning mode
 	expectedPlan := []string{
-		"view",                     // file reading
-		"bash_list", "bash_output", // execution listing
+		"view",                       // file reading
+		"shell_list", "shell_output", // execution listing
 		"fetch", "websearch", // web reading
 		"create_plan", "update_plan", "get_plan", // planning tools
 		"list_tasks", "add_task", "update_task", "create_subtask", // task tools
@@ -336,7 +336,7 @@ func TestTagPlan(t *testing.T) {
 	// Tools that should NOT be available in planning mode
 	notExpectedPlan := []string{
 		"write", "edit", "find_replace", "move_code", // file modification
-		ShellToolName, "bash_kill", // execution (shell is platform-specific)
+		ShellToolName, "shell_kill", // execution (shell is platform-specific)
 		"worktree",        // git modification
 		"metadata_writer", // metadata writing
 	}

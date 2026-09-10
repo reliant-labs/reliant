@@ -20,7 +20,7 @@ import (
 // anything remains, and anything that remains is addressable by offset, by
 // markdown heading, or by regex.
 //
-// Parameter vocabulary deliberately mirrors bash_output (offset/limit/regex/
+// Parameter vocabulary deliberately mirrors shell_output (offset/limit/regex/
 // regex_case_insensitive/regex_context_before/regex_context_after), so an agent
 // that knows one knows the other.
 
@@ -132,7 +132,7 @@ func sectionTitles(sections []skillSection, limit int) []string {
 // skillWindow is one selected view of a skill, before size capping.
 //
 // Start/SpaceLen address the SELECTED space — the whole skill, one section, or
-// the filtered match set — not always the raw body. This is bash_output's
+// the filtered match set — not always the raw body. This is shell_output's
 // semantics: offset applies to the filtered result, and the continuation call
 // repeats the selector that produced it.
 type skillWindow struct {
@@ -176,7 +176,7 @@ func DeliverSkillContent(path, content string) (string, bool) {
 }
 
 // validateSkillWindowParams rejects combinations that cannot mean anything,
-// mirroring bash_output's validateParams.
+// mirroring shell_output's validateParams.
 func validateSkillWindowParams(p SkillParams) error {
 	if p.Section != "" && p.Regex != "" {
 		return fmt.Errorf("cannot use both 'section' and 'regex' — pick one selector")
@@ -245,7 +245,7 @@ func selectSkillWindow(content string, p SkillParams) (skillWindow, error) {
 }
 
 // filterSkillLines renders the lines of content matching the caller's regex,
-// with optional surrounding context, in bash_output's rendering: '>' marks a
+// with optional surrounding context, in shell_output's rendering: '>' marks a
 // match, ' ' marks a context line, and every line carries its number so the
 // agent can convert a hit into a targeted offset or section read.
 func filterSkillLines(content string, p SkillParams) (string, int, error) {

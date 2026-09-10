@@ -32,7 +32,7 @@ vi.mock('@/lib/logger', () => ({
 }))
 
 const linkOAuthIdentity = vi.fn().mockResolvedValue(undefined)
-const signUp = vi.fn()
+const linkEmailIdentity = vi.fn()
 const initialize = vi.fn()
 
 type MockUser = { is_anonymous?: boolean; email?: string } | null
@@ -45,9 +45,9 @@ vi.mock('@/store/authStore', () => ({
     loading: false,
     initialize,
     linkOAuthIdentity,
-    signUp,
-    sendEmailVerificationOTP: vi.fn(),
-    verifyEmailOTP: vi.fn(),
+    linkEmailIdentity,
+    sendEmailIdentityVerification: vi.fn(),
+    verifyEmailIdentityOTP: vi.fn(),
   }),
 }))
 

@@ -131,6 +131,7 @@ Send a prompt to a language model and get a response
 | `compaction_threshold` | integer | - |
 | `model` | string | - |
 | `pending_inbox` | boolean | - |
+| `aborted` | boolean | - |
 | `message_id` | string | - |
 | `last_stream_seq` | integer | - |
 

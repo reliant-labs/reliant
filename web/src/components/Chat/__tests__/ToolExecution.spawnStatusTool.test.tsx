@@ -202,18 +202,18 @@ describe("ToolExecution status for spawn_status / spawn_send", () => {
     expect(screen.queryByText(/wf-untitled/)).not.toBeInTheDocument();
   });
 
-  it("labels bash_wait from the original bash description instead of the process id", () => {
+  it("labels shell_wait from the original shell description instead of the process id", () => {
     mockChatMessages = [
       assistantMessage([
         {
-          id: "bash-call-block",
+          id: "shell-call-block",
           index: 0,
           type: ContentBlockType.TOOL_CALL,
-          toolName: "bash",
-          toolCallId: "toolu_bash_1",
+          toolName: "shell",
+          toolCallId: "toolu_shell_1",
           input: JSON.stringify({ command: "npm test -- --runInBand", description: "Run focused web tests" }),
           matchedResult: {
-            toolCallId: "toolu_bash_1",
+            toolCallId: "toolu_shell_1",
             type: "tool_result",
             content: JSON.stringify({ process_id: "proc-123", backgrounded: true }),
             isError: false,
@@ -225,13 +225,13 @@ describe("ToolExecution status for spawn_status / spawn_send", () => {
     render(
       <ToolExecution
         toolCall={{
-          id: "toolu_bash_wait_1",
-          name: "bash_wait",
+          id: "toolu_shell_wait_1",
+          name: "shell_wait",
           input: { process_id: "proc-123" },
           finished: true,
           durableStatus: ToolCallStatus.COMPLETED,
         }}
-        toolResult={{ name: "bash_wait", content: "done", is_error: false }}
+        toolResult={{ name: "shell_wait", content: "done", is_error: false }}
         chatId="chat-1"
       />,
     );

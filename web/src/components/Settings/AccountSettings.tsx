@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuthStore } from '../../store/authStore'
-import { LogOut, User, CheckCircle } from 'lucide-react'
+import { LogOut, User, CheckCircle, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { LinkedAccounts } from '../LinkedAccounts'
+import { DeleteAccountDialog } from './DeleteAccountDialog'
 
 export function AccountSettings() {
   const {
@@ -17,6 +18,7 @@ export function AccountSettings() {
   const [isSigningOut, setIsSigningOut] = useState(false)
   const [linkSuccess, setLinkSuccess] = useState<string | null>(null)
   const [accountError, setAccountError] = useState<string | null>(null)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
 
   // Track previous providers to detect newly linked identities
   const initializedRef = useRef(false)
@@ -74,6 +76,23 @@ export function AccountSettings() {
     } finally {
       setIsSigningOut(false)
     }
+  }
+
+  // After deletion the user's data is gone but their JWT is still valid, so
+  // the app would keep rendering against an account that no longer has
+  // anything in it. Sign out and route to /auth to end the session.
+  //
+  // Sign-out failure is swallowed deliberately: the deletion already
+  // succeeded, and stranding the user in a half-torn-down UI to report a
+  // secondary error helps nobody. The navigation happens either way.
+  const handleAccountDeleted = async () => {
+    setIsDeleteDialogOpen(false)
+    try {
+      await signOut()
+    } catch (error) {
+      console.error('Sign out after account deletion failed:', error)
+    }
+    navigate({ to: '/auth', search: { redirect: undefined } })
   }
 
   return (
@@ -134,6 +153,30 @@ export function AccountSettings() {
           </Button>
         </div>
       </div>
+
+      <div className="border border-destructive/30 rounded-lg p-6 space-y-4">
+        <div>
+          <h3 className="font-medium mb-1">Delete account</h3>
+          <p className="text-sm text-muted-foreground">
+            Permanently delete your projects, chats and connected provider
+            accounts. This cannot be undone.
+          </p>
+        </div>
+        <Button
+          variant="destructive"
+          size="xs"
+          onClick={() => setIsDeleteDialogOpen(true)}
+          leftIcon={<Trash2 className="w-3 h-3" />}
+        >
+          Delete account
+        </Button>
+      </div>
+
+      <DeleteAccountDialog
+        isOpen={isDeleteDialogOpen}
+        onClose={() => setIsDeleteDialogOpen(false)}
+        onDeleted={handleAccountDeleted}
+      />
     </div>
   )
 }

@@ -20,23 +20,35 @@ events:
     output:
       path: "/wt/1"
       branch: "b1"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Basic CRUD implementation, no pagination"
       response_text: "Basic CRUD implementation, no pagination"
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/wt/2"
       branch: "b2"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "CRUD with offset pagination, missing input validation"
       response_text: "CRUD with offset pagination, missing input validation"
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/wt/3"
       branch: "b3"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Full REST API with cursor pagination, input validation, and comprehensive tests"
       response_text: "Full REST API with cursor pagination, input validation, and comprehensive tests"
+      tool_calls: []
 
   # review EXECUTES its structured-agent body. The response tool is
   # `submit_review` (parallel-compete.yaml sets response_tool_name); any other

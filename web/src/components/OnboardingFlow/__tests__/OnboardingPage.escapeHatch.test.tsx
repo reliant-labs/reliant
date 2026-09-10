@@ -31,6 +31,7 @@ vi.mock("../useOnboardingFacts", () => ({
   useOnboardingFacts: () => ({
     computeEligible: true,
     walletFunded: true,
+    reliantBillingAvailable: true,
     loading: false,
     refetch: vi.fn(),
   }),

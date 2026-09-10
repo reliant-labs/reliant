@@ -16,7 +16,12 @@ import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } 
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { CopilotDevicePanel } from "@/components/CopilotDevicePanel";
 import { useWalletOverview } from "@/hooks/useReliantAIQueries";
+import { CreditAmountPicker } from "@/components/Billing/CreditAmountPicker";
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
+import {
+  TOPUP_PRESETS_CENTS,
+  formatCentsAsDollars,
+} from "@/components/Settings/cloud/billingUtils";
 // TODO: Remove this store import once the ApiKeySetupModal is converted to event-driven
 import { useApiKeySetupStore } from "@/store/apiKeySetupStore";
 import { trackEvent } from "@/lib/analytics";
@@ -129,8 +134,16 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   // hatch for exercising either branch on purpose.
   const forcedEligibility = getForcedEligibility();
 
+  // Claude Code, not Reliant: it is the path that costs the user nothing —
+  // they bring a Claude subscription they already pay for — so pre-selecting
+  // it means the default route through onboarding is the free one.
+  //
+  // A default SELECTION only. `plan.modelProvider` is deliberately NOT written
+  // here, and this does not advance the step: `deriveStep` routes on that
+  // field, so writing it on mount would skip the very step this default is
+  // meant to make easy to answer. The user still chooses.
   const [selectedProvider, setSelectedProvider] =
-    useState<ProviderId>("reliant");
+    useState<ProviderId>("claude");
   const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -191,6 +204,39 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     forcedEligibility === "eligible" ||
     (forcedEligibility == null && hasFunds);
 
+  /**
+   * How much credit to buy — asked HERE, where the user is choosing Reliant's
+   * models, and not on the payment screen.
+   *
+   * The default is the smallest preset that buys a meaningful amount of work
+   * rather than the smallest one Stripe will accept.
+   */
+  const creditCents = plan.aiCreditCents ?? TOPUP_PRESETS_CENTS[1];
+
+  /**
+   * A coupon field on this step, and why its absence was the bug.
+   *
+   * This step deliberately had no coupon field: everything that moved money
+   * lived on the checkout step, and an unfunded user was "not stranded"
+   * because derivation routed them there. That reasoning holds for a CARD. It
+   * does not hold for a COUPON, because a coupon is how a leg gets cleared
+   * WITHOUT paying — and the only place to redeem one was the screen that
+   * exists to collect a card.
+   *
+   * So a user holding codes for both legs still had to walk onto the payment
+   * screen and look at a card form to redeem the second one. The owner's
+   * stated priority is that such a user never sees a card at all. Redeeming
+   * here is what makes that true: both legs settle while the user is still
+   * DECIDING, `requiresPayment` returns nothing owed, and the checkout step is
+   * never derived.
+   *
+   * It settles nothing by itself. Redemption refetches the wallet, and the
+   * wallet balance is the same server fact `requiresPayment` reads — so the
+   * entitlement still comes from the server, exactly as it does on the
+   * checkout step.
+   */
+  const walletRefetch = walletQ.refetch;
+
   const finishOnboarding = useCallback(
     async (modelProvider: ModelProvider) => {
       if (!plan.compute) {
@@ -207,10 +253,24 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
       // Refusing here would only stop them reaching the screen that fixes it.
       setError(null);
       trackEvent("onboarding_model_selected", { provider: modelProvider });
-      await updatePlan({ modelProvider });
+      await updatePlan({
+        modelProvider,
+        // Carried forward so the checkout summary bills what was chosen here
+        // rather than re-asking.
+        //
+        // Written only when credit is actually being BOUGHT: another provider
+        // owes nothing, and a funded wallet has nothing left to buy. In both
+        // cases an amount would describe a purchase that is not happening —
+        // and the amount is offered on screen under exactly this condition, so
+        // recording one the user was never shown would be inventing a choice.
+        aiCreditCents:
+          modelProvider === "reliant_credits" && !creditsAvailable
+            ? creditCents
+            : undefined,
+      });
       onNext();
     },
-    [onNext, plan, updatePlan],
+    [creditCents, creditsAvailable, onNext, plan, updatePlan],
   );
 
   const handleConnectOAuth = useCallback(async () => {
@@ -395,24 +455,54 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 </p>
               ) : (
                 <p className="text-xs leading-relaxed text-muted-foreground">
-                  No API key needed — we&apos;ll ask for credit on the next
-                  step. If you already pay for Claude, ChatGPT or Copilot, pick
-                  it above instead and this is free.
+                  No API key needed — pick how much credit to start with. If you
+                  already pay for Claude, ChatGPT or Copilot, choose it above
+                  instead and this is free.
                 </p>
               )}
-              {/* Always offered, never gated on the current balance: a user
-                  who already has credit may still be holding a code, and
-                  hiding the field until they run out means redeeming it
-                  requires first spending down. Credit is no longer granted
-                  automatically at signup, so for an empty wallet this is also
-                  the only path that keeps "Start with Reliant" from
-                  succeeding into a first message that fails on zero balance. */}
-              <RedeemCouponForm variant="open" size="sm" />
-              {/* No "Set up billing" link. It navigated to /settings/billing,
-                  which is a full exit from a wizard whose entire state lives
-                  in a URL search param, and it existed only because this step
-                  had nowhere in-flow to send an unfunded user. It has one
-                  now — the next step. */}
+
+              {/* The amount, and the coupon, on the step that asks the
+                  question — with no card. The card is collected once, at the
+                  end, for everything still owed. Both are hidden once the
+                  wallet is funded: there is nothing left to buy, and offering
+                  an amount would invite a purchase the user does not need. */}
+              {!walletLoading && !creditsAvailable && (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                      How much credit?
+                    </h4>
+                    <CreditAmountPicker
+                      value={creditCents}
+                      onChange={(cents) =>
+                        void updatePlan({ aiCreditCents: cents })
+                      }
+                    />
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      Credit pays for Reliant&apos;s models as you use them. It
+                      never expires, and there is no subscription.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2 border-t border-border/40 pt-3">
+                    <p className="text-xs text-muted-foreground">
+                      Have a coupon? Redeem it here — it covers this in full,
+                      and no card is needed.
+                    </p>
+                    <RedeemCouponForm
+                      variant="collapsed"
+                      size="sm"
+                      // A redemption REFETCHES the wallet and acts no further.
+                      // Enough credit makes `requiresPayment` false and the
+                      // checkout step simply never appears — which is how a
+                      // user holding both codes reaches the end of onboarding
+                      // without ever seeing a card form.
+                      onRedeemed={() => void walletRefetch()}
+                    />
+                  </div>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => finishOnboarding("reliant_credits")}
@@ -430,7 +520,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
                 {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                 {walletLoading || creditsAvailable
                   ? "Start with Reliant"
-                  : "Continue with Reliant"}
+                  : `Continue with ${formatCentsAsDollars(creditCents)} credit`}
               </button>
             </div>
           ) : provider.usesOAuth === "copilot" ? (

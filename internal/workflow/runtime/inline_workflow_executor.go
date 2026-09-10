@@ -557,6 +557,15 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		"outputKeys", getMapKeys(outputs),
 	)
 
+	// A `workflow:` node is structural in exactly the sense a loop is: its BODY
+	// dispatches activities, but the node itself runs none, so the outputs it
+	// publishes and the moment it finished are visible nowhere outside this
+	// workflow. Reported here, at the single success exit, from the value this
+	// call is about to return — an observation, never a decision. A no-op
+	// unless an observer is attached (structural_observer.go); every error path
+	// above returns before this, because a node that failed did not complete.
+	recordStructuralCompleted(e.ctx, e.nodePath(), outputs)
+
 	return outputs, nil
 }
 
@@ -753,7 +762,9 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		}
 
 		// Process join events first
-		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.subWorkflowName, subNodeOutputs, e.logger, nil, workflow.Now(e.ctx))
+		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.subWorkflowName, subNodeOutputs, e.logger, nil, func(joinID string) {
+			recordJoinSatisfied(e.ctx, joinNodePath(e.nodePath(), joinID))
+		}, workflow.Now(e.ctx))
 
 		// Find triggered steps
 		triggeredNodes, err := stateMachine.FindTriggeredNodes(events, subNodeOutputs, subInputs)

@@ -109,7 +109,11 @@ interface AuthState {
   clearAuthError: () => void
 
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<{ user: User | null; session: Session | null }>
+  linkEmailIdentity: (
+    email: string,
+    password: string,
+    state?: OAuthRedirectState,
+  ) => Promise<{ user: User | null; verificationRequired: boolean }>
   signInWithGoogle: () => Promise<void>
   signInWithGithub: (state?: OAuthRedirectState) => Promise<void>
   signInWithApple: () => Promise<void>
@@ -121,8 +125,15 @@ interface AuthState {
   sendPasswordResetOTP: (email: string) => Promise<void>
   verifyPasswordResetOTP: (email: string, code: string) => Promise<void>
   updatePassword: (newPassword: string) => Promise<void>
-  sendEmailVerificationOTP: (emailOverride?: string) => Promise<void>
+  sendEmailSignInCode: (email: string, state?: OAuthRedirectState) => Promise<void>
+  verifyEmailSignInCode: (email: string, code: string) => Promise<void>
+  resendSignupVerification: (email: string) => Promise<void>
   verifyEmailOTP: (code: string, emailOverride?: string) => Promise<void>
+  verifyEmailIdentityOTP: (code: string, email: string) => Promise<void>
+  sendEmailIdentityVerification: (
+    email: string,
+    state?: OAuthRedirectState,
+  ) => Promise<void>
   signInAnonymously: () => Promise<void>
   signOut: () => Promise<void>
   setApiKeySession: (apiKey: string) => void
@@ -140,13 +151,21 @@ interface AuthState {
  * do not each repeat the same funnel events and try/catch. Sign-in COMPLETES
  * at /auth/callback (OAuthCallback.tsx), which is why the success event here
  * records a hand-off rather than a session.
+ *
+ * It takes no `set`: this deliberately writes no store state (see below), and
+ * the vestigial parameter it used to accept failed `tsc` under
+ * noUnusedParameters, breaking the production build while vitest stayed green.
  */
 const runOAuthSignIn = async (
-  set: (state: Partial<AuthState>) => void,
   provider: OAuthProvider,
   state?: OAuthRedirectState,
 ): Promise<void> => {
-  set({ loading: true })
+  // The global `loading` flag is deliberately untouched. AuthGuard swaps the
+  // entire tree for a full-screen LoadingSpinner while it is true, so setting
+  // it here tore the sign-in screen down and rebuilt it in the gap before the
+  // browser navigated to the provider — indistinguishable from a page refresh.
+  // AuthScreen already shows a per-provider pending state on the button that
+  // was clicked, which acknowledges the click without unmounting anything.
   const startedAt = Date.now()
   const transport = oauthCallbackTransport()
 
@@ -157,10 +176,6 @@ const runOAuthSignIn = async (
 
   try {
     await startOAuthSignIn(provider, state)
-    // Desktop hands consent to the system browser and waits for the loopback
-    // redirect, so the window stays interactive; the browser build is
-    // navigating away and will never read this.
-    set({ loading: false })
   } catch (error) {
     await trackAuthFunnelEvent('oauth_failed', {
       auth_method: provider,
@@ -169,7 +184,6 @@ const runOAuthSignIn = async (
       latency_ms: Date.now() - startedAt,
     })
     logger.error(`[AuthStore] ${provider} sign-in failed:`, error)
-    set({ loading: false })
     throw error
   }
 }
@@ -213,40 +227,115 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     })
   },
 
-  signUp: async (email: string, password: string) => {
-    await trackAuthFunnelEvent('signup_attempted', {
-      auth_method: 'password',
+  /**
+   * Attach an email to the CURRENT (anonymous) user — the email twin of
+   * linkOAuthIdentity.
+   *
+   * `signUp` is NOT the call for this, though it was used here for a long time
+   * and the old comment claimed it "upgrades the anonymous user in place". It
+   * does not: signUp POSTs to /signup, which either mints a SEPARATE user or
+   * returns a user with no session, leaving the anonymous account — its org,
+   * its redeemed coupons, its onboarding progress — untouched and still
+   * anonymous. The user then came back from the confirmation email to the same
+   * "Finish setting up your account" modal, forever.
+   *
+   * Supabase upgrades an anonymous session in place via `updateUser`, which
+   * PUTs /user with the existing session's access token, so the email attaches
+   * to that user id and nothing is migrated. GoTrue answers it by sending an
+   * EMAIL CHANGE verification (see its UserUpdate handler: an anonymous user
+   * getting an email goes down the `sendEmailChange` path), which is why
+   * verification here is `type: 'email_change'` and not `'signup'`.
+   *
+   * ── Why both fields still go in the FIRST call ───────────────────────────
+   *
+   * An earlier version of this comment argued for sending email and password
+   * together and stopped there. That was half right, and the missing half
+   * trapped users. Sending both IS required on the first attempt: GoTrue
+   * refuses a password-only update on an anonymous user, rejecting exactly
+   * `password != "" && email == "" && phone == ""`. So there is no "verify the
+   * email first, then set the password" ordering available to us.
+   *
+   * ── The trap that ordering creates, and the retry that escapes it ────────
+   *
+   * What the old comment missed is that GoTrue's UserUpdate handler processes
+   * the two fields in a fixed order within one transaction:
+   *
+   *   1. password → SetPassword + UpdatePassword   (applied IMMEDIATELY)
+   *   2. email    → sendEmailChange                (left PENDING)
+   *
+   * So any first attempt that half-lands — the mail send fails, the user
+   * abandons the tab, the address is never confirmed — leaves an account with
+   * a password set and no verified email. On a retry with the SAME password,
+   * GoTrue reaches step 1, finds `isSamePassword`, and returns
+   * `422 same_password` BEFORE REACHING STEP 2. No email is sent, and the user
+   * is told to pick a different password for an account they do not believe
+   * they have. That is a dead end reached by doing the obvious thing twice.
+   *
+   * The escape is to retry with the email ALONE. Omitting `password` skips the
+   * password branch entirely, so GoTrue goes straight to sendEmailChange and
+   * the user gets their verification email. `same_password` is therefore not
+   * an error here — it is the server telling us the password half is already
+   * done, and the only thing left is verification.
+   */
+  linkEmailIdentity: async (email: string, password: string, state?: OAuthRedirectState) => {
+    const redirectTo = withOAuthState(await getOAuthRedirectUrl(), {
+      source: 'link',
+      ...state,
     })
 
-    // Don't set loading state here to avoid remounting components
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        // For Electron apps, we don't want to redirect after email confirmation
-        // The email link will just confirm the email without opening the app
-        emailRedirectTo: undefined,
-      }
+    logger.info('[AuthStore] linkEmailIdentity: upgrading anonymous user in place', {
+      redirectTo,
     })
 
-    if (error) throw error
+    let { data, error } = await supabase.auth.updateUser(
+      { email, password },
+      { emailRedirectTo: redirectTo },
+    )
 
-    // With email confirmation enabled, signup commonly returns user + null session.
-    // We intentionally do NOT infer "email already in use" from this response shape,
-    // because Supabase can return null session for legitimate new signups as well.
-
-    set({
-      user: data.user,
-      session: data.session,
-    })
-
-    if (data.session && data.user) {
-      await trackAuthFunnelEvent('signup_succeeded', {
-        auth_method: 'password',
-      })
+    if (error && (error as { code?: string }).code === 'same_password') {
+      // The account is already half-upgraded: the password landed on a
+      // previous attempt, the email never got confirmed. Re-send the email on
+      // its own rather than reporting a failure the user cannot act on.
+      logger.info(
+        '[AuthStore] linkEmailIdentity: password already set; re-sending verification only',
+        { userId: get().user?.id },
+      )
+      ;({ data, error } = await supabase.auth.updateUser(
+        { email },
+        { emailRedirectTo: redirectTo },
+      ))
     }
 
-    return { user: data.user, session: data.session }
+    if (error) {
+      // GoTrue answers a taken address with email_exists / "already been
+      // registered". Surface it as-is — the callers turn it into the "that
+      // email is already attached to another account" copy, and we must NOT
+      // sign the user into that account, which would strand the work sitting
+      // in the session they are trying to upgrade.
+      logger.error('[AuthStore] linkEmailIdentity failed', error)
+      throw error
+    }
+
+    // updateUser returns the SAME user (same id) and issues no new session, so
+    // the session is useless as a "did it link?" signal — the caller already
+    // HAS one, the anonymous one, and reading that as success is precisely the
+    // bug this replaces.
+    //
+    // The honest signal is the user itself. With confirmations on, GoTrue
+    // returns the address as PENDING (`new_email`) and leaves `email` unset
+    // until it is verified; with confirmations off it lands on `email`
+    // straight away and the account is linked with nothing left to do.
+    const linkedEmail = data.user?.email
+    const verificationRequired = !linkedEmail || linkedEmail !== email
+
+    set({ user: data.user ?? get().user })
+
+    logger.info('[AuthStore] linkEmailIdentity: updateUser accepted', {
+      userId: data.user?.id,
+      verificationRequired,
+    })
+
+    return { user: data.user, verificationRequired }
   },
 
   // Provider sign-in — ONE implementation for every provider and every surface.
@@ -265,18 +354,18 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // the daemon, so it works whether the daemon is local, remote, or absent —
   // unlike Claude/Codex OAuth, whose credentials are daemon-scoped by design.
   signInWithGoogle: async () => {
-    await runOAuthSignIn(set, 'google')
+    await runOAuthSignIn('google')
   },
 
   signInWithGithub: async (state?: OAuthRedirectState) => {
     // The Supabase GitHub provider is sign-in only (0 scopes). We never persist
     // the provider_token here — repo access comes from the dedicated
     // /auth/github/authorize custom flow.
-    await runOAuthSignIn(set, 'github', state)
+    await runOAuthSignIn('github', state)
   },
 
   signInWithApple: async () => {
-    await runOAuthSignIn(set, 'apple')
+    await runOAuthSignIn('apple')
   },
 
 
@@ -367,8 +456,14 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // Attach a provider identity to the CURRENT user. This is linkIdentity, not
   // signInWithOAuth: an anonymous user keeps their existing account (and its
   // chats/workspaces) and simply gains a real identity on it.
+  // Deliberately does NOT set the store's global `loading`. AuthGuard renders
+  // a full-screen LoadingSpinner whenever it is true, so flipping it here
+  // unmounted the whole tree for the few hundred ms before the browser left
+  // for the provider — which reads as the page refreshing, not as progress.
+  // The click is acknowledged by the caller's own per-provider pending state
+  // (LinkIdentityForm's pendingProvider -> OAuthButton), which leaves the page
+  // on screen. Same reasoning as signIn's note above.
   linkOAuthIdentity: async (provider: LinkableProvider, state?: OAuthRedirectState) => {
-    set({ loading: true })
     try {
       // Thread OAuth round-trip state (source/returnTo) onto the redirect URL
       // so the /auth/callback handler can land the user back where the link
@@ -417,11 +512,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       } else {
         logger.error('[AuthStore] linkOAuthIdentity: No link URL returned from Supabase', { provider })
       }
-
-      set({ loading: false })
     } catch (error) {
       logger.error('[AuthStore] linkOAuthIdentity: Error:', error)
-      set({ loading: false })
       throw error
     }
   },
@@ -465,6 +557,82 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  /**
+   * The primary sign-in: mail a 6-digit code (and a link) to an address,
+   * whether or not it belongs to an account.
+   *
+   * `shouldCreateUser: true` is the entire anti-enumeration argument, and it
+   * is structural rather than a matter of careful copy. GoTrue answers a known
+   * address and an unknown one with the SAME `200 {}` here — one gets a
+   * magiclink token, the other gets a signup token, and the client cannot tell
+   * which, because the response body is empty either way. There is no branch
+   * to leak from and no error to read. The password screen had to buy this
+   * property with a carefully-worded ambiguous prompt; this gets it for free.
+   *
+   * `emailRedirectTo` matters because the SAME message carries a clickable
+   * link built from `{{ .TokenHash }}`. Without it GoTrue falls back to the
+   * project's site URL and the link lands somewhere that cannot complete a
+   * sign-in. Pointed at /auth/callback, which verifies token_hash + type
+   * generically — so the code and the link finish the same sign-in.
+   */
+  sendEmailSignInCode: async (email: string, state?: OAuthRedirectState) => {
+    await trackAuthFunnelEvent('login_attempted', { auth_method: 'email_otp' })
+
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: true,
+        emailRedirectTo: withOAuthState(await getOAuthRedirectUrl(), {
+          source: 'signin',
+          ...state,
+        }),
+      },
+    })
+
+    if (error) {
+      // Notably includes over_email_send_rate_limit. Surfacing it is the
+      // point: reporting success for a send that did not happen leaves the
+      // user staring at a code-entry box waiting for mail that is not coming.
+      await trackAuthFunnelEvent('login_failed', {
+        auth_method: 'email_otp',
+        failure_reason: normalizeFailureReason(error),
+      })
+      logger.error('[AuthStore] Failed to send email sign-in code:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Redeem the 6-digit code from sendEmailSignInCode.
+   *
+   * `type: 'email'` and not 'signup' or 'magiclink'. Those two name the
+   * COLUMN GoTrue looks the token up in — confirmation_token for a brand-new
+   * account, recovery_token for a returning one — and this flow deliberately
+   * cannot know which population the user is in. 'email' is supabase-js's
+   * union for exactly this case: it is the type paired with signInWithOtp and
+   * it matches either token. Hardcoding one of the specific types would fail
+   * with "expired or invalid" for half of all users, on a code that is fine.
+   */
+  verifyEmailSignInCode: async (email: string, code: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email',
+    })
+
+    if (error) {
+      await trackAuthFunnelEvent('login_failed', {
+        auth_method: 'email_otp',
+        failure_reason: normalizeFailureReason(error),
+      })
+      logger.error('[AuthStore] Email sign-in code verification failed:', error)
+      throw error
+    }
+
+    set({ user: data.user, session: data.session })
+    await trackAuthFunnelEvent('login_succeeded', { auth_method: 'email_otp' })
+  },
+
   sendPasswordResetOTP: async (email: string) => {
     try {
       const redirectTo = await getOAuthRedirectUrl()
@@ -506,31 +674,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  sendEmailVerificationOTP: async (emailOverride?: string) => {
-    try {
-      const { user } = get()
+  /**
+   * Re-send the confirmation for a user created by `signUp` — and ONLY that
+   * user.
+   *
+   * The distinction from sendEmailIdentityVerification is not stylistic, it is
+   * which database column GoTrue reads. `resend` looks the account up by
+   * `users.email`, which a signUp user HAS (unconfirmed, but populated), so
+   * `type: 'signup'` finds them and re-sends against `confirmation_token`.
+   *
+   * An anonymous user being upgraded has an empty `users.email` — their
+   * address sits in `users.email_change` — so this call would find nobody and
+   * return a bare 200 having sent nothing. That flow must use
+   * sendEmailIdentityVerification instead. Sending a signup resend down the
+   * upgrade path is the original "returns 200, no email arrives" bug; do not
+   * reintroduce it by making this the generic resend.
+   */
+  resendSignupVerification: async (email: string) => {
+    const { error } = await supabase.auth.resend({ type: 'signup', email })
 
-      const emailToUse = emailOverride ?? user?.email
-
-      if (!emailToUse) {
-        throw new Error('No user email found')
-      }
-
-      if (user?.email_confirmed_at) {
-        throw new Error('Email already verified')
-      }
-
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: emailToUse,
-      })
-
-      if (error) {
-        logger.error('[AuthStore] Failed to send verification OTP:', error)
-        throw error
-      }
-    } catch (error) {
-      logger.error('[AuthStore] sendEmailVerificationOTP error:', error)
+    if (error) {
+      logger.error('[AuthStore] Failed to resend signup verification:', error)
       throw error
     }
   },
@@ -566,6 +730,91 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
     } catch (error) {
       logger.error('[AuthStore] verifyEmailOTP error:', error)
+      throw error
+    }
+  },
+
+  /**
+   * Verify the 6-digit code from the email-identity link flow.
+   *
+   * Distinct from verifyEmailOTP, which uses `type: 'signup'` for a user
+   * created by signUp. An anonymous user upgraded via updateUser has a pending
+   * EMAIL CHANGE, so its one-time token lives in GoTrue's
+   * email_change_token_new column and only `type: 'email_change'` matches it —
+   * verifying with 'signup' looks up confirmation_token and fails with "Token
+   * has expired or is invalid" even when the code is correct.
+   *
+   * On success GoTrue reloads the user (regenerating is_anonymous, now false),
+   * creates the email identity on the SAME user id, and issues a session.
+   */
+  verifyEmailIdentityOTP: async (code: string, email: string) => {
+    const { data, error } = await supabase.auth.verifyOtp({
+      email,
+      token: code,
+      type: 'email_change',
+    })
+
+    if (error) {
+      logger.error('[AuthStore] Email identity verification failed:', error)
+      throw error
+    }
+
+    if (data.session || data.user) {
+      set({ user: data.user ?? null, session: data.session ?? null })
+    } else {
+      await get().refreshSession()
+    }
+  },
+
+  /**
+   * Re-send the email-identity verification — via `updateUser`, NOT
+   * `supabase.auth.resend`.
+   *
+   * This is the "resend returns 200 but no email ever arrives" bug, and the
+   * reason is that `resend` CANNOT FIND THIS USER. GoTrue's Resend handler
+   * resolves the account with
+   *
+   *   models.FindUserByEmailAndAudience(db, params.Email, aud)
+   *     → WHERE LOWER(email) = ?          -- the users.EMAIL column
+   *
+   * An anonymous user mid-upgrade has an EMPTY `users.email`: the address they
+   * typed lives in `users.email_change` until it is confirmed. Looking them up
+   * by that pending address therefore misses, hits `IsNotFoundError`, and
+   * returns `200 {}` having sent nothing — GoTrue answers a resend for an
+   * unknown address with a bare 200 on purpose, so the endpoint cannot be used
+   * to enumerate accounts.
+   *
+   * That is true for `type: 'signup'` AND for `type: 'email_change'`. The
+   * earlier fix here swapped one for the other and changed nothing observable,
+   * because the lookup fails before the type is ever consulted. Both variants
+   * are silently dead for precisely the user who needs them.
+   *
+   * `updateUser` works because it identifies the user from the session's
+   * access token rather than from an email lookup, and re-entering it with the
+   * same pending address runs `sendEmailChange` again — a genuine resend.
+   *
+   * The password is deliberately omitted: including it would re-enter GoTrue's
+   * password branch and fail with `422 same_password` before any mail is sent
+   * (see linkEmailIdentity). Carries the same round-trip state as the first
+   * send — a resent link that dropped `returnTo` would land an onboarding user
+   * at step one with every answer gone.
+   */
+  sendEmailIdentityVerification: async (email: string, state?: OAuthRedirectState) => {
+    const { error } = await supabase.auth.updateUser(
+      { email },
+      {
+        emailRedirectTo: withOAuthState(await getOAuthRedirectUrl(), {
+          source: 'link',
+          ...state,
+        }),
+      },
+    )
+
+    if (error) {
+      // Notably includes over_email_send_rate_limit. Surfacing it is the point:
+      // reporting success for a send that did not happen is what left the user
+      // waiting for an email that was never going to arrive.
+      logger.error('[AuthStore] Failed to send email identity verification:', error)
       throw error
     }
   },

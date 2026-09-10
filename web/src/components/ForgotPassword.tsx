@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Mail, KeyRound, CheckCircle } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import { cn } from '../lib/utils'
+import { CheckSpamNote } from './CheckSpamNote'
 
 interface ForgotPasswordProps {
   onBackToSignIn: () => void
@@ -242,6 +243,7 @@ export function ForgotPassword({ onBackToSignIn }: ForgotPasswordProps) {
           <p className="text-sm text-center text-muted-foreground">
             We've sent a 6-digit verification code to <strong>{email}</strong>
           </p>
+          <CheckSpamNote />
         </div>
 
         {/* Form */}

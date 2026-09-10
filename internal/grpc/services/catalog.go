@@ -357,7 +357,7 @@ func (s *CatalogService) ListTools(
 		switch toolDef.Name {
 		case "view", "write", "edit", "find_replace":
 			category = "File Operations"
-		case "bash", "powershell", "bash_list", "bash_output", "bash_kill":
+		case "shell", "shell_list", "shell_output", "shell_wait", "shell_kill":
 			category = "Execution"
 		case "fetch", "websearch":
 			category = "Network"

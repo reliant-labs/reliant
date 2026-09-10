@@ -175,16 +175,29 @@ export function CreditBand({
         {/* One redemption RPC, so one box — the server decides whether a code
             grants credit or machine minutes. It renders open because this is
             the answer to "where do I put my code", and an answer behind a
-            disclosure is the bug being fixed. */}
-        <div>
-          <RedeemCouponForm variant="open" size="sm" onRedeemed={onRedeemed} />
-          <p className="mt-2 text-xs text-muted-foreground">
-            One box, either kind of code — a coupon can add account credit or
-            machine minutes, and we&apos;ll tell you which one it applied.
-            Machine minutes show up under Compute, and are spent after your
-            plan&apos;s included hours.
-          </p>
-        </div>
+            disclosure is the bug being fixed.
+
+            Hidden while `checkout` is mounted: the top-up page carries its own
+            coupon field, as a first-class way to pay for the amount being
+            bought. Rendering both stacks two identical "Coupon code" inputs a
+            few hundred pixels apart, and a user cannot tell which one their
+            code belongs in. The panel's is the more specific of the two, so
+            the general one steps aside for as long as it is up. */}
+        {!checkout && (
+          <div>
+            <RedeemCouponForm
+              variant="open"
+              size="sm"
+              onRedeemed={onRedeemed}
+            />
+            <p className="mt-2 text-xs text-muted-foreground">
+              One box, either kind of code — a coupon can add account credit or
+              machine minutes, and we&apos;ll tell you which one it applied.
+              Machine minutes show up under Compute, and are spent after your
+              plan&apos;s included hours.
+            </p>
+          </div>
+        )}
       </div>
     </section>
   );

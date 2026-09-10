@@ -338,8 +338,7 @@ export const ToolContentRenderer = memo(function ToolContentRenderer({
         );
       }
 
-      case "bash":
-      case "powershell": {
+      case "shell": {
         // Extract command from params - handle both direct string and object with command property
         let command: string = '';
 

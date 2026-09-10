@@ -9,6 +9,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -315,4 +316,76 @@ func TestReconciler_UserCancelledDrift_EmitsNoError(t *testing.T) {
 
 	assert.Equal(t, db.Cancelled(), repo.rows["wf-1"].Status)
 	assert.Empty(t, repo.errorUpdates(), "a user cancel must not report an error")
+}
+
+// makeReplayedFailureCloseEvent is the close event of a run that a
+// mis-targeted reset-and-replay closed in milliseconds: the Go SDK's chain
+// for `fmt.Errorf("preflight daemon check failed: %w", activityErr)`.
+func makeReplayedFailureCloseEvent() []*historypb.HistoryEvent {
+	return []*historypb.HistoryEvent{
+		{
+			EventId:   39,
+			EventType: enums.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{
+				WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
+					Failure: &failurepb.Failure{
+						Message: "preflight daemon check failed: activity error (type: PreflightDaemonCheck, scheduledEventID: 11, startedEventID: 12): this workflow requires a daemon but none is available",
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "wrapError"},
+						},
+						Cause: &failurepb.Failure{
+							Message: "activity error",
+							FailureInfo: &failurepb.Failure_ActivityFailureInfo{
+								ActivityFailureInfo: &failurepb.ActivityFailureInfo{
+									ScheduledEventId: 11,
+									StartedEventId:   12,
+									ActivityType:     &commonpb.ActivityType{Name: "PreflightDaemonCheck"},
+								},
+							},
+							Cause: &failurepb.Failure{
+								Message: "this workflow requires a daemon but none is available. Start one locally with 'reliant daemon start' or deploy a cloud daemon",
+								FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+									ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestReconciler_ReplayedFailureDrift_SurfacesRootCause(t *testing.T) {
+	// A FAILED close that the workflow never reported (its WorkflowError
+	// activity was already in replayed history) must reach the user with the
+	// chain's root cause, not the bare "stopped by the system".
+	repo := newTerminationRepo(terminatedChatWorkflow())
+	tempClient := &mockReconcilerTemporalClient{
+		describeResponses: map[string]mockDescribeResponse{
+			"wf-1": {resp: makeTerminalDescribeResp(enums.WORKFLOW_EXECUTION_STATUS_FAILED)},
+		},
+		historyEvents: makeReplayedFailureCloseEvent(),
+	}
+
+	reconciler := NewReconciler(repo, tempClient, DefaultConfig())
+
+	_, errs := reconciler.ReconcileRunningWorkflows(context.Background())
+	require.Empty(t, errs)
+
+	assert.Equal(t, db.Failed(), repo.rows["wf-1"].Status)
+	updates := repo.errorUpdates()
+	require.Len(t, updates, 1)
+	msg, _ := updates[0].data["error_message"].(string)
+	assert.Contains(t, msg, "stopped by the system")
+	assert.Contains(t, msg, "Reason: this workflow requires a daemon but none is available",
+		"the innermost message of the chain is the actionable one")
+	assert.NotContains(t, msg, "scheduledEventID", "SDK wrapper text must not leak to the user")
+}
+
+func TestRootCauseMessage(t *testing.T) {
+	assert.Equal(t, "", rootCauseMessage(nil))
+	assert.Equal(t, "outer", rootCauseMessage(&failurepb.Failure{Message: "outer", Cause: &failurepb.Failure{}}),
+		"an empty innermost message must not erase the outer one")
+	assert.Equal(t, "root", rootCauseMessage(&failurepb.Failure{Message: "outer", Cause: &failurepb.Failure{Message: "root"}}))
 }

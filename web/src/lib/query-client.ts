@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { shouldRetryQuery } from "./queryRetry";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -9,14 +10,10 @@ export const queryClient = new QueryClient({
       gcTime: 5 * 60_000,
       // Refetch when window regains focus (useful for long-running tasks)
       refetchOnWindowFocus: true,
-      // Don't retry on auth errors
-      retry: (failureCount, error) => {
-        // Don't retry on 401/403
-        if (error instanceof Error && (error.message.includes("401") || error.message.includes("403"))) {
-          return false;
-        }
-        return failureCount < 2;
-      },
+      // Skip the retry ladder for errors a retry cannot fix — auth failures
+      // and not-found. Branches on the ConnectError code, not on the message
+      // text; see lib/queryRetry.ts for why the message never matched.
+      retry: shouldRetryQuery,
     },
   },
 });

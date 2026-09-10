@@ -356,10 +356,19 @@ type joinLogger interface {
 // It receives the join node and its aggregated output.
 type JoinSaveMessageFunc func(node *reliantv1.Node, output map[string]interface{})
 
+// JoinSatisfiedFunc is called with a join node's id at the moment the join is
+// decided satisfied — once per join, on the same branch that marks it triggered.
+//
+// It REPORTS; it must not influence execution. A join runs no activity of its
+// own, so this is the only point at which anything outside this function can
+// learn the node was reached. Callers that do not care pass nil.
+type JoinSatisfiedFunc func(joinID string)
+
 // processJoinEvents processes events through join nodes.
 // It updates join state based on source completions and generates
 // synthetic completion events when joins are satisfied.
 // If saveMessageFunc is provided, it's called for join nodes with save_message config.
+// If satisfiedFunc is provided, it's called with each join's id as it is satisfied.
 // The now parameter must come from workflow.Now(ctx) for determinism.
 func processJoinEvents(
 	events []*core.WorkflowEvent,
@@ -371,6 +380,7 @@ func processJoinEvents(
 	nodeOutputs map[string]interface{},
 	logger joinLogger,
 	saveMessageFunc JoinSaveMessageFunc,
+	satisfiedFunc JoinSatisfiedFunc,
 	now time.Time,
 ) []*core.WorkflowEvent {
 	// If no join nodes, pass events through unchanged
@@ -414,6 +424,15 @@ func processJoinEvents(
 
 				// Mark as triggered to prevent re-firing
 				joinState.MarkTriggered(joinID)
+
+				// Report the satisfaction. Placed beside MarkTriggered so the
+				// report and the "this join has fired" decision are the same
+				// event and cannot drift: a join reported here has provably
+				// been satisfied by the runtime, and one that was not is never
+				// reported.
+				if satisfiedFunc != nil {
+					satisfiedFunc(joinID)
+				}
 
 				// Execute save_message if configured on the join node
 				if step.GetSaveMessage() != nil && saveMessageFunc != nil {

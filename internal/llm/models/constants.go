@@ -18,19 +18,19 @@ const (
 
 // OpenAI/GPT model IDs
 const (
-	GPT52           ModelID = "gpt-5.2"
-	GPT5Mini        ModelID = "gpt-5-mini"
-	GPT54Mini       ModelID = "gpt-5.4-mini"
-	GPT52Pro        ModelID = "gpt-5.2-pro"
-	GPT54           ModelID = "gpt-5.4"
-	GPT54Pro        ModelID = "gpt-5.4-pro"
-	GPT55           ModelID = "gpt-5.5"
-	GPT56Sol        ModelID = "gpt-5.6-sol"
-	GPT56Luna       ModelID = "gpt-5.6-luna"
-	GPT56Terra      ModelID = "gpt-5.6-terra"
-	GPT52Codex      ModelID = "gpt-5.2-codex"
-	GPT53Codex      ModelID = "gpt-5.3-codex"
-	GPT53CodexSpark ModelID = "gpt-5.3-codex-spark"
+	GPT52      ModelID = "gpt-5.2"
+	GPT5Mini   ModelID = "gpt-5-mini"
+	GPT54Mini  ModelID = "gpt-5.4-mini"
+	GPT52Pro   ModelID = "gpt-5.2-pro"
+	GPT54      ModelID = "gpt-5.4"
+	GPT54Pro   ModelID = "gpt-5.4-pro"
+	GPT55      ModelID = "gpt-5.5"
+	GPT6Astra  ModelID = "gpt-6-astra"
+	GPT56Sol   ModelID = "gpt-5.6-sol"
+	GPT56Luna  ModelID = "gpt-5.6-luna"
+	GPT56Terra ModelID = "gpt-5.6-terra"
+	GPT52Codex ModelID = "gpt-5.2-codex"
+	GPT53Codex ModelID = "gpt-5.3-codex"
 )
 
 // Google/Gemini model IDs

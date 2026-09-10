@@ -80,8 +80,11 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   get_plan: ToolCategory.PLANNING,
   
   // Execution tools
-  bash: ToolCategory.EXECUTION,
-  powershell: ToolCategory.EXECUTION,
+  shell: ToolCategory.EXECUTION,
+  shell_list: ToolCategory.EXECUTION,
+  shell_output: ToolCategory.EXECUTION,
+  shell_wait: ToolCategory.EXECUTION,
+  shell_kill: ToolCategory.EXECUTION,
   run_command: ToolCategory.EXECUTION,
 };
 
@@ -665,19 +668,19 @@ function formatWaitLabel(value: string, maxLength = 50): string {
 }
 
 /**
- * Format bash_wait parameters without leaking opaque process UUIDs into the row.
- * ToolExecution may augment the display-only input with the original bash
- * description/command after resolving process_id back to the bash call.
+ * Format shell_wait parameters without leaking opaque process UUIDs into the row.
+ * ToolExecution may augment the display-only input with the original shell
+ * description/command after resolving process_id back to the shell call.
  */
-export const formatBashWaitParams: ToolFormatter = (input) => {
-  if (typeof input !== 'object' || input === null) return { summary: 'process', fullText: 'bash_wait(process)', structured: {} };
+export const formatShellWaitParams: ToolFormatter = (input) => {
+  if (typeof input !== 'object' || input === null) return { summary: 'process', fullText: 'shell_wait(process)', structured: {} };
   const processId = input.process_id as string | undefined;
   const description = (input.description as string | undefined)?.trim();
   const command = (input.command as string | undefined)?.trim();
   const label = description || command || 'process';
   return {
     summary: formatWaitLabel(label),
-    fullText: `bash_wait(${label})`,
+    fullText: `shell_wait(${label})`,
     structured: { processId, description, command },
   };
 };
@@ -743,8 +746,6 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   grep: formatGrepParams,
   websearch: formatWebsearchParams,
   shell: formatShellParams,
-  bash: formatShellParams,
-  powershell: formatShellParams,
   run_command: formatShellParams,
   diagnostics: formatDiagnosticsParams,
   glob: formatGlobParams,
@@ -761,7 +762,7 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   find_replace: formatFindReplaceParams,
   load_tool: formatLoadToolParams,
   skill: formatSkillParams,
-  bash_wait: formatBashWaitParams,
+  shell_wait: formatShellWaitParams,
   spawn_status: formatSpawnStatusParams,
   spawn: formatSpawnParams,
 };
@@ -937,7 +938,7 @@ export function isReadToolWithResults(toolName: string): boolean {
 /**
  * Tools that use the shell renderer
  */
-export const SHELL_TOOLS = ['bash', 'powershell', 'run_command'] as const;
+export const SHELL_TOOLS = ['shell', 'run_command'] as const;
 
 /**
  * Check if a tool uses the shell renderer

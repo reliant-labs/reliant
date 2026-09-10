@@ -13,7 +13,7 @@
  * `billing.tsx`, so a balance or plan name never disagrees between the two
  * surfaces.
  *
- * "Upgrade" mounts `EmbeddedCheckoutPanel` in place rather than redirecting to
+ * "Upgrade" mounts `ComputeSubscriptionCheckout` in place rather than redirecting to
  * a hosted Stripe URL. Mobile here is mobile WEB — the same React app at
  * `/m/settings`, on the same registered origin — so embedded checkout needs no
  * mobile-specific work at all; it is the narrowest container, not a different
@@ -33,7 +33,11 @@ import {
   usePlans,
   useWalletOverview,
 } from "../../hooks/useCloudBillingQueries";
-import { CheckoutPanelWithIdentity } from "../Billing/CheckoutPanelWithIdentity";
+import {
+  ComputeSubscriptionCheckout,
+  type ComputePlanOption,
+} from "../Billing/ComputeSubscriptionCheckout";
+import { LinkIdentityModal } from "../Billing/LinkIdentityModal";
 import {
   derivePlanDisplay,
   isPurchasableComputePlan,
@@ -121,13 +125,12 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
   const plansQ = usePlans();
-  // The purchase in flight, or null. Holding the REQUEST (not a boolean) is
-  // what lets the panel key its session off it — reopening the same purchase
-  // reuses the session instead of minting another.
-  const [checkout, setCheckout] = useState<{
-    kind: "compute_plan";
-    planId: string;
-  } | null>(null);
+  // Which plan the user is buying, or null when no checkout is open. This
+  // screen only ever buys compute, so a plan id says that where the old
+  // request union did not.
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
+  // Bumped by a successful identity link so the checkout remounts and retries.
+  const [linkAttempt, setLinkAttempt] = useState(0);
 
   const subscription = subQ.data?.subscription ?? null;
   const wallet = walletQ.data?.overview?.wallet ?? null;
@@ -204,10 +207,50 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   // in-page onComplete. So refetching here is safe: there is something to
   // fetch.
   const handleCheckoutDone = useCallback(() => {
-    setCheckout(null);
+    setCheckoutPlanId(null);
     void subQ.refetch();
     void walletQ.refetch();
   }, [subQ, walletQ]);
+
+  /**
+   * The purchasable catalog in the checkout's shape, labelled by plan name —
+   * this screen lists the catalog directly rather than choosing by size.
+   */
+  const planOptions: ComputePlanOption[] = useMemo(
+    () =>
+      purchasablePlans.flatMap((plan) => {
+        const d = derivePlanDisplay(plan);
+        if (d.monthlyPriceCents === null) return [];
+        return [
+          {
+            planId: plan.id,
+            label: plan.name,
+            monthlyPriceCents: d.monthlyPriceCents,
+            includedMinutes: d.includedMinutes,
+            overageCentsPerMinute: d.overageCentsPerMinute,
+          },
+        ];
+      }),
+    [purchasablePlans],
+  );
+
+  /**
+   * Has the plan the user just bought actually landed, per the SERVER?
+   *
+   * Compares against the plan being PURCHASED rather than merely asking
+   * whether a subscription exists: most buyers here are SWITCHING plans and
+   * already have one, so a presence check would report success immediately and
+   * skip the wait for the webhook entirely.
+   */
+  const computeHasLanded = useCallback(async () => {
+    if (!checkoutPlanId) return false;
+    try {
+      const { data } = await subQ.refetch();
+      return data?.subscription?.plan?.id === checkoutPlanId;
+    } catch {
+      return false;
+    }
+  }, [subQ, checkoutPlanId]);
 
   const loading = subQ.isLoading || walletQ.isLoading || usageQ.isLoading;
 
@@ -220,20 +263,33 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
           <p className="text-sm text-muted-foreground">Loading billing…</p>
         ) : (
           <div className="space-y-4">
-            {checkout && (
+            {checkoutPlanId && (
               <Card>
-                <CheckoutPanelWithIdentity
-                  request={checkout}
+                {/* The same checkout desktop and onboarding mount — one
+                    compute purchase experience, not three that drift. */}
+                <ComputeSubscriptionCheckout
+                  key={`compute:${linkAttempt}`}
+                  plans={planOptions}
+                  selectedPlanId={checkoutPlanId}
+                  onSelectPlan={(option) => setCheckoutPlanId(option.planId)}
+                  confirmSettlement={computeHasLanded}
                   onDone={handleCheckoutDone}
-                  // "Open Settings on desktop" was the old advice because this
-                  // screen had no way to link an identity. It has one now — the
-                  // same modal every other surface uses — so the phone is no
-                  // longer a dead end.
-                  returnTo="/settings/billing"
+                  renderIdentityRequired={(message) => (
+                    // "Open Settings on desktop" was the old advice because
+                    // this screen had no way to link an identity. It has one
+                    // now — the same modal every other surface uses — so the
+                    // phone is no longer a dead end.
+                    <LinkIdentityModal
+                      message={message}
+                      returnTo="/settings/billing"
+                      onLinked={() => setLinkAttempt((n) => n + 1)}
+                      onDismiss={() => undefined}
+                    />
+                  )}
                 />
                 <button
                   type="button"
-                  onClick={() => setCheckout(null)}
+                  onClick={() => setCheckoutPlanId(null)}
                   className="mt-3 min-h-[44px] w-full text-sm text-muted-foreground"
                 >
                   Cancel
@@ -328,7 +384,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                   </div>
                 </div>
               )}
-              {purchasablePlans.length > 0 && !checkout && (
+              {purchasablePlans.length > 0 && !checkoutPlanId && (
                 <div className="mt-4 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">
                     {subscription ? "Switch plan" : "Choose a plan"}
@@ -345,9 +401,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                         key={plan.id}
                         type="button"
                         disabled={isCurrent}
-                        onClick={() =>
-                          setCheckout({ kind: "compute_plan", planId: plan.id })
-                        }
+                        onClick={() => setCheckoutPlanId(plan.id)}
                         className="flex min-h-[44px] w-full items-center justify-between gap-3 rounded-lg border border-border px-3 py-2 text-left active:opacity-80 disabled:opacity-60"
                       >
                         <span className="min-w-0">

@@ -24,6 +24,7 @@ import { parseBinding } from "../../lib/keyboard/chord";
 import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { ConfigHealthIndicator } from "./ConfigHealthIndicator";
+import { LowCreditSurface } from "../Billing/LowCreditSurface";
 import { DaemonStatusDot } from "./DaemonStatusDot";
 import { DetectedPortsChip } from "./DetectedPortsChip";
 import { isDev } from "../../lib/constants";
@@ -316,6 +317,14 @@ export const Header = forwardRef<HeaderRef, HeaderProps>(
                 </button>
               </Tooltip>
             )}
+
+            {/* Credit runway, and the out-of-credit stop.
+                Renders NOTHING unless the balance is actually running down —
+                and nothing at all for a user on their own API key, who has no
+                wallet to run out of. Sits beside ConfigHealthIndicator because
+                it is the same kind of thing: ambient status the user can act
+                on, in the place they already look for it. */}
+            {!projectPickerMode && <LowCreditSurface />}
 
             {/* Config Health Indicator */}
             {!projectPickerMode && <ConfigHealthIndicator />}

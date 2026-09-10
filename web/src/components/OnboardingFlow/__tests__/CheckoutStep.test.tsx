@@ -3,7 +3,7 @@
  *
  * ── What is actually under test ───────────────────────────────────────
  *
- * Not Stripe. `EmbeddedCheckoutPanel` is stubbed, because it owns session
+ * Not Stripe. Each checkout component is stubbed, because it owns intent
  * creation, the anonymous-user refusal and the server-confirmation poll, and
  * it has its own tests. What this file pins is everything AROUND the panel —
  * the decisions the step makes about money and provisioning:
@@ -28,24 +28,68 @@ import type { PaymentFacts } from "../requiresPayment";
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-/** What `onDone` means: the server confirmed it. Nothing else calls it. */
-const mockPanelRequests: unknown[] = [];
-vi.mock("@/components/Billing/EmbeddedCheckoutPanel", () => ({
-  EmbeddedCheckoutPanel: ({
-    request,
+/**
+ * What `onDone` means: the server confirmed it. Nothing else calls it.
+ *
+ * ONE checkout is stubbed now, not two. That is the change under test: the
+ * step used to mount `ComputeSubscriptionCheckout` and then
+ * `WalletTopupCheckout` in sequence — two card forms — and now mounts a single
+ * `OnboardingCheckout` that takes one card for every leg still owed.
+ *
+ * It is stubbed for the reason the panels always were: it owns intent
+ * creation, the anonymous-user refusal, the 3DS handling and the confirmation
+ * poll, and it has its own tests. What this file pins is everything AROUND it.
+ *
+ * The stub records the LINES it was asked to render, so the assertions read as
+ * "what did this step ask to buy?" rather than "which component did it mount?"
+ * — which is what let this file survive the compute leg moving from embedded
+ * Checkout, to Elements, and now to a single consolidated form.
+ */
+interface StubLine {
+  kind: string;
+  amountCents: number;
+  covered: boolean;
+}
+const mockPanelRequests: {
+  lines: StubLine[];
+  computePlanId?: string;
+  creditCents?: number;
+}[] = [];
+
+vi.mock("@/components/Billing/OnboardingCheckout", () => ({
+  OnboardingCheckout: ({
+    lines,
+    computePlanId,
+    creditCents,
     onDone,
   }: {
-    request: unknown;
+    lines: StubLine[];
+    computePlanId?: string;
+    creditCents?: number;
     onDone: () => void;
   }) => {
-    mockPanelRequests.push(request);
+    mockPanelRequests.push({ lines, computePlanId, creditCents });
     return (
-      <button type="button" data-testid="confirm-payment" onClick={onDone}>
-        confirm
-      </button>
+      <div>
+        {/* The summary is the step's own output, so the stub renders enough of
+            it for the "what is on the page" assertions to be about the step. */}
+        {lines.map((line) => (
+          <div key={line.kind} data-testid={`stub-line-${line.kind}`}>
+            {line.kind} {line.amountCents} {line.covered ? "covered" : "owed"}
+          </div>
+        ))}
+        <button type="button" data-testid="confirm-payment" onClick={onDone}>
+          confirm
+        </button>
+      </div>
     );
   },
 }));
+
+/** The lines the most recent render asked for, keyed by leg. */
+function lastLine(kind: string): StubLine | undefined {
+  return mockPanelRequests.at(-1)?.lines.find((l) => l.kind === kind);
+}
 
 const mockRunCommit = vi.fn(async () => ({
   commitKey: "k",
@@ -70,14 +114,29 @@ vi.mock("../commitLaunchPlan", () => ({
  * Facts, driven per-test. `factsRefetch` is what the step polls after a
  * confirmation, so a test controls exactly when the server "agrees".
  */
-let currentFacts: PaymentFacts = {
+/**
+ * The entitlement facts, driven per-test.
+ *
+ * `reliantBillingAvailable` is layered in here rather than written into every
+ * assignment below: it is a deployment constant, true wherever this step can
+ * render at all, and it is the entitlement pair that each test is actually
+ * varying. A test that owed money only because a build flag was undefined
+ * would be testing the harness.
+ */
+type EntitlementFacts = Omit<PaymentFacts, "reliantBillingAvailable">;
+
+let currentFacts: EntitlementFacts = {
   computeEligible: false,
   walletFunded: false,
 };
-const mockFactsRefetch = vi.fn(async () => currentFacts);
+const factsWithBilling = (): PaymentFacts => ({
+  ...currentFacts,
+  reliantBillingAvailable: true,
+});
+const mockFactsRefetch = vi.fn(async () => factsWithBilling());
 vi.mock("../useOnboardingFacts", () => ({
   useOnboardingFacts: () => ({
-    ...currentFacts,
+    ...factsWithBilling(),
     loading: false,
     refetch: mockFactsRefetch,
   }),
@@ -153,33 +212,54 @@ beforeEach(() => {
 describe("CheckoutStep — what it asks for", () => {
   it("buys a compute subscription when only compute is owed", () => {
     renderStep(CLOUD_OWN_KEY);
-    expect(mockPanelRequests).toContainEqual({
-      kind: "compute_plan",
-      planId: "plan_compute_small",
-    });
+    expect(mockPanelRequests.at(-1)?.computePlanId).toBe("plan_compute_small");
+    expect(lastLine("compute")).toMatchObject({ covered: false });
+    // Own API key: no credit line at all, because nothing about this plan buys
+    // Reliant's models.
+    expect(lastLine("credit")).toBeUndefined();
   });
 
   it("buys wallet credit when only credit is owed", () => {
     currentFacts = { computeEligible: true, walletFunded: false };
     renderStep(LOCAL_RELIANT);
-    expect(mockPanelRequests[0]).toMatchObject({ kind: "wallet_topup" });
+    expect(lastLine("credit")).toMatchObject({ covered: false });
+    expect(mockPanelRequests.at(-1)?.creditCents).toBeGreaterThan(0);
+    // Local compute is free, so there is no machine to pay for.
+    expect(lastLine("compute")).toBeUndefined();
   });
 
-  // The trade-off, made visible. A subscription and a variable one-off cannot
-  // share one Stripe Checkout Session while keeping both webhook paths intact,
-  // so a user owing both pays twice — sequentially, in this step. What they
-  // must never do is leave the flow between the two.
-  it("starts with compute when both are owed, and labels it as 1 of 2", () => {
+  // ── THE CONSOLIDATION, stated as a test ──────────────────────────────
+  //
+  // This used to assert the opposite — "starts with compute … and labels it as
+  // 1 of 2" — because a subscription and a variable one-off could not share a
+  // Stripe Checkout Session, so a user owing both paid TWICE, sequentially,
+  // entering a card each time.
+  //
+  // Both legs now bill the same Stripe customer, so one card covers both: the
+  // step hands the checkout every owed line at once and there is no "step 1 of
+  // 2" any more. What must hold is that BOTH are asked for together.
+  it("asks for both legs at once when both are owed", () => {
     renderStep(CLOUD_AND_RELIANT);
-    expect(mockPanelRequests[0]).toMatchObject({ kind: "compute_plan" });
-    expect(screen.getByText(/step 1 of 2/i)).toBeInTheDocument();
+
+    expect(lastLine("compute")).toMatchObject({ covered: false });
+    expect(lastLine("credit")).toMatchObject({ covered: false });
+    expect(mockPanelRequests.at(-1)?.computePlanId).toBe("plan_compute_small");
+    expect(mockPanelRequests.at(-1)?.creditCents).toBeGreaterThan(0);
+
+    // The flow is no longer numbered, because there is no second payment to
+    // number towards.
+    expect(screen.queryByText(/step 1 of 2/i)).toBeNull();
+    expect(screen.queryByText(/step 2 of 2/i)).toBeNull();
   });
 
-  it("moves to the credit leg once compute is entitled, without navigating", async () => {
+  // A leg a coupon already covered stays ON the page, marked covered, rather
+  // than vanishing — otherwise the code reads as though it did nothing at the
+  // exact moment the user is being asked for money. It is simply not charged.
+  it("shows a covered leg rather than hiding it", async () => {
     const { rerender } = renderStep(CLOUD_AND_RELIANT);
-    expect(mockPanelRequests[0]).toMatchObject({ kind: "compute_plan" });
+    expect(lastLine("compute")).toMatchObject({ covered: false });
 
-    // The compute webhook landed.
+    // The compute webhook landed (a coupon, or the subscription).
     currentFacts = { computeEligible: true, walletFunded: false };
     rerender(
       <CheckoutStep
@@ -191,9 +271,11 @@ describe("CheckoutStep — what it asks for", () => {
     );
 
     await waitFor(() => {
-      expect(mockPanelRequests.at(-1)).toMatchObject({ kind: "wallet_topup" });
+      expect(lastLine("compute")).toMatchObject({ covered: true });
     });
-    expect(screen.getByText(/step 2 of 2/i)).toBeInTheDocument();
+    // Still listed, and now not billed.
+    expect(mockPanelRequests.at(-1)?.computePlanId).toBeUndefined();
+    expect(lastLine("credit")).toMatchObject({ covered: false });
   });
 });
 
@@ -370,11 +452,24 @@ describe("CheckoutStep — after the server confirms", () => {
 
 describe("CheckoutStep — prices come from the server", () => {
   // Shipping this step on a client-side price table would put an invented
-  // number next to a real card form. The plan grid renders the catalog's
-  // price_cents and nothing else.
-  it("renders the catalog's price, not a hardcoded one", () => {
+  // number next to a real card form.
+  //
+  // The tiles have moved OUT of this step entirely — the compute step shows
+  // them, with prices, at the moment the machine is chosen. What this step
+  // still does is PRICE the summary, and it must price it from the catalog.
+  it("prices the summary from the catalog, not from a hardcoded number", () => {
+    renderStep(CLOUD_OWN_KEY);
+    expect(lastLine("compute")).toMatchObject({ amountCents: 2000 });
+  });
+
+  // A machine chosen on the compute step is the one billed here. Re-deriving a
+  // plan ("the smallest we can find") would be a second opinion about what the
+  // user is buying, and could silently switch it.
+  it("bills the plan chosen earlier, and asks for none when there is no choice", () => {
     renderStep({ compute: "cloud_paid", modelProvider: "anthropic" });
-    expect(screen.getByText(/\$20\.00\/mo/)).toBeInTheDocument();
+    // No computePlanId on the plan: nothing to subscribe to, so nothing is
+    // requested rather than a guess being substituted.
+    expect(mockPanelRequests.at(-1)?.computePlanId).toBeUndefined();
   });
 
   // Deliberate: which payment methods are available depends on the browser and

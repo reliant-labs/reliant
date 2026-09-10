@@ -76,10 +76,16 @@ func TestAskQuestion_FeedbackContinuesLoop(t *testing.T) {
 	require.Empty(t, res.Mismatches,
 		"feedback must re-enter the loop, consuming the second iteration's events")
 
-	require.Equal(t,
-		map[string]interface{}{model.LoopOutputIterationsField: 2},
-		res.Execution.NodeOutputs["agent_loop"],
+	// Asserted field-by-field rather than as a whole-map equality. The loop
+	// node now reports the outputs it actually PUBLISHED alongside the
+	// iteration count, so pinning the exact map would pin the harness's old
+	// impoverished view — `{_iterations: N}` was all it could see before the
+	// structural-node observer, not all the loop produced.
+	loopOut := res.Execution.NodeOutputs["agent_loop"]
+	require.EqualValues(t, 2, loopOut[model.LoopOutputIterationsField],
 		"the loop node's iteration count must be observable on this backend")
+	require.Equal(t, false, loopOut["has_feedback"],
+		"the loop's own declared output must be observable, and false is why it exited")
 }
 
 // TestAskQuestion_NoFeedbackExitsLoop pins the other half: without feedback the
@@ -99,8 +105,9 @@ func TestAskQuestion_NoFeedbackExitsLoop(t *testing.T) {
 
 	require.Equal(t, "completed", res.Execution.Outcome)
 	require.Empty(t, res.Mismatches)
-	require.Equal(t,
-		map[string]interface{}{model.LoopOutputIterationsField: 1},
-		res.Execution.NodeOutputs["agent_loop"],
+	loopOut := res.Execution.NodeOutputs["agent_loop"]
+	require.EqualValues(t, 1, loopOut[model.LoopOutputIterationsField],
 		"a plain continue must end the loop at one iteration")
+	require.Equal(t, false, loopOut["has_feedback"],
+		"no feedback is what ended the loop, and the loop now publishes that")
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -57,13 +58,13 @@ func (e *RemoteRunExecutor) SetContext(execCtx RunExecutorContext) {
 	e.execCtx = execCtx
 }
 
-// bashInput is the JSON structure the bash tool expects.
-type bashInput struct {
+// shellInput is the JSON structure the shell tool expects.
+type shellInput struct {
 	Command string `json:"command"`
 	Timeout int    `json:"timeout,omitempty"` // timeout in milliseconds
 }
 
-// ExecuteCommand routes a shell command through the daemon's bash tool.
+// ExecuteCommand routes a shell command through the daemon's shell tool.
 func (e *RemoteRunExecutor) ExecuteCommand(
 	ctx context.Context,
 	command string,
@@ -71,14 +72,14 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 	timeoutMs int,
 	env map[string]string,
 ) (stdout, stderr string, exitCode int, interrupted bool, err error) {
-	// Build bash tool input
-	input := bashInput{
+	// Build shell tool input
+	input := shellInput{
 		Command: command,
 		Timeout: timeoutMs,
 	}
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
-		return "", "", -1, false, fmt.Errorf("failed to marshal bash tool input: %w", err)
+		return "", "", -1, false, fmt.Errorf("failed to marshal shell tool input: %w", err)
 	}
 
 	// Determine effective working directory
@@ -93,7 +94,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 
 	// Build tool request
 	req := &toolexec.ToolRequest{
-		ToolName:       "bash",
+		ToolName:       names.ToolShell,
 		ToolInput:      string(inputJSON),
 		UserID:         e.execCtx.UserID,
 		ChatID:         e.execCtx.ChatID,
@@ -138,18 +139,18 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 		return "", result.Content, 1, false, nil
 	}
 
-	// The bash tool returns structured JSON: {"stdout": "...", "stderr": "...", "exit_code": 0}
-	var bashOutput struct {
+	// The shell tool returns structured JSON: {"stdout": "...", "stderr": "...", "exit_code": 0}
+	var shellOutput struct {
 		Stdout   string `json:"stdout"`
 		Stderr   string `json:"stderr"`
 		ExitCode int    `json:"exit_code"`
 	}
-	if err := json.Unmarshal([]byte(result.Content), &bashOutput); err != nil {
+	if err := json.Unmarshal([]byte(result.Content), &shellOutput); err != nil {
 		// Fallback: treat content as plain text stdout (e.g. legacy format)
 		return result.Content, "", 0, false, nil
 	}
 
-	return bashOutput.Stdout, bashOutput.Stderr, bashOutput.ExitCode, false, nil
+	return shellOutput.Stdout, shellOutput.Stderr, shellOutput.ExitCode, false, nil
 }
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.

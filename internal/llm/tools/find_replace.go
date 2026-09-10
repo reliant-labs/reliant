@@ -92,7 +92,7 @@ file_glob: "**/*.{js,ts,jsx,tsx}"
 # 🔄 WORKS WELL WITH
 - BEFORE: preview=true (see changes first)
 - BEFORE: Grep (find occurrences)
-- AFTER: Bash (run tests)
+- AFTER: shell (run tests)
 - ALTERNATIVE: Edit (single file)
 - ALTERNATIVE: Patch (complex multi-file edits)
 # 📝 PARAMETERS

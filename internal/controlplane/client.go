@@ -20,8 +20,25 @@ import (
 
 const defaultBaseURL = "http://localhost:8090"
 
+// AccountDeletionBlocker is one reason the control plane refused to delete the
+// account. Reason is machine-readable ("paid_subscription", "wallet_balance");
+// Detail is a sentence safe to show the user.
+type AccountDeletionBlocker struct {
+	Reason string
+	Detail string
+}
+
 type Client interface {
 	IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error)
+
+	// DeleteCurrentUserAccount asks the control plane to tombstone the
+	// caller's platform account (billing identity, daemons, PII), forwarding
+	// the caller's own JWT.
+	//
+	// A non-empty blocker slice means the control plane REFUSED and destroyed
+	// nothing — the caller must surface the blockers and stop. An error means
+	// the call itself failed.
+	DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error)
 }
 
 type connectClient struct {
@@ -65,6 +82,27 @@ func BaseURLFromEnv() string {
 
 func (c *connectClient) billingClient() controlplanev1connect.BillingServiceClient {
 	return controlplanev1connect.NewBillingServiceClient(c.httpClient, c.baseURL)
+}
+
+func (c *connectClient) userClient() controlplanev1connect.UserServiceClient {
+	return controlplanev1connect.NewUserServiceClient(c.httpClient, c.baseURL)
+}
+
+func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error) {
+	req := connect.NewRequest(&controlplanev1.DeleteCurrentUserAccountRequest{})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.userClient().DeleteCurrentUserAccount(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	var blockers []AccountDeletionBlocker
+	for _, b := range resp.Msg.GetBlockers() {
+		blockers = append(blockers, AccountDeletionBlocker{
+			Reason: b.GetReason(),
+			Detail: b.GetDetail(),
+		})
+	}
+	return blockers, nil
 }
 
 func (c *connectClient) IssueMyReliantAPIKey(ctx context.Context, jwt string) (string, error) {

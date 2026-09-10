@@ -17,9 +17,13 @@ events:
       selected_node: refine_prompt
       reasoning: "Planning-only request — enter the pipeline at the planning phase."
 
-  - node: planning.plan
+  - node: planning.plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Here is the plan for the task."
       response_text: "Here is the plan for the task."
+      tool_calls: []
 
 expect:
   outcome: completed

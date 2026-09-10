@@ -50,10 +50,36 @@ func TestValidateSaveMessageOpts_AssistantContent(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			// A signature with no thinking text produces no block.
-			name: "empty thinking with only a signature is still blockless",
+			// REVERSED, deliberately. This case used to assert wantErr: true,
+			// on the reasoning that a signature produces no block. That was
+			// the bug, not the contract.
+			//
+			// Anthropic streams signature_delta separately from thinking_delta,
+			// and a turn can legitimately arrive signed with no readable text.
+			// Refusing the row discarded the signature, so the retry replayed
+			// an identical prompt and stalled identically — observed on chat
+			// 7c37ad6c at 01:28:03 and again at 01:28:35, thirty seconds apart,
+			// signatureLen=1456 then 952, thinkingLen=0 both times.
+			//
+			// createAssistantContentBlocks now writes a thinking block for a
+			// signature alone, so this is no longer blockless in fact either.
+			name: "a signature with no thinking text is enough",
 			opts: SaveMessageOpts{ChatID: "c", Thread: "t", Role: assistant,
 				Thinking: &ThinkingContent{Signature: "sig"}},
+			wantErr: false,
+		},
+		{
+			// Sealed reasoning is opaque but real, and must be replayable.
+			name: "redacted thinking alone is enough",
+			opts: SaveMessageOpts{ChatID: "c", Thread: "t", Role: assistant,
+				Thinking: &ThinkingContent{Redacted: "encrypted-payload"}},
+			wantErr: false,
+		},
+		{
+			// A Thinking struct that is present but wholly empty carries
+			// nothing, and must still be refused.
+			name:    "present but empty thinking is still blockless",
+			opts:    SaveMessageOpts{ChatID: "c", Thread: "t", Role: assistant, Thinking: &ThinkingContent{}},
 			wantErr: true,
 		},
 	}

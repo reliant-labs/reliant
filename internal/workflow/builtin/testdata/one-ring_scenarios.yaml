@@ -37,20 +37,44 @@ events:
       selected_node: refine_prompt
       reasoning: "Enter at the top of the pipeline."
 
-  - node: planning.plan
+  - node: planning.plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Plan: implement the feature with modular design."
       response_text: "Plan: implement the feature with modular design."
+      tool_calls: []
 
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implemented the feature as planned."
       response_text: "Implemented the feature as planned."
+      tool_calls: []
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Implementation is correct. All checks passed."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Implementation is correct. All checks passed."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Implementation is correct. All checks passed."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -84,9 +108,13 @@ events:
       selected_node: refine_prompt
       reasoning: "Enter at the top of the pipeline."
 
-  - node: planning.plan
+  - node: planning.plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Here is the plan for the task."
       response_text: "Here is the plan for the task."
+      tool_calls: []
 
 expect:
   outcome: completed
@@ -115,17 +143,29 @@ events:
       selected_node: refine_prompt
       reasoning: "Enter at the top of the pipeline."
 
-  - node: planning.plan
+  - node: planning.plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Comprehensive plan for the feature."
       response_text: "Comprehensive plan for the feature."
+      tool_calls: []
 
-  - node: write_tests
+  - node: write_tests.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Wrote failing unit and integration tests."
       response_text: "Wrote failing unit and integration tests."
+      tool_calls: []
 
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Full implementation complete."
       response_text: "Full implementation complete."
+      tool_calls: []
 
   - node: impl_loop.attempt.lint
     output:
@@ -139,12 +179,28 @@ events:
     output:
       exit_code: 0
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Everything passes. Implementation is clean and correct."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Everything passes. Implementation is clean and correct."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Everything passes. Implementation is clean and correct."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -180,9 +236,40 @@ events:
       selected_node: impl_loop
       reasoning: "Simple, well-defined task — go straight to implementation."
 
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Minimal implementation done."
       response_text: "Minimal implementation done."
+      tool_calls: []
+
+  # review is a structured-agent ref. Mocking its inner agent_loop nodes makes
+  # the sub-workflow body EXECUTE rather than taking its output from here, so
+  # get-it-right's own response/completed CEL is compiled and evaluated.
+  # get-it-right declares response_tool_name: submit_evaluation.
+  - node: impl_loop.attempt.review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Minimal implementation is correct."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Minimal implementation is correct."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -229,32 +316,76 @@ events:
       reasoning: "Enter at the top of the pipeline."
 
   # Iteration 0 — review fails, says refactor, refactor fixes
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Initial implementation attempt."
       response_text: "Initial implementation attempt."
+      tool_calls: []
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "Implementation has critical issues. Null pointer in handler, missing validation. Add null check before accessing request.body. Add validation middleware."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "Implementation has critical issues. Null pointer in handler, missing validation. Add null check before accessing request.body. Add validation middleware."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "Implementation has critical issues. Null pointer in handler, missing validation. Add null check before accessing request.body. Add validation middleware."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Added null check and validation middleware."
       response_text: "Added null check and validation middleware."
+      tool_calls: []
 
   # Iteration 1 — passes
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built on refactored code. Issues resolved."
       response_text: "Built on refactored code. Issues resolved."
+      tool_calls: []
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "All issues resolved. Implementation complete."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "All issues resolved. Implementation complete."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "All issues resolved. Implementation complete."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -289,40 +420,84 @@ events:
       reasoning: "Enter at the top of the pipeline."
 
   # Iteration 0 — build fails
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation with compilation error."
       response_text: "Implementation with compilation error."
+      tool_calls: []
 
   - node: impl_loop.attempt.build
     output:
       exit_code: 1
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "Build failed due to missing function reference. Add the processData function definition."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "Build failed due to missing function reference. Add the processData function definition."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "Build failed due to missing function reference. Add the processData function definition."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Added the missing processData function."
       response_text: "Added the missing processData function."
+      tool_calls: []
 
   # Iteration 1 — build passes
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built on refactored code. Compilation verified."
       response_text: "Built on refactored code. Compilation verified."
+      tool_calls: []
 
   - node: impl_loop.attempt.build
     output:
       exit_code: 0
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Build passes, implementation complete."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Build passes, implementation complete."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Build passes, implementation complete."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -358,40 +533,84 @@ events:
       reasoning: "Enter at the top of the pipeline."
 
   # Iteration 0 — lint fails
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation with style issues."
       response_text: "Implementation with style issues."
+      tool_calls: []
 
   - node: impl_loop.attempt.lint
     output:
       exit_code: 1
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "Lint failed with 3 violations. Fix the linting violations."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "Lint failed with 3 violations. Fix the linting violations."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "Lint failed with 3 violations. Fix the linting violations."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Fixed all 3 linting violations."
       response_text: "Fixed all 3 linting violations."
+      tool_calls: []
 
   # Iteration 1 — lint passes
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built on refactored code. Lint clean."
       response_text: "Built on refactored code. Lint clean."
+      tool_calls: []
 
   - node: impl_loop.attempt.lint
     output:
       exit_code: 0
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Lint passes. Code looks good."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Lint passes. Code looks good."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Lint passes. Code looks good."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -427,40 +646,84 @@ events:
       reasoning: "Enter at the top of the pipeline."
 
   # Iteration 0 — test fails
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation with failing tests."
       response_text: "Implementation with failing tests."
+      tool_calls: []
 
   - node: impl_loop.attempt.test
     output:
       exit_code: 1
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "Two test assertions failing. Fix the return value format to match test expectations."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "Two test assertions failing. Fix the return value format to match test expectations."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "Two test assertions failing. Fix the return value format to match test expectations."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Fixed return value format. Assertions should pass."
       response_text: "Fixed return value format. Assertions should pass."
+      tool_calls: []
 
   # Iteration 1 — tests pass
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Built on refactored code. Tests verified."
       response_text: "Built on refactored code. Tests verified."
+      tool_calls: []
 
   - node: impl_loop.attempt.test
     output:
       exit_code: 0
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "Tests pass, review approved."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Tests pass, review approved."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Tests pass, review approved."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -496,9 +759,13 @@ events:
       reasoning: "Enter at the top of the pipeline."
 
   # Iteration 0 — all checks fail, review says refactor
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Rough first implementation."
       response_text: "Rough first implementation."
+      tool_calls: []
 
   - node: impl_loop.attempt.lint
     output:
@@ -512,21 +779,45 @@ events:
     output:
       exit_code: 1
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "All three checks failed. The approach fights the codebase. Follow existing coding conventions, review test fixtures for expected data shapes, check package.json before importing."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "All three checks failed. The approach fights the codebase. Follow existing coding conventions, review test fixtures for expected data shapes, check package.json before importing."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "All three checks failed. The approach fights the codebase. Follow existing coding conventions, review test fixtures for expected data shapes, check package.json before importing."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Reverted all changes. Set up clean foundation matching codebase conventions."
       response_text: "Reverted all changes. Set up clean foundation matching codebase conventions."
+      tool_calls: []
 
   # Iteration 1 — all pass
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Clean implementation following conventions."
       response_text: "Clean implementation following conventions."
+      tool_calls: []
 
   - node: impl_loop.attempt.lint
     output:
@@ -540,12 +831,28 @@ events:
     output:
       exit_code: 0
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "All checks pass. Clean implementation."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "All checks pass. Clean implementation."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "All checks pass. Clean implementation."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed
@@ -584,36 +891,84 @@ events:
       reasoning: "Enter at the top of the pipeline."
 
   # Iteration 0
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "First implementation attempt."
       response_text: "First implementation attempt."
+      tool_calls: []
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "Fundamental design flaw. Restructure to match existing schema patterns."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "Fundamental design flaw. Restructure to match existing schema patterns."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "Fundamental design flaw. Restructure to match existing schema patterns."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Restructured data model."
       response_text: "Restructured data model."
+      tool_calls: []
 
   # Iteration 1
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Second attempt, still flawed."
       response_text: "Second attempt, still flawed."
+      tool_calls: []
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: fail
-        strategy: "refactor"
-        feedback: "Data model fix wasn't sufficient. Try a completely different approach."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: fail
+            strategy: "refactor"
+            feedback: "Data model fix wasn't sufficient. Try a completely different approach."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: fail
+          strategy: "refactor"
+          feedback: "Data model fix wasn't sufficient. Try a completely different approach."
+      tool_results: []
+      thread_token_count: 100
 
-  - node: impl_loop.attempt.refactor
+  - node: impl_loop.attempt.refactor.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Applied further changes but issues remain."
       response_text: "Applied further changes but issues remain."
+      tool_calls: []
 
 expect:
   outcome: completed
@@ -648,17 +1003,29 @@ events:
       selected_node: refine_prompt
       reasoning: "Enter at the top of the pipeline."
 
-  - node: planning.plan
+  - node: planning.plan.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Plan: build full-stack feature with UX validation."
       response_text: "Plan: build full-stack feature with UX validation."
+      tool_calls: []
 
-  - node: write_tests
+  - node: write_tests.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Created tests including accessibility checks."
       response_text: "Created tests including accessibility checks."
+      tool_calls: []
 
-  - node: impl_loop.attempt.implement
+  - node: impl_loop.attempt.implement.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Full-stack implementation with accessibility."
       response_text: "Full-stack implementation with accessibility."
+      tool_calls: []
 
   - node: impl_loop.attempt.lint
     output:
@@ -672,12 +1039,28 @@ events:
     output:
       exit_code: 0
 
-  - node: impl_loop.attempt.review
+  - node: impl_loop.attempt.review.agent_loop.call_llm
     output:
-      response:
-        grade: pass
-        strategy: "pass"
-        feedback: "All checks pass, reviews approved."
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "All checks pass, reviews approved."
+  - node: impl_loop.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "All checks pass, reviews approved."
+      tool_results: []
+      thread_token_count: 100
 
 expect:
   outcome: completed

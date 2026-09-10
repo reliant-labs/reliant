@@ -452,7 +452,8 @@ nodes:
         - Strategy: {{has(nodes.impl_loop.eval_strategy) ? nodes.impl_loop.eval_strategy : 'N/A'}}
 
 outputs:
-  plan_summary: "{{nodes.planning.plan_summary}}"
+  # classify can route straight to impl_loop, so planning may never run.
+  plan_summary: "{{has(nodes.planning) && has(nodes.planning.plan_summary) ? nodes.planning.plan_summary : ''}}"
   review_grade: "{{has(nodes.impl_loop) && has(nodes.impl_loop.review_grade) ? nodes.impl_loop.review_grade : 'N/A'}}"
   eval_strategy: "{{has(nodes.impl_loop) && has(nodes.impl_loop.eval_strategy) ? nodes.impl_loop.eval_strategy : 'pass'}}"
   iterations: "{{has(nodes.impl_loop) && has(nodes.impl_loop.iterations) ? nodes.impl_loop.iterations : 0}}"

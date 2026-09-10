@@ -40,17 +40,17 @@ func InitialToolsForPermission(permission string) []string {
 	// searching the codebase now goes through the shell — a level without it
 	// cannot search at all, which is the regression that followed the first
 	// removal of grep/glob. `tag:shell` is kept whole (the shell's own
-	// description tells the model to reach for bash_output/bash_kill/bash_list,
+	// description tells the model to reach for shell_output/shell_kill/shell_list,
 	// so handing over the shell without them documents tools that do not exist).
 	base := []string{
 		ToolSkill,
 		ToolLoadTool,
 		ToolView,
 		ShellToolName,
-		ToolBashList,
-		ToolBashOutput,
-		ToolBashWait,
-		ToolBashKill,
+		ToolShellList,
+		ToolShellOutput,
+		ToolShellWait,
+		ToolShellKill,
 	}
 
 	switch permission {

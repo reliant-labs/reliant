@@ -1,5 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
+import { useAuthStore } from "@/store/authStore";
+
+/**
+ * Whether an outbound RPC can carry a credential.
+ *
+ * Reads `session`, not `user`. The two are not the same fact: the store can
+ * hold a user while the session write is still in flight (under Electron that
+ * is an IPC round-trip — see AuthInitializer.waitForAccessToken), and every
+ * RPC issued in that window goes out with no Authorization header and comes
+ * back "missing authorization token". Gating on `user` would leave that window
+ * open, which is most of the bug.
+ */
+function useHasSession(): boolean {
+  return useAuthStore((state) => !!state.session);
+}
 
 // Types (matching settingsStore)
 export type WorktreeArchiveMode = "ask_me" | "always_cleanup" | "always_keep";
@@ -39,10 +54,16 @@ export function hasAnyConfiguredProvider(providers: ProviderStatus[]): boolean {
  * forever, only until the next refetch.
  */
 export function useProviderStatuses() {
+  const hasSession = useHasSession();
   return useQuery({
     queryKey: settingsKeys.providers(),
     queryFn: () => api.settings.getProviders(),
     staleTime: 10_000,
+    // GetProviderStatuses is an authenticated RPC. Without this gate it fired
+    // on mount regardless of session — including on the sign-in screen, where
+    // it produced a run of 401s against prod while the user was still moving
+    // from email entry to code entry.
+    enabled: hasSession,
   });
 }
 
@@ -76,14 +97,20 @@ function mapApiPreferences(apiPrefs: any): UserPreferences {
 }
 
 export function usePreferences() {
+  const hasSession = useHasSession();
   return useQuery({
     queryKey: settingsKeys.preferences(),
     queryFn: async () => {
       const apiPrefs = await api.settings.getPreferences();
       return mapApiPreferences(apiPrefs);
     },
+    // Signed out this serves DEFAULT_PREFERENCES rather than `undefined`, so
+    // the modals that destructure `preferences.worktree` degrade to defaults
+    // instead of throwing. Gating a placeholder-backed query is therefore
+    // free — no caller can tell the difference except that no RPC goes out.
     placeholderData: DEFAULT_PREFERENCES,
     staleTime: 60_000,
+    enabled: hasSession,
   });
 }
 

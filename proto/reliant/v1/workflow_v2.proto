@@ -1124,6 +1124,9 @@ message MessageOutput {
 message ThinkingOutput {
   string content = 1; // Raw thinking text
   string signature = 2; // Signature for multi-turn preservation
+  // Opaque, encrypted payload of a redacted_thinking block. No readable text —
+  // carried only so the next turn can replay it to the provider unchanged.
+  string redacted = 3;
 }
 
 // CallLLMOutput is the output from call_llm nodes.

@@ -96,7 +96,9 @@ func StreamAndAccumulate(
 				}
 
 			case llm.EventToolUseStop:
-				// Tool call completed, add to list
+				// Fallback only — see the EventComplete merge below. Drivers
+				// that report tool calls exclusively through stop events
+				// (openrouter, mock_static, replay) depend on this.
 				if event.ToolCall != nil {
 					toolCalls = append(toolCalls, *event.ToolCall)
 				}
@@ -176,8 +178,17 @@ StreamingDone:
 		finalResponse.Content = accumulatedContent
 	}
 
-	// Add accumulated tool calls if any
-	if len(toolCalls) > 0 {
+	// The final response's tool calls WIN over the ones seen mid-stream.
+	//
+	// A stop event marks a content block closing, and does not have to carry
+	// the block's arguments: Anthropic streams those as separate
+	// input_json_delta chunks, so its stop event names only the tool call id.
+	// Overwriting the final response with those stubs produced calls whose
+	// Input was the empty string, and every caller that unmarshalled one got
+	// "unexpected end of JSON input" — deterministically, so retries could not
+	// help. Only fall back to the mid-stream calls when the driver reported
+	// none at the end.
+	if len(finalResponse.ToolCalls) == 0 && len(toolCalls) > 0 {
 		finalResponse.ToolCalls = toolCalls
 	}
 

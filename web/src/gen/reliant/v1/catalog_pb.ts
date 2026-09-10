@@ -386,7 +386,7 @@ export const ListAvailableModelsResponseSchema: GenMessage<ListAvailableModelsRe
  */
 export type ToolInfo = Message<"reliant.v1.ToolInfo"> & {
   /**
-   * Tool name (e.g., "grep", "edit", "bash")
+   * Tool name (e.g., "view", "edit", "shell")
    *
    * @generated from field: string name = 1;
    */
