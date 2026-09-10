@@ -270,9 +270,35 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
     expect(local).toHaveAttribute("aria-pressed", "false");
   });
 
-  it("separates the hosted options from the run-it-yourself one", () => {
+  /**
+   * The free option LEADS, and nothing fences it off.
+   *
+   * This assertion replaced its own inverse. It used to require an "Or run it
+   * yourself" rule between the hosted options and this one, on the reasoning
+   * that the divider marked a real boundary: choosing local leads to a CLI and
+   * a token rather than to "we start it for you".
+   *
+   * The owner asked for the opposite — "move the free option to the top, and
+   * separate it less from the box, ie: make it look like another option" — and
+   * the divider was the separation. A labelled full-width rule is the
+   * strongest separator available, and it announced the option below it as a
+   * different kind of answer, which is the demotion the owner is objecting to.
+   * What the rule was really communicating is now carried by the row's own
+   * subtitle, which does it without ranking the option.
+   *
+   * Ordering is asserted through DOM position rather than a snapshot so that
+   * restyling the list cannot break it — only reordering it can.
+   */
+  it("puts the free option before the paid ones, with no divider between", () => {
     renderStep();
-    expect(screen.getByText(/or run it yourself/i)).toBeInTheDocument();
+
+    const local = screen.getByRole("button", { name: /use your own computer/i });
+    const paid = screen.getByRole("button", { name: /small/i });
+
+    expect(
+      local.compareDocumentPosition(paid) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(screen.queryByText(/or run it yourself/i)).toBeNull();
   });
 
   // The local option is not a plan you buy, so it must never write a

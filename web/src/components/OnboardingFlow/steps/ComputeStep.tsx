@@ -12,6 +12,7 @@ import {
 } from "@/components/Settings/cloud/billingUtils";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { getForcedEligibility } from "../forcedEligibility";
+import { MACHINE_BURST, formatMachineSpec } from "../machineSpecs";
 import {
   DaemonStatus,
   type DaemonInfo,
@@ -174,11 +175,24 @@ export function ComputeStep({
       if (!sizePlan) continue;
       const display = derivePlanDisplay(sizePlan);
       if (display.monthlyPriceCents == null) continue;
+      // What the size actually BUYS, beside the size's name. "Medium" is a
+      // label for a machine, not a description of one, and the user picking it
+      // had no way to know whether it would hold their build. The figures are
+      // the reserved floor; the burst ceiling is stated once under the list
+      // (see MACHINE_BURST_MULTIPLE) rather than four times inside it.
+      const spec = formatMachineSpec(size);
+      const sizeLabel = formatSizeLabel(size);
       out.push({
         planId: sizePlan.id,
         // Size IS the choice here — one plan per size, cheapest that runs it —
         // so the tile is labelled by the machine, not by the plan's name.
-        label: formatSizeLabel(size),
+        //
+        // The spec rides in `label` because that is the seam PlanTiles gives a
+        // caller — it renders the caller's label rather than deriving one,
+        // precisely so its two callers can name different axes. Adding a spec
+        // slot to PlanTiles instead would push an onboarding-only concern into
+        // the component the settings checkout also renders.
+        label: spec ? `${sizeLabel} — ${spec}` : sizeLabel,
         size,
         monthlyPriceCents: display.monthlyPriceCents,
         includedMinutes: display.includedMinutes,
@@ -231,7 +245,14 @@ export function ComputeStep({
    * choosing one is visibly a purchase.
    */
   const coveredPlanId = machineCovered ? planOptions[0]?.planId : undefined;
-  const coveredSizeLabel = planOptions[0]?.label ?? "smallest";
+  // Read from `size`, NOT from the tile's `label`. The label now carries the
+  // machine's specs as well as its name, and this sentence has to read as
+  // prose: "covers the Small machine", never "covers the Small — 2 GB RAM ·
+  // 0.5 CPU machine".
+  const smallestOfferedSize = planOptions[0]?.size;
+  const coveredSizeLabel = smallestOfferedSize
+    ? formatSizeLabel(smallestOfferedSize)
+    : "smallest";
 
   const selectedPlanId =
     planOptions.find((option) => option.planId === plan.computePlanId)?.planId ??
@@ -468,10 +489,29 @@ export function ComputeStep({
           is what makes it a peer rather than a consolation. It also removes
           the height mismatch at the root instead of papering over it.
           
-          Cloud stays first: that is the product's emphasis and a layout fix is
-          not the place to flip it. The local option is last, under a divider,
-          because choosing it leads somewhere genuinely different (install a
-          CLI, paste a token) rather than to "we start it for you". */}
+          ── The free option leads, and there is no divider ─────────────
+          
+          This block used to say "cloud stays first: that is the product's
+          emphasis and a layout fix is not the place to flip it", with the
+          local option last under an "Or run it yourself" rule. The owner has
+          since asked for the opposite, in both respects: free to the top, and
+          "separate it less from the box, ie: make it look like another
+          option."
+          
+          The old reasoning was about not smuggling a product decision into a
+          layout fix. It was never an argument that cloud-first is RIGHT — only
+          that a refactor should not be the thing that decides it. Asked
+          directly, the owner decided it, so the constraint is discharged
+          rather than overruled.
+          
+          The divider went with it, and that is the substance of the change
+          rather than a side effect. A full-width rule with a label is the
+          strongest separator on the page: it announced that what followed was
+          a different KIND of answer, which is exactly the "afterthought"
+          reading the owner wants gone. What it was really marking — that
+          choosing local leads to a CLI and a token instead of "we start it for
+          you" — is already carried by the row's own subtitle, and is carried
+          honestly, without demoting the option to get there. */}
       {/* 560px, matching the checkout step's column. The card itself stays at
           the shared 840px (see stepMaxWidth — every step shares one width so
           the card never resizes between steps); what changes is the measure of
@@ -479,6 +519,110 @@ export function ComputeStep({
           readable measure, not the full card. */}
       <div className="mx-auto w-full max-w-[560px] space-y-6">
         <div className="space-y-4">
+          {/* Deliberately shaped like a PlanTiles row — icon + name + what you
+              get on the left, price on the right — so "Free" lands in the same
+              column as "$20.00/mo" and the comparison is visual rather than
+              inferred. It is NOT a plan: it writes no `computePlanId`, and
+              picking it opens the connect instructions below instead of
+              recording a purchase.
+
+              It leads the list, and it is a bare row rather than a bordered
+              card, which is what "make it look like another option" comes to
+              in practice. The cloud block stays a card because it CONTAINS a
+              list — the sizes, their prices, and a button — so giving this row
+              a matching border would claim a sub-decision it does not have.
+              Peer means same axis and same price column, not same chrome.
+
+              Its subtitle names the spec too, in the same terms as the tiles
+              above it. That is the honest version of a spec column here: the
+              tiles can promise 4 GB because we provision them, and this one
+              cannot promise anything, because the machine is already yours.
+              Saying so is more useful than leaving the cell blank, and it is
+              the actual trade-off being made.
+
+              The horizontal padding is 36px, not the 16px a PlanTiles row
+              uses, because this row sits OUTSIDE the cloud card while the
+              tiles sit inside its `p-5`. The extra 20px of card padding plus
+              its 2px border is what the tiles are inset by, so matching their
+              own padding would leave this price 21px out of column against the
+              tiles below it. Measured: all right edges land in one column.
+              This is unchanged by the move — the offset is the card's, not the
+              row's, so it holds whether the row sits above the card or
+              below. */}
+          <button
+            type="button"
+            onClick={handleLocal}
+            aria-pressed={showLocal}
+            className={cn(
+              "flex w-full min-w-0 items-center justify-between gap-4 rounded-lg border px-[36px] py-3 text-left transition-colors",
+              showLocal
+                ? "border-primary bg-primary/10"
+                : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
+            )}
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex-shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
+                <Monitor className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">
+                  Use your own computer
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  Whatever CPU and memory it already has. Connect it with the
+                  Reliant command line tool.
+                </span>
+              </span>
+            </span>
+            <span className="flex-shrink-0 text-sm font-semibold text-emerald-500">
+              Free
+            </span>
+          </button>
+
+          {/* The connect instructions belong to the option that opens them, so
+              they render directly beneath it.
+
+              They used to sit at the very bottom of the step, which read fine
+              while the free option was itself last. Moving the option to the
+              top left the two separated by the whole cloud card — clicking
+              "Use your own computer" appeared to do nothing, because what it
+              revealed was an 800px scroll away. Keeping them adjacent is the
+              rest of the owner's reorder, not a separate change. */}
+          {showLocal && activeDaemon && (
+            <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+              <div className="flex items-start gap-3">
+                <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
+                <div>
+                  <h3 className="text-sm font-medium text-foreground">
+                    Your machine is connected
+                  </h3>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Reliant found a machine already running. Continue to pick a
+                    folder to work in.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleLocalContinue}
+                className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+              >
+                Continue
+              </button>
+            </div>
+          )}
+
+          {showLocal && !activeDaemon && (
+            <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+              {/* Self-hosted connect instructions are shared with the
+                  ProjectPicker's in-place "Connect a new daemon" flow. The
+                  onboarding-specific auto-advance still happens via the
+                  hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
+                  the download/token/start UI and the "waiting to connect" state. */}
+              <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
+            </div>
+          )}
+
           <div
             className={cn(
               "flex min-w-0 flex-col gap-4 rounded-xl border-2 p-5 text-left transition-all",
@@ -556,6 +700,38 @@ export function ComputeStep({
                     void updatePlan({ computePlanId: option.planId })
                   }
                 />
+                {/* The burst ceiling, said ONCE.
+                
+                    Both multiples hold at every tier, so this belongs under
+                    the list rather than inside four rows of it. It is also the
+                    fact most likely to change someone's mind: "0.5 CPU"
+                    undersells a machine that compiles on two full cores, and a
+                    user reading only the reserved figure would size up for a
+                    build that would have fit. Repeated per row it would read
+                    as noise; stated once it reads as a property of hosted
+                    machines, which is what it is.
+                
+                    CPU and memory are named SEPARATELY because they burst by
+                    different multiples — 4x and 2x. Collapsing them into one
+                    number is the mistake control-plane's own comment makes
+                    (see machineSpecs.ts); here it would overstate the memory
+                    headroom, which is the axis a build actually dies on.
+                
+                    Absent entirely if the ladder stops being uniform — see
+                    machineBurst. */}
+                {MACHINE_BURST &&
+                  !plansQ.isLoading &&
+                  planOptions.length > 0 && (
+                    <p
+                      className="text-xs leading-relaxed text-muted-foreground"
+                      data-testid="compute-step-burst-note"
+                    >
+                      Those are the reserved figures. When a build needs more, a
+                      machine can burst to {MACHINE_BURST.cpu}× the CPU and{" "}
+                      {MACHINE_BURST.memory}× the memory it reserves, at no
+                      extra cost.
+                    </p>
+                  )}
                 {/* Says what the coupon did, at the moment and place the
                     money used to be. Without this the page still changes
                     under the user on redeem — the price becomes "Covered" —
@@ -643,100 +819,12 @@ export function ComputeStep({
             )}
           </div>
 
-          {/* The separator the owner asked for, doing real work rather than
-              decoration: it marks the point where the answer stops being "we
-              run it" and starts being "you run it". */}
-          <div className="flex items-center gap-3">
-            <span className="h-px flex-1 bg-border" aria-hidden="true" />
-            <span className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">
-              Or run it yourself
-            </span>
-            <span className="h-px flex-1 bg-border" aria-hidden="true" />
-          </div>
-
-          {/* Deliberately shaped like a PlanTiles row — icon + name + what you
-              get on the left, price on the right — so "Free" lands in the same
-              column as "$20.00/mo" and the comparison is visual rather than
-              inferred. It is NOT a plan: it writes no `computePlanId`, and
-              picking it opens the connect instructions below instead of
-              recording a purchase.
-
-              The horizontal padding is 36px, not the 16px a PlanTiles row
-              uses, because this row sits OUTSIDE the cloud card while the
-              tiles sit inside its `p-5`. The extra 20px of card padding plus
-              its 2px border is what the tiles are inset by, so matching their
-              own padding would leave this price 21px out of column against the
-              four directly above it. Measured: all five right edges now land
-              at x=883. */}
-          <button
-            type="button"
-            onClick={handleLocal}
-            aria-pressed={showLocal}
-            className={cn(
-              "flex w-full min-w-0 items-center justify-between gap-4 rounded-lg border px-[36px] py-3 text-left transition-colors",
-              showLocal
-                ? "border-primary bg-primary/10"
-                : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
-            )}
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex-shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
-                <Monitor className="h-5 w-5" />
-              </span>
-              <span className="min-w-0">
-                <span className="block text-sm font-semibold text-foreground">
-                  Use your own computer
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  Connect any machine with the Reliant command line tool.
-                </span>
-              </span>
-            </span>
-            <span className="flex-shrink-0 text-sm font-semibold text-emerald-500">
-              Free
-            </span>
-          </button>
         </div>
 
         {/* No inline error slot any more. The only errors this step could
             raise came from provisioning, and it no longer provisions —
             choosing is local and cannot fail. Provisioning failures surface at
             the commit point, where the retry lives. */}
-
-        {showLocal && activeDaemon && (
-          <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-            <div className="flex items-start gap-3">
-              <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
-              <div>
-                <h3 className="text-sm font-medium text-foreground">
-                  Your machine is connected
-                </h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Reliant found a machine already running. Continue to pick a
-                  folder to work in.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleLocalContinue}
-              className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-            >
-              Continue
-            </button>
-          </div>
-        )}
-
-        {showLocal && !activeDaemon && (
-          <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
-            {/* Self-hosted connect instructions are shared with the
-                ProjectPicker's in-place "Connect a new daemon" flow. The
-                onboarding-specific auto-advance still happens via the
-                hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
-                the download/token/start UI and the "waiting to connect" state. */}
-            <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
-          </div>
-        )}
       </div>
     </div>
   );
