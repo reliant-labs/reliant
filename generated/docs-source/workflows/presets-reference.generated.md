@@ -18,8 +18,8 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 
 | Preset | Model | Tools | Description |
 |--------|-------|-------|-------------|
-| `code_reviewer` | `tags:flagship` | `tag:shell`, `tag:web`, `view` | Code review orchestrator that spawns specialized reviewers for comprehensive ... |
-| `debug` | `tags:flagship` | `view`, `tag:shell` | Debugging orchestrator that coordinates research and testing to isolate bugs ... |
+| `code_reviewer` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Code review orchestrator that spawns specialized reviewers for comprehensive ... |
+| `debug` | `tags:flagship` | `view`, `tag:shell`, `code_context` | Debugging orchestrator that coordinates research and testing to isolate bugs ... |
 | `documentation` | `tags:moderate` | `view`, `write`, `edit`, `tag:shell`, `fetch` | Documentation specialist creating comprehensive, narrative-driven technical d... |
 | `forge` | `tags:flagship` | `tag:default` (+13 more) | Balanced general-purpose agent for Forge app generation workflows with full t... |
 | `forge_implementer` | `tags:moderate` | `tag:default`, `component_library` | Implementation specialist for a single seam of a Forge app — same tier as `... |
@@ -27,10 +27,10 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 | `git` | `tags:fast` | `tag:shell`, `view` | Git specialist for commits, branching, and version control operations - loads... |
 | `implementer` | `tags:flagship` | `tag:default` | Implementation specialist for well-specified code changes — follows detaile... |
 | `migrate` | `tags:flagship` | `tag:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
-| `planner` | `tags:flagship` | `view`, `tag:shell`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
-| `refactor` | `tags:moderate` | `view` (+5 more) | Code refactoring specialist who reorganizes and improves code structure while... |
-| `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view` | Research and analysis specialist conducting comprehensive investigations of t... |
-| `tester` | `tags:moderate` | `view`, `write`, `edit`, `tag:shell` | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
+| `planner` | `tags:flagship` | `view`, `tag:shell`, `code_context`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
+| `refactor` | `tags:moderate` | `view` (+6 more) | Code refactoring specialist who reorganizes and improves code structure while... |
+| `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Research and analysis specialist conducting comprehensive investigations of t... |
+| `tester` | `tags:moderate` | `view` (+4 more) | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
 | `ux` | `tags:flagship` | `fetch` (+19 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
 | `workflow_builder` | `tags:flagship` | `tag:workflow` (+4 more) | Specialized assistant for building and modifying Reliant workflows |
 
@@ -44,7 +44,7 @@ Code review orchestrator that spawns specialized reviewers for comprehensive ana
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `tag:shell`, `tag:web`, `view` |
+| **Tools** | `tag:shell`, `tag:web`, `view`, `code_context` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -57,7 +57,7 @@ Debugging orchestrator that coordinates research and testing to isolate bugs wit
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `tag:shell` |
+| **Tools** | `view`, `tag:shell`, `code_context` |
 | **Spawn Presets** | `researcher`, `tester` |
 
 ---
@@ -160,7 +160,7 @@ Strategic planner who orchestrates research and synthesizes actionable implement
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `tag:shell`, `create_plan` |
+| **Tools** | `view`, `tag:shell`, `code_context`, `create_plan` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -173,7 +173,7 @@ Code refactoring specialist who reorganizes and improves code structure while pr
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `edit`, `write`, `find_replace`, `move_code`, `tag:shell` |
+| **Tools** | `view`, `edit`, `write`, `find_replace`, `move_code`, `tag:shell`, `code_context` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -186,7 +186,7 @@ Research and analysis specialist conducting comprehensive investigations of the 
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `tag:shell`, `tag:web`, `view` |
+| **Tools** | `tag:shell`, `tag:web`, `view`, `code_context` |
 
 ---
 
@@ -198,7 +198,7 @@ Testing specialist who creates test harnesses, writes comprehensive tests, and i
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `write`, `edit`, `tag:shell` |
+| **Tools** | `view`, `write`, `edit`, `tag:shell`, `code_context` |
 | **Spawn Presets** | `researcher` |
 
 ---

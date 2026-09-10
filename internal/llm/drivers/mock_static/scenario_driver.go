@@ -46,7 +46,7 @@ type Validation struct {
 	ToolResponseContains []string `json:"tool_response_contains,omitempty"`
 	FileExists           string   `json:"file_exists,omitempty"`
 	FileContains         []string `json:"file_contains,omitempty"`
-	BashOutputContains   []string `json:"bash_output_contains,omitempty"`
+	ShellOutputContains  []string `json:"shell_output_contains,omitempty"`
 	ErrorExpected        bool     `json:"error_expected,omitempty"`
 }
 

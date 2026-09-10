@@ -12,13 +12,16 @@ const (
 	ToolFindReplace = "find_replace"
 
 	// Execution tools
-	// Platform-specific shell tools - use tag:shell to get the appropriate one
-	ToolBash       = "bash"       // Unix/macOS/Linux
-	ToolPowerShell = "powershell" // Windows
-	ToolBashList   = "bash_list"
-	ToolBashOutput = "bash_output"
-	ToolBashWait   = "bash_wait"
-	ToolBashKill   = "bash_kill"
+	// The shell tool's NAME is the same on every platform. Only its
+	// description varies, and it varies by the DAEMON's OS (resolved at
+	// request time), not by the build tags of whatever built this binary.
+	// A per-OS name would change underneath a chat that moves between daemons
+	// and would break every persisted tool_calls reference.
+	ToolShell       = "shell"
+	ToolShellList   = "shell_list"
+	ToolShellOutput = "shell_output"
+	ToolShellWait   = "shell_wait"
+	ToolShellKill   = "shell_kill"
 
 	// Network tools
 	ToolFetch     = "fetch"
@@ -106,7 +109,7 @@ const (
 	TagFile      = "file"
 	TagSearch    = "search"
 	TagExecution = "execution"
-	TagShell     = "shell" // Shell tools (bash on Unix, powershell on Windows)
+	TagShell     = "shell" // The shell tool and its background-process family
 	TagWeb       = "web"
 	TagPlanning  = "planning"
 	TagAnalysis  = "analysis"
@@ -118,7 +121,7 @@ const (
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
-	ToolBash, ToolPowerShell, ToolBashList, ToolBashOutput, ToolBashWait, ToolBashKill,
+	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
 	ToolListTasks, ToolAddTask, ToolUpdateTask, ToolCreateSubtask,

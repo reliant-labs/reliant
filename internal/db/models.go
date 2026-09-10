@@ -327,6 +327,18 @@ func IsBlockValid(block *MessageContentBlock) bool {
 		return block.ToolCallID != nil && *block.ToolCallID != "" && block.Content != nil
 
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_THINKING:
+		// A signature with no readable text is a VALID thinking block. The
+		// provider signs reasoning it does not always return in text form, and
+		// the signature is what lets the next turn replay the block and
+		// continue — requiring Content here would filter out exactly the rows
+		// that keep a thread moving.
+		if block.Content != nil && *block.Content != "" {
+			return true
+		}
+		return block.ThoughtSignature != nil && *block.ThoughtSignature != ""
+
+	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_REDACTED_THINKING:
+		// The sealed payload lives in Content and is the whole block.
 		return block.Content != nil && *block.Content != ""
 
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE,

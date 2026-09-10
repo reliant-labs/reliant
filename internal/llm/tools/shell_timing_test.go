@@ -30,7 +30,7 @@ func (d *stallDaemon) RunCommand(_ context.Context, _ *daemon.RunCommandRequest)
 	}, nil
 }
 
-func runShell(t *testing.T, d *stallDaemon) (BashOutput, ShellResponseMetadata) {
+func runShell(t *testing.T, d *stallDaemon) (ShellOutput, ShellResponseMetadata) {
 	t.Helper()
 	tc := &rctx.ToolContext{
 		Daemon:   d,
@@ -42,7 +42,7 @@ func runShell(t *testing.T, d *stallDaemon) (BashOutput, ShellResponseMetadata) 
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	var out BashOutput
+	var out ShellOutput
 	if err := json.Unmarshal([]byte(resp.Content), &out); err != nil {
 		t.Fatalf("unmarshal tool content %q: %v", resp.Content, err)
 	}

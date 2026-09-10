@@ -27,6 +27,18 @@ vi.mock("../../../api/client", () => ({
   },
 }));
 
+// `usePreferences` is gated on having a session — GetPreferences is an
+// authenticated RPC and must not fire on the signed-out sign-in screen. This
+// panel is only reachable signed in, so the session here is what the real
+// surface always has; without it the hook correctly serves DEFAULT_PREFERENCES
+// and never reads the mocked remote values these tests are about.
+vi.mock("@/store/authStore", () => {
+  const state = { session: { access_token: "test-token" } };
+  const useAuthStore = <T,>(selector: (s: typeof state) => T): T => selector(state);
+  useAuthStore.getState = () => state;
+  return { useAuthStore };
+});
+
 const { MobileWorkspacePreferencesPanel } = await import(
   "../MobileWorkspacePreferencesPanel"
 );

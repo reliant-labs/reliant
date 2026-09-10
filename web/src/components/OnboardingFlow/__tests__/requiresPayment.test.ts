@@ -38,10 +38,18 @@ const MODEL_PROVIDER_VALUES: (ModelProvider | undefined)[] = [
 ];
 
 const FACT_VALUES: PaymentFacts[] = [
-  { computeEligible: false, walletFunded: false },
-  { computeEligible: true, walletFunded: false },
-  { computeEligible: false, walletFunded: true },
-  { computeEligible: true, walletFunded: true },
+  { computeEligible: false, walletFunded: false, reliantBillingAvailable: true },
+  { computeEligible: true, walletFunded: false, reliantBillingAvailable: true },
+  { computeEligible: false, walletFunded: true, reliantBillingAvailable: true },
+  { computeEligible: true, walletFunded: true, reliantBillingAvailable: true },
+  // A deployment with no control plane sells neither product. Enumerated only
+  // against the unentitled row: an entitled user owes nothing regardless, so
+  // the other three could not distinguish the rule.
+  {
+    computeEligible: false,
+    walletFunded: false,
+    reliantBillingAvailable: false,
+  },
 ];
 
 /** The rule, restated from the product and not from the implementation. */
@@ -52,6 +60,11 @@ function oracle(
   provider: ModelProvider | undefined,
   facts: PaymentFacts,
 ) {
+  // Both legs are purchases of RELIANT's products — a machine we host, model
+  // routing we meter. Where we sell neither, there is nothing to charge for.
+  if (!facts.reliantBillingAvailable) {
+    return { needsCompute: false, needsCredit: false, any: false };
+  }
   const runsOnOurHardware = compute !== undefined && HOSTED.has(compute);
   const usesOurModels = provider === "reliant_credits";
   const needsCompute = runsOnOurHardware && !facts.computeEligible;
@@ -87,21 +100,34 @@ describe("requiresPayment — full enumeration", () => {
       }
     }
     expect(offenders).toEqual([]);
-    expect(count).toBe(160);
+    // 5 compute × 8 providers × 5 fact rows.
+    expect(count).toBe(200);
   });
 
   it("is capable of disagreeing with the oracle", () => {
     // Guards the guard. If the loop above can only ever pass, it tests
     // nothing — so prove the oracle rejects a wrong answer.
-    const facts: PaymentFacts = { computeEligible: false, walletFunded: true };
+    const facts: PaymentFacts = {
+      computeEligible: false,
+      walletFunded: true,
+      reliantBillingAvailable: true,
+    };
     expect(oracle("local_daemon", "reliant_credits", facts).any).toBe(false);
     expect(oracle("cloud_paid", "anthropic", facts).any).toBe(true);
   });
 });
 
 describe("requiresPayment — the cases the product turns on", () => {
-  const broke: PaymentFacts = { computeEligible: false, walletFunded: false };
-  const entitled: PaymentFacts = { computeEligible: true, walletFunded: true };
+  const broke: PaymentFacts = {
+    computeEligible: false,
+    walletFunded: false,
+    reliantBillingAvailable: true,
+  };
+  const entitled: PaymentFacts = {
+    computeEligible: true,
+    walletFunded: true,
+    reliantBillingAvailable: true,
+  };
 
   // THE FREE PATH, and per inherited fact 1 it is the ONLY one: a new account
   // gets no trial and no signup credit, so nothing else through this wizard is
@@ -151,7 +177,11 @@ describe("requiresPayment — the cases the product turns on", () => {
     expect(
       requiresPayment(
         { compute: "cloud_free_trial", modelProvider: "anthropic" },
-        { computeEligible: true, walletFunded: false },
+        {
+          computeEligible: true,
+          walletFunded: false,
+          reliantBillingAvailable: true,
+        },
       ).any,
     ).toBe(false);
   });

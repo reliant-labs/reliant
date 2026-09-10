@@ -658,8 +658,14 @@ events:
       response_text: "ERROR: Failed"
       tool_calls: []
 
-  # Review runs but response is null (no response tool called or incomplete)
+  # Deliberate black box, and it must stay one. This scenario tests the PARENT's
+  # edge handling when review yields a null response, which means synthesizing a
+  # state the structured-agent body cannot itself produce: `completed` is derived
+  # from the presence of a response_data key, so a real body that set completed
+  # true would necessarily also have a non-null response. Executing the body
+  # would therefore replace the premise under test rather than exercise it.
   - node: review
+    black_box: true
     output:
       response: null
       completed: true

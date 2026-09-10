@@ -84,9 +84,15 @@ type DriverResponse struct {
 	Content           string
 	Thinking          string // Extended thinking/reasoning content
 	ThinkingSignature string // Signature for multi-turn thinking preservation
-	ToolCalls         []message.ToolCall
-	Usage             TokenUsage
-	FinishReason      message.FinishReason
+	// RedactedThinking is the opaque, encrypted payload of a redacted_thinking
+	// block — reasoning the provider's safety system withheld. It has no
+	// readable content and must never be rendered or treated as thinking text.
+	// It is carried solely so it can be passed back unchanged on the next turn,
+	// which the Anthropic API requires of a multi-turn exchange.
+	RedactedThinking string
+	ToolCalls        []message.ToolCall
+	Usage            TokenUsage
+	FinishReason     message.FinishReason
 
 	// Upstream correlation identifiers copied from provider response headers when available.
 	// Used for log correlation between Reliant app logs and HTTP capture tooling (e.g. Proxyman).

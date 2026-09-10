@@ -197,7 +197,7 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 
 	var truncated string
 	switch toolName {
-	case "bash", "powershell", "bash_output", "view":
+	case "shell", "shell_output", "view":
 		// For shell and view output, show beginning and end (head+tail strategy)
 		if keepSize > 2000 {
 			headSize := keepSize * 3 / 4
@@ -246,7 +246,7 @@ func getToolSpecificSuggestions(toolName string) []string {
 			"Search the file with 'rg pattern <file>' to locate content before reading",
 			"Consider reading only the relevant portion of the file",
 		}
-	case "bash", "powershell", "bash_output":
+	case "shell", "shell_output":
 		return []string{
 			"Use head, tail, or a narrower pattern to filter command output",
 			"When searching, bound the results: 'rg -l' for filenames only, or 'rg -m 20'",

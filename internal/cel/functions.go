@@ -18,11 +18,10 @@ func toolRequiresApprovalImpl(arg ref.Val) ref.Val {
 
 	// Dangerous tools list
 	dangerousTools := map[string]bool{
-		"bash":       true,
-		"powershell": true,
-		"edit":       true,
-		"write":      true,
-		"delete":     true,
+		"shell":  true,
+		"edit":   true,
+		"write":  true,
+		"delete": true,
 	}
 
 	return types.Bool(dangerousTools[toolName])

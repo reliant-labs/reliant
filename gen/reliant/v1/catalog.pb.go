@@ -642,7 +642,7 @@ func (x *ListAvailableModelsResponse) GetModels() []*AvailableModelInfo {
 // ToolInfo represents information about a tool
 type ToolInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tool name (e.g., "grep", "edit", "bash")
+	// Tool name (e.g., "view", "edit", "shell")
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Human-readable description
 	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`

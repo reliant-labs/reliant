@@ -163,6 +163,18 @@ events:
     output:
       exit_code: 0
 
+  # fix EXECUTES rather than falling through to the default empty mock. This
+  # scenario is NAMED for verification failures, and fix's condition plus its
+  # failure-summarizing prompt CEL (which reads each verify_* exit_code) is the
+  # behaviour under test — black-boxing compiled none of it.
+  - node: fix.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Removed the unused session imports from the test files; lint and tests are green."
+      response_text: "Removed the unused session imports from the test files; lint and tests are green."
+      tool_calls: []
+
 expect:
   outcome: completed
   reached:
@@ -176,4 +188,10 @@ expect:
     - verify_build
     - verify
     - verify_report
+    - fix
     - complete
+  # fix is conditional on a non-zero verify exit code. `reached` would also hold
+  # for a SKIPPED node, so the condition actually firing is pinned with `completed`.
+  completed:
+    - fix
+    - fix.agent_loop.call_llm

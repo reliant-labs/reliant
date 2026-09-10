@@ -47,28 +47,28 @@ describe("ToolExecutionGroup header label", () => {
     writePrefs({ execution: true, agent: true });
   });
 
-  const bash = (id: string, description: string) =>
-    mk("bash", id, { command: `rg -n thing-${id} .`, description });
+  const shell = (id: string, description: string) =>
+    mk("shell", id, { command: `rg -n thing-${id} .`, description });
 
   it("previews the lead call's argument and counts the rest", () => {
     render(
       <ToolExecutionGroup
-        executions={[bash("1", "Run the tests"), bash("2", "Lint"), bash("3", "Build")]}
+        executions={[shell("1", "Run the tests"), shell("2", "Lint"), shell("3", "Build")]}
       />
     );
-    expect(screen.getByText("bash(Run the tests) and 2 other tools")).toBeInTheDocument();
+    expect(screen.getByText("shell(Run the tests) and 2 other tools")).toBeInTheDocument();
   });
 
   it("uses the singular for exactly one other call", () => {
-    render(<ToolExecutionGroup executions={[bash("1", "Run the tests"), mk("grep", "2")]} />);
-    expect(screen.getByText("bash(Run the tests) and 1 other tool")).toBeInTheDocument();
+    render(<ToolExecutionGroup executions={[shell("1", "Run the tests"), mk("grep", "2")]} />);
+    expect(screen.getByText("shell(Run the tests) and 1 other tool")).toBeInTheDocument();
   });
 
   it("leads with spawn wherever it appears in the group", () => {
     render(
       <ToolExecutionGroup
         executions={[
-          bash("1", "Run the tests"),
+          shell("1", "Run the tests"),
           mk("spawn", "2", { preset: "researcher" }),
           mk("grep", "3"),
         ]}
@@ -80,21 +80,21 @@ describe("ToolExecutionGroup header label", () => {
   it("strips the mcp__ prefix from the lead name", () => {
     render(
       <ToolExecutionGroup
-        executions={[bash("1", "Run the tests"), mk("mcp__reliant__spawn", "2", {})]}
+        executions={[shell("1", "Run the tests"), mk("mcp__reliant__spawn", "2", {})]}
       />
     );
     expect(screen.getByText(/^spawn.* and 1 other tool$/)).toBeInTheDocument();
   });
 
   it("shows just the lead preview when the group holds a single call", () => {
-    render(<ToolExecutionGroup executions={[bash("1", "Run the tests")]} />);
-    expect(screen.getByText("bash(Run the tests)")).toBeInTheDocument();
+    render(<ToolExecutionGroup executions={[shell("1", "Run the tests")]} />);
+    expect(screen.getByText("shell(Run the tests)")).toBeInTheDocument();
   });
 
   it("truncates a long preview so the trailing count stays visible", () => {
     render(
       <ToolExecutionGroup
-        executions={[bash("1", "A".repeat(200)), bash("2", "Lint")]}
+        executions={[shell("1", "A".repeat(200)), shell("2", "Lint")]}
       />
     );
     const label = screen.getByText(/and 1 other tool$/);

@@ -52,7 +52,7 @@ func gpt56Model(id models.ModelID, apiModel string) models.Model {
 // change, so a test against SDK structs would not catch a regression that
 // silently stops emitting the fields.
 func TestBuildParams_GPT56UsesAdditionalToolsEnvelope(t *testing.T) {
-	for _, modelID := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra} {
+	for _, modelID := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra} {
 		t.Run(string(modelID), func(t *testing.T) {
 			payload := marshalParams(t,
 				gpt56Model(modelID, string(modelID)),
@@ -142,7 +142,7 @@ func TestBuildParams_GPT56ReasoningCarriesContextAndNoSummary(t *testing.T) {
 // Enabling summaries for 5.6 later should be a models.yaml change, so the
 // builder must actually thread a requested summary onto the wire.
 func TestNewGPT56ReasoningParam_IncludesSummaryWhenRequested(t *testing.T) {
-	raw, err := json.Marshal(newGPT56ReasoningParam("high", shared.ReasoningSummaryDetailed))
+	raw, err := json.Marshal(newAdditionalToolsReasoningParam("high", shared.ReasoningSummaryDetailed))
 	if err != nil {
 		t.Fatalf("failed to marshal reasoning param: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestBuildParams_PreGPT56KeepsLegacyEnvelope(t *testing.T) {
 // pinning — particularly for 5.6, where the reasoning block and the tool list
 // are raw override payloads that typed field access cannot see.
 func TestDescribeReasoning_ReadsRawOverrideFields(t *testing.T) {
-	effort, summary, context := describeReasoning(newGPT56ReasoningParam("ultra", ""))
+	effort, summary, context := describeReasoning(newAdditionalToolsReasoningParam("ultra", ""))
 	if effort != "ultra" {
 		t.Errorf("expected effort=ultra, got %q", effort)
 	}
@@ -264,22 +264,24 @@ func TestRawItemFields_SeesAdditionalTools(t *testing.T) {
 }
 
 func TestEnvelopeName(t *testing.T) {
-	if got := envelopeName(models.GPT56Sol); got != "gpt-5.6" {
-		t.Errorf("expected gpt-5.6, got %q", got)
+	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT6Astra} {
+		if got := envelopeName(id); got != "additional_tools" {
+			t.Errorf("expected additional_tools for %s, got %q", id, got)
+		}
 	}
 	if got := envelopeName(models.GPT55); got != "legacy" {
 		t.Errorf("expected legacy, got %q", got)
 	}
 }
 
-func TestIsGPT56(t *testing.T) {
-	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra} {
-		if !isGPT56(id) {
-			t.Errorf("expected %s to use the gpt-5.6 envelope", id)
+func TestUsesAdditionalToolsEnvelope(t *testing.T) {
+	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra} {
+		if !usesAdditionalToolsEnvelope(id) {
+			t.Errorf("expected %s to use the additional_tools envelope", id)
 		}
 	}
-	for _, id := range []models.ModelID{models.GPT55, models.GPT54, models.GPT53Codex, models.GPT53CodexSpark} {
-		if isGPT56(id) {
+	for _, id := range []models.ModelID{models.GPT55, models.GPT54, models.GPT53Codex} {
+		if usesAdditionalToolsEnvelope(id) {
 			t.Errorf("expected %s to use the legacy envelope", id)
 		}
 	}
@@ -287,8 +289,8 @@ func TestIsGPT56(t *testing.T) {
 
 func TestModelSupportsReasoningSummaries(t *testing.T) {
 	noSummaries := []models.ModelID{
-		models.GPT53CodexSpark,
 		models.GPT56Sol, models.GPT56Luna, models.GPT56Terra,
+		models.GPT6Astra,
 	}
 	for _, id := range noSummaries {
 		if modelSupportsReasoningSummaries(id) {
@@ -309,5 +311,53 @@ func TestBuildParams_GPT56StillIncludesEncryptedReasoning(t *testing.T) {
 	include, ok := payload["include"].([]any)
 	if !ok || len(include) != 1 || include[0] != "reasoning.encrypted_content" {
 		t.Errorf("expected gpt-5.6 to include reasoning.encrypted_content, got %#v", payload["include"])
+	}
+}
+
+// Astra pins service_tier=priority on every frame of its capture, and the 5.6
+// family sends the field not at all. Both halves are asserted together because
+// the risk here is symmetric: dropping the field breaks astra's routing, and
+// adding it to 5.6 changes behavior the sol capture shows us is not wanted.
+func TestBuildParams_AstraPinsPriorityServiceTier(t *testing.T) {
+	astra := marshalParams(t, gpt56Model(models.GPT6Astra, "gpt-6-astra"), "high", nil)
+	if astra["service_tier"] != "priority" {
+		t.Errorf("expected astra to request service_tier=priority, got %v", astra["service_tier"])
+	}
+
+	for _, modelID := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra} {
+		payload := marshalParams(t, gpt56Model(modelID, string(modelID)), "high", nil)
+		if tier, ok := payload["service_tier"]; ok {
+			t.Errorf("expected %s to omit service_tier, got %v", modelID, tier)
+		}
+	}
+}
+
+// The routing hint names the api_model, not our catalog id — it is the
+// backend's own routing key. Only astra was observed sending it.
+func TestRoutingHint(t *testing.T) {
+	got := routingHint(models.GPT6Astra, "gpt-6-astra")
+	if want := "model=gpt-6-astra;tier=priority"; got != want {
+		t.Errorf("routingHint(astra) = %q, want %q", got, want)
+	}
+
+	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT55, models.GPT54Mini} {
+		if hint := routingHint(id, string(id)); hint != "" {
+			t.Errorf("expected no routing hint for %s, got %q", id, hint)
+		}
+	}
+}
+
+// Astra's top effort is `max` (its thinking_levels stop there, unlike sol and
+// terra which also declare ultra). The SDK enum stops at xhigh, so this pins
+// that `max` reaches the wire verbatim rather than being clamped.
+func TestBuildParams_AstraPassesThroughMaxEffort(t *testing.T) {
+	payload := marshalParams(t, gpt56Model(models.GPT6Astra, "gpt-6-astra"), "max", nil)
+
+	reasoning, _ := payload["reasoning"].(map[string]any)
+	if reasoning["effort"] != "max" {
+		t.Errorf("expected effort=max to survive serialization, got %v", reasoning["effort"])
+	}
+	if reasoning["context"] != "all_turns" {
+		t.Errorf("expected context=all_turns on astra, got %v", reasoning["context"])
 	}
 }

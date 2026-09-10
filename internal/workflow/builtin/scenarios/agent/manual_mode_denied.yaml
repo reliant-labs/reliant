@@ -24,7 +24,7 @@ events:
     type: llm_response
     text: "I'm going to delete this file."
     tool_calls:
-      - name: bash
+      - name: shell
         input:
           command: "rm -rf /important/file"
 

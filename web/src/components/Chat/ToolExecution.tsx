@@ -143,7 +143,7 @@ function toolResultCallIdsContaining(messages: Message[], needle: string): Set<s
   return ids;
 }
 
-function findBashCallForProcess(messages: Message[], processId: string): ContentBlock | undefined {
+function findShellCallForProcess(messages: Message[], processId: string): ContentBlock | undefined {
   const resultCallIds = toolResultCallIdsContaining(messages, processId);
   let lastMatch: ContentBlock | undefined;
   for (const message of collectMessagesInRenderOrder(messages)) {
@@ -151,7 +151,7 @@ function findBashCallForProcess(messages: Message[], processId: string): Content
       .slice()
       .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
     for (const block of blocks) {
-      if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "bash") {
+      if (block.type !== ContentBlockType.TOOL_CALL || baseToolName(block.toolName || "") !== "shell") {
         continue;
       }
       if (
@@ -492,14 +492,14 @@ function ToolExecutionComponent({
     const input = inputObject(toolCall.input);
     if (!input) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
 
-    if (toolBaseName === "bash_wait") {
+    if (toolBaseName === "shell_wait") {
       const processId = stringField(input.process_id);
       if (!processId) return { displayInput: toolCall.input, threadId: undefined as string | undefined };
-      const bashCall = findBashCallForProcess(allDisplayMessages, processId);
-      const bashInput = parseToolInput(bashCall?.input);
-      const bashObj = inputObject(bashInput);
-      const description = stringField(bashObj?.description) || stringField(bashObj?.Description);
-      const command = stringField(bashObj?.command) || stringField(bashObj?.Command);
+      const shellCall = findShellCallForProcess(allDisplayMessages, processId);
+      const shellInput = parseToolInput(shellCall?.input);
+      const shellObj = inputObject(shellInput);
+      const description = stringField(shellObj?.description) || stringField(shellObj?.Description);
+      const command = stringField(shellObj?.command) || stringField(shellObj?.Command);
       return {
         displayInput: description || command ? { ...input, description, command } : toolCall.input,
         threadId: undefined,

@@ -517,6 +517,7 @@ SimulatedEvent represents a single mocked event in a test scenario.
 | `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
 | `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
 | `is_error` | boolean | No | IsError marks a tool_result as failed (for type: tool_result). |
+| `black_box` | boolean | No | BlackBox mocks a loop or workflow node AS A UNIT: its body is not |
 
 ### Expectation fields
 
@@ -742,6 +743,60 @@ that never exercised what its name claims to test:
   have a silently-defaulted router — including every `one-ring` scenario, where names like
   `implement_only` and `plan_only` assert a routing outcome `classify` never actually made.
   Don't let this happen to your scenario: if the point is "task X gets classified as Y," mock `classify`.
+
+### Responding to a black-box warning: three options, pick deliberately
+
+You have three ways to respond, and the warning itself cannot tell you which is right — that judgment
+call is why the flag exists:
+
+1. **Make it transparent.** Add an event (or an `expect:` reference) targeting a node STRICTLY
+   INSIDE the ref with a qualified id, e.g. `node: research.search`. This is the right move whenever
+   the sub-workflow's own logic — its routing, its loop exit condition, an expression evaluated inside
+   it — is part of what this scenario is supposed to prove.
+2. **Declare it intentional with `black_box: true`.** Add the flag to the event targeting the node
+   itself. This is the right move when the sub-workflow is genuinely not what this scenario tests —
+   e.g. mocking `builtin://agent` to test the pipeline stages around it — and you want the aggregate
+   output without paying for a full simulated agent loop.
+3. **Leave the warning.** If the scenario cannot reasonably be converted (e.g. it predates this
+   convention and reworking it is out of scope), leaving the warning stand is better than converting it
+   incorrectly. Do not silence it with `black_box: true` just to make the warning go away — see below.
+
+`black_box: true` is a claim about INTENT, not a way to quiet the output. Setting it does not
+change what ran; it tells the tool you already knew the body wouldn't run and that's what you meant.
+The node genuinely does not execute, so anything inside it — every inner condition, loop, and
+expression — is untested by this scenario, same as before you added the flag. Reach for it only when
+you have actually decided the body is out of scope, never as a reflex to a warning you have not read.
+
+Concrete precedent for why the distinction matters: `parallel-compete.yaml`'s parallel loop body
+referenced `iter.item.num`, which never resolved at runtime — the loop's own iteration binding was
+broken. No scenario noticed, because every one of them black-boxed the loop as a unit (mocking its
+aggregate `_results`/`_completed` output) instead of letting the body execute, so the failing
+expression was never even compiled. The bug shipped to production and stayed invisible in a fully
+green corpus. Loop bodies now execute by default for exactly this reason — this is the one case where
+opting back in with `black_box: true` needs a real reason, not a reflex.
+
+Real example, verbatim from `internal/workflow/builtin/scenarios/pitch-deck/start_from_research.yaml`,
+declaring a parallel loop black-box deliberately because the scenario tests the caller's aggregation of
+per-slide results, not the per-slide pipeline itself:
+
+```yaml
+- node: slide_pipeline
+  # Deliberate black box: this scenario mocks the parallel loop's AGGREGATE
+  # result (_results/_completed) rather than exercising the per-slide body.
+  # Loop bodies execute by default; this opts out explicitly.
+  black_box: true
+  output:
+    _completed: 1
+    _failed: 0
+    _parallel: true
+    _results:
+      "01-hook.md":
+        response_text: "Wrote hook slide."
+```
+
+The same flag applies to a ref-mode `type: workflow` node: set `black_box: true` on the event
+targeting the node itself (not an internal qualified id) to declare its opacity intentional and
+silence the warning for that node.
 
 ### Best practices
 

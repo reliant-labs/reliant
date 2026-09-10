@@ -71,6 +71,16 @@ vi.mock("../../hooks/chat-queries", () => ({
   chatKeys: { all: ["chats"] },
   getCachedChatList: () => [],
 }));
+// The store now refuses to fetch provider status without a session — that gate
+// is what stopped the checklist's 15s poll from firing 401s at the sign-in
+// screen (see onboardingChecklistStore.signedOut.test.ts). These tests are
+// about the SIGNED-IN derivation, so they supply the session the real flow has.
+vi.mock("../authStore", () => {
+  const state = { session: { access_token: "test-token" } };
+  const useAuthStore = <T,>(selector: (s: typeof state) => T): T => selector(state);
+  useAuthStore.getState = () => state;
+  return { useAuthStore };
+});
 
 // Deliberately NOT mocked: the store imports the real singleton from
 // "../../lib/query-client", and this is the point of the test — writing to

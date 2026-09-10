@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
@@ -28,6 +29,12 @@ func (f *fakeControlPlaneClient) IssueMyReliantAPIKey(ctx context.Context, jwt s
 		return "", f.issueErr
 	}
 	return f.issueKey, nil
+}
+
+// DeleteCurrentUserAccount satisfies controlplane.Client. The settings tests
+// never exercise account deletion; account.go's own tests cover that path.
+func (f *fakeControlPlaneClient) DeleteCurrentUserAccount(context.Context, string) ([]controlplane.AccountDeletionBlocker, error) {
+	return nil, nil
 }
 
 func TestSettingsService_SyncReliantProvider_PersistsKeyAndEmitsRefetch(t *testing.T) {

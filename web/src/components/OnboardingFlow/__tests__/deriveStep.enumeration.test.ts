@@ -2,9 +2,9 @@
  * Exhaustive enumeration of the onboarding step machine.
  *
  * `deriveStep` reads three plan fields plus the two per-leg settlement flags,
- * each with a small closed domain, and two server facts. The whole reachable
- * space is 240 plan states × 4 settlement combinations × 4 fact combinations
- * = 3840. That is still small enough to enumerate in a loop, which is strictly
+ * each with a small closed domain, and the server facts. The whole reachable
+ * space is 240 plan states × 4 settlement combinations × 5 fact combinations
+ * = 4800. That is still small enough to enumerate in a loop, which is strictly
  * better than hand-picking fixtures: a hand-written test only covers the states
  * someone thought of, and every onboarding regression so far lived in one
  * nobody did.
@@ -121,22 +121,33 @@ const SETTLED_VALUES: { computeSettled: boolean; creditSettled: boolean }[] = [
  * rather than living in it.
  */
 const FACT_VALUES: OnboardingFactsInput[] = [
-  { computeEligible: false, walletFunded: false },
-  { computeEligible: true, walletFunded: false },
-  { computeEligible: false, walletFunded: true },
-  { computeEligible: true, walletFunded: true },
+  { computeEligible: false, walletFunded: false, reliantBillingAvailable: true },
+  { computeEligible: true, walletFunded: false, reliantBillingAvailable: true },
+  { computeEligible: false, walletFunded: true, reliantBillingAvailable: true },
+  { computeEligible: true, walletFunded: true, reliantBillingAvailable: true },
+  // The deployment dimension. Only the unentitled row is enumerated against a
+  // non-billing build, because that is the only one where the flag can change
+  // an answer: an entitled user owes nothing whoever the seller is, so the
+  // other three would add states that cannot distinguish the rule.
+  {
+    computeEligible: false,
+    walletFunded: false,
+    reliantBillingAvailable: false,
+  },
 ];
 
 /** The facts a brand-new account actually has: none. */
 const NEW_USER_FACTS: OnboardingFactsInput = {
   computeEligible: false,
   walletFunded: false,
+  reliantBillingAvailable: true,
 };
 
 /** The facts of a fully entitled user — a coupon, or a completed checkout. */
 const ENTITLED_FACTS: OnboardingFactsInput = {
   computeEligible: true,
   walletFunded: true,
+  reliantBillingAvailable: true,
 };
 
 /** Terminal steps — the ones that own a `completeOnboarding` call. */
@@ -190,7 +201,7 @@ function allStates(): EnumeratedState[] {
 const STATES = allStates();
 
 describe("onboarding state space", () => {
-  it("enumerates the full 1920-state render-relevant space", () => {
+  it("enumerates the full 4800-state render-relevant space", () => {
     // Pins the arithmetic in the header comment. If a field gains a value this
     // fails and forces the domain lists above to be revisited, rather than the
     // new value quietly going untested.
@@ -202,7 +213,7 @@ describe("onboarding state space", () => {
         SETTLED_VALUES.length *
         FACT_VALUES.length,
     );
-    expect(STATES).toHaveLength(3840);
+    expect(STATES).toHaveLength(4800);
   });
 });
 
@@ -225,7 +236,7 @@ describe("step registry drift", () => {
 });
 
 describe("invariant 1 — every state has a step the flow can render", () => {
-  it("derives a registered step for all 1920 states", () => {
+  it("derives a registered step for all 4800 states", () => {
     const offenders: string[] = [];
     for (const { plan, facts, label } of STATES) {
       const step = deriveStep(plan, facts);
@@ -358,7 +369,7 @@ describe("invariant 4 — no state strands the user", () => {
     return false;
   }
 
-  it("can reach a terminal step from all 1920 states", () => {
+  it("can reach a terminal step from all 4800 states", () => {
     const offenders: string[] = [];
     for (const { plan, facts, label } of STATES) {
       if (!reachesTerminal(plan, facts)) offenders.push(label);
@@ -431,6 +442,10 @@ describe("the checkout step appears exactly when money is owed", () => {
     plan: Partial<LaunchPlan>,
     facts: OnboardingFactsInput,
   ): boolean {
+    // Reliant bills only for Reliant's own products, so a deployment that
+    // sells neither can charge for nothing. Stated first because it dominates
+    // every plan-shaped consideration below.
+    if (!facts.reliantBillingAvailable) return false;
     const onCloud =
       plan.compute === "cloud_free_trial" || plan.compute === "cloud_paid";
     const owesCompute =
@@ -528,7 +543,11 @@ describe("the checkout step appears exactly when money is owed", () => {
     expect(
       deriveStep(
         { compute: "local_daemon", modelProvider: "reliant_credits" },
-        { computeEligible: true, walletFunded: false },
+        {
+          computeEligible: true,
+          walletFunded: false,
+          reliantBillingAvailable: true,
+        },
       ),
     ).toBe("checkout");
   });

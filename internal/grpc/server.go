@@ -288,6 +288,18 @@ func NewServer(cfg *Config) (*Server, error) {
 	daemonRegistryPath, daemonRegistryHandler := reliantv1connect.NewDaemonRegistryServiceHandler(daemonRegistryService, opts...)
 	daemonTokenPath, daemonTokenHandler := reliantv1connect.NewDaemonTokenServiceHandler(daemonTokenService, opts...)
 	tokenPath, tokenHandler := reliantv1connect.NewTokenServiceHandler(tokenService, opts...)
+
+	// AccountService (account deletion) needs the raw *sql.DB: the purge is an
+	// ordered multi-statement transaction across every user-owned table, which
+	// the per-entity Repository surface cannot express. Mounted only when a
+	// SQL-backed repository is present — offering a delete button that cannot
+	// delete is worse than not offering one.
+	var accountPath string
+	var accountHandler http.Handler
+	if repo, ok := database.(*db.Repo); ok && repo != nil && repo.DB != nil {
+		accountService := services.NewAccountService(repo.DB.SQLDB())
+		accountPath, accountHandler = reliantv1connect.NewAccountServiceHandler(accountService, opts...)
+	}
 	daemonPath, daemonHandler := reliantv1connect.NewDaemonServiceHandler(daemonProxyService, opts...)
 
 	// ConnectorService manages grants for third-party MCP clients. It is
@@ -332,6 +344,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(daemonTokenPath, daemonTokenHandler)
 	mux.Handle(tokenPath, tokenHandler)
 	mux.Handle(daemonPath, daemonHandler)
+
+	if accountHandler != nil {
+		mux.Handle(accountPath, accountHandler)
+	}
 
 	if connectorHandler != nil {
 		mux.Handle(connectorPath, connectorHandler)

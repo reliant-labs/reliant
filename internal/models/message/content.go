@@ -73,6 +73,25 @@ func (tc ReasoningContent) String() string {
 }
 func (ReasoningContent) isPart() {}
 
+// RedactedReasoningContent is reasoning the provider's safety system withheld.
+//
+// Data is opaque and encrypted — there is no readable text in it, so it is a
+// separate part type rather than a ReasoningContent with a funny Thinking
+// value. That keeps it structurally impossible for a renderer to print
+// ciphertext as if it were the model's reasoning, and keeps it out of
+// String(), which the UI treats as displayable.
+//
+// It carries no signature: the sealed payload is self-contained, and the API
+// requires it be passed back byte-for-byte on the next turn.
+type RedactedReasoningContent struct {
+	Data string `json:"data"`
+}
+
+// String is deliberately empty: this block has no readable content, and
+// anything that renders parts must show nothing for it.
+func (RedactedReasoningContent) String() string { return "" }
+func (RedactedReasoningContent) isPart()        {}
+
 type TextContent struct {
 	Text string `json:"text"`
 }
@@ -213,6 +232,20 @@ func (m *Message) ReasoningContent() ReasoningContent {
 		}
 	}
 	return ReasoningContent{}
+}
+
+// RedactedReasoningContent returns every redacted reasoning block on the
+// message, in order. Plural where ReasoningContent is singular because a single
+// turn can carry several sealed blocks, and each must be replayed — returning
+// only the first would silently drop the rest from the provider's history.
+func (m *Message) RedactedReasoningContent() []RedactedReasoningContent {
+	var out []RedactedReasoningContent
+	for _, part := range m.Parts {
+		if c, ok := part.(RedactedReasoningContent); ok {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 func (m *Message) ImageURLContent() []ImageURLContent {

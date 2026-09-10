@@ -70,12 +70,58 @@ export const ONBOARDING_DAEMON_NAME = "onboarding-daemon";
 
 /** controlplane.v1.DaemonType.MANAGED */
 const DAEMON_TYPE_MANAGED = 1;
-/** controlplane.v1.DaemonSize.SMALL */
-const DAEMON_SIZE_SMALL = 1;
 
-/** controlplane.v1.DaemonStatus.ACTIVE / .PENDING */
-const DAEMON_STATUS_ACTIVE = 2;
+/**
+ * controlplane.v1.DaemonSize, keyed by the machine size a plan sells.
+ *
+ * The compute step offers ONE plan per size — picking a size picks the
+ * cheapest plan that runs it — so the plan id the user recorded is the size
+ * they chose, and this is the map back.
+ */
+const DAEMON_SIZE_SMALL = 1;
+const DAEMON_SIZE_BY_NAME: Record<string, number> = {
+  small: DAEMON_SIZE_SMALL,
+  medium: 2,
+  large: 3,
+  xl: 4,
+};
+
+/**
+ * The machine size a recorded compute plan id asks for.
+ *
+ * ── Why this is derived from the id rather than passed alongside it ───
+ *
+ * The size was HARDCODED to SMALL here. A user who picked "XL — $160.00/mo"
+ * on the compute step was shown that price, charged that price at checkout,
+ * and provisioned a 1-CPU machine: the tile moved the money and nothing else.
+ *
+ * Reading it back out of the plan id keeps ONE field in the URL describing the
+ * purchase. Carrying a second `daemonSize` field beside it would let the two
+ * disagree — a plan id for XL next to a size of small is a state with no
+ * correct interpretation, and the URL is user-editable.
+ *
+ * Unknown or absent falls back to SMALL: every compute plan allows it, so the
+ * user still gets a working machine rather than a failed commit.
+ */
+export function daemonSizeForPlan(computePlanId: string | undefined): number {
+  if (!computePlanId) return DAEMON_SIZE_SMALL;
+  // Plan ids are `plan_compute_<size>` in the catalog; match on the suffix
+  // rather than the whole string so a renamed prefix does not silently
+  // downgrade every machine.
+  const suffix = computePlanId.split("_").pop()?.toLowerCase() ?? "";
+  return DAEMON_SIZE_BY_NAME[suffix] ?? DAEMON_SIZE_SMALL;
+}
+
+/**
+ * controlplane.v1.DaemonStatus, in full.
+ *
+ * The whole enum is spelled out rather than the two values the old code
+ * happened to name, because the decision below is a per-status one and a
+ * partial enum is what let it treat four different machine states as one.
+ */
 const DAEMON_STATUS_PENDING = 1;
+const DAEMON_STATUS_ACTIVE = 2;
+const DAEMON_STATUS_SUSPENDED = 3;
 
 export type CommitTaskName = "grant_ai_access" | "provision_daemon";
 
@@ -304,6 +350,18 @@ async function provisionDaemon(
   try {
     const { daemons } = await deps.listDaemons();
 
+    // ── One decision per machine status ──────────────────────────────
+    //
+    // This used to be "active? done : resume whatever we found", and the
+    // fallback was the bug: it explicitly PREFERRED a PENDING daemon and
+    // resumed it. `svcdaemon.ResumeDaemon` refuses anything that is not
+    // SUSPENDED, so a machine that was already booting came back
+    // `[failed_precondition] daemon is not suspended` and onboarding failed
+    // at its last step — for a user whose machine was, in fact, on its way up.
+    //
+    // Resume is a wake-up for a stopped machine and nothing else. Each status
+    // gets the move that matches what the machine is actually doing.
+
     const active = daemons.find((d) => d.status === DAEMON_STATUS_ACTIVE);
     if (active) {
       return {
@@ -314,25 +372,43 @@ async function provisionDaemon(
       };
     }
 
-    const existing =
-      daemons.find((d) => d.status === DAEMON_STATUS_PENDING) ?? daemons[0];
-    if (existing) {
-      // A machine that exists but is not active is resumed, not re-created:
-      // CreateDaemon is not a wake-up for a suspended workspace, so calling it
-      // again would leave a suspended daemon suspended.
-      await deps.resumeDaemon(existing.id);
+    // PENDING: already provisioning. There is nothing to start and nothing to
+    // wake — the correct action is to WAIT, which is what handing the id to
+    // the gate does. Checked before SUSPENDED so list order cannot decide.
+    const booting = daemons.find((d) => d.status === DAEMON_STATUS_PENDING);
+    if (booting) {
       return {
         name: "provision_daemon",
         status: "complete",
         detail: "Starting your machine…",
-        daemonId: existing.id,
+        daemonId: booting.id,
       };
     }
+
+    // SUSPENDED: the one status resume is for. CreateDaemon is not a wake-up
+    // for a suspended workspace, so calling it here would leave the daemon
+    // suspended and the user without a machine.
+    const suspended = daemons.find((d) => d.status === DAEMON_STATUS_SUSPENDED);
+    if (suspended) {
+      await deps.resumeDaemon(suspended.id);
+      return {
+        name: "provision_daemon",
+        status: "complete",
+        detail: "Starting your machine…",
+        daemonId: suspended.id,
+      };
+    }
+
+    // Anything else — DISCONNECTED, FAILED, UNSPECIFIED — is a row we cannot
+    // route to and cannot resume. Fall through to CreateDaemon, which is
+    // idempotent BY NAME (see ONBOARDING_DAEMON_NAME): it refreshes the
+    // existing row rather than minting a second machine.
 
     const daemonId = await deps.createDaemon({
       name: ONBOARDING_DAEMON_NAME,
       daemonType: DAEMON_TYPE_MANAGED,
-      size: DAEMON_SIZE_SMALL,
+      // The size the user actually picked, not a hardcoded SMALL.
+      size: daemonSizeForPlan(plan.computePlanId),
       gitRepo: "",
       gitBranch: "main",
     });

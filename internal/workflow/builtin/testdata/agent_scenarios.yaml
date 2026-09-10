@@ -145,11 +145,11 @@ expect:
 ---
 # Manual mode with approval denied - loop exits (no tool execution)
 name: tool_use_manual_denied
-description: Manual mode, user denies approval, tools do not execute
+description: Manual mode, user denies approval, tools do not execute, loop takes another turn
 inputs:
   mode: manual
 events:
-  # LLM requests a tool
+  # Iteration 0: LLM requests a tool
   - node: agent_loop.call_llm
     output:
       message:
@@ -158,24 +158,49 @@ events:
       response_text: "I'm going to delete this file."
       tool_calls:
         - id: call_0
-          name: bash
+          name: shell
           input: '{"command":"rm -rf /important/file"}'
-  # Approval is denied
+  # Approval is denied. There is no edge out of `approval` for a denial, so the
+  # iteration ends here — execute_tools is never scheduled.
   - node: agent_loop.approval
     output:
       approval_id: "approval_1"
       status: denied
       action_taken: deny
       data: {}
+  # Iteration 1: the denial does NOT end the run. The loop's `while` reads
+  # nodes.call_llm.tool_calls, which iteration 0 left non-empty, so the loop
+  # re-enters and the agent gets another turn to respond to being denied. This
+  # turn returns no tool calls, which is what finally exits the loop.
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Understood — I won't delete that file. Let me know how you'd like to proceed."
+      response_text: "Understood — I won't delete that file. Let me know how you'd like to proceed."
+      tool_calls: []
 expect:
   outcome: completed
-  reached:
-    - agent_loop
+  # `completed:` rather than `reached:` — reached deliberately includes SKIPPED
+  # nodes, so it cannot prove the approval gate actually ran and answered.
+  completed:
     - agent_loop.call_llm
     - agent_loop.approval
   not_reached:
+    # The denial is only meaningful if the tool never ran. compact hangs off
+    # execute_tools, so it cannot fire either.
     - agent_loop.execute_tools
     - agent_loop.compact
+    - agent_loop.ask_question
+  node_outputs:
+    # Pins the DENIAL itself, not merely that the approval node executed.
+    agent_loop.approval:
+      status: denied
+      action_taken: deny
+  outputs:
+    # The run's final answer is the SECOND turn's, which is the observable proof
+    # that the loop continued past the denial rather than ending on it.
+    response_text: "Understood — I won't delete that file. Let me know how you'd like to proceed."
 
 ---
 # ask=true: feedback from ask_question continues the loop, no feedback exits it

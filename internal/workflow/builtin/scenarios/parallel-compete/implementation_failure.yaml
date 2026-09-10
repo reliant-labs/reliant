@@ -20,23 +20,35 @@ events:
     output:
       path: "/wt/1"
       branch: "b1"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation 1 complete with error handling middleware"
       response_text: "Implementation 1 complete with error handling middleware"
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/wt/2"
       branch: "b2"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "ERROR: Unable to complete implementation due to unforeseen issue"
       response_text: "ERROR: Unable to complete implementation due to unforeseen issue"
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/wt/3"
       branch: "b3"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Implementation 3 complete with robust error handling and recovery"
       response_text: "Implementation 3 complete with robust error handling and recovery"
+      tool_calls: []
 
   # review EXECUTES its structured-agent body. The response tool is
   # `submit_review` (parallel-compete.yaml sets response_tool_name); any other

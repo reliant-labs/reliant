@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   ArrowLeft,
@@ -71,8 +71,12 @@ import {
   type DaemonSizeName,
 } from "./billingUtils";
 import { useLLMSpend } from "@/hooks/useReliantAIQueries";
-import { CheckoutPanelWithIdentity } from "@/components/Billing/CheckoutPanelWithIdentity";
-import type { CheckoutRequest } from "@/components/Billing/EmbeddedCheckoutPanel";
+import {
+  ComputeSubscriptionCheckout,
+  type ComputePlanOption,
+} from "@/components/Billing/ComputeSubscriptionCheckout";
+import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
+import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
 import { formatMachineMinutesShort } from "@/lib/formatMachineMinutes";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 import {
@@ -443,10 +447,12 @@ function OverviewTab({
   const walletQ = useWalletOverview();
   const usageQ = useComputeUsage("current");
   const [error, setError] = useState("");
-  // The top-up in flight, or null. Holding the REQUEST rather than a boolean
-  // is what lets the panel key its session off it: reopening the same amount
-  // reuses the in-flight session instead of minting a second one.
-  const [checkout, setCheckout] = useState<CheckoutRequest | null>(null);
+  // The top-up amount in flight, in cents, or null when none is open. Holding
+  // the AMOUNT rather than a boolean is what lets the form key its intent off
+  // it: reopening the same amount reuses the in-flight intent instead of
+  // minting a second one. This band only ever buys credit, so a plain number
+  // says that where the old checkout union did not.
+  const [topupCents, setTopupCents] = useState<number | null>(null);
 
   const overageMutation = useSetComputeOverage();
   const portalMutation = useCreateBillingPortalSession();
@@ -633,15 +639,65 @@ function OverviewTab({
   // that still left the page.
   const handleTopup = (amountCents: number) => {
     setError("");
-    setCheckout({ kind: "wallet_topup", amountCents: BigInt(amountCents) });
+    setTopupCents(amountCents);
   };
 
   // The panel reports done only once the SERVER confirmed (or the dev
   // no-Stripe path completed the purchase outright), never off Stripe's
   // in-page onComplete — so there is genuinely something to refetch.
   const handleCheckoutDone = useCallback(() => {
-    setCheckout(null);
+    setTopupCents(null);
     void walletQ.refetch();
+  }, [walletQ]);
+
+  /**
+   * The wallet balance as this page already reads it everywhere else.
+   *
+   * Goes through `nanosFromFields` rather than reading `balanceUsdNanos`
+   * directly, because the three precision fields are not all populated on
+   * every response — the credit band above depends on that same fallback, and
+   * a settlement check that read only one field could report "no money
+   * arrived" about a balance the page is displaying.
+   */
+  const walletBalanceNanos = (
+    data: typeof walletQ.data | undefined,
+  ): bigint => {
+    const w = data?.overview?.wallet;
+    return nanosFromFields(w?.balanceUsdNanos, w?.balanceUsdMicros, w?.balanceCents);
+  };
+
+  /**
+   * Has the top-up landed, according to the server?
+   *
+   * The wallet balance is the fact the whole band is drawn from, so asking it
+   * again IS the confirmation — there is no separate "did it work" endpoint,
+   * and adding one would be a second answer that could disagree with the
+   * number on screen.
+   *
+   * Compares against the balance as it stood when the top-up started rather
+   * than against zero: a user topping up a wallet that already has credit in
+   * it would otherwise be told the payment had settled the instant they
+   * pressed Pay.
+   */
+  const balanceAtTopupStart = useRef<bigint | null>(null);
+  useEffect(() => {
+    if (topupCents !== null && balanceAtTopupStart.current === null) {
+      balanceAtTopupStart.current = walletBalanceNanos(walletQ.data);
+    }
+    if (topupCents === null) balanceAtTopupStart.current = null;
+  }, [topupCents, walletQ.data]);
+
+  const creditHasLanded = useCallback(async () => {
+    try {
+      const fresh = await walletQ.refetch();
+      return (
+        walletBalanceNanos(fresh.data) > (balanceAtTopupStart.current ?? 0n)
+      );
+    } catch {
+      // One failed read is a reason to look again, not to call the payment
+      // lost. The caller polls.
+      return false;
+    }
   }, [walletQ]);
 
   // Fires only from the control's Save button. This authorizes additional
@@ -701,27 +757,26 @@ function OverviewTab({
             warning={creditUi.warning}
             runwayDays={creditUi.runwayDays}
             meterFraction={creditUi.meterFraction}
-            topupInFlightCents={
-              checkout?.kind === "wallet_topup"
-                ? Number(checkout.amountCents)
-                : null
-            }
+            topupInFlightCents={topupCents}
             onAddCredit={handleTopup}
             onRetryBalance={() => void walletQ.refetch()}
             onRedeemed={refetchAfterRedeem}
             checkout={
-              checkout && (
+              topupCents !== null && (
                 <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-                  <CheckoutPanelWithIdentity
-                    request={checkout}
+                  {/* Our own page, the same component onboarding mounts —
+                      which is the point of the change: one top-up experience,
+                      not two that drift. */}
+                  <WalletTopupCheckout
+                    defaultAmountCents={topupCents}
+                    confirmSettlement={creditHasLanded}
                     onDone={handleCheckoutDone}
-                    returnTo="/settings/billing?tab=plans"
                   />
                   <div>
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => setCheckout(null)}
+                      onClick={() => setTopupCents(null)}
                     >
                       Cancel
                     </Button>
@@ -907,7 +962,12 @@ function BillingEmailRow() {
 function PlansTab() {
   const plansQ = usePlans();
   const subQ = useComputeSubscription();
-  const [checkout, setCheckout] = useState<CheckoutRequest | null>(null);
+  // Which plan the user is currently buying, or null when no checkout is open.
+  // A plain plan id rather than a CheckoutRequest union: this tab only ever
+  // buys compute, and the checkout component now owns switching between plans.
+  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
+  // Bumped by a successful identity link so the checkout remounts and retries.
+  const [linkAttempt, setLinkAttempt] = useState(0);
 
   // Membership and order are both server facts: a plan the catalog priced is a
   // plan the user can buy, sorted by the catalog's display_order. The
@@ -941,10 +1001,55 @@ function PlansTab() {
 
   const loading = plansQ.isLoading || subQ.isLoading;
 
+  /**
+   * The purchasable catalog in the checkout's shape.
+   *
+   * Labelled by plan NAME here, unlike onboarding: this tab shows the whole
+   * catalog and lets the user pick a plan directly, so the tile has to name
+   * the thing being bought.
+   */
+  const planOptions: ComputePlanOption[] = useMemo(
+    () =>
+      computePlans.flatMap((plan) => {
+        const d = derivePlanDisplay(plan);
+        if (d.monthlyPriceCents === null) return [];
+        return [
+          {
+            planId: plan.id,
+            label: plan.name,
+            monthlyPriceCents: d.monthlyPriceCents,
+            includedMinutes: d.includedMinutes,
+            overageCentsPerMinute: d.overageCentsPerMinute,
+          },
+        ];
+      }),
+    [computePlans],
+  );
+
   const handleCheckoutDone = useCallback(() => {
-    setCheckout(null);
+    setCheckoutPlanId(null);
     void subQ.refetch();
   }, [subQ]);
+
+  /**
+   * Has the plan the user just bought actually landed, according to the
+   * SERVER?
+   *
+   * Compares against the plan being PURCHASED, not merely "is there a
+   * subscription". Most buyers on this tab are SWITCHING plans, so they
+   * already have one — a presence check would report success the instant it
+   * was called, skip the wait for the webhook entirely, and leave the page
+   * claiming a plan the user had not been moved to yet.
+   */
+  const computeHasLanded = useCallback(async () => {
+    if (!checkoutPlanId) return false;
+    try {
+      const { data } = await subQ.refetch();
+      return data?.subscription?.plan?.id === checkoutPlanId;
+    } catch {
+      return false;
+    }
+  }, [subQ, checkoutPlanId]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -997,40 +1102,47 @@ function PlansTab() {
               value={activeSize}
               onChange={(size) => {
                 setChosenSize(size);
-                // A size change invalidates the plan in flight — the panel is
-                // keyed by the request, and continuing to show a checkout for
-                // a plan that no longer matches the choice is how the two
-                // silently disagree.
-                setCheckout(null);
+                // A size change invalidates the plan in flight: continuing to
+                // show a checkout for a plan that no longer matches the choice
+                // is how the two silently disagree.
+                setCheckoutPlanId(null);
               }}
             />
           )}
 
-          {checkout && (
-            <Card>
-              <CardContent className="flex flex-col gap-3">
-                <CheckoutPanelWithIdentity
-                  request={checkout}
-                  onDone={handleCheckoutDone}
-                  // Only the OAuth buttons consult this — the email path
-                  // completes inside the modal and never leaves the page.
-                  returnTo={
-                    checkout.kind === "compute_plan"
-                      ? `/settings/billing?tab=plans&planId=${encodeURIComponent(checkout.planId)}`
-                      : "/settings/billing?tab=plans"
-                  }
-                />
-                <div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setCheckout(null)}
-                  >
-                    Cancel
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+          {checkoutPlanId && (
+            <div className="flex flex-col gap-3">
+              {/* The same component onboarding mounts — one compute checkout,
+                  not two that drift. It carries its own plan tiles, so
+                  switching plans here updates the mounted form in place
+                  instead of tearing down a Stripe iframe and minting a new
+                  session. */}
+              <ComputeSubscriptionCheckout
+                plans={planOptions}
+                selectedPlanId={checkoutPlanId}
+                onSelectPlan={(option) => setCheckoutPlanId(option.planId)}
+                confirmSettlement={computeHasLanded}
+                onDone={handleCheckoutDone}
+                renderIdentityRequired={(message) => (
+                  <LinkIdentityModal
+                    message={message}
+                    returnTo={`/settings/billing?tab=plans&planId=${encodeURIComponent(checkoutPlanId)}`}
+                    onLinked={() => setLinkAttempt((n) => n + 1)}
+                    onDismiss={() => undefined}
+                  />
+                )}
+                key={`compute:${linkAttempt}`}
+              />
+              <div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setCheckoutPlanId(null)}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
           )}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1091,9 +1203,7 @@ function PlansTab() {
                       fullWidth
                       variant={isCurrent ? "outline" : "primary"}
                       disabled={isCurrent || !runsChosenSize}
-                      onClick={() =>
-                        setCheckout({ kind: "compute_plan", planId: plan.id })
-                      }
+                      onClick={() => setCheckoutPlanId(plan.id)}
                     >
                       {isCurrent
                         ? `Current plan — ${plan.name}`

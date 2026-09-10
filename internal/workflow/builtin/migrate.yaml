@@ -134,7 +134,7 @@ nodes:
           - rule/skills directories
           - custom command directories that may deserve workflow conversion
 
-          Use normal tools only. Prefer `glob`, `grep`, `view`, and targeted `bash` when checking home-directory paths.
+          Use normal tools only. Prefer `glob`, `grep`, `view`, and targeted `shell` when checking home-directory paths.
 
           Deliver a conversational summary that covers:
           1. what you found

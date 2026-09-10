@@ -53,7 +53,7 @@ type ExecuteRunStepOutput struct {
 // ============================================================================
 
 // ExecuteRunStepActivity implements TypedActivity[ExecuteRunStepInput, ExecuteRunStepOutput]
-// This activity executes shell commands via the daemon's bash tool.
+// This activity executes shell commands via the daemon's shell tool.
 type ExecuteRunStepActivity struct {
 	repo         db.Repository
 	toolExecutor toolexec.ToolExecutor

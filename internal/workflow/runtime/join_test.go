@@ -298,7 +298,7 @@ func TestProcessJoinEvents_ConditionAll(t *testing.T) {
 		{ID: "e1", StepID: "task_a", Data: map[string]interface{}{"result": "a"}},
 	}
 
-	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 
 	// Should still have original event, no join event yet
 	assert.Len(t, result, 1)
@@ -309,7 +309,7 @@ func TestProcessJoinEvents_ConditionAll(t *testing.T) {
 		{ID: "e2", StepID: "task_b", Data: map[string]interface{}{"result": "b"}},
 	}
 
-	result = processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result = processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 
 	// Should have original event + join completion event
 	assert.Len(t, result, 2)
@@ -364,7 +364,7 @@ func TestProcessJoinEvents_ConditionAny(t *testing.T) {
 		{ID: "e1", StepID: "task_a", Data: map[string]interface{}{"result": "a"}},
 	}
 
-	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 
 	// Should have original event + join completion event
 	assert.Len(t, result, 2)
@@ -376,7 +376,7 @@ func TestProcessJoinEvents_ConditionAny(t *testing.T) {
 		{ID: "e2", StepID: "task_b", Data: map[string]interface{}{"result": "b"}},
 	}
 
-	result = processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result = processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 
 	// Should only have original event, join already triggered
 	assert.Len(t, result, 1)
@@ -407,7 +407,7 @@ func TestProcessJoinEvents_SkipsWorkflowStartEvent(t *testing.T) {
 		{ID: "start", StepID: "", Data: map[string]interface{}{}},
 	}
 
-	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 
 	// Should only have original start event, no join processing
 	assert.Len(t, result, 1)
@@ -555,14 +555,14 @@ func TestProcessJoinEvents_SkippedSourceTriggersJoin(t *testing.T) {
 	events := []*core.WorkflowEvent{
 		{ID: "e1", StepID: "task_a", Data: map[string]interface{}{"result": "a"}},
 	}
-	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result := processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 	assert.Len(t, result, 1) // No join event yet
 
 	// task_b is skipped - use map representation that IsSkippedOutput can detect
 	events = []*core.WorkflowEvent{
 		{ID: "e2", StepID: "task_b", Data: map[string]interface{}{"skipped": true}},
 	}
-	result = processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, time.Now())
+	result = processJoinEvents(events, js, workflow, "wf1", "chat1", "test", nodeOutputs, logger, nil, nil, time.Now())
 
 	// Should have original event + join completion event (skipped satisfies "all")
 	assert.Len(t, result, 2)

@@ -130,10 +130,12 @@ func (a *SaveMessageActivity) Execute(ctx context.Context, input ActivityInput) 
 
 	// Convert input to service options
 	var thinking *threads.ThinkingContent
-	if rt := protoArgs.GetResolvedThinking(); rt != nil && (rt.GetContent() != "" || rt.GetSignature() != "") {
+	if rt := protoArgs.GetResolvedThinking(); rt != nil &&
+		(rt.GetContent() != "" || rt.GetSignature() != "" || rt.GetRedacted() != "") {
 		thinking = &threads.ThinkingContent{
 			Content:   rt.GetContent(),
 			Signature: rt.GetSignature(),
+			Redacted:  rt.GetRedacted(),
 		}
 	}
 

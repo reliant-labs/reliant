@@ -48,7 +48,10 @@ export function LinkedAccounts() {
     } catch (error) {
       console.error('Failed to link account:', error)
       alert(error instanceof Error ? error.message : 'Failed to link account')
-    } finally {
+      // Cleared only on failure. A success is on its way to the provider, and
+      // resetting here flipped the button back to "Link" while the page was
+      // still on screen — the account looks unlinked at the exact moment it is
+      // being linked.
       setLinkingProvider(null)
     }
   }

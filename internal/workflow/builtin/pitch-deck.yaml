@@ -1555,13 +1555,13 @@ nodes:
           ```
 
           **Step 2: Confirm it's actually serving.** Give it a moment, then verify via
-          `bash_list` / `bash_output` (or `curl -sS -o /dev/null -w '%{http_code}'
+          `shell_list` / `shell_output` (or `curl -sS -o /dev/null -w '%{http_code}'
           http://localhost:5174/`). If it isn't up, fix the bind/port and retry.
 
           **Step 3: Get the preview URL and hand it to the user.** Run
           `reliant preview-url 5174` — it prints the authoritative proxied URL for port 5174
-          (also surfaced as a `Preview URL (port 5174): ...` line in the `bash_list` /
-          `bash_output` result). Do NOT invent or guess a URL. Post it as a markdown link:
+          (also surfaced as a `Preview URL (port 5174): ...` line in the `shell_list` /
+          `shell_output` result). Do NOT invent or guess a URL. Post it as a markdown link:
 
           **[Open your pitch deck](<the URL from `reliant preview-url 5174`>)**
 

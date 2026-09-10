@@ -294,7 +294,7 @@ func (e *InlineLoopExecutor) GetThread() string {
 // (no live detached spawns for this thread).
 //
 // The wait is UNBOUNDED by design. It previously carried a 4-minute ceiling
-// borrowed from bash_wait, on the theory that a wedged child must not park the
+// borrowed from shell_wait, on the theory that a wedged child must not park the
 // run forever. That ceiling fired on the HEALTHY path instead: a background
 // agent doing real work routinely runs longer than four minutes, so the parent
 // gave up on live children, exited, and cascaded them all to COMPLETED — which
@@ -580,7 +580,31 @@ func (e *InlineLoopExecutor) loadPresetParams(ctx workflow.Context, presetName s
 // 4. Return aggregated output
 // Note: save_message (if configured) is executed by the parent workflow after loop completion,
 // consistent with how all other node types handle save_message.
+// Execute runs this loop node and returns its published output.
+//
+// It is the single shared exit for BOTH loop strategies — the sequential body
+// below and the parallel path in ExecuteParallel, which is reached only through
+// here — which is what makes it the one honest place to report a loop's
+// completion. Reporting from either strategy's own return would let the report
+// and the decision drift apart the moment a third strategy is added.
+//
+// The report is an observation of a value already computed: it converts the
+// LoopOutput this call is about to return through the SAME
+// model.ProtoLoopOutputToMap every caller uses to store it, so the observer
+// cannot show a per-node view that differs from what the node-output store
+// holds. It is a no-op unless an observer is attached (see loop_observer.go),
+// and it runs only on success — a loop that failed did not complete, and saying
+// otherwise would fabricate execution.
 func (e *InlineLoopExecutor) Execute() (*reliantv1.LoopOutput, error) {
+	out, err := e.execute()
+	if err != nil {
+		return nil, err
+	}
+	recordStructuralCompleted(e.ctx, e.nodePath(), model.ProtoLoopOutputToMap(out))
+	return out, nil
+}
+
+func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 	la := model.GetLoopArgs(e.loopStep.Node)
 
 	// Branch to parallel execution if parallel is set
@@ -1065,7 +1089,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		}
 
 		// Process join events
-		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.workflowIdentity(), iterNodeOutputs, e.logger, nil, workflow.Now(e.ctx))
+		events = processJoinEvents(events, joinState, e.subWorkflow, e.workflowID, e.chatID, e.workflowIdentity(), iterNodeOutputs, e.logger, nil, func(joinID string) {
+			recordJoinSatisfied(e.ctx, joinNodePath(e.nodePath(), joinID))
+		}, workflow.Now(e.ctx))
 		// Find triggered steps
 		if len(events) > 0 {
 			e.logger.Info("[InlineLoop] First event details",

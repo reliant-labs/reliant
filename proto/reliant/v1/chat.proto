@@ -93,6 +93,12 @@ enum ContentBlockType {
   CONTENT_BLOCK_TYPE_THINKING = 5;
   CONTENT_BLOCK_TYPE_FILE_REFERENCE = 6;
   CONTENT_BLOCK_TYPE_DOCUMENT = 7;  // Binary document (PDF) - sent natively to supporting LLMs
+  // Reasoning the provider's safety system withheld. The block carries an
+  // opaque, encrypted payload in `content` with NO readable text — it exists
+  // only to be replayed to the provider unchanged on the next turn, which the
+  // Anthropic API requires of a multi-turn exchange. Distinct from THINKING so
+  // that no renderer ever mistakes ciphertext for reasoning and shows it.
+  CONTENT_BLOCK_TYPE_REDACTED_THINKING = 8;
 }
 
 // ChatActivity represents the computed activity state of a chat.

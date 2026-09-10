@@ -14,8 +14,8 @@ import (
 // blocking tool must stay under: the execution context cancels the call when
 // it elapses, which surfaces to the model as an error rather than as a result.
 //
-// Sized for the blocking waiters (bash_wait) rather than for a typical
-// command, because those are what press against it. bash_wait deliberately
+// Sized for the blocking waiters (shell_wait) rather than for a typical
+// command, because those are what press against it. shell_wait deliberately
 // returns a minute early so it can answer "still running, call again" instead
 // of being cancelled mid-flight, so this is defined in terms of that budget —
 // the two cannot drift apart.

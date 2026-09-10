@@ -14,19 +14,6 @@ const (
 	ClaudeCodeFamily models.Family = "claude-code"
 )
 
-// SupportedModels lists the models that both Anthropic drivers support
-var SupportedModels = []models.ModelID{
-	models.Claude45Haiku,
-	models.Claude45Sonnet,
-	models.Claude46Sonnet,
-	models.Claude45Opus,
-	models.Claude46Opus,
-	models.Claude48Opus,
-	models.Claude5Sonnet,
-	models.Claude5Fable,
-	models.Claude5Opus,
-}
-
 // createAnthropicClient is the driver factory for standard Anthropic API
 func createAnthropicClient(opts *llm.DriverOptions) (registry.Client, error) {
 	// Route to Claude Code client if using sk-ant-oat key
@@ -42,12 +29,15 @@ func createClaudeCodeClient(opts *llm.DriverOptions) (registry.Client, error) {
 }
 
 func init() {
-	// Register which models the Anthropic driver supports
-	models.RegisterDriverModels(Family, SupportedModels)
+	// Both families serve whatever models.yaml maps to `anthropic`. The Claude
+	// Code family is the same Anthropic model set reached with an sk-ant-oat
+	// subscription token rather than an API key, so it reads the same mappings
+	// instead of keeping a second list that could fall behind.
+	models.RegisterCatalogDriver(Family)
 	// Register the Anthropic driver factory (auto-routes to Claude Code for sk-ant-oat keys)
 	registry.RegisterDriver(Family, createAnthropicClient)
 
 	// Register Claude Code as a separate driver family (explicit selection)
-	models.RegisterDriverModels(ClaudeCodeFamily, SupportedModels)
+	models.RegisterCatalogDriverAs(ClaudeCodeFamily, Family)
 	registry.RegisterDriver(ClaudeCodeFamily, createClaudeCodeClient)
 }

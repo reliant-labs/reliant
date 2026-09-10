@@ -307,18 +307,7 @@ func (o *OpenaiClient) preparedParams(messages []openai.ChatCompletionMessagePar
 		params.MaxCompletionTokens = openai.Int(o.Options.MaxTokens)
 		// Only set reasoning effort if model can reason AND reasoning is not disabled
 		if o.Options.Model.CanReason && o.Options.ReasoningEffort != "disabled" && o.Options.ReasoningEffort != "none" {
-			switch o.Options.ReasoningEffort {
-			case "low":
-				params.ReasoningEffort = shared.ReasoningEffortLow
-			case "medium":
-				params.ReasoningEffort = shared.ReasoningEffortMedium
-			case "high":
-				params.ReasoningEffort = shared.ReasoningEffortHigh
-			case "xhigh":
-				params.ReasoningEffort = shared.ReasoningEffort("xhigh")
-			default:
-				params.ReasoningEffort = shared.ReasoningEffortMedium
-			}
+			params.ReasoningEffort = reasoningEffort(o.Options.ReasoningEffort)
 		}
 	} else {
 		params.MaxTokens = openai.Int(o.Options.MaxTokens)
@@ -845,18 +834,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 
 	params.MaxOutputTokens = openai.Int(o.Options.MaxTokens)
 	if o.Options.Model.CanReason && o.Options.ReasoningEffort != "disabled" && o.Options.ReasoningEffort != "none" {
-		effort := shared.ReasoningEffortMedium
-		switch o.Options.ReasoningEffort {
-		case "low":
-			effort = shared.ReasoningEffortLow
-		case "medium":
-			effort = shared.ReasoningEffortMedium
-		case "high":
-			effort = shared.ReasoningEffortHigh
-		case "xhigh":
-			effort = shared.ReasoningEffort("xhigh")
-		}
-		params.Reasoning = shared.ReasoningParam{Effort: effort}
+		params.Reasoning = shared.ReasoningParam{Effort: reasoningEffort(o.Options.ReasoningEffort)}
 	}
 
 	var rawResp *http.Response
@@ -933,17 +911,6 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		}
 		params.MaxOutputTokens = openai.Int(o.Options.MaxTokens)
 		if o.Options.Model.CanReason && o.Options.ReasoningEffort != "disabled" && o.Options.ReasoningEffort != "none" {
-			effort := shared.ReasoningEffortMedium
-			switch o.Options.ReasoningEffort {
-			case "low":
-				effort = shared.ReasoningEffortLow
-			case "medium":
-				effort = shared.ReasoningEffortMedium
-			case "high":
-				effort = shared.ReasoningEffortHigh
-			case "xhigh":
-				effort = shared.ReasoningEffort("xhigh")
-			}
 			// Enable reasoning summary streaming so we get events during thinking
 			// Some models (e.g., gpt-5.2-codex) only support 'detailed' summary mode
 			summaryMode := shared.ReasoningSummaryConcise
@@ -951,7 +918,7 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 				summaryMode = shared.ReasoningSummaryDetailed
 			}
 			params.Reasoning = shared.ReasoningParam{
-				Effort:  effort,
+				Effort:  reasoningEffort(o.Options.ReasoningEffort),
 				Summary: summaryMode,
 			}
 		}

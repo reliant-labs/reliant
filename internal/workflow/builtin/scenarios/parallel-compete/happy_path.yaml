@@ -36,32 +36,44 @@ events:
     output:
       path: "/tmp/worktrees/compete-impl-1"
       branch: "compete-impl-1"
-  # implementations.impl is a ref INSIDE a parallel loop body. The simulator
-  # cannot make such a ref transparent (executeLoopIteration has no
-  # NodeTypeWorkflow branch), so it stays a black box — see the report.
-  - node: implementations.impl
+  # implementations.impl is a builtin://agent ref INSIDE a parallel loop body.
+  # Mocking its inner call_llm makes the body EXECUTE, so the sub-workflow's own
+  # config and CEL are compiled — the blindness that hid the iter.item bug.
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Candidate 1: Basic password auth only, no OAuth."
       response_text: "Candidate 1: Basic password auth only, no OAuth."
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/tmp/worktrees/compete-impl-2"
       branch: "compete-impl-2"
-  # implementations.impl is a ref INSIDE a parallel loop body. The simulator
-  # cannot make such a ref transparent (executeLoopIteration has no
-  # NodeTypeWorkflow branch), so it stays a black box — see the report.
-  - node: implementations.impl
+  # implementations.impl is a builtin://agent ref INSIDE a parallel loop body.
+  # Mocking its inner call_llm makes the body EXECUTE, so the sub-workflow's own
+  # config and CEL are compiled — the blindness that hid the iter.item bug.
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Candidate 2: Full OAuth + password auth with comprehensive test suite."
       response_text: "Candidate 2: Full OAuth + password auth with comprehensive test suite."
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/tmp/worktrees/compete-impl-3"
       branch: "compete-impl-3"
-  # implementations.impl is a ref INSIDE a parallel loop body. The simulator
-  # cannot make such a ref transparent (executeLoopIteration has no
-  # NodeTypeWorkflow branch), so it stays a black box — see the report.
-  - node: implementations.impl
+  # implementations.impl is a builtin://agent ref INSIDE a parallel loop body.
+  # Mocking its inner call_llm makes the body EXECUTE, so the sub-workflow's own
+  # config and CEL are compiled — the blindness that hid the iter.item bug.
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Candidate 3: OAuth only, minimal tests."
       response_text: "Candidate 3: OAuth only, minimal tests."
+      tool_calls: []
 
   # Step 3: Review — structured-agent, EXECUTED (not black-boxed).
   # Mocking the inner call_llm/execute_tools makes the ref transparent, so the

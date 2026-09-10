@@ -9,8 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
-
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -696,6 +694,40 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		return nil, fmt.Errorf("failed to set workflow inputs query handler: %w", err)
 	}
 
+	// Register the satisfied-joins query handler.
+	//
+	// A join node dispatches no activity and has no children, so it is the one
+	// node type whose entry is otherwise unobservable from outside the
+	// workflow. The observer is attached to ctx so every nested executor —
+	// loop bodies, inline sub-workflows, parallel iterations — reports into
+	// this same one, and it records only what processJoinEvents has already
+	// decided.
+	joinObs := newJoinObserver()
+	ctx = withJoinObserver(ctx, joinObs)
+	err = workflow.SetQueryHandler(ctx, JoinsSatisfiedQuery, func() ([]string, error) {
+		return joinObs.snapshot(), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set joins satisfied query handler: %w", err)
+	}
+
+	// Register the completed-structural-nodes query handler.
+	//
+	// A `loop` or `workflow` node runs no activity of its own — its BODY does —
+	// so the node's own outputs and the moment it finished are computed
+	// in-workflow and written straight to the node-output store, where no
+	// activity-level observer can see them. Like the join observer this only
+	// records what the executors have already returned, and is attached to ctx
+	// so nested nodes report their qualified paths into this same one.
+	structuralObs := newStructuralObserver()
+	ctx = withStructuralObserver(ctx, structuralObs)
+	err = workflow.SetQueryHandler(ctx, StructuralNodesCompletedQuery, func() ([]StructuralCompletion, error) {
+		return structuralObs.snapshot(), nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to set structural nodes completed query handler: %w", err)
+	}
+
 	// Register per-thread inputs query handler.
 	// Returns the subInputs map for a specific thread, or the root inputs if thread not found.
 	err = workflow.SetQueryHandler(ctx, "get_thread_inputs", func(thread string) (map[string]interface{}, error) {
@@ -1021,7 +1053,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 		// STEP 9.1: Process events through join nodes first
 		// This updates join state and may generate join completion events
-		events = processJoinEvents(events, joinState, wf, workflowID, input.ChatID, input.WorkflowName, nodeOutputs, logger, joinSaveMessageFunc, workflow.Now(ctx))
+		events = processJoinEvents(events, joinState, wf, workflowID, input.ChatID, input.WorkflowName, nodeOutputs, logger, joinSaveMessageFunc, func(joinID string) {
+			// Top level: a node's path is its own id.
+			recordJoinSatisfied(ctx, joinID)
+		}, workflow.Now(ctx))
 
 		// Collect node router completion events before they're consumed by FindTriggeredNodes.
 		// These need fallback dispatch if no edges match.
@@ -2608,49 +2643,27 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 	logger := workflow.GetLogger(ctx)
 	toolCallID := spawnToolCall.GetId()
 
-	// Parse spawn tool input
-	// The input may be wrapped in a metadata envelope: {"input": "<raw>", "__reliant_tool_meta__": {...}}
-	// Unwrap it to get the actual LLM tool call input.
-	inputStr := spawnToolCall.GetInput()
-	var envelope map[string]interface{}
-	if err := json.Unmarshal([]byte(inputStr), &envelope); err != nil {
-		logger.Error("[ExecuteTools] Failed to parse spawn tool input", "error", err, "input", inputStr)
+	// Shared with the simulator so both lanes agree on what a spawn tool call
+	// says — see spawn_node.go.
+	parsed, err := parseSpawnToolInput(spawnToolCall.GetInput())
+	if err != nil {
+		logger.Error("[ExecuteTools] Failed to parse spawn tool input",
+			"error", err, "tool_call_id", toolCallID, "preset", parsed.preset)
 		return nil, err
 	}
-	// Unwrap metadata envelope if present
-	if _, hasMeta := envelope["__reliant_tool_meta__"]; hasMeta {
-		if rawInput, ok := envelope["input"].(string); ok {
-			inputStr = rawInput
-		}
-	}
-	var toolInput map[string]interface{}
-	if err := json.Unmarshal([]byte(inputStr), &toolInput); err != nil {
-		logger.Error("[ExecuteTools] Failed to parse unwrapped spawn tool input", "error", err, "input", inputStr)
-		return nil, err
-	}
-
-	promptStr, _ := toolInput["prompt"].(string)
-	presetName, _ := toolInput["preset"].(string)
-	agentID, hasAgentID := toolInput["agent_id"].(string)
-	titleOverride, _ := toolInput["title"].(string)
-
-	// Prompt is always required, including for resumptions
-	if promptStr == "" {
-		logger.Warn("[ExecuteTools] Spawn tool called with empty prompt",
-			"tool_call_id", toolCallID,
-			"preset", presetName)
-		return nil, fmt.Errorf("spawn tool requires a non-empty 'prompt' parameter")
-	}
+	promptStr := parsed.prompt
+	presetName := parsed.preset
+	agentID := parsed.agentID
 
 	config := &spawnChildWorkflowConfig{
 		promptStr:  promptStr,
 		toolCallID: toolCallID,
 		presetName: presetName,
-		title:      titleOverride, // May be empty - will default to preset name
-		rawInput:   inputStr,
+		title:      parsed.title, // May be empty - will default to preset name
+		rawInput:   parsed.rawInput,
 	}
 
-	if hasAgentID && agentID != "" {
+	if agentID != "" {
 		// Resuming an existing conversation
 		config.childThread = agentID
 		config.childWorkflowID = DeterministicWorkflowID(parentWorkflowID, toolCallID)
@@ -2839,7 +2852,7 @@ func prepareSpawnInline(
 		)
 	}
 
-	targetWorkflow := "builtin://agent"
+	targetWorkflow := spawnTargetWorkflow
 
 	// Build child inputs - only pass actual workflow inputs (mode, model)
 	childInputs := buildSpawnChildInputs(workflowInputs)
@@ -2931,28 +2944,9 @@ func prepareSpawnInline(
 		},
 	}
 
-	// Build proto V2Node for the InlineWorkflowExecutor.
-	spawnNode := &reliantv1.Node{
-		Id:   "spawn-" + config.toolCallID,
-		Type: model.NodeTypeWorkflow,
-		Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{
-			Ref: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: targetWorkflow}},
-		}},
-	}
-	// Set args
-	if childInputs != nil {
-		protoArgs := make(map[string]*structpb.Value)
-		for k, v := range childInputs {
-			if val, err := structpb.NewValue(v); err == nil {
-				protoArgs[k] = val
-			}
-		}
-		spawnNode.GetWorkflow().Args = protoArgs
-	}
-	// Set preset if specified
-	if config.presetName != "" {
-		spawnNode.GetWorkflow().Presets = map[string]string{DefaultPresetGroup: config.presetName}
-	}
+	// Build proto V2Node for the InlineWorkflowExecutor. Shared with the
+	// simulator so both lanes name the node identically — see spawn_node.go.
+	spawnNode := newSpawnNode(config.toolCallID, targetWorkflow, config.presetName, childInputs)
 
 	// Spawn nodes are already fully resolved (no CEL), so use the proto node directly.
 	evalResult := spawnNode

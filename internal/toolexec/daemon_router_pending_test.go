@@ -74,6 +74,71 @@ func TestResolveDaemonID_NoDaemonAtAll_ReturnsHardError(t *testing.T) {
 	assert.Contains(t, err.Error(), "no daemon available")
 }
 
+// Neither resolution failure may name the account UUID. These messages are
+// rendered verbatim to the end user (mapDaemonDispatchError wraps them into a
+// Connect error the UI prints), and the owner hit
+// "[internal] resolving daemon for command: no daemon available for user
+// 22302879-fd98-4cde-9e12-532b12a5d3fc" in the product. The id belongs in the
+// log, where an operator needs it — not in copy shown to the person it
+// identifies.
+func TestResolveDaemonID_ErrorsDoNotLeakTheUserID(t *testing.T) {
+	const userID = "22302879-fd98-4cde-9e12-532b12a5d3fc"
+
+	cases := []struct {
+		name     string
+		resp     *reliantv1.ResolveDaemonResponse
+		selector *DaemonSelector
+	}{
+		{
+			name: "no daemon at all",
+			resp: &reliantv1.ResolveDaemonResponse{Found: false, Daemon: nil},
+		},
+		{
+			name: "daemon record exists but is not routable",
+			resp: &reliantv1.ResolveDaemonResponse{
+				Found:  false,
+				Daemon: &reliantv1.DaemonInfo{DaemonId: "daemon-provisioning"},
+			},
+		},
+		{
+			name:     "no daemon matching an explicit selector",
+			resp:     &reliantv1.ResolveDaemonResponse{Found: false, Daemon: nil},
+			selector: &DaemonSelector{Type: "managed", Name: "box", ID: "d-1"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			router := NewNATSDaemonRouter(nil, WithControlPlaneClient(&fakeRegistryClient{resolveResp: tc.resp}))
+
+			_, err := router.resolveDaemonID(context.Background(), userID, tc.selector)
+			require.Error(t, err)
+			assert.NotContains(t, err.Error(), userID,
+				"the account UUID must never appear in a message shown to the user")
+			assert.Contains(t, err.Error(), "machine",
+				"the message must talk about the user's machine, not about resolution plumbing")
+		})
+	}
+}
+
+// The pending path keeps the marker the frontend's wait machinery keys on,
+// even though the message text around it changed. Losing this turns a
+// "still starting, please wait" into a terminal error in the UI.
+func TestResolveDaemonID_PendingKeepsTheConnectingMarker(t *testing.T) {
+	router := NewNATSDaemonRouter(nil, WithControlPlaneClient(&fakeRegistryClient{
+		resolveResp: &reliantv1.ResolveDaemonResponse{
+			Found:  false,
+			Daemon: &reliantv1.DaemonInfo{DaemonId: "daemon-provisioning"},
+		},
+	}))
+
+	_, err := router.resolveDaemonID(context.Background(), "user-1", &DaemonSelector{Type: "managed"})
+	require.Error(t, err)
+	assert.True(t, IsDaemonPending(err))
+	assert.Contains(t, err.Error(), "no daemon connected",
+		"isDaemonConnectingError keys on this marker")
+}
+
 // A daemon that resolves cleanly (control plane finds it and it's routable)
 // must return the id with no error, pending or otherwise.
 func TestResolveDaemonID_DaemonResolves_ReturnsID(t *testing.T) {

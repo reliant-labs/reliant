@@ -93,7 +93,7 @@ func stringSlice(t *testing.T, v interface{}) []string {
 // pairing off backticks is not a style choice — the first version of this matched
 // backtick pairs left to right with `([^`\n]+)` and found NOTHING, because the
 // reviewer's prompt contains a fenced code block. The three fence backticks shift
-// every pair after them by one, so `bash_output` was read as the text BETWEEN a
+// every pair after them by one, so `shell_output` was read as the text BETWEEN a
 // closing and an opening tick. A derived check that silently matches nothing is
 // the same defect this file exists to catch, so TestToolNameExtractionIsNotVacuous
 // below holds it to a known-present name.
@@ -117,10 +117,10 @@ func toolsNamedIn(text string) []string {
 // DRIFT between the list and the prose was.
 //
 // Measured, run against a complete and working 23-RPC app: the reviewer's step 1
-// ordered it to "READ that line … out of `bash_output` / `bash_list` and use THAT
+// ordered it to "READ that line … out of `shell_output` / `shell_list` and use THAT
 // port everywhere". `review_tools` was [view, tag:shell, component_library,
 // mcp__chrome-devtools__*], and `tag:shell` carried the shell tool ALONE —
-// bash_list and bash_output were tagged execution/readonly/plan/default and
+// shell_list and shell_output were tagged execution/readonly/plan/default and
 // nothing else. Step 1 gates `live_url`, which the response schema REQUIRES
 // alongside a non-empty `pages_inspected`, so with no legal way to obtain the port
 // the only in-schema move left was an evidence-free `stuck`. That is what it
@@ -199,7 +199,7 @@ func TestToolNameExtractionIsNotVacuous(t *testing.T) {
 	require.NotEmpty(t, named,
 		"the reviewer's prompt names shell-family tools; an extractor that returns nothing "+
 			"makes TestReviewerHoldsEveryToolItsInstructionsName pass by asking nothing")
-	for _, want := range []string{tools.ToolBashOutput, tools.ToolBashList, tools.ToolBashKill} {
+	for _, want := range []string{tools.ToolShellOutput, tools.ToolShellList, tools.ToolShellKill} {
 		require.Contains(t, named, want,
 			"the reviewer's prompt tells the agent to use %q, so extraction must see it", want)
 	}
@@ -224,7 +224,7 @@ func TestToolNameExtractionIsNotVacuous(t *testing.T) {
 			"a backticked shell command that happens to contain a tool word is not a tool order")
 		require.Empty(t, toolsNamedIn("the schema requires `live_url` and `pages_inspected`"),
 			"response-schema fields are not tools")
-		require.Equal(t, []string{tools.ToolBashOutput}, toolsNamedIn("read it out of `bash_output`"),
+		require.Equal(t, []string{tools.ToolShellOutput}, toolsNamedIn("read it out of `shell_output`"),
 			"a standalone backticked tool name IS a tool order")
 	})
 }
@@ -527,12 +527,12 @@ func TestGetItRightReEntersAtReviewWhenTheREVIEWIsWhatWasStuck(t *testing.T) {
 // source rather than at each prompt that trips over it.
 //
 // The shell tool's own description says: "Use 'run_in_background: true' to run
-// long-running commands in the background. You can then use BashOutput to check
-// output, BashKill to terminate, and BashList to see all running processes."
+// long-running commands in the background. You can then use shell_output to check
+// output, shell_kill to terminate, and shell_list to see all running processes."
 // Granting `tag:shell` without those three therefore hands every holder — ux,
 // tester, refactor, debug, code_reviewer, planner, researcher, git, documentation,
 // and plan mode — instructions for tools it does not have. They are also useless
-// without the shell: nothing can be in `bash_list` for an agent that cannot start
+// without the shell: nothing can be in `shell_list` for an agent that cannot start
 // a process.
 func TestShellTagCarriesTheToolsTheShellToolTellsAgentsToUse(t *testing.T) {
 	t.Parallel()
@@ -541,7 +541,7 @@ func TestShellTagCarriesTheToolsTheShellToolTellsAgentsToUse(t *testing.T) {
 		granted[name] = true
 	}
 
-	for _, companion := range []string{tools.ShellToolName, tools.ToolBashOutput, tools.ToolBashList, tools.ToolBashKill} {
+	for _, companion := range []string{tools.ShellToolName, tools.ToolShellOutput, tools.ToolShellList, tools.ToolShellKill} {
 		require.True(t, granted[companion],
 			"tag:shell must resolve to the whole shell family; %q is missing, so an agent told "+
 				"by the shell tool's own description to use it has no such tool", companion)
@@ -550,7 +550,7 @@ func TestShellTagCarriesTheToolsTheShellToolTellsAgentsToUse(t *testing.T) {
 	// The inverse has to hold too, or `!tag:shell` stops meaning "no shell".
 	excluded := tools.ExpandToolFilter([]string{"tag:default", "!tag:shell"}, nil)
 	for _, name := range excluded {
-		require.NotContains(t, []string{tools.ShellToolName, tools.ToolBashOutput, tools.ToolBashList, tools.ToolBashKill}, name,
+		require.NotContains(t, []string{tools.ShellToolName, tools.ToolShellOutput, tools.ToolShellList, tools.ToolShellKill}, name,
 			fmt.Sprintf("!tag:shell must remove the whole family, but %q survived", name))
 	}
 }

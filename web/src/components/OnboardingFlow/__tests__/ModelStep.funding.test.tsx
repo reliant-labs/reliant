@@ -33,12 +33,19 @@ import type { LaunchPlan } from "../types";
 type WalletReturn = {
   data: { wallet?: { balanceUsdNanos?: bigint } } | undefined;
   isLoading: boolean;
+  // The step refetches after a coupon redemption — the wallet balance is the
+  // same server fact `requiresPayment` reads, so redeeming settles the credit
+  // leg only once the SERVER says so.
+  refetch?: () => Promise<unknown>;
 };
 
 const mockUseWalletOverview = vi.fn<() => WalletReturn>();
 
 vi.mock("@/hooks/useReliantAIQueries", () => ({
-  useWalletOverview: () => mockUseWalletOverview(),
+  useWalletOverview: () => ({
+    refetch: vi.fn().mockResolvedValue({}),
+    ...mockUseWalletOverview(),
+  }),
   useRedeemCoupon: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -107,7 +114,7 @@ const plan: Partial<LaunchPlan> = { compute: "cloud_free_trial" };
 function renderStep(
   overrides: { updatePlan?: () => void; onNext?: () => void } = {},
 ) {
-  return render(
+  const result = render(
     <ModelStep
       plan={plan as LaunchPlan}
       updatePlan={overrides.updatePlan ?? vi.fn()}
@@ -116,12 +123,23 @@ function renderStep(
     />,
     { wrapper },
   );
+  // The step opens with Claude Code pre-selected — the free path, so a user
+  // can finish onboarding without being charged. Every test in this file is
+  // about the FUNDING GATE on the Reliant CTA, which is not on screen until
+  // Reliant is chosen, so the choice is made here rather than each test
+  // silently depending on which provider happens to be the default.
+  fireEvent.click(screen.getByRole("button", { name: /^reliant$/i }));
+  return result;
 }
 
-/** The Reliant CTA, under either label. */
+/** The Reliant CTA, under any of its labels. Reliant is selected by renderStep.
+ *
+ *  Unfunded, the label now names the amount being bought ("Continue with
+ *  $25.00 credit") rather than saying "Continue with Reliant" — the amount is
+ *  chosen on THIS step, so the button states what pressing it commits to. */
 function startButton() {
   return screen.getByRole("button", {
-    name: /(start|continue) with reliant/i,
+    name: /(start with reliant|continue with \$)/i,
   });
 }
 
@@ -199,26 +217,63 @@ describe("ModelStep funding gate", () => {
     ).toBeNull();
   });
 
-  // The coupon field is what remains, and it must not have been removed along
-  // with the exit — a user holding a code can still fund the wallet here and
-  // skip the checkout step entirely.
-  it("still offers coupon redemption when unfunded", () => {
+  // ── INVERTED, and this is the owner's stated engagement priority ─────
+  //
+  // This used to assert the OPPOSITE: no coupon field here, because
+  // "everything that moves money lives in ONE place — the checkout step".
+  // That reasoning is right about a CARD and wrong about a COUPON. A coupon is
+  // how a leg is cleared WITHOUT paying, so putting the only coupon field on
+  // the screen that exists to collect a card forced a user holding codes for
+  // both legs to walk onto a payment form to redeem the second one.
+  //
+  // The requirement is that such a user never sees a card at all. Redeeming
+  // here is what makes it true: both legs settle while the user is still
+  // deciding, `requiresPayment` returns nothing owed, and `deriveStep` never
+  // routes to checkout.
+  //
+  // The drift the old comment feared is avoided by the SAME mechanism the
+  // checkout step uses — redemption refetches the wallet, and the wallet
+  // balance is the fact derivation reads. Nothing here writes a settlement
+  // flag, so this step cannot claim an entitlement the server has not granted.
+  it("offers a coupon field when unfunded, so both-coupon users never see a card", () => {
     mockUseWalletOverview.mockReturnValue({
       data: { wallet: { balanceUsdNanos: 0n } },
       isLoading: false,
     });
     renderStep();
-    expect(screen.getByLabelText(/coupon code/i)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: /have a coupon/i }),
+    ).toBeInTheDocument();
   });
 
-  it("does not put a real coupon code in the input placeholder", () => {
+  // The mirror: a funded wallet has nothing left to buy, so neither the amount
+  // nor the coupon is offered. Showing them would invite a purchase the user
+  // does not need.
+  it("offers no amount or coupon once the wallet is funded", () => {
+    mockUseWalletOverview.mockReturnValue({
+      data: { wallet: { balanceUsdNanos: 2_000_000_000n } },
+      isLoading: false,
+    });
+    renderStep();
+    expect(screen.queryByRole("button", { name: /have a coupon/i })).toBeNull();
+    expect(screen.queryByText(/how much credit/i)).toBeNull();
+  });
+
+  // The amount is chosen HERE, beside the provider, and carried on the plan so
+  // the single checkout at the end bills what was decided rather than re-asking.
+  it("records the chosen credit amount on the plan", async () => {
     mockUseWalletOverview.mockReturnValue({
       data: { wallet: { balanceUsdNanos: 0n } },
       isLoading: false,
     });
-    renderStep();
-    const input = screen.getByLabelText(/coupon code/i);
-    expect(input.getAttribute("placeholder")).not.toMatch(/launch/i);
+    const updatePlan = vi.fn();
+    renderStep({ updatePlan });
+
+    // $50.00 — a preset other than the default, so the assertion cannot pass
+    // by accident.
+    fireEvent.click(screen.getByRole("button", { name: "$50.00" }));
+
+    expect(updatePlan).toHaveBeenCalledWith({ aiCreditCents: 5000 });
   });
 
   // THE ORIGINAL USER REPORT: "I was able to select reliant as an ai provider
@@ -249,8 +304,11 @@ describe("ModelStep funding gate", () => {
       fireEvent.click(startButton());
     });
 
+    // The amount chosen on this step rides along, so the single checkout at
+    // the end bills what was decided here rather than asking a second time.
     expect(updatePlan).toHaveBeenCalledWith({
       modelProvider: "reliant_credits",
+      aiCreditCents: 2500,
     });
     expect(onNext).toHaveBeenCalled();
   });
@@ -268,8 +326,11 @@ describe("ModelStep funding gate", () => {
     fireEvent.click(startButton());
 
     await waitFor(() => {
+      // A funded wallet buys nothing, so no amount is recorded — writing one
+      // would describe a purchase that is not happening.
       expect(updatePlan).toHaveBeenCalledWith({
         modelProvider: "reliant_credits",
+        aiCreditCents: undefined,
       });
     });
   });

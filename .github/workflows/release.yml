@@ -248,7 +248,25 @@ jobs:
       # gate the hosted frontend does.
       - name: Build React frontend
         working-directory: web
-        run: npm run build
+        # NODE_ENV=production is scoped to this command, NOT the step, and NOT
+        # the job. Vite honours NODE_ENV even under `vite build`, so a leaked
+        # `development` folds `import.meta.env.DEV` to TRUE inside a production
+        # bundle; isSameOriginTransport() then survives DCE and the packaged
+        # app POSTs its RPCs at app://bundle, where there is no proxy — the
+        # SPA fallback answers with index.html and the app hangs with every
+        # request returning 200. verify-bundle's [2/4] assertion catches it,
+        # and this makes it not happen in the first place.
+        #
+        # A fresh runner does not set NODE_ENV, so this is belt-and-braces
+        # HERE — but it is load-bearing on any machine that does, which is why
+        # control-plane's deploy-reliant-web.yml has carried it since the
+        # hosted site broke this exact way. The two paths build the SAME
+        # bundle; they should not disagree about the one variable that decides
+        # whether it is a production build.
+        #
+        # Never set on `npm ci`/`npm install`: npm reads the same variable and
+        # skips devDependencies, removing vite and typescript themselves.
+        run: NODE_ENV=production npm run build
 
       # ── The artifact gate. Asserts on the BUILT BUNDLE, not the source. ────
       #

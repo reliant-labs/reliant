@@ -211,21 +211,53 @@ func (r *NATSDaemonRouter) resolveDaemonID(ctx context.Context, userID string, s
 		}
 	}
 
+	// ── The user id stays in the LOG, never in the message ───────────
+	//
+	// Both errors below are rendered VERBATIM to the end user:
+	// mapDaemonDispatchError wraps them into a Connect error whose message the
+	// UI prints. The account UUID that used to be interpolated here therefore
+	// surfaced as "[internal] resolving daemon for command: no daemon
+	// available for user 22302879-fd98-4cde-9e12-532b12a5d3fc" — an internal
+	// identifier shown to the person it identifies, describing our plumbing
+	// rather than telling them anything they can act on.
+	//
+	// The id is exactly what an OPERATOR needs, so it is logged with the
+	// selector beside it. What crosses to the user is a sentence about their
+	// machine.
+
 	// A daemon record exists (provisioning, or created but not yet attached)
-	// but nothing above could route to it. This is the "please wait" case,
-	// not a hard failure — wrap ErrDaemonPending so callers can distinguish
-	// it from "this user has no daemon at all" below.
+	// but nothing above could route to it. The "please wait" case, not a hard
+	// failure — ErrDaemonPending lets callers tell it from "no daemon at all",
+	// and its own text carries the "no daemon connected" marker the frontend's
+	// wait machinery keys on (isDaemonConnectingError / classifyDaemonWait).
 	if sawDaemonRecord {
+		logging.Warn("[DaemonRouter] daemon record exists but is not routable yet",
+			append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 		if selector != nil {
-			return "", fmt.Errorf("no daemon matching selector (type=%q, name=%q, id=%q) for user %s: %w", selector.Type, selector.Name, selector.ID, userID, ErrDaemonPending)
+			return "", fmt.Errorf("the machine for this request is still starting: %w", ErrDaemonPending)
 		}
-		return "", fmt.Errorf("daemon for user %s: %w", userID, ErrDaemonPending)
+		return "", fmt.Errorf("your machine is still starting: %w", ErrDaemonPending)
 	}
 
+	logging.Warn("[DaemonRouter] no daemon could be resolved",
+		append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 	if selector != nil {
-		return "", fmt.Errorf("no daemon matching selector (type=%q, name=%q, id=%q) for user %s", selector.Type, selector.Name, selector.ID, userID)
+		return "", fmt.Errorf("no daemon available: the machine this request asked for is not connected")
 	}
-	return "", fmt.Errorf("no daemon available for user %s", userID)
+	return "", fmt.Errorf("no daemon available: no machine is connected to your account yet")
+}
+
+// selectorLogFields renders an optional selector as structured log key/values,
+// so a nil selector logs empty strings rather than being dropped or panicking.
+func selectorLogFields(selector *DaemonSelector) []any {
+	if selector == nil {
+		return []any{"selector_type", "", "selector_name", "", "selector_id", ""}
+	}
+	return []any{
+		"selector_type", selector.Type,
+		"selector_name", selector.Name,
+		"selector_id", selector.ID,
+	}
 }
 
 // resolveViaControlPlane calls the control plane's ResolveDaemon RPC.

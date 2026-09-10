@@ -40,8 +40,17 @@ const config = {
     enableNodeOptionsEnvironmentVariable: false,
     // Disable --inspect and similar debug flags in production
     enableNodeCliInspectArguments: false,
-    // Enable file:// protocol privileges (required for loadFile to work)
-    grantFileProtocolExtraPrivileges: true
+    // No extra privileges for file://. The packaged renderer is served over
+    // app:// (src/app-protocol.js), which is registered `standard` + `secure`
+    // and carries its own origin — the app calls loadFile() nowhere, so
+    // nothing loads from file:// at all.
+    //
+    // This was `true`, commented "required for loadFile to work", and that
+    // stopped being true when v1.7.0 moved the renderer off file:// to fix the
+    // blank-window bug. It granted a dead scheme the ability to reach other
+    // file:// resources; turning it off narrows what a renderer compromise can
+    // read from disk and costs nothing, because that scheme is unused.
+    grantFileProtocolExtraPrivileges: false
   },
 
   files: [

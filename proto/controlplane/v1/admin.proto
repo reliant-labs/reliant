@@ -72,6 +72,32 @@ message ManagedReliantAccess {
 
 service UserService {
   rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {}
+
+  // DeleteCurrentUserAccount tombstones the caller's control-plane account
+  // (billing identity, daemons, PII). Called by reliant's own
+  // AccountService.DeleteAccount BEFORE it purges local data, forwarding the
+  // caller's JWT — see internal/controlplane/client.go.
+  //
+  // Control-plane first is deliberate: if it refuses (a paid subscription or
+  // prepaid credit), nothing has been destroyed and the user can resolve the
+  // blocker and retry. The reverse order could destroy every chat and project
+  // and then fail to stop the billing, which is the one unacceptable outcome.
+  rpc DeleteCurrentUserAccount(DeleteCurrentUserAccountRequest) returns (DeleteCurrentUserAccountResponse) {}
+}
+
+// AccountDeletionBlocker is one reason control-plane refused the deletion.
+message AccountDeletionBlocker {
+  // Machine-readable: "paid_subscription" or "wallet_balance".
+  string reason = 1;
+  // Human-readable sentence, safe to show the user verbatim.
+  string detail = 2;
+}
+
+message DeleteCurrentUserAccountRequest {}
+
+message DeleteCurrentUserAccountResponse {
+  // Non-empty means REFUSED and nothing was destroyed.
+  repeated AccountDeletionBlocker blockers = 1;
 }
 
 message GetCurrentUserRequest {}

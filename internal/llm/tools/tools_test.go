@@ -81,8 +81,8 @@ func TestIsToolReadOnly(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "bash_kill tool - kills processes",
-			tool:     &mockTool{name: "bash_kill"},
+			name:     "shell_kill tool - kills processes",
+			tool:     &mockTool{name: "shell_kill"},
 			expected: false,
 		},
 		{

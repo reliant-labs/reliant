@@ -198,7 +198,7 @@ func TestPresetToolsAreValid(t *testing.T) {
 				assert.NotEmpty(t, toolStr, "tool at index %d should not be empty", i)
 
 				// Tools can be:
-				// - Simple names: "view", "edit", "bash"
+				// - Simple names: "view", "edit", "shell"
 				// - Tag references: "tag:default", "tag:search", "tag:mcp"
 				// - External MCP names: "mcp__server__tool"
 				if strings.HasPrefix(toolStr, "spawn:") {

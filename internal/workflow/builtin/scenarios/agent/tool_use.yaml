@@ -20,14 +20,14 @@ events:
     type: llm_response
     text: "Let me check something for you."
     tool_calls:
-      - name: bash
+      - name: shell
         input:
           command: "ls -la"
 
   # Tool execution result
   - node: agent_loop.execute_tools
     type: tool_result
-    tool: bash
+    tool: shell
     output:
       result: "total 64\ndrwxr-xr-x  5 user  staff  160 Jan 24 10:00 .\n-rw-r--r--  1 user  staff  1234 Jan 24 10:00 file.txt"
 

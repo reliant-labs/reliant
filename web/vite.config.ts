@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
 import { versionJson } from "./vite-plugin-version-json";
+import { cspPlugin } from "./vite-plugin-csp";
 
 // Get worktree name from parent directory
 // When Vite runs, cwd is the 'web' directory, so we need to go up one level
@@ -26,7 +27,12 @@ export default defineConfig({
   // versionJson is build-only (apply: "build"): it emits dist/version.json, a
   // real static file so the SPA rewrite cannot swallow a request for it. See
   // vite-plugin-version-json.ts.
-  plugins: [react(), browserLogSink(), versionJson()],
+  // cspPlugin is build-only (apply: "build"): it injects the Content-Security-
+  // Policy as a <meta> tag so ONE bundle carries its own policy to both the
+  // Firebase-hosted SPA and the packaged app:// renderer. forge's
+  // FirebaseHosting schema has no `headers` field, so a response header is not
+  // expressible; see vite-plugin-csp.ts.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin()],
   // Load .env files from project root instead of web directory
   envDir: path.resolve(__dirname, ".."),
   // Define global constants available in the app

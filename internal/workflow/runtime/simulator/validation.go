@@ -194,6 +194,26 @@ func collectValidNodes(workflow *reliantv1.Workflow, prefix string) map[string]n
 	return nodes
 }
 
+// spawnNodeRefPrefix is the id prefix the runtime gives the synthetic
+// sub-workflow node it runs a `spawn` tool call as (runtime's spawnNodeID).
+// Kept as a literal here rather than imported because the constant is
+// unexported in the runtime package and exporting it would widen that
+// package's API for one string; the pairing is pinned by TestSpawnNodeIDPrefixMatchesRuntime.
+const spawnNodeRefPrefix = "spawn-"
+
+// isSpawnNodeRef reports whether a scenario node reference addresses a
+// synthetic spawn node ("spawn-call_x") or something inside one
+// ("spawn-call_x.call_llm").
+func isSpawnNodeRef(nodeRef string) bool {
+	if !strings.HasPrefix(nodeRef, spawnNodeRefPrefix) {
+		return false
+	}
+	// The tool call id must be non-empty: "spawn-" alone, or "spawn-.inner",
+	// names nothing.
+	rest := strings.TrimPrefix(nodeRef, spawnNodeRefPrefix)
+	return rest != "" && !strings.HasPrefix(rest, ".")
+}
+
 // nodeInfo stores information about a node for validation.
 type nodeInfo struct {
 	nodeType  string
@@ -208,6 +228,21 @@ type nodeInfo struct {
 func isValidNodeRef(nodeRef string, validNodes map[string]nodeInfo) bool {
 	// Direct match
 	if _, ok := validNodes[nodeRef]; ok {
+		return true
+	}
+
+	// A spawn is not a node any workflow declares: the runtime synthesizes one
+	// per `spawn` tool call, named from the tool call's id
+	// ("spawn-call_x"), and targets builtin://agent by ref. So it cannot appear
+	// in validNodes, and validating it against the graph would reject the only
+	// id a scenario CAN use to address the spawn or its internals.
+	//
+	// The tool call id comes from the scenario's own call_llm mock, so the
+	// author who writes "spawn-call_x" is the same author who wrote
+	// `id: call_x` — a typo still surfaces, as an event that goes unconsumed
+	// rather than as a validation error. Deeper segments are unvalidatable for
+	// the same reason any ref's internals are: they live in another workflow.
+	if isSpawnNodeRef(nodeRef) {
 		return true
 	}
 

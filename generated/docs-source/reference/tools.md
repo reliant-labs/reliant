@@ -36,7 +36,7 @@ Tools are organized by tags for filtering:
 
 ## Categories
 
-- [Planning & Task Management](#planning--task-management) (22 tools)
+- [Planning & Task Management](#planning--task-management) (23 tools)
 - [File Operations](#file-operations) (4 tools)
 - [Information Retrieval](#information-retrieval) (1 tools)
 - [Workflow Management](#workflow-management) (16 tools)
@@ -53,9 +53,7 @@ _Tools for creating plans, managing tasks, and tracking progress._
 |------|------|-------------|
 | [`add_dependency`](#add_dependency) | planning, plan | Create a dependency between two tasks in the current plan. |
 | [`add_task`](#add_task) | planning, plan, default | Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning. |
-| [`bash_list`](#bash_list) | execution, shell, readonly, plan, default | Lists background processes in the current workspace. |
-| [`bash_output`](#bash_output) | execution, shell, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
-| [`bash_wait`](#bash_wait) | execution, shell, readonly, plan, default | Block until a background process exits, then return its exit code and recent output. |
+| [`code_context`](#code_context) | analysis, search, readonly, plan, default | Resolve a code symbol to its definition, callers, callees, and implementations in ONE call. |
 | [`component_library`](#component_library) | readonly, plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`create_plan`](#create_plan) | planning, plan, default | Create a comprehensive plan with tasks for implementing a feature or solving a problem. |
 | [`create_subtask`](#create_subtask) | planning, plan | Create a subtask under an existing task. |
@@ -67,6 +65,9 @@ _Tools for creating plans, managing tasks, and tracking progress._
 | [`project_analyzer`](#project_analyzer) | analysis, readonly, plan | Analyzes project structure, detects languages, build systems, and test frameworks |
 | [`read_attachment`](#read_attachment) | file, readonly, plan, default | Read the contents of a file the user attached to the conversation. |
 | [`remove_dependency`](#remove_dependency) | planning, plan | Remove a dependency between two tasks. |
+| [`shell_list`](#shell_list) | execution, shell, readonly, plan, default | Lists background processes in the current workspace. |
+| [`shell_output`](#shell_output) | execution, shell, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
+| [`shell_wait`](#shell_wait) | execution, shell, readonly, plan, default | Block until a background process exits, then return its exit code and recent output. |
 | [`skill`](#skill) | default, readonly, plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`sourcegraph`](#sourcegraph) | analysis, readonly, plan | Search code across public repositories using Sourcegraph's GraphQL API. |
 | [`update_plan`](#update_plan) | planning, plan | Update an existing plan's details or status. |
@@ -155,167 +156,95 @@ BEST PRACTICES:
 
 ---
 
-### bash_list
+### code_context
 
-**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
+**Tags:** `analysis`, `search`, `readonly`, `plan`, `default`
 
-Lists background processes in the current workspace.
+Resolve a code symbol to its definition, callers, callees, and implementations in ONE call.
 
-WORKSPACE SCOPING:
-- Processes are scoped to the current workspace (worktree)
-- Multiple chats in the same workspace share the same process list
-- This enables coordination: one chat can start a server, another can check its status
-- Use BashOutput to view output and BashKill to terminate any workspace process
+⚠️ GO AND TYPESCRIPT/JAVASCRIPT ONLY. Call graphs are resolved by a language server
+(gopls for .go, tsserver for .ts/.tsx/.js/.jsx), and only those two are supported.
+For any other language — Python, Ruby, Java, Rust, C# — this falls back to a text
+search that CANNOT resolve call edges, and you should use bash + rg instead.
 
-Usage notes:
-- By default, shows only running processes in the current workspace
-- Use 'all: true' to include completed, failed, and killed processes
-- Process IDs can be used with BashOutput and BashKill tools
+Use this INSTEAD of a multi-step grep walk whenever the question is about a symbol's
+relationships. A grep walk costs one turn per hop and each turn re-derives what to
+search next; this returns the whole neighborhood at once.
 
-Example outputs:
-- Running processes: Shows ID, command, and how long they've been running
-- Completed processes: Shows ID, command, exit code, and duration
-- Failed processes: Shows ID, command, exit code, and error indication
+WHEN TO USE THIS TOOL:
+- "Who calls X?" / "What does X call?" — the answers grep cannot compute, because a
+  call site never names the receiver's type.
+- "What implements this interface?" — neither Go nor TypeScript records that at the
+  implementation site, so there is no text to search for.
+- "Where is X defined?" when the name is ambiguous across packages or modules.
+- Orienting in unfamiliar code: one call replaces the definition->callers->callees walk.
 
-Examples:
-1. List running processes: bash_list()
-2. List all processes including completed: bash_list(all=true)
+LANGUAGE SUPPORT:
+- Go (.go) — resolved by gopls. Authoritative.
+- TypeScript / JavaScript (.ts .tsx .js .jsx .mts .cts) — resolved by tsserver from
+  the project's own TypeScript install. Authoritative.
+- Everything else (Python, Ruby, Java, ...) — a text engine reports call sites and
+  their enclosing function. Useful for locating, but approximate: it cannot see
+  dynamic dispatch and may include same-named methods on unrelated types. The
+  response labels this explicitly.
 
----
+WHEN NOT TO USE THIS TOOL:
+- Full-text or pattern search ("find every TODO", "which files mention retry") — use bash + rg.
+- Reading a file you already located — use view.
 
-### bash_output
-
-**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
-
-Retrieves output from a background process with pagination and regex filtering support.
-
-WORKSPACE SCOPING:
-- Can read output from any process in the current workspace, regardless of which chat started it
-- Multiple chats in the same workspace share process visibility
-- This enables monitoring: check on servers or builds started by other chats
-
-This tool allows you to check the stdout and stderr output of a process running in the background,
-with support for reading in chunks to handle large outputs efficiently and filtering with regex.
-
-Usage notes:
-- Process IDs are provided when you start a background process with run_in_background: true
-- The tool will indicate if the process is still running or has completed
-- If the process has completed, the exit code will be provided
-- Output is not cleared after reading - you can re-read from any position
-
-MODES OF OPERATION:
-
-1. Standard Pagination (default):
-   - offset: Start reading from byte N (default: 0)
-   - limit: Read up to N bytes (default: 16000)
-   - Can be combined: offset + limit
-
-2. Tail Mode:
-   - tail: Get last N lines
-   - Cannot be combined with: regex, offset, limit
-
-3. Regex Filter Mode:
-   - regex: Filter output to lines matching pattern
-   - When set, tool filters FIRST, then applies offset/limit to filtered results
-   - Can be combined with: offset, limit, regex_case_insensitive, regex_context_before, regex_context_after
-   - Cannot be combined with: tail
-   - Optional parameters:
-     * regex_case_insensitive: Case-insensitive matching
-     * regex_context_before: Include N lines before match (like grep -B)
-     * regex_context_after: Include N lines after match (like grep -A)
-
-PARAMETER COMPATIBILITY:
-Valid combinations:
-  - offset + limit (standard pagination)
-  - tail (alone)
-  - regex (alone)
-  - regex + offset + limit (filtered pagination)
-  - regex + regex_case_insensitive + regex_context_before + regex_context_after
-
-Invalid combinations (will error):
-  - tail + regex
-  - tail + offset
-  - tail + limit
-  - regex_case_insensitive without regex
-  - regex_context_before/after without regex
-
-Examples:
-1. Start a background process:
-   bash(command="npm run dev", run_in_background=true)
-
-2. Get first chunk:
-   bash_output(process_id="<id>")
-
-3. Get next chunk:
-   bash_output(process_id="<id>", offset=16000)
-
-4. Get last 100 lines:
-   bash_output(process_id="<id>", tail=100)
-
-5. Filter for errors:
-   bash_output(process_id="<id>", regex="ERROR|FATAL")
-
-6. Filter with context:
-   bash_output(process_id="<id>", regex="ERROR", regex_context_after=3)
-
-7. Filter and paginate:
-   bash_output(process_id="<id>", regex="WARN", offset=0, limit=10000)
-
-The response includes metadata:
-- has_more: true if more output is available
-- next_offset: where to start reading for the next chunk
-- total_available: total bytes available in the (filtered or original) output
-- filter_applied: true if regex was used
-- total_matches: number of matching lines (when filtered)
-- matches_in_response: number of matches in this chunk
-
----
-
-### bash_wait
-
-**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
-
-Block until a background process exits, then return its exit code and recent output.
-
-WHY THIS EXISTS:
-Waiting by running a sleep command is the wrong tool and costs far more than it
-looks. `sleep 300; tail log` occupies a whole turn doing nothing, and it
-frequently exceeds the tool timeout and dies, losing the wait entirely. Polling
-bash_output in a loop is better but spends a model round-trip on every check.
-bash_wait blocks server-side: one tool call, no round-trips, no lost work.
-
-WHEN TO USE:
-- Waiting for a long build, test suite, or install to finish
-- Any time the next thing you do depends on a background process being done
-
-WHEN NOT TO USE:
-- A long-running server you never expect to exit (use bash_output to check on it)
-- You only want progress so far, not completion (use bash_output)
+PREFER THIS OVER GREP FOR ANY NAMED SYMBOL. If you are about to run
+`rg 'SomeFunction'` or `grep -n 'SomeType'` against Go or TypeScript,
+call this instead — it returns everything that search would have found plus the
+things it cannot find, in one call rather than one call per hop.
 
 HOW TO USE:
-1. Start the work in the background:
-   bash(command="npm test", run_in_background=true)
-2. Do any useful work that does not depend on the result — read the next file,
-   prepare the following edit. The process runs while you do.
-3. Wait for it:
-   bash_wait(process_id="<id>")
+Usually just: code_context(symbol: "ResolveDaemon"). The defaults are the common case —
+the definition, its source, and a 3-level call map, which is what "how does this work"
+actually needs. Every parameter below is optional.
 
-TIMEOUTS ARE NOT FAILURES:
-If the process is still running when the budget elapses, this returns normally
-with timed_out: true and the process untouched. Call bash_wait again to keep
-waiting. It never kills the process — use bash_kill for that.
+- symbol (REQUIRED): the identifier alone, unqualified and with no regex.
+  Good: "ResolveDaemon", "classifyDaemonWait", "DaemonRegistryService".
+  Bad: "svc.ResolveDaemon" (drop the receiver), "Resolve.*" (not a pattern),
+  "func ResolveDaemon" (just the name).
 
-Because a single call cannot block past the tool-execution ceiling, a very long
-build may need a few consecutive bash_wait calls. That is still dramatically
-cheaper than polling, and unlike a sleep it cannot lose the wait.
+- want: which relationships to return. Default "all".
+  "all"             definition + source + call map + implementations
+  "callers"         who reaches this — trace a request path inbound
+  "callees"         what this drives — see the work a function delegates
+  "implementations" on an interface: who implements it. On a concrete method:
+                    which interfaces it satisfies (the reverse lookup).
+  "definition"      still includes the graph; narrows the emphasis, not the answer.
 
-RETURNS:
-- Exit code and status once the process has exited
-- The last tail_lines lines of output (default 50), so a passing build or a
-  failing test usually needs no follow-up call
-- timed_out: true, with no exit code, if the budget elapsed first
+- depth: levels of call graph to expand as a tree. Default 3, max 5. Depth 3
+  answers "who ultimately triggers this" for typical handler->service->repo
+  layering. Use depth 1 when you only want the immediate neighbors as flat lists.
 
-Use bash_output for the full log, for pagination, or for regex filtering.
+- file: a path FRAGMENT to disambiguate when a name is declared many times
+  (`Execute` has dozens here). The response tells you when this is needed and
+  lists the alternatives — pass e.g. file: "daemon_router_nats.go".
+
+- include_source: first ~30 lines of the definition. On by default, because the
+  usual next question is "what does it do" and that would cost another turn.
+  Set false when you want only the graph.
+
+- scope: "project" (default) keeps results in this workspace INCLUDING sibling
+  repos linked into it, and excludes the standard library, node_modules and
+  vendored code. Use "all" only to deliberately read into a dependency.
+
+- repo: multi-repo projects only — "root" or a repo name. Omit otherwise.
+
+- limit: max entries per flat section. Default 25, max 200. The response says
+  when a section was truncated.
+
+OUTPUT:
+An ENGINE line naming what resolved the query and how far to trust it, a DEFINITION
+line with the first ~30 lines of source, then either a CALL MAP tree (depth > 1) or
+flat CALLERS / CALLEES / IMPLEMENTATIONS sections. Truncation is always stated.
+
+NOTES:
+- The first call in a large repo pays a one-time index cost (a few seconds); later calls are fast.
+- Results include test files; they are real callers.
+- If a language server is missing, the response says so and names the install command.
 
 ---
 
@@ -636,6 +565,170 @@ Specify from_task, to_task, and type to identify which dependency to remove.
 
 ---
 
+### shell_list
+
+**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
+
+Lists background processes in the current workspace.
+
+WORKSPACE SCOPING:
+- Processes are scoped to the current workspace (worktree)
+- Multiple chats in the same workspace share the same process list
+- This enables coordination: one chat can start a server, another can check its status
+- Use shell_output to view output and shell_kill to terminate any workspace process
+
+Usage notes:
+- By default, shows only running processes in the current workspace
+- Use 'all: true' to include completed, failed, and killed processes
+- Process IDs can be used with shell_output and shell_kill tools
+
+Example outputs:
+- Running processes: Shows ID, command, and how long they've been running
+- Completed processes: Shows ID, command, exit code, and duration
+- Failed processes: Shows ID, command, exit code, and error indication
+
+Examples:
+1. List running processes: shell_list()
+2. List all processes including completed: shell_list(all=true)
+
+---
+
+### shell_output
+
+**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
+
+Retrieves output from a background process with pagination and regex filtering support.
+
+WORKSPACE SCOPING:
+- Can read output from any process in the current workspace, regardless of which chat started it
+- Multiple chats in the same workspace share process visibility
+- This enables monitoring: check on servers or builds started by other chats
+
+This tool allows you to check the stdout and stderr output of a process running in the background,
+with support for reading in chunks to handle large outputs efficiently and filtering with regex.
+
+Usage notes:
+- Process IDs are provided when you start a background process with run_in_background: true
+- The tool will indicate if the process is still running or has completed
+- If the process has completed, the exit code will be provided
+- Output is not cleared after reading - you can re-read from any position
+
+MODES OF OPERATION:
+
+1. Standard Pagination (default):
+   - offset: Start reading from byte N (default: 0)
+   - limit: Read up to N bytes (default: 16000)
+   - Can be combined: offset + limit
+
+2. Tail Mode:
+   - tail: Get last N lines
+   - Cannot be combined with: regex, offset, limit
+
+3. Regex Filter Mode:
+   - regex: Filter output to lines matching pattern
+   - When set, tool filters FIRST, then applies offset/limit to filtered results
+   - Can be combined with: offset, limit, regex_case_insensitive, regex_context_before, regex_context_after
+   - Cannot be combined with: tail
+   - Optional parameters:
+     * regex_case_insensitive: Case-insensitive matching
+     * regex_context_before: Include N lines before match (like grep -B)
+     * regex_context_after: Include N lines after match (like grep -A)
+
+PARAMETER COMPATIBILITY:
+Valid combinations:
+  - offset + limit (standard pagination)
+  - tail (alone)
+  - regex (alone)
+  - regex + offset + limit (filtered pagination)
+  - regex + regex_case_insensitive + regex_context_before + regex_context_after
+
+Invalid combinations (will error):
+  - tail + regex
+  - tail + offset
+  - tail + limit
+  - regex_case_insensitive without regex
+  - regex_context_before/after without regex
+
+Examples:
+1. Start a background process:
+   bash(command="npm run dev", run_in_background=true)
+
+2. Get first chunk:
+   shell_output(process_id="<id>")
+
+3. Get next chunk:
+   shell_output(process_id="<id>", offset=16000)
+
+4. Get last 100 lines:
+   shell_output(process_id="<id>", tail=100)
+
+5. Filter for errors:
+   shell_output(process_id="<id>", regex="ERROR|FATAL")
+
+6. Filter with context:
+   shell_output(process_id="<id>", regex="ERROR", regex_context_after=3)
+
+7. Filter and paginate:
+   shell_output(process_id="<id>", regex="WARN", offset=0, limit=10000)
+
+The response includes metadata:
+- has_more: true if more output is available
+- next_offset: where to start reading for the next chunk
+- total_available: total bytes available in the (filtered or original) output
+- filter_applied: true if regex was used
+- total_matches: number of matching lines (when filtered)
+- matches_in_response: number of matches in this chunk
+
+---
+
+### shell_wait
+
+**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
+
+Block until a background process exits, then return its exit code and recent output.
+
+WHY THIS EXISTS:
+Waiting by running a sleep command is the wrong tool and costs far more than it
+looks. `sleep 300; tail log` occupies a whole turn doing nothing, and it
+frequently exceeds the tool timeout and dies, losing the wait entirely. Polling
+shell_output in a loop is better but spends a model round-trip on every check.
+shell_wait blocks server-side: one tool call, no round-trips, no lost work.
+
+WHEN TO USE:
+- Waiting for a long build, test suite, or install to finish
+- Any time the next thing you do depends on a background process being done
+
+WHEN NOT TO USE:
+- A long-running server you never expect to exit (use shell_output to check on it)
+- You only want progress so far, not completion (use shell_output)
+
+HOW TO USE:
+1. Start the work in the background:
+   bash(command="npm test", run_in_background=true)
+2. Do any useful work that does not depend on the result — read the next file,
+   prepare the following edit. The process runs while you do.
+3. Wait for it:
+   shell_wait(process_id="<id>")
+
+TIMEOUTS ARE NOT FAILURES:
+If the process is still running when the budget elapses, this returns normally
+with timed_out: true and the process untouched. Call shell_wait again to keep
+waiting. It never kills the process — use shell_kill for that.
+
+Because a single call cannot block past the tool-execution ceiling, a very long
+build may need a few consecutive shell_wait calls. That is still dramatically
+cheaper than polling, and unlike a sleep it cannot lose the wait.
+
+RETURNS:
+- Exit code and status once the process has exited
+- The last tail_lines lines of output (default 50), so a passing build or a
+  failing test usually needs no follow-up call
+- timed_out: true, with no exit code, if the budget elapsed first
+
+Use shell_output for the full log, for pagination, or for regex filtering.
+
+---
+
 ### skill
 
 **Tags:** `default`, `readonly`, `plan`
@@ -657,7 +750,7 @@ Every load ends with its total size and whether anything remains, so ONE call
 tells you if you have the whole skill. Do not page defensively — page only when
 a result says bytes remain, and it will name the exact call to continue with.
 
-A skill too large to deliver at once is read with these, mirroring bash_output:
+A skill too large to deliver at once is read with these, mirroring shell_output:
 - section: fetch one markdown section by heading. Preferred — every load lists
   the skill's sections, so this is usually one targeted call rather than
   guessing byte ranges.
@@ -995,7 +1088,7 @@ exists, use edit. If an old_string fails to match, re-read the exact region and
 retry the edit — falling back to a full rewrite is the most expensive move available.
 
 WHEN NOT TO USE:
-- Moving/renaming files: Use Bash mv command
+- Moving/renaming files: Use the shell tool's mv command
 
 COMMON MISTAKES TO AVOID:
 - Insufficient context in old_string (needs 3-5 lines)
@@ -1056,7 +1149,7 @@ replace_all: true
 - Verify edits don't break code
 
 #### WORKS WELL WITH
-- AFTER: Bash (test changes)
+- AFTER: shell (test changes)
 - ALTERNATIVE: Write (complete rewrite)
 
 #### PARAMETERS
@@ -1135,7 +1228,7 @@ file_glob: "**/*.{js,ts,jsx,tsx}"
 #### WORKS WELL WITH
 - BEFORE: preview=true (see changes first)
 - BEFORE: Grep (find occurrences)
-- AFTER: Bash (run tests)
+- AFTER: shell (run tests)
 - ALTERNATIVE: Edit (single file)
 - ALTERNATIVE: Patch (complex multi-file edits)
 #### PARAMETERS
@@ -1273,15 +1366,24 @@ _Tools for searching code, finding files, and fetching external content._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`bash`](#bash) | execution, shell, search, default | Execute bash commands for building, testing, and system operations in a stateless shell. |
+| [`shell`](#shell) | execution, shell, search, default | Execute shell commands for building, testing, and system operations in a stateless shell. |
 
-### bash
+### shell
 
 **Tags:** `execution`, `shell`, `search`, `default`
 
-Execute bash commands for building, testing, and system operations in a stateless shell.
+Execute shell commands for building, testing, and system operations in a stateless shell.
 
-Uses bash -c to execute commands on Unix/macOS/Linux.
+#### ⚠️ THE EXECUTING MACHINE'S PLATFORM IS NOT KNOWN — DO NOT ASSUME BASH
+Commands run on a remote machine whose operating system has not been reported
+to this session, so it may be a POSIX shell (bash -c) or PowerShell on Windows.
+Write portable commands, and PROBE before relying on either dialect:
+- Run one cheap command first (`uname -s`, or `$PSVersionTable`) and read the
+  result to find out which shell you actually have, then commit to that dialect.
+- Until you know: prefer one command per call over chaining, avoid `&&`, `||`,
+  `$VAR` expansion, POSIX redirection and shell globbing, all of which mean
+  different things (or nothing) in PowerShell.
+- Do not guess path separators; use paths exactly as they were given to you.
 #### WHEN NOT TO USE THIS TOOL
 - File editing → Use Edit/Write tools
 - File reading → Use View tool
@@ -1293,25 +1395,15 @@ reducing that is precious. When searching through deeper call chains, the best w
 to do this is via an LSP that gives you the full graph, otherwise you may spend 50-100+
 calls at ~10s per turn. 
 
-## Go — 'gopls' (for Go packages)
-    gopls call_hierarchy path/to/file.go:LINE:COL   # callers AND callees
-    gopls implementation path/to/file.go:LINE:COL   # interface -> concrete types
-    gopls references     path/to/file.go:LINE:COL   # only when rg is ambiguous
-Get LINE:COL from an rg hit first ('rg -n' gives the line; the column is the
-1-based offset of the identifier on it). You can CHAIN the lookup and the query
-in ONE command rather than spending a turn on each:
-    f=internal/svc/x.go; l=$(rg -n 'func .*executeApproval' $f | cut -d: -f1); \
-      gopls call_hierarchy $f:$l:34; gopls implementation $f:$l:34
-Do not use it for plain name lookup — that is a grep, which is faster than gopls.
+## Go and TypeScript — use the 'code_context' TOOL, not this one
+IMPORTANT: for "who calls X", "what does X call", "what implements X", or "where
+is X defined", call code_context(symbol: "X"). One call returns the definition,
+its source, and a 3-level call map. Do NOT hand-run gopls or tsserver here, and
+do NOT walk callers with rg: a call site never names its receiver's type, so a
+grep walk matches every same-named method and compounds the error at each level.
 
 ## Other languages
-Capability varies, and a command that is not installed is worse than no advice.
-Probe before relying on one: 'command -v <tool> >/dev/null && <tool> ...'.
-TypeScript and C# reach a language server through an MCP bridge when the harness
-enables one; that bridge exposes references/definition/hover but NOT call
-hierarchy, so caller walks there stay with rg — keep them shallow and verify.
-'hover' is still uniquely valuable: it returns an INFERRED type ('const x =
-useFoo()' with no annotation), which rg cannot compute at all.
+No language server, so rg IS the tool. Keep caller walks shallow and verify them.
 Load the 'code-search' skill for the per-language capability table.
 
 
@@ -1374,7 +1466,7 @@ nothing.
 Usage notes:
 - The command argument is required.
 - You can specify an optional timeout in milliseconds (up to 600000ms / 10 minutes). If not specified, commands will timeout after 60 seconds.
-- Use 'run_in_background: true' to run long-running commands in the background. You can then use BashOutput to check output, BashKill to terminate, and BashList to see all running processes.
+- Use 'run_in_background: true' to run long-running commands in the background. You can then use shell_output to check output, shell_kill to terminate, and shell_list to see all running processes.
 - Searching the codebase IS a use of this tool (prefer 'rg', scoped to a relative path — see above). For reading whole files, prefer the View tool over 'cat'/'head'/'tail'.
 - VERY IMPORTANT: YOU MUST AVOID WRITING FILES USING SHELL. Please use the appropriate edit and create tools.
 - When issuing multiple commands, use the ';' or '&&' operator to separate them. DO NOT use newlines (newlines are ok in quoted strings).
@@ -1412,7 +1504,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`get_cel_reference`](#get_cel_reference) | workflow, readonly | Gets the CEL expression reference for workflow development. |
 | [`get_preset`](#get_preset) | workflow, readonly | Gets the full configuration of a preset. |
 | [`get_schema`](#get_schema) | workflow, readonly | Look up schema documentation for any workflow type by name. |
-| [`get_workflow`](#get_workflow) | workflow, readonly | Gets the full YAML definition of a workflow draft. |
+| [`get_workflow`](#get_workflow) | workflow, readonly | Gets the full YAML definition of a workflow. |
 | [`get_workflow_suggestions`](#get_workflow_suggestions) | workflow, readonly | Returns static design suggestions for building workflows. |
 | [`list_presets`](#list_presets) | workflow, readonly | Lists available presets for agent nodes. |
 | [`list_scenarios`](#list_scenarios) | workflow, readonly | List all test scenarios for the current workflow. |
@@ -1456,6 +1548,9 @@ Delete a test scenario.
 
 Permanently removes the scenario from the workflow.
 
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to delete a scenario on a different workflow.
+
 ---
 
 ### edit_scenario
@@ -1466,6 +1561,9 @@ Make precise text replacements in a scenario's YAML definition.
 
 Use this for small changes like updating expected values or modifying events.
 The old_string must match exactly (including whitespace and indentation).
+
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to edit a scenario on a different workflow.
 
 **Example:**
 {
@@ -1494,9 +1592,14 @@ Include enough context to ensure a unique match.
 If you provide expected_version (from get_workflow), the edit will fail if the 
 workflow was modified since you last viewed it.
 
+**Parameters:**
+- id: (optional) Workflow UUID, slug, or name. Omit it to edit the workflow this chat is editing.
+- old_string: (required) Exact text to replace.
+- new_string: (required) Replacement text.
+- expected_version: (optional) Version number for conflict detection.
+
 **Example:**
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
   "old_string": "  - id: agent\n    type: call_llm",
   "new_string": "  - id: agent\n    type: call_llm\n    model: \"{{inputs.model}}\""
 }
@@ -1576,18 +1679,25 @@ EXAMPLES:
 
 **Tags:** `workflow`, `readonly`
 
-Gets the full YAML definition of a workflow draft.
+Gets the full YAML definition of a workflow.
 
 WHEN TO USE:
 - To view the current state of the workflow you're editing
 - Before making edits to understand the structure
+- To read a builtin or project workflow as a starting point
 
 PARAMETERS:
-- id: (required) Workflow draft UUID
+- id: (optional) Workflow UUID, slug, or name — including a builtin or project
+  workflow name straight out of list_workflows. Omit it to get the workflow this
+  chat is editing.
 
 RETURNS:
-The complete workflow YAML definition with validation status, version, and timestamps.
-Use the version for conflict detection in edit_workflow/write_workflow.
+The complete workflow YAML with validation status. For editable drafts it also
+returns the version and timestamp; pass that version as expected_version to
+edit_workflow/write_workflow for conflict detection.
+
+Builtin and project workflows are read-only and have no version — copy one into
+create_workflow to get an editable draft.
 
 ---
 
@@ -1640,7 +1750,9 @@ List all test scenarios for the current workflow.
 Returns a summary of each scenario including name, description, and last run status.
 Use this to see what scenarios exist and their current state.
 
-No parameters needed - the workflow is determined from the current chat context.
+No parameters are required. The workflow defaults to the one this chat is
+editing. Pass id (a workflow UUID, slug, or name) only to list scenarios for a
+different workflow.
 
 ---
 
@@ -1656,7 +1768,10 @@ WHEN TO USE:
 - Before using get_workflow to view details
 
 RETURNS:
-List of workflow names with descriptions and source (builtin, project, or user).
+A table of workflows with their descriptions and source (builtin, project, or user).
+User workflows also list their draft UUID; builtin and project workflows have none.
+
+Any handle in the Workflow column can be passed straight to get_workflow as id.
 
 ---
 
@@ -1671,6 +1786,9 @@ Use this after making changes to verify scenarios still pass.
 
 Use list_scenarios to see available scenario names.
 
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to run a scenario on a different workflow.
+
 ---
 
 ### view_scenario
@@ -1681,6 +1799,9 @@ View a specific test scenario's full definition.
 
 Returns the complete scenario YAML including events, expectations, and last run results.
 Use this to examine a scenario's configuration or debug test failures.
+
+The workflow defaults to the one this chat is editing. Pass id (a workflow UUID,
+slug, or name) only to view a scenario on a different workflow.
 
 ---
 
@@ -1703,18 +1824,44 @@ events:
         text: "Hello!"
       response_text: "Hello!"
 expect:
-  outcome: completed         # or "error"
+  outcome: completed         # or "error" / "failed"
   reached: ["node1", "node2"]
   not_reached: ["node3"]
+
+**Events — typed mode (usually shorter than a raw output map):**
+  - node: call_llm
+    type: llm_response       # llm_response | tool_result | tool_error | llm_error | user_input
+    text: "Hello!"
+    tool_calls: [{name: bash, input: {command: ls}}]
+  - node: execute_tools
+    type: tool_result
+    tool: bash
+    tool_output: {result: "file.txt"}
+    is_error: false          # marks the tool result as failed
+
+**Assertions — all optional:**
+- outcome: completed | error | failed
+- reached / not_reached: whether a node was SCHEDULED. reached includes nodes
+  that were skipped or errored, so it does NOT prove a node ran.
+- completed: nodes that must have EXECUTED successfully. This is the assertion
+  that excludes skipped nodes — use it, not reached, to prove a branch ran.
+- skipped: nodes that must have been scheduled but skipped by a false condition.
+- error_contains / error_node: for outcome: error
+- node_outputs: {node_id: {field: expected}} — partial match on a node's output
+- outputs: {name: expected} — the workflow's declared outputs. Keys support
+  dotted paths (e.g. "response.choice": "complete").
 
 **Targeting nodes:**
 - Top-level nodes: node: "call_llm"
 - Inner loop nodes: node: "agent_loop.call_llm" (dot-separated)
 - Nested loops: node: "outer_loop.inner_loop.call_llm"
 
+**Workflow selection:**
+Defaults to the workflow this chat is editing. Pass id (a workflow UUID, slug,
+or name) only to write a scenario on a different workflow.
+
 **Example:**
 {
-  "id": "workflow-uuid",
   "name": "happy_path",
   "content": "name: happy_path\ndescription: Test happy path\nevents:\n  - output:\n      message:\n        role: assistant\n        text: Hello!\n      response_text: Hello!\nexpect:\n  outcome: completed"
 }
@@ -1729,7 +1876,6 @@ Replace an existing workflow draft with YAML content.
 
 **Usage:**
 {
-  "id": "550e8400-e29b-41d4-a716-446655440000",
   "content": "name: my-workflow\nentry: [agent]\nnodes:\n  - id: agent\n    type: call_llm"
 }
 
@@ -1740,7 +1886,7 @@ The content must be valid workflow YAML with at minimum:
 - edges: Array of edge definitions (optional for single-node workflows)
 
 **Parameters:**
-- id: (required) Workflow draft UUID.
+- id: (optional) Workflow UUID, slug, or name. Omit it to write the workflow this chat is editing.
 - name: (optional) Overrides the name in YAML. Used for display name.
 - content: (required) Complete workflow YAML content.
 - expected_version: (optional) Version number for conflict detection.
@@ -1757,9 +1903,9 @@ _Tools for executing shell commands and managing system processes._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`bash_kill`](#bash_kill) | execution, shell, default | Terminates a background process in the current workspace. |
+| [`shell_kill`](#shell_kill) | execution, shell, default | Terminates a background process in the current workspace. |
 
-### bash_kill
+### shell_kill
 
 **Tags:** `execution`, `shell`, `default`
 
@@ -1776,12 +1922,12 @@ If it doesn't stop gracefully, it will be forcefully killed.
 Usage notes:
 - Process IDs are provided when you start a background process with run_in_background: true
 - You can only kill processes that are currently running
-- After killing a process, its output is still available via BashOutput
-- Use BashList to see all running background processes in the workspace
+- After killing a process, its output is still available via shell_output
+- Use shell_list to see all running background processes in the workspace
 
 Example:
 1. Start a background process: bash(command="npm run dev", run_in_background=true)
-2. Kill the process: bash_kill(process_id="<id-from-step-1>")
+2. Kill the process: shell_kill(process_id="<id-from-step-1>")
 
 ---
 
@@ -1862,7 +2008,7 @@ WAITING:
 Set wait: true with agent_id to block server-side until that agent reaches a
 terminal state (completed/failed/cancelled/expired), instead of polling this
 tool yourself. One call, no round-trips, no lost work — the same shape as
-bash_wait.
+shell_wait.
 
 TIMEOUTS ARE NOT FAILURES:
 If the agent is still running when the budget elapses, this returns normally

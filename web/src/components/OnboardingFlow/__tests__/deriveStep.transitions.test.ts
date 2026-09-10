@@ -48,10 +48,11 @@ import { requiresPayment } from "../requiresPayment";
 import { isCloudCompute } from "../types";
 import type { ComputeChoice, LaunchPlan, ModelProvider } from "../types";
 
-/** A brand-new account: no subscription, no wallet balance. */
+/** A brand-new account on a deployment that sells: no subscription, no wallet. */
 const NEW_USER: OnboardingFactsInput = {
   computeEligible: false,
   walletFunded: false,
+  reliantBillingAvailable: true,
 };
 
 const TERMINAL_STEPS = ["project-choice", "project-picker", "github-connect"];
@@ -347,5 +348,84 @@ describe("F2 — no walk of the UI reaches the app owing money", () => {
     // asked about a state the user never reaches.
     expect(TERMINAL_STEPS).toContain(deriveStep(world.plan, world.facts));
     expect(owesMoneyAtTerminal(world)).toBeTruthy();
+  });
+
+  /**
+   * Reported from the live flow: "there's no way to go back to step 1... what
+   * if i want to change my compute size?"
+   *
+   * A compute COUPON is the common way the compute leg clears — no card, no
+   * Stripe. It sets `computeSettled`. If Back does not un-set it, the walk is:
+   *
+   *   checkout(compute leg) --Back--> model --choose provider--> checkout
+   *
+   * and that last derivation skips the compute leg entirely, because
+   * `requiresPayment` reads the stale flag as "already handled". The user is
+   * returned to the CREDIT leg forever and can never revisit their machine
+   * size. The flag outlived the decision it described.
+   *
+   * Expressed as a walk rather than a state, because the broken and the fixed
+   * plan look identical in isolation — the difference is only visible in what
+   * a Back was supposed to have undone.
+   */
+  it("Back from checkout lets a coupon-settled user reach compute sizing again", () => {
+    // A user who redeemed a compute coupon: the server agrees they are
+    // eligible, and the plan records the leg as settled.
+    const settled: World = {
+      plan: {
+        compute: "cloud_paid",
+        modelProvider: "reliant_credits",
+        computePlanId: "plan_compute_small",
+        computeSettled: true,
+      },
+      facts: { ...NEW_USER, computeEligible: true },
+    };
+    expect(deriveStep(settled.plan, settled.facts)).toBe("checkout");
+
+    // ONE Back now reaches compute sizing, not two.
+    //
+    // This used to land on `model` and need a second Back, because
+    // BACK_CLEARS.checkout cleared `computePlanId` but not `compute`. That gap
+    // was its own bug: the intermediate state is a cloud plan with no machine
+    // chosen, and re-answering the model question from there derives back to
+    // checkout with no plan id — which renders "we couldn't load the machine
+    // plans" for a catalog that loaded fine. Clearing `compute` with it means
+    // the step that un-priced the bill is the step the user lands on.
+    const afterBack = back.apply(settled);
+    expect(deriveStep(afterBack.plan, afterBack.facts)).toBe("compute");
+
+    // The settlement must not have survived the Back. This is the assertion
+    // that fails without the fix.
+    expect(afterBack.plan.computeSettled).toBeUndefined();
+    expect(afterBack.plan.computePlanId).toBeUndefined();
+  });
+
+  /**
+   * The other half of the same fix: un-settling must not re-charge someone.
+   *
+   * A coupon grant is a SERVER fact and survives the Back untouched, so
+   * derivation owes nothing and simply does not route to checkout again. If
+   * clearing the flag re-introduced a bill, the fix would have traded a
+   * navigation trap for a double-charge.
+   */
+  it("re-settling after Back is free when the coupon grant still stands", () => {
+    const settled: World = {
+      plan: {
+        compute: "cloud_paid",
+        modelProvider: "anthropic",
+        computeSettled: true,
+      },
+      facts: { ...NEW_USER, computeEligible: true },
+    };
+
+    const afterBack = back.apply(settled);
+    const reChosen: World = {
+      plan: { ...afterBack.plan, modelProvider: "anthropic" },
+      facts: afterBack.facts,
+    };
+
+    // Eligible from the grant, so no checkout step and nothing owed.
+    expect(deriveStep(reChosen.plan, reChosen.facts)).not.toBe("checkout");
+    expect(owesMoneyAtTerminal(reChosen)).toBeNull();
   });
 });

@@ -52,7 +52,7 @@ describe("tool collapse preference changes apply live", () => {
 
   it("expands an on-screen group when execution tools switch to expanded", () => {
     writePrefs({ execution: true });
-    render(<ToolExecutionGroup executions={[mk("bash", "1"), mk("bash", "2")]} />);
+    render(<ToolExecutionGroup executions={[mk("shell", "1"), mk("shell", "2")]} />);
     expect(screen.queryAllByTestId("tool-row")).toHaveLength(0);
 
     // User flips "Execution Tools" to expanded in Settings.
@@ -66,7 +66,7 @@ describe("tool collapse preference changes apply live", () => {
 
   it("collapses an on-screen group when execution tools switch to collapsed", () => {
     writePrefs({ execution: false });
-    render(<ToolExecutionGroup executions={[mk("bash", "1"), mk("bash", "2")]} />);
+    render(<ToolExecutionGroup executions={[mk("shell", "1"), mk("shell", "2")]} />);
     expect(screen.queryAllByTestId("tool-row")).toHaveLength(2);
 
     writePrefs({ execution: true });

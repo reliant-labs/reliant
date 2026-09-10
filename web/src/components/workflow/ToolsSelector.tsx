@@ -62,7 +62,7 @@ const QUICK_EXPRESSIONS: Array<{ token: string; description: string }> = [
   },
   {
     token: "!tag:shell",
-    description: "Remove bash/powershell tools",
+    description: "Remove the shell tool family",
   },
   {
     token: "mcp__*",
@@ -120,7 +120,7 @@ function isValidToolToken(token: string): boolean {
     return /^[a-zA-Z0-9_:\-.*!]+$/.test(token);
   }
 
-  // Plain tool names like view, grep, bash_output
+  // Plain tool names like view, grep, shell_output
   return /^[a-zA-Z][a-zA-Z0-9_]*$/.test(token);
 }
 

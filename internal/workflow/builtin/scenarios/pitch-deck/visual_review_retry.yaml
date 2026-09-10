@@ -131,10 +131,14 @@ events:
           feedback: "Good."
 
   # Phase 5, Iteration 0: Build slides
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     iteration: 0
     output:
+      message:
+        role: assistant
+        text: "Built 3 slide components."
       response_text: "Built 3 slide components."
+      tool_calls: []
 
   - node: slides_loop.start_dev_server
     iteration: 0
@@ -143,40 +147,72 @@ events:
       stdout: "Dev server started"
 
   # Phase 5, Iteration 0: Visual reviewer FAILS
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     iteration: 0
     output:
-      response_text: "Slides fail visual review."
-      response:
-        verdict: fail
-        summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
-        slide_issues:
-          - slide_number: 1
-            description: "Title text too small for projection."
-            severity: warning
-          - slide_number: 3
-            description: "Content overflows the slide boundary."
-            severity: critical
-        brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
-        layout_issues:
-          - "Slides 1, 2, 3 all use identical card layout. Needs variety."
-        ai_visual_tells:
-          - "Purple gradient blob in top-right corner on every slide"
-          - "Emoji characters used as icons"
-        typography_issues:
-          - "Body text at 12px is unreadable when projected"
-      completed: true
-
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_visual_review
+          name: submit_visual_review
+          input:
+            verdict: fail
+            summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
+            slide_issues:
+              - slide_number: 1
+                description: "Title text too small for projection."
+                severity: warning
+              - slide_number: 3
+                description: "Content overflows the slide boundary."
+                severity: critical
+            brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
+            layout_issues:
+              - "Slides 1, 2, 3 all use identical card layout. Needs variety."
+            ai_visual_tells:
+              - "Purple gradient blob in top-right corner on every slide"
+              - "Emoji characters used as icons"
+            typography_issues:
+              - "Body text at 12px is unreadable when projected"
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    iteration: 0
+    output:
+      response_data:
+        submit_visual_review:
+          verdict: fail
+          summary: "Multiple AI visual tells and brand mismatch. Blue instead of purple. Same 3-card layout on every slide."
+          slide_issues:
+            - slide_number: 1
+              description: "Title text too small for projection."
+              severity: warning
+            - slide_number: 3
+              description: "Content overflows the slide boundary."
+              severity: critical
+          brand_consistency: "FAIL. Uses blue (#3b82f6) instead of brand purple (#a855f7)."
+          layout_issues:
+            - "Slides 1, 2, 3 all use identical card layout. Needs variety."
+          ai_visual_tells:
+            - "Purple gradient blob in top-right corner on every slide"
+            - "Emoji characters used as icons"
+          typography_issues:
+            - "Body text at 12px is unreadable when projected"
+      tool_results: []
+      thread_token_count: 100
   - node: slides_loop.stop_dev_server
     iteration: 0
     output:
       exit_code: 0
 
   # Phase 5, Iteration 1: Rebuild
-  - node: slides_loop.build_slides
+  - node: slides_loop.build_slides.agent_loop.call_llm
     iteration: 1
     output:
+      message:
+        role: assistant
+        text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
       response_text: "Rebuilt slides. Fixed colors, varied layouts, removed gradient blobs and emoji icons."
+      tool_calls: []
 
   - node: slides_loop.start_dev_server
     iteration: 1
@@ -185,20 +221,38 @@ events:
       stdout: "Dev server started"
 
   # Phase 5, Iteration 1: Visual reviewer PASSES
-  - node: slides_loop.visual_review
+  - node: slides_loop.visual_review.agent_loop.call_llm
     iteration: 1
     output:
-      response_text: "Rebuilt slides pass visual review."
-      response:
-        verdict: pass
-        summary: "Brand colors correct, layout variety good, text readable at projection size."
-        slide_issues: []
-        brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
-        layout_issues: []
-        ai_visual_tells: []
-        typography_issues: []
-      completed: true
-
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_visual_review
+          name: submit_visual_review
+          input:
+            verdict: pass
+            summary: "Brand colors correct, layout variety good, text readable at projection size."
+            slide_issues: []
+            brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
+            layout_issues: []
+            ai_visual_tells: []
+            typography_issues: []
+  - node: slides_loop.visual_review.agent_loop.execute_tools
+    iteration: 1
+    output:
+      response_data:
+        submit_visual_review:
+          verdict: pass
+          summary: "Brand colors correct, layout variety good, text readable at projection size."
+          slide_issues: []
+          brand_consistency: "Matches. Purple #a855f7, #0a0a0a bg, Inter font."
+          layout_issues: []
+          ai_visual_tells: []
+          typography_issues: []
+      tool_results: []
+      thread_token_count: 100
   - node: slides_loop.stop_dev_server
     iteration: 1
     output:

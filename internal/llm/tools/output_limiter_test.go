@@ -323,8 +323,8 @@ func TestOutputCeiling_ViewReadsMoreThanOtherTools(t *testing.T) {
 	})
 
 	t.Run("shell still capped at the shared ceiling", func(t *testing.T) {
-		if got := TruncateOutput("bash", big, true); len(got) > MaxOutputSize {
-			t.Errorf("bash output was %d bytes; it must stay within MaxOutputSize (%d) — "+
+		if got := TruncateOutput(ShellToolName, big, true); len(got) > MaxOutputSize {
+			t.Errorf("shell output was %d bytes; it must stay within MaxOutputSize (%d) — "+
 				"command output volume is not something the agent chose", len(got), MaxOutputSize)
 		}
 	})

@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -2157,7 +2158,7 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 // reconcile loop cannot repeat the error.
 func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState) {
 	message := "The workflow was stopped by the system before it could finish."
-	if reason := r.terminationReason(ctx, wf.ID, state); reason != "" {
+	if reason := r.closeReason(ctx, wf.ID, state); reason != "" {
 		// Temporal's own words. For the incident above this reads "Workflow
 		// history count exceeds limit." — which is the difference between a
 		// user filing "it just stopped" and one who can say what happened.
@@ -2181,25 +2182,32 @@ func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Work
 	}
 }
 
-// terminationReason returns the reason Temporal recorded on the
-// WorkflowExecutionTerminated event, or "" when there is none to be had.
+// closeReason returns what Temporal recorded about WHY the run closed, or ""
+// when there is nothing to be had: the operator/system reason on a
+// WorkflowExecutionTerminated event, or the root cause of the error chain on a
+// WorkflowExecutionFailed event.
 //
-// Only called for a state that Describe already reported as TERMINATED, and
-// only on the single pass that won the status swap — so this costs one extra
-// Temporal call per dead workflow, once, not once per pass. The close-event
-// filter keeps it to the last event rather than paging a history that, for
-// the motivating incident, was 51,199 events long.
-func (r *Reconciler) terminationReason(ctx context.Context, workflowID string, state *TemporalWorkflowState) string {
-	if !state.WasTerminated {
-		return ""
-	}
-
+// The FAILED half exists because a failure can reach the silent path too. A
+// reset-and-replay resume that lands after a recorded activity failure
+// replays that failure and closes the new run in milliseconds; the
+// WorkflowError activity that reported it the first time is already in
+// history, so it never fires again and the user would otherwise get the bare
+// "stopped by the system". The close event still carries the whole chain, and
+// its innermost message is the actionable one ("this workflow requires a
+// daemon but none is available…") rather than the SDK's outer wrapper text
+// ("activity error (type: …, scheduledEventID: …)").
+//
+// Only called on the single pass that won the status swap — so this costs one
+// extra Temporal call per dead workflow, once, not once per pass. The
+// close-event filter keeps it to the last event rather than paging a history
+// that, for the motivating incident, was 51,199 events long.
+func (r *Reconciler) closeReason(ctx context.Context, workflowID string, state *TemporalWorkflowState) string {
 	iter := r.tempClient.GetWorkflowHistory(ctx, workflowID, state.RunID, false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	for iter.HasNext() {
 		event, err := iter.Next()
 		if err != nil {
 			// Best-effort enrichment: the error is still emitted without it.
-			logging.Warn("[Reconciler] Failed to read close event for termination reason",
+			logging.Warn("[Reconciler] Failed to read close event for close reason",
 				"error", err,
 				"workflowID", workflowID,
 			)
@@ -2208,8 +2216,23 @@ func (r *Reconciler) terminationReason(ctx context.Context, workflowID string, s
 		if attrs := event.GetWorkflowExecutionTerminatedEventAttributes(); attrs != nil {
 			return attrs.GetReason()
 		}
+		if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs != nil {
+			return rootCauseMessage(attrs.GetFailure())
+		}
 	}
 	return ""
+}
+
+// rootCauseMessage returns the innermost non-empty message of a failure
+// chain, or "" for a nil chain.
+func rootCauseMessage(f *failurepb.Failure) string {
+	msg := ""
+	for ; f != nil; f = f.GetCause() {
+		if m := f.GetMessage(); m != "" {
+			msg = m
+		}
+	}
+	return msg
 }
 
 // StartBackgroundReconciliation starts the background reconciliation loop.

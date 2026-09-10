@@ -166,8 +166,22 @@ export const upgradeSearchSchema = z.object({
   returnTo: z.string().optional(),
 });
 
+// Search params for `/auth/callback`. Two different arrivals land here:
+//
+//   - OAuth (and any PKCE email link): `code`, exchanged for a session.
+//   - A non-PKCE email confirmation link: `token_hash` + `type`, verified
+//     directly. Which of the two Supabase sends is decided by the email
+//     template in the hosted dashboard, which this repo cannot see or version,
+//     so both shapes have to be accepted.
+//
+// `type` mirrors supabase-js's EmailOtpType. An unknown value is dropped by the
+// enum rather than forwarded to verifyOtp.
 export const oauthCallbackSearchSchema = z.object({
   code: z.string().optional(),
+  token_hash: z.string().optional(),
+  type: z
+    .enum(["signup", "invite", "magiclink", "recovery", "email_change", "email"])
+    .optional(),
   state: z.string().optional(),
   error: z.string().optional(),
   error_description: z.string().optional(),

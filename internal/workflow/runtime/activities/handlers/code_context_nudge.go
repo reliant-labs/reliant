@@ -17,7 +17,7 @@ import (
 // WHY THIS EXISTS, AND WHY IT IS NOT A PROMPT
 //
 // Telling an agent to use a navigation tool does not work. Measured twice on
-// this exact capability: `gopls call_hierarchy` was documented in the bash tool
+// this exact capability: `gopls call_hierarchy` was documented in the shell tool
 // description and named explicitly in a spawn prompt, and was used 0 times in
 // 166 shell calls. `code_context` was then registered as a DEFAULT tool, with a
 // 40-line description, and a fresh sub-agent used it 0 times in 76 calls while
@@ -131,9 +131,9 @@ func maybeCodeContextNudge(toolName, toolInput, threadID string) string {
 	return fmt.Sprintf(codeContextNudgeText, symbol)
 }
 
-// isShellToolName covers both platform spellings of the shell tool.
+// isShellToolName reports whether name is the shell tool.
 func isShellToolName(name string) bool {
-	return name == names.ToolBash || name == names.ToolPowerShell
+	return name == names.ToolShell
 }
 
 // identifier matches a bare code identifier.

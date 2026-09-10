@@ -51,11 +51,18 @@ type streamProcessingState struct {
 	textParts         []string
 	thinkingParts     []string // Extended thinking content parts
 	thinkingSignature string   // Thinking signature for multi-turn preservation
-	toolCalls         []message.ToolCall
-	tokenCount        int            // Total tokens (prompt + response + context)
-	usage             llm.TokenUsage // Full token usage for analytics and managed spend tracking
-	cost              float64        // Request cost in USD returned by the provider response
-	workingDir        string         // Working directory for trimming bash commands
+
+	// redactedThinking is the opaque payload of a redacted_thinking block —
+	// reasoning the provider withheld. Never rendered and never shown; kept
+	// only so the next turn can replay it unchanged, which the API requires.
+	// Deliberately NOT part of thinkingParts: it is not readable text, and
+	// concatenating it there would put ciphertext on screen.
+	redactedThinking string
+	toolCalls        []message.ToolCall
+	tokenCount       int            // Total tokens (prompt + response + context)
+	usage            llm.TokenUsage // Full token usage for analytics and managed spend tracking
+	cost             float64        // Request cost in USD returned by the provider response
+	workingDir       string         // Working directory for trimming bash commands
 
 	upstreamRequestID  string // Provider response header x-oai-request-id (if available)
 	upstreamProxymanID string // Provider response header x-proxyman-id (if available)
@@ -352,8 +359,13 @@ func (a *CallLLMActivity) persistInterruptedTurn(
 		workflowID = &rtx.WorkflowID
 	}
 	var thinking *threads.ThinkingContent
-	if t := output.GetThinking(); t != nil && (t.GetContent() != "" || t.GetSignature() != "") {
-		thinking = &threads.ThinkingContent{Content: t.GetContent(), Signature: t.GetSignature()}
+	if t := output.GetThinking(); t != nil &&
+		(t.GetContent() != "" || t.GetSignature() != "" || t.GetRedacted() != "") {
+		thinking = &threads.ThinkingContent{
+			Content:   t.GetContent(),
+			Signature: t.GetSignature(),
+			Redacted:  t.GetRedacted(),
+		}
 	}
 	activityID := rtx.MessageIdempotencyKey
 
@@ -515,10 +527,17 @@ func (a *CallLLMActivity) cancelInFlightStreamingToolCalls(
 // nothing in it, and what to say about it. Split out from streamLLMResponse so
 // the decision is testable on its own: it is the single guard between a
 // content-free provider response and a chat that stops with nothing to show.
+// signedThinking and redactedThinking are what the turn produced BESIDES
+// readable output. Either one means the provider did real work and sealed or
+// signed it, so the turn is recoverable: it gets persisted and replayed rather
+// than reported as an empty response. Treating those as "nothing" is what made
+// a signed-but-textless turn look identical to a refusal.
 func contentFreeTurnExplanation(
 	interrupted bool,
 	responseText string,
 	thinkingText string,
+	signedThinking string,
+	redactedThinking string,
 	toolCallCount int,
 	reason message.FinishReason,
 ) (string, bool) {
@@ -526,6 +545,9 @@ func contentFreeTurnExplanation(
 		return "", false
 	}
 	if responseText != "" || thinkingText != "" || toolCallCount > 0 {
+		return "", false
+	}
+	if signedThinking != "" || redactedThinking != "" {
 		return "", false
 	}
 	return contentFreeTurnText(reason), true
@@ -842,12 +864,21 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 	// Load worktree path if applicable
 	var worktreePath string
+	// worktreeDaemonID is the daemon that physically owns this worktree's
+	// checkout. It is the first input to shell-platform resolution because it
+	// is also the first branch of ExecuteTools' daemon routing: whichever
+	// daemon will RUN the command is the one whose shell the description must
+	// describe.
+	var worktreeDaemonID string
 	if chat.WorktreeID != nil {
 		worktree, err := a.repo.GetWorktree(ctx, *chat.WorktreeID)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load worktree %s for chat %s: %w", *chat.WorktreeID, chat.ID, err)
 		}
 		worktreePath = worktree.Path
+		if worktree.DaemonID != nil {
+			worktreeDaemonID = *worktree.DaemonID
+		}
 	}
 
 	// Determine working directory (prefer worktree path over project path)
@@ -967,7 +998,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// every request.
 		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
 		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, projectCfg, toolFilter, thread, mailboxReachable)
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, thread, mailboxReachable)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -1539,7 +1570,9 @@ streamLoop:
 	// persistInterruptedTurn already declines to write a row for it; reporting
 	// it as an error would flag the user's own cancel as a failure.
 	contentFreeExplanation, contentFree := contentFreeTurnExplanation(
-		streamInterrupted, responseText, thinkingText, len(toolCalls), streamState.finishReason,
+		streamInterrupted, responseText, thinkingText,
+		streamState.thinkingSignature, streamState.redactedThinking,
+		len(toolCalls), streamState.finishReason,
 	)
 	if contentFree {
 		a.reportContentFreeTurn(ctx, chat.ID, thread, rtx, streamState.finishReason, contentFreeExplanation)
@@ -1566,6 +1599,7 @@ streamLoop:
 		Thinking: &reliantv1.ThinkingOutput{
 			Content:   thinkingText,
 			Signature: streamState.thinkingSignature,
+			Redacted:  streamState.redactedThinking,
 		},
 		Message: &reliantv1.MessageOutput{
 			Role: "assistant",
@@ -1706,7 +1740,7 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 // getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
 // Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
 // Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, projectCfg *cfgpkg.Config, toolFilter []string, _ string, mailboxReachable bool) toolsWithSpawnResult {
+func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, _ string, mailboxReachable bool) toolsWithSpawnResult {
 	if a.toolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
@@ -1715,6 +1749,16 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	if projectScopedToolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
+
+	// The shell tool's description must match the shell that will RUN the
+	// command — the daemon's, which is routinely a different OS from this
+	// worker's. Resolved from the daemon record here, at request time, because
+	// this is where tool instances are constructed and the last point at which
+	// the chat (and therefore its daemon) is still in scope.
+	shellPlatform := resolveShellPlatform(ctx, a.repo, chat, worktreeDaemonID)
+	projectScopedToolsFactory = projectScopedToolsFactory.WithShellPlatform(shellPlatform)
+	slog.Debug("[CallLLM] Resolved shell platform for tool descriptions",
+		"chatID", chat.ID, "platform", string(shellPlatform))
 
 	// Inject skills loaded via the project config so the skill tool never
 	// touches the filesystem on the server side.
@@ -2484,6 +2528,32 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 	if event.Response.Content != "" {
 		state.textParts = []string{event.Response.Content}
 	}
+
+	// Same for thinking, and for the same reason — but this one had been
+	// missing, which is how a turn could reach the end holding a signature and
+	// no reasoning to go with it.
+	//
+	// thinkingParts is otherwise fed ONLY by streamed thinking_delta events,
+	// and a driver may legitimately never emit one while still returning
+	// thinking on the final message (the SDK accumulates the block itself, and
+	// deltas carrying empty text are skipped upstream). When that happened the
+	// signature survived — handled just above — while the reasoning it signs
+	// did not, so save_message saw a content-free turn and wrote no row at all.
+	//
+	// Only ever widens what we captured: a driver that did stream its thinking
+	// produces the same text here, and a driver that returns none leaves the
+	// streamed parts untouched.
+	if event.Response.Thinking != "" {
+		state.thinkingParts = []string{event.Response.Thinking}
+	}
+
+	// Redacted thinking is opaque and encrypted — there is no readable text to
+	// show and none to accumulate. It still has to survive the round trip:
+	// Anthropic requires redacted_thinking blocks be passed back unchanged, so
+	// dropping it silently corrupts the history of every following turn.
+	if event.Response.RedactedThinking != "" {
+		state.redactedThinking = event.Response.RedactedThinking
+	}
 }
 
 // trackLLMCallCompleted fires an analytics event after each LLM API call.
@@ -2570,7 +2640,7 @@ func classifyLLMError(err error) string {
 }
 
 // trimBashWorkspaceCD removes redundant "cd <workspace> && " prefix from Bash tool input.
-// This is done for cleaner display since the bash tool already runs in the workspace directory.
+// This is done for cleaner display since the shell tool already runs in the workspace directory.
 func trimBashWorkspaceCD(toolInput string, workspaceDir string) string {
 	if workspaceDir == "" {
 		return toolInput

@@ -26,6 +26,7 @@ import { DaemonRegistryService } from "../gen/reliant/v1/daemon_registry_pb";
 import { DaemonTokenService } from "../gen/reliant/v1/daemon_token_pb";
 import { QuestionService } from "../gen/reliant/v1/question_pb";
 import { ConnectorService } from "../gen/reliant/v1/connector_pb";
+import { AccountService } from "../gen/reliant/v1/account_pb";
 import { logger } from "../lib/logger";
 import {
   buildLocalhostUrl,
@@ -295,6 +296,10 @@ export const createPresetClient = (): Client<typeof PresetService> => {
 
 export const createScenarioClient = (): Client<typeof ScenarioService> => {
   return createClient(ScenarioService, getTransport());
+};
+
+export const createAccountClient = (): Client<typeof AccountService> => {
+  return createClient(AccountService, getTransport());
 };
 
 // DaemonRegistryService is served by RELIANT's api-server, never by

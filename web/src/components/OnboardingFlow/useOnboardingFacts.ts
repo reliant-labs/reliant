@@ -25,6 +25,7 @@ import { useCallback } from "react";
 
 import { useCloudEligibility } from "@/hooks/useOnboardingQueries";
 import { useWalletOverview } from "@/hooks/useReliantAIQueries";
+import { capabilities } from "@/services/controlPlane/capabilities";
 
 import type { PaymentFacts } from "./requiresPayment";
 
@@ -56,6 +57,7 @@ export function useOnboardingFacts(): OnboardingFacts {
       walletFunded: walletIsFunded(
         walletResult.data?.wallet?.balanceUsdNanos,
       ),
+      reliantBillingAvailable: capabilities.billing,
     };
   }, [eligibilityRefetch, walletRefetch]);
 
@@ -66,6 +68,9 @@ export function useOnboardingFacts(): OnboardingFacts {
     computeEligible: !loading && eligibility.eligible,
     walletFunded:
       !loading && walletIsFunded(wallet.data?.wallet?.balanceUsdNanos),
+    // Not folded through `loading`: a build constant is known before the first
+    // render and has no in-flight state to be pessimistic about.
+    reliantBillingAvailable: capabilities.billing,
     loading,
     refetch,
   };

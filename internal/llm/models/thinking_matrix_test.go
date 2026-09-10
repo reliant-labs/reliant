@@ -74,14 +74,14 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			},
 		},
 		{
-			ID:         "gpt-5.3-codex-spark",
-			Name:       "GPT-5.3 Codex Spark",
+			ID:         "gpt-5.6-sol",
+			Name:       "GPT-5.6 Sol",
 			Visibility: VisibilityUser,
 			Capabilities: ModelCapabilities{
 				CanReason:      true,
 				ThinkingLevels: xhigh,
 			},
-			Providers: []ProviderMapping{{Driver: "codex", APIModel: "gpt-5.3-codex-spark"}},
+			Providers: []ProviderMapping{{Driver: "codex", APIModel: "gpt-5.6-sol"}},
 		},
 		{
 			ID:         "claude-4.5-haiku",
@@ -118,7 +118,7 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 	var miniCodexRow *ThinkingCapabilityMatrixEntry
 	var miniOpenAIRow *ThinkingCapabilityMatrixEntry
 	var miniOpenRouterRow *ThinkingCapabilityMatrixEntry
-	var sparkRow *ThinkingCapabilityMatrixEntry
+	var solRow *ThinkingCapabilityMatrixEntry
 	var openAIRow *ThinkingCapabilityMatrixEntry
 	var noReasonRow *ThinkingCapabilityMatrixEntry
 	var claudeOpusRow *ThinkingCapabilityMatrixEntry
@@ -141,8 +141,8 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 			miniOpenAIRow = row
 		case "gpt-5.4-mini@openrouter":
 			miniOpenRouterRow = row
-		case "gpt-5.3-codex-spark@codex":
-			sparkRow = row
+		case "gpt-5.6-sol@codex":
+			solRow = row
 		case "gpt-5.3-codex@openai":
 			openAIRow = row
 		case "claude-4.5-haiku@anthropic":
@@ -208,11 +208,11 @@ func TestBuildThinkingCapabilityMatrix(t *testing.T) {
 		t.Fatalf("expected gpt-5.4-mini openrouter row to include xhigh, got %v", miniOpenRouterRow.Levels)
 	}
 
-	if sparkRow == nil {
-		t.Fatal("missing spark row")
+	if solRow == nil {
+		t.Fatal("missing gpt-5.6-sol row")
 	}
-	if len(sparkRow.Levels) != 4 || sparkRow.Levels[3] != "xhigh" {
-		t.Fatalf("expected spark row to include xhigh, got %v", sparkRow.Levels)
+	if len(solRow.Levels) != 4 || solRow.Levels[3] != "xhigh" {
+		t.Fatalf("expected gpt-5.6-sol row to include xhigh, got %v", solRow.Levels)
 	}
 
 	if openAIRow == nil {

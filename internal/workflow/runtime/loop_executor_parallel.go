@@ -370,7 +370,9 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 		// Process join events
 		events = processJoinEvents(events, joinState, e.subWorkflow,
 			e.workflowID, e.chatID, e.workflowIdentity(),
-			iterNodeOutputs, e.logger, nil, workflow.Now(gCtx))
+			iterNodeOutputs, e.logger, nil, func(joinID string) {
+				recordJoinSatisfied(gCtx, joinNodePath(e.nodePath(), joinID))
+			}, workflow.Now(gCtx))
 
 		// Find triggered steps
 		backfillNodeOutputsFromEvents(events, iterNodeOutputs)

@@ -43,6 +43,14 @@ export interface PaymentFacts {
   computeEligible: boolean;
   /** The org wallet has a non-zero balance. */
   walletFunded: boolean;
+  /**
+   * Reliant sells something in this deployment — `capabilities.billing`.
+   *
+   * NOT pessimistic, and it is the one fact here that must not be: it is a
+   * build constant, so there is no in-flight window to lose a race in. The two
+   * above are server reads and stay pessimistic exactly as before.
+   */
+  reliantBillingAvailable: boolean;
 }
 
 export interface PaymentRequirement {
@@ -64,6 +72,11 @@ export interface PaymentRequirement {
  * | cloud   | own key          | not eligible         | compute       |
  * | cloud   | reliant_credits  | eligible + funded    | nothing       |
  * | cloud   | reliant_credits  | neither              | compute+credit|
+ * | *any*   | *any*            | billing unavailable  | nothing       |
+ *
+ * The last row is the deployment question, and it dominates the rest: it is
+ * asking whether RELIANT is the seller at all, not what the user picked. See
+ * the guard at the top of the function.
  *
  * An unset `compute` or `modelProvider` cannot owe anything: the user has not
  * chosen the thing that would cost money yet, and derivation has them on an
@@ -86,6 +99,23 @@ export function requiresPayment(
   plan: Partial<LaunchPlan>,
   facts: PaymentFacts,
 ): PaymentRequirement {
+  // Reliant cannot bill for what Reliant does not sell.
+  //
+  // Both legs below are purchases of OUR products — a machine we host, and
+  // model routing we meter. A deployment with no control plane offers neither:
+  // `ComputeStep` already hides the cloud card behind `capabilities.cloudDaemons`
+  // and every billing RPC throws rather than answering. Charging was never
+  // possible; only the ASKING survived, because the pessimistic facts made an
+  // unanswerable query read as a debt.
+  //
+  // This is the deployment half of the owner's rule ("only conditionally do
+  // billing if either reliant AI, or reliant compute is chosen") — the plan
+  // half is the two conditions below, which already name exactly those two
+  // products and nothing else.
+  if (!facts.reliantBillingAvailable) {
+    return { needsCompute: false, needsCredit: false, any: false };
+  }
+
   const needsCompute =
     isCloudCompute(plan.compute) &&
     !facts.computeEligible &&

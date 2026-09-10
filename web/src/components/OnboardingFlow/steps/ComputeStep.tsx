@@ -1,6 +1,16 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Cloud, Loader2, Monitor } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PlanTiles, type ComputePlanOption } from "@/components/Billing/PlanTiles";
+import {
+  DAEMON_SIZE_ORDER,
+  derivePlanDisplay,
+  formatSizeLabel,
+  isPurchasableComputePlan,
+  smallestPlanAllowingSize,
+  sortPlansForDisplay,
+} from "@/components/Settings/cloud/billingUtils";
+import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { getForcedEligibility } from "../forcedEligibility";
 import {
   DaemonStatus,
@@ -128,6 +138,105 @@ export function ComputeStep({
     (forcedEligibility == null && cloudEligible);
   const loading = forcedEligibility == null && cloudLoading;
 
+  // ── The prices live HERE now, on the step that asks the question ─────
+  //
+  // Choosing a machine and paying for it used to be two screens: this step
+  // asked "cloud or your own?", and the checkout step — after the model
+  // question — was the first place a price or a size appeared. So the user
+  // committed to hosted compute before learning what it cost, and picked the
+  // size on a page whose purpose was collecting a card.
+  //
+  // Now the decision carries its own price. Nothing here mounts Stripe or
+  // creates anything: picking a tile writes `computePlanId` to the plan and
+  // that is all. The card comes once, at the end, for everything owed.
+  const plansQ = usePlans();
+
+  const computePlans = useMemo(
+    () =>
+      sortPlansForDisplay(
+        (plansQ.data?.plans ?? []).filter(isPurchasableComputePlan),
+      ),
+    [plansQ.data],
+  );
+
+  // Which sizes to offer is the union of what the catalog sells, and plan and
+  // size are ONE axis — picking a size picks the cheapest plan that runs it.
+  const planOptions = useMemo<ComputePlanOption[]>(() => {
+    const offered = new Set<string>();
+    for (const p of computePlans) {
+      for (const s of p.structuredLimits?.allowedDaemonSizes ?? []) {
+        offered.add(s.toLowerCase());
+      }
+    }
+    const out: ComputePlanOption[] = [];
+    for (const size of DAEMON_SIZE_ORDER.filter((s) => offered.has(s))) {
+      const sizePlan = smallestPlanAllowingSize(computePlans, size);
+      if (!sizePlan) continue;
+      const display = derivePlanDisplay(sizePlan);
+      if (display.monthlyPriceCents == null) continue;
+      out.push({
+        planId: sizePlan.id,
+        // Size IS the choice here — one plan per size, cheapest that runs it —
+        // so the tile is labelled by the machine, not by the plan's name.
+        label: formatSizeLabel(size),
+        size,
+        monthlyPriceCents: display.monthlyPriceCents,
+        includedMinutes: display.includedMinutes,
+        overageCentsPerMinute: display.overageCentsPerMinute,
+      });
+    }
+    return out;
+  }, [computePlans]);
+
+  // The machine sizes are shown to EVERYONE who can choose a hosted machine.
+  //
+  // This used to be `!eligible`, so redeeming a compute coupon deleted the
+  // "Choose your machine" heading and all four tiles on the very next render.
+  // The user's report was "entering a coupon took me to this page... or maybe
+  // it just hid the options?" — nothing navigated; the card rearranged under
+  // them at the moment they acted, which is indistinguishable from being moved.
+  //
+  // The original reasoning — an entitled user has nothing to buy, and a price
+  // list invites them to buy a second machine — is right about the PRICES and
+  // wrong about the CHOICE. A coupon grants minutes, not a size, so the size
+  // is still a real decision, and it is made here or nowhere: the checkout
+  // step has no size picker, and an entitled user never reaches it anyway.
+  // Hiding the tiles silently took that decision away as a reward for
+  // redeeming, and pinned every entitled user to whatever the commit defaulted
+  // to.
+  //
+  // So the tiles stay and the PRICES change — see `coverage` below. That
+  // satisfies the real constraint (do not ask an entitled user for money)
+  // without removing the question.
+  const showPlanChoice = HAS_CLOUD_DAEMONS && !loading;
+
+  // Whether this user's machine is already paid for — by a coupon, a grant, or
+  // an existing subscription. It decides what the tiles SAY, never whether
+  // they appear.
+  const machineCovered = eligible;
+
+  /**
+   * WHICH machine the coverage actually pays for.
+   *
+   * Not all of them, and getting this wrong is worse than showing prices. The
+   * server's `checkDaemonSizeAllowed` resolves a coupon-only user's size
+   * allowance from `plan_compute_free`, which permits SMALL alone — a compute
+   * grant buys machine TIME, deliberately not a bigger machine. So marking
+   * every tile "Covered" tells the user their code bought an XL, and the
+   * commit is then refused with "your plan does not include daemon size xl"
+   * at the last step of onboarding. Observed doing exactly that in dev.
+   *
+   * Marking only the smallest offered tile keeps the claim true: that is the
+   * one the grant genuinely covers, and the others still show their price, so
+   * choosing one is visibly a purchase.
+   */
+  const coveredPlanId = machineCovered ? planOptions[0]?.planId : undefined;
+  const coveredSizeLabel = planOptions[0]?.label ?? "smallest";
+
+  const selectedPlanId =
+    planOptions.find((option) => option.planId === plan.computePlanId)?.planId ??
+    planOptions[0]?.planId;
+
   // Whether the user can CHOOSE a hosted machine — which is now everyone, as
   // long as this build has hosted machines at all.
   //
@@ -174,10 +283,28 @@ export function ComputeStep({
     hasAdvanced.current = true;
     await updatePlan({
       compute: "cloud_paid",
+      // The size chosen HERE, beside its price, rather than later on the
+      // payment screen — and recorded whether or not the user is entitled.
+      //
+      // It used to be written only for an un-entitled user, on the reasoning
+      // that an entitled one "picks nothing". They do pick something: the
+      // SIZE. A compute grant buys minutes, not a tier, and this is the only
+      // screen that asks. Leaving it undefined meant the tile had no effect
+      // for exactly the users whose machine was already paid for.
+      //
+      // It does not create a bill. `requiresPayment` owes compute only when
+      // `computeEligible` is false, so an entitled user still skips checkout
+      // with the id recorded.
+      computePlanId: selectedPlanId,
       localPath: undefined,
       projectName: undefined,
     });
-    trackEvent("onboarding_compute_selected", { compute: "cloud" });
+    trackEvent("onboarding_compute_selected", {
+      compute: "cloud",
+      // "" rather than undefined: the analytics payload takes only concrete
+      // values, and an empty catalog leaves no plan to name.
+      plan_id: selectedPlanId || "",
+    });
     onNext();
   };
 
@@ -320,8 +447,38 @@ export function ComputeStep({
         </div>
       )}
 
-      <div className="mx-auto w-full max-w-[840px] space-y-6">
-        <div className="grid gap-3 sm:grid-cols-2">
+      {/* ── ONE list, not two cards ────────────────────────────────────
+          
+          This was a `sm:grid-cols-2` of two cards, and the layout broke when
+          the machine tiles moved inline: the cloud card grew to ~550px while
+          the local card held ~106px of content. Grid items stretch to the row
+          height, so the right-hand card was 445px of empty black — measured,
+          81% dead. It read as broken rather than sparse.
+          
+          `items-start` would have fixed the dead space and left the real
+          problem: the two options were never comparable. One was a card
+          carrying a whole priced sub-decision; the other was a button with a
+          badge and no price, so the eye had nothing to weigh "$20.00/mo"
+          against. The free option looked like an afterthought beside the paid
+          one.
+          
+          They are ONE question — where does my code run, and what does it
+          cost — so they are now one list with one price column. "Your own
+          computer / Free" sits on the same axis as "Small / $20.00/mo", which
+          is what makes it a peer rather than a consolation. It also removes
+          the height mismatch at the root instead of papering over it.
+          
+          Cloud stays first: that is the product's emphasis and a layout fix is
+          not the place to flip it. The local option is last, under a divider,
+          because choosing it leads somewhere genuinely different (install a
+          CLI, paste a token) rather than to "we start it for you". */}
+      {/* 560px, matching the checkout step's column. The card itself stays at
+          the shared 840px (see stepMaxWidth — every step shares one width so
+          the card never resizes between steps); what changes is the measure of
+          the content inside it. A single column of full-width rows wants a
+          readable measure, not the full card. */}
+      <div className="mx-auto w-full max-w-[560px] space-y-6">
+        <div className="space-y-4">
           <div
             className={cn(
               "flex min-w-0 flex-col gap-4 rounded-xl border-2 p-5 text-left transition-all",
@@ -355,8 +512,13 @@ export function ComputeStep({
                 <span className="block text-xs leading-relaxed text-muted-foreground">
                   {!HAS_CLOUD_DAEMONS
                     ? "Hosted machines are not available in this setup."
-                    : loading || eligible
-                      ? "We start one for you, ready in a few minutes. Setup continues while it boots."
+                    : loading || machineCovered
+                      ? // No longer says "monthly plans start during setup" to
+                        // someone whose plan is already covered — that line
+                        // survived a coupon redemption and told the user they
+                        // were about to be charged for the thing they had just
+                        // paid for with a code.
+                        "We start one for you, ready in a few minutes. Setup continues while it boots."
                       : "We run it for you — no setup, and it keeps working after you close your laptop. Monthly plans start during setup."}
                 </span>
               </div>
@@ -376,6 +538,56 @@ export function ComputeStep({
                 offered, because choosing is all this step does, and where an
                 un-entitled choice leads is the checkout step rather than a
                 different page. */}
+            {/* The prices, on the step that asks the question. Picking a tile
+                records the choice and nothing else — no intent is minted, no
+                card is mounted, nothing exists at Stripe until the single
+                checkout at the end of the flow. */}
+            {showPlanChoice && (
+              <div className="space-y-2">
+                <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Choose your machine
+                </h3>
+                <PlanTiles
+                  plans={planOptions}
+                  loading={plansQ.isLoading}
+                  selectedPlanId={selectedPlanId}
+                  coveredPlanId={coveredPlanId}
+                  onSelect={(option) =>
+                    void updatePlan({ computePlanId: option.planId })
+                  }
+                />
+                {/* Says what the coupon did, at the moment and place the
+                    money used to be. Without this the page still changes
+                    under the user on redeem — the price becomes "Covered" —
+                    but nothing connects that to the code they just entered.
+                    It also names the LIMIT, because the server enforces one:
+                    a compute grant buys machine time at the free plan's size
+                    (small), not a bigger machine, and a user who picks Large
+                    on the strength of a coupon is refused at provisioning
+                    with "your plan does not include daemon size large". */}
+                {machineCovered && !plansQ.isLoading && planOptions.length > 0 && (
+                  <p
+                    className="text-xs leading-relaxed text-primary"
+                    data-testid="compute-step-coverage-note"
+                  >
+                    Your code covers the {coveredSizeLabel} machine — no charge
+                    today. Larger machines need a monthly plan, and you can
+                    upgrade any time.
+                  </p>
+                )}
+                {!plansQ.isLoading && planOptions.length === 0 && (
+                  <p
+                    className="text-xs leading-relaxed text-muted-foreground"
+                    data-testid="compute-step-plans-unavailable"
+                  >
+                    We couldn&apos;t load the plans just now — that&apos;s on our
+                    end, not your setup. You can still continue, or redeem a
+                    code below.
+                  </p>
+                )}
+              </div>
+            )}
+
             {loading ? (
               <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-muted px-4 py-2.5 text-sm font-semibold text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -431,34 +643,58 @@ export function ComputeStep({
             )}
           </div>
 
+          {/* The separator the owner asked for, doing real work rather than
+              decoration: it marks the point where the answer stops being "we
+              run it" and starts being "you run it". */}
+          <div className="flex items-center gap-3">
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+            <span className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">
+              Or run it yourself
+            </span>
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+          </div>
+
+          {/* Deliberately shaped like a PlanTiles row — icon + name + what you
+              get on the left, price on the right — so "Free" lands in the same
+              column as "$20.00/mo" and the comparison is visual rather than
+              inferred. It is NOT a plan: it writes no `computePlanId`, and
+              picking it opens the connect instructions below instead of
+              recording a purchase.
+
+              The horizontal padding is 36px, not the 16px a PlanTiles row
+              uses, because this row sits OUTSIDE the cloud card while the
+              tiles sit inside its `p-5`. The extra 20px of card padding plus
+              its 2px border is what the tiles are inset by, so matching their
+              own padding would leave this price 21px out of column against the
+              four directly above it. Measured: all five right edges now land
+              at x=883. */}
           <button
             type="button"
             onClick={handleLocal}
+            aria-pressed={showLocal}
             className={cn(
-              "flex min-w-0 items-start gap-4 rounded-xl border-2 p-5 text-left transition-all",
-              "hover:border-primary/50 hover:bg-muted/50",
+              "flex w-full min-w-0 items-center justify-between gap-4 rounded-lg border px-[36px] py-3 text-left transition-colors",
               showLocal
                 ? "border-primary bg-primary/10"
-                : "border-border/50 bg-background",
+                : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
             )}
           >
-            <div className="flex-shrink-0 rounded-lg bg-muted p-2.5 text-muted-foreground">
-              <Monitor className="h-6 w-6" />
-            </div>
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-semibold text-foreground">
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex-shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
+                <Monitor className="h-5 w-5" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-sm font-semibold text-foreground">
                   Use your own computer
                 </span>
-                <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-emerald-500">
-                  Free
+                <span className="block text-xs text-muted-foreground">
+                  Connect any machine with the Reliant command line tool.
                 </span>
-              </div>
-              <span className="block text-xs leading-relaxed text-muted-foreground">
-                Connect any machine to Reliant. Just download the Reliant
-                command line tool and connect to our platform.
               </span>
-            </div>
+            </span>
+            <span className="flex-shrink-0 text-sm font-semibold text-emerald-500">
+              Free
+            </span>
           </button>
         </div>
 

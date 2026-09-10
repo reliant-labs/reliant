@@ -40,8 +40,8 @@ vi.mock("../../../hooks/useCloudBillingQueries", () => ({
   isCheckoutIdentityRequired: () => false,
 }));
 
-vi.mock("../../Billing/EmbeddedCheckoutPanel", () => ({
-  EmbeddedCheckoutPanel: () => <div data-testid="embedded-checkout" />,
+vi.mock("../../Billing/ComputeSubscriptionCheckout", () => ({
+  ComputeSubscriptionCheckout: () => <div data-testid="compute-checkout" />,
 }));
 
 const { MobileBillingScreen } = await import("../MobileBillingScreen");

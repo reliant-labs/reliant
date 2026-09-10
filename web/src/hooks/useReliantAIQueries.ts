@@ -22,6 +22,7 @@ import {
   type GetLLMSpendArgs,
 } from "@/services/controlPlane/reliantAI";
 import { cloudBillingKeys } from "./useCloudBillingQueries";
+import { computeEligibilityQueryKey } from "./useOnboardingQueries";
 
 const KEY = {
   reliantOverview: ["reliantAI", "reliantOverview"] as const,
@@ -76,6 +77,20 @@ export function useRedeemCoupon() {
       });
       void queryClient.invalidateQueries({
         queryKey: cloudBillingKeys.walletOverview,
+      });
+      // The read that actually GATES compute, and the one this list was
+      // missing. A compute coupon grants MINUTES, not a subscription, so
+      // invalidating the subscription key above refreshes a row the coupon did
+      // not touch while leaving the eligibility answer — which folds granted
+      // minutes in — stale for its full 30s staleTime.
+      //
+      // It belongs here rather than at the call sites. Onboarding's compute
+      // step happened to refetch eligibility by hand, so the gap was invisible
+      // there and load-bearing everywhere else: a code redeemed on the billing
+      // page granted minutes server-side while every eligibility-driven
+      // surface went on believing the user had none.
+      void queryClient.invalidateQueries({
+        queryKey: computeEligibilityQueryKey,
       });
     },
   });

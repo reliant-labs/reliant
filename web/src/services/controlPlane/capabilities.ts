@@ -17,4 +17,25 @@ export const capabilities = {
   managedCredits: hasControlPlane,
   /** Cloud-managed git credential storage & repo cloning. */
   gitConnections: hasControlPlane,
+  /**
+   * Reliant can charge for something in this deployment.
+   *
+   * True exactly when there is a product of ours to sell — hosted machines or
+   * Reliant's models — which today means a control plane is configured. It is
+   * the deployment half of "only bill when Reliant AI or Reliant compute is
+   * chosen": the plan half asks WHAT the user picked, this asks whether we are
+   * the one billing for it.
+   *
+   * Without it, `requiresPayment` had no way to know that the billing RPCs it
+   * routes on cannot answer here. Its facts read pessimistic by design
+   * (unknown ⇒ "you owe"), so a build with no control plane derived the user
+   * to a checkout step that could not mint a Stripe session and could not list
+   * a plan — a dead end whose only visible symptom was "No plans are available
+   * in this setup".
+   *
+   * Deliberately a BUILD CONSTANT rather than a server read: it cannot flap,
+   * so suppressing the bill on it introduces no race, unlike the entitlement
+   * facts beside it which must stay pessimistic while in flight.
+   */
+  billing: hasControlPlane,
 } as const;

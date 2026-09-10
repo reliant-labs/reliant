@@ -598,14 +598,18 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
 	reg := MustGetRegistry()
 
-	// TagFast stays on gpt-5.3-codex-spark. The 5.6 family's faster/cheaper
-	// member (terra) carries `moderate` rather than `fast` precisely to keep it
-	// off this path: @fast, chat titling and compaction all resolve TagFast for
-	// a codex user, so repointing it is a latency decision, not a catalog one.
+	// TagFast is gpt-5.4-mini. It was gpt-5.3-codex-spark until the
+	// ChatGPT-account Codex backend was found to refuse that model outright
+	// (400 "not supported when using Codex with a ChatGPT account"), which made
+	// every titling and compaction call fail for a codex user. The 5.6 family's
+	// faster/cheaper member (terra) still carries `moderate` rather than `fast`
+	// to keep it off this path: @fast, chat titling and compaction all resolve
+	// TagFast for a codex user, so repointing it is a latency decision, not a
+	// catalog one.
 	for tag, want := range map[string]string{
 		TagFlagship:  "gpt-5.5",
 		TagModerate:  "gpt-5.5",
-		TagFast:      "gpt-5.3-codex-spark",
+		TagFast:      "gpt-5.4-mini",
 		TagReasoning: "gpt-5.5",
 	} {
 		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}}, []string{"codex"})

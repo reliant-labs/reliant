@@ -46,6 +46,26 @@ import {
   type ProviderStatus,
 } from "../hooks/settings-queries";
 import { queryClient } from "../lib/query-client";
+import { useAuthStore } from "./authStore";
+
+/**
+ * Whether an outbound RPC from this store can carry a credential.
+ *
+ * This store is driven by OnboardingWizard, which is mounted at the ROUTER
+ * ROOT — so it is alive on every route, including the signed-out sign-in
+ * screen. Its `if (!user) return null` guard stops it RENDERING, but effects
+ * still run, so `detectCompletedItems()` and the provider poll below both
+ * fired against a session that did not exist. Both swallow their failures
+ * ("fail open"), so nothing surfaced and nothing stopped: that is where the
+ * 401s against GetProviderStatuses on /auth actually came from.
+ *
+ * Read imperatively rather than through the hook — these are store actions and
+ * timer callbacks, not React renders, and the answer must be the session as it
+ * stands at the moment of the call.
+ */
+function hasSession(): boolean {
+  return !!useAuthStore.getState().session;
+}
 
 // ─── Store Interface ──────────────────────────────────────────────────────────
 
@@ -347,7 +367,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // 1. API key — read through the shared React Query cache (settingsKeys.providers())
       // rather than calling the API directly, so this and every other consumer of
       // "is a provider configured?" agree on one in-flight request and one cached answer.
-      if (!newItems.has("add-api-key")) {
+      if (!newItems.has("add-api-key") && hasSession()) {
         try {
           const providers = await queryClient.fetchQuery({
             queryKey: settingsKeys.providers(),
@@ -573,6 +593,11 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // either way. Stops once the item is complete — nothing left to detect.
       const providerPoll = setInterval(() => {
         if (get().completedItems.has("add-api-key")) return;
+        // Signed out there is nothing to detect and no credential to detect it
+        // with — this is the timer that produced the visible 401 "polling".
+        // Skipping a tick (rather than clearing the interval) means the poll
+        // resumes by itself the moment a session lands, with no re-arming.
+        if (!hasSession()) return;
         void queryClient.fetchQuery({
           queryKey: settingsKeys.providers(),
           queryFn: () => api.settings.getProviders(),

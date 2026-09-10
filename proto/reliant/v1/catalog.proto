@@ -135,7 +135,7 @@ message ListAvailableModelsResponse {
 
 // ToolInfo represents information about a tool
 message ToolInfo {
-  // Tool name (e.g., "grep", "edit", "bash")
+  // Tool name (e.g., "view", "edit", "shell")
   string name = 1;
   // Human-readable description
   string description = 2;

@@ -7,6 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -132,12 +133,33 @@ func ResetInterruptedWorkflow(ctx context.Context, tempClient client.Client, wor
 // all (the workflow closed before completing its first workflow task — nothing
 // replayable to resume into).
 //
-// "Reset before the failing activity" is applied ONLY when the run FAILED and
-// the failing activity is in the tail (no successful activity completion after
-// it). That guard matters: a TERMINATED run may carry an OLD activity failure
-// from a prior self-pause followed by lots of forward progress — resetting
-// before that stale failure would silently discard the progress, so terminated
-// runs always use the safe last-WorkflowTaskCompleted point.
+// For a FAILED run the close event is the authority on WHICH activity to
+// re-run: the Go SDK records the error chain the workflow returned on
+// WorkflowExecutionFailed, and an activity error in that chain carries the
+// ActivityTaskScheduled EventId it came from. Resetting to the decision that
+// scheduled that activity re-executes it fresh — precisely the activity whose
+// failure closed the run, whatever else happened afterwards.
+//
+// "Whatever else happened afterwards" is why the chain is read at all. The
+// runtime's completion handler runs its own activities (WorkflowError,
+// Cleanup, WorkflowStatus) AFTER the failing one, so by the time the run
+// closes the failing activity is never the last activity outcome in history.
+// A tail-position heuristic sees "an activity completed after the failure",
+// concludes the failure was recovered from, resets to the last
+// WorkflowTaskCompleted — and the new run REPLAYS the recorded failure in
+// milliseconds without re-running anything. (2026-09-08: a PreflightDaemonCheck
+// that failed while the gateway was down kept failing on every resume after
+// the daemon was back, each new run's failure still citing the original
+// scheduledEventID.)
+//
+// The tail heuristic remains the fallback for close events whose chain names
+// no activity (a code-level failure, or a bare close event), with its original
+// guard: it is applied ONLY when the run FAILED and the failing activity is in
+// the tail (no successful activity completion after it). A TERMINATED run may
+// carry an OLD activity failure from a prior self-pause followed by lots of
+// forward progress — resetting before that stale failure would silently
+// discard the progress, so terminated runs always use the safe
+// last-WorkflowTaskCompleted point.
 func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflowID, runID string, status enumspb.WorkflowExecutionStatus) (int64, error) {
 	iter := tempClient.GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 
@@ -152,6 +174,8 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		lastActivityCompletedAt int64
 		lastActivityFailedAt    int64
 		failingActivityResetTo  int64
+		// The error chain the workflow returned, from the close event.
+		closeFailure *failurepb.Failure
 	)
 
 	for iter.HasNext() {
@@ -175,6 +199,8 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT:
 			lastActivityFailedAt = event.GetEventId()
 			failingActivityResetTo = scheduledToWFT[event.GetActivityTaskTimedOutEventAttributes().GetScheduledEventId()]
+		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
+			closeFailure = event.GetWorkflowExecutionFailedEventAttributes().GetFailure()
 		}
 	}
 
@@ -182,17 +208,35 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		return 0, fmt.Errorf("no WorkflowTaskCompleted event found in history for workflow %s (run %s)", workflowID, runID)
 	}
 
-	// Only re-run the failing activity when the run FAILED on a tail activity
-	// (the failure is the last activity outcome and produced a valid pre-schedule
-	// reset point). Terminated/timed-out runs and code-level failures take the
-	// safe last-decision point.
-	if status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED &&
-		lastActivityFailedAt > lastActivityCompletedAt &&
-		failingActivityResetTo > 0 {
-		return failingActivityResetTo, nil
+	if status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {
+		// The activity the run's own error chain blames. Its schedule event is
+		// in THIS history even after a prior reset — a reset copies every event
+		// before its point, and the chain only ever names an earlier one.
+		if scheduled := failedActivityScheduledEventID(closeFailure); scheduled > 0 {
+			if resetTo := scheduledToWFT[scheduled]; resetTo > 0 {
+				return resetTo, nil
+			}
+		}
+		// Fallback: the failure is the last activity outcome and produced a
+		// valid pre-schedule reset point.
+		if lastActivityFailedAt > lastActivityCompletedAt && failingActivityResetTo > 0 {
+			return failingActivityResetTo, nil
+		}
 	}
 
 	return lastWFTCompleted, nil
+}
+
+// failedActivityScheduledEventID walks a close-event failure chain from the
+// outermost wrapper inward and returns the ActivityTaskScheduled EventId of
+// the first activity failure in it, or 0 when the chain names no activity.
+func failedActivityScheduledEventID(f *failurepb.Failure) int64 {
+	for ; f != nil; f = f.GetCause() {
+		if info := f.GetActivityFailureInfo(); info != nil && info.GetScheduledEventId() > 0 {
+			return info.GetScheduledEventId()
+		}
+	}
+	return 0
 }
 
 // findLastWorkflowTaskCompleted walks the full workflow history and returns the

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/admin.proto.
  */
 export const file_controlplane_v1_admin: GenFile = /*@__PURE__*/
-  fileDesc("Chtjb250cm9scGxhbmUvdjEvYWRtaW4ucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJECgRVc2VyEgoKAmlkGAEgASgJEhMKC2V4dGVybmFsX2lkGAIgASgJEg0KBWVtYWlsGAMgASgJEgwKBG5hbWUYBCABKAkiNgoMT3JnYW5pemF0aW9uEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2x1ZxgDIAEoCSJxCgZMTE1LZXkSCgoCaWQYASABKAkSDgoGb3JnX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSDgoGbW9kZWxzGAQgAygJEi0KBnN0YXR1cxgHIAEoDjIdLmNvbnRyb2xwbGFuZS52MS5MTE1LZXlTdGF0dXMi4gMKElJlbGlhbnRFbnRpdGxlbWVudBIPCgd1c2VyX2lkGAEgASgJEg4KBnN0YXR1cxgCIAEoCRIPCgdwbGFuX2lkGAMgASgJEhEKCXBsYW5fbmFtZRgEIAEoCRIXCg9yZWxpYW50X2VuYWJsZWQYBSABKAgSFgoOYWxsb3dlZF9tb2RlbHMYBiADKAkSHwoXbW9udGhseV9zcGVuZF9jYXBfY2VudHMYByABKAMSGwoTcmVxdWVzdHNfcGVyX21pbnV0ZRgIIAEoBRIfChdtYXhfY29uY3VycmVudF9yZXF1ZXN0cxgJIAEoBRIQCghoYXJkX2NhcBgKIAEoCBIXCg9vdmVyYWdlX2FsbG93ZWQYCyABKAgSOAoUY3VycmVudF9wZXJpb2Rfc3RhcnQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjYKEmN1cnJlbnRfcGVyaW9kX2VuZBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLc291cmNlX3R5cGUYDiABKAkSFQoNc291cmNlX3JlZl9pZBgPIAEoCRIuCgp1cGRhdGVkX2F0GBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCLBAwoUTWFuYWdlZFJlbGlhbnRBY2Nlc3MSCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIOCgZzdGF0dXMYAyABKAkSGQoRYWN0aXZlX2xsbV9rZXlfaWQYBCABKAkSGgoSY3JlZGVudGlhbF92ZXJzaW9uGAUgASgFEikKHGVudGl0bGVtZW50X3NuYXBzaG90X3ZlcnNpb24YBiABKAVIAIgBARIzCg9sYXN0X3JvdGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjcKE2xhc3RfcHJvdmlzaW9uZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxhc3RfZXJyb3IYCSABKAkSFwoPaW50ZXJuYWxfb3JnX2lkGAogASgJEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQh8KHV9lbnRpdGxlbWVudF9zbmFwc2hvdF92ZXJzaW9uIhcKFUdldEN1cnJlbnRVc2VyUmVxdWVzdCJzChZHZXRDdXJyZW50VXNlclJlc3BvbnNlEiMKBHVzZXIYASABKAsyFS5jb250cm9scGxhbmUudjEuVXNlchI0Cg1vcmdhbml6YXRpb25zGAIgAygLMh0uY29udHJvbHBsYW5lLnYxLk9yZ2FuaXphdGlvbiIuChBDcmVhdGVPcmdSZXF1ZXN0EgwKBG5hbWUYASABKAkSDAoEc2x1ZxgCIAEoCSI/ChFDcmVhdGVPcmdSZXNwb25zZRIqCgNvcmcYASABKAsyHS5jb250cm9scGxhbmUudjEuT3JnYW5pemF0aW9uIhEKD0xpc3RPcmdzUmVxdWVzdCI/ChBMaXN0T3Jnc1Jlc3BvbnNlEisKBG9yZ3MYASADKAsyHS5jb250cm9scGxhbmUudjEuT3JnYW5pemF0aW9uIh0KG0lzc3VlTXlSZWxpYW50QVBJS2V5UmVxdWVzdCI1ChxJc3N1ZU15UmVsaWFudEFQSUtleVJlc3BvbnNlEhUKDXBsYWludGV4dF9rZXkYASABKAkiIwohR2V0Q3VycmVudFVzZXJSZWxpYW50U3RhdGVSZXF1ZXN0Ip0BCiJHZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcyInCiVSZXBhaXJDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0IrMBCiZSZXBhaXJDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXNwb25zZRI4CgtlbnRpdGxlbWVudBgBIAEoCzIjLmNvbnRyb2xwbGFuZS52MS5SZWxpYW50RW50aXRsZW1lbnQSPQoObWFuYWdlZF9hY2Nlc3MYAiABKAsyJS5jb250cm9scGxhbmUudjEuTWFuYWdlZFJlbGlhbnRBY2Nlc3MSEAoIcmVwYWlyZWQYAyABKAgiUwolUm90YXRlQ3VycmVudFVzZXJSZWxpYW50QWNjZXNzUmVxdWVzdBIZCgxncmFjZV9wZXJpb2QYASABKAlIAIgBAUIPCg1fZ3JhY2VfcGVyaW9kItsBCiZSb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXNwb25zZRI4CgtlbnRpdGxlbWVudBgBIAEoCzIjLmNvbnRyb2xwbGFuZS52MS5SZWxpYW50RW50aXRsZW1lbnQSPQoObWFuYWdlZF9hY2Nlc3MYAiABKAsyJS5jb250cm9scGxhbmUudjEuTWFuYWdlZFJlbGlhbnRBY2Nlc3MSDwoHcm90YXRlZBgDIAEoCBIQCghyZXBsYWNlZBgEIAEoCBIVCg1wbGFpbnRleHRfa2V5GAUgASgJIoQBChNDcmVhdGVMTE1LZXlSZXF1ZXN0Eg4KBm9yZ19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEg4KBm1vZGVscxgDIAMoCRIXCgptYXhfYnVkZ2V0GAQgASgBSACIAQESFwoPYnVkZ2V0X2R1cmF0aW9uGAUgASgJQg0KC19tYXhfYnVkZ2V0IlMKFENyZWF0ZUxMTUtleVJlc3BvbnNlEiQKA2tleRgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5MTE1LZXkSFQoNcGxhaW50ZXh0X2tleRgCIAEoCSIkChJMaXN0TExNS2V5c1JlcXVlc3QSDgoGb3JnX2lkGAEgASgJIjwKE0xpc3RMTE1LZXlzUmVzcG9uc2USJQoEa2V5cxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5MTE1LZXkiOwoTUm90YXRlTExNS2V5UmVxdWVzdBIOCgZrZXlfaWQYASABKAkSFAoMZ3JhY2VfcGVyaW9kGAIgASgJIlMKFFJvdGF0ZUxMTUtleVJlc3BvbnNlEiQKA2tleRgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5MTE1LZXkSFQoNcGxhaW50ZXh0X2tleRgCIAEoCSqBAQoMTExNS2V5U3RhdHVzEh4KGkxMTV9LRVlfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGQoVTExNX0tFWV9TVEFUVVNfQUNUSVZFEAESGgoWTExNX0tFWV9TVEFUVVNfUkVWT0tFRBACEhoKFkxMTV9LRVlfU1RBVFVTX0VYUElSRUQQAzJyCgtVc2VyU2VydmljZRJjCg5HZXRDdXJyZW50VXNlchImLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlcXVlc3QaJy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZXNwb25zZSIAMrUBCgpPcmdTZXJ2aWNlElQKCUNyZWF0ZU9yZxIhLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVPcmdSZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU9yZ1Jlc3BvbnNlIgASUQoITGlzdE9yZ3MSIC5jb250cm9scGxhbmUudjEuTGlzdE9yZ3NSZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkxpc3RPcmdzUmVzcG9uc2UiADK9BAoOQmlsbGluZ1NlcnZpY2UShwEKGkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlEjIuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlUmVxdWVzdBozLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlc3BvbnNlIgASkwEKHlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2VzcxI2LmNvbnRyb2xwbGFuZS52MS5SZXBhaXJDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0GjcuY29udHJvbHBsYW5lLnYxLlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlIgASkwEKHlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2VzcxI2LmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0GjcuY29udHJvbHBsYW5lLnYxLlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlIgASdQoUSXNzdWVNeVJlbGlhbnRBUElLZXkSLC5jb250cm9scGxhbmUudjEuSXNzdWVNeVJlbGlhbnRBUElLZXlSZXF1ZXN0Gi0uY29udHJvbHBsYW5lLnYxLklzc3VlTXlSZWxpYW50QVBJS2V5UmVzcG9uc2UiADKtAgoRTExNR2F0ZXdheVNlcnZpY2USXQoMQ3JlYXRlTExNS2V5EiQuY29udHJvbHBsYW5lLnYxLkNyZWF0ZUxMTUtleVJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuQ3JlYXRlTExNS2V5UmVzcG9uc2UiABJaCgtMaXN0TExNS2V5cxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0TExNS2V5c1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdExMTUtleXNSZXNwb25zZSIAEl0KDFJvdGF0ZUxMTUtleRIkLmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVMTE1LZXlSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlJvdGF0ZUxMTUtleVJlc3BvbnNlIgBCRFpCZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Chtjb250cm9scGxhbmUvdjEvYWRtaW4ucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJECgRVc2VyEgoKAmlkGAEgASgJEhMKC2V4dGVybmFsX2lkGAIgASgJEg0KBWVtYWlsGAMgASgJEgwKBG5hbWUYBCABKAkiNgoMT3JnYW5pemF0aW9uEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDAoEc2x1ZxgDIAEoCSJxCgZMTE1LZXkSCgoCaWQYASABKAkSDgoGb3JnX2lkGAIgASgJEgwKBG5hbWUYAyABKAkSDgoGbW9kZWxzGAQgAygJEi0KBnN0YXR1cxgHIAEoDjIdLmNvbnRyb2xwbGFuZS52MS5MTE1LZXlTdGF0dXMi4gMKElJlbGlhbnRFbnRpdGxlbWVudBIPCgd1c2VyX2lkGAEgASgJEg4KBnN0YXR1cxgCIAEoCRIPCgdwbGFuX2lkGAMgASgJEhEKCXBsYW5fbmFtZRgEIAEoCRIXCg9yZWxpYW50X2VuYWJsZWQYBSABKAgSFgoOYWxsb3dlZF9tb2RlbHMYBiADKAkSHwoXbW9udGhseV9zcGVuZF9jYXBfY2VudHMYByABKAMSGwoTcmVxdWVzdHNfcGVyX21pbnV0ZRgIIAEoBRIfChdtYXhfY29uY3VycmVudF9yZXF1ZXN0cxgJIAEoBRIQCghoYXJkX2NhcBgKIAEoCBIXCg9vdmVyYWdlX2FsbG93ZWQYCyABKAgSOAoUY3VycmVudF9wZXJpb2Rfc3RhcnQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjYKEmN1cnJlbnRfcGVyaW9kX2VuZBgNIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASEwoLc291cmNlX3R5cGUYDiABKAkSFQoNc291cmNlX3JlZl9pZBgPIAEoCRIuCgp1cGRhdGVkX2F0GBAgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCLBAwoUTWFuYWdlZFJlbGlhbnRBY2Nlc3MSCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIOCgZzdGF0dXMYAyABKAkSGQoRYWN0aXZlX2xsbV9rZXlfaWQYBCABKAkSGgoSY3JlZGVudGlhbF92ZXJzaW9uGAUgASgFEikKHGVudGl0bGVtZW50X3NuYXBzaG90X3ZlcnNpb24YBiABKAVIAIgBARIzCg9sYXN0X3JvdGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjcKE2xhc3RfcHJvdmlzaW9uZWRfYXQYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhIKCmxhc3RfZXJyb3IYCSABKAkSFwoPaW50ZXJuYWxfb3JnX2lkGAogASgJEi4KCmNyZWF0ZWRfYXQYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi4KCnVwZGF0ZWRfYXQYDCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQh8KHV9lbnRpdGxlbWVudF9zbmFwc2hvdF92ZXJzaW9uIjgKFkFjY291bnREZWxldGlvbkJsb2NrZXISDgoGcmVhc29uGAEgASgJEg4KBmRldGFpbBgCIAEoCSIhCh9EZWxldGVDdXJyZW50VXNlckFjY291bnRSZXF1ZXN0Il0KIERlbGV0ZUN1cnJlbnRVc2VyQWNjb3VudFJlc3BvbnNlEjkKCGJsb2NrZXJzGAEgAygLMicuY29udHJvbHBsYW5lLnYxLkFjY291bnREZWxldGlvbkJsb2NrZXIiFwoVR2V0Q3VycmVudFVzZXJSZXF1ZXN0InMKFkdldEN1cnJlbnRVc2VyUmVzcG9uc2USIwoEdXNlchgBIAEoCzIVLmNvbnRyb2xwbGFuZS52MS5Vc2VyEjQKDW9yZ2FuaXphdGlvbnMYAiADKAsyHS5jb250cm9scGxhbmUudjEuT3JnYW5pemF0aW9uIi4KEENyZWF0ZU9yZ1JlcXVlc3QSDAoEbmFtZRgBIAEoCRIMCgRzbHVnGAIgASgJIj8KEUNyZWF0ZU9yZ1Jlc3BvbnNlEioKA29yZxgBIAEoCzIdLmNvbnRyb2xwbGFuZS52MS5Pcmdhbml6YXRpb24iEQoPTGlzdE9yZ3NSZXF1ZXN0Ij8KEExpc3RPcmdzUmVzcG9uc2USKwoEb3JncxgBIAMoCzIdLmNvbnRyb2xwbGFuZS52MS5Pcmdhbml6YXRpb24iHQobSXNzdWVNeVJlbGlhbnRBUElLZXlSZXF1ZXN0IjUKHElzc3VlTXlSZWxpYW50QVBJS2V5UmVzcG9uc2USFQoNcGxhaW50ZXh0X2tleRgBIAEoCSIjCiFHZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlcXVlc3QinQEKIkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlUmVzcG9uc2USOAoLZW50aXRsZW1lbnQYASABKAsyIy5jb250cm9scGxhbmUudjEuUmVsaWFudEVudGl0bGVtZW50Ej0KDm1hbmFnZWRfYWNjZXNzGAIgASgLMiUuY29udHJvbHBsYW5lLnYxLk1hbmFnZWRSZWxpYW50QWNjZXNzIicKJVJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1JlcXVlc3QiswEKJlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcxIQCghyZXBhaXJlZBgDIAEoCCJTCiVSb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0EhkKDGdyYWNlX3BlcmlvZBgBIAEoCUgAiAEBQg8KDV9ncmFjZV9wZXJpb2Qi2wEKJlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlEjgKC2VudGl0bGVtZW50GAEgASgLMiMuY29udHJvbHBsYW5lLnYxLlJlbGlhbnRFbnRpdGxlbWVudBI9Cg5tYW5hZ2VkX2FjY2VzcxgCIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5NYW5hZ2VkUmVsaWFudEFjY2VzcxIPCgdyb3RhdGVkGAMgASgIEhAKCHJlcGxhY2VkGAQgASgIEhUKDXBsYWludGV4dF9rZXkYBSABKAkihAEKE0NyZWF0ZUxMTUtleVJlcXVlc3QSDgoGb3JnX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGbW9kZWxzGAMgAygJEhcKCm1heF9idWRnZXQYBCABKAFIAIgBARIXCg9idWRnZXRfZHVyYXRpb24YBSABKAlCDQoLX21heF9idWRnZXQiUwoUQ3JlYXRlTExNS2V5UmVzcG9uc2USJAoDa2V5GAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkxMTUtleRIVCg1wbGFpbnRleHRfa2V5GAIgASgJIiQKEkxpc3RMTE1LZXlzUmVxdWVzdBIOCgZvcmdfaWQYASABKAkiPAoTTGlzdExMTUtleXNSZXNwb25zZRIlCgRrZXlzGAEgAygLMhcuY29udHJvbHBsYW5lLnYxLkxMTUtleSI7ChNSb3RhdGVMTE1LZXlSZXF1ZXN0Eg4KBmtleV9pZBgBIAEoCRIUCgxncmFjZV9wZXJpb2QYAiABKAkiUwoUUm90YXRlTExNS2V5UmVzcG9uc2USJAoDa2V5GAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkxMTUtleRIVCg1wbGFpbnRleHRfa2V5GAIgASgJKoEBCgxMTE1LZXlTdGF0dXMSHgoaTExNX0tFWV9TVEFUVVNfVU5TUEVDSUZJRUQQABIZChVMTE1fS0VZX1NUQVRVU19BQ1RJVkUQARIaChZMTE1fS0VZX1NUQVRVU19SRVZPS0VEEAISGgoWTExNX0tFWV9TVEFUVVNfRVhQSVJFRBADMvYBCgtVc2VyU2VydmljZRJjCg5HZXRDdXJyZW50VXNlchImLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlcXVlc3QaJy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZXNwb25zZSIAEoEBChhEZWxldGVDdXJyZW50VXNlckFjY291bnQSMC5jb250cm9scGxhbmUudjEuRGVsZXRlQ3VycmVudFVzZXJBY2NvdW50UmVxdWVzdBoxLmNvbnRyb2xwbGFuZS52MS5EZWxldGVDdXJyZW50VXNlckFjY291bnRSZXNwb25zZSIAMrUBCgpPcmdTZXJ2aWNlElQKCUNyZWF0ZU9yZxIhLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVPcmdSZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkNyZWF0ZU9yZ1Jlc3BvbnNlIgASUQoITGlzdE9yZ3MSIC5jb250cm9scGxhbmUudjEuTGlzdE9yZ3NSZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkxpc3RPcmdzUmVzcG9uc2UiADK9BAoOQmlsbGluZ1NlcnZpY2UShwEKGkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlEjIuY29udHJvbHBsYW5lLnYxLkdldEN1cnJlbnRVc2VyUmVsaWFudFN0YXRlUmVxdWVzdBozLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlbGlhbnRTdGF0ZVJlc3BvbnNlIgASkwEKHlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2VzcxI2LmNvbnRyb2xwbGFuZS52MS5SZXBhaXJDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0GjcuY29udHJvbHBsYW5lLnYxLlJlcGFpckN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlIgASkwEKHlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2VzcxI2LmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVDdXJyZW50VXNlclJlbGlhbnRBY2Nlc3NSZXF1ZXN0GjcuY29udHJvbHBsYW5lLnYxLlJvdGF0ZUN1cnJlbnRVc2VyUmVsaWFudEFjY2Vzc1Jlc3BvbnNlIgASdQoUSXNzdWVNeVJlbGlhbnRBUElLZXkSLC5jb250cm9scGxhbmUudjEuSXNzdWVNeVJlbGlhbnRBUElLZXlSZXF1ZXN0Gi0uY29udHJvbHBsYW5lLnYxLklzc3VlTXlSZWxpYW50QVBJS2V5UmVzcG9uc2UiADKtAgoRTExNR2F0ZXdheVNlcnZpY2USXQoMQ3JlYXRlTExNS2V5EiQuY29udHJvbHBsYW5lLnYxLkNyZWF0ZUxMTUtleVJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuQ3JlYXRlTExNS2V5UmVzcG9uc2UiABJaCgtMaXN0TExNS2V5cxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0TExNS2V5c1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdExMTUtleXNSZXNwb25zZSIAEl0KDFJvdGF0ZUxMTUtleRIkLmNvbnRyb2xwbGFuZS52MS5Sb3RhdGVMTE1LZXlSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLlJvdGF0ZUxMTUtleVJlc3BvbnNlIgBCRFpCZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.User
@@ -276,6 +276,66 @@ export const ManagedReliantAccessSchema: GenMessage<ManagedReliantAccess> = /*@_
   messageDesc(file_controlplane_v1_admin, 4);
 
 /**
+ * AccountDeletionBlocker is one reason control-plane refused the deletion.
+ *
+ * @generated from message controlplane.v1.AccountDeletionBlocker
+ */
+export type AccountDeletionBlocker = Message<"controlplane.v1.AccountDeletionBlocker"> & {
+  /**
+   * Machine-readable: "paid_subscription" or "wallet_balance".
+   *
+   * @generated from field: string reason = 1;
+   */
+  reason: string;
+
+  /**
+   * Human-readable sentence, safe to show the user verbatim.
+   *
+   * @generated from field: string detail = 2;
+   */
+  detail: string;
+};
+
+/**
+ * Describes the message controlplane.v1.AccountDeletionBlocker.
+ * Use `create(AccountDeletionBlockerSchema)` to create a new message.
+ */
+export const AccountDeletionBlockerSchema: GenMessage<AccountDeletionBlocker> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_admin, 5);
+
+/**
+ * @generated from message controlplane.v1.DeleteCurrentUserAccountRequest
+ */
+export type DeleteCurrentUserAccountRequest = Message<"controlplane.v1.DeleteCurrentUserAccountRequest"> & {
+};
+
+/**
+ * Describes the message controlplane.v1.DeleteCurrentUserAccountRequest.
+ * Use `create(DeleteCurrentUserAccountRequestSchema)` to create a new message.
+ */
+export const DeleteCurrentUserAccountRequestSchema: GenMessage<DeleteCurrentUserAccountRequest> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_admin, 6);
+
+/**
+ * @generated from message controlplane.v1.DeleteCurrentUserAccountResponse
+ */
+export type DeleteCurrentUserAccountResponse = Message<"controlplane.v1.DeleteCurrentUserAccountResponse"> & {
+  /**
+   * Non-empty means REFUSED and nothing was destroyed.
+   *
+   * @generated from field: repeated controlplane.v1.AccountDeletionBlocker blockers = 1;
+   */
+  blockers: AccountDeletionBlocker[];
+};
+
+/**
+ * Describes the message controlplane.v1.DeleteCurrentUserAccountResponse.
+ * Use `create(DeleteCurrentUserAccountResponseSchema)` to create a new message.
+ */
+export const DeleteCurrentUserAccountResponseSchema: GenMessage<DeleteCurrentUserAccountResponse> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_admin, 7);
+
+/**
  * @generated from message controlplane.v1.GetCurrentUserRequest
  */
 export type GetCurrentUserRequest = Message<"controlplane.v1.GetCurrentUserRequest"> & {
@@ -286,7 +346,7 @@ export type GetCurrentUserRequest = Message<"controlplane.v1.GetCurrentUserReque
  * Use `create(GetCurrentUserRequestSchema)` to create a new message.
  */
 export const GetCurrentUserRequestSchema: GenMessage<GetCurrentUserRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 5);
+  messageDesc(file_controlplane_v1_admin, 8);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserResponse
@@ -308,7 +368,7 @@ export type GetCurrentUserResponse = Message<"controlplane.v1.GetCurrentUserResp
  * Use `create(GetCurrentUserResponseSchema)` to create a new message.
  */
 export const GetCurrentUserResponseSchema: GenMessage<GetCurrentUserResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 6);
+  messageDesc(file_controlplane_v1_admin, 9);
 
 /**
  * @generated from message controlplane.v1.CreateOrgRequest
@@ -330,7 +390,7 @@ export type CreateOrgRequest = Message<"controlplane.v1.CreateOrgRequest"> & {
  * Use `create(CreateOrgRequestSchema)` to create a new message.
  */
 export const CreateOrgRequestSchema: GenMessage<CreateOrgRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 7);
+  messageDesc(file_controlplane_v1_admin, 10);
 
 /**
  * @generated from message controlplane.v1.CreateOrgResponse
@@ -347,7 +407,7 @@ export type CreateOrgResponse = Message<"controlplane.v1.CreateOrgResponse"> & {
  * Use `create(CreateOrgResponseSchema)` to create a new message.
  */
 export const CreateOrgResponseSchema: GenMessage<CreateOrgResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 8);
+  messageDesc(file_controlplane_v1_admin, 11);
 
 /**
  * @generated from message controlplane.v1.ListOrgsRequest
@@ -360,7 +420,7 @@ export type ListOrgsRequest = Message<"controlplane.v1.ListOrgsRequest"> & {
  * Use `create(ListOrgsRequestSchema)` to create a new message.
  */
 export const ListOrgsRequestSchema: GenMessage<ListOrgsRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 9);
+  messageDesc(file_controlplane_v1_admin, 12);
 
 /**
  * @generated from message controlplane.v1.ListOrgsResponse
@@ -377,7 +437,7 @@ export type ListOrgsResponse = Message<"controlplane.v1.ListOrgsResponse"> & {
  * Use `create(ListOrgsResponseSchema)` to create a new message.
  */
 export const ListOrgsResponseSchema: GenMessage<ListOrgsResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 10);
+  messageDesc(file_controlplane_v1_admin, 13);
 
 /**
  * @generated from message controlplane.v1.IssueMyReliantAPIKeyRequest
@@ -390,7 +450,7 @@ export type IssueMyReliantAPIKeyRequest = Message<"controlplane.v1.IssueMyRelian
  * Use `create(IssueMyReliantAPIKeyRequestSchema)` to create a new message.
  */
 export const IssueMyReliantAPIKeyRequestSchema: GenMessage<IssueMyReliantAPIKeyRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 11);
+  messageDesc(file_controlplane_v1_admin, 14);
 
 /**
  * @generated from message controlplane.v1.IssueMyReliantAPIKeyResponse
@@ -410,7 +470,7 @@ export type IssueMyReliantAPIKeyResponse = Message<"controlplane.v1.IssueMyRelia
  * Use `create(IssueMyReliantAPIKeyResponseSchema)` to create a new message.
  */
 export const IssueMyReliantAPIKeyResponseSchema: GenMessage<IssueMyReliantAPIKeyResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 12);
+  messageDesc(file_controlplane_v1_admin, 15);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserReliantStateRequest
@@ -423,7 +483,7 @@ export type GetCurrentUserReliantStateRequest = Message<"controlplane.v1.GetCurr
  * Use `create(GetCurrentUserReliantStateRequestSchema)` to create a new message.
  */
 export const GetCurrentUserReliantStateRequestSchema: GenMessage<GetCurrentUserReliantStateRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 13);
+  messageDesc(file_controlplane_v1_admin, 16);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserReliantStateResponse
@@ -445,7 +505,7 @@ export type GetCurrentUserReliantStateResponse = Message<"controlplane.v1.GetCur
  * Use `create(GetCurrentUserReliantStateResponseSchema)` to create a new message.
  */
 export const GetCurrentUserReliantStateResponseSchema: GenMessage<GetCurrentUserReliantStateResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 14);
+  messageDesc(file_controlplane_v1_admin, 17);
 
 /**
  * @generated from message controlplane.v1.RepairCurrentUserReliantAccessRequest
@@ -458,7 +518,7 @@ export type RepairCurrentUserReliantAccessRequest = Message<"controlplane.v1.Rep
  * Use `create(RepairCurrentUserReliantAccessRequestSchema)` to create a new message.
  */
 export const RepairCurrentUserReliantAccessRequestSchema: GenMessage<RepairCurrentUserReliantAccessRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 15);
+  messageDesc(file_controlplane_v1_admin, 18);
 
 /**
  * @generated from message controlplane.v1.RepairCurrentUserReliantAccessResponse
@@ -485,7 +545,7 @@ export type RepairCurrentUserReliantAccessResponse = Message<"controlplane.v1.Re
  * Use `create(RepairCurrentUserReliantAccessResponseSchema)` to create a new message.
  */
 export const RepairCurrentUserReliantAccessResponseSchema: GenMessage<RepairCurrentUserReliantAccessResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 16);
+  messageDesc(file_controlplane_v1_admin, 19);
 
 /**
  * @generated from message controlplane.v1.RotateCurrentUserReliantAccessRequest
@@ -502,7 +562,7 @@ export type RotateCurrentUserReliantAccessRequest = Message<"controlplane.v1.Rot
  * Use `create(RotateCurrentUserReliantAccessRequestSchema)` to create a new message.
  */
 export const RotateCurrentUserReliantAccessRequestSchema: GenMessage<RotateCurrentUserReliantAccessRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 17);
+  messageDesc(file_controlplane_v1_admin, 20);
 
 /**
  * @generated from message controlplane.v1.RotateCurrentUserReliantAccessResponse
@@ -539,7 +599,7 @@ export type RotateCurrentUserReliantAccessResponse = Message<"controlplane.v1.Ro
  * Use `create(RotateCurrentUserReliantAccessResponseSchema)` to create a new message.
  */
 export const RotateCurrentUserReliantAccessResponseSchema: GenMessage<RotateCurrentUserReliantAccessResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 18);
+  messageDesc(file_controlplane_v1_admin, 21);
 
 /**
  * @generated from message controlplane.v1.CreateLLMKeyRequest
@@ -576,7 +636,7 @@ export type CreateLLMKeyRequest = Message<"controlplane.v1.CreateLLMKeyRequest">
  * Use `create(CreateLLMKeyRequestSchema)` to create a new message.
  */
 export const CreateLLMKeyRequestSchema: GenMessage<CreateLLMKeyRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 19);
+  messageDesc(file_controlplane_v1_admin, 22);
 
 /**
  * @generated from message controlplane.v1.CreateLLMKeyResponse
@@ -598,7 +658,7 @@ export type CreateLLMKeyResponse = Message<"controlplane.v1.CreateLLMKeyResponse
  * Use `create(CreateLLMKeyResponseSchema)` to create a new message.
  */
 export const CreateLLMKeyResponseSchema: GenMessage<CreateLLMKeyResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 20);
+  messageDesc(file_controlplane_v1_admin, 23);
 
 /**
  * @generated from message controlplane.v1.ListLLMKeysRequest
@@ -615,7 +675,7 @@ export type ListLLMKeysRequest = Message<"controlplane.v1.ListLLMKeysRequest"> &
  * Use `create(ListLLMKeysRequestSchema)` to create a new message.
  */
 export const ListLLMKeysRequestSchema: GenMessage<ListLLMKeysRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 21);
+  messageDesc(file_controlplane_v1_admin, 24);
 
 /**
  * @generated from message controlplane.v1.ListLLMKeysResponse
@@ -632,7 +692,7 @@ export type ListLLMKeysResponse = Message<"controlplane.v1.ListLLMKeysResponse">
  * Use `create(ListLLMKeysResponseSchema)` to create a new message.
  */
 export const ListLLMKeysResponseSchema: GenMessage<ListLLMKeysResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 22);
+  messageDesc(file_controlplane_v1_admin, 25);
 
 /**
  * @generated from message controlplane.v1.RotateLLMKeyRequest
@@ -654,7 +714,7 @@ export type RotateLLMKeyRequest = Message<"controlplane.v1.RotateLLMKeyRequest">
  * Use `create(RotateLLMKeyRequestSchema)` to create a new message.
  */
 export const RotateLLMKeyRequestSchema: GenMessage<RotateLLMKeyRequest> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 23);
+  messageDesc(file_controlplane_v1_admin, 26);
 
 /**
  * @generated from message controlplane.v1.RotateLLMKeyResponse
@@ -676,7 +736,7 @@ export type RotateLLMKeyResponse = Message<"controlplane.v1.RotateLLMKeyResponse
  * Use `create(RotateLLMKeyResponseSchema)` to create a new message.
  */
 export const RotateLLMKeyResponseSchema: GenMessage<RotateLLMKeyResponse> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_admin, 24);
+  messageDesc(file_controlplane_v1_admin, 27);
 
 /**
  * @generated from enum controlplane.v1.LLMKeyStatus
@@ -720,6 +780,24 @@ export const UserService: GenService<{
     methodKind: "unary";
     input: typeof GetCurrentUserRequestSchema;
     output: typeof GetCurrentUserResponseSchema;
+  },
+  /**
+   * DeleteCurrentUserAccount tombstones the caller's control-plane account
+   * (billing identity, daemons, PII). Called by reliant's own
+   * AccountService.DeleteAccount BEFORE it purges local data, forwarding the
+   * caller's JWT — see internal/controlplane/client.go.
+   *
+   * Control-plane first is deliberate: if it refuses (a paid subscription or
+   * prepaid credit), nothing has been destroyed and the user can resolve the
+   * blocker and retry. The reverse order could destroy every chat and project
+   * and then fail to stop the billing, which is the one unacceptable outcome.
+   *
+   * @generated from rpc controlplane.v1.UserService.DeleteCurrentUserAccount
+   */
+  deleteCurrentUserAccount: {
+    methodKind: "unary";
+    input: typeof DeleteCurrentUserAccountRequestSchema;
+    output: typeof DeleteCurrentUserAccountResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_controlplane_v1_admin, 0);

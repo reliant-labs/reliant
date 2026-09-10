@@ -156,6 +156,7 @@ content: "Custom response"
 | `tool` | string | No | Tool is the tool name (for type: tool_result or tool_error). |
 | `tool_output` | object | No | ToolOutput is the tool execution result (for type: tool_result). |
 | `is_error` | boolean | No | IsError marks a tool_result as failed (for type: tool_result). |
+| `black_box` | boolean | No | BlackBox mocks a loop or workflow node AS A UNIT: its body is not |
 
 ---
 
@@ -177,7 +178,7 @@ tool_calls:
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Name is the tool name (e.g., "bash", "search", "edit"). |
+| `name` | string | Yes | Name is the tool name (e.g., "shell", "search", "edit"). |
 | `input` | object | No | Input contains the tool's input parameters. |
 
 ---

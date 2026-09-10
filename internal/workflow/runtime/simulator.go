@@ -116,6 +116,24 @@ type WorkflowSimulator struct {
 	// semantic contracts compiled from core; used to align simulator semantics
 	compiledSemantics    *core.CompiledSemantics
 	canonicalWorkflowRef string
+
+	// spawns models detached `spawn` tool calls. Shared by pointer with every
+	// child simulator, because a spawn dispatched inside a nested body has to
+	// be visible to the loop that must wait for it. See spawnState.
+	spawns *spawnState
+}
+
+// spawnState is the simulator's stand-in for ChildWorkflowTracker's detached
+// registry (workflow.go). The real tracker distinguishes "live" from
+// "completed" and the loop-exit gate parks until a live child finishes; the
+// simulator has no concurrency, so it models the OBSERVABLE consequence of that
+// gate instead — see awaitDetachedSpawnCompletion.
+type spawnState struct {
+	// pendingCompletions counts detached spawns whose completion no loop-exit
+	// check has observed yet. Each one is worth exactly one extra loop turn,
+	// mirroring the real gate waking on the FIRST finisher and re-entering once
+	// per completion.
+	pendingCompletions int
 }
 
 // SimWorkflowLoader loads workflows by reference for simulation (e.g., "builtin://agent")
@@ -257,6 +275,7 @@ func NewWorkflowSimulator(protoWf *reliantv1.Workflow, config SimulatorConfig) *
 		workflowLoader:       config.WorkflowLoader,
 		compiledSemantics:    compiledSemantics,
 		canonicalWorkflowRef: canonicalWorkflowRef,
+		spawns:               &spawnState{},
 	}
 }
 
@@ -512,7 +531,7 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 		}
 
 		// Process events through join nodes first
-		s.events = processJoinEvents(s.events, s.joinState, s.protoWorkflow, "sim-workflow", "sim-chat", s.rootWorkflowIdentity(), s.nodeOutputs, logger, nil, time.Now())
+		s.events = processJoinEvents(s.events, s.joinState, s.protoWorkflow, "sim-workflow", "sim-chat", s.rootWorkflowIdentity(), s.nodeOutputs, logger, nil, nil, time.Now())
 
 		// Find triggered steps
 		triggeredSteps, err := s.stateMachine.FindTriggeredNodes(s.events, s.nodeOutputs, s.workflowInputs)
@@ -759,6 +778,15 @@ func (s *WorkflowSimulator) Run(mocker StepMocker) error {
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
 			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
+			// A `spawn` tool call is split out of execute_tools and run as its
+			// own synthetic sub-workflow node — see simulator_spawn.go.
+			spawnResults, err := s.executeSpawnToolCalls(evalResult, mocker)
+			if err != nil {
+				s.markError(stepID)
+				return err
+			}
+			mergeSpawnToolResults(normalizedOutput, spawnResults)
+
 			// Store step output
 			s.nodeOutputs[stepID] = normalizedOutput
 			s.markCompleted(stepID)
@@ -924,6 +952,9 @@ func (s *WorkflowSimulator) executeLoopBodyWorkflowNode(
 		workflowLoader:       s.workflowLoader,
 		compiledSemantics:    s.compiledSemantics,
 		canonicalWorkflowRef: s.canonicalWorkflowRef,
+		// Shared by pointer: a spawn dispatched inside this body must be
+		// visible to the loop that has to wait for it.
+		spawns: s.spawns,
 	}
 	output, err := childSim.executeWorkflowNode(qualifiedID, node, mocker)
 	// Slice appends don't propagate to the parent.
@@ -1051,6 +1082,14 @@ func (s *WorkflowSimulator) executeRefLoop(nodePath string, protoNode *reliantv1
 			return nil, err
 		}
 		if !shouldContinue {
+			// The loop is about to exit — the ONLY point at which the real
+			// runtime consults awaitLiveDetachedSpawns, so a turn with no
+			// background spawns costs nothing extra here either. A detached
+			// spawn that completed earns one more turn, because its result may
+			// now be deliverable and only another turn can deliver it.
+			if s.awaitDetachedSpawnCompletion() {
+				continue
+			}
 			break
 		}
 	}
@@ -1095,6 +1134,14 @@ func (s *WorkflowSimulator) executeInlineLoop(nodePath string, protoNode *relian
 			return nil, err
 		}
 		if !shouldContinue {
+			// The loop is about to exit — the ONLY point at which the real
+			// runtime consults awaitLiveDetachedSpawns, so a turn with no
+			// background spawns costs nothing extra here either. A detached
+			// spawn that completed earns one more turn, because its result may
+			// now be deliverable and only another turn can deliver it.
+			if s.awaitDetachedSpawnCompletion() {
+				continue
+			}
 			break
 		}
 	}
@@ -1179,7 +1226,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 
 	for innerIter := 0; innerIter < maxInnerIterations; innerIter++ {
 		// Process join events
-		events = processJoinEvents(events, joinState, subWorkflow, "sim-workflow", "sim-chat", workflowIdentity, innerOutputs, logger, nil, time.Now())
+		events = processJoinEvents(events, joinState, subWorkflow, "sim-workflow", "sim-chat", workflowIdentity, innerOutputs, logger, nil, nil, time.Now())
 
 		// Find triggered nodes in the sub-workflow
 		triggeredSteps, err := subSM.FindTriggeredNodes(events, innerOutputs, subInputs)
@@ -1347,6 +1394,15 @@ func (s *WorkflowSimulator) executeLoopIteration(
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
 			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
 
+			// A `spawn` tool call is split out of execute_tools and run as its
+			// own synthetic sub-workflow node — see simulator_spawn.go.
+			spawnResults, err := s.executeSpawnToolCalls(evalResult, mocker)
+			if err != nil {
+				s.markError(qualifiedID)
+				return nil, err
+			}
+			mergeSpawnToolResults(normalizedOutput, spawnResults)
+
 			// Store in sub-workflow's local outputs (for edge evaluation)
 			innerOutputs[innerNodeID] = normalizedOutput
 
@@ -1436,6 +1492,14 @@ func (s *WorkflowSimulator) executeNestedLoop(qualifiedPrefix string, protoNode 
 			return nil, err
 		}
 		if !shouldContinue {
+			// The loop is about to exit — the ONLY point at which the real
+			// runtime consults awaitLiveDetachedSpawns, so a turn with no
+			// background spawns costs nothing extra here either. A detached
+			// spawn that completed earns one more turn, because its result may
+			// now be deliverable and only another turn can deliver it.
+			if s.awaitDetachedSpawnCompletion() {
+				continue
+			}
 			break
 		}
 	}
@@ -1479,6 +1543,14 @@ func (s *WorkflowSimulator) executeNestedRefLoop(qualifiedPrefix string, protoNo
 			return nil, err
 		}
 		if !shouldContinue {
+			// The loop is about to exit — the ONLY point at which the real
+			// runtime consults awaitLiveDetachedSpawns, so a turn with no
+			// background spawns costs nothing extra here either. A detached
+			// spawn that completed earns one more turn, because its result may
+			// now be deliverable and only another turn can deliver it.
+			if s.awaitDetachedSpawnCompletion() {
+				continue
+			}
 			break
 		}
 	}
@@ -1525,7 +1597,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 	maxInnerIterations := 100
 
 	for innerIter := 0; innerIter < maxInnerIterations; innerIter++ {
-		events = processJoinEvents(events, joinState, subWorkflow, "sim-workflow", "sim-chat", workflowIdentity, innerOutputs, logger, nil, time.Now())
+		events = processJoinEvents(events, joinState, subWorkflow, "sim-workflow", "sim-chat", workflowIdentity, innerOutputs, logger, nil, nil, time.Now())
 		triggeredSteps, err := subSM.FindTriggeredNodes(events, innerOutputs, subInputs)
 		if err != nil {
 			return nil, fmt.Errorf("find triggered steps for nested loop %s iteration %d: %w", qualifiedPrefix, iteration, err)
@@ -1671,6 +1743,15 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 			mockOutput := mocker(qualifiedID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
 			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
+
+			// A `spawn` tool call is split out of execute_tools and run as its
+			// own synthetic sub-workflow node — see simulator_spawn.go.
+			spawnResults, err := s.executeSpawnToolCalls(evalResult, mocker)
+			if err != nil {
+				s.markError(qualifiedID)
+				return nil, err
+			}
+			mergeSpawnToolResults(normalizedOutput, spawnResults)
 
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput
@@ -1844,7 +1925,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 
 	for innerIter := 0; innerIter < maxInnerIterations; innerIter++ {
 		// Process join events
-		events = processJoinEvents(events, joinState, subWorkflow, "sim-sub-workflow", "sim-chat", workflowIdentity, innerOutputs, logger, nil, time.Now())
+		events = processJoinEvents(events, joinState, subWorkflow, "sim-sub-workflow", "sim-chat", workflowIdentity, innerOutputs, logger, nil, nil, time.Now())
 
 		// Find triggered nodes
 		triggeredSteps, err := subSM.FindTriggeredNodes(events, innerOutputs, subInputs)
@@ -1934,6 +2015,8 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 					workflowLoader:       s.workflowLoader,
 					compiledSemantics:    s.compiledSemantics,
 					canonicalWorkflowRef: s.canonicalWorkflowRef,
+					// Shared by pointer — see executeLoopBodyWorkflowNode.
+					spawns: s.spawns,
 				}
 				loopOutput, err := loopSim.executeNestedLoop(qualifiedID, triggered.Node, mocker)
 				// Sync visited steps back (slice appends don't propagate to the parent)
@@ -2012,6 +2095,15 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			mockOutput := subMocker(innerNodeID, evaluatedInputs)
 			normalizedOutput := normalizeMockOutput(mockOutput, nodeActivityName(triggered.Node))
 			applyCallLLMCompactionThreshold(normalizedOutput, triggered.Node, evaluatedInputs)
+
+			// A `spawn` tool call is split out of execute_tools and run as its
+			// own synthetic sub-workflow node — see simulator_spawn.go.
+			spawnResults, err := s.executeSpawnToolCalls(evalResult, mocker)
+			if err != nil {
+				s.markError(qualifiedID)
+				return nil, err
+			}
+			mergeSpawnToolResults(normalizedOutput, spawnResults)
 
 			innerOutputs[innerNodeID] = normalizedOutput
 			s.nodeOutputs[qualifiedID] = normalizedOutput

@@ -42,6 +42,9 @@ const (
 	// UserServiceGetCurrentUserProcedure is the fully-qualified name of the UserService's
 	// GetCurrentUser RPC.
 	UserServiceGetCurrentUserProcedure = "/controlplane.v1.UserService/GetCurrentUser"
+	// UserServiceDeleteCurrentUserAccountProcedure is the fully-qualified name of the UserService's
+	// DeleteCurrentUserAccount RPC.
+	UserServiceDeleteCurrentUserAccountProcedure = "/controlplane.v1.UserService/DeleteCurrentUserAccount"
 	// OrgServiceCreateOrgProcedure is the fully-qualified name of the OrgService's CreateOrg RPC.
 	OrgServiceCreateOrgProcedure = "/controlplane.v1.OrgService/CreateOrg"
 	// OrgServiceListOrgsProcedure is the fully-qualified name of the OrgService's ListOrgs RPC.
@@ -72,6 +75,16 @@ const (
 // UserServiceClient is a client for the controlplane.v1.UserService service.
 type UserServiceClient interface {
 	GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error)
+	// DeleteCurrentUserAccount tombstones the caller's control-plane account
+	// (billing identity, daemons, PII). Called by reliant's own
+	// AccountService.DeleteAccount BEFORE it purges local data, forwarding the
+	// caller's JWT — see internal/controlplane/client.go.
+	//
+	// Control-plane first is deliberate: if it refuses (a paid subscription or
+	// prepaid credit), nothing has been destroyed and the user can resolve the
+	// blocker and retry. The reverse order could destroy every chat and project
+	// and then fail to stop the billing, which is the one unacceptable outcome.
+	DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error)
 }
 
 // NewUserServiceClient constructs a client for the controlplane.v1.UserService service. By default,
@@ -91,12 +104,19 @@ func NewUserServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(userServiceMethods.ByName("GetCurrentUser")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteCurrentUserAccount: connect.NewClient[v1.DeleteCurrentUserAccountRequest, v1.DeleteCurrentUserAccountResponse](
+			httpClient,
+			baseURL+UserServiceDeleteCurrentUserAccountProcedure,
+			connect.WithSchema(userServiceMethods.ByName("DeleteCurrentUserAccount")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // userServiceClient implements UserServiceClient.
 type userServiceClient struct {
-	getCurrentUser *connect.Client[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse]
+	getCurrentUser           *connect.Client[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse]
+	deleteCurrentUserAccount *connect.Client[v1.DeleteCurrentUserAccountRequest, v1.DeleteCurrentUserAccountResponse]
 }
 
 // GetCurrentUser calls controlplane.v1.UserService.GetCurrentUser.
@@ -104,9 +124,24 @@ func (c *userServiceClient) GetCurrentUser(ctx context.Context, req *connect.Req
 	return c.getCurrentUser.CallUnary(ctx, req)
 }
 
+// DeleteCurrentUserAccount calls controlplane.v1.UserService.DeleteCurrentUserAccount.
+func (c *userServiceClient) DeleteCurrentUserAccount(ctx context.Context, req *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error) {
+	return c.deleteCurrentUserAccount.CallUnary(ctx, req)
+}
+
 // UserServiceHandler is an implementation of the controlplane.v1.UserService service.
 type UserServiceHandler interface {
 	GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error)
+	// DeleteCurrentUserAccount tombstones the caller's control-plane account
+	// (billing identity, daemons, PII). Called by reliant's own
+	// AccountService.DeleteAccount BEFORE it purges local data, forwarding the
+	// caller's JWT — see internal/controlplane/client.go.
+	//
+	// Control-plane first is deliberate: if it refuses (a paid subscription or
+	// prepaid credit), nothing has been destroyed and the user can resolve the
+	// blocker and retry. The reverse order could destroy every chat and project
+	// and then fail to stop the billing, which is the one unacceptable outcome.
+	DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error)
 }
 
 // NewUserServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -122,10 +157,18 @@ func NewUserServiceHandler(svc UserServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(userServiceMethods.ByName("GetCurrentUser")),
 		connect.WithHandlerOptions(opts...),
 	)
+	userServiceDeleteCurrentUserAccountHandler := connect.NewUnaryHandler(
+		UserServiceDeleteCurrentUserAccountProcedure,
+		svc.DeleteCurrentUserAccount,
+		connect.WithSchema(userServiceMethods.ByName("DeleteCurrentUserAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.UserService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case UserServiceGetCurrentUserProcedure:
 			userServiceGetCurrentUserHandler.ServeHTTP(w, r)
+		case UserServiceDeleteCurrentUserAccountProcedure:
+			userServiceDeleteCurrentUserAccountHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -137,6 +180,10 @@ type UnimplementedUserServiceHandler struct{}
 
 func (UnimplementedUserServiceHandler) GetCurrentUser(context.Context, *connect.Request[v1.GetCurrentUserRequest]) (*connect.Response[v1.GetCurrentUserResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.GetCurrentUser is not implemented"))
+}
+
+func (UnimplementedUserServiceHandler) DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.UserService.DeleteCurrentUserAccount is not implemented"))
 }
 
 // OrgServiceClient is a client for the controlplane.v1.OrgService service.

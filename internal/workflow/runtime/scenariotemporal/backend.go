@@ -48,6 +48,8 @@ import (
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Result is the outcome of running one scenario on the Temporal backend.
@@ -66,6 +68,17 @@ type Runner struct {
 // NewRunner builds a Temporal-backed scenario runner for a workflow.
 func NewRunner(wf *reliantv1.Workflow) *Runner {
 	return &Runner{workflow: wf}
+}
+
+// runWorkflow is the graph a scenario actually executes: the workflow under
+// test with every ref the scenario did not open replaced, at the node, by its
+// stand-in body. See inlineBlackBoxedRefs for why the substitution has to
+// happen here rather than in the loader activity.
+func (r *Runner) runWorkflow(scenario *simulator.Scenario) *reliantv1.Workflow {
+	openPaths := transparentRefPaths(r.workflow, scenario.Events)
+	return inlineBlackBoxedRefs(
+		r.workflow, openPaths,
+		blackBoxOutputKeys(r.workflow, scenario.Events, openPaths))
 }
 
 // recorder accumulates what the real run actually did, in the shape the shared
@@ -140,12 +153,23 @@ func (r *recorder) markReached(id string) {
 	// So parallel-compete's `implementations` announced itself nowhere, and its
 	// absence from `reached` read as "the loop never ran" when in fact all three
 	// iterations had completed.
+	r.markAncestorsReached(id)
+	r.markReachedExact(id)
+}
+
+// markAncestorsReached records every enclosing node of a dotted path, without
+// recording the node itself. Splitting this out of markReached is what lets a
+// SKIPPED node credit its ancestors — the parent really was entered — while
+// staying out of `reached` itself.
+func (r *recorder) markAncestorsReached(id string) {
+	if strings.HasSuffix(id, blackBoxNodeID) {
+		id = strings.TrimSuffix(strings.TrimSuffix(id, blackBoxNodeID), ".")
+	}
 	for i, c := range id {
 		if c == '.' {
 			r.markReachedExact(id[:i])
 		}
 	}
-	r.markReachedExact(id)
 }
 
 func (r *recorder) markReachedExact(id string) {
@@ -188,10 +212,22 @@ func (r *recorder) recordEntered(id string, iteration int) {
 	}
 }
 
+// recordSkipped records a node whose condition evaluated false.
+//
+// A skipped node is NOT reached. That is the fast simulator's explicit rule
+// ("Mark as skipped (not visited - skipped nodes don't count as 'reached')",
+// simulator.go), and it is what makes `not_reached:` mean anything: one-ring's
+// `write_tests` is scheduled and condition-skipped on every run, so counting
+// it as reached turned `not_reached: [write_tests]` into an assertion that can
+// never hold — a scenario the simulator passes and this backend cannot.
+//
+// The node's ANCESTORS are still reached: reaching a skipped node's parent is
+// what scheduled it, and the parent's own entry is a real event. Only the
+// skipped node itself is withheld.
 func (r *recorder) recordSkipped(id string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.markReached(id)
+	r.markAncestorsReached(id)
 	r.states[id] = simulator.StateSkipped
 	r.skipped = append(r.skipped, id)
 }
@@ -217,6 +253,80 @@ func qualifiedNodeID(rtx types.RuntimeContext) string {
 		return rtx.LoopNodeID + "." + rtx.StepID
 	}
 	return rtx.StepID
+}
+
+// nodeRoutingSuffix is the id RouterExecutor.executeNodeRouting appends to a
+// node-router's own id when it builds the synthetic CallLLM node that carries
+// the routing decision (router_executor.go).
+const nodeRoutingSuffix = "__node_routing_decision"
+
+// nodeRoutingDecisionRouter recognises the synthetic routing step and returns
+// the id of the ROUTER that dispatched it.
+//
+// A node router runs no activity under its own name. It dispatches a CallLLM
+// step called "<router>__node_routing_decision" and reads selected_node out of
+// that call's response_data — so the scenario's event, which names the router
+// ("classify"), can only be delivered by mapping the synthetic id back.
+// Without this the router's mock goes unconsumed, the CallLLM returns an empty
+// output, and parseNodeRoutingDecision fails the run with "node routing
+// decision has no response_data or response_text".
+//
+// The suffix is stripped off the LAST path segment so a router nested in a
+// sub-workflow ("planning.classify__node_routing_decision") maps to the
+// qualified router id a scenario would write ("planning.classify").
+func nodeRoutingDecisionRouter(qualifiedID string) (string, bool) {
+	if !strings.HasSuffix(qualifiedID, nodeRoutingSuffix) {
+		return "", false
+	}
+	routerID := strings.TrimSuffix(qualifiedID, nodeRoutingSuffix)
+	if routerID == "" || strings.HasSuffix(routerID, ".") {
+		return "", false
+	}
+	return routerID, true
+}
+
+// nodeRoutingDecisionOutput answers the synthetic routing CallLLM from the
+// ROUTER's scenario event, reshaped into the CallLLM output the real
+// RouterExecutor parses.
+//
+// The scenario writes the router's decision flat, as the fast simulator
+// consumes it:
+//
+//   - node: classify
+//     output: {selected_node: refine_prompt, reasoning: "..."}
+//
+// The real runtime does not read that shape. parseNodeRoutingDecision unmarshals
+// CallLLMOutput.response_data, so the flat mock is nested under response_data
+// here. That is a translation of the SAME scenario event into the wire shape
+// production really carries, not a second source of routing truth: the decision
+// still comes from the scenario, and an unmocked router still gets an empty
+// response_data and fails exactly as production does when the LLM returns
+// nothing. This backend deliberately does not reproduce the fast simulator's
+// "default to the first candidate" fallback — silently defaulting is what the
+// explicit router mocks were added to stop.
+//
+// The router is recorded as reached/completed under its OWN id, with the flat
+// output, so `reached: [classify]` and `node_outputs.classify.selected_node`
+// mean the same thing on both backends. The synthetic step is not recorded at
+// all: it is runtime scaffolding, not a graph node a scenario can name.
+func nodeRoutingDecisionOutput(
+	events *eventTable,
+	rec *recorder,
+	routerID string,
+	activityName string,
+) (map[string]interface{}, error) {
+	decision := events.next(routerID)
+	rec.recordCompleted(routerID, decision)
+
+	out := normalizeOutput(map[string]interface{}{}, activityName)
+	if len(decision) > 0 {
+		responseData, err := structpb.NewStruct(decision)
+		if err != nil {
+			return nil, fmt.Errorf("scenario router mock for %q is not valid response_data: %w", routerID, err)
+		}
+		out["response_data"] = responseData.AsMap()
+	}
+	return out, nil
 }
 
 // eventTable indexes scenario events the same way the simulator's mocker does:
@@ -272,14 +382,7 @@ func newEventTable(events []simulator.SimulatedEvent) *eventTable {
 // A node with NO events at all is left silent: never mocking a node is the
 // existing, deliberate "empty output" contract (an unmocked save_message must
 // stay free). Only exhausting a node the author DID mock is under-specification.
-// diagEnabled / diagHook: TEMPORARY diagnostic seam. Remove.
-var diagEnabled bool
-var diagHook func(string)
-
 func (t *eventTable) next(nodeID string) map[string]interface{} {
-	if diagEnabled && diagHook != nil {
-		diagHook(nodeID)
-	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -417,18 +520,63 @@ func (r *Runner) Run(scenario *simulator.Scenario) *Result {
 		}
 	}
 
-	// A loop node publishes its outputs into the workflow's node-output store
-	// (workflow.go's ProtoLoopOutputToMap -> nodeOutputStore.Set) and runs no
-	// activity of its own, so no mock above can observe them. Surfacing the
-	// iteration count the runtime's own per-iteration checkpoint reported is
-	// what lets `node_outputs: { <loop>: { _iterations: N } }` be asserted here
-	// as it is in the simulator — under the same field name the real runtime
-	// uses (model.LoopOutputIterationsField).
+	// A STRUCTURAL node — `loop` or `workflow` — publishes its outputs into the
+	// workflow's node-output store and runs no activity of its own, so no mock
+	// above can observe them. The runtime reports each completed structural
+	// node's qualified path and published outputs through a query, and this
+	// reads it.
+	//
+	// Read AFTER the run, from the workflow's own state, so it stays an
+	// observation: the harness learns what the runtime computed and cannot
+	// influence it. A node that never completed — it errored, or the run was
+	// abandoned mid-iteration — is simply absent, which is the truthful
+	// answer, and for a loop the checkpoint-derived `_iterations` fallback
+	// below still covers it.
+	//
+	// This supplies BOTH halves the harness previously lacked: real per-node
+	// outputs (get-it-right's `attempt` loop publishes `eval_strategy` and
+	// `review_grade`, which no mock could see) and COMPLETION (one-ring's
+	// `impl_loop`, a `workflow:` node, was reached but never completed).
+	var structuralCompletions []runtime.StructuralCompletion
+	if q, qErr := env.QueryWorkflow(runtime.StructuralNodesCompletedQuery); qErr == nil {
+		if decodeErr := q.Get(&structuralCompletions); decodeErr == nil {
+			for _, sc := range structuralCompletions {
+				rec.recordCompleted(sc.Path, sc.Outputs)
+			}
+		}
+	}
+
+	// Fallback for a loop the query did NOT report, i.e. one that was entered
+	// but never completed. Its outputs are genuinely unknown, but the
+	// per-iteration checkpoints still say how far it got, so `_iterations`
+	// stays assertable — under the same field name the real runtime uses
+	// (model.LoopOutputIterationsField). A loop the query DID report already
+	// carries a real `_iterations` from the runtime itself and is skipped here.
 	for nodeID, iterations := range rec.loopIterations {
 		if _, isActivityNode := rec.outputs[nodeID]; isActivityNode {
 			continue
 		}
 		rec.outputs[nodeID] = map[string]interface{}{model.LoopOutputIterationsField: iterations}
+	}
+
+	// A JOIN node is the last structural node no mock can see. It runs no
+	// activity (every dispatch loop filters join steps out — a join's work is
+	// its SOURCES completing), and unlike a loop or a `workflow` node it has no
+	// children whose composed NodePath would reveal it. So the runtime reports
+	// satisfied joins through a query, and this reads it.
+	//
+	// Read AFTER the run, from the workflow's own state, so it stays an
+	// observation: the harness learns which joins the runtime decided were
+	// satisfied, and cannot influence that decision. A join that was never
+	// satisfied is simply absent, which is the truthful answer — it was not
+	// reached.
+	var satisfiedJoins []string
+	if q, qErr := env.QueryWorkflow(runtime.JoinsSatisfiedQuery); qErr == nil {
+		if decodeErr := q.Get(&satisfiedJoins); decodeErr == nil {
+			for _, joinPath := range satisfiedJoins {
+				rec.recordEntered(joinPath, 0)
+			}
+		}
 	}
 
 	execution := simulator.ExecutionDetails{
@@ -749,11 +897,39 @@ const blackBoxNodeID = "__scenario_black_box"
 // body a scenario has not asked to execute: one inert save_message node. It
 // keeps the parent's inputs so input binding still type-checks, and it cannot
 // loop, block, or fail.
-func blackBoxWorkflow(wf *reliantv1.Workflow) *reliantv1.Workflow {
+//
+// outputKeys are the field names the scenario's mocks for black-boxed ref nodes
+// actually carry, and declaring them is what makes a black box MOCKABLE rather
+// than merely inert.
+//
+// Without them the sub-workflow declares no outputs, EvaluateWorkflowOutputs
+// falls back to returning the raw node-output map, and the parent reads
+// `nodes.review` as `{"__scenario_black_box": {...}}` — harness scaffolding
+// where the scenario's `{response: {...}}` should be. Every downstream CEL then
+// reads through a key that does not exist, which is why get-it-right's
+// `eval_strategy` and `review_grade` came back missing while `attempt.review`
+// sat in the reached list looking fine.
+//
+// Hoisting each key from the stand-in node makes the parent see exactly the map
+// the scenario wrote, which is precisely what the fast simulator stores for a
+// black-boxed ref node (`s.nodeOutputs[stepID] = mockOutput`). The `has()` guard
+// is required because ONE stand-in graph serves every black-boxed ref in the
+// run: a key another node's mock supplied is simply absent here, and must
+// evaluate to null rather than fail the whole output evaluation.
+func blackBoxWorkflow(wf *reliantv1.Workflow, outputKeys []string) *reliantv1.Workflow {
+	var outputs map[string]string
+	if len(outputKeys) > 0 {
+		outputs = make(map[string]string, len(outputKeys))
+		for _, k := range outputKeys {
+			outputs[k] = fmt.Sprintf(
+				"{{has(nodes.%[1]s.%[2]s) ? nodes.%[1]s.%[2]s : null}}", blackBoxNodeID, k)
+		}
+	}
 	return &reliantv1.Workflow{
 		Name:       wf.GetName(),
 		ApiVersion: wf.GetApiVersion(),
 		Inputs:     wf.GetInputs(),
+		Outputs:    outputs,
 		Entry:      []string{blackBoxNodeID},
 		Nodes: []*reliantv1.Node{{
 			Id:   blackBoxNodeID,
@@ -762,18 +938,249 @@ func blackBoxWorkflow(wf *reliantv1.Workflow) *reliantv1.Workflow {
 	}
 }
 
+// blackBoxedRefPaths returns the node paths of every `workflow` ref the run will
+// replace with a black box — i.e. the ref nodes a scenario is entitled to mock
+// as a UNIT, addressing the ref node itself.
+//
+// It walks exactly as transparentRefs does, and for the same reason: a ref two
+// levels down is only reachable through the graph of the ref above it, and a
+// node inside a ref is addressed from the REFERRING node's path.
+func blackBoxedRefPaths(wf *reliantv1.Workflow, openPaths map[string]bool) map[string]bool {
+	paths := map[string]bool{}
+	visited := map[string]bool{}
+
+	var walk func(nodes []*reliantv1.Node, prefix string)
+	walk = func(nodes []*reliantv1.Node, prefix string) {
+		for _, n := range nodes {
+			nodePath := joinScenarioNodePath(prefix, n.GetId())
+			if inline := model.NodeInlineWorkflow(n); inline != nil {
+				walk(inline.GetNodes(), nodePath)
+				continue
+			}
+			ref := model.NodeRef(n)
+			if ref == "" {
+				continue
+			}
+			if !openPaths[nodePath] {
+				paths[nodePath] = true
+				continue
+			}
+			name := bareWorkflowName(ref)
+			if visited[name] {
+				continue
+			}
+			visited[name] = true
+			if sub, err := loadBuiltinWorkflowForScenario(name); err == nil {
+				walk(sub.GetNodes(), nodePath)
+			}
+		}
+	}
+	walk(wf.GetNodes(), "")
+	return paths
+}
+
+// blackBoxOutputKeys collects the field names the scenario's mocks for
+// black-boxed ref nodes carry, so blackBoxWorkflow can hoist them.
+//
+// Only events targeting a black-boxed ref NODE contribute. An event aimed at an
+// ordinary node inside a transparent body is answered by that node's own
+// activity mock and has nothing to do with a sub-workflow's output contract.
+func blackBoxOutputKeys(
+	wf *reliantv1.Workflow,
+	events []simulator.SimulatedEvent,
+	openPaths map[string]bool,
+) []string {
+	refPaths := blackBoxedRefPaths(wf, openPaths)
+	seen := map[string]bool{}
+	var keys []string
+	for _, e := range events {
+		if e.Node == "" || !refPaths[e.Node] {
+			continue
+		}
+		for k := range simulator.EventOutput(e) {
+			if !seen[k] {
+				seen[k] = true
+				keys = append(keys, k)
+			}
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// blackBoxRefPath maps a stand-in node's path back to the ref node above it —
+// "attempt.review.__scenario_black_box" -> "attempt.review". That parent path is
+// the id the scenario writes, and resolving it here is what lets an event on the
+// ref node be consumed at all.
+func blackBoxRefPath(nodePath string) string {
+	if !strings.HasSuffix(nodePath, blackBoxNodeID) {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimSuffix(nodePath, blackBoxNodeID), ".")
+}
+
+// inlineBlackBoxedRefs rewrites the workflow so every ref the scenario did NOT
+// target internally carries its stand-in body INLINE, at the node itself.
+//
+// This is what makes the transparency gate per-NODE. The loader activity is
+// told only `workflow_name`, so a decision made there is necessarily keyed by
+// sub-workflow name — and that is too coarse the moment one name is referenced
+// twice with different intent. get-it-right is exactly that shape: `implement`
+// and `refactor` are both `builtin://agent`, and a scenario that mocks
+// `implement`'s internals while mocking `refactor` as a unit has to get a
+// transparent body at one node and an opaque one at the other. Keyed by name,
+// opening `agent` for `implement` also opened it for `refactor`, whose own mock
+// then went unconsumed while its body ran off the scenario's events.
+//
+// Substituting in the graph moves the decision to the only place that knows the
+// node path. An inline body is loaded directly by the executor and never
+// consults the loader at all, so the two nodes can now differ. Refs that ARE
+// transparent are left as refs and still resolve by name through the loader,
+// where a name is the right key: the scenario asked for that body.
+func inlineBlackBoxedRefs(
+	wf *reliantv1.Workflow,
+	openPaths map[string]bool,
+	outputKeys []string,
+) *reliantv1.Workflow {
+	var rewrite func(nodes []*reliantv1.Node, prefix string) []*reliantv1.Node
+	rewrite = func(nodes []*reliantv1.Node, prefix string) []*reliantv1.Node {
+		out := make([]*reliantv1.Node, 0, len(nodes))
+		for _, n := range nodes {
+			nodePath := joinScenarioNodePath(prefix, n.GetId())
+
+			if model.NodeInlineWorkflow(n) != nil {
+				clone, ok := proto.Clone(n).(*reliantv1.Node)
+				if !ok {
+					out = append(out, n)
+					continue
+				}
+				if sub := model.NodeInlineWorkflow(clone); sub != nil {
+					sub.Nodes = rewrite(sub.GetNodes(), nodePath)
+				}
+				out = append(out, clone)
+				continue
+			}
+
+			ref := model.NodeRef(n)
+			if ref == "" || openPaths[nodePath] {
+				// No ref, or the scenario targeted THIS node's internals — the
+				// body it asked for is loaded by name through the loader.
+				out = append(out, n)
+				continue
+			}
+
+			sub, err := loadBuiltinWorkflowForScenario(bareWorkflowName(ref))
+			if err != nil {
+				// Not a builtin (a project-local ref). The loader still
+				// black-boxes it by name, which is the previous behaviour.
+				out = append(out, n)
+				continue
+			}
+			clone, ok := proto.Clone(n).(*reliantv1.Node)
+			if !ok {
+				out = append(out, n)
+				continue
+			}
+			args := clone.GetWorkflow()
+			if args == nil {
+				out = append(out, n)
+				continue
+			}
+			args.Ref = nil
+			args.Inline = blackBoxWorkflow(sub, outputKeys)
+			out = append(out, clone)
+		}
+		return out
+	}
+
+	clone, ok := proto.Clone(wf).(*reliantv1.Workflow)
+	if !ok {
+		return wf
+	}
+	clone.Nodes = rewrite(clone.GetNodes(), "")
+	return clone
+}
+
+// transparentRefPaths is transparentRefs's per-NODE twin: the set of ref node
+// PATHS whose internals the scenario targeted.
+//
+// transparentRefs answers the loader's question ("may this NAME be loaded for
+// real"), which is all the loader can act on. This answers the graph's question
+// ("does THIS node get its real body"), which is the one that decides
+// black-boxing now that the substitution happens at the node. They disagree
+// exactly when one sub-workflow is referenced twice with different intent —
+// get-it-right's `implement` and `refactor` are both `builtin://agent`.
+func transparentRefPaths(wf *reliantv1.Workflow, events []simulator.SimulatedEvent) map[string]bool {
+	targeted := make(map[string]bool, len(events))
+	for _, e := range events {
+		if e.Node != "" {
+			targeted[e.Node] = true
+		}
+	}
+	hasInternalEvent := func(nodePath string) bool {
+		prefix := nodePath + "."
+		for node := range targeted {
+			if strings.HasPrefix(node, prefix) {
+				return true
+			}
+		}
+		return false
+	}
+
+	open := map[string]bool{}
+	visited := map[string]bool{}
+
+	var walk func(nodes []*reliantv1.Node, prefix string)
+	walk = func(nodes []*reliantv1.Node, prefix string) {
+		for _, n := range nodes {
+			nodePath := joinScenarioNodePath(prefix, n.GetId())
+			if inline := model.NodeInlineWorkflow(n); inline != nil {
+				walk(inline.GetNodes(), nodePath)
+				continue
+			}
+			ref := model.NodeRef(n)
+			if ref == "" || !hasInternalEvent(nodePath) {
+				continue
+			}
+			open[nodePath] = true
+
+			name := bareWorkflowName(ref)
+			if visited[name] {
+				continue
+			}
+			visited[name] = true
+			if sub, err := loadBuiltinWorkflowForScenario(name); err == nil {
+				walk(sub.GetNodes(), nodePath)
+			}
+		}
+	}
+	walk(wf.GetNodes(), "")
+	return open
+}
+
 func (r *Runner) registerActivities(
 	env *testsuite.TestWorkflowEnvironment,
 	rec *recorder,
 	events *eventTable,
 	scenario *simulator.Scenario,
 ) error {
-	wfJSON, err := protojson.Marshal(r.workflow)
+	wfJSON, err := protojson.Marshal(r.runWorkflow(scenario))
 	if err != nil {
 		return fmt.Errorf("marshal workflow: %w", err)
 	}
 
-	blackBoxJSON, err := protojson.Marshal(blackBoxWorkflow(r.workflow))
+	// Which refs stay opaque is what decides which scenario events are ref-node
+	// mocks, and therefore which keys a stand-in has to expose.
+	//
+	// Two gates, deliberately, because two consumers ask different questions.
+	// openPaths is per-NODE and drives the graph rewrite, which is the one that
+	// decides black-boxing. `transparent` is per-NAME and is all the loader
+	// activity can act on, since `workflow_name` is the only thing it receives.
+	openPaths := transparentRefPaths(r.workflow, scenario.Events)
+	transparent := transparentRefs(r.workflow, scenario.Events)
+	outputKeys := blackBoxOutputKeys(r.workflow, scenario.Events, openPaths)
+
+	blackBoxJSON, err := protojson.Marshal(blackBoxWorkflow(r.workflow, outputKeys))
 	if err != nil {
 		return fmt.Errorf("marshal black-box workflow: %w", err)
 	}
@@ -793,7 +1200,6 @@ func (r *Runner) registerActivities(
 	// A ref the scenario DID target internally is loaded for real, so the body
 	// under test actually runs; see transparentRefs for why that gate is keyed
 	// by name and why opening every ref by default does not terminate.
-	transparent := transparentRefs(r.workflow, scenario.Events)
 	env.RegisterActivityWithOptions(
 		func(_ context.Context, in map[string]string) (runtime.LoadedWorkflow, error) {
 			// A ref is written "builtin://agent" while the loaded workflow is
@@ -1001,6 +1407,19 @@ func (r *Runner) registerActivities(
 					if loopNodeID != "" && loopNodeID != stepID {
 						id = loopNodeID + "." + stepID
 					}
+					// node_path is the QUALIFIED position and the same
+					// authoritative answer qualifiedNodeID prefers for every
+					// other activity — the runtime sends it for run steps too
+					// (step_executor.go startRun). The loop_node_id form above
+					// can only express ONE level, so a run node inside a
+					// sub-workflow body resolved to "attempt.lint" while the
+					// scenario names "impl_loop.attempt.lint": the mock went
+					// unconsumed and the node was recorded under an id nothing
+					// could match. SkippedStep already prefers node_path; this
+					// makes an executed run node agree with a skipped one.
+					if nodePath, _ := in["node_path"].(string); nodePath != "" {
+						id = nodePath
+					}
 					out := normalizeOutput(events.next(id), activityName)
 					rec.recordCompleted(id, out)
 					return out, nil
@@ -1012,6 +1431,9 @@ func (r *Runner) registerActivities(
 		env.RegisterActivityWithOptions(
 			func(_ context.Context, in types.ActivityInput) (map[string]interface{}, error) {
 				id := qualifiedNodeID(in.Runtime)
+				if routerID, ok := nodeRoutingDecisionRouter(id); ok {
+					return nodeRoutingDecisionOutput(events, rec, routerID, activityName)
+				}
 				// An inline save_message runs as a SaveMessage activity under a
 				// synthetic "<node>-save" step id (save_message.go:611). It is a
 				// side effect of the owning node, not a graph node a scenario
@@ -1026,6 +1448,23 @@ func (r *Runner) registerActivities(
 				// appeared as a phantom entry in every mismatch message.
 				if in.Runtime.StepID == "" {
 					return normalizeOutput(map[string]interface{}{}, activityName), nil
+				}
+				// A black-boxed ref runs one stand-in node, so the mock has to
+				// be looked up under the REF NODE above it: the scenario wrote
+				// `attempt.review`, the runtime dispatches
+				// `attempt.review.__scenario_black_box`. Resolving the id here
+				// is what lets an event on a ref node be consumed at all —
+				// keyed by the dispatched path it never matched, and the run
+				// reported it "never consumed" while the node sat in `reached`.
+				//
+				// The output is deliberately NOT normalized: it is a
+				// sub-workflow's declared output map, not a SaveMessage result,
+				// and filling it with SaveMessage's fields would put keys in
+				// `nodes.<ref>` that the real sub-workflow never returns.
+				if refPath := blackBoxRefPath(id); refPath != "" {
+					out := events.next(refPath)
+					rec.recordCompleted(refPath, out)
+					return out, nil
 				}
 				out := normalizeOutput(events.next(id), activityName)
 				// in.Node is the node with its args already CEL-evaluated by

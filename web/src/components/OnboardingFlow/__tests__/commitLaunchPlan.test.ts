@@ -22,8 +22,11 @@ import {
 import type { LaunchPlan } from "../types";
 
 /** controlplane.v1.DaemonStatus */
+const PENDING = 1;
 const ACTIVE = 2;
 const SUSPENDED = 3;
+const DISCONNECTED = 4;
+const FAILED = 5;
 
 function makeDeps(overrides: Partial<CommitDeps> = {}) {
   const deps = {
@@ -184,6 +187,62 @@ describe("commitLaunchPlan — ordering", () => {
     expect(task.status).toBe("pending");
     expect(task.detail).toContain("waiting on payment confirmation");
   });
+
+  // THE COUPON COROLLARY, and the reason it is worth a second test that looks
+  // like the one above.
+  //
+  // A coupon settles the checkout step, so the plan arrives here carrying
+  // `computeSettled: true` — a flag the checkout step wrote after ITS OWN
+  // poll agreed the debt was cleared. That flag governs step DERIVATION (it
+  // stops a confirmed purchase deriving the user back to a payment they
+  // already made) and it must never govern PROVISIONING.
+  //
+  // The two questions are genuinely different. "Has this user settled the
+  // bill" is answered from the browser's reading of entitlement; "may this
+  // account start a machine right now" is answered only by the server, which
+  // additionally enforces per-size limits and minute exhaustion that no client
+  // flag can see. So the commit re-asks the server regardless, and a plan that
+  // believes itself settled while the server has granted nothing still gets
+  // `pending` and still never reaches CreateDaemon.
+  it("ignores a settled flag and still asks the server before provisioning", async () => {
+    const eligibility = vi.fn(async () => ({
+      eligible: false,
+      reason: "redeem a coupon code or subscribe to a compute plan",
+    }));
+    const deps = makeDeps({ getComputeEligibility: eligibility });
+
+    const result = await commitLaunchPlan(
+      { ...CLOUD_CREDITS_PLAN, computeSettled: true, creditSettled: true },
+      deps,
+    );
+
+    expect(eligibility).toHaveBeenCalled();
+    expect(deps.createDaemon).not.toHaveBeenCalled();
+    expect(deps.resumeDaemon).not.toHaveBeenCalled();
+    const task = taskNamed(result.tasks, "provision_daemon");
+    expect(task.status).toBe("pending");
+    expect(task.detail).toContain("redeem a coupon code");
+  });
+
+  // The other half of the same rule: once the server DOES report the grant —
+  // which is what a redeemed compute coupon produces — provisioning proceeds
+  // normally. The gate is "the server said yes", not "a coupon was involved".
+  it("provisions once the server reports the coupon's grant", async () => {
+    const deps = makeDeps({
+      getComputeEligibility: vi.fn(async () => ({
+        eligible: true,
+        reason: null as string | null,
+      })),
+    });
+
+    const result = await commitLaunchPlan(
+      { ...CLOUD_CREDITS_PLAN, computeSettled: true },
+      deps,
+    );
+
+    expect(deps.createDaemon).toHaveBeenCalledTimes(1);
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+  });
 });
 
 describe("commitLaunchPlan — partial failure", () => {
@@ -306,6 +365,71 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
     expect(result.daemonId).toBe("d-old");
   });
 
+  // The bug this covers: a PENDING daemon is a machine already booting.
+  // Resuming it is refused by the control plane
+  // (`svcdaemon.ResumeDaemon` requires SUSPENDED), and the
+  // `[failed_precondition] daemon is not suspended` that comes back failed
+  // provisioning outright at the last step of onboarding. A machine that is
+  // coming up needs WAITING ON, not resuming.
+  it("waits on a machine that is still booting instead of resuming it", async () => {
+    const deps = makeDeps({
+      listDaemons: vi.fn(async () => ({
+        daemons: [{ id: "d-booting", status: PENDING }],
+      })),
+      resumeDaemon: vi.fn(async () => {
+        throw new Error("[failed_precondition] daemon is not suspended");
+      }),
+    });
+
+    const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+
+    expect(deps.resumeDaemon).not.toHaveBeenCalled();
+    expect(deps.createDaemon).not.toHaveBeenCalled();
+    // Handed to the gate so it polls the machine that is already coming up.
+    expect(result.daemonId).toBe("d-booting");
+    expect(result.status).toBe("complete");
+  });
+
+  // A daemon that is neither running, booting, nor suspended (DISCONNECTED /
+  // FAILED / UNSPECIFIED) cannot be resumed either — resume is refused for
+  // exactly the same reason. Creating is the correct move, and CreateDaemon is
+  // idempotent by name so it refreshes rather than minting a second machine.
+  it.each([
+    ["disconnected", DISCONNECTED],
+    ["failed", FAILED],
+  ])("creates rather than resuming a %s machine", async (_label, status) => {
+    const deps = makeDeps({
+      listDaemons: vi.fn(async () => ({
+        daemons: [{ id: "d-dead", status }],
+      })),
+      createDaemon: vi.fn(async () => "d-remade"),
+    });
+
+    const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+
+    expect(deps.resumeDaemon).not.toHaveBeenCalled();
+    expect(deps.createDaemon).toHaveBeenCalledTimes(1);
+    expect(result.daemonId).toBe("d-remade");
+  });
+
+  // Status is what decides, not list order. A suspended daemon sitting behind
+  // a booting one must not be picked up and resumed.
+  it("prefers the booting machine over a suspended one further down the list", async () => {
+    const deps = makeDeps({
+      listDaemons: vi.fn(async () => ({
+        daemons: [
+          { id: "d-suspended", status: SUSPENDED },
+          { id: "d-booting", status: PENDING },
+        ],
+      })),
+    });
+
+    const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+
+    expect(deps.resumeDaemon).not.toHaveBeenCalled();
+    expect(result.daemonId).toBe("d-booting");
+  });
+
   it("does nothing when a machine is already running", async () => {
     const deps = makeDeps({
       listDaemons: vi.fn(async () => ({
@@ -319,6 +443,39 @@ describe("commitLaunchPlan — what each plan actually commits", () => {
     expect(deps.resumeDaemon).not.toHaveBeenCalled();
     expect(result.daemonId).toBe("d-live");
     expect(result.status).toBe("complete");
+  });
+
+  // The size the user picked, and paid for, is the size we provision.
+  //
+  // This was hardcoded to SMALL. A user who chose XL saw "$160.00/mo" beside
+  // the tile, was charged for the XL plan at checkout, and got a 1-CPU box —
+  // the tile changed the price and nothing else.
+  it.each([
+    ["plan_compute_small", 1],
+    ["plan_compute_medium", 2],
+    ["plan_compute_large", 3],
+    ["plan_compute_xl", 4],
+  ])("provisions the size %s names", async (computePlanId, expectedSize) => {
+    const deps = makeDeps();
+
+    await commitLaunchPlan({ ...CLOUD_CREDITS_PLAN, computePlanId }, deps);
+
+    expect(deps.createDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({ size: expectedSize }),
+    );
+  });
+
+  // An unknown or absent plan id falls back to the smallest machine rather
+  // than failing: the user still gets something to work on, and small is the
+  // only size every plan allows.
+  it("falls back to the smallest machine when no plan was recorded", async () => {
+    const deps = makeDeps();
+
+    await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+
+    expect(deps.createDaemon).toHaveBeenCalledWith(
+      expect.objectContaining({ size: 1 }),
+    );
   });
 
   it("hands the gate the daemon id it should poll", async () => {

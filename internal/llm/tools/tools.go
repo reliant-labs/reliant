@@ -211,9 +211,8 @@ func IsToolReadOnly(tool Tool) bool {
 	// These are tools that write files or modify external state
 	explicitlyModifying := map[string]bool{
 		"metadata_writer": true, // Writes .reliant/project-meta.yaml
-		"bash":            true, // Can execute arbitrary commands (Unix)
-		"powershell":      true, // Can execute arbitrary commands (Windows)
-		"bash_kill":       true, // Kills processes
+		"shell":           true, // Can execute arbitrary commands
+		"shell_kill":      true, // Kills processes
 		"worktree":        true, // Creates/modifies git worktrees
 		"find_replace":    true, // Modifies files
 		"move_code":       true, // Moves/copies code between files

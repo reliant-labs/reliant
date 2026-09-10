@@ -44,7 +44,11 @@ vi.mock("@/hooks/useTitleBarChrome", () => ({
 // react-query reads and need a client this test does not mount. Facts are
 // driven per-fixture below instead: `currentFacts` is what each PLAN_FOR_STEP
 // entry needs to actually land on the step it claims.
-let currentFacts = { computeEligible: true, walletFunded: true };
+let currentFacts = {
+  computeEligible: true,
+  walletFunded: true,
+  reliantBillingAvailable: true,
+};
 vi.mock("../useOnboardingFacts", () => ({
   useOnboardingFacts: () => ({
     ...currentFacts,
@@ -91,8 +95,19 @@ import type { LaunchPlan } from "../types";
  * hoping would silently stop covering a step the day payment started mattering
  * to it.
  */
-const ENTITLED = { computeEligible: true, walletFunded: true };
-const OWES_MONEY = { computeEligible: false, walletFunded: false };
+// `reliantBillingAvailable` is true in both: it is a deployment constant, and
+// a build that cannot bill has no checkout step to reach, which would make the
+// checkout fixture below unreachable for a reason unrelated to what it tests.
+const ENTITLED = {
+  computeEligible: true,
+  walletFunded: true,
+  reliantBillingAvailable: true,
+};
+const OWES_MONEY = {
+  computeEligible: false,
+  walletFunded: false,
+  reliantBillingAvailable: true,
+};
 
 const PLAN_FOR_STEP: Record<
   string,

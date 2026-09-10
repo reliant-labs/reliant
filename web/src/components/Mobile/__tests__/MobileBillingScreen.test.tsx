@@ -62,17 +62,17 @@ vi.mock("../../../hooks/useCloudBillingQueries", () => ({
   isCheckoutIdentityRequired: () => false,
 }));
 
-// The panel is exercised directly in components/Billing; here it is stubbed so
-// this file keeps testing the SCREEN — that tapping Upgrade opens checkout in
-// place for the right plan, rather than navigating away.
-vi.mock("../../Billing/EmbeddedCheckoutPanel", () => ({
-  EmbeddedCheckoutPanel: ({
-    request,
+// The checkout is exercised directly in components/Billing; here it is stubbed
+// so this file keeps testing the SCREEN — that tapping Upgrade opens checkout
+// in place for the right plan, rather than navigating away.
+vi.mock("../../Billing/ComputeSubscriptionCheckout", () => ({
+  ComputeSubscriptionCheckout: ({
+    selectedPlanId,
   }: {
-    request: { kind: string; planId?: string };
+    selectedPlanId?: string;
   }) => (
-    <div data-testid="embedded-checkout" data-plan-id={request.planId}>
-      embedded checkout
+    <div data-testid="compute-checkout" data-plan-id={selectedPlanId}>
+      compute checkout
     </div>
   ),
 }));
@@ -149,7 +149,7 @@ describe("MobileBillingScreen", () => {
 
   it("buys nothing until a plan is chosen", () => {
     renderScreen();
-    expect(screen.queryByTestId("embedded-checkout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
   });
 
@@ -161,7 +161,7 @@ describe("MobileBillingScreen", () => {
 
     // Beta, not the cheapest — the point of offering a choice is that the
     // choice is honoured. A screen that still auto-picked would mount Alpha.
-    expect(screen.getByTestId("embedded-checkout")).toHaveAttribute(
+    expect(screen.getByTestId("compute-checkout")).toHaveAttribute(
       "data-plan-id",
       "tier_beta",
     );
@@ -187,10 +187,10 @@ describe("MobileBillingScreen", () => {
     renderScreen();
 
     await user.click(screen.getByRole("button", { name: /beta/i }));
-    expect(screen.getByTestId("embedded-checkout")).toBeInTheDocument();
+    expect(screen.getByTestId("compute-checkout")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /^cancel$/i }));
-    expect(screen.queryByTestId("embedded-checkout")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("compute-checkout")).not.toBeInTheDocument();
   });
 
   it("points users to desktop for invoices, usage charts, and plan comparisons", () => {

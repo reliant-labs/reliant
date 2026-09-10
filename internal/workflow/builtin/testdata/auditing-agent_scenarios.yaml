@@ -167,7 +167,7 @@ events:
       response_text: "I'm going to delete all the test files."
       tool_calls:
         - id: call_0
-          name: bash
+          name: shell
           input: '{"command":"rm -rf tests/"}'
   # audit_check rejects
   - node: audited_loop.audit_check

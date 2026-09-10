@@ -19,23 +19,35 @@ events:
     output:
       path: "/wt/1"
       branch: "b1"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Created cache.go with excellent TTL implementation but basic API"
       response_text: "Created cache.go with excellent TTL implementation but basic API"
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/wt/2"
       branch: "b2"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Created cache.go and cache_test.go with great test coverage but basic TTL"
       response_text: "Created cache.go and cache_test.go with great test coverage but basic TTL"
+      tool_calls: []
   - node: implementations.create_wt
     output:
       path: "/wt/3"
       branch: "b3"
-  - node: implementations.impl
+  - node: implementations.impl.agent_loop.call_llm
     output:
+      message:
+        role: assistant
+        text: "Created cache.go with clean API design but minimal tests"
       response_text: "Created cache.go with clean API design but minimal tests"
+      tool_calls: []
 
   # review EXECUTES its structured-agent body. The response tool is
   # `submit_review` (parallel-compete.yaml sets response_tool_name); any other

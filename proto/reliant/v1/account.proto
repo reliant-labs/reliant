@@ -1,0 +1,80 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// AccountService is the user's escape hatch: it removes everything reliant
+// stores about them.
+//
+// Scope, stated precisely because the name over-promises. Reliant has no
+// `users` table — the Supabase `sub` claim is carried as a bare `user_id` text
+// column on 23 tables, so "delete the account" here means "delete every row
+// owned by this sub". The platform account itself (billing, wallet, daemons in
+// the control plane) and the Supabase identity are owned elsewhere and are NOT
+// removed by these RPCs. PreviewAccountDeletion reports that boundary so the
+// UI can state it plainly rather than implying a completeness we do not
+// deliver yet; see ACCOUNT_DELETION_DESIGN.md for the cross-repo phases.
+//
+// Auth: session-authed (Supabase JWT) only. A PAT bearer cannot delete the
+// account that issued it — the same rule TokenService.CreateToken applies to
+// minting, for the same reason: an automation credential must not be able to
+// perform the one irreversible act on its owner's data.
+service AccountService {
+  // PreviewAccountDeletion reports what DeleteAccount would destroy, without
+  // destroying anything. The UI shows these counts in the confirmation dialog
+  // so the user sees the actual scale of what they are about to lose rather
+  // than a generic warning.
+  rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {}
+
+  // DeleteAccount permanently removes every row reliant holds for the caller.
+  // Irreversible: there is no soft-delete and no undo.
+  //
+  // The caller must echo their own email address in confirm_email. This is a
+  // deliberate speed bump on an unrecoverable action, and it is verified
+  // server-side against the JWT's email claim — a client that skips its own
+  // dialog still cannot delete by accident.
+  rpc DeleteAccount(DeleteAccountRequest) returns (DeleteAccountResponse) {}
+}
+
+message PreviewAccountDeletionRequest {}
+
+message PreviewAccountDeletionResponse {
+  // Counts of the user-owned rows that DeleteAccount would remove. These are
+  // the headline aggregates only; deleting a chat also removes its messages,
+  // threads and tool calls via ON DELETE CASCADE.
+  int64 project_count = 1;
+  int64 chat_count = 2;
+  int64 worktree_count = 3;
+  int64 message_count = 4;
+
+  // Whether the caller has stored third-party provider credentials (Claude /
+  // Codex / Copilot OAuth tokens, provider API keys). Called out separately
+  // from the counts because losing a credential has a different character to
+  // losing content: the user may want to note what to re-link afterwards.
+  bool has_provider_credentials = 5;
+
+  // The email DeleteAccount expects in confirm_email, echoed from the JWT so
+  // the dialog can tell the user exactly what to type. Empty for a session
+  // with no email claim (an un-upgraded anonymous user), in which case
+  // DeleteAccount accepts an empty confirm_email.
+  string confirm_email = 6;
+
+  // Human-readable statements of what this operation does NOT remove, for the
+  // UI to render verbatim. Populated while account deletion is scoped to
+  // reliant's own data; see the service doc comment.
+  repeated string retained_elsewhere = 7;
+}
+
+message DeleteAccountRequest {
+  // Must equal the caller's own email (case-insensitive, trimmed). See
+  // DeleteAccount.
+  string confirm_email = 1;
+}
+
+message DeleteAccountResponse {
+  // Total rows deleted across every user-owned table, for the audit log and
+  // for the confirmation the UI shows before signing the user out.
+  int64 deleted_row_count = 1;
+}

@@ -331,7 +331,7 @@ nodes:
           For a framework dev server, pass its host/port flags to bind `0.0.0.0:4321`.
 
           **Step 3: Confirm YOUR server is the one serving.** Check the background process you
-          just started (`bash_list`, or `bash_output` on its pid) — its output must show a
+          just started (`shell_list`, or `shell_output` on its pid) — its output must show a
           successful start and NOT "address already in use". A 200 from
           `curl -sS -o /dev/null -w '%{http_code}' http://localhost:4321/` is only a
           secondary check: a stale server answers 200 too, so it proves nothing on its own —
@@ -355,7 +355,7 @@ nodes:
           **Step 5: Get the preview URL and hand it to the user.** Run
           `reliant preview-url 4321` — it prints the authoritative, externally-reachable URL
           for port 4321 (the same URL also appears as a `Preview URL (port 4321): ...` line in
-          the `bash_list` / `bash_output` result from Step 3). Do NOT invent or guess a URL.
+          the `shell_list` / `shell_output` result from Step 3). Do NOT invent or guess a URL.
           Post it as a markdown link:
 
           **[Open your landing page](<the URL from `reliant preview-url 4321`>)**
