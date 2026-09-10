@@ -1,0 +1,118 @@
+# Fails a release whose tag is not an ancestor of main.
+#
+# WHY THIS EXISTS
+# ===============
+#
+# Every tag from v1.7.8 through v1.7.12 is off main. `git describe --tags
+# --abbrev=0 origin/main` still answers v1.7.7, five releases stale.
+#
+# The cause was scripts/release.sh tagging a `release-*` branch that main then
+# SQUASH-merged: the merged commit is a new object, so the tag stayed behind on
+# the branch. Nothing warned, because from the release's point of view
+# everything worked — the tag existed, the artifacts built, the app shipped.
+#
+# The damage is only visible to things that read history from tags, and those
+# fail quietly too. The one that forced the issue: `go get` derives a
+# pseudo-version from the highest tag REACHABLE from the pinned commit, so
+# pinning reliant's main yields `v1.7.8-0.<date>-<sha>` — which sorts BELOW the
+# released v1.7.12. That makes pinning main a version-number DOWNGRADE that is
+# a content UPGRADE, and Go's minimum-version selection can silently undo it.
+#
+# WHY IT RUNS ON TAG PUSH AND NOT ONLY IN THE RELEASE SCRIPT
+# ==========================================================
+#
+# scripts/release-tag.sh performs the same ancestry check before it tags, and
+# that is the better place to CATCH the mistake — it prevents the bad tag
+# instead of reporting it. But a script only guards the tags it creates. A tag
+# made from the GitHub releases UI, from a stale clone, or by hand at 2am never
+# runs it.
+#
+# This workflow sees every tag however it was made, so the two are not
+# redundant: the script makes the right thing easy, and this makes the wrong
+# thing loud. Given the failure mode here was five releases of total silence,
+# both are warranted.
+#
+# WHAT A FAILURE HERE MEANS
+# =========================
+#
+# The tag is already pushed by the time this runs — a `push` trigger cannot
+# prevent one. This job does not delete or move it, deliberately: a published
+# tag is referenced by the Electron artifacts on R2 and by the Homebrew cask,
+# and moving one is the same class of error as re-cutting a burned Go module
+# version. The correct response to a red run here is to cut the NEXT version
+# through the two-phase flow, leaving the bad tag as history.
+
+name: Release tag guard
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  # Also on PRs that touch the release tooling, so a change to the scripts or
+  # to this workflow is exercised before it is relied on during an actual
+  # release. A guard whose own edits are untested is not a guard.
+  pull_request:
+    paths:
+      - "scripts/release.sh"
+      - "scripts/release-tag.sh"
+      - "scripts/check-release-tags.sh"
+      - ".github/workflows/release-tag-guard.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tag-on-main:
+    name: Tag is an ancestor of main
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          # fetch-depth: 0 is LOAD-BEARING. `git merge-base --is-ancestor`
+          # needs real history on both sides; a shallow clone makes every
+          # ancestry query answer "no" and this job would fail every release
+          # for the wrong reason.
+          fetch-depth: 0
+
+      - name: Fetch main and tags
+        # A tag push checks out a detached HEAD with no branch refs, so main
+        # has to be fetched explicitly before it can be compared against.
+        run: |
+          git fetch origin main:refs/remotes/origin/main --tags --force
+          echo "origin/main is at: $(git rev-parse --short origin/main)"
+
+      - name: Check this tag lands on main
+        if: github.ref_type == 'tag'
+        run: ./scripts/check-release-tags.sh --tag "${{ github.ref_name }}"
+
+      - name: Audit all release tags
+        # On PRs and manual runs there is no tag under test, so audit the whole
+        # set. This is what reports drift that predates the change in hand.
+        if: github.ref_type != 'tag'
+        run: ./scripts/check-release-tags.sh
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" << 'EOF'
+          ## ✖ Release tag is not on `main`
+
+          This tag is not an ancestor of `main`, so it is invisible to
+          `git describe`, to changelog-from-tags, and to Go's pseudo-version
+          derivation — pinning `main` will resolve to a version that sorts
+          *below* this release.
+
+          **Do not move or delete the tag.** It may already be referenced by
+          published Electron artifacts and by the Homebrew cask.
+
+          Cut the next version through the two-phase flow instead:
+
+          ```
+          ./scripts/release.sh <patch|minor|major|prerelease>   # opens the PR
+          # ... merge it ...
+          ./scripts/release-tag.sh                              # tags main
+          ```
+          EOF
