@@ -234,9 +234,12 @@ export function NewChatView({
     return () => window.removeEventListener("open-create-worktree-modal", handler);
   }, []);
 
-  const handleWorktreeCreated = (worktreeId: string) => {
-    setSelectedWorkspaceId(worktreeId);
+  const handleWorktreeCreated = async (worktreeId: string) => {
     setShowWorkspaceDropdown(false);
+    // Switch the global context too. Setting local state alone loses the
+    // selection: the sync effect below sees an id that isn't the current
+    // worktree and snaps the toggle back.
+    await handleWorkspaceSelect(worktreeId);
   };
 
   const handleWorktreesImported = (_importedWorktreeIds?: string[]) => {
@@ -246,8 +249,11 @@ export function NewChatView({
   };
 
   const handleWorkspaceSelect = async (worktreeId: string | null) => {
+    // Read from the store rather than the render closure: a workspace created
+    // moments ago is already in the store but not yet in this render's list.
+    const latestWorktrees = useWorktreeStore.getState().worktrees;
     if (worktreeId && currentProject) {
-      const worktree = worktrees.find((w) => w.id === worktreeId);
+      const worktree = latestWorktrees.find((w) => w.id === worktreeId);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
         setSelectedWorkspaceId(worktreeId);

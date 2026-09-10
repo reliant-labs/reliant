@@ -10,8 +10,6 @@ import { Button } from "../ui/Button";
 import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { repoGrpc, type Repo } from "../../api/repo-grpc";
-import { worktreeGrpc } from "../../api/worktree-grpc";
-import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
 
 interface CreateWorktreeModalProps {
@@ -237,60 +235,23 @@ export function CreateWorktreeModal({
       // Merge default copy_files with any additional files (e.g., modified/untracked files from source worktree)
       const allCopyFiles = [...new Set([...formData.copy_files, ...additionalCopyFiles])];
 
-      // Multi-repo branch: project has >1 nested repo. The worktree always
-      // spans all of them; only per-repo base-branch overrides are user-tunable.
+      // A worktree always spans every nested repo, so single- and multi-repo
+      // both go through the store. Multi-repo differs only in offering
+      // per-repo base-branch overrides; entries the user left blank are
+      // omitted so the daemon falls back to per-repo default-branch detection.
+      const baseBranchesMap: Record<string, string> = {};
       if (isMultiRepo) {
-        const repoIds = repos.map((r) => r.id);
-        // Only send entries the user actually filled in. Empty values fall
-        // back to daemon-side per-repo default-branch detection.
-        const baseBranchesMap: Record<string, string> = {};
-        for (const id of repoIds) {
-          const v = formData.base_branches[id]?.trim();
-          if (v) baseBranchesMap[id] = v;
+        for (const repo of repos) {
+          const override = formData.base_branches[repo.id]?.trim();
+          if (override) baseBranchesMap[repo.id] = override;
         }
-        const result = await worktreeGrpc.batchCreate(
-          projectId,
-          repoIds,
-          finalName,
-          finalBranch,
-          {
-            baseBranches: baseBranchesMap,
-            copyFiles: allCopyFiles,
-            force: formData.force,
-          }
-        );
-
-        if (result.all_succeeded) {
-          const firstWorktreeId = result.results.find((r) => r.worktree)?.worktree?.id;
-          if (firstWorktreeId) {
-            await onWorktreeCreated(firstWorktreeId);
-          }
-          toast.success(
-            `Workspace "${finalName}" created in ${result.results.length} repos`,
-            { duration: 4000 }
-          );
-          onClose();
-          resetFormState();
-        } else {
-          const failed = result.results.filter((r) => r.error);
-          const lines = failed.map((r) => {
-            const repoName = repos.find((rr) => rr.id === r.repo_id)?.name || r.repo_id;
-            return `${repoName}: ${r.error}`;
-          });
-          const heading = result.rolled_back
-            ? "Batch creation failed; rolled back successful creates"
-            : "Batch creation failed";
-          toast.error(`${heading}\n${lines.join("\n")}`);
-          setError(`${heading}: ${lines.join("; ")}`);
-        }
-        return;
       }
 
-      // Single-repo (or no-repos-discovered) path: legacy single-create RPC.
       const worktree = await createWorktree({
         name: finalName,
         branch: finalBranch,
-        base_branch: formData.base_branch,
+        base_branch: isMultiRepo ? undefined : formData.base_branch,
+        base_branches: isMultiRepo ? baseBranchesMap : undefined,
         project_id: projectId,
         copy_files: allCopyFiles,
         status: WorktreeStatus.ACTIVE,

@@ -45,9 +45,13 @@ export function WorktreeSelector({
     const effectiveWorktreeId = worktreeId || mainWorktree?.id || null;
     onWorktreeSelect?.(effectiveWorktreeId);
 
-    // Also update the global current worktree in the store
+    // Also update the global current worktree in the store. Look it up in the
+    // store rather than this render's list, which won't yet contain a
+    // just-created workspace.
     if (currentProject && effectiveWorktreeId) {
-      const worktree = activeWorktrees.find(w => w.id === effectiveWorktreeId);
+      const worktree = useWorktreeStore
+        .getState()
+        .worktrees.find((w) => w.id === effectiveWorktreeId && !w.deleted_at);
       if (worktree) {
         await switchWorktreeContext(currentProject.id, worktree);
       }
