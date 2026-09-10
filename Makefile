@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift
 
 # Default target
 all: deps fmt vet test build
@@ -248,6 +248,19 @@ proto-format:
 db-driver-audit:
 	@echo "$(YELLOW)Running DB driver audit...$(NC)"
 	@./scripts/db-driver-audit.sh
+
+## pin-forge: Pin forge + forge/pkg to forge's current origin/main commit
+# Pre-launch we pin by COMMIT, not tag — a tag costs three CI cycles and up to
+# 20 minutes of module-proxy lag before a one-line forge fix can reach prod,
+# where every bug we chase actually lives. See docs/pinning.md for the mode
+# switch and the exact command to go back to tags at launch.
+# Pass a ref to pin something else: make pin-forge REF=<sha|branch|tag>
+pin-forge:
+	@./scripts/pin-forge.sh $(REF)
+
+## pin-drift: Report how many commits behind forge's main the pin has fallen
+pin-drift:
+	@./scripts/pin-drift.sh
 
 ## sqlc: Generate database code with sqlc
 SQLC_VERSION := v1.31.1
