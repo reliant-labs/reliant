@@ -15,6 +15,83 @@ env:
   NODE_VERSION: '24'
 
 jobs:
+  # ── What changed in this PR? ──────────────────────────────────────────────
+  #
+  # Exists to let the three PURE-NODE jobs (web, e2e-frontend, electron) skip
+  # a PR that cannot possibly affect them — the release-chain version bump,
+  # which touches go.mod + go.sum and nothing else (PR #237, "require forge +
+  # forge/pkg v0.1.14", changed exactly those two files).
+  #
+  # WHY A JOB AND NOT `paths-ignore` — this is the load-bearing detail.
+  #
+  # `paths-ignore` prevents the workflow from being CREATED, so its checks
+  # never report at all. A required status check that never reports is not a
+  # pass, it is a PR that can never merge — and the usual fix under deadline
+  # is to un-require the check, which quietly removes the gate for every
+  # future PR too. A job that is skipped via `if:` still REPORTS (as skipped,
+  # which branch protection accepts as satisfied), so the gate keeps working
+  # and nothing has to be weakened.
+  #
+  # It is also per-JOB rather than per-workflow, which `paths-ignore` cannot
+  # express: the Go jobs below deliberately keep running on a go.mod change,
+  # because compiling against the new dependency is the entire point of the
+  # bump.
+  changes:
+    name: Detect what changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      # true when the PR touches ANYTHING that is not go.mod / go.sum.
+      # Deliberately phrased as "is there any non-Go-module file", not "is
+      # there a frontend file": the default on an unrecognised path is to RUN
+      # the jobs. A new top-level directory nobody thought about makes this
+      # true and everything runs, which is the safe direction to be wrong in.
+      non_gomod: ${{ steps.filter.outputs.non_gomod }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify changed files
+        id: filter
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+
+          # Compare against the MERGE BASE, not the branch tip: a PR branched
+          # from an older main must be judged on its own commits, otherwise
+          # every unrelated commit that landed on main meanwhile counts as
+          # "changed" and the skip never fires.
+          base="$(git merge-base "origin/${BASE_REF}" "${HEAD_SHA}")"
+          echo "merge base: ${base}"
+
+          changed="$(git diff --name-only "${base}" "${HEAD_SHA}")"
+          echo "--- changed files ---"
+          echo "${changed}"
+          echo "---------------------"
+
+          # An EMPTY diff yields non_gomod=false, which would skip the Node
+          # jobs. That is only reachable for an empty PR, but treat it as
+          # "run everything" anyway rather than reasoning about whether an
+          # empty PR is possible.
+          if [ -z "${changed}" ]; then
+            echo "non_gomod=true" >> "$GITHUB_OUTPUT"
+            echo "empty diff — running everything"
+            exit 0
+          fi
+
+          if echo "${changed}" | grep -qvE '^(go\.mod|go\.sum)$'; then
+            echo "non_gomod=true" >> "$GITHUB_OUTPUT"
+            echo "PR touches files beyond go.mod/go.sum — every job runs."
+          else
+            echo "non_gomod=false" >> "$GITHUB_OUTPUT"
+            echo "go.mod/go.sum ONLY — the pure-Node jobs will skip."
+            echo "Every Go job still runs: compiling and testing against the"
+            echo "new dependency is the point of a version bump."
+          fi
+
   # Catches what the pre-commit hook would have, for the cases where it did not
   # run: hooks are opt-in (make setup-hooks) and --no-verify skips them.
   no-binaries:
@@ -77,6 +154,11 @@ jobs:
   # commit that diff in the change that caused it.
   generate-drift:
     name: Generated code is up to date
+    # DELIBERATELY NOT GATED on the `changes` job, even though a version bump
+    # "only" touches go.mod. A forge bump CHANGES CODEGEN OUTPUT — that is a
+    # real failure mode this repo hit, not a hypothetical — and this job is
+    # the only thing that catches it. It is the single most important job to
+    # keep on a dependency bump.
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -120,6 +202,11 @@ jobs:
 
   backend:
     name: Backend (Go)
+    # DELIBERATELY NOT GATED on the `changes` job. A dependency bump is
+    # exactly the change this job exists to validate: a new forge/pkg can
+    # break compilation or change behaviour, and that failure must surface
+    # HERE, on the PR, rather than on main. Skipping Go tests on a go.mod
+    # change would be strictly worse than a slow CI run.
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -315,6 +402,14 @@ jobs:
 
   web:
     name: Web (lint, test, build)
+    # SAFE TO SKIP on a go.mod/go.sum-only PR. This job is pure Node — npm
+    # lint / typecheck / vitest / vite build — with no Go toolchain in it at
+    # all (see the note below on why the generators were removed). The
+    # generated TypeScript under web/src/gen/** is COMMITTED, so nothing here
+    # is derived from a Go dependency at build time. Changing the version of
+    # a Go module cannot alter eslint, tsc, vitest or vite output.
+    needs: changes
+    if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -388,6 +483,12 @@ jobs:
 
   e2e-frontend:
     name: E2E Frontend (Playwright)
+    # SAFE TO SKIP on a go.mod/go.sum-only PR, for the same reason as `web`:
+    # this is a pure-Node job (vite build + Playwright against the built
+    # renderer) and it starts NO Go backend. The suite drives the frontend
+    # only, so no Go dependency version participates in the result.
+    needs: changes
+    if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
     # Measured, not guessed: this job was cancelled at 15m in every one of
     # the last 50 runs that reached the test step (the other 8/50 died in
@@ -482,6 +583,15 @@ jobs:
 
   electron:
     name: Electron (build smoke)
+    # SAFE TO SKIP on a go.mod/go.sum-only PR. Verified from package.json
+    # rather than assumed: `dist:pr` runs with-release-config -> build:config
+    # -> build:web:alpha -> electron-builder --dir, and NONE of those compile
+    # Go. The Go binaries would live in electron/resources/server, which is
+    # untracked and which CI has never populated — this job has always
+    # packaged an empty server dir (the comment below says as much). A Go
+    # module bump therefore cannot change what it produces.
+    needs: changes
+    if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
