@@ -236,6 +236,27 @@ jobs:
 
       - name: Install forge
         if: steps.forge-cache.outputs.cache-hit != 'true'
+        # GOPRIVATE routes OUR OWN modules straight at GitHub instead of
+        # proxy.golang.org. This is a real, measured delay, not a nicety: a
+        # freshly pushed tag takes proxy.golang.org ~20 MINUTES to ingest, and
+        # until it does, `go install ...@vX.Y.Z` fails with
+        #   invalid version: unknown revision vX.Y.Z
+        # on a tag that already exists and that `GOPROXY=direct` fetches
+        # instantly. Because the release chain is forge -> reliant ->
+        # control-plane, that stall is paid at EVERY hop of every release.
+        #
+        # It also removes a class of confusion the proxy's immutability
+        # creates: a deleted-and-re-cut tag is served forever from its first
+        # publish (that is how forge v0.1.12 became permanently unusable).
+        # Going direct means the tag in git is the tag you build.
+        #
+        # Scoped to reliant-labs/* on purpose — third-party modules keep using
+        # the proxy and the checksum database, which is where those are
+        # actually worth having.
+        env:
+          GOPRIVATE: github.com/reliant-labs/*
+          GONOSUMDB: github.com/reliant-labs/*
+          GONOSUMCHECK: "1"
         run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.forge-version.outputs.version }}"
 
       - name: Lint (forge)
