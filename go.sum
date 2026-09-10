@@ -460,10 +460,10 @@ github.com/prometheus/otlptranslator v1.0.0 h1:s0LJW/iN9dkIH+EnhiD3BlkkP5QVIUVEo
 github.com/prometheus/otlptranslator v1.0.0/go.mod h1:vRYWnXvI6aWGpsdY/mOT/cbeVRBlPWtBNDb7kGR3uKM=
 github.com/prometheus/procfs v0.22.0 h1:6q9+/JL9IKAPbCmBrv9n5O5Ty3NKnciV5X7YGw0oics=
 github.com/prometheus/procfs v0.22.0/go.mod h1:CvmFr/GVhIjIvWJZW3tgkODBQMRIf0EyWMQLHCHab58=
-github.com/reliant-labs/forge v0.1.13 h1:IPIf61Vj/eUGip8hqRJ8ih739D1XZlyo09DU8yc8/P8=
-github.com/reliant-labs/forge v0.1.13/go.mod h1:nIhy0XW0FBIM2M7ASspG6eRtxkBrxR5H1U6lTGkxPGg=
-github.com/reliant-labs/forge/pkg v0.1.13 h1:8LYeSRthAH82Xe0gpjbBgNRXB+nNNzJheK8wPuyEb7Q=
-github.com/reliant-labs/forge/pkg v0.1.13/go.mod h1:sfx6mK8xPMq8RqvfpkNa3mj4mBp7CDOKaNyTZLmX1QE=
+github.com/reliant-labs/forge v0.1.14 h1:1ncEA6QNW0E44nVjTJPtYgw/zUxpVU7dGtWXpBlaF5I=
+github.com/reliant-labs/forge v0.1.14/go.mod h1:MRwzgDMi+42IIWfq4WHzFGy8hWEEH1KRFe3bBccVKkA=
+github.com/reliant-labs/forge/pkg v0.1.14 h1:oEi68/DnGrk7r/zJf5IKTC02p6cISJJhsGKjhCULOuw=
+github.com/reliant-labs/forge/pkg v0.1.14/go.mod h1:sfx6mK8xPMq8RqvfpkNa3mj4mBp7CDOKaNyTZLmX1QE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
