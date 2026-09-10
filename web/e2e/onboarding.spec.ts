@@ -209,7 +209,7 @@ test.describe('Onboarding Flow', () => {
 
     // First step is Compute — verify the heading is visible.
     await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Start my machine' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toBeVisible();
   });
 
   test('landing on / redirects a not-yet-onboarded user to /onboarding', async ({ page }) => {
@@ -272,7 +272,7 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
 
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
     await expect(page).toHaveURL(/cloud_free_trial/, { timeout: 10_000 });
@@ -424,7 +424,7 @@ test.describe('Onboarding Flow', () => {
     // First step (compute): no Back button.
     await expect(dialog.getByRole('button', { name: /Back/i })).not.toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     // Back button now visible in the footer, and returns to Compute.
@@ -470,7 +470,7 @@ test.describe('Onboarding Flow', () => {
  * mockGrpcRoutes seeds `eligible: true`, which is the funded path every other
  * test here exercises. But the compute auto-grant at signup is gone, so an
  * actual brand-new account comes back NO_SUBSCRIPTION — and that was the one
- * state where the step's primary control, "Start my machine", could never be
+ * state where the step's primary control, "Use a Reliant machine", could never be
  * clicked. It rendered greyed out with the two controls that fix it (redeem a
  * coupon, set up billing) demoted to small links underneath.
  *
@@ -499,14 +499,14 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
     await loginWithApiKey(page);
   });
 
-  test('offers no dead "Start my machine" button, and promotes coupon + billing instead', async ({
+  test('offers no dead "Use a Reliant machine" button, and promotes coupon + billing instead', async ({
     page,
   }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
     // The reported bug: a button that is always grey. It is now absent.
-    await expect(dialog.getByRole('button', { name: 'Start my machine' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toHaveCount(0);
 
     // The two controls that CAN change this user's state are the ones on offer.
     await expect(dialog.getByRole('button', { name: /Have a coupon code/i })).toBeEnabled();
@@ -586,7 +586,7 @@ test.describe('Onboarding – Failure Scenarios', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
 
     // Stays on Compute and surfaces the server's error text.
     await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible({
@@ -698,11 +698,11 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await loginWithApiKey(page);
   });
 
-  test('Rapid double-click on "Start my machine" does not skip past Model', async ({ page }) => {
+  test('Rapid double-click on "Use a Reliant machine" does not skip past Model', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).dblclick();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).dblclick();
 
     // Lands on Model, not further — a double-fire would otherwise race two
     // updatePlan calls and could land past it.
@@ -732,7 +732,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Start my machine' }).click();
+    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();
