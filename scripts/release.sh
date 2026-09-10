@@ -1,14 +1,44 @@
 #!/bin/bash
 
-# Script to create and publish releases to GitHub and Cloudflare R2
+# PHASE 1 of a release: propose the version bump. Creates NO tag.
 # Usage: ./scripts/release.sh [patch|minor|major|prerelease]
 #
 # This script will:
-# 1. Update version in package.json
-# 2. Create git tag
-# 3. Push tag to GitHub
-# 4. Trigger GitHub Actions to build and publish to R2
-# 5. Make app available for download and auto-update
+# 1. Validate and regenerate the changelog
+# 2. Update the version in electron/package.json (+ lockfile)
+# 3. Open a PR against main
+#
+# Then, once that PR has MERGED:
+#
+#   ./scripts/release-tag.sh        # phase 2 — tags the merged commit on main
+#
+# Phase 2 is what creates the tag and triggers `Release Electron App` and
+# `Build & Push Image`.
+#
+# ── WHY THE TAG MOVED OUT OF THIS SCRIPT ────────────────────────────────────
+#
+# This script used to cut a `release-*` branch, bump the version there, tag
+# THAT commit, and open a PR. main squash-merges — there is not a single merge
+# commit in its history — so the commit that landed was a different object than
+# the one that got tagged, and the tag stayed behind on the branch forever.
+#
+# Every tag from v1.7.8 to v1.7.12 is off main because of this. To this day
+# `git describe --tags --abbrev=0 origin/main` answers v1.7.7.
+#
+# Nothing warned. That is the part worth fixing: the tag was created, pushed,
+# and built artifacts, so the release looked entirely successful. The damage
+# only surfaces when something reads history from tags — `git describe`,
+# changelog-from-tags, or `go get`, which derives a pseudo-version from the
+# highest tag REACHABLE from the pinned commit. Pinning main therefore yields
+# v1.7.8-0.<date>-<sha>, which sorts BELOW the released v1.7.12: a content
+# upgrade that is a version-number downgrade, which Go's minimum-version
+# selection can silently undo.
+#
+# The alternatives were considered and rejected. Tagging the merge commit
+# requires merge commits, and main has none. Committing the bump straight to
+# main removes the review step from the one change whose whole content is
+# human-written release notes. Tagging after the merge is the only option that
+# is correct BY CONSTRUCTION rather than by everyone remembering.
 
 set -e
 
@@ -152,17 +182,18 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     make generate-changelog
 fi
 
-# Check if we're on main branch (protected)
+# Always cut a branch. Even when this is run from a non-main branch, the
+# release commit belongs on its own branch so the PR contains the bump and
+# nothing else.
 CURRENT_BRANCH=$(git branch --show-current)
-if [[ $CURRENT_BRANCH == "main" ]]; then
-    echo -e "${YELLOW}📋 Detected main branch - creating feature branch for release...${NC}"
-    VERSION_BRANCH="release-$NEW_VERSION"
-    git checkout -b $VERSION_BRANCH
+VERSION_BRANCH="release-$NEW_VERSION"
+if [[ $CURRENT_BRANCH != "$VERSION_BRANCH" ]]; then
+    echo -e "${YELLOW}📋 Creating release branch...${NC}"
+    git checkout -b "$VERSION_BRANCH"
     echo -e "${BLUE}Created branch: $VERSION_BRANCH${NC}"
 fi
 
-# Create git tag with v prefix
-echo -e "${YELLOW}🏷️  Creating release commit and tag...${NC}"
+echo -e "${YELLOW}📝 Creating release commit (no tag — see phase 2)...${NC}"
 # `npm version` rewrites BOTH package.json and package-lock.json. Staging
 # only the former left the lockfile's version field behind on every release
 # — by v1.7.8 it still read 1.7.4, three releases stale — and left the
@@ -173,35 +204,41 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     git add "$CHANGELOG_FILE" "$GENERATED_CHANGELOG"
 fi
 git commit -m "chore: release v$NEW_VERSION"
-git tag "$RELEASE_TAG"
 
-# Push changes and tags
-echo -e "${YELLOW}🚀 Publishing release to GitHub...${NC}"
+# NO `git tag` HERE. The commit just created is not the commit that will land
+# on main — main squash-merges, so the merged object is a different one.
+# Tagging here is exactly what stranded v1.7.8..v1.7.12 off the trunk.
+
+echo -e "${YELLOW}🚀 Pushing release branch...${NC}"
 git push origin HEAD
-git push origin "v$NEW_VERSION"
 
-echo -e "${BLUE}📦 GitHub Actions will now build and publish to Cloudflare R2${NC}"
-echo -e "${BLUE}Monitor progress: https://github.com/reliant-labs/reliant/actions${NC}"
+echo -e "${YELLOW}📋 Creating pull request...${NC}"
+PR_BODY="Version bump for v$NEW_VERSION.
 
-# If we created a feature branch, create a PR
-if [[ $CURRENT_BRANCH == "main" ]]; then
-    echo -e "${YELLOW}📋 Creating pull request...${NC}"
-    if command -v gh >/dev/null 2>&1; then
-        gh pr create --title "chore: release v$NEW_VERSION" --body "Automated release of v$NEW_VERSION" --base main --head $VERSION_BRANCH
-        echo -e "${GREEN}✅ Pull request created!${NC}"
-    else
-        echo -e "${YELLOW}GitHub CLI not found. Please create a PR manually:${NC}"
-        echo -e "${BLUE}Branch: $VERSION_BRANCH${NC}"
-        echo -e "${BLUE}Base: main${NC}"
-        echo -e "${BLUE}Title: chore: release v$NEW_VERSION${NC}"
-    fi
+**This PR does not create the tag.** After it merges, run:
+
+\`\`\`
+./scripts/release-tag.sh
+\`\`\`
+
+That tags the *merged* commit on \`main\` and triggers \`Release Electron App\`
+and \`Build & Push Image\`. Tagging this branch instead would strand the tag off
+the trunk once the PR is squash-merged — which is how v1.7.8 through v1.7.12
+ended up unreachable from \`main\`."
+
+if command -v gh >/dev/null 2>&1; then
+    gh pr create --title "chore: release v$NEW_VERSION" --body "$PR_BODY" --base main --head "$VERSION_BRANCH"
+    echo -e "${GREEN}✅ Pull request created!${NC}"
+else
+    echo -e "${YELLOW}GitHub CLI not found. Please create a PR manually:${NC}"
+    echo -e "${BLUE}Branch: $VERSION_BRANCH${NC}"
+    echo -e "${BLUE}Base: main${NC}"
+    echo -e "${BLUE}Title: chore: release v$NEW_VERSION${NC}"
 fi
 
-echo -e "${GREEN}🎉 Release v$NEW_VERSION created and published successfully!${NC}"
-echo -e "${BLUE}📥 Download URLs (available after build completes):${NC}"
-echo -e "${BLUE}  Latest: https://downloads.reliantlabs.io/Reliant-latest-mac-arm64.dmg${NC}"
-echo -e "${BLUE}  Versioned: https://downloads.reliantlabs.io/Reliant-${NEW_VERSION}-mac-arm64.dmg${NC}"
-echo -e "${BLUE}Tag: ${RELEASE_TAG}${NC}"
+echo ""
+echo -e "${GREEN}🎉 Release v$NEW_VERSION proposed — phase 1 of 2 complete.${NC}"
+echo -e "${BLUE}Branch: ${VERSION_BRANCH}${NC}"
 echo -e "${BLUE}Commit: $(git rev-parse --short HEAD)${NC}"
 if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
     echo -e "${BLUE}Changelog source: ${CHANGELOG_FILE}${NC}"
@@ -209,3 +246,11 @@ if [[ "$REQUIRES_CHANGELOG" == "true" ]]; then
 else
     echo -e "${BLUE}Changelog: skipped for RC prerelease${NC}"
 fi
+echo ""
+echo -e "${YELLOW}⚠️  NO TAG WAS CREATED, AND NOTHING IS BUILDING YET.${NC}"
+echo -e "${YELLOW}   Next steps:${NC}"
+echo -e "${BLUE}     1. Review and merge the PR above${NC}"
+echo -e "${BLUE}     2. ./scripts/release-tag.sh${NC}"
+echo ""
+echo -e "${BLUE}   Step 2 tags the merged commit on main and starts the builds.${NC}"
+echo -e "${BLUE}   Preview it any time with: ./scripts/release-tag.sh --dry-run${NC}"

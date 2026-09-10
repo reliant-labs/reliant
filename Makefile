@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build
+.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -468,7 +468,16 @@ version:
 	@echo "Date:    $(DATE)"
 	@echo "Branch:  $(BRANCH)"
 
-## release-rc: Release new release candidate (0.0.1-rc38 → 0.0.1-rc39)
+# A release is TWO steps. `release-*` opens the version-bump PR; `release-tag`
+# tags the commit once that PR has MERGED.
+#
+# They are separate because main squash-merges — the commit on the release
+# branch is not the commit that lands, so tagging before the merge strands the
+# tag off the trunk. That is what happened to v1.7.8..v1.7.12, and to fifteen
+# older tags; `git describe --tags --abbrev=0 origin/main` still answers
+# v1.7.7. See the header of scripts/release.sh.
+
+## release-rc: Open the version-bump PR for a release candidate (0.0.1-rc38 → 0.0.1-rc39)
 release-rc:
 	@echo "$(YELLOW)Creating new release candidate...$(NC)"
 	@./scripts/release.sh prerelease
@@ -483,10 +492,22 @@ release-minor:
 	@echo "$(YELLOW)Creating minor release...$(NC)"
 	@./scripts/release.sh minor
 
-## release-major: Release major version (0.1.0 → 1.0.0)
+## release-major: Open the version-bump PR for a major release (0.1.0 → 1.0.0)
 release-major:
 	@echo "$(YELLOW)Creating major release...$(NC)"
 	@./scripts/release.sh major
+
+## release-tag: STEP 2 — tag the merged release commit on main (run after the PR merges)
+release-tag:
+	@./scripts/release-tag.sh
+
+## release-tag-dry-run: Preview which commit step 2 would tag, creating nothing
+release-tag-dry-run:
+	@./scripts/release-tag.sh --dry-run
+
+## check-release-tags: Verify every release tag is an ancestor of main
+check-release-tags:
+	@./scripts/check-release-tags.sh
 
 ## info: Show build information
 info:
