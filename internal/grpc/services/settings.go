@@ -952,7 +952,14 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 
 			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
 			if configured {
-				if claude.IsTokenExpired(tokens.ExpiresAt) {
+				// claude.IsTokenExpired reports true a full TokenRefreshBuffer
+				// before real expiry, so on its own it means "refresh before
+				// using", not "disconnected". A stored refresh token is what
+				// makes the session recoverable without the user reconnecting,
+				// and the transport interceptor refreshes it automatically —
+				// the same rule drivers.BuildAvailableDrivers applies when
+				// deciding whether the credential is usable.
+				if claude.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
 					configured = false
 				}
 			}
@@ -1196,7 +1203,11 @@ func (s *SettingsService) ValidateProviderAPIKey(ctx context.Context, req *conne
 				Message: "Claude is not connected",
 			}), nil
 		}
-		if claude.IsTokenExpired(tokens.ExpiresAt) {
+		// Only a token that is expired AND has no refresh token needs the user
+		// to reconnect. Anything else is refreshed by the transport, so
+		// reporting it as expired here would contradict the connected status
+		// GetProviderStatuses shows for the very same credential.
+		if claude.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
 			return connect.NewResponse(&reliantv1.ValidateProviderAPIKeyResponse{
 				Valid:   false,
 				Message: "Claude session expired. Please reconnect Claude.",

@@ -37,6 +37,7 @@ import { useWorktreeStore } from "./worktreeStore";
 import type { Chat } from "../api/client";
 import { useActivityStore, activityToDotState, ChatActivity } from "./activityStore";
 import { getCachedChatList, getChatFromCache } from "../hooks/chat-queries";
+import { sortChats, compareChatGroups } from "../lib/chatListOrder";
 
 /**
  * Whether a chat is blocked on the user.
@@ -156,56 +157,9 @@ async function getOrderedChatList(): Promise<Chat[]> {
     });
   }
 
-  // Sort function matching Sidebar.tsx logic exactly
-  const sortChatList = (chatList: Chat[]): Chat[] => {
-    return [...chatList].sort((a, b) => {
-      // ONLY awaiting_approval floats to top - it requires immediate user action
-      // Other states (thinking, streaming) stay in their natural position but get visual indicators
-      const aRequiresAction = isAwaitingApproval(a.id);
-      const bRequiresAction = isAwaitingApproval(b.id);
-
-      if (aRequiresAction && !bRequiresAction) return -1;
-      if (!aRequiresAction && bRequiresAction) return 1;
-
-      // Apply user-selected sort order for all other chats
-      switch (sortOrder) {
-        case "recent_activity":
-          // Most recent last_message_at first (falls back to created_at for new chats)
-          return (
-            new Date(b.lastMessageAt || b.createdAt).getTime() -
-            new Date(a.lastMessageAt || a.createdAt).getTime()
-          );
-        case "needs_attention_first": {
-          // Chats needing attention come first (unread or awaiting_approval)
-          const aNeedsAttention = needsAttention(a);
-          const bNeedsAttention = needsAttention(b);
-          
-          if (aNeedsAttention && !bNeedsAttention) return -1;
-          if (!aNeedsAttention && bNeedsAttention) return 1;
-          
-          // Both need attention or neither - sort by lastMessageAt
-          return (
-            new Date(b.lastMessageAt || b.createdAt).getTime() -
-            new Date(a.lastMessageAt || a.createdAt).getTime()
-          );
-        }
-        case "newest_first":
-          // Most recent createdAt first
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case "oldest_first":
-          // Oldest createdAt first
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case "alphabetical_asc":
-          // A-Z by title
-          return (a.title || "New chat").localeCompare(b.title || "New chat");
-        case "alphabetical_desc":
-          // Z-A by title
-          return (b.title || "New chat").localeCompare(a.title || "New chat");
-        default:
-          return 0;
-      }
-    });
-  };
+  // Shared with Sidebar.tsx so navigation order cannot drift from what renders
+  const sortChatList = (chatList: Chat[]): Chat[] =>
+    sortChats(chatList, sortOrder, needsAttention);
 
   // For flat view, just return sorted list
   if (viewMode === "flat") {
@@ -213,25 +167,17 @@ async function getOrderedChatList(): Promise<Chat[]> {
   }
 
   // For grouped view, group by worktree then flatten in visual order (matching Sidebar.tsx)
-  const worktreeGroups = new Map<string, { chats: Chat[]; hasActivity: boolean }>(); 
-  
+  const worktreeGroups = new Map<string, { chats: Chat[] }>();
+
   for (const chat of activeChats) {
     const worktree = getWorktreeForChat(chat);
     if (!worktree) continue; // Skip if worktree doesn't exist (shouldn't happen after filtering, but be safe)
-    
+
     const groupKey = worktree.id;
     if (!worktreeGroups.has(groupKey)) {
-      worktreeGroups.set(groupKey, { chats: [], hasActivity: false });
+      worktreeGroups.set(groupKey, { chats: [] });
     }
-    const group = worktreeGroups.get(groupKey)!;
-    group.chats.push(chat);
-    
-    // Check if any chat in group requires immediate action (awaiting_approval)
-    // Only awaiting_approval should cause groups to float - other activity states
-    // get visual indicators but don't change sort order
-    if (isAwaitingApproval(chat.id)) {
-      group.hasActivity = true;
-    }
+    worktreeGroups.get(groupKey)!.chats.push(chat);
   }
 
   // Sort chats within each group
@@ -239,21 +185,10 @@ async function getOrderedChatList(): Promise<Chat[]> {
     group.chats = sortChatList(group.chats);
   });
 
-  // Sort groups: active groups first, then by most recent chat (matching Sidebar.tsx)
-  const sortedGroups = Array.from(worktreeGroups.values()).sort((a, b) => {
-    // Active groups first
-    if (a.hasActivity !== b.hasActivity) {
-      return a.hasActivity ? -1 : 1;
-    }
-    // Then by most recent chat in group (using last_message_at for activity-based sorting)
-    const aTime = Math.max(
-      ...a.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime())
-    );
-    const bTime = Math.max(
-      ...b.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime())
-    );
-    return bTime - aTime;
-  });
+  // Sort groups by their leading chat (matching Sidebar.tsx)
+  const sortedGroups = Array.from(worktreeGroups.values()).sort((a, b) =>
+    compareChatGroups(a.chats, b.chats, sortOrder, needsAttention)
+  );
 
   // Flatten groups into final ordered list
   return sortedGroups.flatMap((group) => group.chats);

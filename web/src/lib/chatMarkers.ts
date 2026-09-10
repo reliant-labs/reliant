@@ -36,6 +36,15 @@
 export const CHAT_MARKER_KINDS = {
   ReliantManagedQuotaExhausted: "RELIANT_MANAGED_QUOTA_EXHAUSTED",
   DaemonOfflineHalt: "RELIANT_DAEMON_OFFLINE_HALT",
+  /**
+   * The upstream provider accepted the request then sent only keepalives
+   * until the content-stall deadline; the turn was cut and will be retried.
+   * Payload is the provider name (e.g. "claude-code").
+   *
+   * Observed cause is an exhausted subscription: the provider answers 200 and
+   * pings indefinitely without ever sending content or an error.
+   */
+  ProviderStreamStalled: "RELIANT_PROVIDER_STREAM_STALLED",
 } as const;
 
 /**

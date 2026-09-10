@@ -280,51 +280,175 @@ func StreamIdleTimeout() time.Duration {
 // so a silent stream is retried rather than failing the workflow.
 var ErrStreamIdleTimeout = errors.New("llm stream idle timeout: provider sent no data before the idle deadline")
 
-// IdleTimeoutReader wraps an io.ReadCloser and enforces an idle timeout on reads.
-// If no data is received within the timeout, Read returns ErrStreamIdleTimeout.
-// This is designed for SSE streaming where the server may silently stop sending
-// data but keep the TCP connection alive.
-type IdleTimeoutReader struct {
-	r       io.ReadCloser
-	timeout time.Duration
-	timer   *time.Timer
-	fired   atomic.Bool
-	once    sync.Once
+// ErrStreamContentStalled is returned when a stream kept its connection busy
+// with keepalives but produced no actual content for DefaultStreamContentStallTimeout.
+//
+// Distinct from ErrStreamIdleTimeout because the two describe different
+// faults and a reader of the logs needs to tell them apart: idle means the
+// socket went silent, stalled means the provider kept pinging while doing
+// nothing. Same classification requirements as above — it must read as
+// transient so the turn is retried.
+var ErrStreamContentStalled = errors.New("llm stream content stall timeout: provider sent only keepalives before the content deadline")
+
+// DefaultStreamContentStallTimeout bounds how long a stream may deliver
+// keepalives and nothing else.
+//
+// This is the guard for the credit-exhaustion hang: Anthropic answered 200,
+// then emitted ping frames for 28-43 minutes while withholding all content,
+// and because every ping is a byte, the byte-idle timer above never fired.
+// Seven activities returned success with zero tokens after ~35 minutes each.
+//
+// It is deliberately MUCH looser than the byte-idle timeout, because the two
+// guard different things and this one can fire against legitimately slow work:
+// before the first token the provider may be queueing the request or
+// processing a 400k-token prompt, and pings are all it sends. Sized against
+// the same 4,039-stream sample as DefaultStreamIdleTimeout, whose p99 TOTAL
+// duration is 137.6s — so at 5 minutes even a stream that spent more than
+// twice its p99 entire lifetime without emitting content is left alone. The
+// point is not to cut promptly; it is to make an unbounded hang bounded.
+//
+// Override with RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT.
+const DefaultStreamContentStallTimeout = 5 * time.Minute
+
+// StreamContentStallTimeoutEnv overrides DefaultStreamContentStallTimeout.
+const StreamContentStallTimeoutEnv = "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT"
+
+// StreamContentStallTimeout returns the configured content-stall timeout,
+// read per client construction like StreamIdleTimeout.
+func StreamContentStallTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(StreamContentStallTimeoutEnv))
+	if raw == "" {
+		return DefaultStreamContentStallTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		logging.Warn("[Transport] Ignoring unusable stream content stall timeout override",
+			"env", StreamContentStallTimeoutEnv, "value", raw, "using", DefaultStreamContentStallTimeout)
+		return DefaultStreamContentStallTimeout
+	}
+	return d
 }
 
-// NewIdleTimeoutReader wraps r with an idle timeout.
-// Each successful Read resets the timer. If the timer fires before the next
-// Read completes, the underlying reader is closed, unblocking the pending Read,
-// which then reports ErrStreamIdleTimeout.
+// IdleTimeoutReader wraps an io.ReadCloser and enforces two independent
+// deadlines on an SSE stream. Designed for streaming where the server may stop
+// working while keeping the TCP connection alive.
+//
+//	byte-idle    no bytes at all for `timeout`        -> ErrStreamIdleTimeout
+//	content-stall no CONTENT for `contentStallTimeout` -> ErrStreamContentStalled
+//
+// Two timers rather than one, because "the socket is alive" and "the request
+// is progressing" are different questions and each has its own correct
+// deadline. The byte-idle timer stays tight (90s) and keeps its original
+// semantics: ANY byte, keepalives included, resets it, so a slow-but-live
+// stream is never at risk. The content-stall timer is much looser (5m) and is
+// reset only by real stream content, which is what makes an
+// all-keepalives-forever stream terminate at all.
+//
+// Collapsing these into one timer is the tempting simplification and it is
+// wrong in both directions: at 90s it cuts legitimate long prompt-processing
+// that emits only pings, and at 5m it lets a genuinely silent socket sit for
+// five minutes when 90s was demonstrably enough.
+type IdleTimeoutReader struct {
+	r                   io.ReadCloser
+	timeout             time.Duration
+	contentStallTimeout time.Duration
+	timer               *time.Timer
+	contentTimer        *time.Timer
+	fired               atomic.Bool
+	contentFired        atomic.Bool
+	once                sync.Once
+	// done releases both watcher goroutines when the stream ends normally, so
+	// neither outlives the body it guards.
+	done chan struct{}
+	// progress is touched only from Read, which io.Reader forbids calling
+	// concurrently, so it needs no lock of its own.
+	progress sseProgressScanner
+}
+
+// NewIdleTimeoutReader wraps r with the byte-idle timeout and the default
+// content-stall timeout.
 func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration) *IdleTimeoutReader {
+	return newIdleTimeoutReader(r, timeout, StreamContentStallTimeout())
+}
+
+// newIdleTimeoutReader takes both deadlines explicitly so tests can exercise
+// either guard without waiting the real durations.
+func newIdleTimeoutReader(r io.ReadCloser, timeout, contentStall time.Duration) *IdleTimeoutReader {
 	itr := &IdleTimeoutReader{
-		r:       r,
-		timeout: timeout,
+		r:                   r,
+		timeout:             timeout,
+		contentStallTimeout: contentStall,
+		done:                make(chan struct{}),
 	}
-	itr.timer = time.AfterFunc(timeout, func() {
-		itr.fired.Store(true)
+
+	// Both timers are created STOPPED and started only once both fields are
+	// assigned. time.AfterFunc starts its clock immediately, so arming the
+	// first timer inline let it fire — and call Close, which reads
+	// contentTimer — before the second assignment had happened. With a short
+	// timeout that is a real nil-deref/data race, not a theoretical one; the
+	// race detector caught it on the 200ms unit test.
+	itr.timer = time.NewTimer(timeout)
+	itr.timer.Stop()
+	itr.contentTimer = time.NewTimer(contentStall)
+	itr.contentTimer.Stop()
+
+	go itr.watch(itr.timer.C, &itr.fired, func() {
 		logging.Warn("[IdleTimeoutReader] Stream idle timeout reached, closing connection",
 			"timeout", timeout)
-		_ = itr.Close()
 	})
+	go itr.watch(itr.contentTimer.C, &itr.contentFired, func() {
+		logging.Warn("[IdleTimeoutReader] Stream content stall timeout reached, closing connection",
+			"timeout", contentStall,
+			"detail", "connection stayed alive on keepalives but the provider sent no content")
+	})
+
+	itr.timer.Reset(timeout)
+	itr.contentTimer.Reset(contentStall)
 	return itr
+}
+
+// watch closes the stream when its timer fires, recording which deadline was
+// breached so Read can report the right sentinel. Close is once-guarded, so
+// whichever timer fires first wins and the other watcher returns via done.
+func (itr *IdleTimeoutReader) watch(c <-chan time.Time, flag *atomic.Bool, logFire func()) {
+	select {
+	case <-c:
+		flag.Store(true)
+		logFire()
+		_ = itr.Close()
+	case <-itr.done:
+	}
 }
 
 func (itr *IdleTimeoutReader) Read(p []byte) (int, error) {
 	n, err := itr.r.Read(p)
 	if n > 0 {
-		// Data received — reset the idle timer
+		// Any byte proves the connection is alive.
 		itr.timer.Reset(itr.timeout)
+		// Only real content proves the provider is working. sawContent must
+		// see EVERY chunk — it carries partial-line and SSE frame state
+		// between calls.
+		if itr.progress.sawContent(p[:n]) {
+			itr.contentTimer.Reset(itr.contentStallTimeout)
+		}
 	}
 	if err != nil {
 		// Report the real cause. Without this the caller sees whatever the
 		// transport says about a body we closed underneath it ("read on closed
 		// response body", "use of closed network connection"), which is neither
 		// diagnosable in a log nor reliably classified as transient.
+		//
+		// Content-stall is checked first: when it fires, the byte-idle timer
+		// is usually moments from firing too (the close stops both reads), and
+		// the stall is the more specific, more actionable diagnosis.
+		if itr.contentFired.Load() {
+			return n, ErrStreamContentStalled
+		}
 		if itr.fired.Load() {
 			return n, ErrStreamIdleTimeout
 		}
 		itr.timer.Stop()
+		itr.contentTimer.Stop()
 	}
 	return n, err
 }
@@ -332,6 +456,9 @@ func (itr *IdleTimeoutReader) Read(p []byte) (int, error) {
 func (itr *IdleTimeoutReader) Close() error {
 	itr.once.Do(func() {
 		itr.timer.Stop()
+		itr.contentTimer.Stop()
+		// Release whichever watcher did not fire.
+		close(itr.done)
 	})
 	return itr.r.Close()
 }
@@ -341,8 +468,9 @@ func (itr *IdleTimeoutReader) Close() error {
 // (where we don't have direct access to resp.Body) still get idle timeout
 // protection.
 type idleTimeoutTransport struct {
-	base    http.RoundTripper
-	timeout time.Duration
+	base                http.RoundTripper
+	timeout             time.Duration
+	contentStallTimeout time.Duration
 }
 
 func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -351,7 +479,11 @@ func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, err
 		return nil, err
 	}
 	if resp.Body != nil {
-		resp.Body = NewIdleTimeoutReader(resp.Body, t.timeout)
+		stall := t.contentStallTimeout
+		if stall <= 0 {
+			stall = StreamContentStallTimeout()
+		}
+		resp.Body = newIdleTimeoutReader(resp.Body, t.timeout, stall)
 	}
 	return resp, nil
 }
@@ -362,8 +494,9 @@ func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, err
 // detection on top.
 func WrapWithIdleTimeout(base http.RoundTripper) http.RoundTripper {
 	return &idleTimeoutTransport{
-		base:    base,
-		timeout: StreamIdleTimeout(),
+		base:                base,
+		timeout:             StreamIdleTimeout(),
+		contentStallTimeout: StreamContentStallTimeout(),
 	}
 }
 
@@ -382,10 +515,17 @@ func StreamingHTTPClient() *http.Client {
 // newStreamingHTTPClient builds the streaming client with an explicit idle
 // timeout. Tests use it to exercise the guard without waiting the real timeout.
 func newStreamingHTTPClient(idle time.Duration) *http.Client {
+	return newStreamingHTTPClientWithStall(idle, StreamContentStallTimeout())
+}
+
+// newStreamingHTTPClientWithStall additionally pins the content-stall deadline,
+// so a test can drive either guard independently of the other.
+func newStreamingHTTPClientWithStall(idle, contentStall time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &idleTimeoutTransport{
-			base:    otelhttp.NewTransport(ResilientTransport()),
-			timeout: idle,
+			base:                otelhttp.NewTransport(ResilientTransport()),
+			timeout:             idle,
+			contentStallTimeout: contentStall,
 		},
 	}
 }

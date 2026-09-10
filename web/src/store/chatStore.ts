@@ -298,6 +298,14 @@ function routeChatErrorMarker(
       errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
       return;
     }
+    case CHAT_MARKER_KINDS.ProviderStreamStalled: {
+      // The prefix already names the provider and says the turn is being
+      // retried, so stripping the tail leaves a complete message. The
+      // payload duplicates the provider name that prefix carries, so there
+      // is nothing extra to surface here.
+      errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
+      return;
+    }
     default: {
       // Exhaustiveness guard: a new kind landed in chatMarkers.ts without
       // being routed here. TypeScript will flag this at compile time.

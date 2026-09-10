@@ -55,6 +55,7 @@ import {
   useChatListPreferencesStore,
   type ChatSortOption,
 } from "../../store/chatListPreferencesStore";
+import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { Dropdown } from "../ui/Dropdown";
 import { ActivityDot, type ChatActivityState } from "../ui/ActivityDot";
 import { useActivityStore, activityToDotState, ChatActivity } from "../../store/activityStore";
@@ -164,6 +165,10 @@ interface ChatWithActivity extends Chat {
   priority: number;
   lastActivity?: string;
 }
+
+/** A chat is blocked on the user when it is awaiting approval, or unread. */
+const chatNeedsAttention = (chat: ChatWithActivity) =>
+  chat.activityState === "awaiting_approval" || chat.unread;
 
 // Shared utility - avoids duplicate definitions in ChatItem/ArchivedChatItem
 function getRelativeTime(timestamp: string): string {
@@ -804,68 +809,11 @@ function SidebarComponent({
       }
     });
 
-    // Sort chats based on user preference
-    const sortChatList = (chats: ChatWithActivity[]) => {
-      return [...chats].sort((a, b) => {
-        // ONLY awaiting_approval floats to top - it requires immediate user action
-        // Other states (thinking, streaming) stay in their natural position but get visual indicators
-        const aRequiresAction = a.activityState === "awaiting_approval";
-        const bRequiresAction = b.activityState === "awaiting_approval";
-
-        if (aRequiresAction && !bRequiresAction) return -1;
-        if (!aRequiresAction && bRequiresAction) return 1;
-
-        // Apply user-selected sort order for all other chats
-        switch (sortOrder) {
-          case "recent_activity":
-            // Most recent last_message_at first (falls back to created_at for new chats)
-            // Using last_message_at prevents "viewing" a chat from changing its sort position
-            return (
-              new Date(b.lastMessageAt || b.createdAt).getTime() -
-              new Date(a.lastMessageAt || a.createdAt).getTime()
-            );
-          case "needs_attention_first": {
-            // Chats needing attention come first (unread or awaiting_approval)
-            // This is an explicit sort mode where user WANTS these at top
-            const aNeedsAttention = a.unread || a.activityState === "awaiting_approval";
-            const bNeedsAttention = b.unread || b.activityState === "awaiting_approval";
-            
-            if (aNeedsAttention && !bNeedsAttention) return -1;
-            if (!aNeedsAttention && bNeedsAttention) return 1;
-            
-            // Both need attention or neither - sort by last_message_at
-            return (
-              new Date(b.lastMessageAt || b.createdAt).getTime() -
-              new Date(a.lastMessageAt || a.createdAt).getTime()
-            );
-          }
-          case "newest_first":
-            // Most recent created_at first
-            return (
-              new Date(b.createdAt).getTime() -
-              new Date(a.createdAt).getTime()
-            );
-          case "oldest_first":
-            // Oldest created_at first
-            return (
-              new Date(a.createdAt).getTime() -
-              new Date(b.createdAt).getTime()
-            );
-          case "alphabetical_asc":
-            // A-Z by title
-            return (a.title || "New chat").localeCompare(
-              b.title || "New chat"
-            );
-          case "alphabetical_desc":
-            // Z-A by title
-            return (b.title || "New chat").localeCompare(
-              a.title || "New chat"
-            );
-          default:
-            return 0;
-        }
-      });
-    };
+    // Sort chats based on user preference. The comparator is shared with the
+    // navigation store so keyboard next/prev walks the list in the order it is
+    // rendered in.
+    const sortChatList = (chats: ChatWithActivity[]) =>
+      sortChats(chats, sortOrder, chatNeedsAttention);
 
     // Sort chats within each group
     worktreeGroupsMap.forEach((group) => {
@@ -892,30 +840,23 @@ function SidebarComponent({
       });
     }
 
-    // Convert to array and sort groups (groups with activity first, then by most recent chat)
+    // Convert to array and sort groups. Groups rank by their leading chat under
+    // the selected sort order, so a group only moves when the chat at its top
+    // moves — an incoming message no longer reshuffles the workspaces.
     const groupsArray = Array.from(worktreeGroupsMap.values());
     groupsArray.sort((a, b) => {
       // Main workspace should be first when it has no chats so users can always switch to it
       if (a.isMain && a.chats.length === 0) return -1;
       if (b.isMain && b.chats.length === 0) return 1;
 
-      // Active groups first
-      if (a.hasActivity !== b.hasActivity) {
-        return a.hasActivity ? -1 : 1;
-      }
-
       // If one group is empty, put non-empty first (except main empty special-case above)
       if (a.chats.length === 0 && b.chats.length > 0) return 1;
       if (b.chats.length === 0 && a.chats.length > 0) return -1;
+      if (a.chats.length === 0 && b.chats.length === 0) {
+        return a.worktreeId.localeCompare(b.worktreeId);
+      }
 
-      // Then by most recent chat in group (using last_message_at for activity-based sorting)
-      const aTime = a.chats.length > 0
-        ? Math.max(...a.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime()))
-        : 0;
-      const bTime = b.chats.length > 0
-        ? Math.max(...b.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime()))
-        : 0;
-      return bTime - aTime;
+      return compareChatGroups(a.chats, b.chats, sortOrder, chatNeedsAttention);
     });
 
     // Create flat list for flat view mode
@@ -946,17 +887,11 @@ function SidebarComponent({
       group.chats = sortChatList([...group.chats]);
     });
 
-    // Convert to array and sort groups by most recent chat
+    // Convert to array and sort groups by their leading chat
     const archivedGroupsArray = Array.from(archivedGroupsMap.values());
-    archivedGroupsArray.sort((a, b) => {
-      const aTime = Math.max(
-        ...a.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime())
-      );
-      const bTime = Math.max(
-        ...b.chats.map((c) => new Date(c.lastMessageAt || c.createdAt).getTime())
-      );
-      return bTime - aTime;
-    });
+    archivedGroupsArray.sort((a, b) =>
+      compareChatGroups(a.chats, b.chats, sortOrder, chatNeedsAttention)
+    );
 
     return {
       activeGroups: groupsArray,

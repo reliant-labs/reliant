@@ -29,6 +29,12 @@ describe("chat marker kind literals (cross-process drift guard)", () => {
       "RELIANT_DAEMON_OFFLINE_HALT",
     );
   });
+
+  it("RELIANT_PROVIDER_STREAM_STALLED string matches Go mirror", () => {
+    expect(CHAT_MARKER_KINDS.ProviderStreamStalled).toBe(
+      "RELIANT_PROVIDER_STREAM_STALLED",
+    );
+  });
 });
 
 describe("extractChatMarker", () => {
@@ -49,6 +55,16 @@ describe("extractChatMarker", () => {
     expect(got).toEqual({
       kind: "RELIANT_DAEMON_OFFLINE_HALT" satisfies ChatMarkerKind,
       payload: "3",
+    });
+  });
+
+  it("extracts provider-stall marker with a provider-name payload", () => {
+    const got = extractChatMarker(
+      "the claude-code provider accepted the request but sent no content for 5m0s; retrying. If this repeats, check that the subscription has remaining credit. [RELIANT_PROVIDER_STREAM_STALLED:claude-code]",
+    );
+    expect(got).toEqual({
+      kind: "RELIANT_PROVIDER_STREAM_STALLED" satisfies ChatMarkerKind,
+      payload: "claude-code",
     });
   });
 
