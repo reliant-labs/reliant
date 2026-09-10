@@ -70,6 +70,19 @@ const (
 	// Payload is the integer turn count (decimal-encoded).
 	// Producer: internal/workflow/runtime/daemon_offline_tracker.go.
 	KindDaemonOfflineHalt Kind = "RELIANT_DAEMON_OFFLINE_HALT"
+
+	// KindProviderStreamStalled signals the upstream provider accepted the
+	// request and then produced only keepalives until the content-stall
+	// deadline, so the turn was cut and will be retried. Payload is the
+	// provider name (e.g. "claude-code"), which is the one thing that makes
+	// the message actionable — it tells the user WHICH subscription to check.
+	//
+	// The observed cause is a subscription with no remaining credit: the
+	// provider answers 200, pings for 28-43 minutes, and never sends content
+	// nor an error. Without this marker the user saw an active chat with no
+	// output and no explanation.
+	// Producer: internal/llm/drivers/anthropic (via llm.ErrStreamContentStalled).
+	KindProviderStreamStalled Kind = "RELIANT_PROVIDER_STREAM_STALLED"
 )
 
 // markerRegex matches any `[<KIND>:<payload>]` tail, allowing an optional

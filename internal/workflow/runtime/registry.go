@@ -295,6 +295,18 @@ const (
 	// shortening it, so it stays.
 	activityHeartbeatTimeout = 30 * time.Second
 
+	// activityStallWarnAfter is how long an activity may run before the
+	// heartbeat loop starts logging that it might be stalled, and
+	// activityStallWarnInterval is how often it repeats afterwards.
+	//
+	// Sized above the p99 LLM stream duration (137.6s across 4,039 measured
+	// streams) so a legitimately slow turn stays quiet, and far below the
+	// 28-43 minute hangs this exists to surface. These only control LOGGING —
+	// no execution decision reads them, so an occasional warning on a genuinely
+	// long activity is harmless.
+	activityStallWarnAfter    = 5 * time.Minute
+	activityStallWarnInterval = 5 * time.Minute
+
 	// stepActivityMaxAttempts is the retry ladder every GRAPH STEP is
 	// dispatched with (StepExecutor.activityOptions). It lives here, next to
 	// the wrapper that reports attempt progress to the UI, because the wrapper
@@ -557,6 +569,13 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		ticker := time.NewTicker(activityHeartbeatInterval)
 		defer ticker.Stop()
 
+		// nextStallWarn schedules the first "this has run a long time" log.
+		// The heartbeat payload records elapsed time on every tick, but a
+		// payload is only seen by someone already running `temporal workflow
+		// describe`; the periodic log is what makes a stall discoverable from
+		// the log directory, which is where an investigation actually starts.
+		nextStallWarn := startTime.Add(activityStallWarnAfter)
+
 		for {
 			select {
 			case <-heartbeatCtx.Done():
@@ -577,12 +596,43 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 						"error", ctx.Err())
 					return
 				}
-				// Send heartbeat with current progress
+
+				// Report elapsed time, not just liveness.
+				//
+				// This heartbeat proves the WORKER is alive; it has never
+				// proven the activity is making progress, and a hardcoded
+				// "status: running" actively obscured that difference. During
+				// the credit-exhaustion incident Temporal showed a current
+				// lastHeartbeatTime beside a 34-minute-old lastStartedTime for
+				// seven activities, and every surface that consulted the
+				// heartbeat called them healthy. Carrying elapsed_seconds in
+				// the payload makes `temporal workflow describe` show the age
+				// of the work rather than the age of the ping.
+				//
+				// Deliberately NOT turned into a failure here: withholding a
+				// heartbeat would make Temporal re-dispatch the activity, and
+				// for CallLLM that means a second in-flight request to the
+				// provider. Bounding the hang belongs at the transport layer,
+				// where llm.ErrStreamContentStalled now ends it. This is the
+				// diagnostic half of that fix.
+				elapsed := time.Since(startTime)
 				activity.RecordHeartbeat(ctx, map[string]interface{}{
-					"activity_type": activityType,
-					"attempt":       attemptNumber,
-					"status":        "running",
+					"activity_type":   activityType,
+					"attempt":         attemptNumber,
+					"status":          "running",
+					"elapsed_seconds": int64(elapsed.Seconds()),
 				})
+
+				if now := time.Now(); now.After(nextStallWarn) {
+					nextStallWarn = now.Add(activityStallWarnInterval)
+					logging.Warn("[ActivityWrapper] Activity still running after a long interval; it may be stalled",
+						"activityType", activityType,
+						"activityID", activityID,
+						"workflowID", workflowID,
+						"chatID", chatID,
+						"stepID", stepID,
+						"elapsed", elapsed.Round(time.Second))
+				}
 			}
 		}
 	}()

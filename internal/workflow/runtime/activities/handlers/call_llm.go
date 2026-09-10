@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -1472,6 +1473,27 @@ streamLoop:
 	// user, then lets the workflow persist that partial assistant message and run
 	// one more mailbox-draining turn. Provider errors still fail normally.
 	if streamErr != nil && !streamInterrupted {
+		// A content stall is the one stream failure whose cause the user can
+		// act on, and the one they cannot diagnose from the chat: the
+		// provider returned 200 and then sent keepalives and nothing else,
+		// which historically presented as a chat that stayed active for half
+		// an hour with no output and no error. Name the provider and say what
+		// to check. The marker survives Temporal's error stringification so
+		// the chat UI can route on it; see internal/chatmarkers.
+		if errors.Is(streamErr, llm.ErrStreamContentStalled) {
+			activity.GetLogger(ctx).Warn("[CallLLM] Provider streamed only keepalives; cutting the turn for retry",
+				"chatID", chat.ID,
+				"thread", thread,
+				"provider", resolved.ProviderDriver,
+				"model", resolvedModelID,
+				"stallTimeout", llm.StreamContentStallTimeout())
+			return nil, fmt.Errorf("%s: %w", chatmarkers.Wrap(
+				chatmarkers.KindProviderStreamStalled,
+				resolved.ProviderDriver,
+				fmt.Sprintf("the %s provider accepted the request but sent no content for %s; retrying. If this repeats, check that the subscription has remaining credit",
+					resolved.ProviderDriver, llm.StreamContentStallTimeout()),
+			), streamErr)
+		}
 		return nil, streamErr
 	}
 

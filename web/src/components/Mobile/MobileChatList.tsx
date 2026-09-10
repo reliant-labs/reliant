@@ -49,6 +49,8 @@ import { ChatState } from "../../gen/reliant/v1/chat_pb";
 // `$typeName` this component never reads.
 import type { Chat } from "../../types/chat";
 import type { Worktree } from "../../store/worktreeStore";
+import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
+import { useSortOrder, type ChatSortOption } from "../../store/chatListPreferencesStore";
 
 interface ChatGroup {
   worktreeId: string;
@@ -60,25 +62,14 @@ interface ChatGroup {
   lastActivityAt: number;
 }
 
-function sortChatsWithinGroup(chats: Chat[]): Chat[] {
-  return [...chats].sort((a, b) => {
-    const aAttention = needsUserAttention({
-      activity: a.activity,
-      needsRecovery: a.needsRecovery,
-    });
-    const bAttention = needsUserAttention({
-      activity: b.activity,
-      needsRecovery: b.needsRecovery,
-    });
-    if (aAttention !== bAttention) return aAttention ? -1 : 1;
+const chatNeedsAttention = (chat: Chat) =>
+  needsUserAttention({ activity: chat.activity, needsRecovery: chat.needsRecovery });
 
-    const aTime = a.lastMessageAt ? Date.parse(a.lastMessageAt) : 0;
-    const bTime = b.lastMessageAt ? Date.parse(b.lastMessageAt) : 0;
-    return bTime - aTime;
-  });
-}
-
-function buildGroups(chats: Chat[], worktrees: Worktree[]): ChatGroup[] {
+function buildGroups(
+  chats: Chat[],
+  worktrees: Worktree[],
+  sortOrder: ChatSortOption,
+): ChatGroup[] {
   const worktreesById = new Map(worktrees.map((w) => [w.id, w]));
   const groupsById = new Map<string, ChatGroup>();
 
@@ -122,20 +113,24 @@ function buildGroups(chats: Chat[], worktrees: Worktree[]): ChatGroup[] {
 
   const groups = Array.from(groupsById.values());
   for (const group of groups) {
-    group.chats = sortChatsWithinGroup(group.chats);
-    group.hasActivity = group.chats.some((chat) =>
-      needsUserAttention({ activity: chat.activity, needsRecovery: chat.needsRecovery }),
-    );
+    group.chats = sortChats(group.chats, sortOrder, chatNeedsAttention);
+    group.hasActivity = group.chats.some(chatNeedsAttention);
     group.lastActivityAt = group.chats.reduce((max, chat) => {
       const t = chat.lastMessageAt ? Date.parse(chat.lastMessageAt) : 0;
       return Math.max(max, t);
     }, 0);
   }
 
+  // Main workspace pins to the top; the rest rank by their leading chat under
+  // the selected sort order, so a group only moves when its top chat does.
   groups.sort((a, b) => {
     if (a.isMain !== b.isMain) return a.isMain ? -1 : 1;
-    if (a.hasActivity !== b.hasActivity) return a.hasActivity ? -1 : 1;
-    return b.lastActivityAt - a.lastActivityAt;
+    if (a.chats.length === 0 && b.chats.length > 0) return 1;
+    if (b.chats.length === 0 && a.chats.length > 0) return -1;
+    if (a.chats.length === 0 && b.chats.length === 0) {
+      return a.worktreeId.localeCompare(b.worktreeId);
+    }
+    return compareChatGroups(a.chats, b.chats, sortOrder, chatNeedsAttention);
   });
 
   return groups;
@@ -312,6 +307,7 @@ export function MobileChatList() {
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const { data: chats, isLoading } = useChatList(currentProjectId);
   const worktrees = useWorktreeStore((s) => s.worktrees);
+  const sortOrder = useSortOrder();
   const archiveWorktree = useWorktreeStore((s) => s.archiveWorktree);
   const queryClient = useQueryClient();
 
@@ -319,8 +315,8 @@ export function MobileChatList() {
   const [confirmingArchive, setConfirmingArchive] = useState<ChatGroup | null>(null);
 
   const groups = useMemo(
-    () => buildGroups(chats ?? [], worktrees),
-    [chats, worktrees],
+    () => buildGroups(chats ?? [], worktrees, sortOrder),
+    [chats, worktrees, sortOrder],
   );
 
   const toggleGroup = useCallback((worktreeId: string) => {
