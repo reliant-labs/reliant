@@ -55,7 +55,14 @@ build_binary() {
     echo "  Building for $goos/$goarch..."
     mkdir -p "$output_dir"
 
+    # -tags exp.winarm64 keeps the windows/arm64 target compiling: cmd/reliant
+    # links Delve via `reliant forge`, and delve >= 1.27 fails that GOARCH
+    # unless this tag selects its experimental winarm64 backend over the
+    # deliberately-unbuildable sentinel package. No-op on every other target.
+    # Kept in step with the same flag in .github/workflows/release.yml, which
+    # has the full explanation.
     GOOS=$goos GOARCH=$goarch go build \
+        -tags exp.winarm64 \
         -ldflags="$LDFLAGS_BASE -X github.com/reliant-labs/reliant/internal/version.Version=$version" \
         -o "$output_dir/reliant-backend$ext" \
         ./cmd/reliant/

@@ -491,7 +491,34 @@ jobs:
           mkdir -p "$OUT_DIR"
 
           echo "Building backend for ${TARGET_OS}/${TARGET_ARCH}..."
-          GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="$LDFLAGS" -o "$OUT_DIR/$BACKEND_BIN_NAME" ./cmd/reliant/
+          # `exp.winarm64` is a DELVE build tag, and it is what makes the
+          # windows/arm64 leg compile at all.
+          #
+          # cmd/reliant registers `reliant forge` (cmd/reliant/commands/forge.go),
+          # which pulls github.com/reliant-labs/forge/cli -> internal/cli/debug ->
+          # delve/service/debugger, so the shipped backend links Delve on every
+          # target. Delve only supports windows/amd64 natively; for windows/arm64
+          # it compiles a sentinel package whose whole job is to break the build.
+          #
+          # In delve v1.26.3 that sentinel was `windows && !amd64 && !arm64`, so
+          # windows/arm64 slipped through and v1.7.11 shipped. v1.27.1 — pulled in
+          # by the forge v0.1.11 -> v0.1.13 bump between v1.7.11 and v1.7.12 —
+          # retightened it to `windows && !amd64 && !(arm64 && exp.winarm64)`,
+          # which is what produced "found packages native and
+          # your_windows_architecture_is_not_supported_by_delve" and left v1.7.12
+          # with no Windows artifact.
+          #
+          # The tag selects delve's own experimental winarm64 backend instead of
+          # the sentinel. It is compile-only for us: nothing in a released binary
+          # ever starts a debugger, so this restores exactly the v1.7.11 behavior
+          # rather than enabling anything new. It is a no-op on the other five
+          # targets, so it stays on one shared command line that cannot drift.
+          #
+          # The durable fix is for the desktop backend not to link a debugger at
+          # all — that is a forge-side change to how `forge/cli` pulls in
+          # internal/cli/debug, tracked separately; it is not something this
+          # release build can do on its own.
+          GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -tags exp.winarm64 -ldflags="$LDFLAGS" -o "$OUT_DIR/$BACKEND_BIN_NAME" ./cmd/reliant/
 
           if [[ "$TARGET_OS" != "windows" ]]; then
             chmod +x "$OUT_DIR/$BACKEND_BIN_NAME"
