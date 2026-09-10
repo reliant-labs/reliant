@@ -1,0 +1,77 @@
+# forge pin drift check — reports, never blocks.
+#
+# WHY THIS EXISTS
+# ===============
+#
+# Pre-launch we pin forge by COMMIT rather than by tag, because a tagged
+# release costs three tags, three CI cycles and three merges (plus up to ~20
+# minutes of module-proxy lag) before a one-line fix reaches prod — the only
+# environment where our bugs actually appear. See docs/development/pinning.md.
+#
+# That trade has exactly one real cost, and this workflow is the thing that
+# pays it. A commit pin has NO VERSION NUMBER TO NOTICE IS STALE. `v0.1.11`
+# next to a `v0.1.14` release is obviously old at a glance;
+# `v0.1.15-0.20260910160302-c195f15386be` looks equally current whether it is
+# one commit behind or ninety. Nothing decays visibly, so nothing prompts a
+# bump, and the pin quietly ages until someone wonders why a forge fix they
+# merged weeks ago never reached prod.
+#
+# WHERE IT RUNS, AND WHY THERE
+# ============================
+#
+# Separate from pr-ci.yml deliberately. pr-ci is a GATE — every job in it can
+# fail the PR — and this check must never do that (see below). Folding a
+# never-failing job into the gate blurs what a red PR-CI means, and it would
+# inherit that workflow's change-detection plumbing for no benefit.
+#
+# It runs on `pull_request` (the annotation lands where somebody is holding the
+# context) and on a weekly `schedule`. The schedule is the one that matters
+# most: drift is caused by the SIBLING moving, so the commit that makes a pin
+# stale never lands in this repo at all, and a quiet week with no PRs is
+# exactly when a pin rots unobserved.
+#
+# WHY IT NEVER FAILS THE BUILD
+# ============================
+#
+# A deliberately older pin is legitimate. Holding forge steady while chasing a
+# regression is normal, and a check that failed CI for it would be one whose
+# only remedy is to bypass it — and a check people routinely bypass has already
+# stopped being a check.
+#
+# The invariant that genuinely MUST hold is enforced as a hard failure where it
+# belongs: internal/buildmode's guards fail the test job if go.mod carries a
+# forge `replace`, or requires no concrete forge version at all.
+name: Pin Drift
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pin-drift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  drift:
+    name: Report forge pin drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report drift
+        env:
+          # The compare API reads reliant-labs/forge, which is private. The
+          # default GITHUB_TOKEN is scoped to THIS repository only and cannot
+          # see it. The script degrades honestly when a compare fails (it says
+          # "skipped" rather than claiming up-to-date), so a missing
+          # SIBLING_READ_TOKEN yields a useless-but-not-misleading report
+          # instead of a false green.
+          GH_TOKEN: ${{ secrets.SIBLING_READ_TOKEN || secrets.GITHUB_TOKEN }}
+        run: ./scripts/pin-drift.sh --github
