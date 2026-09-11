@@ -156,6 +156,18 @@ const config = {
 
   artifactName: "${productName}-${version}-${os}-${arch}.${ext}",
 
+  // The portable build needs its OWN name. Both win targets are .exe for x64,
+  // so the global artifactName above resolves them to the same
+  // Reliant-<version>-win-x64.exe: portable overwrites the NSIS installer on
+  // disk and then re-uploads that key to R2. The second PUT of a key already
+  // being served has failed the publish step with `read ECONNRESET` three
+  // times in a row on v1.7.13 — after the installers were uploaded but BEFORE
+  // latest.yml was written, so Windows shipped binaries that no client was
+  // ever offered (the feed stayed on 1.7.11).
+  portable: {
+    artifactName: "${productName}-${version}-${os}-${arch}-portable.${ext}"
+  },
+
   dmg: {
     sign: false,
     writeUpdateInfo: true
