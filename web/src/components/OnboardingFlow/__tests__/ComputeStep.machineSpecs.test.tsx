@@ -137,7 +137,11 @@ vi.mock("@/hooks/useBundledDaemonPending", () => ({
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 
 vi.mock("@/services/controlPlane/capabilities", () => ({
-  capabilities: { cloudDaemons: true, managedCredits: true, gitConnections: true },
+  capabilities: {
+    cloudDaemons: true,
+    managedCredits: true,
+    gitConnections: true,
+  },
 }));
 
 vi.mock("@/services/controlPlane/reliantAI", () => ({
@@ -238,7 +242,9 @@ describe("ComputeStep — every size says what it gives you", () => {
     expect(note).toHaveTextContent(/reserve/i);
 
     for (const size of ["Small", "Medium", "Large", "XL"]) {
-      const tile = screen.getByRole("button", { name: new RegExp(`^${size} `) });
+      const tile = screen.getByRole("button", {
+        name: new RegExp(`^${size} `),
+      });
       expect(tile).not.toHaveTextContent(/burst/i);
     }
   });
@@ -279,7 +285,9 @@ describe("ComputeStep — every size says what it gives you", () => {
   it("describes the free option's compute in the user's own terms", () => {
     renderStep();
 
-    const local = screen.getByRole("button", { name: /use your own computer/i });
+    const local = screen.getByRole("button", {
+      name: /use your own computer/i,
+    });
     expect(local).toHaveTextContent(/CPU and memory it already has/i);
     // Still on the same price axis as the paid rows — the property the
     // one-list layout exists to preserve.
@@ -287,34 +295,257 @@ describe("ComputeStep — every size says what it gives you", () => {
   });
 
   /**
-   * Picking the free option must visibly DO something.
+   * A size is a machine SHAPE. It is not an hours allowance.
    *
-   * The connect instructions used to render at the bottom of the step, which
-   * was adjacent while the free option was itself last. Moving the option to
-   * the top left the two separated by the entire cloud card — observed in the
-   * browser: clicking "Use your own computer" looked inert, because what it
-   * revealed was most of a screen further down. Adjacency is what makes the
-   * click legible, so it is asserted rather than left to layout.
+   * ── The report ────────────────────────────────────────────────────────
+   *
+   * > "they're still saying the wrong number of hours. the size is purely the
+   * > cpu/mem shape. remove the hours note" — and, decisively: "they all get
+   * > 160 hours / month".
+   *
+   * The rows read "17 hours included each month" / "42 hours" / "83 hours" /
+   * "Unlimited hours included". Every one of those was wrong, and the shape of
+   * the error is why the per-row line cannot come back. control-plane grants
+   * `daemon_compute_included_minutes: 9600` — 160 h — at small, medium, large
+   * and xl alike (internal/plansconfig/plans.yaml). The figures on screen came
+   * from a dev database still seeded with migration 00054's superseded
+   * per-plan values, so the UI rendered stale data faithfully and stated a
+   * product claim nobody had made: that a bigger machine buys more time.
+   *
+   * A quantity that does not vary per row must not be PRINTED per row. Stated
+   * four times it implies four allowances, and it turns any lag between config
+   * and a database into user-visible pricing copy. The fixture above keeps
+   * that hazard alive on purpose — its plans carry 1020 and 2520 minutes, so
+   * a reintroduced per-row line would render "17 hours" beside "42 hours"
+   * again and fail here.
    */
-  it("opens the connect instructions next to the option that opens them", () => {
+  it("does not put an hours figure on any machine row", () => {
+    renderStep();
+
+    for (const size of ["Small", "Medium", "Large", "XL"]) {
+      const row = screen.getByRole("button", { name: new RegExp(`^${size} `) });
+      expect(row).not.toHaveTextContent(/hours/i);
+      expect(row).not.toHaveTextContent(/included/i);
+    }
+  });
+
+  /**
+   * The allowance is still SAID — once, and as a property of every machine.
+   *
+   * Deleting the per-row line must not delete the fact. It moves beside the
+   * burst ceiling, which is stated once for exactly the same reason, and it is
+   * still read from the catalog rather than hardcoded so it tracks 9600 if
+   * control-plane changes it.
+   */
+  it("states the included hours once, for every size", () => {
+    renderStep();
+
+    const note = screen.getByTestId("compute-step-hours-note");
+    // 1020 min = 17 h, from the fixture's own catalog — not a constant.
+    expect(note).toHaveTextContent(/17 machine hours/i);
+    expect(note).toHaveTextContent(/every size/i);
+    expect(screen.getAllByTestId("compute-step-hours-note")).toHaveLength(1);
+  });
+
+  /**
+   * The free option is a ROW IN the machine list, under the one heading.
+   *
+   * Two earlier attempts moved it nearer the paid options — to the top of the
+   * step, then inside the bordered card — and neither made it one of them,
+   * because the thing separating it was never the border. It was the heading:
+   * "Choose your machine" titled the hosted tiles alone, so the list of
+   * machines was by construction the list the free option was not in.
+   *
+   * That makes this a structural assertion, not a styling one. The free row
+   * and the priced rows must be SIBLINGS in one list that the heading
+   * introduces. Asserted by walking from the heading to the element it labels
+   * and requiring both rows inside it, so restyling is free but re-dividing
+   * the list is not.
+   */
+  it("makes the free option a row in the machine list, under the heading", () => {
+    renderStep();
+
+    const heading = screen.getByText(/choose your machine/i);
+    const list = heading.nextElementSibling as HTMLElement | null;
+    expect(list).not.toBeNull();
+
+    const rows = within(list as HTMLElement);
+    const local = rows.getByRole("button", { name: /use your own computer/i });
+    const small = rows.getByRole("button", { name: /^Small / });
+
+    // Siblings in the same list — not one nested inside a block that holds
+    // the other, which is what every "move it closer" version produced.
+    expect(local.parentElement).toBe(small.parentElement);
+    // Free leads.
+    expect(
+      local.compareDocumentPosition(small) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  /**
+   * There is exactly ONE heading over the machines.
+   *
+   * The hosted rows used to carry their own ("In the Cloud"). A second
+   * heading over the rest of the list re-draws the division this layout
+   * removes, however the boxes are nested — so its absence is part of the
+   * requirement rather than a side effect of deleting the card.
+   */
+  it("does not head the hosted rows separately", () => {
+    renderStep();
+
+    expect(screen.queryByText(/in the cloud/i)).toBeNull();
+    expect(screen.queryByText(/^or use a machine we host$/i)).toBeNull();
+  });
+
+  /**
+   * One question, one selection.
+   *
+   * `selectedPlanId` falls back to the first plan so committing cloud always
+   * carries a size. In a list where the free row and the priced rows sit
+   * together, that default paints Small as selected beside an equally
+   * selected free row — the user sees two chosen machines and no way to tell
+   * which one they get.
+   */
+  it("shows no machine selected while the user's own computer is chosen", () => {
+    renderStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    ).toHaveAttribute("aria-pressed", "true");
+    for (const size of ["Small", "Medium", "Large", "XL"]) {
+      expect(
+        screen.getByRole("button", { name: new RegExp(`^${size} `) }),
+      ).toHaveAttribute("aria-pressed", "false");
+    }
+  });
+
+  /**
+   * Picking the free option must visibly DO something — and what it does now
+   * happens at the BOTTOM of the step.
+   *
+   * This assertion previously required the opposite: the instructions above
+   * the hosted option, because bottom-anchoring them had been observed to make
+   * the click look inert, with the whole cloud card in between. The owner
+   * asked for the bottom, and the reason it holds this time is the change in
+   * the same commit — the cloud CTA is hidden while the free option is
+   * selected, so what separates the row from its instructions is a short list
+   * and two lines of prose rather than a card and a primary button.
+   *
+   * So the ordering is no longer the thing worth pinning; the two facts that
+   * make the bottom position safe are. They are asserted directly below and in
+   * the CTA test that follows.
+   */
+  it("opens the connect instructions when the free option is chosen", () => {
     renderStep();
 
     // fireEvent, not a bare .click(): the latter dispatches outside React's
     // act() scope, so `showLocal` never re-renders and the instructions this
     // test is looking for are legitimately absent.
-    fireEvent.click(screen.getByRole("button", { name: /use your own computer/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    );
 
     const connect = screen.getByTestId("self-hosted-connect");
-    const cloudCard = screen
-      .getByRole("button", { name: /use a reliant machine/i })
-      .closest("div.rounded-xl");
-
     expect(connect).toBeInTheDocument();
-    // Before the cloud card, not after it — the whole point of the move.
+
+    // Last thing on the step: after the machine list, and outside the box
+    // that holds the options — it is the consequence of choosing, not one of
+    // the choices.
+    const heading = screen.getByText(/choose your machine/i);
+    const list = heading.nextElementSibling as HTMLElement;
     expect(
-      connect.compareDocumentPosition(cloudCard!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
+      list.compareDocumentPosition(connect) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(list.contains(connect)).toBe(false);
+  });
+
+  /**
+   * The cloud CTA must be GONE while the user's own computer is selected.
+   *
+   * This is what buys back the distance the bottom-anchored panel costs, and
+   * on its own it fixes a worse problem: "Use a Reliant machine" was a primary
+   * button sitting under a visibly selected free row, offering to undo the
+   * selection the user had just made. It was also the only primary button on
+   * the step, so it read as the way forward — and clicking it discarded the
+   * free choice and committed to a paid machine.
+   */
+  it("hides the cloud CTA while the free option is selected", () => {
+    renderStep();
+
+    expect(
+      screen.getByRole("button", { name: /use a reliant machine/i }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    );
+
+    expect(
+      screen.queryByRole("button", { name: /use a reliant machine/i }),
+    ).toBeNull();
+  });
+
+  /**
+   * ...and it must come BACK when a hosted machine is picked instead.
+   *
+   * Hiding on `showLocal` is only correct if selecting a size clears it.
+   * Otherwise the free option's instructions stay open under a deselected row
+   * with no way to commit the hosted choice, which is a dead end reachable in
+   * two clicks.
+   */
+  it("restores the cloud CTA when a hosted machine is picked", () => {
+    renderStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
+
+    expect(
+      screen.getByRole("button", { name: /use a reliant machine/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
+  });
+
+  /**
+   * The coupon field goes too, and for a DIFFERENT reason than the CTA.
+   *
+   * The CTA had to go because it contradicted the selection and destroyed it
+   * on click. This field does neither — redeeming leaves `showLocal` alone,
+   * so the choice survives. It is hidden on relevance: a compute coupon buys
+   * machine time the user has just declined.
+   *
+   * That weaker justification is exactly why this needs a test. The field
+   * accepts WALLET_CREDIT codes as well as compute codes, so hiding it is
+   * only safe while the local path still reaches a coupon field later, on the
+   * model step. If that ever stops being true, this hiding becomes a trap and
+   * the reasoning above is where to start.
+   */
+  it("hides the coupon field while the free option is selected", () => {
+    renderStep();
+
+    expect(screen.getByTestId("redeem-coupon")).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    );
+
+    expect(screen.queryByTestId("redeem-coupon")).toBeNull();
+  });
+
+  it("restores the coupon field when a hosted machine is picked", () => {
+    renderStep();
+
+    fireEvent.click(
+      screen.getByRole("button", { name: /use your own computer/i }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
+
+    expect(screen.getByTestId("redeem-coupon")).toBeInTheDocument();
   });
 });
 
@@ -336,10 +567,9 @@ describe("machineSpecs mirrors control-plane's ladder", () => {
   it("keeps each axis uniform, at its own multiple", () => {
     for (const [size, spec] of Object.entries(MACHINE_SPECS)) {
       expect(spec.cpuBurst / spec.cpuReserved, `${size} cpu`).toBe(4);
-      expect(
-        spec.memoryBurstGb / spec.memoryReservedGb,
-        `${size} memory`,
-      ).toBe(2);
+      expect(spec.memoryBurstGb / spec.memoryReservedGb, `${size} memory`).toBe(
+        2,
+      );
     }
   });
 });

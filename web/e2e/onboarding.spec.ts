@@ -299,18 +299,26 @@ test.describe('Onboarding Flow', () => {
     await expect(page).toHaveURL(/cloud_paid/, { timeout: 10_000 });
   });
 
-  test('Compute: "Use your own computer" shows self-hosted connect instructions inline', async ({ page }) => {
+  test('Compute: "Use your own computer" shows self-hosted connect instructions on the same step', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
     await dialog.getByRole('button', { name: 'Use your own computer' }).click();
 
     // Stays on the compute step (URL keeps no `compute` plan field) — the
-    // local-daemon instructions render inline rather than navigating.
+    // local-daemon instructions render below the machine list rather than
+    // navigating. "inline" in the old title meant "without navigating", but
+    // it now reads as a claim about POSITION that is no longer true: the
+    // panel sits at the bottom of the step, not inside the list.
     await expect(
       dialog.getByText('Install Reliant Daemon and connect with a token'),
     ).toBeVisible({ timeout: 5_000 });
     await expect(dialog.getByRole('button', { name: 'Generate token' })).toBeVisible();
+
+    // The cloud CTA is gone while this path is selected — it would offer to
+    // undo the choice the user just made, as the only primary button on the
+    // step.
+    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toHaveCount(0);
   });
 
   test('Compute: an already-connected local daemon auto-advances to Model', async ({ page }) => {
