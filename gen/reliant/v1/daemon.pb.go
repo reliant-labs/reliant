@@ -23,6 +23,201 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type OpenOAuthHelperRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Browser origin that will call the helper, added to its CORS allowlist.
+	//
+	// Passed from the UI because the daemon cannot know it: a worktree's web dev
+	// server gets a per-worktree port, so the origin is neither one of the
+	// static defaults nor present in the daemon's environment. Without it the
+	// allowlist would reject the very caller that asked for the port.
+	WebOrigin     string `protobuf:"bytes,1,opt,name=web_origin,json=webOrigin,proto3" json:"web_origin,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenOAuthHelperRequest) Reset() {
+	*x = OpenOAuthHelperRequest{}
+	mi := &file_reliant_v1_daemon_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenOAuthHelperRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenOAuthHelperRequest) ProtoMessage() {}
+
+func (x *OpenOAuthHelperRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenOAuthHelperRequest.ProtoReflect.Descriptor instead.
+func (*OpenOAuthHelperRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *OpenOAuthHelperRequest) GetWebOrigin() string {
+	if x != nil {
+		return x.WebOrigin
+	}
+	return ""
+}
+
+type OpenOAuthHelperResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Port the helper is listening on.
+	Port int32 `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	// Full loopback address, for the probe URL.
+	Addr string `protobuf:"bytes,2,opt,name=addr,proto3" json:"addr,omitempty"`
+	// True when the port was already served (a previous session, or a standalone
+	// `reliant auth serve`). Not an error — the surface exists either way.
+	AlreadyRunning bool `protobuf:"varint,3,opt,name=already_running,json=alreadyRunning,proto3" json:"already_running,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OpenOAuthHelperResponse) Reset() {
+	*x = OpenOAuthHelperResponse{}
+	mi := &file_reliant_v1_daemon_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenOAuthHelperResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenOAuthHelperResponse) ProtoMessage() {}
+
+func (x *OpenOAuthHelperResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenOAuthHelperResponse.ProtoReflect.Descriptor instead.
+func (*OpenOAuthHelperResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *OpenOAuthHelperResponse) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *OpenOAuthHelperResponse) GetAddr() string {
+	if x != nil {
+		return x.Addr
+	}
+	return ""
+}
+
+func (x *OpenOAuthHelperResponse) GetAlreadyRunning() bool {
+	if x != nil {
+		return x.AlreadyRunning
+	}
+	return false
+}
+
+type CloseOAuthHelperRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseOAuthHelperRequest) Reset() {
+	*x = CloseOAuthHelperRequest{}
+	mi := &file_reliant_v1_daemon_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseOAuthHelperRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseOAuthHelperRequest) ProtoMessage() {}
+
+func (x *CloseOAuthHelperRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseOAuthHelperRequest.ProtoReflect.Descriptor instead.
+func (*CloseOAuthHelperRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{2}
+}
+
+type CloseOAuthHelperResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// False when nothing was open.
+	Closed        bool `protobuf:"varint,1,opt,name=closed,proto3" json:"closed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CloseOAuthHelperResponse) Reset() {
+	*x = CloseOAuthHelperResponse{}
+	mi := &file_reliant_v1_daemon_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CloseOAuthHelperResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CloseOAuthHelperResponse) ProtoMessage() {}
+
+func (x *CloseOAuthHelperResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CloseOAuthHelperResponse.ProtoReflect.Descriptor instead.
+func (*CloseOAuthHelperResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *CloseOAuthHelperResponse) GetClosed() bool {
+	if x != nil {
+		return x.Closed
+	}
+	return false
+}
+
 type StartOAuthFlowRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Full OAuth authorize URL with {redirect_uri} placeholder.
@@ -33,7 +228,7 @@ type StartOAuthFlowRequest struct {
 
 func (x *StartOAuthFlowRequest) Reset() {
 	*x = StartOAuthFlowRequest{}
-	mi := &file_reliant_v1_daemon_proto_msgTypes[0]
+	mi := &file_reliant_v1_daemon_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +240,7 @@ func (x *StartOAuthFlowRequest) String() string {
 func (*StartOAuthFlowRequest) ProtoMessage() {}
 
 func (x *StartOAuthFlowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_proto_msgTypes[0]
+	mi := &file_reliant_v1_daemon_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +253,7 @@ func (x *StartOAuthFlowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthFlowRequest.ProtoReflect.Descriptor instead.
 func (*StartOAuthFlowRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StartOAuthFlowRequest) GetAuthorizeUrlTemplate() string {
@@ -82,7 +277,7 @@ type StartOAuthFlowResponse struct {
 
 func (x *StartOAuthFlowResponse) Reset() {
 	*x = StartOAuthFlowResponse{}
-	mi := &file_reliant_v1_daemon_proto_msgTypes[1]
+	mi := &file_reliant_v1_daemon_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -94,7 +289,7 @@ func (x *StartOAuthFlowResponse) String() string {
 func (*StartOAuthFlowResponse) ProtoMessage() {}
 
 func (x *StartOAuthFlowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_proto_msgTypes[1]
+	mi := &file_reliant_v1_daemon_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -107,7 +302,7 @@ func (x *StartOAuthFlowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartOAuthFlowResponse.ProtoReflect.Descriptor instead.
 func (*StartOAuthFlowResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_daemon_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *StartOAuthFlowResponse) GetCode() string {
@@ -136,15 +331,27 @@ var File_reliant_v1_daemon_proto protoreflect.FileDescriptor
 const file_reliant_v1_daemon_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/daemon.proto\x12\n" +
-	"reliant.v1\"M\n" +
+	"reliant.v1\"7\n" +
+	"\x16OpenOAuthHelperRequest\x12\x1d\n" +
+	"\n" +
+	"web_origin\x18\x01 \x01(\tR\twebOrigin\"j\n" +
+	"\x17OpenOAuthHelperResponse\x12\x12\n" +
+	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x12\n" +
+	"\x04addr\x18\x02 \x01(\tR\x04addr\x12'\n" +
+	"\x0falready_running\x18\x03 \x01(\bR\x0ealreadyRunning\"\x19\n" +
+	"\x17CloseOAuthHelperRequest\"2\n" +
+	"\x18CloseOAuthHelperResponse\x12\x16\n" +
+	"\x06closed\x18\x01 \x01(\bR\x06closed\"M\n" +
 	"\x15StartOAuthFlowRequest\x124\n" +
 	"\x16authorize_url_template\x18\x01 \x01(\tR\x14authorizeUrlTemplate\"e\n" +
 	"\x16StartOAuthFlowResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x14\n" +
 	"\x05state\x18\x02 \x01(\tR\x05state\x12!\n" +
-	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri2j\n" +
+	"\fredirect_uri\x18\x03 \x01(\tR\vredirectUri2\xa9\x02\n" +
 	"\rDaemonService\x12Y\n" +
-	"\x0eStartOAuthFlow\x12!.reliant.v1.StartOAuthFlowRequest\x1a\".reliant.v1.StartOAuthFlowResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x0eStartOAuthFlow\x12!.reliant.v1.StartOAuthFlowRequest\x1a\".reliant.v1.StartOAuthFlowResponse\"\x00\x12\\\n" +
+	"\x0fOpenOAuthHelper\x12\".reliant.v1.OpenOAuthHelperRequest\x1a#.reliant.v1.OpenOAuthHelperResponse\"\x00\x12_\n" +
+	"\x10CloseOAuthHelper\x12#.reliant.v1.CloseOAuthHelperRequest\x1a$.reliant.v1.CloseOAuthHelperResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_daemon_proto_rawDescOnce sync.Once
@@ -158,16 +365,24 @@ func file_reliant_v1_daemon_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_daemon_proto_rawDescData
 }
 
-var file_reliant_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_reliant_v1_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_reliant_v1_daemon_proto_goTypes = []any{
-	(*StartOAuthFlowRequest)(nil),  // 0: reliant.v1.StartOAuthFlowRequest
-	(*StartOAuthFlowResponse)(nil), // 1: reliant.v1.StartOAuthFlowResponse
+	(*OpenOAuthHelperRequest)(nil),   // 0: reliant.v1.OpenOAuthHelperRequest
+	(*OpenOAuthHelperResponse)(nil),  // 1: reliant.v1.OpenOAuthHelperResponse
+	(*CloseOAuthHelperRequest)(nil),  // 2: reliant.v1.CloseOAuthHelperRequest
+	(*CloseOAuthHelperResponse)(nil), // 3: reliant.v1.CloseOAuthHelperResponse
+	(*StartOAuthFlowRequest)(nil),    // 4: reliant.v1.StartOAuthFlowRequest
+	(*StartOAuthFlowResponse)(nil),   // 5: reliant.v1.StartOAuthFlowResponse
 }
 var file_reliant_v1_daemon_proto_depIdxs = []int32{
-	0, // 0: reliant.v1.DaemonService.StartOAuthFlow:input_type -> reliant.v1.StartOAuthFlowRequest
-	1, // 1: reliant.v1.DaemonService.StartOAuthFlow:output_type -> reliant.v1.StartOAuthFlowResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	4, // 0: reliant.v1.DaemonService.StartOAuthFlow:input_type -> reliant.v1.StartOAuthFlowRequest
+	0, // 1: reliant.v1.DaemonService.OpenOAuthHelper:input_type -> reliant.v1.OpenOAuthHelperRequest
+	2, // 2: reliant.v1.DaemonService.CloseOAuthHelper:input_type -> reliant.v1.CloseOAuthHelperRequest
+	5, // 3: reliant.v1.DaemonService.StartOAuthFlow:output_type -> reliant.v1.StartOAuthFlowResponse
+	1, // 4: reliant.v1.DaemonService.OpenOAuthHelper:output_type -> reliant.v1.OpenOAuthHelperResponse
+	3, // 5: reliant.v1.DaemonService.CloseOAuthHelper:output_type -> reliant.v1.CloseOAuthHelperResponse
+	3, // [3:6] is the sub-list for method output_type
+	0, // [0:3] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -184,7 +399,7 @@ func file_reliant_v1_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_daemon_proto_rawDesc), len(file_reliant_v1_daemon_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -30,3 +30,44 @@ export async function startOAuthViaDaemon(
   const client = createClient(DaemonService, transport);
   return client.startOAuthFlow({ authorizeUrlTemplate }, { signal });
 }
+
+/**
+ * Ask the daemon to open its localhost OAuth helper port for ONE linking
+ * session.
+ *
+ * Returns immediately — unlike `startOAuthViaDaemon` this does not block on a
+ * human at a consent screen, which is what made that RPC fail at ~15s in the
+ * packaged app.
+ *
+ * Pair every call with `closeOAuthHelper`. The daemon also closes the port
+ * after an idle timeout, but that is the backstop for a UI that never got to
+ * ask (a closed tab, a crash) — not the normal path.
+ */
+export async function openOAuthHelper(
+  webOrigin: string,
+  signal?: AbortSignal
+): Promise<{ port: number; addr: string; alreadyRunning: boolean }> {
+  const transport = getTransport();
+  const client = createClient(DaemonService, transport);
+  const resp = await client.openOAuthHelper({ webOrigin }, { signal });
+  return {
+    port: resp.port,
+    addr: resp.addr,
+    alreadyRunning: resp.alreadyRunning,
+  };
+}
+
+/**
+ * Release the helper port. Best-effort by design: the caller is usually in a
+ * `finally`, and a failure here must not mask the outcome of the flow itself.
+ * The daemon's idle timeout covers a missed close.
+ */
+export async function closeOAuthHelper(): Promise<void> {
+  try {
+    const transport = getTransport();
+    const client = createClient(DaemonService, transport);
+    await client.closeOAuthHelper({});
+  } catch {
+    // Ignored: the idle timeout is the backstop.
+  }
+}

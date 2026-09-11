@@ -601,6 +601,14 @@ Credential resolution order:
 			defer shell.GetBackgroundManager().KillAllRunning()
 			defer shell.GetProcessMonitor().Stop()
 
+			// NOTE: the localhost OAuth helper is NOT started here. It is
+			// opened ON DEMAND by the `auth.open_oauth_helper` daemon command
+			// (internal/toolexec/daemonruntime/cmd_oauth_helper.go) when the
+			// web app asks for it, and closed when the linking session ends.
+			// A port that starts browsers and returns authorization codes
+			// should exist for the seconds it is needed, not for the life of
+			// every daemon on every machine.
+
 			// In server mode, skip credential resolution — the gateway dials
 			// into us and already knows our identity from the NATS connect command.
 			if serverMode {
@@ -744,6 +752,7 @@ Credential resolution order:
 	}
 
 	cmd.Flags().StringVar(&port, "port", envOrDefault("TOOLS_DAEMON_PORT", "9190"), "Daemon listen port")
+
 	cmd.Flags().StringVar(&grpcURL, "grpc-url", envOrDefault("DAEMON_GRPC_URL", ""), "gRPC server URL to connect to")
 	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
 
