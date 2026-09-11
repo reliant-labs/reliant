@@ -2594,6 +2594,23 @@ func buildSpawnChildInputs(workflowInputs map[string]interface{}) map[string]int
 		childInputs["parent_permission"] = parentPerm
 	}
 
+	// The parent's DECLARED TOOL SET is deliberately not propagated, unlike its
+	// permission. The two constrain different things and only one of them
+	// composes.
+	//
+	// A permission cap composes because it is a tier: a child at or below its
+	// parent's tier is always meaningful. A tool set does not — an orchestrator's
+	// filter describes the orchestrator's own job, not its children's. The
+	// builtin `code_reviewer` preset is the worked example: it holds a narrow
+	// filter (view, code_context, shell, web) and spawns `researcher`, whose work
+	// needs a different set entirely. Intersecting parent into child would leave
+	// every spawned unit with the orchestrator's tools, which is precisely what
+	// presets exist to avoid.
+	//
+	// A child's set comes from its own preset, and is enforced against that set
+	// by the same rules as any other agent. The permission cap remains the
+	// constraint that crosses the boundary.
+
 	return childInputs
 }
 

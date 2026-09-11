@@ -213,9 +213,11 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	expectedResponseTools := protoArgs.GetExpectedResponseTools()
 	responseToolSchemas := protoStructMapToGoMap(protoArgs.GetResponseToolSchemas())
 
-	// Resolve the permission level for tool execution enforcement.
-	// This was set by call_llm when it resolved tools for the LLM request.
-	grantedPermission := tools.GetLoadedToolsStore().GetPermission(tools.Scope(rtx.ChatID, rtx.Thread))
+	// Resolve the permission level and the declared tool set for execution-time
+	// enforcement. Both were set by call_llm when it resolved tools for the LLM
+	// request; a tool must pass both to run.
+	scopeKey := tools.Scope(rtx.ChatID, rtx.Thread)
+	grantedPermission := tools.GetLoadedToolsStore().GetPermission(scopeKey)
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
@@ -301,6 +303,24 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 							result: message.ToolResult{
 								ToolCallID: toolCallID,
 								Content:    "incomplete tool call: missing name or id",
+								IsError:    true,
+							},
+						}
+						return
+					}
+
+					// Enforce the workflow's declared tool set at EXECUTION, not
+					// only when the request was built. The model can name a tool
+					// that was never offered — a stale name from earlier history,
+					// or an outright hallucination — and without this the call
+					// would run purely because the ladder allowed its tier.
+					if !tools.GetLoadedToolsStore().IsToolAllowed(scopeKey, toolName) {
+						resultsChan <- toolCallResult{
+							index: job.index,
+							result: message.ToolResult{
+								ToolCallID: toolCallID,
+								Name:       toolName,
+								Content:    fmt.Sprintf("Tool '%s' is not in this workflow's declared tool set.", toolName),
 								IsError:    true,
 							},
 						}

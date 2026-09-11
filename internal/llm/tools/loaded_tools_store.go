@@ -24,6 +24,7 @@ type LoadedToolsStore struct {
 	mu           sync.RWMutex
 	tools        map[string]map[string]bool      // scope -> set of tool names
 	permissions  map[string]string               // scope -> permission level
+	allowed      map[string]map[string]bool      // scope -> workflow-declared allow-set
 	skills       map[string][]config.StoredSkill // scope -> skills
 	availableMCP map[string][]MCPToolInfo        // scope -> connected/available MCP tools
 }
@@ -57,6 +58,7 @@ type MCPToolInfo struct {
 var globalLoadedToolsStore = &LoadedToolsStore{
 	tools:        make(map[string]map[string]bool),
 	permissions:  make(map[string]string),
+	allowed:      make(map[string]map[string]bool),
 	skills:       make(map[string][]config.StoredSkill),
 	availableMCP: make(map[string][]MCPToolInfo),
 }
@@ -118,6 +120,7 @@ func (s *LoadedToolsStore) Clear(scopeKey string) {
 
 	delete(s.tools, scopeKey)
 	delete(s.permissions, scopeKey)
+	delete(s.allowed, scopeKey)
 	delete(s.skills, scopeKey)
 	delete(s.availableMCP, scopeKey)
 }
@@ -170,6 +173,59 @@ func (s *LoadedToolsStore) SetPermission(scopeKey, permission string) {
 	defer s.mu.Unlock()
 
 	s.permissions[scopeKey] = permission
+}
+
+// SetAllowedTools records the workflow's declared tool set for a scope, already
+// expanded from `tools:` (tags, globs and exclusions resolved to concrete
+// names). It is what makes the declaration a boundary rather than a hint: the
+// expansion used to be computed to build one request's tool array and then
+// thrown away, so load_tool could hand back anything the permission ladder
+// happened to allow — including a tool the author had explicitly excluded.
+//
+// An EMPTY set means "no declaration", not "nothing allowed". A workflow with
+// no `tools:` filter places no restriction, and must not be silently reduced to
+// zero tools.
+func (s *LoadedToolsStore) SetAllowedTools(scopeKey string, names []string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if len(names) == 0 {
+		delete(s.allowed, scopeKey)
+		return
+	}
+	set := make(map[string]bool, len(names))
+	for _, name := range names {
+		set[name] = true
+	}
+	s.allowed[scopeKey] = set
+}
+
+// IsToolAllowed reports whether a tool passes the scope's declared allow-set.
+// Scopes with no declaration allow everything, so an undeclared workflow keeps
+// working and a lost scope (worker restart) does not strand a live run.
+//
+// This is deliberately NOT the security boundary — a declared set still hands
+// the agent a shell. It enforces authorial intent: what this workflow said its
+// agent should have.
+func (s *LoadedToolsStore) IsToolAllowed(scopeKey, toolName string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	set, ok := s.allowed[scopeKey]
+	if !ok {
+		return true
+	}
+	return set[toolName]
+}
+
+// HasAllowedTools reports whether a scope carries a declaration at all, so
+// callers can tell "allowed because declared" from "allowed because undeclared".
+func (s *LoadedToolsStore) HasAllowedTools(scopeKey string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	_, ok := s.allowed[scopeKey]
+	return ok
 }
 
 // GetPermission returns the permission level for a scope.
