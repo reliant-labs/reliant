@@ -67,3 +67,72 @@ func (s *DaemonProxyService) StartOAuthFlow(
 		RedirectUri: resp.RedirectURI,
 	}), nil
 }
+
+// openHelperTimeoutMs bounds the open/close commands. These return as soon as
+// the listener is bound or closed — no human is in the loop — so the generous
+// hour StartOAuthFlow needs would only delay reporting a dead daemon.
+const openHelperTimeoutMs = 10_000
+
+// OpenOAuthHelper asks the user's daemon to open its localhost OAuth helper
+// port for one linking session.
+func (s *DaemonProxyService) OpenOAuthHelper(
+	ctx context.Context,
+	req *connect.Request[reliantv1.OpenOAuthHelperRequest],
+) (*connect.Response[reliantv1.OpenOAuthHelperResponse], error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"web_origin": req.Msg.WebOrigin,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+	}
+
+	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.open_oauth_helper", payload, openHelperTimeoutMs)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open OAuth helper: %w", err))
+	}
+
+	var resp struct {
+		Port           int32  `json:"port"`
+		Addr           string `json:"addr"`
+		AlreadyRunning bool   `json:"already_running"`
+	}
+	if err := json.Unmarshal(respBytes, &resp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+	}
+
+	return connect.NewResponse(&reliantv1.OpenOAuthHelperResponse{
+		Port:           resp.Port,
+		Addr:           resp.Addr,
+		AlreadyRunning: resp.AlreadyRunning,
+	}), nil
+}
+
+// CloseOAuthHelper closes the helper port when the linking session ends.
+func (s *DaemonProxyService) CloseOAuthHelper(
+	ctx context.Context,
+	_ *connect.Request[reliantv1.CloseOAuthHelperRequest],
+) (*connect.Response[reliantv1.CloseOAuthHelperResponse], error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+
+	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.close_oauth_helper", []byte("{}"), openHelperTimeoutMs)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("close OAuth helper: %w", err))
+	}
+
+	var resp struct {
+		Closed bool `json:"closed"`
+	}
+	if err := json.Unmarshal(respBytes, &resp); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+	}
+
+	return connect.NewResponse(&reliantv1.CloseOAuthHelperResponse{Closed: resp.Closed}), nil
+}

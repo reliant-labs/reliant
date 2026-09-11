@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
-import { OAUTH_LOCAL_SERVER_URL } from '@/lib/oauth-local'
+import {
+  probeOAuthHelper,
+  releaseOAuthHelper,
+  requestOAuthHelper,
+} from '@/lib/oauth-local'
 
 export interface UseOAuthAvailabilityOptions {
   /**
@@ -29,15 +33,12 @@ export interface UseOAuthAvailabilityReturn {
 const POLL_INTERVAL_MS = 2000
 const HEALTH_TIMEOUT_MS = 2000
 
+// Identity-checked: a 200 alone proves only that SOMETHING holds port 19284,
+// and offering an OAuth flow to an unrelated dev server fails silently. See
+// probeOAuthHelper.
 async function pingHealth(): Promise<boolean> {
-  try {
-    const resp = await fetch(`${OAUTH_LOCAL_SERVER_URL}/health`, {
-      signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
-    })
-    return resp.ok
-  } catch {
-    return false
-  }
+  const health = await probeOAuthHelper(HEALTH_TIMEOUT_MS)
+  return !!health?.ready
 }
 
 /**
@@ -45,12 +46,18 @@ async function pingHealth(): Promise<boolean> {
  *
  * - **Electron**: always available immediately (daemon handles it); no network
  *   probe is ever made.
- * - **Web**: pings `http://127.0.0.1:19284/health` to see if `reliant auth serve`
- *   is running — but ONLY once `enabled` is `true`. Callers set `enabled` while
- *   the local-OAuth UI is on screen, so the probe (and Chrome's Local Network
- *   Access prompt) never fires for users who never chose the local-OAuth path.
- *   While enabled + unavailable, polls every 2s so the UI flips automatically
- *   when the user starts the helper in their terminal.
+ * - **Web**: probes `http://127.0.0.1:19284/health` and requires the response to
+ *   identify itself as reliant — served either by `reliant daemon start` running
+ *   on THIS machine or by a standalone `reliant auth serve`. Probing only once
+ *   `enabled` is `true`: callers set it while the local-OAuth UI is on screen, so
+ *   the probe (and Chrome's Local Network Access prompt) never fires for users
+ *   who never chose the local-OAuth path. While enabled + unavailable, polls
+ *   every 2s so the UI flips automatically when the helper appears.
+ *
+ * The probe doubles as the CO-LOCATION test. Whether the daemon is on the same
+ * machine as the browser cannot be answered from the server side — it knows its
+ * hostname and instance id, but not which machine rendered this page, and behind
+ * NAT many machines share one address. Reaching it on localhost is the proof.
  */
 export function useOAuthAvailability(
   { enabled = false }: UseOAuthAvailabilityOptions = {},
@@ -68,25 +75,39 @@ export function useOAuthAvailability(
       return
     }
     setLoading(true)
-    const ok = await pingHealth()
-    setAvailable(ok)
+    // An explicit retry ASKS again: the user may have started a daemon since
+    // the last attempt, and re-probing alone would never open a port.
+    const health = await requestOAuthHelper()
+    setAvailable(!!health?.ready)
     setLoading(false)
   }, [isElectron])
 
-  // Kick off an immediate check when probing turns on. In Electron we never
-  // touch the network; while disabled we stay quiet so no health probe fires.
+  // Ask the daemon to OPEN the port when the panel appears, then confirm it is
+  // reachable here.
+  //
+  // Requesting rather than merely probing is what removes the second terminal
+  // command: a connected daemon on this machine opens the port on demand, so
+  // `reliant auth serve` is only needed when the daemon is remote or absent.
+  // The request is also the co-location test — see requestOAuthHelper.
+  //
+  // In Electron we never touch the network; while disabled we stay quiet so
+  // nothing fires for users who never chose the local-OAuth path.
   useEffect(() => {
     if (isElectron || !enabled) return
     let cancelled = false
     void (async () => {
       setLoading(true)
-      const ok = await pingHealth()
+      const health = await requestOAuthHelper()
       if (cancelled) return
-      setAvailable(ok)
+      setAvailable(!!health?.ready)
       setLoading(false)
     })()
     return () => {
       cancelled = true
+      // Release the port when the panel goes away. The daemon's idle timeout
+      // is the backstop for a tab that closes without unmounting; this is the
+      // fast path that keeps the listener's life equal to the task.
+      void releaseOAuthHelper()
     }
   }, [enabled, isElectron])
 

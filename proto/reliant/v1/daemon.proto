@@ -10,6 +10,56 @@ service DaemonService {
   // StartOAuthFlow starts a localhost callback server on the daemon, opens the
   // browser for the user to authorize, and returns the authorization code.
   rpc StartOAuthFlow(StartOAuthFlowRequest) returns (StartOAuthFlowResponse) {}
+
+  // OpenOAuthHelper asks the daemon to open its localhost OAuth helper port
+  // for ONE account-linking session. Returns immediately — unlike
+  // StartOAuthFlow it does not block on a human working through a consent
+  // screen, which is what made that RPC unusable in the packaged app.
+  //
+  // The port is NOT open the rest of the time, deliberately: a listener that
+  // starts browsers and returns authorization codes should exist for the
+  // seconds it is needed, not for the life of every daemon on every machine.
+  // The daemon closes it on CloseOAuthHelper, or after an idle timeout if the
+  // UI never gets to send one.
+  //
+  // This pair is also how the app learns whether the daemon is CO-LOCATED with
+  // the browser — a fact neither side can assert on its own. The UI asks the
+  // daemon to open the port over the connection it already has, then probes
+  // 127.0.0.1 itself. A successful probe proves the daemon that just opened it
+  // is on the browser's machine; a failed one means the daemon is remote, and
+  // the UI can say so instead of offering a flow that would hang.
+  rpc OpenOAuthHelper(OpenOAuthHelperRequest) returns (OpenOAuthHelperResponse) {}
+
+  // CloseOAuthHelper closes the helper port when the linking session ends
+  // (completed or cancelled).
+  rpc CloseOAuthHelper(CloseOAuthHelperRequest) returns (CloseOAuthHelperResponse) {}
+}
+
+message OpenOAuthHelperRequest {
+  // Browser origin that will call the helper, added to its CORS allowlist.
+  //
+  // Passed from the UI because the daemon cannot know it: a worktree's web dev
+  // server gets a per-worktree port, so the origin is neither one of the
+  // static defaults nor present in the daemon's environment. Without it the
+  // allowlist would reject the very caller that asked for the port.
+  string web_origin = 1;
+}
+
+message OpenOAuthHelperResponse {
+  // Port the helper is listening on.
+  int32 port = 1;
+  // Full loopback address, for the probe URL.
+  string addr = 2;
+  // True when the port was already served (a previous session, or a standalone
+  // `reliant auth serve`). Not an error — the surface exists either way.
+  bool already_running = 3;
+}
+
+message CloseOAuthHelperRequest {}
+
+message CloseOAuthHelperResponse {
+  // False when nothing was open.
+  bool closed = 1;
 }
 
 message StartOAuthFlowRequest {

@@ -208,6 +208,45 @@ func InferConfig(authorizeURLTemplate string) CallbackConfig {
 	return cfg
 }
 
+// listenRetryBudget bounds how long a bind waits out a PREVIOUS flow that is
+// still releasing the port.
+//
+// Even with the listener closed first on cancel, two flows can overlap by
+// milliseconds — the user clicks Connect again before the cancelled flow's
+// goroutine has been scheduled. A fixed-port provider has nowhere else to go,
+// so a bare failure there is a dead end for the user; waiting a moment turns
+// it into a click that just works. Kept short: a port held by something that
+// is NOT a dying flow of ours should still fail fast and say so.
+const listenRetryBudget = 3 * time.Second
+
+// listenRetryInterval is the poll between bind attempts. Fine enough that the
+// wait is imperceptible when the previous flow is already unwinding.
+const listenRetryInterval = 50 * time.Millisecond
+
+// listenWithRetry binds addr, retrying briefly while the port is in use.
+//
+// Only "address already in use" is retried — any other bind error (a bad
+// address, a permission problem) is returned at once, because waiting cannot
+// change it. Returns the LAST error on timeout so the caller's reuse path and
+// error message see the real bind failure.
+func listenWithRetry(ctx context.Context, addr string) (net.Listener, error) {
+	deadline := time.Now().Add(listenRetryBudget)
+	for {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		if !isAddressInUse(err) || time.Now().After(deadline) {
+			return nil, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(listenRetryInterval):
+		}
+	}
+}
+
 // Run starts a temporary HTTP server, opens the browser, and waits for the
 // OAuth callback or context cancellation. It returns the authorization code,
 // state and redirect URI.
@@ -225,10 +264,21 @@ func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
 	listenAddr := fmt.Sprintf("%s:%d", cfg.ListenHost, cfg.FixedPort)
 	listener, err := net.Listen("tcp", listenAddr)
 	if err != nil {
+		// An ACTIVE sibling flow owns the port — join it and share the one
+		// callback. This must be tried BEFORE any retry: a concurrent flow is
+		// not a port to wait out, it is a flow to queue behind, and waiting
+		// would break the handoff (see rebind_test.go).
 		if reusedResult, reuseErr := tryReuseExistingListener(ctx, cfg, server.redirectURI, err); reuseErr == nil {
 			return reusedResult, nil
 		}
-		return nil, fmt.Errorf("failed to start callback listener: %w", err)
+		// No live owner answered the handshake, so the holder is a flow on its
+		// way out — typically the one the user just cancelled, whose graceful
+		// shutdown has not finished releasing the socket. Wait briefly rather
+		// than failing the click.
+		listener, err = listenWithRetry(ctx, listenAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to start callback listener: %w", err)
+		}
 	}
 	defer listener.Close()
 
@@ -256,8 +306,28 @@ func Run(ctx context.Context, authorizeURLTemplate string) (*Result, error) {
 	go func() {
 		<-ctx.Done()
 		// A cancelled flow has no answer to hand anyone, so there is nothing
-		// to drain — but still shut down gracefully rather than severing the
-		// socket, so the port is released cleanly for the next attempt.
+		// to drain.
+		//
+		// CLOSE THE LISTENER FIRST, before the graceful Shutdown. Shutdown
+		// waits for open connections to go idle, and on a cancel the browser
+		// is typically still holding one open at the consent screen — so the
+		// PORT stayed bound for the whole drain (measured: 6.3s). A user who
+		// cancelled and immediately clicked Connect again landed inside that
+		// window and got
+		//
+		//     failed to start callback listener: listen tcp 127.0.0.1:1455:
+		//     bind: address already in use
+		//
+		// which reads as a broken app rather than a moment's wait. It bites
+		// the FIXED-port providers (Codex on 1455) because they cannot fall
+		// back to another port.
+		//
+		// Closing the listener releases the port at once while Shutdown still
+		// lets in-flight responses finish on their already-accepted
+		// connections. Nothing is severed that was mid-write: the listener
+		// only governs NEW accepts.
+		_ = listener.Close()
+
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownBudget)
 		defer cancel()
 		if err := httpServer.Shutdown(shutdownCtx); err != nil {

@@ -13,7 +13,97 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/daemon.proto.
  */
 export const file_reliant_v1_daemon: GenFile = /*@__PURE__*/
-  fileDesc("ChdyZWxpYW50L3YxL2RhZW1vbi5wcm90bxIKcmVsaWFudC52MSI3ChVTdGFydE9BdXRoRmxvd1JlcXVlc3QSHgoWYXV0aG9yaXplX3VybF90ZW1wbGF0ZRgBIAEoCSJLChZTdGFydE9BdXRoRmxvd1Jlc3BvbnNlEgwKBGNvZGUYASABKAkSDQoFc3RhdGUYAiABKAkSFAoMcmVkaXJlY3RfdXJpGAMgASgJMmoKDURhZW1vblNlcnZpY2USWQoOU3RhcnRPQXV0aEZsb3cSIS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhGbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuU3RhcnRPQXV0aEZsb3dSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChdyZWxpYW50L3YxL2RhZW1vbi5wcm90bxIKcmVsaWFudC52MSIsChZPcGVuT0F1dGhIZWxwZXJSZXF1ZXN0EhIKCndlYl9vcmlnaW4YASABKAkiTgoXT3Blbk9BdXRoSGVscGVyUmVzcG9uc2USDAoEcG9ydBgBIAEoBRIMCgRhZGRyGAIgASgJEhcKD2FscmVhZHlfcnVubmluZxgDIAEoCCIZChdDbG9zZU9BdXRoSGVscGVyUmVxdWVzdCIqChhDbG9zZU9BdXRoSGVscGVyUmVzcG9uc2USDgoGY2xvc2VkGAEgASgIIjcKFVN0YXJ0T0F1dGhGbG93UmVxdWVzdBIeChZhdXRob3JpemVfdXJsX3RlbXBsYXRlGAEgASgJIksKFlN0YXJ0T0F1dGhGbG93UmVzcG9uc2USDAoEY29kZRgBIAEoCRINCgVzdGF0ZRgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkyqQIKDURhZW1vblNlcnZpY2USWQoOU3RhcnRPQXV0aEZsb3cSIS5yZWxpYW50LnYxLlN0YXJ0T0F1dGhGbG93UmVxdWVzdBoiLnJlbGlhbnQudjEuU3RhcnRPQXV0aEZsb3dSZXNwb25zZSIAElwKD09wZW5PQXV0aEhlbHBlchIiLnJlbGlhbnQudjEuT3Blbk9BdXRoSGVscGVyUmVxdWVzdBojLnJlbGlhbnQudjEuT3Blbk9BdXRoSGVscGVyUmVzcG9uc2UiABJfChBDbG9zZU9BdXRoSGVscGVyEiMucmVsaWFudC52MS5DbG9zZU9BdXRoSGVscGVyUmVxdWVzdBokLnJlbGlhbnQudjEuQ2xvc2VPQXV0aEhlbHBlclJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
+
+/**
+ * @generated from message reliant.v1.OpenOAuthHelperRequest
+ */
+export type OpenOAuthHelperRequest = Message<"reliant.v1.OpenOAuthHelperRequest"> & {
+  /**
+   * Browser origin that will call the helper, added to its CORS allowlist.
+   *
+   * Passed from the UI because the daemon cannot know it: a worktree's web dev
+   * server gets a per-worktree port, so the origin is neither one of the
+   * static defaults nor present in the daemon's environment. Without it the
+   * allowlist would reject the very caller that asked for the port.
+   *
+   * @generated from field: string web_origin = 1;
+   */
+  webOrigin: string;
+};
+
+/**
+ * Describes the message reliant.v1.OpenOAuthHelperRequest.
+ * Use `create(OpenOAuthHelperRequestSchema)` to create a new message.
+ */
+export const OpenOAuthHelperRequestSchema: GenMessage<OpenOAuthHelperRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon, 0);
+
+/**
+ * @generated from message reliant.v1.OpenOAuthHelperResponse
+ */
+export type OpenOAuthHelperResponse = Message<"reliant.v1.OpenOAuthHelperResponse"> & {
+  /**
+   * Port the helper is listening on.
+   *
+   * @generated from field: int32 port = 1;
+   */
+  port: number;
+
+  /**
+   * Full loopback address, for the probe URL.
+   *
+   * @generated from field: string addr = 2;
+   */
+  addr: string;
+
+  /**
+   * True when the port was already served (a previous session, or a standalone
+   * `reliant auth serve`). Not an error — the surface exists either way.
+   *
+   * @generated from field: bool already_running = 3;
+   */
+  alreadyRunning: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.OpenOAuthHelperResponse.
+ * Use `create(OpenOAuthHelperResponseSchema)` to create a new message.
+ */
+export const OpenOAuthHelperResponseSchema: GenMessage<OpenOAuthHelperResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon, 1);
+
+/**
+ * @generated from message reliant.v1.CloseOAuthHelperRequest
+ */
+export type CloseOAuthHelperRequest = Message<"reliant.v1.CloseOAuthHelperRequest"> & {
+};
+
+/**
+ * Describes the message reliant.v1.CloseOAuthHelperRequest.
+ * Use `create(CloseOAuthHelperRequestSchema)` to create a new message.
+ */
+export const CloseOAuthHelperRequestSchema: GenMessage<CloseOAuthHelperRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon, 2);
+
+/**
+ * @generated from message reliant.v1.CloseOAuthHelperResponse
+ */
+export type CloseOAuthHelperResponse = Message<"reliant.v1.CloseOAuthHelperResponse"> & {
+  /**
+   * False when nothing was open.
+   *
+   * @generated from field: bool closed = 1;
+   */
+  closed: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.CloseOAuthHelperResponse.
+ * Use `create(CloseOAuthHelperResponseSchema)` to create a new message.
+ */
+export const CloseOAuthHelperResponseSchema: GenMessage<CloseOAuthHelperResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_daemon, 3);
 
 /**
  * @generated from message reliant.v1.StartOAuthFlowRequest
@@ -32,7 +122,7 @@ export type StartOAuthFlowRequest = Message<"reliant.v1.StartOAuthFlowRequest"> 
  * Use `create(StartOAuthFlowRequestSchema)` to create a new message.
  */
 export const StartOAuthFlowRequestSchema: GenMessage<StartOAuthFlowRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon, 0);
+  messageDesc(file_reliant_v1_daemon, 4);
 
 /**
  * @generated from message reliant.v1.StartOAuthFlowResponse
@@ -65,7 +155,7 @@ export type StartOAuthFlowResponse = Message<"reliant.v1.StartOAuthFlowResponse"
  * Use `create(StartOAuthFlowResponseSchema)` to create a new message.
  */
 export const StartOAuthFlowResponseSchema: GenMessage<StartOAuthFlowResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_daemon, 1);
+  messageDesc(file_reliant_v1_daemon, 5);
 
 /**
  * DaemonService exposes daemon-side operations proxied through the daemon-gateway.
@@ -83,6 +173,43 @@ export const DaemonService: GenService<{
     methodKind: "unary";
     input: typeof StartOAuthFlowRequestSchema;
     output: typeof StartOAuthFlowResponseSchema;
+  },
+  /**
+   * OpenOAuthHelper asks the daemon to open its localhost OAuth helper port
+   * for ONE account-linking session. Returns immediately — unlike
+   * StartOAuthFlow it does not block on a human working through a consent
+   * screen, which is what made that RPC unusable in the packaged app.
+   *
+   * The port is NOT open the rest of the time, deliberately: a listener that
+   * starts browsers and returns authorization codes should exist for the
+   * seconds it is needed, not for the life of every daemon on every machine.
+   * The daemon closes it on CloseOAuthHelper, or after an idle timeout if the
+   * UI never gets to send one.
+   *
+   * This pair is also how the app learns whether the daemon is CO-LOCATED with
+   * the browser — a fact neither side can assert on its own. The UI asks the
+   * daemon to open the port over the connection it already has, then probes
+   * 127.0.0.1 itself. A successful probe proves the daemon that just opened it
+   * is on the browser's machine; a failed one means the daemon is remote, and
+   * the UI can say so instead of offering a flow that would hang.
+   *
+   * @generated from rpc reliant.v1.DaemonService.OpenOAuthHelper
+   */
+  openOAuthHelper: {
+    methodKind: "unary";
+    input: typeof OpenOAuthHelperRequestSchema;
+    output: typeof OpenOAuthHelperResponseSchema;
+  },
+  /**
+   * CloseOAuthHelper closes the helper port when the linking session ends
+   * (completed or cancelled).
+   *
+   * @generated from rpc reliant.v1.DaemonService.CloseOAuthHelper
+   */
+  closeOAuthHelper: {
+    methodKind: "unary";
+    input: typeof CloseOAuthHelperRequestSchema;
+    output: typeof CloseOAuthHelperResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_daemon, 0);
