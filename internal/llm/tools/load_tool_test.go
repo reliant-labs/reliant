@@ -16,17 +16,19 @@ import (
 func newLoadToolTestCtx(t *testing.T, permission string) *rctx.ToolContext {
 	t.Helper()
 	chatID := "loadtool-test-" + t.Name()
+	const thread = "0"
+	scopeKey := Scope(chatID, thread)
 
 	store := GetLoadedToolsStore()
-	store.Clear(chatID) // start clean in case a prior run left state
-	store.SetPermission(chatID, permission)
+	store.Clear(scopeKey) // start clean in case a prior run left state
+	store.SetPermission(scopeKey, permission)
 
 	t.Cleanup(func() {
-		store.Clear(chatID)
+		store.Clear(scopeKey)
 	})
 
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
-	return rctx.NewToolContext(context.Background(), chatID, "0", nil, worktree)
+	return rctx.NewToolContext(context.Background(), chatID, thread, nil, worktree)
 }
 
 // ----- Load / search behavior -----
@@ -103,7 +105,7 @@ func TestLoadTool_GeneralPresetAgentCanReachWorkflowTools(t *testing.T) {
 			"a mutating-permission agent must be able to load %q via load_tool: %s", name, loadResp.Content)
 	}
 
-	loaded := GetLoadedToolsStore().Get(ctx.ChatID)
+	loaded := GetLoadedToolsStore().Get(Scope(ctx.ChatID, ctx.Thread))
 	for _, name := range []string{ToolCreateWorkflow, ToolEditWorkflow, ToolListWorkflows, ToolGetWorkflow} {
 		assert.Contains(t, loaded, name, "%q should be recorded as loaded for this chat", name)
 	}
@@ -141,7 +143,7 @@ func TestLoadTool_SearchByQuery_SurfacesConnectedMCPTool(t *testing.T) {
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
-	GetLoadedToolsStore().SetAvailableMCPTools(ctx.ChatID, []MCPToolInfo{
+	GetLoadedToolsStore().SetAvailableMCPTools(Scope(ctx.ChatID, ctx.Thread), []MCPToolInfo{
 		{Name: "mcp__chrome-devtools__take_screenshot", Description: "Capture a screenshot"},
 	})
 
@@ -158,7 +160,7 @@ func TestLoadTool_LoadMCPTool_ConnectedSucceeds(t *testing.T) {
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
 	const mcpName = "mcp__chrome-devtools__take_screenshot"
-	GetLoadedToolsStore().SetAvailableMCPTools(ctx.ChatID, []MCPToolInfo{
+	GetLoadedToolsStore().SetAvailableMCPTools(Scope(ctx.ChatID, ctx.Thread), []MCPToolInfo{
 		{Name: mcpName, Description: "Capture a screenshot"},
 	})
 
@@ -167,7 +169,7 @@ func TestLoadTool_LoadMCPTool_ConnectedSucceeds(t *testing.T) {
 	assert.False(t, resp.IsError, "connected MCP tool should load: %s", resp.Content)
 	assert.Contains(t, resp.Content, mcpName)
 	assert.Contains(t, resp.Metadata, mcpName, "metadata should announce the loaded MCP tool")
-	assert.True(t, GetLoadedToolsStore().Has(ctx.ChatID, mcpName),
+	assert.True(t, GetLoadedToolsStore().Has(Scope(ctx.ChatID, ctx.Thread), mcpName),
 		"connected MCP tool must be recorded in the store")
 }
 
@@ -264,13 +266,14 @@ func TestLoadTool_StoresInLoadedToolsStore(t *testing.T) {
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
 
 	store := GetLoadedToolsStore()
-	assert.False(t, store.Has(ctx.ChatID, ToolWrite), "precondition: not yet loaded")
+	scopeKey := Scope(ctx.ChatID, ctx.Thread)
+	assert.False(t, store.Has(scopeKey, ToolWrite), "precondition: not yet loaded")
 
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, "load must succeed: %s", resp.Content)
 
-	assert.True(t, store.Has(ctx.ChatID, ToolWrite),
+	assert.True(t, store.Has(scopeKey, ToolWrite),
 		"successfully loaded tool must be recorded in the store")
 }
 
@@ -292,7 +295,7 @@ func TestLoadTool_LoadAlreadyLoadedTool_Idempotent(t *testing.T) {
 
 	// Still exactly one entry.
 	store := GetLoadedToolsStore()
-	loaded := store.Get(ctx.ChatID)
+	loaded := store.Get(Scope(ctx.ChatID, ctx.Thread))
 	assert.Equal(t, []string{ToolWrite}, loaded)
 }
 

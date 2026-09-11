@@ -65,13 +65,16 @@ func (t *loadToolTool) Execute(rctx *rctx.ToolContext, params LoadToolParams) (T
 		return NewTextErrorResponse("Either 'name' or 'query' is required"), nil
 	}
 
-	// Resolve permission from the store (set by call_llm based on preset/workflow inputs)
-	chatID := GetChatID(rctx)
-	permission := GetLoadedToolsStore().GetPermission(chatID)
+	// Resolve permission from the store (set by call_llm based on preset/workflow
+	// inputs). Keyed by scope, not chat: a spawned child shares the chat with its
+	// parent and is distinguished only by thread, so a chat-keyed read would hand
+	// the child whichever level was written last.
+	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
+	permission := GetLoadedToolsStore().GetPermission(scopeKey)
 
 	// Search mode
 	if params.Query != "" {
-		return t.searchTools(chatID, params.Query, permission), nil
+		return t.searchTools(scopeKey, params.Query, permission), nil
 	}
 
 	// Load mode
@@ -107,14 +110,14 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 	}
 
 	// Check if already loaded
-	chatID := GetChatID(rctx)
+	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
 	store := GetLoadedToolsStore()
-	if store.Has(chatID, name) {
+	if store.Has(scopeKey, name) {
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
 	}
 
 	// Add to loaded tools store
-	store.Add(chatID, name)
+	store.Add(scopeKey, name)
 
 	// Return confirmation with metadata for the runtime
 	metadata := LoadToolMetadata{
@@ -128,23 +131,23 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 }
 
 func (t *loadToolTool) loadMCPTool(rctx *rctx.ToolContext, name string) ToolResponse {
-	chatID := GetChatID(rctx)
+	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
 	store := GetLoadedToolsStore()
 
-	if store.Has(chatID, name) {
+	if store.Has(scopeKey, name) {
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
 	}
 
 	// Verify the MCP tool is actually connected in this environment before
 	// loading it. Adding an unavailable name would be silently dropped by the
 	// runtime next turn ("Tools in filter not found"), so fail loudly instead.
-	if !mcpToolAvailable(store.GetAvailableMCPTools(chatID), name) {
+	if !mcpToolAvailable(store.GetAvailableMCPTools(scopeKey), name) {
 		return NewTextErrorResponse(fmt.Sprintf(
 			"MCP tool '%s' is not available in this environment. Use load_tool with a query to discover connected MCP tools.", name))
 	}
 
 	// MCP tools are gated by MCP configuration, not the agent permission ladder.
-	store.Add(chatID, name)
+	store.Add(scopeKey, name)
 
 	metadata := LoadToolMetadata{
 		LoadedTools: []string{name},
@@ -167,8 +170,8 @@ func mcpToolAvailable(available []MCPToolInfo, name string) bool {
 	return false
 }
 
-func (t *loadToolTool) searchTools(chatID, query string, permission string) ToolResponse {
-	mcpTools := GetLoadedToolsStore().GetAvailableMCPTools(chatID)
+func (t *loadToolTool) searchTools(scopeKey, query string, permission string) ToolResponse {
+	mcpTools := GetLoadedToolsStore().GetAvailableMCPTools(scopeKey)
 	results := SearchTools(query, permission, mcpTools)
 
 	if len(results) == 0 {

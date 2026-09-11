@@ -11,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 )
@@ -75,6 +76,11 @@ func (a *CleanupActivity) Category() schema.ActivityCategory {
 // Execute cancels pending approvals and notifies UI
 func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (CleanupOutput, error) {
 	logging.Info("[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
+
+	// Release this run's dynamically loaded tools and its resolved permission.
+	// The store is in-memory and scoped to (chat, thread), so a run that ends
+	// without clearing leaves its grants behind until the process exits.
+	tools.GetLoadedToolsStore().Clear(tools.Scope(input.ChatID, input.Thread))
 
 	// Cancel orphaned tool calls (stops spinning indicators in UI for cancelled tool executions)
 	toolCallsCancelled := a.cancelOrphanedToolCalls(ctx, input.ChatID, input.Thread)

@@ -183,7 +183,7 @@ func (e *LocalToolExecutor) executeTool(
 	// skills per-chat; the executor's factory was created at startup without
 	// them, so we clone with skills here so the skill tool sees them.
 	if toolsFactory != nil && chatID != "" {
-		if skills := tools.GetLoadedToolsStore().GetSkills(chatID); len(skills) > 0 {
+		if skills := tools.GetLoadedToolsStore().GetSkills(tools.Scope(chatID, thread)); len(skills) > 0 {
 			toolsFactory = toolsFactory.WithSkills(skills)
 		}
 	}
