@@ -64,11 +64,11 @@ func TestPathLockNotHeldAcrossPermissionGate(t *testing.T) {
 
 	mustReturnWithin(t, 5*time.Second, "permission tier gate", func() {
 		required := MinimumPermissionForTool(EditToolName)
-		assert.Equal(t, PermissionMutating, required, "edit is a mutating tool")
+		assert.Equal(t, PermissionMutating, required, "edit sits at the base tier")
 		assert.True(t, PermissionAtLeast(PermissionMutating, required),
 			"a mutating agent must clear edit's gate")
-		assert.False(t, PermissionAtLeast(PermissionReadOnly, required),
-			"a readonly agent must not clear edit's gate")
+		assert.False(t, PermissionAtLeast("bogus", required),
+			"an unrecognized level must not clear edit's gate")
 	})
 
 	wrapped := NewEditTool()

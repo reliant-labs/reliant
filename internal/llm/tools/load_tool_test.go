@@ -206,28 +206,12 @@ func TestLoadTool_LoadMCPTool_NoneConnectedErrors(t *testing.T) {
 
 // ----- Permission gating -----
 
-func TestLoadTool_PermissionGating_ReadOnlyCannotLoadMutatingTool(t *testing.T) {
-	t.Parallel()
-	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionReadOnly)
-
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
-	require.NoError(t, err)
-	assert.True(t, resp.IsError, "readonly agent must be denied write tool")
-	assert.Contains(t, resp.Content, "permission")
-	assert.Contains(t, resp.Content, PermissionMutating)
-}
-
-func TestLoadTool_PermissionGating_ReadOnlyCanLoadReadOnlyTool(t *testing.T) {
-	t.Parallel()
-	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionReadOnly)
-
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolFetch})
-	require.NoError(t, err)
-	assert.False(t, resp.IsError, "readonly agent should be allowed to load fetch: %s", resp.Content)
-	assert.Contains(t, resp.Content, ToolFetch)
-}
+// The readonly tier's gating tests are gone with the tier. What they were
+// really asserting — that an agent scoped to reading cannot acquire `write` —
+// is now enforced by the declared tool set and tested in load_tool_filter_test.go
+// (TestLoadTool_CannotEscapeDeclaredFilter, TestLoadTool_PlanModeCannotLoadWrite).
+// That is a stronger test than the old one, which passed while the same agent
+// held a shell that could `> file`.
 
 func TestLoadTool_PermissionGating_MutatingCanLoadMutatingTool(t *testing.T) {
 	t.Parallel()
@@ -302,16 +286,19 @@ func TestLoadTool_LoadAlreadyLoadedTool_Idempotent(t *testing.T) {
 func TestLoadTool_DeniedLoadNotStored(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionReadOnly)
+	// spawn is the one capability the ladder still gates, so it is what a denial
+	// is tested with now that readonly is gone.
+	ctx := newLoadToolTestCtx(t, PermissionMutating)
 
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "spawn"})
 	require.NoError(t, err)
-	require.True(t, resp.IsError, "readonly must be denied write")
+	require.True(t, resp.IsError, "a mutating agent must be denied spawn")
 
+	scopeKey := Scope(ctx.ChatID, ctx.Thread)
 	store := GetLoadedToolsStore()
-	assert.False(t, store.Has(ctx.ChatID, ToolWrite),
+	assert.False(t, store.Has(scopeKey, "spawn"),
 		"permission-denied load must NOT be recorded in the store")
-	assert.Nil(t, store.Get(ctx.ChatID),
+	assert.Nil(t, store.Get(scopeKey),
 		"store should have no loaded tools after a denied load")
 }
 

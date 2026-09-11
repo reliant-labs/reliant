@@ -1852,14 +1852,42 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// Expand tool filter with spawn support
 	filterResult := tools.ExpandToolFilterWithSpawn(toolFilter, mcpToolNames)
 
-	// Include dynamically loaded tools (via load_tool)
+	// Record the expansion as this scope's allow-set BEFORE anything is added to
+	// it, so the declaration is what the author wrote rather than what the agent
+	// has since accumulated. Previously this expansion was used to build one
+	// request's tool array and then discarded, which is why `tools:` could not
+	// refuse anything load_tool chose to add.
+	//
+	// The two universally-granted tools are admitted explicitly. Both are handed
+	// to every tool-enabled agent AFTER this expansion (see below), so a filter
+	// that never named them would otherwise make the agent unable to use the very
+	// tool it discovers with — load_tool would refuse its own name.
+	if chat != nil && len(filterResult.ToolNames) > 0 {
+		allowed := make([]string, 0, len(filterResult.ToolNames)+2)
+		allowed = append(allowed, filterResult.ToolNames...)
+		allowed = append(allowed, tools.ToolLoadTool, tools.ToolSpawnSend)
+		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chat.ID, thread), allowed)
+	}
+
+	// Include dynamically loaded tools (via load_tool). These are intersected
+	// against the declared set rather than appended past it: appending is what
+	// let a loaded tool override even an explicit `!write` exclusion. load_tool
+	// already refuses out-of-set tools, so this is the second half of the same
+	// rule — a grant recorded before the filter narrowed cannot outlive it.
 	if chat != nil {
-		loadedTools := tools.GetLoadedToolsStore().Get(tools.Scope(chat.ID, thread))
-		if len(loadedTools) > 0 {
-			filterResult.ToolNames = append(filterResult.ToolNames, loadedTools...)
+		scopeKey := tools.Scope(chat.ID, thread)
+		store := tools.GetLoadedToolsStore()
+		var admitted []string
+		for _, name := range store.Get(scopeKey) {
+			if store.IsToolAllowed(scopeKey, name) {
+				admitted = append(admitted, name)
+			}
+		}
+		if len(admitted) > 0 {
+			filterResult.ToolNames = append(filterResult.ToolNames, admitted...)
 			logDebug("[CallLLM] Including dynamically loaded tools",
 				"chatID", chat.ID,
-				"loadedTools", loadedTools)
+				"loadedTools", admitted)
 		}
 	}
 

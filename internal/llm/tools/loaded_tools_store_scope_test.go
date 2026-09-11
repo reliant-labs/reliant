@@ -62,11 +62,11 @@ func TestLoadedToolsStore_PermissionIsPerScope(t *testing.T) {
 	child := scope(chatID, "thread:child-1")
 
 	s.SetPermission(parent, PermissionOrchestrator)
-	s.SetPermission(child, PermissionReadOnly)
+	s.SetPermission(child, PermissionMutating)
 
 	assert.Equal(t, PermissionOrchestrator, s.GetPermission(parent),
 		"a child's lower permission must not overwrite the parent's")
-	assert.Equal(t, PermissionReadOnly, s.GetPermission(child),
+	assert.Equal(t, PermissionMutating, s.GetPermission(child),
 		"the child must keep the capped permission it was given")
 }
 
@@ -78,6 +78,6 @@ func TestLoadedToolsStore_UnknownScopeFailsClosed(t *testing.T) {
 	t.Parallel()
 	s := newTestStore()
 
-	assert.Equal(t, PermissionReadOnly, s.GetPermission(scope("chat-never-seen", "thread:root")),
-		"an unknown scope must fail closed, not grant orchestrator")
+	assert.Equal(t, PermissionMutating, s.GetPermission(scope("chat-never-seen", "thread:root")),
+		"an unknown scope must fail closed at the lowest live tier, not grant orchestrator")
 }

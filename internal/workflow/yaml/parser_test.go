@@ -406,6 +406,9 @@ nodes:
         filter: [view, edit]
         permission: readonly
 `
+	// `readonly` is the RETIRED permission tier, deliberately left in this
+	// fixture: stored workflows still carry it, so parsing must keep accepting
+	// it. tools.NormalizePermission maps it onto a live tier at use.
 	wf, err := ParseWorkflow([]byte(yaml))
 	if err != nil {
 		t.Fatalf("parse: %v", err)
