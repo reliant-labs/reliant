@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Cloud, Loader2, Monitor } from "lucide-react";
+// CheckCircle2, not Monitor: the free row is a row in the machine list now, so
+// it marks SELECTION exactly as PlanTiles does. The Cloud/Monitor pair went
+// with the two-card layout — an icon on one row and none on the others is the
+// shape difference that made the free option read as a different kind of
+// answer.
+import { Check, CheckCircle2, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { PlanTiles, type ComputePlanOption } from "@/components/Billing/PlanTiles";
+import {
+  PlanTileRow,
+  describeIncludedHours,
+  type ComputePlanOption,
+} from "@/components/Billing/PlanTiles";
 import {
   DAEMON_SIZE_ORDER,
   derivePlanDisplay,
@@ -255,8 +264,8 @@ export function ComputeStep({
     : "smallest";
 
   const selectedPlanId =
-    planOptions.find((option) => option.planId === plan.computePlanId)?.planId ??
-    planOptions[0]?.planId;
+    planOptions.find((option) => option.planId === plan.computePlanId)
+      ?.planId ?? planOptions[0]?.planId;
 
   // Whether the user can CHOOSE a hosted machine — which is now everyone, as
   // long as this build has hosted machines at all.
@@ -489,7 +498,7 @@ export function ComputeStep({
           is what makes it a peer rather than a consolation. It also removes
           the height mismatch at the root instead of papering over it.
           
-          ── The free option leads, and there is no divider ─────────────
+          ── The free option is a ROW IN the machine list ───────────────
           
           This block used to say "cloud stays first: that is the product's
           emphasis and a layout fix is not the place to flip it", with the
@@ -504,235 +513,236 @@ export function ComputeStep({
           directly, the owner decided it, so the constraint is discharged
           rather than overruled.
           
-          The divider went with it, and that is the substance of the change
-          rather than a side effect. A full-width rule with a label is the
-          strongest separator on the page: it announced that what followed was
-          a different KIND of answer, which is exactly the "afterthought"
-          reading the owner wants gone. What it was really marking — that
-          choosing local leads to a CLI and a token instead of "we start it for
-          you" — is already carried by the row's own subtitle, and is carried
-          honestly, without demoting the option to get there. */}
+          It then took two passes to land, and the first one is the instructive
+          failure. Moving the row to the top of the step, and then INSIDE the
+          bordered card, both kept it a distinct block that merely sat nearer
+          the others — because what actually separated it was never the border.
+          It was the HEADING: "Choose your machine" titled the hosted tiles
+          alone, so the list of machines was by definition the list the free
+          option was not in. Any amount of re-boxing leaves that intact.
+          
+          So the heading now covers every machine, your own included, and the
+          free option is the first ROW of that one list — same geometry, same
+          name-over-subtitle stack, same price column, same selected state.
+          "Use your own computer / Free" is a row exactly like "Small /
+          $15.00/mo" is a row. The hosted rows lost their own header entirely:
+          a second heading over the rest of the list would re-draw the division
+          this removes, so what it carried is said once beneath the list.
+          
+          Two smaller consequences. The px-[36px] alignment hack is gone — it
+          existed only to cancel the cloud card's padding from outside it, and
+          inside one list plain px-4 puts every price in one column by
+          construction. And the row's Monitor icon is gone: an icon on one row
+          and none on the others is precisely the shape difference that made
+          this option read as a different kind of answer. */}
       {/* 560px, matching the checkout step's column. The card itself stays at
           the shared 840px (see stepMaxWidth — every step shares one width so
           the card never resizes between steps); what changes is the measure of
           the content inside it. A single column of full-width rows wants a
           readable measure, not the full card. */}
       <div className="mx-auto w-full max-w-[560px] space-y-6">
-        <div className="space-y-4">
-          {/* Deliberately shaped like a PlanTiles row — icon + name + what you
-              get on the left, price on the right — so "Free" lands in the same
-              column as "$20.00/mo" and the comparison is visual rather than
-              inferred. It is NOT a plan: it writes no `computePlanId`, and
-              picking it opens the connect instructions below instead of
-              recording a purchase.
+        {/* ONE box, holding ONE list, under ONE heading.
+        
+            The border used to belong to the cloud option, and it carried that
+            option's selected state — primary when `isCloudCompute(plan.compute)`.
+            It cannot mean either of those things now that the free row is one
+            of the rows inside it, so it means neither: it is a neutral
+            container, and selection is expressed on the ROWS, which is the
+            only level at which a selection exists. */}
+        <div className="space-y-4 rounded-xl border border-border/60 bg-muted/20 p-5">
+          {/* ONE heading over ALL the machines, your own included.
+          
+              "Choose your machine" used to head the hosted tiles alone, which
+              is what kept the free option outside the list no matter where the
+              box was drawn: the question the heading asked excluded one of its
+              own answers. The user's machine IS a machine you can choose, so
+              it belongs under the heading that says so, and the heading now
+              renders whether or not there are tiles beneath it. */}
+          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Choose your machine
+          </h3>
 
-              It leads the list, and it is a bare row rather than a bordered
-              card, which is what "make it look like another option" comes to
-              in practice. The cloud block stays a card because it CONTAINS a
-              list — the sizes, their prices, and a button — so giving this row
-              a matching border would claim a sub-decision it does not have.
-              Peer means same axis and same price column, not same chrome.
-
-              Its subtitle names the spec too, in the same terms as the tiles
-              above it. That is the honest version of a spec column here: the
-              tiles can promise 4 GB because we provision them, and this one
-              cannot promise anything, because the machine is already yours.
-              Saying so is more useful than leaving the cell blank, and it is
-              the actual trade-off being made.
-
-              The horizontal padding is 36px, not the 16px a PlanTiles row
-              uses, because this row sits OUTSIDE the cloud card while the
-              tiles sit inside its `p-5`. The extra 20px of card padding plus
-              its 2px border is what the tiles are inset by, so matching their
-              own padding would leave this price 21px out of column against the
-              tiles below it. Measured: all right edges land in one column.
-              This is unchanged by the move — the offset is the card's, not the
-              row's, so it holds whether the row sits above the card or
-              below. */}
-          <button
-            type="button"
-            onClick={handleLocal}
-            aria-pressed={showLocal}
-            className={cn(
-              "flex w-full min-w-0 items-center justify-between gap-4 rounded-lg border px-[36px] py-3 text-left transition-colors",
-              showLocal
-                ? "border-primary bg-primary/10"
-                : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
-            )}
-          >
-            <span className="flex min-w-0 items-center gap-3">
-              <span className="flex-shrink-0 rounded-lg bg-muted p-2 text-muted-foreground">
-                <Monitor className="h-5 w-5" />
-              </span>
+          {/* The list — ONE flat list, rendered here rather than by PlanTiles.
+          
+              PlanTiles wraps its rows in its own container, so mounting it
+              here would nest the priced rows one level below the free row:
+              adjacent on screen, but a separate list in the DOM, and a screen
+              reader would announce them as such. The free row would be a block
+              beside the machine list again, which is the whole defect.
+              
+              So this maps the rows itself with PlanTileRow — the primitive
+              PlanTiles is now also built from — and every row in this list is
+              a sibling of every other. `space-y-2` is PlanTiles' own row
+              spacing, kept identical so the two surfaces stay visually one
+              component.
+              
+              This is why the loading and empty states are handled per row
+              below rather than by PlanTiles: the free option must not vanish
+              because the plan catalog is slow or down. It is the one machine
+              that needs no catalog at all. */}
+          <div className="space-y-2">
+            {/* The free option, as the FIRST ROW of the machine list.
+            
+                It has been an outside row and then an inside row above the
+                card; it is now a row IN the list, which is what "under Choose
+                your machine" comes to. Everything that made it read as a
+                different class of answer is gone: no icon where the tiles have
+                none, the same px-4 py-3 geometry, the same name-over-subtitle
+                stack, and its price in the same column.
+                
+                The icon went with the move and is the one loss worth naming. A
+                Monitor beside the label distinguished "yours" from "ours" at a
+                glance — but only by making this row shaped unlike every row it
+                sits with, which is the demotion being removed. The subtitle
+                carries the distinction in words instead.
+                
+                It is still NOT a plan: it writes no `computePlanId`, and
+                picking it opens the connect instructions below rather than
+                recording a purchase. Being a peer in the list is a claim about
+                the QUESTION it answers, not about what it costs us. */}
+            <button
+              type="button"
+              onClick={handleLocal}
+              aria-pressed={showLocal}
+              className={cn(
+                "flex w-full min-w-0 items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left transition-colors",
+                showLocal
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
+              )}
+            >
               <span className="min-w-0">
-                <span className="block text-sm font-semibold text-foreground">
+                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                   Use your own computer
+                  {showLocal && (
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                  )}
                 </span>
                 <span className="block text-xs text-muted-foreground">
                   Whatever CPU and memory it already has. Connect it with the
                   Reliant command line tool.
                 </span>
               </span>
-            </span>
-            <span className="flex-shrink-0 text-sm font-semibold text-emerald-500">
-              Free
-            </span>
-          </button>
+              <span className="flex-shrink-0 text-sm font-semibold text-emerald-500">
+                Free
+              </span>
+            </button>
 
-          {/* The connect instructions belong to the option that opens them, so
-              they render directly beneath it.
+            {/* The connect instructions are NOT here — they render at the
+                bottom of the step. See the block after the list.
 
-              They used to sit at the very bottom of the step, which read fine
-              while the free option was itself last. Moving the option to the
-              top left the two separated by the whole cloud card — clicking
-              "Use your own computer" appeared to do nothing, because what it
-              revealed was an 800px scroll away. Keeping them adjacent is the
-              rest of the owner's reorder, not a separate change. */}
-          {showLocal && activeDaemon && (
-            <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-              <div className="flex items-start gap-3">
-                <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
-                <div>
-                  <h3 className="text-sm font-medium text-foreground">
-                    Your machine is connected
-                  </h3>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    Reliant found a machine already running. Continue to pick a
-                    folder to work in.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleLocalContinue}
-                className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-              >
-                Continue
-              </button>
-            </div>
-          )}
+                They were briefly inline, expanding the row like an accordion,
+                which is the conventional meaning of selecting a row. The owner
+                asked for them at the bottom instead, and the reason it works
+                here is that selecting the free row also hides the cloud CTA:
+                what sits between the row and its instructions is a short list
+                and two lines of prose, not the ~800px of card-plus-button that
+                made the earlier bottom-anchored version read as "the click did
+                nothing". */}
 
-          {showLocal && !activeDaemon && (
-            <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
-              {/* Self-hosted connect instructions are shared with the
-                  ProjectPicker's in-place "Connect a new daemon" flow. The
-                  onboarding-specific auto-advance still happens via the
-                  hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
-                  the download/token/start UI and the "waiting to connect" state. */}
-              <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
-            </div>
-          )}
-
-          <div
-            className={cn(
-              "flex min-w-0 flex-col gap-4 rounded-xl border-2 p-5 text-left transition-all",
-              isCloudCompute(plan.compute)
-                ? "border-primary bg-primary/10"
-                : "border-primary/25 bg-primary/5",
-              !HAS_CLOUD_DAEMONS && "border-border/50 bg-muted/30 opacity-80",
-            )}
-          >
-            <div className="flex min-w-0 items-start gap-4">
-              <div className="flex-shrink-0 rounded-lg bg-primary/15 p-2.5 text-primary">
-                <Cloud className="h-6 w-6" />
-              </div>
-              <div className="min-w-0 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-foreground">
-                    In the Cloud
-                  </span>
-                  <span className="rounded bg-primary/20 px-1.5 py-0.5 text-2xs font-medium uppercase tracking-wider text-primary">
-                    Nothing to install
-                  </span>
-                </div>
-                {/* Describes what the user can do RIGHT NOW. Promising "start
-                    a machine now" to someone with no compute plan sets up the
-                    dead end this card no longer has. */}
-                {/* Eligibility no longer changes whether the user may choose,
-                    so it only changes what they are told to expect: an
-                    entitled user's machine starts at the end of setup, while
-                    an un-entitled one passes through payment on the way. Both
-                    are true statements about the same button. */}
-                <span className="block text-xs leading-relaxed text-muted-foreground">
-                  {!HAS_CLOUD_DAEMONS
-                    ? "Hosted machines are not available in this setup."
-                    : loading || machineCovered
-                      ? // No longer says "monthly plans start during setup" to
-                        // someone whose plan is already covered — that line
-                        // survived a coupon redemption and told the user they
-                        // were about to be charged for the thing they had just
-                        // paid for with a code.
-                        "We start one for you, ready in a few minutes. Setup continues while it boots."
-                      : "We run it for you — no setup, and it keeps working after you close your laptop. Monthly plans start during setup."}
-                </span>
-              </div>
-            </div>
-
-            {/* Two states now, not three.
-
-                This card has been through both failure modes. First a disabled
-                "Start my machine" that a brand-new user could never click,
-                because the signup compute grant is gone and every new account
-                resolves to NO_SUBSCRIPTION. Then no button at all for those
-                users, with "Set up billing" promoted in its place — which
-                fixed the inert control by replacing it with an exit from the
-                flow.
-
-                Neither is needed once payment is a step. The choice is always
-                offered, because choosing is all this step does, and where an
-                un-entitled choice leads is the checkout step rather than a
-                different page. */}
-            {/* The prices, on the step that asks the question. Picking a tile
-                records the choice and nothing else — no intent is minted, no
-                card is mounted, nothing exists at Stripe until the single
-                checkout at the end of the flow. */}
-            {showPlanChoice && (
-              <div className="space-y-2">
-                <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Choose your machine
-                </h3>
-                <PlanTiles
-                  plans={planOptions}
-                  loading={plansQ.isLoading}
-                  selectedPlanId={selectedPlanId}
-                  coveredPlanId={coveredPlanId}
-                  onSelect={(option) =>
-                    void updatePlan({ computePlanId: option.planId })
-                  }
+            {/* The hosted machines — the REST of the same list.
+            
+                There is no "In the Cloud" header over them any more, and that
+                is the change rather than a casualty of it. A header there
+                would re-divide the list into "your option" and "our options",
+                which is the separation being removed; what it used to carry
+                (these are hosted, nothing to install, plans start during
+                setup) is said once beneath the list, where the burst ceiling
+                and the coupon coverage are already said.
+                
+                Picking a tile records the choice and nothing else — no intent
+                is minted, no card is mounted, nothing exists at Stripe until
+                the single checkout at the end of the flow. */}
+            {showPlanChoice &&
+              planOptions.map((option) => (
+                <PlanTileRow
+                  key={option.planId}
+                  plan={option}
+                  // NOTHING is selected while the user's own computer is the
+                  // choice. `selectedPlanId` falls back to the first plan so
+                  // that committing cloud always carries a size — harmless
+                  // when the tiles were a separate block, but in one list that
+                  // default paints Small as selected beside an equally
+                  // selected free row, showing two chosen machines for one
+                  // question.
+                  selected={!showLocal && option.planId === selectedPlanId}
+                  covered={option.planId === coveredPlanId}
+                  onSelect={() => {
+                    // Picking a hosted size is also picking "hosted", so it
+                    // closes the free row's expanded instructions. Without
+                    // this the connect panel stays open under a row that is no
+                    // longer selected.
+                    setShowLocal(false);
+                    void updatePlan({ computePlanId: option.planId });
+                  }}
                 />
-                {/* The burst ceiling, said ONCE.
-                
-                    Both multiples hold at every tier, so this belongs under
-                    the list rather than inside four rows of it. It is also the
-                    fact most likely to change someone's mind: "0.5 CPU"
-                    undersells a machine that compiles on two full cores, and a
-                    user reading only the reserved figure would size up for a
-                    build that would have fit. Repeated per row it would read
-                    as noise; stated once it reads as a property of hosted
-                    machines, which is what it is.
-                
-                    CPU and memory are named SEPARATELY because they burst by
-                    different multiples — 4x and 2x. Collapsing them into one
-                    number is the mistake control-plane's own comment makes
-                    (see machineSpecs.ts); here it would overstate the memory
-                    headroom, which is the axis a build actually dies on.
-                
-                    Absent entirely if the ladder stops being uniform — see
-                    machineBurst. */}
-                {MACHINE_BURST &&
-                  !plansQ.isLoading &&
-                  planOptions.length > 0 && (
-                    <p
-                      className="text-xs leading-relaxed text-muted-foreground"
-                      data-testid="compute-step-burst-note"
-                    >
-                      Those are the reserved figures. When a build needs more, a
-                      machine can burst to {MACHINE_BURST.cpu}× the CPU and{" "}
-                      {MACHINE_BURST.memory}× the memory it reserves, at no
-                      extra cost.
-                    </p>
-                  )}
-                {/* Says what the coupon did, at the moment and place the
+              ))}
+
+            {showPlanChoice && plansQ.isLoading && (
+              <div className="flex items-center gap-2 px-1 py-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading machines…
+              </div>
+            )}
+          </div>
+
+          {showPlanChoice && (
+            <div className="space-y-2">
+              {/* What the hosted rows are, said once, under the list.
+              
+                  This is the surviving half of the old cloud card's header.
+                  Eligibility does not change whether the user may choose, so
+                  it only changes what they are told to expect: an entitled
+                  user's machine starts at the end of setup, while an
+                  un-entitled one passes through payment on the way. Both are
+                  true statements about the same button. */}
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                {!HAS_CLOUD_DAEMONS
+                  ? "Hosted machines are not available in this setup."
+                  : loading || machineCovered
+                    ? // No longer says "monthly plans start during setup" to
+                      // someone whose plan is already covered — that line
+                      // survived a coupon redemption and told the user they
+                      // were about to be charged for the thing they had just
+                      // paid for with a code.
+                      "The paid machines are ours: nothing to install, and we start one for you, ready in a few minutes. Setup continues while it boots."
+                    : "Paid machines run in Reliant Cloud, and allow access from any device, including mobile."}
+              </p>
+              {/* The hours, said ONCE — for the same reason the burst ceiling
+                  below is said once. The allowance does not vary by size, so
+                  it is a property of hosted machines rather than of any row,
+                  and a per-row copy was reading as "a bigger machine buys more
+                  hours". Sized from a real plan so it still tracks the
+                  catalog. */}
+              {!plansQ.isLoading && planOptions.length > 0 && (
+                <p
+                  className="text-xs leading-relaxed text-muted-foreground"
+                  data-testid="compute-step-hours-note"
+                >
+                  {describeIncludedHours(planOptions[0])}
+                </p>
+              )}
+              {/* The burst ceiling, said once for the same reason the hours
+                  are: it does not vary by size, so it is a property of hosted
+                  machines rather than of any row. Reserved figures are what
+                  the rows print; this is the headroom above them, which is the
+                  axis a build actually dies on.
+
+                  Absent entirely if the ladder stops being uniform — see
+                  machineBurst. */}
+              {MACHINE_BURST &&
+                !plansQ.isLoading &&
+                planOptions.length > 0 && (
+                  <p
+                    className="text-xs leading-relaxed text-muted-foreground"
+                    data-testid="compute-step-burst-note"
+                  >
+                    Those are the reserved figures. When a build needs more, a
+                    machine can burst to {MACHINE_BURST.cpu}× the CPU and{" "}
+                    {MACHINE_BURST.memory}× the memory it reserves, at no extra
+                    cost.
+                  </p>
+                )}
+              {/* Says what the coupon did, at the moment and place the
                     money used to be. Without this the page still changes
                     under the user on redeem — the price becomes "Covered" —
                     but nothing connects that to the code they just entered.
@@ -741,7 +751,9 @@ export function ComputeStep({
                     (small), not a bigger machine, and a user who picks Large
                     on the strength of a coupon is refused at provisioning
                     with "your plan does not include daemon size large". */}
-                {machineCovered && !plansQ.isLoading && planOptions.length > 0 && (
+              {machineCovered &&
+                !plansQ.isLoading &&
+                planOptions.length > 0 && (
                   <p
                     className="text-xs leading-relaxed text-primary"
                     data-testid="compute-step-coverage-note"
@@ -751,75 +763,154 @@ export function ComputeStep({
                     upgrade any time.
                   </p>
                 )}
-                {!plansQ.isLoading && planOptions.length === 0 && (
-                  <p
-                    className="text-xs leading-relaxed text-muted-foreground"
-                    data-testid="compute-step-plans-unavailable"
-                  >
-                    We couldn&apos;t load the plans just now — that&apos;s on our
-                    end, not your setup. You can still continue, or redeem a
-                    code below.
-                  </p>
-                )}
-              </div>
-            )}
+              {!plansQ.isLoading && planOptions.length === 0 && (
+                <p
+                  className="text-xs leading-relaxed text-muted-foreground"
+                  data-testid="compute-step-plans-unavailable"
+                >
+                  We couldn&apos;t load the plans just now — that&apos;s on our
+                  end, not your setup. You can still continue, or redeem a code
+                  below.
+                </p>
+              )}
+            </div>
+          )}
 
-            {loading ? (
-              <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-muted px-4 py-2.5 text-sm font-semibold text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Checking availability...
-              </div>
-            ) : canChooseCloud ? (
-              // "Use a Reliant machine", not "Start my machine". The verb is
-              // the contract: this records a choice and moves on, and a label
-              // promising the machine is starting would be describing work
-              // that now happens at the end of onboarding.
-              <button
-                type="button"
-                onClick={chooseCloud}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500"
-              >
-                Use a Reliant machine
-              </button>
-            ) : null}
+          {/* The cloud CTA, and it is ABSENT while the free option is chosen.
+          
+              It is the commit for hosted compute, so with "Use your own
+              computer" selected it was a primary button that contradicted the
+              selection directly above it — the page showed a machine chosen
+              and, beneath it, one button offering to choose a different one.
+              Worse, it was the ONLY primary button on screen, so it read as
+              the way forward; clicking it silently discarded the free choice
+              and bought a machine.
+              
+              Hiding it leaves the free path with no button here at all, which
+              is correct: that path advances from the connect panel at the
+              bottom (Continue, when a daemon is already running) or
+              automatically when a daemon connects. Nothing is stranded. */}
+          {loading ? (
+            <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-muted px-4 py-2.5 text-sm font-semibold text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking availability...
+            </div>
+          ) : canChooseCloud && !showLocal ? (
+            // "Use a Reliant machine", not "Start my machine". The verb is
+            // the contract: this records a choice and moves on, and a label
+            // promising the machine is starting would be describing work
+            // that now happens at the end of onboarding.
+            <button
+              type="button"
+              onClick={chooseCloud}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500"
+            >
+              Use a Reliant machine
+            </button>
+          ) : null}
 
-            {!loading && !HAS_CLOUD_DAEMONS && (
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                Hosted machines are not available in this setup. Choose
-                &ldquo;Use your own computer&rdquo; to continue — it is free.
-              </p>
-            )}
+          {!loading && !HAS_CLOUD_DAEMONS && (
+            <p className="text-xs leading-relaxed text-muted-foreground">
+              Hosted machines are not available in this setup. Choose &ldquo;Use
+              your own computer&rdquo; to continue — it is free.
+            </p>
+          )}
 
-            {/* Coupon redemption stays, and is offered to everyone: someone
-                who is already entitled may still be holding a code, and
-                hiding the field until they run out means redeeming it requires
-                first spending down.
+          {/* Coupon redemption is offered to everyone who is choosing a
+                hosted machine — someone already entitled may still be holding
+                a code, and hiding the field until they run out would mean
+                redeeming it requires first spending down.
 
-                What is GONE is the "Set up billing" / "View plans" button that
-                sat beside it. It navigated to /settings/billing — a full exit
-                from a wizard whose state lives in a URL search param, needing
-                a `returnTo` round-trip to get back. Prices are now shown on
-                the checkout step, which is inside the flow, so there is
-                nothing left for it to do. */}
-            {HAS_CLOUD_DAEMONS && !loading && (
-              <RedeemCouponForm
-                variant="collapsed"
-                size="sm"
-                onRedeemed={(result) => {
-                  // A redemption REFETCHES; it does not act. Enough compute
-                  // minutes make `requiresPayment` false, and the checkout
-                  // step simply never appears. This callback used to arm an
-                  // auto-start that provisioned a machine on the next render —
-                  // the speculative-execution defect this step no longer has.
-                  if (result.kind === RedeemedCouponKind.COMPUTE_MINUTES) {
-                    void refetchCloudEligibility();
-                  }
-                }}
-              />
-            )}
-          </div>
+                It is ABSENT while "Use your own computer" is selected, for a
+                weaker reason than the CTA above. That button contradicted the
+                selection and destroyed it on click; this field does neither —
+                redeeming leaves `showLocal` untouched, so the choice
+                survives. The argument is relevance: a compute coupon buys
+                machine time the user has just declined to use.
 
+                The thing that makes this safe is not visible on this step:
+                the field also accepts WALLET_CREDIT codes, not just compute
+                codes, so hiding it here could have removed the only way to
+                redeem an AI-credit code. It does not, because the local-daemon
+                path goes straight to the model step next, which carries its
+                own coupon field.
+
+                What is GONE entirely is the "Set up billing" / "View plans"
+                button that sat beside it. It navigated to /settings/billing —
+                a full exit from a wizard whose state lives in a URL search
+                param, needing a `returnTo` round-trip to get back. Prices are
+                now shown on the checkout step, which is inside the flow, so
+                there is nothing left for it to do. */}
+          {HAS_CLOUD_DAEMONS && !loading && !showLocal && (
+            <RedeemCouponForm
+              variant="collapsed"
+              size="sm"
+              onRedeemed={(result) => {
+                // A redemption REFETCHES; it does not act. Enough compute
+                // minutes make `requiresPayment` false, and the checkout
+                // step simply never appears. This callback used to arm an
+                // auto-start that provisioned a machine on the next render —
+                // the speculative-execution defect this step no longer has.
+                if (result.kind === RedeemedCouponKind.COMPUTE_MINUTES) {
+                  void refetchCloudEligibility();
+                }
+              }}
+            />
+          )}
         </div>
+
+        {/* ── What to do next, at the BOTTOM of the step ────────────────
+        
+            Selecting "Use your own computer" is only half an answer: the
+            machine still has to be connected, and this is where that happens.
+            It sits outside the options box, after everything, because it is no
+            longer part of choosing — it is the consequence of having chosen.
+            
+            Bottom-anchoring was tried once before and reverted, so the
+            difference matters. Then, the free row was at the top and the
+            entire cloud card sat between it and this panel; the click appeared
+            inert because its result was most of a screen away. Now the cloud
+            CTA is hidden whenever this panel is showing, so the gap is a short
+            list and two lines of prose. Same position, different distance.
+            
+            The two states are distinct answers, not a loading ladder: a daemon
+            is ALREADY running (confirm and go), or one is not (download,
+            token, wait). */}
+        {showLocal && activeDaemon && (
+          <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+            <div className="flex items-start gap-3">
+              <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
+              <div>
+                <h3 className="text-sm font-medium text-foreground">
+                  Your machine is connected
+                </h3>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Reliant found a machine already running. Continue to pick a
+                  folder to work in.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleLocalContinue}
+              className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
+            >
+              Continue
+            </button>
+          </div>
+        )}
+
+        {showLocal && !activeDaemon && (
+          <div className="rounded-xl border border-border/50 bg-muted/30 p-4">
+            {/* Self-hosted connect instructions are shared with the
+                ProjectPicker's in-place "Connect a new daemon" flow. The
+                onboarding-specific auto-advance still happens via the
+                hasUsableDaemon effect above; SelfHostedDaemonConnect just owns
+                the download/token/start UI and the "waiting to connect"
+                state. */}
+            <SelfHostedDaemonConnect onConnected={handleLocalContinue} />
+          </div>
+        )}
 
         {/* No inline error slot any more. The only errors this step could
             raise came from provisioning, and it no longer provisions —

@@ -78,49 +78,117 @@ export function PlanTiles({
 
   return (
     <div className="space-y-2">
-      {plans.map((plan) => {
-        const selected = plan.planId === selectedPlanId;
-        return (
-          <button
-            key={plan.planId}
-            type="button"
-            aria-pressed={selected}
-            onClick={() => onSelect(plan)}
-            className={cn(
-              "flex w-full items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left transition-colors",
-              selected
-                ? "border-primary bg-primary/10"
-                : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
-            )}
-          >
-            <span className="min-w-0">
-              <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-                {plan.label}
-                {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
-              </span>
-              <span className="block text-xs text-muted-foreground">
-                {describeIncluded(plan)}
-              </span>
-            </span>
-            <span className="flex-shrink-0 text-sm font-semibold text-foreground">
-              {plan.planId === coveredPlanId ? (
-                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
-                  Covered
-                </span>
-              ) : (
-                <>{formatCentsAsDollars(plan.monthlyPriceCents)}/mo</>
-              )}
-            </span>
-          </button>
-        );
-      })}
+      {plans.map((plan) => (
+        <PlanTileRow
+          key={plan.planId}
+          plan={plan}
+          selected={plan.planId === selectedPlanId}
+          covered={plan.planId === coveredPlanId}
+          onSelect={() => onSelect(plan)}
+        />
+      ))}
     </div>
   );
 }
 
-function describeIncluded(plan: ComputePlanOption): string {
-  if (plan.includedMinutes < 0) return "Unlimited hours included";
-  return `${Math.round(plan.includedMinutes / 60)} hours included each month`;
+/**
+ * ONE row of the machine list.
+ *
+ * Exported as a primitive because onboarding's list is not only plans: the
+ * user's own computer is a row in it, and it is not a plan — it has no
+ * `planId`, writes no `computePlanId`, and opens connect instructions instead
+ * of recording a purchase. Its heading ("Choose your machine") covers every
+ * machine, so the free row must be a SIBLING of the priced rows, not a block
+ * beside the list.
+ *
+ * The alternative was a `leadingRow` slot on PlanTiles, and it is worse in the
+ * way that matters here: PlanTiles owns the loading and empty states, so a
+ * slot would make the free option disappear while the catalog loads or fails
+ * — exactly when the one machine that needs no catalog is most useful. Giving
+ * the caller the row and letting it own its own container keeps that
+ * independent, and keeps ONE declaration of what a row looks like. The state
+ * lives on the row rather than in it (`selected`, `covered` as props) because
+ * a row cannot know which of the two lists it is in.
+ */
+export function PlanTileRow({
+  plan,
+  selected,
+  covered,
+  onSelect,
+}: {
+  plan: ComputePlanOption;
+  selected: boolean;
+  covered?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left transition-colors",
+        selected
+          ? "border-primary bg-primary/10"
+          : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
+      )}
+    >
+      {/* The row names the MACHINE and its price. Nothing else.
+      
+          It used to carry "N hours included each month" under the size, and
+          that line was wrong in the way a per-row number always is when the
+          quantity does not vary per row: every compute plan in the catalog
+          grants the same 9600 minutes (see daemon_compute_included_minutes in
+          control-plane's plans.yaml — 9600 at small, medium, large and xl
+          alike). Printing it four times implied four allowances and invited
+          exactly the reading it got, that a bigger machine buys more hours. It
+          does not; it buys a bigger machine.
+      
+          The figures on screen were worse than merely redundant. They came
+          from a dev database still seeded with migration 00054's superseded
+          per-plan values (1000/2500/5000/-1), so the rows read 17/42/83 hours
+          and Unlimited — three wrong numbers and one wrong claim, all rendered
+          faithfully from stale data. A uniform fact stated per row is a
+          standing invitation for drift like that to show up as product copy.
+      
+          Where the hours belong is once, beside the other things true of every
+          hosted machine — which is what the caller does. */}
+      <span className="min-w-0">
+        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          {plan.label}
+          {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
+        </span>
+      </span>
+      <span className="flex-shrink-0 text-sm font-semibold text-foreground">
+        {covered ? (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
+            Covered
+          </span>
+        ) : (
+          <>{formatCentsAsDollars(plan.monthlyPriceCents)}/mo</>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/**
+ * The included hours, as one sentence to sit ONCE beneath a list of machines.
+ *
+ * Replaces the per-row `describeIncluded`. The allowance is the same at every
+ * size, so a per-row figure said the same thing four times while implying it
+ * varied — and, being fed straight from the catalog, printed four DIFFERENT
+ * stale numbers the moment a dev database lagged the config.
+ *
+ * Still read from the plan rather than hardcoded: 9600 is control-plane's
+ * value to change, and this must follow it. It takes the plan whose row is
+ * selected, and callers render it only where the whole list shares that
+ * allowance — the uniformity is the caller's fact to know, not this
+ * function's.
+ */
+export function describeIncludedHours(plan: ComputePlanOption): string {
+  if (plan.includedMinutes < 0) return "Unlimited machine hours are included.";
+  return `${Math.round(plan.includedMinutes / 60)} machine hours are included each month, on every size.`;
 }
 
 /**
@@ -157,8 +225,8 @@ export function PlanFinePrint({ plan }: { plan: ComputePlanOption }) {
     <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
       <li>
         A machine uses its included hours whenever it&apos;s connected — whether
-        or not you&apos;re actively working. Startup time isn&apos;t counted, and
-        stopping a machine stops the clock.
+        or not you&apos;re actively working. Startup time isn&apos;t counted,
+        and stopping a machine stops the clock.
       </li>
       <li>
         {plan.includedMinutes < 0 ? (
