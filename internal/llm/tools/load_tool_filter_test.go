@@ -54,12 +54,14 @@ func TestLoadTool_CannotEscapeDeclaredFilter(t *testing.T) {
 // TestLoadTool_AllowedByFilterStillHonoursLadder pins that the two checks are
 // AND, not OR. Naming a tool in `tools:` must not promote an agent past its
 // permission level — otherwise the filter becomes a privilege escalation path.
+// spawn is the capability the ladder still gates, so it is the one that can
+// demonstrate this.
 func TestLoadTool_AllowedByFilterStillHonoursLadder(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newFilteredTestCtx(t, PermissionReadOnly, []string{ToolView, ToolWrite, ToolLoadTool})
+	ctx := newFilteredTestCtx(t, PermissionMutating, []string{ToolView, "spawn", ToolLoadTool})
 
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: "spawn"})
 	require.NoError(t, err)
 
 	assert.True(t, resp.IsError,

@@ -230,19 +230,24 @@ func (s *LoadedToolsStore) HasAllowedTools(scopeKey string) bool {
 
 // GetPermission returns the permission level for a scope.
 //
-// An unknown scope FAILS CLOSED at PermissionReadOnly. This store is in-memory,
-// so a worker restart empties it while runs are in flight; the previous default
-// of PermissionOrchestrator meant that any execute_tools landing between the
-// restart and the next call_llm — which is what re-populates the scope — was
-// granted maximum privilege precisely because the state had been lost.
+// An unknown scope FAILS CLOSED at the LOWEST live tier. This store is
+// in-memory, so a worker restart empties it while runs are in flight; defaulting
+// to PermissionOrchestrator would grant maximum privilege — including spawn —
+// to any execute_tools landing between the restart and the next call_llm, which
+// is what re-populates the scope, precisely because the state had been lost.
+//
+// With the readonly tier removed, the lowest tier is PermissionMutating, so this
+// default now withholds only spawn. That is a real reduction in what the
+// fail-closed path protects, and it is the honest one: the readonly tier never
+// withheld write in the first place, since the shell was granted at every level.
 func (s *LoadedToolsStore) GetPermission(scopeKey string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if perm, ok := s.permissions[scopeKey]; ok {
-		return perm
+		return NormalizePermission(perm)
 	}
-	return PermissionReadOnly
+	return PermissionMutating
 }
 
 // DeferredToolNames returns tool names from the registry (and available MCP tools)
@@ -319,7 +324,7 @@ func SearchTools(query string, permission string, mcpTools []MCPToolInfo) []Tool
 		results = append(results, ToolSearchResult{
 			Name:              m.Name,
 			Tags:              []ToolTag{TagMCP},
-			MinPermission:     PermissionReadOnly,
+			MinPermission:     PermissionMutating,
 			PermissionAllowed: true,
 		})
 	}

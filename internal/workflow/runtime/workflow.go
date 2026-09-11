@@ -2627,13 +2627,22 @@ func resolveParentPermission(workflowInputs map[string]interface{}) string {
 		return pp
 	}
 
-	// Derive from mode: plan mode = readonly, otherwise mutating
-	// These match the permission constants in internal/llm/tools/permissions.go
+	// Every live mode maps to the same tier. Plan mode used to derive "readonly",
+	// which promised more than it delivered — the shell was granted at that tier
+	// too, so a plan-mode agent could always write. What keeps write out of a
+	// planning agent's hands is its `tools:` filter (['tag:plan', 'tag:shell']),
+	// which is enforced; see LoadedToolsStore.IsToolAllowed.
+	//
+	// The mode switch is kept rather than collapsed to a constant because an
+	// unrecognized mode must still return "" — "don't constrain" is a different
+	// answer from "constrain to the base tier", and a spawned child of an unknown
+	// mode should inherit no cap rather than a guessed one.
+	// The literal matches tools.PermissionMutating, spelled out because
+	// internal/llm/tools imports this package (workflow_discovery.go) and the
+	// dependency cannot run the other way.
 	mode := getModeFromInputs(workflowInputs)
 	switch mode {
-	case "plan":
-		return "readonly"
-	case "manual", "auto":
+	case "plan", "manual", "auto":
 		return "mutating"
 	default:
 		return "" // Unknown mode, don't constrain

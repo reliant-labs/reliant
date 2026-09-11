@@ -1,29 +1,48 @@
 // Copyright (c) 2025 Reliant Labs
 package tools
 
-// Permission levels control which tools an agent can load via load_tool.
+// Permission levels control which tools an agent is OFFERED, and which it can
+// load via load_tool.
+//
+// THIS IS NOT A SECURITY BOUNDARY, and must not be described as one. Every tier
+// holds the shell family, because search goes through the shell — so an agent
+// at any level can read, write and execute whatever the daemon user can. What
+// the ladder decides is which convenience tools the model is handed, which is
+// steering: an agent not given `write` is far less likely to write, and that is
+// genuinely useful for shaping behavior. It is not a guarantee, and code that
+// needs a guarantee must get it below the tool layer.
+//
+// A third tier, "readonly", was removed. It sat below mutating and differed
+// only in withholding write/edit/find_replace/move_code — each a one-line shell
+// equivalent (`cat > f`, `sed -i`, `mv`) — while still handing over the shell.
+// The name promised something the mechanism never delivered, which is worse
+// than not offering it: callers reasonably read "readonly" as "cannot write".
+// What that tier was really expressing — "this agent should not be handed write
+// tools" — is now said directly by a workflow's `tools:` filter, which is
+// enforced (see LoadedToolsStore.IsToolAllowed). A real read-only mode needs OS
+// containment and will be reintroduced on that footing.
 const (
-	// PermissionReadOnly allows read-only tools: view, fetch, websearch, skill,
-	// load_tool — plus the shell, which is the ONLY search path now that the
-	// scoped grep/glob tools are gone. See minimumPermissionFromTags for why
-	// that makes "readonly" a weaker guarantee than its name implies.
-	PermissionReadOnly = "readonly"
-
-	// PermissionMutating allows read-only + mutating tools: write, edit, bash, find_replace, move_code, etc.
+	// PermissionMutating is the default: every tool except those reserved for
+	// orchestrators.
 	PermissionMutating = "mutating"
 
-	// PermissionOrchestrator allows all tools including spawn
+	// PermissionOrchestrator additionally allows spawning sub-agents.
 	PermissionOrchestrator = "orchestrator"
 )
 
 // permissionOrder defines the hierarchy for comparison.
 var permissionOrder = map[string]int{
-	PermissionReadOnly:     0,
-	PermissionMutating:     1,
-	PermissionOrchestrator: 2,
+	PermissionMutating:     0,
+	PermissionOrchestrator: 1,
 }
 
 // PermissionAtLeast returns true if `have` is at least as permissive as `need`.
+//
+// An unrecognized level is NOT at least anything — including the retired
+// "readonly", which a stored workflow or an in-flight run may still carry. That
+// is deliberate: such a run is denied rather than silently promoted to
+// mutating. See NormalizePermission for the resolution callers should apply
+// when reading a level that may predate this change.
 func PermissionAtLeast(have, need string) bool {
 	h, ok1 := permissionOrder[have]
 	n, ok2 := permissionOrder[need]
@@ -33,15 +52,43 @@ func PermissionAtLeast(have, need string) bool {
 	return h >= n
 }
 
+// legacyReadOnlyPermission is the retired tier. Workflow YAML, presets and
+// in-flight Temporal histories may still carry it, so it is recognized at the
+// boundary and mapped forward rather than treated as a typo.
+const legacyReadOnlyPermission = "readonly"
+
+// NormalizePermission maps a declared permission onto a live tier.
+//
+// The retired "readonly" becomes "mutating", which is an honest description of
+// what it always was: the shell rode along at that tier, so the agent could
+// already do anything mutating could. Workflows that relied on the name to
+// withhold write tools should express that in `tools:`, which enforces it —
+// the builtin agent's plan mode does exactly this, and its filter is what
+// actually keeps write out of a planning agent's hands.
+//
+// An empty or unrecognized value resolves to the default tier.
+func NormalizePermission(permission string) string {
+	switch permission {
+	case PermissionOrchestrator:
+		return PermissionOrchestrator
+	case PermissionMutating:
+		return PermissionMutating
+	case legacyReadOnlyPermission:
+		return PermissionMutating
+	default:
+		return PermissionMutating
+	}
+}
+
 // InitialToolsForPermission returns the tool names that are always loaded
 // (with full schemas) for a given permission level.
 func InitialToolsForPermission(permission string) []string {
-	// All levels get these. The shell family rides along at EVERY level because
-	// searching the codebase now goes through the shell — a level without it
-	// cannot search at all, which is the regression that followed the first
-	// removal of grep/glob. `tag:shell` is kept whole (the shell's own
-	// description tells the model to reach for shell_output/shell_kill/shell_list,
-	// so handing over the shell without them documents tools that do not exist).
+	// The shell family rides along at EVERY level because searching the codebase
+	// goes through the shell — a level without it cannot search at all, which is
+	// the regression that followed the removal of grep/glob. `tag:shell` is kept
+	// whole (the shell's own description tells the model to reach for
+	// shell_output/shell_kill/shell_list, so handing over the shell without them
+	// documents tools that do not exist).
 	base := []string{
 		ToolSkill,
 		ToolLoadTool,
@@ -51,29 +98,26 @@ func InitialToolsForPermission(permission string) []string {
 		ToolShellOutput,
 		ToolShellWait,
 		ToolShellKill,
+		ToolFetch,
+		ToolWebSearch,
+		ToolWrite,
+		ToolEdit,
+		ToolFindReplace,
+		ToolMoveCode,
 	}
 
-	switch permission {
-	case PermissionReadOnly:
-		return append(base, ToolFetch, ToolWebSearch)
-	case PermissionMutating:
-		return append(base,
-			ToolFetch, ToolWebSearch,
-			ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode,
-		)
-	case PermissionOrchestrator:
-		// Orchestrator gets everything mutating gets, plus spawn is added separately
-		return append(base,
-			ToolFetch, ToolWebSearch,
-			ToolWrite, ToolEdit, ToolFindReplace, ToolMoveCode,
-		)
+	// Orchestrator adds spawn, which is granted separately — so both live tiers
+	// start from the same set. The switch is kept rather than collapsed because
+	// an unrecognized level must still resolve to something sane.
+	switch NormalizePermission(permission) {
+	case PermissionMutating, PermissionOrchestrator:
+		return base
 	default:
 		return base
 	}
 }
 
 // MinimumPermissionForTool returns the minimum permission level required to load a tool.
-// Uses tool tags from the registry to determine the level.
 func MinimumPermissionForTool(toolName string) string {
 	// Explicit orchestrator-only tools.
 	//
@@ -86,42 +130,9 @@ func MinimumPermissionForTool(toolName string) string {
 		return PermissionOrchestrator
 	}
 
-	// Check the registry for tag-based classification
-	registry := GetToolRegistry()
-	for _, def := range registry {
-		if def.Name == toolName {
-			return minimumPermissionFromTags(def.Tags)
-		}
-	}
-
-	// MCP tools and unknown tools default to readonly (safe default)
-	return PermissionReadOnly
-}
-
-// minimumPermissionFromTags determines permission level from tool tags.
-//
-// The shell family is readonly-tier. That is a deliberate weakening, not an
-// oversight: with the scoped grep/glob tools removed, the shell is the only way
-// to search a codebase, so gating it at mutating would leave readonly and
-// plan-mode agents unable to search — the exact regression the earlier removal
-// produced. The tradeoff is that "readonly" no longer means the agent cannot
-// write; it means the agent is not HANDED write tools, while retaining a shell
-// that can still `>` a file. Callers needing a hard read-only boundary must
-// enforce it below the tool layer (sandbox/filesystem), not via this gate.
-func minimumPermissionFromTags(tags []ToolTag) string {
-	for _, tag := range tags {
-		switch tag {
-		case TagShell, TagExecution:
-			return PermissionReadOnly
-		case TagFile:
-			// File tools that are also read-only stay readonly
-			for _, t := range tags {
-				if t == TagReadOnly {
-					return PermissionReadOnly
-				}
-			}
-			return PermissionMutating
-		}
-	}
-	return PermissionReadOnly
+	// Everything else — including MCP and unknown tools — sits at the base tier.
+	// Tag-based classification existed only to separate mutating from readonly;
+	// with readonly gone there is nothing left for it to decide, and a tag table
+	// that always returns the same answer reads as a gate while gating nothing.
+	return PermissionMutating
 }

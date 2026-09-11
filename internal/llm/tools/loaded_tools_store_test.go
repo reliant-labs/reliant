@@ -113,8 +113,21 @@ func TestLoadedToolsStore_SetAndGetPermission(t *testing.T) {
 	assert.Equal(t, PermissionMutating, s.GetPermission(chatID))
 
 	// Overwrite
-	s.SetPermission(chatID, PermissionReadOnly)
-	assert.Equal(t, PermissionReadOnly, s.GetPermission(chatID))
+	s.SetPermission(chatID, PermissionOrchestrator)
+	assert.Equal(t, PermissionOrchestrator, s.GetPermission(chatID))
+}
+
+// A scope written before the readonly tier was removed — an in-flight run, or a
+// stored value — must read back as a live tier rather than as an unknown level
+// that fails every comparison.
+func TestLoadedToolsStore_GetPermission_NormalizesRetiredTier(t *testing.T) {
+	t.Parallel()
+	s := newTestStore()
+	chatID := "chat-legacy-perm"
+
+	s.SetPermission(chatID, "readonly")
+	assert.Equal(t, PermissionMutating, s.GetPermission(chatID),
+		"a stored readonly must normalize forward, not strand the run")
 }
 
 func TestLoadedToolsStore_GetPermission_DefaultFailsClosed(t *testing.T) {
@@ -123,11 +136,11 @@ func TestLoadedToolsStore_GetPermission_DefaultFailsClosed(t *testing.T) {
 
 	// An unset scope means "we do not know what this agent was granted", which
 	// happens after a worker restart empties this in-memory store mid-run. The
-	// answer must be the LEAST privilege, not the most: the previous
-	// orchestrator default handed maximum privilege to any execute_tools that
-	// landed before the next call_llm repopulated the scope.
-	assert.Equal(t, PermissionReadOnly, s.GetPermission("unknown-scope"),
-		"unset permission must fail closed at readonly")
+	// answer must be the LEAST privilege, not the most: an orchestrator default
+	// would hand spawn to any execute_tools that landed before the next call_llm
+	// repopulated the scope.
+	assert.Equal(t, PermissionMutating, s.GetPermission("unknown-scope"),
+		"unset permission must fail closed at the lowest live tier")
 }
 
 func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
@@ -135,14 +148,14 @@ func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
 	s := newTestStore()
 	chatID := "chat-clear-perm"
 
-	s.SetPermission(chatID, PermissionReadOnly)
+	s.SetPermission(chatID, PermissionOrchestrator)
 	s.Add(chatID, "view")
-	assert.Equal(t, PermissionReadOnly, s.GetPermission(chatID))
+	assert.Equal(t, PermissionOrchestrator, s.GetPermission(chatID))
 
 	s.Clear(chatID)
 
 	// Back to the fail-closed default.
-	assert.Equal(t, PermissionReadOnly, s.GetPermission(chatID),
+	assert.Equal(t, PermissionMutating, s.GetPermission(chatID),
 		"Clear must remove stored permission, falling back to the least-privilege default")
 	assert.Nil(t, s.Get(chatID))
 }
@@ -180,7 +193,7 @@ func TestSearchTools_SurfacesConnectedMCPTool(t *testing.T) {
 	}
 
 	// Keyword present in the MCP tool NAME.
-	results := SearchTools("screenshot", PermissionReadOnly, mcpTools)
+	results := SearchTools("screenshot", PermissionMutating, mcpTools)
 	require.True(t, containsToolResult(results, "mcp__chrome-devtools__take_screenshot"),
 		"expected screenshot MCP tool surfaced by name keyword")
 	for _, r := range results {
@@ -191,12 +204,12 @@ func TestSearchTools_SurfacesConnectedMCPTool(t *testing.T) {
 	}
 
 	// Keyword present only in the DESCRIPTION ("browser").
-	results = SearchTools("browser", PermissionReadOnly, mcpTools)
+	results = SearchTools("browser", PermissionMutating, mcpTools)
 	assert.True(t, containsToolResult(results, "mcp__chrome-devtools__navigate_page"),
 		"expected MCP tool surfaced via description keyword")
 
 	// Non-matching keyword surfaces no MCP tools.
-	results = SearchTools("zzz_no_match_zzz", PermissionReadOnly, mcpTools)
+	results = SearchTools("zzz_no_match_zzz", PermissionMutating, mcpTools)
 	for _, r := range results {
 		assert.NotContains(t, r.Name, "mcp__", "no MCP tool should match a non-matching keyword")
 	}

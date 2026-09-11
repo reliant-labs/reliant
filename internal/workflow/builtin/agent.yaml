@@ -203,15 +203,20 @@ nodes:
             # through the shell, since there are no dedicated grep/glob tools;
             # spawn available in all modes (child inherits preset config).
             #
-            # Plan mode gates at 'readonly', which is now sufficient: the shell is
-            # readonly-tier precisely so plan-mode agents can still search. The
-            # earlier blanket 'mutating' existed only because the shell used to
-            # gate at mutating and plan mode would otherwise have had no way to
-            # search at all; that workaround is no longer needed.
+            # The FILTER is what makes this a planning agent. It is enforced:
+            # load_tool and execute_tools both check it, so a plan-mode agent
+            # cannot acquire `write` by asking for it.
+            #
+            # `permission` is no longer varied by mode. It used to read
+            # 'readonly' for plan, which promised more than it delivered — the
+            # shell was granted at that tier too, so a plan-mode agent could
+            # always redirect into a file. The tier was removed rather than left
+            # to imply a guarantee it never made; a real read-only mode needs OS
+            # containment and will return on that footing.
             tools_config:
               filter: "{{inputs.mode == 'plan' ? ['tag:plan', 'tag:shell'] : inputs.tools}}"
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
-              permission: "{{inputs.mode == 'plan' ? 'readonly' : 'mutating'}}"
+              permission: mutating
 
         - id: approval
           type: approval

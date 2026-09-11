@@ -16,10 +16,11 @@ import (
 // TOOL PERMISSION ENFORCEMENT TESTS
 // ============================================================================
 
-// TestExecuteToolsActivity_PermissionEnforcement tests that tool calls are validated
-// against the permission level set by call_llm via LoadedToolsStore.
+// TestExecuteToolsActivity_PermissionEnforcement tests that tool calls are
+// validated at execution against BOTH the declared tool set and the permission
+// level set by call_llm via LoadedToolsStore.
 func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
-	t.Run("Mutating tool denied with readonly permission", func(t *testing.T) {
+	t.Run("Tool outside the declared set is denied", func(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 
@@ -32,17 +33,18 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// Set readonly permission (simulates plan mode)
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionReadOnly)
+		// Plan mode is expressed as a DECLARED TOOL SET, not a permission tier.
+		// The readonly tier used to carry this and never actually prevented a
+		// write — the shell was granted at that tier too. The filter does, and
+		// is enforced here at execution.
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
+		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chatID, "0"),
+			[]string{tools.ToolView, tools.ShellToolName})
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		// write requires mutating permission. The shell family does NOT: it
-		// is readonly-tier by decision (internal/llm/tools/permissions.go),
-		// since the shell is the only way to search once the scoped search
-		// tools were removed.
 		input := ExecuteToolsInput{
 			ChatID: chatID,
 			Thread: "0",
@@ -61,14 +63,13 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
 		assert.True(t, output.ToolResults[0].IsError)
-		assert.Contains(t, output.ToolResults[0].Content, "permission")
-		assert.Contains(t, output.ToolResults[0].Content, "readonly")
+		assert.Contains(t, output.ToolResults[0].Content, "declared tool set")
 
 		// Tool should NOT have been executed
 		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"))
 	})
 
-	t.Run("Read-only tool allowed with readonly permission", func(t *testing.T) {
+	t.Run("Tool inside the declared set runs", func(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 
@@ -81,14 +82,17 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// Set readonly permission
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionReadOnly)
+		// A tool inside the declared set runs normally, so the guard above is
+		// not just refusing everything.
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
+		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chatID, "0"),
+			[]string{tools.ToolView, tools.ShellToolName})
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		// view is a read-only tool
+		// view is inside the declared set
 		input := ExecuteToolsInput{
 			ChatID: chatID,
 			Thread: "0",
@@ -151,10 +155,11 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 	})
 
 	// An unset scope is the worker-restart case: the in-memory store was emptied
-	// while the run was in flight. It must fail CLOSED — a readonly-tier tool
-	// still runs, a mutating one does not — rather than granting orchestrator
-	// precisely because the grant was lost.
-	t.Run("Unset permission falls back to readonly and still allows a readonly tool", func(t *testing.T) {
+	// while the run was in flight. It must fail CLOSED — falling back to the
+	// lowest live tier rather than granting orchestrator precisely because the
+	// grant was lost. An undeclared scope still allows ordinary tools, so a live
+	// run is not stranded.
+	t.Run("Unset permission falls back to the base tier and still runs ordinary tools", func(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 
@@ -196,7 +201,12 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 
 	// The other half of the same case, and the one the old orchestrator default
 	// got wrong: losing the grant must not widen it.
-	t.Run("Unset permission denies a mutating tool", func(t *testing.T) {
+	//
+	// spawn is what this can be shown with now. With the readonly tier removed,
+	// the base tier IS mutating, so there is no longer a "mutating tool" an
+	// ungranted scope can be denied — the fail-closed default withholds exactly
+	// one capability, and that is the one worth pinning.
+	t.Run("Unset permission denies spawn", func(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 
@@ -220,9 +230,9 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 			Thread: "0",
 			ToolCalls: []ToolCall{
 				{
-					ID:    "call_write",
-					Name:  "write",
-					Input: `{"file_path": "/tmp/x", "content": "y"}`,
+					ID:    "call_spawn",
+					Name:  "spawn",
+					Input: `{"preset": "general", "prompt": "x"}`,
 				},
 			},
 		}
@@ -233,8 +243,8 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
 		assert.True(t, output.ToolResults[0].IsError,
-			"a mutating tool must be denied when the scope carries no granted permission")
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"),
+			"spawn must be denied when the scope carries no granted permission")
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_spawn"),
 			"a denied tool must never reach the executor")
 	})
 }
@@ -425,13 +435,15 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// Set readonly — view and bash are allowed, write is denied. bash is
-		// readonly-tier by decision (internal/llm/tools/permissions.go): with
-		// the scoped search tools gone the shell is the only way to search, so
-		// gating it at mutating would leave a readonly agent unable to look
-		// around. It can still redirect into a file, which is why a hard
-		// boundary has to live below the tool layer.
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionReadOnly)
+		// A declared set of view + bash: both run, write is refused. bash is in
+		// the set because with the scoped search tools gone the shell is the
+		// only way to search, so a planning agent needs it. It can still
+		// redirect into a file — which is exactly why this is authorial intent
+		// and not a security boundary; a hard boundary lives below the tool
+		// layer.
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
+		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chatID, "0"),
+			[]string{tools.ToolView, "bash"})
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -476,7 +488,7 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 
 		// Mutating tool should be denied
 		assert.True(t, resultMap["call_write"].IsError)
-		assert.Contains(t, resultMap["call_write"].Content, "permission")
+		assert.Contains(t, resultMap["call_write"].Content, "declared tool set")
 
 		// Verify execution counts
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
