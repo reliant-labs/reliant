@@ -101,6 +101,19 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 			"Tool '%s' not found in the registry. Use load_tool with query to search for available tools.", name))
 	}
 
+	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
+	store := GetLoadedToolsStore()
+
+	// The workflow's declared tool set is checked FIRST, and independently of
+	// the permission ladder. A tool must pass both: the ladder says what this
+	// agent's tier may ever hold, the filter says what this workflow said its
+	// agent should have. Checking only the ladder is what let an agent load
+	// `write` past a `tools: [view]` declaration.
+	if !store.IsToolAllowed(scopeKey, name) {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"Tool '%s' is not in this workflow's declared tool set.", name))
+	}
+
 	// Check permission
 	minPerm := MinimumPermissionForTool(name)
 	if !PermissionAtLeast(permission, minPerm) {
@@ -110,8 +123,6 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 	}
 
 	// Check if already loaded
-	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
-	store := GetLoadedToolsStore()
 	if store.Has(scopeKey, name) {
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
 	}
@@ -136,6 +147,17 @@ func (t *loadToolTool) loadMCPTool(rctx *rctx.ToolContext, name string) ToolResp
 
 	if store.Has(scopeKey, name) {
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
+	}
+
+	// A workflow's declared tool set covers MCP too. The ladder exemption below
+	// is deliberate and stays, but it previously left an author with a
+	// restrictive `tools:` filter no way to refuse a connected MCP tool —
+	// availability was the only check, so MCP was the widest hole in the filter.
+	// `tag:mcp` expands to the connected names, so an author who wants them can
+	// still say so in one line.
+	if !store.IsToolAllowed(scopeKey, name) {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"MCP tool '%s' is not in this workflow's declared tool set.", name))
 	}
 
 	// Verify the MCP tool is actually connected in this environment before
@@ -171,8 +193,22 @@ func mcpToolAvailable(available []MCPToolInfo, name string) bool {
 }
 
 func (t *loadToolTool) searchTools(scopeKey, query string, permission string) ToolResponse {
-	mcpTools := GetLoadedToolsStore().GetAvailableMCPTools(scopeKey)
+	store := GetLoadedToolsStore()
+	mcpTools := store.GetAvailableMCPTools(scopeKey)
 	results := SearchTools(query, permission, mcpTools)
+
+	// Discovery must agree with enforcement. Advertising a tool that loadTool
+	// will then refuse teaches the model to keep retrying something that cannot
+	// work, and burns a turn each time.
+	if store.HasAllowedTools(scopeKey) {
+		filtered := results[:0]
+		for _, r := range results {
+			if store.IsToolAllowed(scopeKey, r.Name) {
+				filtered = append(filtered, r)
+			}
+		}
+		results = filtered
+	}
 
 	if len(results) == 0 {
 		return NewTextResponse(fmt.Sprintf("No tools found matching '%s'.", query))
