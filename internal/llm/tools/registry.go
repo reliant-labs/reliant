@@ -463,9 +463,15 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
 
-		// Network tools — routed to daemon so HTTP requests originate from the user's machine
-		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		// Network tools. Both are pure net/http plus HTML parsing — no filesystem,
+		// no subprocess — so they carry no daemon requirement. They were daemon-routed
+		// so outbound requests would originate from the user's machine; that is now
+		// paid for elsewhere, because RequiresDaemon treats a daemon-located tool in a
+		// node's filter as proof the whole workflow needs a daemon. With TagDefault on
+		// both, `tag:default` alone was enough to fire the preflight gate and refuse a
+		// workflow that never touches the user's machine.
+		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
+		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
 
 		// Planning tools
 		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
