@@ -215,7 +215,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 
 	// Resolve the permission level for tool execution enforcement.
 	// This was set by call_llm when it resolved tools for the LLM request.
-	grantedPermission := tools.GetLoadedToolsStore().GetPermission(rtx.ChatID)
+	grantedPermission := tools.GetLoadedToolsStore().GetPermission(tools.Scope(rtx.ChatID, rtx.Thread))
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))

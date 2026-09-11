@@ -117,13 +117,17 @@ func TestLoadedToolsStore_SetAndGetPermission(t *testing.T) {
 	assert.Equal(t, PermissionReadOnly, s.GetPermission(chatID))
 }
 
-func TestLoadedToolsStore_GetPermission_DefaultOrchestrator(t *testing.T) {
+func TestLoadedToolsStore_GetPermission_DefaultFailsClosed(t *testing.T) {
 	t.Parallel()
 	s := newTestStore()
 
-	// No permission ever set -> backward-compatible default of orchestrator.
-	assert.Equal(t, PermissionOrchestrator, s.GetPermission("unknown-chat"),
-		"unset permission should default to orchestrator for backward compat")
+	// An unset scope means "we do not know what this agent was granted", which
+	// happens after a worker restart empties this in-memory store mid-run. The
+	// answer must be the LEAST privilege, not the most: the previous
+	// orchestrator default handed maximum privilege to any execute_tools that
+	// landed before the next call_llm repopulated the scope.
+	assert.Equal(t, PermissionReadOnly, s.GetPermission("unknown-scope"),
+		"unset permission must fail closed at readonly")
 }
 
 func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
@@ -137,9 +141,9 @@ func TestLoadedToolsStore_ClearRemovesPermission(t *testing.T) {
 
 	s.Clear(chatID)
 
-	// Back to the backward-compat default.
-	assert.Equal(t, PermissionOrchestrator, s.GetPermission(chatID),
-		"Clear must remove stored permission, falling back to default")
+	// Back to the fail-closed default.
+	assert.Equal(t, PermissionReadOnly, s.GetPermission(chatID),
+		"Clear must remove stored permission, falling back to the least-privilege default")
 	assert.Nil(t, s.Get(chatID))
 }
 

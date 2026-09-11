@@ -814,7 +814,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		permission = rtx.ParentPermission
 	}
 	if chat != nil {
-		tools.GetLoadedToolsStore().SetPermission(chat.ID, permission)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chat.ID, thread), permission)
 	}
 
 	// Model must be provided via workflow inputs
@@ -1077,7 +1077,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		for i, t := range availableTools {
 			currentToolNames[i] = t.Name()
 		}
-		deferred := tools.DeferredToolNames(chat.ID, permission, currentToolNames, toolsResult.AllMCPToolNames)
+		deferred := tools.DeferredToolNames(tools.Scope(chat.ID, thread), permission, currentToolNames, toolsResult.AllMCPToolNames)
 		if len(deferred) > 0 {
 			for _, t := range availableTools {
 				if u, ok := t.(interface{ Unwrap() any }); ok {
@@ -1740,7 +1740,7 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 // getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
 // Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
 // Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, _ string, mailboxReachable bool) toolsWithSpawnResult {
+func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, thread string, mailboxReachable bool) toolsWithSpawnResult {
 	if a.toolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
@@ -1767,7 +1767,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		projectScopedToolsFactory = projectScopedToolsFactory.WithSkills(projectCfg.Skills)
 		// Also store skills in the global store so the executor can access them
 		// when creating skill tool instances (the executor uses a different factory).
-		tools.GetLoadedToolsStore().SetSkills(chat.ID, projectCfg.Skills)
+		tools.GetLoadedToolsStore().SetSkills(tools.Scope(chat.ID, thread), projectCfg.Skills)
 	} else {
 		slog.Debug("[CallLLM] No skills available", "projectCfgNil", projectCfg == nil)
 	}
@@ -1824,7 +1824,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 				Description: t.Description(),
 			})
 		}
-		tools.GetLoadedToolsStore().SetAvailableMCPTools(chat.ID, mcpToolInfos)
+		tools.GetLoadedToolsStore().SetAvailableMCPTools(tools.Scope(chat.ID, thread), mcpToolInfos)
 	}
 
 	// Expand tool filter with spawn support
@@ -1832,7 +1832,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 
 	// Include dynamically loaded tools (via load_tool)
 	if chat != nil {
-		loadedTools := tools.GetLoadedToolsStore().Get(chat.ID)
+		loadedTools := tools.GetLoadedToolsStore().Get(tools.Scope(chat.ID, thread))
 		if len(loadedTools) > 0 {
 			filterResult.ToolNames = append(filterResult.ToolNames, loadedTools...)
 			logDebug("[CallLLM] Including dynamically loaded tools",

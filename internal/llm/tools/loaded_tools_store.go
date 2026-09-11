@@ -9,15 +9,40 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 )
 
-// LoadedToolsStore tracks which tools have been dynamically loaded per chat.
-// This is an in-memory store that persists across loop iterations within
-// the same server process. Thread-safe for concurrent access.
+// LoadedToolsStore tracks which tools have been dynamically loaded, and at what
+// permission, for one agent scope. This is an in-memory store that persists
+// across loop iterations within the same server process. Thread-safe for
+// concurrent access.
+//
+// Entries are keyed by SCOPE — (chatID, thread) via scope() — not by chat.
+// Thread is what distinguishes the three things a chat-only key conflated:
+// a new run sets targetThread = workflowID, and a spawned child runs on the
+// SAME chat under a new thread. Keying by chat alone therefore let a completed
+// run's grants reappear in the next run, and let a child's grants outlive it
+// into the parent (and vice versa). Callers must pass scope(chatID, thread).
 type LoadedToolsStore struct {
 	mu           sync.RWMutex
-	tools        map[string]map[string]bool      // chatID -> set of tool names
-	permissions  map[string]string               // chatID -> permission level
-	skills       map[string][]config.StoredSkill // chatID -> skills
-	availableMCP map[string][]MCPToolInfo        // chatID -> connected/available MCP tools
+	tools        map[string]map[string]bool      // scope -> set of tool names
+	permissions  map[string]string               // scope -> permission level
+	skills       map[string][]config.StoredSkill // scope -> skills
+	availableMCP map[string][]MCPToolInfo        // scope -> connected/available MCP tools
+}
+
+// scope builds the store key identifying one agent's tool state: a single run of
+// a single thread. Callers that genuinely have no thread (there should be none
+// on the production path) degrade to chat-only keying rather than colliding on
+// an empty key.
+func scope(chatID, thread string) string {
+	if thread == "" {
+		return chatID
+	}
+	return chatID + "\x00" + thread
+}
+
+// Scope exposes the store's key construction to callers outside this package
+// (the workflow activities), so the key shape stays defined in exactly one place.
+func Scope(chatID, thread string) string {
+	return scope(chatID, thread)
 }
 
 // MCPToolInfo carries the minimal metadata needed for progressive discovery of
@@ -41,28 +66,28 @@ func GetLoadedToolsStore() *LoadedToolsStore {
 	return globalLoadedToolsStore
 }
 
-// Add adds a tool to the loaded set for a chat.
+// Add adds a tool to the loaded set for a scope.
 // Returns true if the tool was newly added, false if already loaded.
-func (s *LoadedToolsStore) Add(chatID, toolName string) bool {
+func (s *LoadedToolsStore) Add(scopeKey, toolName string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if s.tools[chatID] == nil {
-		s.tools[chatID] = make(map[string]bool)
+	if s.tools[scopeKey] == nil {
+		s.tools[scopeKey] = make(map[string]bool)
 	}
-	if s.tools[chatID][toolName] {
+	if s.tools[scopeKey][toolName] {
 		return false
 	}
-	s.tools[chatID][toolName] = true
+	s.tools[scopeKey][toolName] = true
 	return true
 }
 
-// Get returns all loaded tool names for a chat.
-func (s *LoadedToolsStore) Get(chatID string) []string {
+// Get returns all loaded tool names for a scope.
+func (s *LoadedToolsStore) Get(scopeKey string) []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	set := s.tools[chatID]
+	set := s.tools[scopeKey]
 	if len(set) == 0 {
 		return nil
 	}
@@ -75,29 +100,32 @@ func (s *LoadedToolsStore) Get(chatID string) []string {
 	return names
 }
 
-// Has checks if a tool is loaded for a chat.
-func (s *LoadedToolsStore) Has(chatID, toolName string) bool {
+// Has checks if a tool is loaded for a scope.
+func (s *LoadedToolsStore) Has(scopeKey, toolName string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.tools[chatID][toolName]
+	return s.tools[scopeKey][toolName]
 }
 
-// Clear removes all loaded tools, permission, and skills for a chat.
-func (s *LoadedToolsStore) Clear(chatID string) {
+// Clear removes all loaded tools, permission, and skills for a scope. Called
+// when a run reaches a terminal state so its grants do not outlive it; scoped
+// keying makes a missed Clear far less dangerous than it was, but a run that
+// ends should still release its state rather than wait for process exit.
+func (s *LoadedToolsStore) Clear(scopeKey string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.tools, chatID)
-	delete(s.permissions, chatID)
-	delete(s.skills, chatID)
-	delete(s.availableMCP, chatID)
+	delete(s.tools, scopeKey)
+	delete(s.permissions, scopeKey)
+	delete(s.skills, scopeKey)
+	delete(s.availableMCP, scopeKey)
 }
 
-// SetAvailableMCPTools records the connected/available MCP tools for a chat so
+// SetAvailableMCPTools records the connected/available MCP tools for a scope so
 // load_tool can search them by keyword and verify they exist before loading.
-// Passing an empty slice clears any previously recorded set for the chat.
-func (s *LoadedToolsStore) SetAvailableMCPTools(chatID string, mcpTools []MCPToolInfo) {
+// Passing an empty slice clears any previously recorded set for the scope.
+func (s *LoadedToolsStore) SetAvailableMCPTools(scopeKey string, mcpTools []MCPToolInfo) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -105,61 +133,66 @@ func (s *LoadedToolsStore) SetAvailableMCPTools(chatID string, mcpTools []MCPToo
 		s.availableMCP = make(map[string][]MCPToolInfo)
 	}
 	if len(mcpTools) == 0 {
-		delete(s.availableMCP, chatID)
+		delete(s.availableMCP, scopeKey)
 		return
 	}
-	s.availableMCP[chatID] = mcpTools
+	s.availableMCP[scopeKey] = mcpTools
 }
 
 // GetAvailableMCPTools returns the connected/available MCP tools recorded for a
-// chat, or nil if none.
-func (s *LoadedToolsStore) GetAvailableMCPTools(chatID string) []MCPToolInfo {
+// scope, or nil if none.
+func (s *LoadedToolsStore) GetAvailableMCPTools(scopeKey string) []MCPToolInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.availableMCP[chatID]
+	return s.availableMCP[scopeKey]
 }
 
-// SetSkills stores the project skills for a chat so the executor can access them.
-func (s *LoadedToolsStore) SetSkills(chatID string, skills []config.StoredSkill) {
+// SetSkills stores the project skills for a scope so the executor can access them.
+func (s *LoadedToolsStore) SetSkills(scopeKey string, skills []config.StoredSkill) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.skills[chatID] = skills
+	s.skills[scopeKey] = skills
 }
 
-// GetSkills returns the stored skills for a chat, or nil if none.
-func (s *LoadedToolsStore) GetSkills(chatID string) []config.StoredSkill {
+// GetSkills returns the stored skills for a scope, or nil if none.
+func (s *LoadedToolsStore) GetSkills(scopeKey string) []config.StoredSkill {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	return s.skills[chatID]
+	return s.skills[scopeKey]
 }
 
-// SetPermission sets the permission level for a chat.
-func (s *LoadedToolsStore) SetPermission(chatID, permission string) {
+// SetPermission sets the permission level for a scope.
+func (s *LoadedToolsStore) SetPermission(scopeKey, permission string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.permissions[chatID] = permission
+	s.permissions[scopeKey] = permission
 }
 
-// GetPermission returns the permission level for a chat.
-// Returns PermissionOrchestrator if not set (backward compatible default).
-func (s *LoadedToolsStore) GetPermission(chatID string) string {
+// GetPermission returns the permission level for a scope.
+//
+// An unknown scope FAILS CLOSED at PermissionReadOnly. This store is in-memory,
+// so a worker restart empties it while runs are in flight; the previous default
+// of PermissionOrchestrator meant that any execute_tools landing between the
+// restart and the next call_llm — which is what re-populates the scope — was
+// granted maximum privilege precisely because the state had been lost.
+func (s *LoadedToolsStore) GetPermission(scopeKey string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	if perm, ok := s.permissions[chatID]; ok {
+	if perm, ok := s.permissions[scopeKey]; ok {
 		return perm
 	}
-	return PermissionOrchestrator
+	return PermissionReadOnly
 }
 
 // DeferredToolNames returns tool names from the registry (and available MCP tools)
 // that are NOT in the initial set and NOT already loaded for a given chat.
 // These are the tools the LLM can request via load_tool.
-func DeferredToolNames(chatID string, permission string, initialToolNames []string, mcpToolNames []string) []string {
+func DeferredToolNames(scopeKey string, permission string, initialToolNames []string, mcpToolNames []string) []string {
 	registry := GetToolRegistry()
 	store := GetLoadedToolsStore()
 
@@ -168,7 +201,7 @@ func DeferredToolNames(chatID string, permission string, initialToolNames []stri
 	for _, name := range initialToolNames {
 		loaded[name] = true
 	}
-	for _, name := range store.Get(chatID) {
+	for _, name := range store.Get(scopeKey) {
 		loaded[name] = true
 	}
 

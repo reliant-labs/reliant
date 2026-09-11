@@ -33,8 +33,8 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
 		// Set readonly permission (simulates plan mode)
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionReadOnly)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionReadOnly)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -82,8 +82,8 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
 		// Set readonly permission
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionReadOnly)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionReadOnly)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -123,8 +123,8 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionMutating)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -150,7 +150,11 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_bash"))
 	})
 
-	t.Run("Default permission is orchestrator (allows everything)", func(t *testing.T) {
+	// An unset scope is the worker-restart case: the in-memory store was emptied
+	// while the run was in flight. It must fail CLOSED — a readonly-tier tool
+	// still runs, a mutating one does not — rather than granting orchestrator
+	// precisely because the grant was lost.
+	t.Run("Unset permission falls back to readonly and still allows a readonly tool", func(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 
@@ -163,8 +167,8 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// Don't set permission — should default to orchestrator
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		// Deliberately set no permission for this scope.
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -189,6 +193,50 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		assert.False(t, output.ToolResults[0].IsError)
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_any"))
 	})
+
+	// The other half of the same case, and the one the old orchestrator default
+	// got wrong: losing the grant must not widen it.
+	t.Run("Unset permission denies a mutating tool", func(t *testing.T) {
+		h := NewIdempotencyTestHelper(t)
+		defer h.Cleanup()
+
+		ctx := context.Background()
+
+		userID := uuid.New().String()
+		projectID := uuid.New().String()
+		chatID := uuid.New().String()
+
+		h.CreateTestProject(ctx, projectID, userID)
+		h.CreateTestChat(ctx, chatID, projectID, userID)
+
+		// Deliberately set no permission for this scope.
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
+
+		mockExecutor := newMockToolExecutor()
+		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
+
+		input := ExecuteToolsInput{
+			ChatID: chatID,
+			Thread: "0",
+			ToolCalls: []ToolCall{
+				{
+					ID:    "call_write",
+					Name:  "write",
+					Input: `{"file_path": "/tmp/x", "content": "y"}`,
+				},
+			},
+		}
+
+		var output ExecuteToolsOutput
+		err := h.ExecuteActivity(activity.Execute, input, &output)
+
+		require.NoError(t, err)
+		require.Len(t, output.ToolResults, 1)
+		assert.True(t, output.ToolResults[0].IsError,
+			"a mutating tool must be denied when the scope carries no granted permission")
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"),
+			"a denied tool must never reach the executor")
+	})
 }
 
 // TestExecuteToolsActivity_SpawnPresetValidation tests that spawn tool calls
@@ -208,8 +256,8 @@ func TestExecuteToolsActivity_SpawnPresetValidation(t *testing.T) {
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
 		// Orchestrator permission so spawn itself is allowed
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -252,8 +300,8 @@ func TestExecuteToolsActivity_SpawnPresetValidation(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -292,8 +340,8 @@ func TestExecuteToolsActivity_SpawnPresetValidation(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -332,8 +380,8 @@ func TestExecuteToolsActivity_SpawnPresetValidation(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -383,8 +431,8 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 		// gating it at mutating would leave a readonly agent unable to look
 		// around. It can still redirect into a file, which is why a hard
 		// boundary has to live below the tool layer.
-		tools.GetLoadedToolsStore().SetPermission(chatID, tools.PermissionReadOnly)
-		defer tools.GetLoadedToolsStore().Clear(chatID)
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionReadOnly)
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
