@@ -13,6 +13,15 @@ Regenerate with: make generate-changelog
 
 Track what's new in each Reliant release.
 
+<Update label="v1.7.13" description="September 10, 2026">
+### The chat list stops rearranging itself, and new workspaces show up straight away
+
+- **The chat list no longer rearranges itself while you work** The list arrived from the server ordered by whichever conversation was touched most recently, so activity in a chat you were not looking at could reorder the ones you were. Ordering is now decided entirely by the chats themselves, with ties broken consistently, so the list stays put unless something you care about actually changes.
+- **A workspace you create appears immediately** Creating a workspace in a project with more than one repository saved it without telling the part of the app that tracks workspaces, so it was missing from every picker until you refreshed — and the selection would snap back to the main branch on its own. Unarchiving a chat had the same gap. Both now update the app's view of your workspaces as soon as the change is made.
+- **A stalled provider now explains itself** When a provider accepted a request and then went silent until the turn was cut, the message you saw ended in a bracketed internal code. That tail is now removed before the message is shown, leaving the readable explanation — which provider stalled, and that the turn is being retried.
+- **Release tags are now guaranteed to match what shipped** Version tags were being created from whichever commit happened to be checked out, which could differ from the commit that actually landed. Tagging now targets the commit on the main branch and verifies it before publishing, so a released version always corresponds to the code that shipped.
+</Update>
+
 <Update label="v1.7.12" description="September 10, 2026">
 ### Choosing a machine tells you what you get, buying credit is one screen, and running low no longer takes you by surprise
 
