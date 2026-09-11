@@ -1,0 +1,13 @@
+version: "v1.7.13"
+date: "2026-09-10"
+title: "The chat list stops rearranging itself, and new workspaces show up straight away"
+summary: "A maintenance release. The chat list now keeps a steady order instead of reshuffling whenever any conversation is touched, workspaces you create appear immediately rather than after a manual refresh, and a chat whose provider goes quiet now explains itself instead of showing a bare internal code."
+items:
+  - title: "The chat list no longer rearranges itself while you work"
+    description: "The list arrived from the server ordered by whichever conversation was touched most recently, so activity in a chat you were not looking at could reorder the ones you were. Ordering is now decided entirely by the chats themselves, with ties broken consistently, so the list stays put unless something you care about actually changes."
+  - title: "A workspace you create appears immediately"
+    description: "Creating a workspace in a project with more than one repository saved it without telling the part of the app that tracks workspaces, so it was missing from every picker until you refreshed — and the selection would snap back to the main branch on its own. Unarchiving a chat had the same gap. Both now update the app's view of your workspaces as soon as the change is made."
+  - title: "A stalled provider now explains itself"
+    description: "When a provider accepted a request and then went silent until the turn was cut, the message you saw ended in a bracketed internal code. That tail is now removed before the message is shown, leaving the readable explanation — which provider stalled, and that the turn is being retried."
+  - title: "Release tags are now guaranteed to match what shipped"
+    description: "Version tags were being created from whichever commit happened to be checked out, which could differ from the commit that actually landed. Tagging now targets the commit on the main branch and verifies it before publishing, so a released version always corresponds to the code that shipped."
