@@ -61,6 +61,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
   const daemonUnavailableRef = useRef(false);
   const connectWebSocketRef = useRef<(() => Promise<(() => void) | undefined>) | null>(null);
   const updateSessionPID = useTerminalStore((state) => state.updateSessionPID);
+  const setDaemonSessionId = useTerminalStore((state) => state.setDaemonSessionId);
   const activeSessionId = useTerminalStore((state) => state.activeSessionId);
 
   const updateConnectionState = useCallback((next: TerminalConnectionState) => {
@@ -347,6 +348,11 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
                 updateSessionPID(sessionId, data.pid);
                 logger.info("[Terminal] Received PID", { sessionId, pid: data.pid });
               }
+              // Bind the daemon's session id. Until this lands the store only
+              // knows the local id, which cannot close the PTY.
+              if (typeof data.session_id === "string" && data.session_id) {
+                setDaemonSessionId(sessionId, data.session_id);
+              }
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
@@ -505,7 +511,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
       term.dispose();
     };
-  }, [sessionId, workingDir, worktreeId, updateSessionPID, updateConnectionState]); // updateConnectionState is a stable setter
+  }, [sessionId, workingDir, worktreeId, updateSessionPID, setDaemonSessionId, updateConnectionState]); // updateConnectionState is a stable setter
 
   // Listen for theme changes and update terminal colors
   useEffect(() => {

@@ -13,6 +13,19 @@ export interface TerminalSession {
   createdAt: Date;
   isActive: boolean;
   pid?: number;
+  /**
+   * The DAEMON's session id, learned from the server's "init" message.
+   *
+   * `id` above is minted locally before any socket exists, because the React
+   * tree needs a stable key immediately. It is meaningless to the daemon. Only
+   * this id can address the real PTY, so it is what CloseSession must send —
+   * passing `id` made every close fail with "session not found" and left the
+   * shell process running in the workspace.
+   *
+   * Undefined until "init" arrives, and undefined forever for a session whose
+   * socket never connected. Closing one of those is correctly a no-op.
+   */
+  daemonSessionId?: string;
 }
 
 interface TerminalState {
@@ -32,6 +45,8 @@ interface TerminalState {
   getWorktreeSessions: (worktreeId?: string) => TerminalSession[];
   updateSessionTitle: (id: string, title: string) => void;
   updateSessionPID: (id: string, pid: number) => void;
+  /** Bind the daemon's session id once "init" arrives. See TerminalSession.daemonSessionId. */
+  setDaemonSessionId: (id: string, daemonSessionId: string) => void;
   toggleTerminal: () => void; // Show/hide the terminal panel
   showTerminal: () => void; // Expand/show the terminal panel
   hideTerminal: () => void; // Collapse/hide the terminal panel
@@ -82,12 +97,23 @@ export const useTerminalStore = create(
   },
 
   killSession: (id: string) => {
-    // Phase 12: Close the session on the server via gRPC
-    // Fire-and-forget - we update UI immediately for responsiveness
-    terminalApi.closeSession(id).catch((error) => {
-      // Log but don't block - session might have already been closed server-side
-      logger.warn("[TerminalStore] Failed to close session on server (may already be closed)", { id, error });
-    });
+    // Close on the server with the DAEMON's id, not `id` — `id` is local and
+    // the daemon has never seen it. Sending it failed every close with
+    // "session not found" and left the PTY running in the workspace until the
+    // pod died. Fire-and-forget: the UI drops the tab immediately.
+    const daemonSessionId = get().sessions.find((s) => s.id === id)?.daemonSessionId;
+    if (daemonSessionId) {
+      terminalApi.closeSession(daemonSessionId).catch((error) => {
+        // Still best-effort: the session may have exited on its own (the shell
+        // was exited, or the daemon restarted) and is genuinely gone already.
+        logger.warn("[TerminalStore] Failed to close session on server (may already be closed)", { id, daemonSessionId, error });
+      });
+    } else {
+      // No daemon id means "init" never arrived, so no PTY was ever created
+      // for this tab. There is nothing to close, and calling CloseSession with
+      // the local id is what produced the errors this replaces.
+      logger.debug("[TerminalStore] No daemon session to close", { id });
+    }
 
     set((state) => {
       const sessions = state.sessions.filter((s) => s.id !== id);
@@ -164,6 +190,15 @@ export const useTerminalStore = create(
         s.id === id ? { ...s, title } : s
       ),
     }));
+  },
+
+  setDaemonSessionId: (id: string, daemonSessionId: string) => {
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === id ? { ...s, daemonSessionId } : s
+      ),
+    }));
+    logger.debug("[TerminalStore] Bound daemon session id", { id, daemonSessionId });
   },
 
   updateSessionPID: (id: string, pid: number) => {

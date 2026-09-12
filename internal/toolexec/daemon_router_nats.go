@@ -306,6 +306,20 @@ func (r *NATSDaemonRouter) resolveViaControlPlane(ctx context.Context, userID st
 		if resp.Msg.Daemon != nil && resp.Msg.Daemon.DaemonId != "" {
 			return "", true, fmt.Errorf("control plane found a daemon record but it is not yet routable")
 		}
+		// Found=false with a nil Daemon is ambiguous, and resolving it the wrong
+		// way is what told a user mid-provision "no machine is connected to your
+		// account yet". A machine that is still coming up is not yet routable, so
+		// ResolveDaemon reports Found=false and returns no daemon — identical on
+		// the wire to a user who has never provisioned one.
+		//
+		// The DB fallback (step 3) is what can actually tell these apart: it
+		// lists the user's daemon rows directly and sets sawDaemonRecord from
+		// them. So do NOT claim "no record" here — claiming it is a positive
+		// assertion this call cannot support, and it would be believed even
+		// though the caller ORs our answer with the DB's. Returning false is
+		// safe only because the OR lets a later step correct it; saying so
+		// explicitly keeps the next reader from "simplifying" this into an
+		// early return.
 		return "", false, fmt.Errorf("control plane found no matching daemon")
 	}
 

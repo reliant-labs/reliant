@@ -41,13 +41,32 @@ import {
 } from "@/services/controlPlane/daemon";
 
 /**
- * 60 seconds at 2-second intervals is enough to catch the median provisioning
- * window for a cloud daemon (image pull + NATS handshake) without keeping the
- * user staring at a spinner indefinitely. After the window we fail fast and
- * give the user real CTAs (Retry / View logs / Skip).
+ * How long to keep waiting before offering the failure CTAs.
+ *
+ * This was 60s, chosen as "the median provisioning window". Measured against
+ * prod it is not: a cold start on the kata daemon cluster is ~3.5 minutes, and
+ * the breakdown is mostly not ours to shorten.
+ *
+ *   ~2m00s  GCE boots an n2-standard-8, because the kata node pools scale to
+ *           zero, so the common case pays a full VM boot
+ *     ~50s  scheduler binds the pod once the node registers
+ *     ~20s  kata-deploy has not yet written the containerd handler, so the
+ *           first sandbox create on a fresh node fails and is retried
+ *      ~7s  image pull (1.46 GB, served from the preloaded secondary boot disk)
+ *
+ * At 60s we declared failure roughly a third of the way through a provision
+ * that was working, and the user read "no machine is connected to your account
+ * yet" while their machine was still two minutes from ready.
+ *
+ * 5 minutes covers the measured cold start with headroom. This is deliberately
+ * NOT the point at which we go quiet: classifyDaemonWait escalates the copy at
+ * DAEMON_WAIT_SLOW_MS (20s) and again at DAEMON_WAIT_STUCK_MS (60s), where it
+ * surfaces Retry and "check on it" while still telling the truth — that the
+ * machine is expected to connect on its own. The timeout is only the point
+ * where we stop claiming it will.
  */
 export const POLL_INTERVAL_MS = 2_000;
-export const POLL_TIMEOUT_MS = 60_000;
+export const POLL_TIMEOUT_MS = 300_000;
 
 const FAILED_FALLBACK_MESSAGE =
   "We couldn't reach your machine. This is usually a network or configuration problem.";
