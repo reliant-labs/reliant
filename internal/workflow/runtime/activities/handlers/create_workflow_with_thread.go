@@ -114,6 +114,15 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		SpawnedByNodeID: input.SpawnedByNodeID,
 		LoopIteration:   input.LoopIteration,
 		CreatedAt:       time.Now().UTC(),
+		// OwnerUserID is deliberately left unset here. This activity holds only
+		// the threads service, and widening its dependencies to look up a chat
+		// would be a real change to an activity on the spawn hot path — for a
+		// column nothing reads yet.
+		//
+		// These are SPAWNED runs, and the reader that lands with the read-site
+		// flip walks to the root run for an owner when a child carries none,
+		// which is the same answer this lookup would produce. A child's owner is
+		// its parent's by construction; there is no case where they differ.
 	}
 
 	// Build the options for CreateWorkflowWithThread

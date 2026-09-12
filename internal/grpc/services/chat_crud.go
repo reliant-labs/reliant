@@ -154,6 +154,10 @@ func (s *ChatService) CreateChat(
 	}
 
 	// Root workflow + thread, created atomically with the chat below.
+	//
+	// OwnerUserID is recorded on the run itself rather than left to be read off
+	// the chat later. Nothing reads it yet — see the migration — but writing it
+	// from the start is what lets the read sites flip without a second backfill.
 	rootWorkflow := &db.Workflow{
 		ID:           workflowID,
 		ChatID:       chatID,
@@ -161,6 +165,7 @@ func (s *ChatService) CreateChat(
 		Thread:       workflowID, // Root workflow: thread = workflow ID
 		Status:       db.Pending(),
 		CreatedAt:    now,
+		OwnerUserID:  &userID,
 	}
 
 	// chat_created payload for the global websocket, computed from data we

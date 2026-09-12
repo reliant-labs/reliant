@@ -29,6 +29,7 @@ func (s *workflowStore) CreateWorkflow(ctx context.Context, workflow *core.Workf
 		LoopIteration:   workflowPtrToNullInt64(workflow.LoopIteration),
 		CreatedAt:       workflow.CreatedAt,
 		CompletedAt:     workflowPtrToNullTime(workflow.CompletedAt),
+		OwnerUserID:     ptrToNullString(workflow.OwnerUserID),
 	})
 	// CreateWorkflow uses INSERT ... ON CONFLICT (id) DO NOTHING, so an existing
 	// workflow ID is a no-op that returns no row (sql.ErrNoRows). This is the
@@ -358,6 +359,7 @@ func workflowFromPG(row pgdb.Workflow) *core.Workflow {
 		WorkerStartedAt: workflowNullTimeToPtr(row.WorkerStartedAt),
 		WorkerStoppedAt: workflowNullTimeToPtr(row.WorkerStoppedAt),
 		Outcome:         nullStringToPtr(row.Outcome),
+		OwnerUserID:     nullStringToPtr(row.OwnerUserID),
 	}
 }
 
