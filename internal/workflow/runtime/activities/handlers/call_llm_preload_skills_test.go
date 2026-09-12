@@ -439,11 +439,13 @@ func TestSkillSuggestionsNeverContradictThePreload(t *testing.T) {
 	// The stimulus is real: with no preload signal, the suggester fires on the
 	// seed and endorses the very skills the seed says are already loaded.
 	control := forkedThread()
-	require.Positive(t, injectSkillSuggestions(control, catalog, nil),
+	require.Positive(t, injectSkillSuggestions(&control, catalog, nil),
 		"the suggester no longer fires on a preload seed, so this guard is testing nothing")
+	// The reminder is its own message now (it no longer edits the seed), so the
+	// contradiction shows up in the appended turn rather than inside the seed.
 	contradicted := 0
 	for _, name := range injected {
-		if strings.Contains(control[1].Content().Text, "- "+name+":") {
+		if strings.Contains(control[len(control)-1].Content().Text, "- "+name+":") {
 			contradicted++
 		}
 	}
@@ -455,7 +457,7 @@ func TestSkillSuggestionsNeverContradictThePreload(t *testing.T) {
 	// The fix: a call that preloaded skills makes no suggestion, and the seed is
 	// returned untouched.
 	guarded := forkedThread()
-	require.Zero(t, injectSkillSuggestions(guarded, catalog, injected),
+	require.Zero(t, injectSkillSuggestions(&guarded, catalog, injected),
 		"the harness suggested skills into a turn whose seed already told the model not to "+
 			"load them")
 	require.Equal(t, seed[0].Content().Text, guarded[1].Content().Text,
@@ -473,9 +475,9 @@ func TestSkillSuggestionsStillFireWithoutAPreload(t *testing.T) {
 		{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "PROTO body — regenerate the proto surface"}}},
 	}
 
-	require.Positive(t, injectSkillSuggestions(history, catalog, nil),
+	require.Positive(t, injectSkillSuggestions(&history, catalog, nil),
 		"a call with no preloaded skills must still get suggestions; the guard above is a "+
 			"condition on the preload, not a removal of the feature")
-	require.Contains(t, history[0].Content().Text, "Potentially relevant skills",
-		"the reminder must land on the user message the suggester scored")
+	require.Contains(t, history[len(history)-1].Content().Text, "Potentially relevant skills",
+		"the reminder must be delivered as its own message after the scored request")
 }

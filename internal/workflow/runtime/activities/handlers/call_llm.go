@@ -1266,7 +1266,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Inject skill suggestions into the latest user message based on token matching.
 	// Skills come from the synced project config — no filesystem access.
 	if projectCfg != nil {
-		if n := injectSkillSuggestions(history, projectCfg.Skills, preloadedSkillNames); n > 0 {
+		if n := injectSkillSuggestions(&history, projectCfg.Skills, preloadedSkillNames); n > 0 {
 			activity.GetLogger(ctx).Debug("[CallLLM] Injected skill suggestions",
 				"chatID", chat.ID,
 				"count", n)
@@ -2791,11 +2791,22 @@ func getLatestUserMessageText(history []message.Message) string {
 // offset so the prompt cache reuses it; a catalog-dependent suffix appended to
 // it breaks that prefix on every turn, and does so hardest while the catalog is
 // still filling — which is exactly when the seed matters most.
-func injectSkillSuggestions(history []message.Message, catalog []cfgpkg.StoredSkill, preloaded []string) int {
-	if len(catalog) == 0 || len(preloaded) > 0 {
+// injectSkillSuggestions appends a reminder naming skills that match the latest
+// user request. It returns the number suggested, and 0 when it added nothing.
+//
+// The reminder is its OWN message and never edits the user's turn. Appending it
+// to the user's text made the user's words not be the user's words: the
+// transcript stopped matching what was sent, and the model saw the user asking
+// for skills they never mentioned. An engine may add to a request; it does not
+// get to rewrite the part the caller wrote.
+//
+// It takes history by pointer because it now appends rather than mutating in
+// place — a slice passed by value cannot grow for its caller.
+func injectSkillSuggestions(history *[]message.Message, catalog []cfgpkg.StoredSkill, preloaded []string) int {
+	if history == nil || len(catalog) == 0 || len(preloaded) > 0 {
 		return 0
 	}
-	latestUserText := getLatestUserMessageText(history)
+	latestUserText := getLatestUserMessageText(*history)
 	if latestUserText == "" {
 		return 0
 	}
@@ -2803,14 +2814,20 @@ func injectSkillSuggestions(history []message.Message, catalog []cfgpkg.StoredSk
 	if len(suggestions) == 0 {
 		return 0
 	}
-	injectReminderIntoLastUserMessage(history, buildSkillSuggestionReminder(suggestions))
+
+	// Positioned after the request it is about, so the model reads the guidance
+	// with the request already in view.
+	*history = append(*history, message.Message{
+		Role:  message.User,
+		Parts: []message.ContentPart{message.TextContent{Text: buildSkillSuggestionReminder(suggestions)}},
+	})
 	return len(suggestions)
 }
 
 // buildSkillSuggestionReminder formats suggested skills as a system-reminder block.
 func buildSkillSuggestionReminder(suggestions []suggest.Suggested) string {
 	var sb strings.Builder
-	sb.WriteString("\n\n<system-reminder>\nPotentially relevant skills (use the skill tool to load if needed):\n")
+	sb.WriteString("<system-reminder>\nPotentially relevant skills (use the skill tool to load if needed):\n")
 	for _, s := range suggestions {
 		desc := s.Skill.Description
 		if len(desc) > 80 {
@@ -2820,24 +2837,6 @@ func buildSkillSuggestionReminder(suggestions []suggest.Suggested) string {
 	}
 	sb.WriteString("</system-reminder>")
 	return sb.String()
-}
-
-// injectReminderIntoLastUserMessage appends a reminder string to the last user message's text content.
-func injectReminderIntoLastUserMessage(history []message.Message, reminder string) {
-	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role != message.User {
-			continue
-		}
-		for j, part := range history[i].Parts {
-			if tc, ok := part.(message.TextContent); ok {
-				history[i].Parts[j] = message.TextContent{Text: tc.Text + reminder}
-				return
-			}
-		}
-		// No text part found, append one
-		history[i].Parts = append(history[i].Parts, message.TextContent{Text: reminder})
-		return
-	}
 }
 
 func formatStoredMemories(projectCfg *cfgpkg.Config) string {
