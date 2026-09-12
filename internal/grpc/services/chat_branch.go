@@ -216,6 +216,7 @@ func (s *ChatService) BranchChat(
 		Thread:       branchWorkflowID, // Root workflow: thread = workflow ID
 		Status:       db.Pending(),     // Pending until first message (allows workflow switching)
 		CreatedAt:    time.Now().UTC(),
+		OwnerUserID:  &userID,
 	}
 
 	// Announce the new chat on the user stream, exactly as CreateChat does.

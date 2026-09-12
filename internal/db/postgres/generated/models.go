@@ -592,6 +592,7 @@ type Workflow struct {
 	Outcome         sql.NullString `json:"outcome"`
 	State           int32          `json:"state"`
 	StopReason      int32          `json:"stop_reason"`
+	OwnerUserID     sql.NullString `json:"owner_user_id"`
 }
 
 type WorkflowCheckpoint struct {

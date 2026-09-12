@@ -281,6 +281,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 				SpawnedByNodeID: spawnedByNodeID,
 				LoopIteration:   input.LoopIteration,
 				CreatedAt:       time.Now().UTC(),
+				OwnerUserID:     ownerForChat(ctx, a.repo, input.ChatID),
 			}
 
 			// Root workflow - thread already exists from ChatService
@@ -319,6 +320,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 					SpawnedByNodeID: spawnedByNodeID,
 					LoopIteration:   input.LoopIteration,
 					CreatedAt:       time.Now().UTC(),
+					OwnerUserID:     ownerForChat(ctx, a.repo, input.ChatID),
 				}
 				if createErr := a.repo.CreateWorkflow(ctx, childWorkflow); createErr != nil {
 					return fmt.Errorf("child workflow %s does not exist (lookup: %v) and create-on-missing failed: %w", input.WorkflowID, err, createErr)
