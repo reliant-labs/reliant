@@ -19,35 +19,30 @@ import (
 // block the USER saw nothing but an id in a wall of tool-result text. These
 // tests pin the block that closes that gap.
 //
-// They drive createToolContentBlocks through a fake repository rather than the
+// They drive buildToolContentBlocks through a fake repository rather than the
 // package's Postgres harness. That harness t.Skip()s when DATABASE_URL is
 // unset, and a skipped test that reports "ok" is indistinguishable from a
 // passing one — every assertion below would silently vanish on a machine with
 // no database, which is exactly the machine this was written on.
+//
+// The builder RETURNS blocks rather than writing them — every block for a
+// message now goes in through one atomic statement so concurrent writers cannot
+// collide on seq. So these assert on the returned slice instead of on what the
+// fake recorded. The contract being pinned is unchanged: block types, dense
+// interleaved positions, and skip-don't-fail on an unusable attachment.
+// GetAttachment is still a real read, which is why the fake repo remains.
 
-// fakeBlockRepo records content blocks in memory and serves attachment
-// metadata from a fixed map. It embeds Repository so the many methods this
-// path never calls do not have to be spelled out; calling one panics loudly
-// rather than passing silently.
+// fakeBlockRepo serves attachment metadata from a fixed map. It embeds
+// Repository so the many methods this path never calls do not have to be
+// spelled out; calling one panics loudly rather than passing silently.
 type fakeBlockRepo struct {
 	Repository
-	blocks      []*db.MessageContentBlock
 	attachments map[string]*db.Attachment
 	getErr      error
-	createErr   error
 }
 
 func newFakeBlockRepo() *fakeBlockRepo {
 	return &fakeBlockRepo{attachments: map[string]*db.Attachment{}}
-}
-
-func (r *fakeBlockRepo) CreateContentBlock(ctx context.Context, block *db.MessageContentBlock) error {
-	if r.createErr != nil {
-		return r.createErr
-	}
-	copied := *block
-	r.blocks = append(r.blocks, &copied)
-	return nil
 }
 
 func (r *fakeBlockRepo) GetAttachment(ctx context.Context, id string) (*db.Attachment, error) {
@@ -77,7 +72,7 @@ func TestToolResultAttachments_MaterializeImageBlocks(t *testing.T) {
 	svc := NewService(repo)
 	timestamp := time.Now().UTC()
 
-	err := svc.createToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
+	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
 		ToolResults: []ToolResult{{
 			ToolCallID:    "toolu_1",
 			Name:          "generate_image",
@@ -87,15 +82,15 @@ func TestToolResultAttachments_MaterializeImageBlocks(t *testing.T) {
 	}, timestamp)
 	require.NoError(t, err)
 
-	require.Len(t, repo.blocks, 2, "expected the tool_result block plus a sibling image block")
+	require.Len(t, blocks, 2, "expected the tool_result block plus a sibling image block")
 
-	resultBlock := repo.blocks[0]
+	resultBlock := blocks[0]
 	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, resultBlock.BlockType)
 	assert.Equal(t, 0, resultBlock.Position)
 	require.NotNil(t, resultBlock.ToolCallID)
 	assert.Equal(t, "toolu_1", *resultBlock.ToolCallID)
 
-	imageBlock := repo.blocks[1]
+	imageBlock := blocks[1]
 	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, imageBlock.BlockType,
 		"a generated image must render through the same block type an uploaded one does")
 	require.NotNil(t, imageBlock.Content)
@@ -113,7 +108,7 @@ func TestToolResultAttachments_PositionsInterleaveWithResults(t *testing.T) {
 	repo := newFakeBlockRepo().withImage("att-a").withImage("att-b")
 	svc := NewService(repo)
 
-	err := svc.createToolContentBlocks(context.Background(), "msg-2", SaveMessageOpts{
+	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-2", SaveMessageOpts{
 		ToolResults: []ToolResult{
 			{ToolCallID: "toolu_1", Name: "generate_image", Content: "one", AttachmentIDs: []string{"att-a"}},
 			{ToolCallID: "toolu_2", Name: "bash", Content: "no attachments here"},
@@ -122,14 +117,14 @@ func TestToolResultAttachments_PositionsInterleaveWithResults(t *testing.T) {
 	}, time.Now().UTC())
 	require.NoError(t, err)
 
-	require.Len(t, repo.blocks, 5)
+	require.Len(t, blocks, 5)
 
 	type blockShape struct {
 		blockType reliantv1.ContentBlockType
 		position  int
 	}
-	actual := make([]blockShape, 0, len(repo.blocks))
-	for _, block := range repo.blocks {
+	actual := make([]blockShape, 0, len(blocks))
+	for _, block := range blocks {
 		actual = append(actual, blockShape{block.BlockType, block.Position})
 	}
 
@@ -150,13 +145,13 @@ func TestToolResultAttachments_NoAttachmentsIsUnchanged(t *testing.T) {
 	repo := newFakeBlockRepo()
 	svc := NewService(repo)
 
-	err := svc.createToolContentBlocks(context.Background(), "msg-3", SaveMessageOpts{
+	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-3", SaveMessageOpts{
 		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "bash", Content: "hello"}},
 	}, time.Now().UTC())
 	require.NoError(t, err)
 
-	require.Len(t, repo.blocks, 1)
-	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, repo.blocks[0].BlockType)
+	require.Len(t, blocks, 1)
+	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, blocks[0].BlockType)
 }
 
 // A missing, unreadable or non-image attachment must not fail the save. The
@@ -193,7 +188,7 @@ func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T)
 			tc.setup(repo)
 			svc := NewService(repo)
 
-			err := svc.createToolContentBlocks(context.Background(), "msg-4", SaveMessageOpts{
+			blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-4", SaveMessageOpts{
 				ToolResults: []ToolResult{{
 					ToolCallID:    "toolu_1",
 					Name:          "generate_image",
@@ -203,8 +198,8 @@ func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T)
 			}, time.Now().UTC())
 			require.NoError(t, err, "an unusable attachment must not discard a completed turn")
 
-			require.Len(t, repo.blocks, 1, "only the tool_result block should be written")
-			assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, repo.blocks[0].BlockType)
+			require.Len(t, blocks, 1, "only the tool_result block should be built")
+			assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT, blocks[0].BlockType)
 		})
 	}
 }

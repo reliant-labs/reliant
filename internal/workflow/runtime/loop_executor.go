@@ -49,6 +49,11 @@ type InlineLoopExecutor struct {
 	// made available as outputs.* in CEL expressions for inner nodes.
 	prevIterOutputs map[string]interface{}
 
+	// heartbeatRestarts bounds how many fresh retry ladders each step may be
+	// granted after losing one to heartbeat RPC failures. See
+	// heartbeat_ladder.go.
+	heartbeatRestarts ladderRestarts
+
 	// resolvedItems holds the pre-evaluated items list for sequential loops
 	// that specify an items expression. When set, iter.item is populated per iteration.
 	resolvedItems []interface{}
@@ -1619,6 +1624,31 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					}
 				}
 
+				// A ladder spent entirely on heartbeat RPC failures is not a
+				// failed step — the activity was streaming normally and the SDK
+				// killed it because a round trip to the Temporal server missed
+				// its deadline. Pausing the chat for that shows the user an
+				// error they cannot act on. Re-dispatch with a fresh ladder
+				// instead, bounded so a server that is truly down still pauses.
+				if stepEvent.RetryExhausted && heartbeatCancelExhausted(stepEvent.Error) &&
+					e.heartbeatRestarts.grantRestart(running.StepID) {
+					e.logger.Warn("[InlineLoop] Retry ladder consumed by heartbeat RPC failures; re-dispatching with a fresh ladder instead of pausing",
+						"loopID", e.loopID,
+						"iteration", e.iteration,
+						"stepID", running.StepID,
+						"restart", e.heartbeatRestarts[running.StepID],
+						"maxRestarts", maxHeartbeatLadderRestarts,
+						"error", stepEvent.Error,
+					)
+					_ = workflow.Sleep(e.ctx, 0)
+					newRunning := iterExecutor.Start(&core.TriggeredNode{
+						Node:  running.Node,
+						Event: running.Event,
+					})
+					runningSteps = append(runningSteps, newRunning)
+					continue
+				}
+
 				// Handle retry exhaustion - pause workflow and retry on resume.
 				// This handles rate limits, transient errors, etc. that exhaust
 				// Temporal's retry budget.
@@ -1690,6 +1720,10 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					)
 					return nil, routingErr
 				}
+
+				// The step got through, so forget any ladders it lost to an
+				// earlier burst.
+				e.heartbeatRestarts.clear(stepEvent.StepID)
 
 				if stepEvent.StepID != "" && stepEvent.Data != nil {
 					iterNodeOutputs[stepEvent.StepID] = stepEvent.Data

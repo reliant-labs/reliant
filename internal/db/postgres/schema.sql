@@ -553,6 +553,17 @@ CREATE TABLE public.message_content_blocks (
 );
 
 --
+-- Name: message_order_counters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_order_counters (
+    counter_kind text NOT NULL,
+    scope_id text NOT NULL,
+    last_assigned bigint NOT NULL,
+    CONSTRAINT message_order_counters_kind_check CHECK ((counter_kind = ANY (ARRAY['ordinal'::text, 'seq'::text])))
+);
+
+--
 -- Name: plans; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1149,6 +1160,13 @@ ALTER TABLE ONLY public.item_defaults
 
 ALTER TABLE ONLY public.message_content_blocks
     ADD CONSTRAINT message_content_blocks_pkey PRIMARY KEY (id);
+
+--
+-- Name: message_order_counters message_order_counters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_order_counters
+    ADD CONSTRAINT message_order_counters_pkey PRIMARY KEY (counter_kind, scope_id);
 
 --
 -- Name: messages messages_chat_seq_key; Type: CONSTRAINT; Schema: public; Owner: -
@@ -1839,6 +1857,12 @@ CREATE INDEX project_daemons_daemon_idx ON public.project_daemons USING btree (d
 --
 
 CREATE UNIQUE INDEX projects_user_remote_url_uniq ON public.projects USING btree (user_id, remote_url) WHERE (remote_url IS NOT NULL);
+
+--
+-- Name: settings_user_key_unique; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX settings_user_key_unique ON public.settings USING btree (user_id, key) WHERE (project_id IS NULL);
 
 --
 -- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

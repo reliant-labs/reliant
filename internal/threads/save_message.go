@@ -210,78 +210,67 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		}
 	}
 
-	// Execute in transaction
-	var result SaveMessageResult
-	err = s.repo.RunTx(ctx, func(txCtx context.Context) error {
-		// Get next ordinal
-		ordinal, err := s.repo.GetNextOrdinal(txCtx, opts.Thread)
-		if err != nil {
-			return fmt.Errorf("failed to get next ordinal: %w", err)
-		}
+	timestamp := now()
+	messageID := uuid.New().String()
+	if opts.MessageID != "" {
+		messageID = opts.MessageID
+	}
 
-		// Get next chat-global seq. See 20260802000000_add_message_seq.sql.
-		seq, err := s.repo.GetNextSeq(txCtx, opts.ChatID, opts.Thread)
-		if err != nil {
-			return fmt.Errorf("failed to get next seq: %w", err)
-		}
+	// Build everything the write needs BEFORE opening the transaction.
+	//
+	// Block construction is pure except for attachment lookup, and doing it
+	// out here means the durable write below is a single round trip with no
+	// reads holding locks open. This is the whole point of the rewrite: the
+	// previous version made 5+N round trips inside a SERIALIZABLE transaction
+	// (MAX(ordinal) scan, a WITH RECURSIVE seq walk, the message insert, one
+	// insert per content block, then the chat_update), and the duration of
+	// that transaction — not the amount of work in it — was what produced the
+	// 40001 storms.
+	blocks, err := s.buildContentBlocks(ctx, messageID, opts, timestamp)
+	if err != nil {
+		return nil, err
+	}
 
-		timestamp := now()
-		messageID := uuid.New().String()
-		if opts.MessageID != "" {
-			messageID = opts.MessageID
-		}
+	write := db.AtomicMessageWrite{
+		MessageID:       messageID,
+		ChatID:          opts.ChatID,
+		ThreadID:        opts.Thread,
+		ContextWindowID: cw.ID,
+		Role:            reliantv1.MessageRole(opts.Role),
+		DisplayStyle:    displayStylePtrIfNonZero(opts.DisplayStyle),
+		Model:           ptr.StringIfNotEmpty(opts.Model),
+		Agent:           ptr.StringIfNotEmpty(opts.Agent),
+		TokenCount:      ptr.IntIfPositive(opts.TokenCount),
+		Cost:            ptr.Float64IfPositive(opts.Cost),
+		WorkflowID:      opts.WorkflowID,
+		NodeID:          ptr.StringIfNotEmpty(opts.StepID),
+		ActivityID:      opts.ActivityID,
+		CreatedAt:       timestamp,
+		Blocks:          blocks,
 
-		// Create message
-		msg := &db.Message{
-			ID:              messageID,
-			ChatID:          opts.ChatID,
-			Ordinal:         ordinal,
-			Seq:             seq,
-			ThreadID:        opts.Thread,
-			ContextWindowID: cw.ID,
-			Role:            reliantv1.MessageRole(opts.Role),
-			WorkflowID:      opts.WorkflowID,
-			NodeID:          ptr.StringIfNotEmpty(opts.StepID),
-			ActivityID:      opts.ActivityID,
-			TokenCount:      ptr.IntIfPositive(opts.TokenCount),
-			Cost:            ptr.Float64IfPositive(opts.Cost),
-			Model:           ptr.StringIfNotEmpty(opts.Model),
-			Agent:           ptr.StringIfNotEmpty(opts.Agent),
-			DisplayStyle:    displayStylePtrIfNonZero(opts.DisplayStyle),
-			CreatedAt:       timestamp,
-			UpdatedAt:       timestamp,
-		}
+		ChatUpdateType:   db.UpdateTypeMessage,
+		ChatUpdateEntity: messageID,
+		// ordinal and seq are not known until the statement allocates them,
+		// so the payload is rendered from the RETURNING values.
+		ChatUpdateData: func(ordinal, seq, _ int64) (string, error) {
+			return s.buildChatUpdateData(ctx, opts, messageID, blocks, ordinal, seq, cw.Sequence, threadTokenCount, timestamp)
+		},
+	}
 
-		if err := s.repo.CreateMessage(txCtx, msg); err != nil {
-			return fmt.Errorf("failed to create message: %w", err)
-		}
-
-		// Create content blocks based on role
-		if err := s.createContentBlocks(txCtx, messageID, opts, timestamp); err != nil {
-			return err
-		}
-
-		// Emit chat_update for frontend
-		if err := s.emitChatUpdate(txCtx, opts, messageID, ordinal, seq, cw.Sequence, threadTokenCount, timestamp); err != nil {
-			return err
-		}
-
-		result = SaveMessageResult{
-			MessageID:        messageID,
-			Ordinal:          ordinal,
-			ContextWindowID:  cw.ID,
-			ThreadTokenCount: threadTokenCount,
-			MessageCount:     messageCount + 1,
-			ToolCalls:        opts.ToolCalls,
-			ToolResults:      opts.ToolResults,
-			WasExisting:      false,
-		}
-
-		return nil
-	})
-
+	written, err := s.repo.SaveMessageAtomic(ctx, write)
 	if err != nil {
 		return nil, fmt.Errorf("failed to save message: %w", err)
+	}
+
+	result := SaveMessageResult{
+		MessageID:        messageID,
+		Ordinal:          written.Ordinal,
+		ContextWindowID:  cw.ID,
+		ThreadTokenCount: threadTokenCount,
+		MessageCount:     messageCount + 1,
+		ToolCalls:        opts.ToolCalls,
+		ToolResults:      opts.ToolResults,
+		WasExisting:      false,
 	}
 
 	slog.Info("[SaveMessage] Created",
@@ -485,27 +474,33 @@ func (s *Service) checkExistingMessageByID(ctx context.Context, opts SaveMessage
 }
 
 // createContentBlocks creates the appropriate content blocks based on message role.
-func (s *Service) createContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
+func (s *Service) buildContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) ([]db.MessageContentBlock, error) {
 	switch reliantv1.MessageRole(opts.Role) {
 	case reliantv1.MessageRole_MESSAGE_ROLE_USER:
-		return s.createUserContentBlocks(ctx, messageID, opts, timestamp)
+		return s.buildUserContentBlocks(ctx, messageID, opts, timestamp)
 	case reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT:
-		return s.createAssistantContentBlocks(ctx, messageID, opts, timestamp)
+		return s.buildAssistantContentBlocks(messageID, opts, timestamp), nil
 	case reliantv1.MessageRole_MESSAGE_ROLE_TOOL:
-		return s.createToolContentBlocks(ctx, messageID, opts, timestamp)
+		return s.buildToolContentBlocks(ctx, messageID, opts, timestamp)
 	case reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM:
-		return s.createSystemContentBlocks(ctx, messageID, opts, timestamp)
+		return s.buildSystemContentBlocks(messageID, opts, timestamp), nil
 	}
-	return nil
+	return nil, nil
 }
 
 // createUserContentBlocks creates content blocks for user messages.
-func (s *Service) createUserContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
+// buildUserContentBlocks is one of two builders that take a context (the other
+// is buildToolContentBlocks): both resolve attachment metadata, and that read
+// must happen BEFORE the write statement rather than inside it. Reading here
+// keeps the durable write a single round trip with no lookups holding locks
+// open.
+func (s *Service) buildUserContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) ([]db.MessageContentBlock, error) {
+	var blocks []db.MessageContentBlock
 	position := 0
 
 	// Create text block if content is provided
 	if opts.Content != "" {
-		block := &db.MessageContentBlock{
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:        uuid.New().String(),
 			MessageID: messageID,
 			Position:  position,
@@ -514,10 +509,7 @@ func (s *Service) createUserContentBlocks(ctx context.Context, messageID string,
 			Version:   ptr.Of(1),
 			CreatedAt: timestamp,
 			UpdatedAt: timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create text content block: %w", err)
-		}
+		})
 		position++
 	}
 
@@ -525,10 +517,10 @@ func (s *Service) createUserContentBlocks(ctx context.Context, messageID string,
 	for _, attachmentID := range opts.Attachments {
 		att, err := s.repo.GetAttachment(ctx, attachmentID)
 		if err != nil {
-			return fmt.Errorf("failed to get attachment metadata for %s: %w", attachmentID, err)
+			return nil, fmt.Errorf("failed to get attachment metadata for %s: %w", attachmentID, err)
 		}
 		if att == nil {
-			return fmt.Errorf("failed to get attachment metadata for %s: attachment not found", attachmentID)
+			return nil, fmt.Errorf("failed to get attachment metadata for %s: attachment not found", attachmentID)
 		}
 
 		var blockType reliantv1.ContentBlockType
@@ -540,11 +532,11 @@ func (s *Service) createUserContentBlocks(ctx context.Context, messageID string,
 		case "document":
 			blockType = reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_DOCUMENT
 		default:
-			return fmt.Errorf("invalid attachment type %q for attachment %s", att.AttachmentType, attachmentID)
+			return nil, fmt.Errorf("invalid attachment type %q for attachment %s", att.AttachmentType, attachmentID)
 		}
 
 		attachmentRef := attachmentID
-		block := &db.MessageContentBlock{
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:        uuid.New().String(),
 			MessageID: messageID,
 			Position:  position,
@@ -553,18 +545,16 @@ func (s *Service) createUserContentBlocks(ctx context.Context, messageID string,
 			Version:   ptr.Of(1),
 			CreatedAt: timestamp,
 			UpdatedAt: timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create attachment content block: %w", err)
-		}
+		})
 		position++
 	}
 
-	return nil
+	return blocks, nil
 }
 
 // createAssistantContentBlocks creates content blocks for assistant messages.
-func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
+func (s *Service) buildAssistantContentBlocks(messageID string, opts SaveMessageOpts, timestamp time.Time) []db.MessageContentBlock {
+	var blocks []db.MessageContentBlock
 	position := 0
 
 	// Create thinking block when there is readable reasoning OR a signature.
@@ -585,7 +575,7 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			"has_signature", opts.Thinking.Signature != "",
 			"position", position)
 
-		block := &db.MessageContentBlock{
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:               uuid.New().String(),
 			MessageID:        messageID,
 			Position:         position,
@@ -595,10 +585,7 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			Version:          ptr.Of(1),
 			CreatedAt:        timestamp,
 			UpdatedAt:        timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create thinking content block: %w", err)
-		}
+		})
 		position++
 	}
 
@@ -610,7 +597,7 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			"data_len", len(opts.Thinking.Redacted),
 			"position", position)
 
-		block := &db.MessageContentBlock{
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:        uuid.New().String(),
 			MessageID: messageID,
 			Position:  position,
@@ -619,16 +606,13 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			Version:   ptr.Of(1),
 			CreatedAt: timestamp,
 			UpdatedAt: timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create redacted thinking content block: %w", err)
-		}
+		})
 		position++
 	}
 
 	// Create text block if content is provided
 	if opts.Content != "" {
-		block := &db.MessageContentBlock{
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:        uuid.New().String(),
 			MessageID: messageID,
 			Position:  position,
@@ -637,10 +621,7 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			Version:   ptr.Of(1),
 			CreatedAt: timestamp,
 			UpdatedAt: timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create text content block: %w", err)
-		}
+		})
 		position++
 	}
 
@@ -651,7 +632,7 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			thoughtSig = &toolCall.ThoughtSignature
 		}
 
-		block := &db.MessageContentBlock{
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:               uuid.New().String(),
 			MessageID:        messageID,
 			Position:         position + i,
@@ -663,16 +644,13 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 			Version:          ptr.Of(1),
 			CreatedAt:        timestamp,
 			UpdatedAt:        timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create tool_call block %d: %w", i, err)
-		}
+		})
 	}
 
-	return nil
+	return blocks
 }
 
-// createToolContentBlocks creates content blocks for tool messages.
+// buildToolContentBlocks builds the content blocks for tool messages.
 //
 // A tool result may carry attachment ids (see message.ToolResult.AttachmentIDs).
 // Each one becomes a sibling IMAGE block immediately after its tool_result
@@ -681,10 +659,21 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 // the whole point — the attachment fetch, the /api/attachments/{id} serving and
 // the existing renderer all key off it, so a generated image travels the same
 // road as an uploaded one rather than needing a second one built for it.
-func (s *Service) createToolContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
+//
+// This BUILDS rather than writes, unlike the createToolContentBlocks it
+// replaces: every block for a message now goes in through one atomic statement
+// (SaveMessageAtomic) so concurrent writers cannot collide on seq. The
+// attachment lookup still needs a DB read, so this keeps a ctx and an error
+// return even though nothing here writes.
+//
+// `position` is therefore explicit and no longer the loop index: an attachment
+// block occupies a position of its own, so with any attachment present the
+// tool_result for result i is no longer at position i.
+func (s *Service) buildToolContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) ([]db.MessageContentBlock, error) {
+	blocks := make([]db.MessageContentBlock, 0, len(opts.ToolResults))
 	position := 0
-	for i, result := range opts.ToolResults {
-		block := &db.MessageContentBlock{
+	for _, result := range opts.ToolResults {
+		blocks = append(blocks, db.MessageContentBlock{
 			ID:         uuid.New().String(),
 			MessageID:  messageID,
 			Position:   position,
@@ -696,27 +685,23 @@ func (s *Service) createToolContentBlocks(ctx context.Context, messageID string,
 			Version:    ptr.Of(1),
 			CreatedAt:  timestamp,
 			UpdatedAt:  timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create tool_result block %d: %w", i, err)
-		}
+		})
 		position++
 
 		for _, attachmentID := range result.AttachmentIDs {
-			created, err := s.createToolAttachmentBlock(ctx, messageID, attachmentID, position, timestamp)
-			if err != nil {
-				return fmt.Errorf("failed to create attachment block for tool_result %d: %w", i, err)
+			block, ok := s.buildToolAttachmentBlock(ctx, messageID, attachmentID, position, timestamp)
+			if !ok {
+				continue
 			}
-			if created {
-				position++
-			}
+			blocks = append(blocks, block)
+			position++
 		}
 	}
-	return nil
+	return blocks, nil
 }
 
-// createToolAttachmentBlock materializes one attachment id as a content block
-// on a tool message, reporting whether a block was written.
+// buildToolAttachmentBlock materializes one attachment id as a content block
+// on a tool message, reporting whether there is a block to append.
 //
 // A missing or non-image attachment is skipped rather than failing the save.
 // That is the opposite of the user-upload path, and deliberately so: there, the
@@ -724,31 +709,37 @@ func (s *Service) createToolContentBlocks(ctx context.Context, messageID string,
 // surfacing, whereas here the message also carries the tool's textual result
 // and the model's own view of the image. Failing the whole save would discard a
 // completed turn — including work that cost money — over a thumbnail.
-func (s *Service) createToolAttachmentBlock(ctx context.Context, messageID, attachmentID string, position int, timestamp time.Time) (bool, error) {
+//
+// It BUILDS rather than writes (it used to end in CreateContentBlock), because
+// every block for a message is now inserted by one atomic statement. The skip
+// semantics above are what let the return be a plain (block, ok) rather than an
+// error: every failure mode here is already "log it and carry on", so there is
+// no error left for a caller to handle.
+func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attachmentID string, position int, timestamp time.Time) (db.MessageContentBlock, bool) {
 	if attachmentID == "" {
-		return false, nil
+		return db.MessageContentBlock{}, false
 	}
 
 	att, err := s.repo.GetAttachment(ctx, attachmentID)
 	if err != nil {
 		slog.Warn("[SaveMessage] Failed to load tool result attachment; skipping its content block",
 			"error", err, "attachment_id", attachmentID, "message_id", messageID)
-		return false, nil
+		return db.MessageContentBlock{}, false
 	}
 	if att == nil {
 		slog.Warn("[SaveMessage] Tool result attachment not found; skipping its content block",
 			"attachment_id", attachmentID, "message_id", messageID)
-		return false, nil
+		return db.MessageContentBlock{}, false
 	}
 
 	if att.AttachmentType != string(attachment.TypeImage) {
 		slog.Warn("[SaveMessage] Tool result attachment is not an image; skipping its content block",
 			"attachment_id", attachmentID, "attachment_type", att.AttachmentType, "message_id", messageID)
-		return false, nil
+		return db.MessageContentBlock{}, false
 	}
 
 	attachmentRef := attachmentID
-	block := &db.MessageContentBlock{
+	return db.MessageContentBlock{
 		ID:        uuid.New().String(),
 		MessageID: messageID,
 		Position:  position,
@@ -757,39 +748,42 @@ func (s *Service) createToolAttachmentBlock(ctx context.Context, messageID, atta
 		Version:   ptr.Of(1),
 		CreatedAt: timestamp,
 		UpdatedAt: timestamp,
-	}
-	if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-		return false, err
-	}
-	return true, nil
+	}, true
 }
 
 // createSystemContentBlocks creates content blocks for system messages.
-func (s *Service) createSystemContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
-	if opts.Content != "" {
-		block := &db.MessageContentBlock{
-			ID:        uuid.New().String(),
-			MessageID: messageID,
-			Position:  0,
-			BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT,
-			Content:   &opts.Content,
-			Version:   ptr.Of(1),
-			CreatedAt: timestamp,
-			UpdatedAt: timestamp,
-		}
-		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
-			return fmt.Errorf("failed to create text content block: %w", err)
-		}
+func (s *Service) buildSystemContentBlocks(messageID string, opts SaveMessageOpts, timestamp time.Time) []db.MessageContentBlock {
+	if opts.Content == "" {
+		return nil
 	}
-	return nil
+	return []db.MessageContentBlock{{
+		ID:        uuid.New().String(),
+		MessageID: messageID,
+		Position:  0,
+		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT,
+		Content:   &opts.Content,
+		Version:   ptr.Of(1),
+		CreatedAt: timestamp,
+		UpdatedAt: timestamp,
+	}}
 }
 
 // emitChatUpdate emits a chat_update for the frontend.
-func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, messageID string, ordinal int64, seq int64, contextSequence int, threadTokenCount int, timestamp time.Time) error {
-	// Fetch content blocks
-	blocks, err := s.repo.ListContentBlocks(ctx, messageID)
-	if err != nil {
-		return fmt.Errorf("failed to list content blocks for chat_update: %w", err)
+// buildChatUpdateData renders the chat_update payload for a message.
+//
+// It takes the blocks it was ASKED to write rather than re-reading them. The
+// previous version issued a ListContentBlocks against rows the same
+// transaction had just inserted — a round trip whose only possible answer was
+// the slice already in hand, paid while holding locks on the hottest write
+// path in the system.
+//
+// ordinal and seq arrive as parameters because they do not exist until the
+// write statement allocates them; the caller supplies them from its RETURNING
+// values.
+func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts, messageID string, blocks []db.MessageContentBlock, ordinal int64, seq int64, contextSequence int, threadTokenCount int, timestamp time.Time) (string, error) {
+	blockPtrs := make([]*db.MessageContentBlock, len(blocks))
+	for i := range blocks {
+		blockPtrs[i] = &blocks[i]
 	}
 
 	// One serializer for a block's wire shape, shared with every other path
@@ -806,8 +800,8 @@ func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, mess
 			toolCallsByID[call.ID] = call
 		}
 	}
-	contentBlocks := db.ContentBlockPayloadsWithToolCalls(blocks, toolCallsByID)
-	attachmentIDs := db.AttachmentIDsFromBlocks(blocks)
+	contentBlocks := db.ContentBlockPayloadsWithToolCalls(blockPtrs, toolCallsByID)
+	attachmentIDs := db.AttachmentIDsFromBlocks(blockPtrs)
 
 	// Fetch attachment metadata
 	attachments := []map[string]interface{}{}
@@ -869,36 +863,16 @@ func (s *Service) emitChatUpdate(ctx context.Context, opts SaveMessageOpts, mess
 		updateData.TokenCount = &opts.TokenCount
 	}
 
-	// Marshal and emit
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {
 		slog.Error("[SaveMessage] Failed to marshal chat_update data",
 			"error", err,
 			"chat_id", opts.ChatID,
 			"message_id", messageID)
-		return fmt.Errorf("failed to marshal chat_update data: %w", err)
+		return "", fmt.Errorf("failed to marshal chat_update data: %w", err)
 	}
 
-	if err := s.repo.CreateChatUpdate(ctx, opts.ChatID, db.UpdateTypeMessage, messageID, string(updateDataJSON)); err != nil {
-		// Warn, not Error: this runs inside SaveMessage's RunTx, so transient
-		// failures (e.g. SQLSTATE 40001) are retried by the enclosing
-		// transaction. Terminal failures are logged at ERROR by RunTx itself.
-		slog.Warn("[SaveMessage] Failed to create chat_update (may be retried)",
-			"error", err,
-			"chat_id", opts.ChatID,
-			"message_id", messageID)
-		return fmt.Errorf("failed to create chat_update: %w", err)
-	}
-
-	slog.Debug("[SaveMessage] Emitted chat_update",
-		"chat_id", opts.ChatID,
-		"message_id", messageID,
-		"role", opts.Role,
-		"ordinal", ordinal,
-		"blocks", len(contentBlocks),
-		"json_bytes", len(updateDataJSON))
-
-	return nil
+	return string(updateDataJSON), nil
 }
 
 func displayStylePtrIfNonZero(i int32) *reliantv1.DisplayStyle {

@@ -396,6 +396,19 @@ type Repository interface {
 	GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID string) ([]ChatUpdate, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 
+	// SaveMessageAtomic writes a message, its content blocks and its
+	// chat_update in a single statement, allocating ordinal, seq and the
+	// update sequence from counter rows rather than MAX() scans.
+	SaveMessageAtomic(ctx context.Context, w AtomicMessageWrite) (*AtomicMessageResult, error)
+
+	// SeedSeqCounterForFork raises a chat's seq allocator to cover the
+	// history reachable through a fork's context-window chain.
+	SeedSeqCounterForFork(ctx context.Context, chatID, forkAtContextWindowID string) error
+
+	// RunTxNoRetry runs one transaction attempt with no retry ladder, so a
+	// serialization conflict surfaces verbatim instead of being absorbed.
+	RunTxNoRetry(ctx context.Context, f func(ctx context.Context) error) error
+
 	// Question methods
 	CreateQuestion(ctx context.Context, question *Question) error
 	GetQuestionByID(ctx context.Context, id string) (*Question, error)

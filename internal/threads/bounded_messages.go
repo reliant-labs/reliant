@@ -51,6 +51,9 @@ func (s *Service) LoadRecentMessagesBefore(ctx context.Context, threadID string,
 
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
+		if !isEmptyThread(err) {
+			return nil, false, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
 		// No context window means empty thread.
 		return []*db.Message{}, false, nil
 	}
@@ -132,6 +135,9 @@ func (s *Service) LoadMessagesInSeqRange(ctx context.Context, threadID string, f
 
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
+		if !isEmptyThread(err) {
+			return nil, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
 		return []*db.Message{}, nil
 	}
 
@@ -179,6 +185,9 @@ func (s *Service) CountCurrentMessages(ctx context.Context, threadID string) (in
 
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
+		if !isEmptyThread(err) {
+			return 0, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
 		return 0, nil
 	}
 
@@ -201,6 +210,9 @@ func (s *Service) CountDisplayMessages(ctx context.Context, threadID string) (in
 
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
+		if !isEmptyThread(err) {
+			return 0, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
 		return 0, nil
 	}
 

@@ -850,6 +850,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Track running steps (using RunningStep from StepExecutor)
 	var runningSteps []*RunningStep
 
+	// heartbeatRestarts bounds how many fresh retry ladders each step may be
+	// granted after losing one to heartbeat RPC failures. See
+	// heartbeat_ladder.go.
+	var heartbeatRestarts ladderRestarts
+
 	// Track running inline workflows for parallel execution of workflow/agent steps
 	var runningInlineWorkflows []*RunningInlineWorkflow
 
@@ -1903,6 +1908,26 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					}
 				}
 
+				// A ladder spent entirely on heartbeat RPC failures is not a
+				// failed step; see the matching comment in loop_executor.go.
+				if stepEvent.RetryExhausted && heartbeatCancelExhausted(stepEvent.Error) &&
+					heartbeatRestarts.grantRestart(running.StepID) {
+					logger.Warn("[Workflow Runtime] Retry ladder consumed by heartbeat RPC failures; re-dispatching with a fresh ladder instead of pausing",
+						"stepID", running.StepID,
+						"activityID", running.ActivityID,
+						"restart", heartbeatRestarts[running.StepID],
+						"maxRestarts", maxHeartbeatLadderRestarts,
+						"error", stepEvent.Error,
+					)
+					_ = workflow.Sleep(ctx, 0)
+					newRunning := executor.Start(&core.TriggeredNode{
+						Node:  running.Node,
+						Event: running.Event,
+					})
+					runningSteps = append(runningSteps, newRunning)
+					continue
+				}
+
 				// Handle retry exhaustion - pause workflow and retry on resume
 				if stepEvent.RetryExhausted {
 					logger.Info("[Workflow Runtime] *** RETRY EXHAUSTION DETECTED *** Activity exhausted retries, triggering pause",
@@ -1960,6 +1985,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				}
 
 				events = append(events, stepEvent.ToEvent())
+
+				// The step got through, so forget any ladders it lost to an
+				// earlier burst — a later, unrelated one deserves the full
+				// allowance rather than a spent one.
+				heartbeatRestarts.clear(running.StepID)
 
 				// Update thread liveness - mark step as completed
 				if threadTracker != nil && running.StepID != "" {

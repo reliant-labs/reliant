@@ -91,8 +91,25 @@ type Repository interface {
 	// Chat update operations
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 
+	// SaveMessageAtomic writes a message, its content blocks and its
+	// chat_update in one statement, allocating ordinal/seq from counters
+	// rather than scanning MAX(). This is the hot write path; see
+	// db.SaveMessageAtomic for why it is one statement and why it is safe at
+	// READ COMMITTED.
+	SaveMessageAtomic(ctx context.Context, w db.AtomicMessageWrite) (*db.AtomicMessageResult, error)
+
+	// SeedSeqCounterForFork raises a chat's seq allocator to cover history
+	// inherited through a fork chain, so a branch does not restart at 0 and
+	// sort its replies above the transcript it inherited.
+	SeedSeqCounterForFork(ctx context.Context, chatID, forkAtContextWindowID string) error
+
 	// Transaction support
 	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+
+	// RunTxNoRetry runs one attempt with no retry ladder. Used by the
+	// concurrency control test to measure the raw conflict rate of the
+	// superseded allocator shape; production paths want RunTx.
+	RunTxNoRetry(ctx context.Context, f func(ctx context.Context) error) error
 }
 
 // Service provides centralized thread and context window management.
