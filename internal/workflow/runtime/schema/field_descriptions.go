@@ -19,6 +19,8 @@ func init() {
 	FieldDescriptions["create_worktree.force"] = "Force creation by deleting existing worktree"
 	FieldDescriptions["create_worktree.name"] = "Worktree name, used in path"
 	FieldDescriptions["execute_tools.tool_calls"] = "CEL expression for tool calls to execute"
+	FieldDescriptions["invoke_tool.params"] = "Tool parameters, keyed as in the tool's schema"
+	FieldDescriptions["invoke_tool.tool"] = "Which tool to invoke"
 	FieldDescriptions["loop.items"] = "CEL expression evaluating to a list or map to iterate over"
 	FieldDescriptions["loop.key"] = "CEL expression for output map key per iteration"
 	FieldDescriptions["loop.on_failure"] = "Failure policy for parallel iterations"

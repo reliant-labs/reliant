@@ -38,6 +38,12 @@ const (
 	// DaemonServiceStartOAuthFlowProcedure is the fully-qualified name of the DaemonService's
 	// StartOAuthFlow RPC.
 	DaemonServiceStartOAuthFlowProcedure = "/reliant.v1.DaemonService/StartOAuthFlow"
+	// DaemonServiceOpenOAuthHelperProcedure is the fully-qualified name of the DaemonService's
+	// OpenOAuthHelper RPC.
+	DaemonServiceOpenOAuthHelperProcedure = "/reliant.v1.DaemonService/OpenOAuthHelper"
+	// DaemonServiceCloseOAuthHelperProcedure is the fully-qualified name of the DaemonService's
+	// CloseOAuthHelper RPC.
+	DaemonServiceCloseOAuthHelperProcedure = "/reliant.v1.DaemonService/CloseOAuthHelper"
 )
 
 // DaemonServiceClient is a client for the reliant.v1.DaemonService service.
@@ -45,6 +51,27 @@ type DaemonServiceClient interface {
 	// StartOAuthFlow starts a localhost callback server on the daemon, opens the
 	// browser for the user to authorize, and returns the authorization code.
 	StartOAuthFlow(context.Context, *connect.Request[v1.StartOAuthFlowRequest]) (*connect.Response[v1.StartOAuthFlowResponse], error)
+	// OpenOAuthHelper asks the daemon to open its localhost OAuth helper port
+	// for ONE account-linking session. Returns immediately — unlike
+	// StartOAuthFlow it does not block on a human working through a consent
+	// screen, which is what made that RPC unusable in the packaged app.
+	//
+	// The port is NOT open the rest of the time, deliberately: a listener that
+	// starts browsers and returns authorization codes should exist for the
+	// seconds it is needed, not for the life of every daemon on every machine.
+	// The daemon closes it on CloseOAuthHelper, or after an idle timeout if the
+	// UI never gets to send one.
+	//
+	// This pair is also how the app learns whether the daemon is CO-LOCATED with
+	// the browser — a fact neither side can assert on its own. The UI asks the
+	// daemon to open the port over the connection it already has, then probes
+	// 127.0.0.1 itself. A successful probe proves the daemon that just opened it
+	// is on the browser's machine; a failed one means the daemon is remote, and
+	// the UI can say so instead of offering a flow that would hang.
+	OpenOAuthHelper(context.Context, *connect.Request[v1.OpenOAuthHelperRequest]) (*connect.Response[v1.OpenOAuthHelperResponse], error)
+	// CloseOAuthHelper closes the helper port when the linking session ends
+	// (completed or cancelled).
+	CloseOAuthHelper(context.Context, *connect.Request[v1.CloseOAuthHelperRequest]) (*connect.Response[v1.CloseOAuthHelperResponse], error)
 }
 
 // NewDaemonServiceClient constructs a client for the reliant.v1.DaemonService service. By default,
@@ -64,12 +91,26 @@ func NewDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(daemonServiceMethods.ByName("StartOAuthFlow")),
 			connect.WithClientOptions(opts...),
 		),
+		openOAuthHelper: connect.NewClient[v1.OpenOAuthHelperRequest, v1.OpenOAuthHelperResponse](
+			httpClient,
+			baseURL+DaemonServiceOpenOAuthHelperProcedure,
+			connect.WithSchema(daemonServiceMethods.ByName("OpenOAuthHelper")),
+			connect.WithClientOptions(opts...),
+		),
+		closeOAuthHelper: connect.NewClient[v1.CloseOAuthHelperRequest, v1.CloseOAuthHelperResponse](
+			httpClient,
+			baseURL+DaemonServiceCloseOAuthHelperProcedure,
+			connect.WithSchema(daemonServiceMethods.ByName("CloseOAuthHelper")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // daemonServiceClient implements DaemonServiceClient.
 type daemonServiceClient struct {
-	startOAuthFlow *connect.Client[v1.StartOAuthFlowRequest, v1.StartOAuthFlowResponse]
+	startOAuthFlow   *connect.Client[v1.StartOAuthFlowRequest, v1.StartOAuthFlowResponse]
+	openOAuthHelper  *connect.Client[v1.OpenOAuthHelperRequest, v1.OpenOAuthHelperResponse]
+	closeOAuthHelper *connect.Client[v1.CloseOAuthHelperRequest, v1.CloseOAuthHelperResponse]
 }
 
 // StartOAuthFlow calls reliant.v1.DaemonService.StartOAuthFlow.
@@ -77,11 +118,42 @@ func (c *daemonServiceClient) StartOAuthFlow(ctx context.Context, req *connect.R
 	return c.startOAuthFlow.CallUnary(ctx, req)
 }
 
+// OpenOAuthHelper calls reliant.v1.DaemonService.OpenOAuthHelper.
+func (c *daemonServiceClient) OpenOAuthHelper(ctx context.Context, req *connect.Request[v1.OpenOAuthHelperRequest]) (*connect.Response[v1.OpenOAuthHelperResponse], error) {
+	return c.openOAuthHelper.CallUnary(ctx, req)
+}
+
+// CloseOAuthHelper calls reliant.v1.DaemonService.CloseOAuthHelper.
+func (c *daemonServiceClient) CloseOAuthHelper(ctx context.Context, req *connect.Request[v1.CloseOAuthHelperRequest]) (*connect.Response[v1.CloseOAuthHelperResponse], error) {
+	return c.closeOAuthHelper.CallUnary(ctx, req)
+}
+
 // DaemonServiceHandler is an implementation of the reliant.v1.DaemonService service.
 type DaemonServiceHandler interface {
 	// StartOAuthFlow starts a localhost callback server on the daemon, opens the
 	// browser for the user to authorize, and returns the authorization code.
 	StartOAuthFlow(context.Context, *connect.Request[v1.StartOAuthFlowRequest]) (*connect.Response[v1.StartOAuthFlowResponse], error)
+	// OpenOAuthHelper asks the daemon to open its localhost OAuth helper port
+	// for ONE account-linking session. Returns immediately — unlike
+	// StartOAuthFlow it does not block on a human working through a consent
+	// screen, which is what made that RPC unusable in the packaged app.
+	//
+	// The port is NOT open the rest of the time, deliberately: a listener that
+	// starts browsers and returns authorization codes should exist for the
+	// seconds it is needed, not for the life of every daemon on every machine.
+	// The daemon closes it on CloseOAuthHelper, or after an idle timeout if the
+	// UI never gets to send one.
+	//
+	// This pair is also how the app learns whether the daemon is CO-LOCATED with
+	// the browser — a fact neither side can assert on its own. The UI asks the
+	// daemon to open the port over the connection it already has, then probes
+	// 127.0.0.1 itself. A successful probe proves the daemon that just opened it
+	// is on the browser's machine; a failed one means the daemon is remote, and
+	// the UI can say so instead of offering a flow that would hang.
+	OpenOAuthHelper(context.Context, *connect.Request[v1.OpenOAuthHelperRequest]) (*connect.Response[v1.OpenOAuthHelperResponse], error)
+	// CloseOAuthHelper closes the helper port when the linking session ends
+	// (completed or cancelled).
+	CloseOAuthHelper(context.Context, *connect.Request[v1.CloseOAuthHelperRequest]) (*connect.Response[v1.CloseOAuthHelperResponse], error)
 }
 
 // NewDaemonServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -97,10 +169,26 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(daemonServiceMethods.ByName("StartOAuthFlow")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonServiceOpenOAuthHelperHandler := connect.NewUnaryHandler(
+		DaemonServiceOpenOAuthHelperProcedure,
+		svc.OpenOAuthHelper,
+		connect.WithSchema(daemonServiceMethods.ByName("OpenOAuthHelper")),
+		connect.WithHandlerOptions(opts...),
+	)
+	daemonServiceCloseOAuthHelperHandler := connect.NewUnaryHandler(
+		DaemonServiceCloseOAuthHelperProcedure,
+		svc.CloseOAuthHelper,
+		connect.WithSchema(daemonServiceMethods.ByName("CloseOAuthHelper")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.DaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaemonServiceStartOAuthFlowProcedure:
 			daemonServiceStartOAuthFlowHandler.ServeHTTP(w, r)
+		case DaemonServiceOpenOAuthHelperProcedure:
+			daemonServiceOpenOAuthHelperHandler.ServeHTTP(w, r)
+		case DaemonServiceCloseOAuthHelperProcedure:
+			daemonServiceCloseOAuthHelperHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -112,4 +200,12 @@ type UnimplementedDaemonServiceHandler struct{}
 
 func (UnimplementedDaemonServiceHandler) StartOAuthFlow(context.Context, *connect.Request[v1.StartOAuthFlowRequest]) (*connect.Response[v1.StartOAuthFlowResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonService.StartOAuthFlow is not implemented"))
+}
+
+func (UnimplementedDaemonServiceHandler) OpenOAuthHelper(context.Context, *connect.Request[v1.OpenOAuthHelperRequest]) (*connect.Response[v1.OpenOAuthHelperResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonService.OpenOAuthHelper is not implemented"))
+}
+
+func (UnimplementedDaemonServiceHandler) CloseOAuthHelper(context.Context, *connect.Request[v1.CloseOAuthHelperRequest]) (*connect.Response[v1.CloseOAuthHelperResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonService.CloseOAuthHelper is not implemented"))
 }
