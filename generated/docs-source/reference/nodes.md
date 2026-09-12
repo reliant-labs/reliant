@@ -195,6 +195,28 @@ Execute tool calls from an LLM response
 
 ---
 
+## Invoke Tool
+
+Invoke a single tool directly from the graph
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `tool` | string | No | - | Which tool to invoke |
+| `params` | map | No | - | Tool parameters, keyed as in the tool's schema |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | - |
+| `is_error` | boolean | - |
+| `attachment_ids` | string | - |
+| `tool` | string | - |
+
+---
+
 ## Join
 
 Wait for parallel branches to complete before continuing
@@ -307,6 +329,7 @@ Save a message to the conversation thread
 | `tool_results[].name` | string |  |
 | `tool_results[].content` | string |  |
 | `tool_results[].is_error` | bool |  |
+| `tool_results[].attachment_ids` | string |  |
 | `thread_token_count` | integer | - |
 | `message_count` | integer | - |
 
