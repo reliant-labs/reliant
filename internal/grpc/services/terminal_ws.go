@@ -28,10 +28,17 @@ var wsUpgrader = websocket.Upgrader{
 }
 
 // wsMessage is the JSON envelope sent from server to browser.
+//
+// SessionID is the DAEMON's session id, and the browser needs it to close the
+// session later. The browser mints its own local id first (it needs a React key
+// before the socket exists), so without this field it had no way to learn the
+// real one — and CloseSession was called with the local id, which the daemon
+// has never heard of. That failed every close and leaked the PTY.
 type wsMessage struct {
-	Type string `json:"type"`
-	Data string `json:"data,omitempty"`
-	PID  int32  `json:"pid,omitempty"`
+	Type      string `json:"type"`
+	Data      string `json:"data,omitempty"`
+	PID       int32  `json:"pid,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
 }
 
 // wsResizeMessage is the JSON message the browser sends for resize events.
@@ -122,8 +129,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			"working_dir", workingDir,
 		)
 
-		// Send init message to browser.
-		writeWSJSON(conn, wsMessage{Type: "init", PID: createResp.PID})
+		// Send init message to browser, carrying the daemon's session id so the
+		// browser can address this session on close. See wsMessage.SessionID.
+		writeWSJSON(conn, wsMessage{Type: "init", PID: createResp.PID, SessionID: sessionID})
 
 		// --- Subscribe to terminal output ---
 		outputCh, unsub, err := router.SubscribeTerminalOutput(ctx, userID, sessionID)
