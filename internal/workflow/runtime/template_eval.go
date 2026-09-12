@@ -429,19 +429,21 @@ func populateSaveMessageResolved(args *reliantv1.SaveMessageNodeArgs) {
 			if err := json.Unmarshal([]byte(toolResultsJSON), &rawToolResults); err == nil {
 				for _, raw := range rawToolResults {
 					var tr struct {
-						ToolCallID string `json:"tool_call_id"`
-						Name       string `json:"name"`
-						Content    string `json:"content"`
-						IsError    bool   `json:"is_error"`
+						ToolCallID    string   `json:"tool_call_id"`
+						Name          string   `json:"name"`
+						Content       string   `json:"content"`
+						IsError       bool     `json:"is_error"`
+						AttachmentIDs []string `json:"attachment_ids"`
 					}
 					if err := json.Unmarshal(raw, &tr); err != nil {
 						continue
 					}
 					args.ResolvedToolResults = append(args.ResolvedToolResults, &reliantv1.ToolResultMsg{
-						ToolCallId: tr.ToolCallID,
-						Name:       tr.Name,
-						Content:    strings.ToValidUTF8(tr.Content, "\uFFFD"),
-						IsError:    tr.IsError,
+						ToolCallId:    tr.ToolCallID,
+						Name:          tr.Name,
+						Content:       strings.ToValidUTF8(tr.Content, "\uFFFD"),
+						IsError:       tr.IsError,
+						AttachmentIds: tr.AttachmentIDs,
 					})
 				}
 			}

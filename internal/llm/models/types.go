@@ -95,6 +95,24 @@ type ModelSelector struct {
 	//
 	// YAML key: providers
 	Providers []string `yaml:"providers,omitempty" json:"providers,omitempty"`
+
+	// RequireOutputModality constrains resolution to models that can GENERATE
+	// this modality. Empty means no constraint (any model qualifies), which is
+	// the behavior every existing selector gets.
+	//
+	// This is a HARD FILTER, deliberately not a tag. Tag scoring degrades
+	// gracefully — [image-gen, cheap] would happily settle for a text model
+	// that matches only "cheap" — and for modality that graceful fallback is
+	// exactly wrong: it turns "no image model available" into an image request
+	// dispatched to a text model, which fails confusingly deep in a driver
+	// instead of clearly at selection time.
+	//
+	// Not settable from workflow YAML. The node/tool doing the generating sets
+	// it, because it is a property of the OPERATION, not a user preference —
+	// a user asking for an image cannot opt out of needing an image model.
+	//
+	// JSON key: require_output_modality
+	RequireOutputModality Modality `yaml:"require_output_modality,omitempty" json:"require_output_modality,omitempty"`
 }
 
 // UnmarshalJSON handles both string and object formats for ModelSelector.
@@ -473,6 +491,19 @@ type ModelCapabilities struct {
 	// Common values: "image", "pdf", "text", "audio", "video"
 	// When empty and SupportsAttachments is true, assumed to support common types.
 	SupportedFileTypes []string `yaml:"supported_file_types,omitempty" json:"supported_file_types,omitempty" mapstructure:"supported_file_types"`
+
+	// OutputModalities lists what this model can GENERATE — the counterpart to
+	// SupportedFileTypes, which lists what it can CONSUME. A vision model reads
+	// images but emits only text, so the two are independent.
+	//
+	// Empty means text (see DefaultOutputModalities). Do not read this field
+	// directly — call EffectiveOutputModalities() or CanOutput(), which apply
+	// that default. Reading it raw treats every model defined before this field
+	// existed as producing nothing.
+	//
+	// YAML key: output_modalities
+	// Default: [text]
+	OutputModalities []Modality `yaml:"output_modalities,omitempty" json:"output_modalities,omitempty" mapstructure:"output_modalities"`
 }
 
 // ModelCost represents pricing information in USD per 1 million tokens.

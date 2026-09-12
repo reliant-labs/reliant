@@ -692,3 +692,75 @@ func TestEvaluateSaveMessageConfig_ModelAndAgent(t *testing.T) {
 		})
 	}
 }
+
+// TestConvertToToolResults_CarriesAttachmentIDs is the regression test for a
+// bug that made every generated image invisible in the transcript.
+//
+// The inline save_message path (agent.yaml's `save_message:` block on the
+// execute_tools node) routes tool results through CEL, which hands them back
+// as []map[string]interface{}. This converter read tool_call_id, content, name
+// and is_error — and silently dropped attachment_ids. SaveMessage materializes
+// one IMAGE content block per id, so a dropped id meant the tool_result block
+// landed alone: the bytes were stored and addressable, the model saw the
+// image, and the user saw nothing.
+//
+// Observed live on chat 44e0ad1c: three generate_image calls produced three
+// TOOL_RESULT blocks and zero IMAGE blocks, against attachment rows holding
+// intact 2.5MB PNGs.
+func TestConvertToToolResults_CarriesAttachmentIDs(t *testing.T) {
+	// CEL yields []interface{} of string, never []string — asserting the
+	// slice type directly is what a naive fix gets wrong.
+	results, err := convertToToolResults([]map[string]interface{}{{
+		"tool_call_id":   "call_1",
+		"content":        "Generated generated-36a40863.png",
+		"name":           "generate_image",
+		"attachment_ids": []interface{}{"att-1", "att-2"},
+	}})
+	if err != nil {
+		t.Fatalf("convertToToolResults: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	got := results[0].AttachmentIDs
+	if len(got) != 2 || got[0] != "att-1" || got[1] != "att-2" {
+		t.Errorf("AttachmentIDs = %v, want [att-1 att-2] — a dropped id means the image is stored but never rendered", got)
+	}
+}
+
+// TestConvertToToolResults_NoAttachmentIDsIsUnchanged pins that the common
+// case — a tool that produces no attachments — is untouched.
+func TestConvertToToolResults_NoAttachmentIDsIsUnchanged(t *testing.T) {
+	results, err := convertToToolResults([]map[string]interface{}{{
+		"tool_call_id": "call_1",
+		"content":      "ok",
+		"name":         "view",
+	}})
+	if err != nil {
+		t.Fatalf("convertToToolResults: %v", err)
+	}
+	if len(results[0].AttachmentIDs) != 0 {
+		t.Errorf("AttachmentIDs = %v, want empty", results[0].AttachmentIDs)
+	}
+}
+
+// TestConvertToToolResults_MalformedAttachmentIDsIsAnError pins that a bad
+// payload fails loudly. Skipping a non-string element quietly would reproduce
+// the very class of bug this field exists to fix.
+func TestConvertToToolResults_MalformedAttachmentIDsIsAnError(t *testing.T) {
+	if _, err := convertToToolResults([]map[string]interface{}{{
+		"tool_call_id":   "call_1",
+		"content":        "ok",
+		"attachment_ids": []interface{}{"att-1", 42},
+	}}); err == nil {
+		t.Error("expected an error for a non-string attachment id")
+	}
+
+	if _, err := convertToToolResults([]map[string]interface{}{{
+		"tool_call_id":   "call_1",
+		"content":        "ok",
+		"attachment_ids": "not-an-array",
+	}}); err == nil {
+		t.Error("expected an error when attachment_ids is not an array")
+	}
+}

@@ -15,6 +15,23 @@ import { useOAuthAvailability } from "../useOAuthAvailability";
 describe("useOAuthAvailability — helper disappears mid-session", () => {
   const originalFetch = global.fetch;
 
+  // probeOAuthHelper reads the body and requires `service === "reliant"`,
+  // because any other dev server holding port 19284 also answers a health
+  // probe — and the UI would then offer an OAuth flow that silently fails.
+  // A bare `{ ok: true }` therefore reads as "not reliant" and the hook stays
+  // unavailable, so the mock has to answer like the real helper does.
+  const healthyHelperResponse = () =>
+    ({
+      ok: true,
+      json: async () => ({
+        status: "ok",
+        service: "reliant",
+        ready: true,
+        version: "test",
+        source: "test",
+      }),
+    }) as unknown as Response;
+
   beforeEach(() => {
     // REAL timers: pingHealth uses AbortSignal.timeout(), which is backed by
     // the platform's timer and does not advance under vi.useFakeTimers() —
@@ -28,7 +45,7 @@ describe("useOAuthAvailability — helper disappears mid-session", () => {
 
   it("flips back to unavailable when the helper stops responding", async () => {
     // Healthy at first.
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response);
+    const fetchMock = vi.fn().mockResolvedValue(healthyHelperResponse());
     global.fetch = fetchMock as unknown as typeof fetch;
 
     const { result } = renderHook(() => useOAuthAvailability({ enabled: true }));
@@ -58,7 +75,7 @@ describe("useOAuthAvailability — helper disappears mid-session", () => {
       expect(result.current.available).toBe(false);
     });
 
-    fetchMock.mockResolvedValue({ ok: true } as Response);
+    fetchMock.mockResolvedValue(healthyHelperResponse());
 
     await waitFor(
       () => {
@@ -69,7 +86,7 @@ describe("useOAuthAvailability — helper disappears mid-session", () => {
   });
 
   it("does not probe at all while disabled", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true } as Response);
+    const fetchMock = vi.fn().mockResolvedValue(healthyHelperResponse());
     global.fetch = fetchMock as unknown as typeof fetch;
 
     renderHook(() => useOAuthAvailability({ enabled: false }));

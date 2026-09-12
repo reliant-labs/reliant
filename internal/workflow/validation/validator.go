@@ -96,6 +96,11 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 	// Resolver is optional; without one the layer is a no-op.
 	validateSkillReferences(wf, opts, result)
 
+	// Layer 6: tools_config.tools bindings name real tools and real bindable
+	// parameters. Unconditional — the catalog is generated and always present,
+	// so unlike the skill layer there is no optional dependency to skip on.
+	validateToolsConfigBindings(wf, result)
+
 	return result
 }
 

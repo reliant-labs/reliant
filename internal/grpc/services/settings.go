@@ -891,6 +891,45 @@ func (s *SettingsService) SavePrompts(ctx context.Context, req *connect.Request[
 // Sub-phase 6d: Provider Settings (API Keys)
 // ============================================================================
 
+// providerOutputModalities returns the distinct output modalities the given
+// provider's models can generate, derived from the model registry.
+//
+// Derived rather than hardcoded per provider: adding an image model to
+// models.yaml makes its provider image-capable with no change here. A static
+// per-provider map would drift the moment a provider ships a new endpoint, and
+// the drift would be silent — the UI would keep claiming a capability the
+// registry no longer backs, or hide one it does.
+//
+// Order is stable (text first, then the generative extras alphabetically) so
+// the UI and any test see a deterministic list rather than map order.
+func providerOutputModalities(provider string) []string {
+	registry, err := models.GetRegistry()
+	if err != nil {
+		logging.Warn("Failed to load model registry for provider modalities", "error", err)
+		return nil
+	}
+
+	seen := make(map[models.Modality]bool)
+	for _, def := range registry.ListModelsByProvider(provider) {
+		for _, m := range def.Capabilities.EffectiveOutputModalities() {
+			seen[m] = true
+		}
+	}
+
+	result := make([]string, 0, len(seen))
+	if seen[models.ModalityText] {
+		result = append(result, string(models.ModalityText))
+	}
+	extras := make([]string, 0, len(seen))
+	for m := range seen {
+		if m != models.ModalityText {
+			extras = append(extras, string(m))
+		}
+	}
+	sort.Strings(extras)
+	return append(result, extras...)
+}
+
 // GetProviderStatuses retrieves configuration status of all providers
 func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.Request[reliantv1.GetProviderStatusesRequest]) (*connect.Response[reliantv1.GetProviderStatusesResponse], error) {
 	userID := auth.MustGetUserID(ctx)
@@ -938,8 +977,9 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	statuses := make([]*reliantv1.ProviderStatus, 0, len(providers))
 	for _, provider := range providers {
 		status := &reliantv1.ProviderStatus{
-			Provider:    string(provider),
-			DisplayName: providerDisplayNames[provider],
+			Provider:         string(provider),
+			DisplayName:      providerDisplayNames[provider],
+			OutputModalities: providerOutputModalities(string(provider)),
 		}
 
 		// Claude uses OAuth tokens persisted by Reliant.
@@ -1011,8 +1051,9 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	// Reliant provider is configured once the user has synced an rlnt_ key
 	// from control-plane via SyncReliantProvider.
 	reliantStatus := &reliantv1.ProviderStatus{
-		Provider:    "reliant",
-		DisplayName: "Reliant",
+		Provider:         "reliant",
+		DisplayName:      "Reliant",
+		OutputModalities: providerOutputModalities("reliant"),
 	}
 	if maskedKey, hasKey := apiKeys["reliant"]; hasKey {
 		reliantStatus.Configured = true

@@ -430,6 +430,33 @@ func convertToToolResults(maps []map[string]interface{}) ([]message.ToolResult, 
 			return nil, fmt.Errorf("tool_results[%d].is_error: expected bool, got %T", i, m["is_error"])
 		}
 
+		// attachment_ids is optional. It must survive this conversion or the
+		// image a tool produced is stored but never rendered: SaveMessage
+		// materializes one IMAGE content block per id, and a dropped id means
+		// the tool_result block lands alone and the picture is invisible in
+		// the transcript even though the bytes are durable and addressable.
+		//
+		// CEL hands values back as []interface{} of string, not []string, so
+		// the element type has to be asserted per item rather than on the
+		// slice. A non-string element is a malformed payload, not something to
+		// skip quietly — silently dropping it reproduces exactly the bug this
+		// field exists to fix.
+		if raw, present := m["attachment_ids"]; present && raw != nil {
+			ids, ok := raw.([]interface{})
+			if !ok {
+				return nil, fmt.Errorf("tool_results[%d].attachment_ids: expected array, got %T", i, raw)
+			}
+			for j, rawID := range ids {
+				id, ok := rawID.(string)
+				if !ok {
+					return nil, fmt.Errorf("tool_results[%d].attachment_ids[%d]: expected string, got %T", i, j, rawID)
+				}
+				if id != "" {
+					tr.AttachmentIDs = append(tr.AttachmentIDs, id)
+				}
+			}
+		}
+
 		result = append(result, tr)
 	}
 	return result, nil
@@ -772,10 +799,11 @@ func buildSaveMessageNode(input *types.SaveMessageInput) *reliantv1.Node {
 	// Convert tool results
 	for _, tr := range input.ToolResults {
 		args.ResolvedToolResults = append(args.ResolvedToolResults, &reliantv1.ToolResultMsg{
-			ToolCallId: tr.ToolCallID,
-			Name:       tr.Name,
-			Content:    strings.ToValidUTF8(tr.Content, "\uFFFD"),
-			IsError:    tr.IsError,
+			ToolCallId:    tr.ToolCallID,
+			Name:          tr.Name,
+			AttachmentIds: tr.AttachmentIDs,
+			Content:       strings.ToValidUTF8(tr.Content, "\uFFFD"),
+			IsError:       tr.IsError,
 		})
 	}
 

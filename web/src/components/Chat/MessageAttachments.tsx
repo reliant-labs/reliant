@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import type { Attachment } from "../../api/client";
 import { FileIcon } from "../ui/FileIcon";
 import { ImagePreviewModal } from "../ui/ImagePreviewModal";
-import { attachmentGrpc } from "../../api/attachment-grpc";
+import { isImageMimeType, useAttachmentBlobUrls } from "./useAttachmentBlobUrls";
 
 interface MessageAttachmentsProps {
   attachments: Attachment[];
@@ -10,12 +10,13 @@ interface MessageAttachmentsProps {
   className?: string;
 }
 
-const isImageMimeType = (mimeType: string): boolean => {
-  return mimeType.startsWith('image/');
-};
-
 // Chat thread attachment previews were 80x80 (h-20/w-20).
 // Reduce to Tailwind h-8/w-8 per UX request.
+//
+// This is the size for a *reference* to a file the user attached — a chip, not
+// the content. An image a tool GENERATED is content and is rendered much larger
+// by MessageGeneratedImages, which is why that is a separate component rather
+// than a size prop here: changing this constant would regress the request above.
 const CHAT_THREAD_ATTACHMENT_PREVIEW_SIZE_CLASS = "h-8 w-8";
 
 export function MessageAttachments({
@@ -24,65 +25,9 @@ export function MessageAttachments({
   className = "",
 }: MessageAttachmentsProps) {
   const [previewImage, setPreviewImage] = useState<{ url: string; filename: string } | null>(null);
-  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
-  const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map());
-  const blobUrlsRef = useRef<Map<string, string>>(blobUrls);
-  blobUrlsRef.current = blobUrls;
+  const { blobUrls, failedIds } = useAttachmentBlobUrls(attachments);
 
-  // Load images via gRPC and convert to blob URLs
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadImages = async () => {
-      const newBlobUrls = new Map<string, string>();
-
-      for (const attachment of attachments) {
-        if (cancelled) break;
-        if (!isImageMimeType(attachment.mimeType || '')) {
-          continue;
-        }
-        if (blobUrlsRef.current.has(attachment.id)) continue; // Already loaded
-        
-        try {
-          // Fetch image via gRPC
-          const blob = await attachmentGrpc.getAttachmentAsBlob(attachment.id);
-          if (cancelled) {
-            // Don't create blob URLs we'd never clean up
-            break;
-          }
-          const blobUrl = URL.createObjectURL(blob);
-          newBlobUrls.set(attachment.id, blobUrl);
-        } catch (error) {
-          if (cancelled) break;
-          console.error('Error loading image:', {
-            id: attachment.id,
-            error,
-          });
-          setImageErrors(prev => new Set(prev).add(attachment.id));
-        }
-      }
-      
-      if (!cancelled && newBlobUrls.size > 0) {
-        setBlobUrls(prev => new Map([...prev, ...newBlobUrls]));
-      } else if (cancelled) {
-        // Revoke any blob URLs created during this cancelled run
-        newBlobUrls.forEach(url => URL.revokeObjectURL(url));
-      }
-    };
-
-    loadImages();
-    
-    // Cleanup blob URLs when effect re-runs or component unmounts
-    return () => {
-      cancelled = true;
-      blobUrlsRef.current.forEach(url => URL.revokeObjectURL(url));
-      blobUrlsRef.current = new Map();
-    };
-  }, [attachments]);
-  
   if (!attachments || attachments.length === 0) return null;
-
-
 
   return (
     <>
@@ -92,7 +37,7 @@ export function MessageAttachments({
           const isImage = isImageMimeType(mimeType);
           
           const blobUrl = blobUrls.get(attachment.id);
-          const hasError = imageErrors.has(attachment.id);
+          const hasError = failedIds.has(attachment.id);
           const isLoading = !blobUrl && !hasError;
           
           return isImage ? (

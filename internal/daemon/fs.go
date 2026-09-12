@@ -16,6 +16,14 @@ type FileSystem interface {
 	// If the file didn't exist, WriteResult.Created is true.
 	WriteFile(ctx context.Context, path string, content string) (*WriteResult, error)
 
+	// WriteBinaryFile writes raw bytes to a file, creating parent directories
+	// as needed. Use this for any content that is not text: WriteFile carries
+	// its content as a JSON string on the remote path, where bytes that are
+	// not valid UTF-8 are silently replaced with U+FFFD.
+	// WriteResult.OldContent is not populated — the previous bytes of a binary
+	// file are not a diffable string.
+	WriteBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error)
+
 	// PatchFile applies a set of edits (old_string → new_string replacements) to a file.
 	// Each edit is applied independently. If an edit's OldString is not found,
 	// it is reported in PatchResult.Failed. Edits that match are applied in order.

@@ -30,6 +30,7 @@ var nodeTypeActivities = map[string]nodeTypeActivityDef{
 	model.NodeTypeCreateWorktree: {"CreateWorktree", reflect.TypeOf(reliantv1.CreateWorktreeArgs{}), reflect.TypeOf(handlers.CreateWorktreeOutput{})},
 	model.NodeTypeAskQuestion:    {"AskQuestion", reflect.TypeOf(reliantv1.AskQuestionArgs{}), reflect.TypeOf((*reliantv1.AskQuestionOutput)(nil))},
 	model.NodeTypeSaveMessage:    {"SaveMessage", reflect.TypeOf(reliantv1.SaveMessageNodeArgs{}), reflect.TypeOf(reliantv1.SaveMessageOutput{})},
+	model.NodeTypeInvokeTool:     {"InvokeTool", reflect.TypeOf(reliantv1.InvokeToolArgs{}), reflect.TypeOf((*reliantv1.InvokeToolOutput)(nil))},
 }
 
 func init() {
@@ -161,6 +162,7 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// ========================================================================
 
 	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor))
 
 	// ========================================================================
 	// CONTEXT MANAGEMENT ACTIVITIES

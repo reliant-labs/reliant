@@ -23,9 +23,16 @@ const natsPayloadHeadroom = 8 * 1024
 // Remediation hints appended to oversize-payload errors. The reply-side hint
 // is what an LLM sees as its tool result, so it must tell the model how to
 // recover; the request-side hint targets callers pushing large inputs.
+//
+// The request hint no longer says "split into smaller chunks": the transport
+// splits oversize requests itself now (nats_chunked_request.go), so a request
+// only fails above the absolute per-request cap — a point at which splitting
+// by hand would not help, because the cap is on the whole logical request and
+// not on any one message. What DOES help there is moving the bytes off the
+// message bus entirely, so that is what it says.
 const (
 	oversizeReplyHint   = "narrow your search or request less data (add filters, lower limits, or target specific paths)"
-	oversizeRequestHint = "send less data in a single call (split large payloads into smaller chunks)"
+	oversizeRequestHint = "this exceeds the maximum size a single daemon request can carry; transfer data this large out of band (e.g. by reference) rather than inline"
 )
 
 // exceedsNATSPayloadLimit reports whether a message of size bytes would

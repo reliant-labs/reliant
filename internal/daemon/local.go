@@ -125,6 +125,37 @@ func (c *LocalClient) WriteFile(ctx context.Context, path string, content string
 	}, nil
 }
 
+// WriteBinaryFile writes raw bytes to a file, creating parent directories as
+// needed. OldContent is left empty: the previous bytes of a binary file are
+// not a diffable string, and the remote path cannot carry them either.
+func (c *LocalClient) WriteBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error) {
+	created := true
+	if _, err := os.Stat(path); err == nil {
+		created = false
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("stat %s: %w", path, err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil, fmt.Errorf("creating parent directories for %s: %w", path, err)
+	}
+
+	if err := os.WriteFile(path, content, 0o644); err != nil {
+		return nil, fmt.Errorf("writing file %s: %w", path, err)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("stat after write %s: %w", path, err)
+	}
+
+	return &WriteResult{
+		Created:      created,
+		ModTime:      info.ModTime(),
+		BytesWritten: len(content),
+	}, nil
+}
+
 // PatchFile applies a set of edits to a file.
 func (c *LocalClient) PatchFile(ctx context.Context, path string, edits []PatchEdit) (*PatchResult, error) {
 	data, err := os.ReadFile(path)

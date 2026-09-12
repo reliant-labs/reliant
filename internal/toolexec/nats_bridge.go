@@ -42,6 +42,15 @@ type NATSToolBridge struct {
 	// inFlight bounds the number of concurrently-handled request/reply
 	// messages. See handleAsync.
 	inFlight chan struct{}
+
+	// requestChunks reassembles oversize REQUESTS arriving on the shared
+	// per-daemon subjects. One assembler for the whole bridge, not one per
+	// subscription: the budgets it enforces (maxChunkAssemblyBytes,
+	// maxInFlightChunkAssemblies) are meant to bound this PROCESS's memory,
+	// and a per-subscription assembler would multiply them by the number of
+	// connected daemons. Chunk ids are globally unique inboxes, so sharing
+	// one map across subjects cannot collide.
+	requestChunks *chunkAssembler
 }
 
 // maxInFlightRequests bounds concurrent request/reply handlers across all
@@ -62,6 +71,7 @@ func NewNATSToolBridge(nc *nats.Conn, js jetstream.JetStream, mgr DaemonConnecti
 		ctx:           ctx,
 		cancel:        cancel,
 		inFlight:      make(chan struct{}, maxInFlightRequests),
+		requestChunks: newChunkAssembler(),
 	}
 }
 
@@ -114,6 +124,48 @@ func (b *NATSToolBridge) handleAsync(subject string, msg *nats.Msg, onOverload f
 		}()
 		fn()
 	}()
+}
+
+// assembleRequest feeds a received message through the request-chunk
+// assembler. It returns the message to handle and true when a complete request
+// is available — immediately for the single-message fast path (which is the
+// overwhelming majority and costs one map-free header lookup), or once the
+// final chunk of a chunked stream lands.
+//
+// It returns false when more chunks are expected, and also when the stream is
+// unusable: in that case onError is called with a caller-facing message so the
+// subject's own error-envelope shape can be published, since a requester
+// blocked on its inbox has no other way to learn the request died.
+func (b *NATSToolBridge) assembleRequest(subject string, msg *nats.Msg, onError func(errMsg string)) (*nats.Msg, bool) {
+	full, done, err := b.requestChunks.accept(msg)
+	if err != nil {
+		logging.Error("[NATSToolBridge] Failed to reassemble chunked request",
+			"subject", subject, "error", err)
+		observability.NATSErrorsTotal.WithLabelValues(subject, "chunk_reassembly").Inc()
+		onError(err.Error())
+		return nil, false
+	}
+	if !done {
+		return nil, false
+	}
+	if full != msg {
+		logging.Info("[NATSToolBridge] Reassembled chunked request",
+			"subject", subject, "requestBytes", len(full.Data))
+	}
+	return full, true
+}
+
+// chunkedRequestSub lifts the default pending limits on a subscription that
+// may receive chunked requests. nats.go's defaults (512K messages / 64MB)
+// would drop chunks — and therefore fail the whole request — when a multi-MB
+// stream arrives faster than the callback drains it. Memory stays bounded by
+// the assembler's own budgets, which is where that decision belongs. Passes
+// the (sub, err) pair straight through so it composes with addSub.
+func chunkedRequestSub(sub *nats.Subscription, err error) (*nats.Subscription, error) {
+	if err == nil && sub != nil {
+		_ = sub.SetPendingLimits(-1, -1)
+	}
+	return sub, err
 }
 
 // OnDaemonConnected implements DaemonConnectionListener. It creates per-daemon
@@ -375,7 +427,20 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 	}))
 
 	// 10. daemon.command.{userID}.{daemonID}
-	addSub(b.nc.Subscribe(daemonSubject(daemonCommandSubject, userID, daemonID), func(msg *nats.Msg) {
+	addSub(chunkedRequestSub(b.nc.Subscribe(daemonSubject(daemonCommandSubject, userID, daemonID), func(chunk *nats.Msg) {
+		// Requests may arrive chunked (an fs.write_binary_file carrying a
+		// multi-MB image). Reassemble before doing anything else; a request
+		// that fits is returned untouched by the first call.
+		msg, ok := b.assembleRequest("daemon.command", chunk, func(errMsg string) {
+			errResp, _ := json.Marshal(map[string]interface{}{
+				"success": false, "error_message": errMsg,
+			})
+			_ = chunk.Respond(errResp)
+		})
+		if !ok {
+			return
+		}
+
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.command")
 		observability.NATSReceiveTotal.WithLabelValues("daemon.command").Inc()
 
@@ -395,10 +460,24 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			defer span.End()
 			b.respondDaemonCommand(ctx, msg, userID, &req)
 		})
-	}))
+	})))
 
 	// 11. tools.request.sync.{userID}.{daemonID}
-	addSub(b.nc.Subscribe(daemonSubject(toolRequestSyncSubject, userID, daemonID), func(msg *nats.Msg) {
+	addSub(chunkedRequestSub(b.nc.Subscribe(daemonSubject(toolRequestSyncSubject, userID, daemonID), func(chunk *nats.Msg) {
+		msg, ok := b.assembleRequest("tools.request.sync", chunk, func(errMsg string) {
+			errResp, _ := json.Marshal(&ToolExecutionResponse{
+				Success:      false,
+				IsError:      true,
+				Content:      errMsg,
+				ErrorMessage: errMsg,
+				ErrorCode:    ErrorCodeDaemonRoundTrip,
+			})
+			_ = chunk.Respond(errResp)
+		})
+		if !ok {
+			return
+		}
+
 		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request.sync")
 		observability.NATSReceiveTotal.WithLabelValues("tools.request.sync").Inc()
 
@@ -426,7 +505,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			defer span.End()
 			b.respondToolRequestSync(ctx, msg, userID, &request)
 		})
-	}))
+	})))
 
 	b.finishDaemonConnected(daemonCtx, userID, daemonID, subs)
 }

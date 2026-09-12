@@ -287,21 +287,30 @@ func TestNATSBridge_ToolSyncReplyWithinLimit_PassesThrough(t *testing.T) {
 	assert.Equal(t, "42 matches", resp.Content)
 }
 
-// The request direction is still guarded by a preflight: requests are
-// client-constructed, so failing fast with an actionable error (before daemon
-// resolution and before any NATS round trip) is correct there.
-func TestNATSDaemonRouter_OversizeRequest_FailsFast(t *testing.T) {
+// A request merely over the per-message max_payload is no longer rejected —
+// it is chunked (see nats_chunked_request.go). This pins the change at all
+// three entry points: the size preflight must NOT fire, so each call proceeds
+// past it and fails for the only reason left, which is that no daemon exists.
+//
+// Before the request-chunking change every one of these returned
+// "request too large ... split large payloads into smaller chunks" without
+// ever attempting resolution, which is what blocked a 2.9MB
+// fs.write_binary_file.
+func TestNATSDaemonRouter_OverMaxPayloadRequest_IsChunkedNotRejected(t *testing.T) {
 	nc := startPayloadTestNATS(t)
-	// No resolver on purpose: the preflight must reject before resolution.
+	// No resolver on purpose: with the preflight gone, resolution is the next
+	// thing that can fail, and seeing ITS error proves the size check passed.
 	router := NewNATSDaemonRouter(nc)
 
+	// 32KB — four times the effective 8KB single-message budget.
 	// Valid JSON: the daemon-command payload travels as json.RawMessage.
 	bigPayload := []byte(`{"content":"` + string(bytes.Repeat([]byte("x"), 32*1024)) + `"}`)
 
 	_, err := router.SendDaemonCommand(context.Background(), "user-1", "fs.write", bigPayload, 5000)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "request too large")
-	assert.Contains(t, err.Error(), "smaller chunks")
+	assert.NotContains(t, err.Error(), "request too large",
+		"a request over max_payload must be chunked, not rejected")
+	assert.Contains(t, err.Error(), "no daemon available")
 
 	_, err = router.SendToolRequestSync(context.Background(), "user-1", &ToolExecutionRequest{
 		RequestID: "req-1",
@@ -309,7 +318,8 @@ func TestNATSDaemonRouter_OversizeRequest_FailsFast(t *testing.T) {
 		ToolInput: string(bigPayload),
 	})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "request too large")
+	assert.NotContains(t, err.Error(), "request too large")
+	assert.Contains(t, err.Error(), "no daemon available")
 
 	_, err = router.SendToolRequestSyncWithSelector(context.Background(), "user-1", &ToolExecutionRequest{
 		RequestID: "req-1",
@@ -317,7 +327,8 @@ func TestNATSDaemonRouter_OversizeRequest_FailsFast(t *testing.T) {
 		ToolInput: string(bigPayload),
 	}, &DaemonSelector{Type: "any"})
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "request too large")
+	assert.NotContains(t, err.Error(), "request too large")
+	assert.Contains(t, err.Error(), "no daemon")
 }
 
 // A request to a daemon nobody is serving must keep today's ErrNoResponders

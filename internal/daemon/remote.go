@@ -150,6 +150,28 @@ func (r *RemoteClient) WriteFile(ctx context.Context, path string, content strin
 	return &resp, nil
 }
 
+type writeBinaryFileRequest struct {
+	Path string `json:"path"`
+	Data string `json:"data"` // base64-encoded
+}
+
+// WriteBinaryFile writes raw bytes to a file on the daemon, creating parent
+// directories as needed.
+//
+// This exists separately from WriteFile because the daemon command envelope is
+// JSON: WriteFile's content crosses as a JSON string, and encoding/json
+// replaces every byte that is not valid UTF-8 with U+FFFD rather than failing.
+// Any non-text payload — an image, an archive — arrives corrupted and silently.
+// Here the bytes are base64 on the wire, mirroring ReadBinaryFile.
+func (r *RemoteClient) WriteBinaryFile(ctx context.Context, path string, content []byte) (*WriteResult, error) {
+	var resp WriteResult
+	req := writeBinaryFileRequest{Path: path, Data: base64.StdEncoding.EncodeToString(content)}
+	if err := r.send(ctx, "fs.write_binary_file", req, &resp, timeoutFSDefault); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 type patchFileRequest struct {
 	Path  string      `json:"path"`
 	Edits []PatchEdit `json:"edits"`

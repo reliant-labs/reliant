@@ -43,6 +43,7 @@ const (
 	CategoryConditionalAccess Category = "conditional_access" // Unsafe access to conditional node outputs
 	CategoryNodeOrdering      Category = "node_ordering"      // nodes.<id> references to nodes not guaranteed to have executed
 	CategorySkillRef          Category = "skill_ref"          // skills: names that do not resolve in the skill catalog
+	CategoryToolBinding       Category = "tool_binding"       // tools_config.tools: unknown tool, or a parameter that tool cannot bind
 )
 
 // Error represents a single validation issue.

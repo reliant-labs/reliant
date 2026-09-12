@@ -280,6 +280,7 @@ message Node {
     LoopArgs loop = 22;
     JoinArgs join = 23;
     RouterArgs router = 24;
+    InvokeToolArgs invoke_tool = 25;
   }
 }
 
@@ -287,8 +288,35 @@ message Node {
 // ACTIVITY NODE ARGS
 // =============================================================================
 
-// ToolsConfig configures tool availability for a call_llm node.
-// Unifies filter, spawn, and permission into a single object.
+// ToolsConfig configures the tools available to a call_llm node, and how each
+// one behaves.
+//
+// The first three fields decide WHICH tools exist. The `tools` map decides how
+// an individual tool BEHAVES, by binding some of its parameters ahead of time.
+// A bound parameter is removed from the schema the model sees, so binding is
+// also the access-control mechanism: the model cannot set what it was never
+// shown.
+//
+//   tools_config:
+//     filter: [tag:default, generate_image]
+//     tools:
+//       generate_image:
+//         model: {tags: [image-gen], providers: [codex]}
+//         size: "1536x1024"
+//
+// The wire shape is an untyped map, but the CONTENT is not free-form. Every
+// tool name and every parameter key is checked against a catalog generated
+// from the live tool registry — see
+// internal/llm/tools/toolcatalog/catalog_generated.go, written by
+// `go run ./internal/llm/tools/cmd/toolconfiggen`. A workflow naming a tool
+// that does not exist, or a parameter that tool does not declare, fails
+// validation rather than being silently ignored.
+//
+// The map is deliberately NOT a generated per-tool proto union. Fifty tools
+// with ~300 parameters between them would put every tool's parameter list into
+// the wire format, so renaming one tool's optional argument would churn the
+// API surface and break stored workflows. Keeping the schema in a generated Go
+// catalog gets the same build-time rejection without that coupling.
 message ToolsConfig {
   // Filter specifies which tools are available (names, tags like "tag:search", globs, !exclusions).
   CelStringList filter = 1;
@@ -299,6 +327,15 @@ message ToolsConfig {
   // Supersedes filter — tools exceeding this permission level are excluded
   // even if they match the filter.
   CelString permission = 3;
+  // Per-tool parameter bindings, keyed by tool name. Each value is that tool's
+  // own parameter object: keys are the tool's parameter names, values are the
+  // bound values. Binding a parameter fixes it and hides it from the model.
+  //
+  // Only parameters the tool declares as bindable may appear. A few are
+  // deliberately unbindable — binding generate_image's `save_to` to a constant
+  // in an agentic loop would make every image overwrite the last — and naming
+  // one is an error, not a silent no-op.
+  map<string, google.protobuf.Struct> tools = 4;
 }
 
 // CallLLMArgs configures a call_llm node — calls a Large Language Model.
@@ -443,6 +480,16 @@ message ToolResultMsg {
   string name = 2;
   string content = 3;
   bool is_error = 4;
+  // Attachments the tool produced, as ids of rows already persisted in the
+  // attachments table. Ids rather than bytes: the bytes are durable in the
+  // database and reachable at /api/attachments/{id}, so carrying them here
+  // would duplicate every image into the workflow payload and into every
+  // subsequent message read.
+  //
+  // SaveMessage materializes one IMAGE content block per id alongside the
+  // tool_result block, which is the same representation a user-uploaded
+  // image already produces.
+  repeated string attachment_ids = 5;
 }
 
 // ExecuteToolsArgs configures an execute_tools node — executes tool calls from an LLM.
@@ -474,6 +521,57 @@ message ExecuteToolsArgs {
   // consuming too much of the next LLM turn. Wire this from
   // nodes.<call_llm>.compaction_threshold so provider-specific windows are honored.
   CelInt compaction_threshold = 5 [(reliant) = {hidden: true}];
+}
+
+// InvokeToolArgs configures an invoke_tool node — invokes ONE tool directly from the graph,
+// with no LLM deciding to call it.
+//
+// This is deliberately ONE generic node type rather than one node type per
+// tool. A tool's real parameter contract is its Go param struct, reflected to
+// JSON schema; re-declaring each opted-in tool as its own proto message and
+// oneof arm would duplicate that contract into a permanent wire commitment for
+// type information that already exists. `params` is therefore an open map, and
+// the schema check happens against the tool's reflected schema at validation
+// time.
+//
+// Only tools that explicitly opt in are invocable this way — see
+// tools.NodeExposedTools(). Most tools are conversational affordances
+// (bash_output, spawn_status, load_tool) and are noise in a node palette.
+//
+// Output fields accessible via nodes.<id>.*:
+//   content, is_error, attachment_ids, data.<field>
+message InvokeToolArgs {
+  option (node_meta) = {
+    node_type: "invoke_tool"
+    display_name: "Invoke Tool"
+    description: "Invoke a single tool directly from the graph"
+    is_structural: false
+    category: "agentic"
+    icon: "Wrench"
+  };
+
+  // Tool names which tool to invoke, e.g. "generate_image". It must be a tool
+  // that declares node exposure; naming any other tool is an error rather than
+  // a silent no-op.
+  CelString tool = 1 [(reliant) = {
+    description: "Which tool to invoke"
+    label: "Tool"
+    visibility_contexts: "basic"
+    required: true
+  }];
+
+  // Params are the tool's parameters, keyed exactly as in the tool's own
+  // parameter schema. Values may be literals or {{expr}} templates; templates
+  // are resolved before the activity runs, the same way every other node's
+  // arguments are.
+  //
+  // A parameter bound by configuration must NOT appear here — a binding exists
+  // precisely so the value is not restated per call site.
+  map<string, google.protobuf.Value> params = 2 [(reliant) = {
+    description: "Tool parameters, keyed as in the tool's schema"
+    label: "Parameters"
+    visibility_contexts: "basic"
+  }];
 }
 
 // CompactArgs configures a compact node — compacts conversation context to reduce token usage.
@@ -1213,6 +1311,28 @@ message ExecuteToolsOutput {
   int32 thread_token_count = 3;
   int32 total_result_chars = 4;
   google.protobuf.Struct response_data = 5;
+}
+
+// InvokeToolOutput is the output from the invoke_tool activity.
+//
+// `data` is the tool's own structured output — the same JSON a tool publishes
+// through WithResponseMetadata, parsed back into a Struct. It is typed `dyn`
+// to CEL, so runtime access always works; field-level type checking comes from
+// the tool's reflected output schema at validation time, not from this
+// descriptor. That is what keeps this ONE message instead of one per tool.
+message InvokeToolOutput {
+  // Content is the tool's human/model-facing result text.
+  string content = 1;
+  // IsError reports whether the tool result represents a failure. A failing
+  // tool does NOT fail the node — the graph decides what to do about it.
+  bool is_error = 2;
+  // AttachmentIDs lists attachments the tool produced, if any.
+  repeated string attachment_ids = 3;
+  // Data is the tool's structured output, reachable as nodes.<id>.data.<field>.
+  google.protobuf.Struct data = 4;
+  // Tool echoes which tool ran, so a downstream node can branch on it without
+  // re-reading the workflow definition.
+  string tool = 5;
 }
 
 // CompactOutput is the output from the compact activity.

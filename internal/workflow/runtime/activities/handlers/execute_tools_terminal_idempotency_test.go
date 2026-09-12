@@ -295,7 +295,7 @@ func TestExecuteTools_ActivityRetryDoesNotReExecute(t *testing.T) {
 // was interrupted so it can decide whether to try again itself.
 func TestExecuteTools_ActivityRetryResultIsAnErrorNotAFailure(t *testing.T) {
 	activityInstance := &ExecuteToolsActivity{}
-	result := activityInstance.buildToolResult("toolu_retry", "bash", InterruptedToolResultContent, "", true, nil)
+	result := activityInstance.buildToolResult("toolu_retry", "bash", InterruptedToolResultContent, "", true, nil, nil)
 
 	assert.True(t, result.IsError, "the model must see that this tool did not produce a real result")
 	assert.Equal(t, InterruptedToolResultContent, result.Content,

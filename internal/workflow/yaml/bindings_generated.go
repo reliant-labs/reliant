@@ -107,6 +107,14 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"tool_calls":              {},
 		},
 	},
+	"invoke_tool": {
+		oneofFieldName: "invoke_tool",
+		isStructural:   false,
+		argFieldKeys: map[string]struct{}{
+			"params": {},
+			"tool":   {},
+		},
+	},
 	"join": {
 		oneofFieldName: "join",
 		isStructural:   true,

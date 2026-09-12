@@ -164,6 +164,9 @@ func Run(ctx context.Context, opts Options) error {
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// generate_image executes here, inside the ExecuteTools activity, so
+		// this is the wiring that actually decides whether the tool works.
+		ImageGeneratorResolver: resolveImageGenerator,
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
@@ -373,4 +376,13 @@ func Run(ctx context.Context, opts Options) error {
 
 	logging.Info("temporal-worker shut down gracefully")
 	return nil
+}
+
+// resolveImageGenerator adapts the driver layer's image-model selection to the
+// narrow interface the generate_image tool declares. The selector arrives from
+// the tool's bound `model` parameter — tags:[image-gen] unless a human bound
+// something else — and ResolveImageGenerator pins the image output modality on
+// top of it, so no selector can degrade into a text model.
+func resolveImageGenerator(ctx context.Context, userID string, selector models.ModelSelector) (tools.ImageGenerator, error) {
+	return drivers.ResolveImageGenerator(ctx, userID, selector)
 }

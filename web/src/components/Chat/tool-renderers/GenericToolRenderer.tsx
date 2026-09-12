@@ -16,8 +16,14 @@ function GenericToolRendererComponent({ ctx }: ToolContentProps) {
   const hasInput = input !== undefined && 
     (typeof input === 'object' ? Object.keys(input).length > 0 : input !== '');
   const hasResult = result?.content;
+  // Images the tool generated are NOT drawn here. They are the outcome of the
+  // turn, so ChatMessage renders them in the message flow just after this card
+  // (see MessageGeneratedImages) — this card is collapsed by default, which made
+  // a generated image invisible. `hasAttachments` still gates the empty check so
+  // an image-only result does not render as an empty card.
+  const hasAttachments = Boolean(result?.attachments?.length);
 
-  if (!hasInput && !hasResult) {
+  if (!hasInput && !hasResult && !hasAttachments) {
     return null;
   }
 

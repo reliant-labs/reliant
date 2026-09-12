@@ -30,6 +30,12 @@ type ToolsOptions struct {
 	// The zero value (ShellPlatformUnknown) is the honest default — it yields
 	// portable, probe-first guidance rather than asserting bash.
 	ShellPlatform ShellPlatform
+	// ImageGeneratorResolver binds generate_image to the driver layer's model
+	// selection. Injected rather than imported because internal/llm/drivers
+	// already imports this package. Optional: nil means generate_image reports
+	// that image generation is unavailable here, which is correct for the
+	// daemon runtime.
+	ImageGeneratorResolver ImageGeneratorResolver
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -169,6 +175,10 @@ func (f *ToolsFactory) ReadAttachment() Tool {
 	return NewReadAttachmentTool(f.opts.Repo)
 }
 
+func (f *ToolsFactory) SaveAttachment() Tool {
+	return NewSaveAttachmentTool(f.opts.Repo)
+}
+
 func (f *ToolsFactory) Write() Tool {
 	return NewWriteTool()
 }
@@ -213,6 +223,14 @@ func (f *ToolsFactory) Fetch() Tool {
 
 func (f *ToolsFactory) WebSearch() Tool {
 	return NewWebSearchTool()
+}
+
+// Media tools
+
+// GenerateImage generates an image, stores it as an attachment, and returns
+// the bytes to the model.
+func (f *ToolsFactory) GenerateImage() Tool {
+	return NewGenerateImageTool(f.opts.Repo, f.opts.ImageGeneratorResolver)
 }
 
 // Planning tools

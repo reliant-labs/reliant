@@ -14,7 +14,11 @@ import {
 } from "../gen/reliant/v1/chat_pb";
 import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
-import { getProcessedMessage } from "../lib/messageProcessor";
+import {
+  foldToolResultImages,
+  foldToolResultMessage,
+  getProcessedMessage,
+} from "../lib/messageProcessor";
 import { sortMessagesForDisplay } from "../lib/messageOrder";
 import {
   CHAT_MARKER_KINDS,
@@ -1596,15 +1600,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       };
       for (const message of messages) {
         if (message.role !== MessageRole.TOOL) continue;
-        for (const block of message.contentBlocks || []) {
-          if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
-            loadedToolResults[block.toolCallId] = {
-              content: block.content || "",
-              is_error: block.isError,
-              tool_name: block.toolName,
-            };
-          }
-        }
+        foldToolResultMessage(message, loadedToolResults);
       }
 
       // Warm the reference-keyed processMessage memo so the first render after
@@ -1727,15 +1723,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       };
       for (const message of older) {
         if (message.role !== MessageRole.TOOL) continue;
-        for (const block of message.contentBlocks || []) {
-          if (block.type === ContentBlockType.TOOL_RESULT && block.toolCallId) {
-            pageToolResults[block.toolCallId] = {
-              content: block.content || "",
-              is_error: block.isError,
-              tool_name: block.toolName,
-            };
-          }
-        }
+        foldToolResultMessage(message, pageToolResults);
       }
 
       // Warm the processMessage memo before the prepend commits, so the newly
@@ -2319,6 +2307,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                 };
               }
             });
+
+            // Images the tool produced ride along on the same TOOL message as
+            // sibling IMAGE blocks. They are folded in a second pass so the
+            // first-write-wins dedup above stays exactly as it was: only the
+            // message that actually won a tool_call_id contributes its images.
+            foldToolResultImages(protoMsg, batchToolResults, batchToolResultSourceMsgId);
           }
         });
 

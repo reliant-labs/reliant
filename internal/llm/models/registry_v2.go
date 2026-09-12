@@ -297,17 +297,46 @@ func (r *ModelRegistry) ListAll() []ModelDefinition {
 	return result
 }
 
-// GetUserVisibleModels returns all models that should be shown in user-facing UI.
-// This includes models with VisibilityUser or empty visibility (which defaults to user-visible).
-// Models with VisibilityMeta or VisibilityDev are excluded.
+// GetUserVisibleModels returns the models shown on chat-model surfaces: the
+// per-chat picker, ListModels, model preferences, and anything else that lets a
+// user pick the model a conversation runs on.
+//
+// It is GetUserVisibleModelsForModality(ModalityText). Chat is a text-output
+// operation, so a model that cannot emit text has no chat-completions endpoint
+// and would fail every request the picker could send it. Image-generation
+// models (output_modalities: [image]) are therefore excluded here even though
+// they are visibility: user — they are user-visible, just not on this surface.
+//
+// A multi-modal model declaring output_modalities: [text, image] still appears,
+// because it can serve a chat request.
+//
+// If you want user-visible models irrespective of what they emit, use
+// GetUserVisibleModelsForModality with the modality your surface needs, or
+// ListAll for the whole registry.
 func (r *ModelRegistry) GetUserVisibleModels() []*ModelDefinition {
+	return r.GetUserVisibleModelsForModality(ModalityText)
+}
+
+// GetUserVisibleModelsForModality returns all models that should be shown in
+// user-facing UI for an operation that produces the given output modality.
+//
+// Visibility and capability are two independent gates and both apply: models
+// with VisibilityMeta or VisibilityDev are excluded regardless of modality, and
+// models that cannot produce the requested modality are excluded regardless of
+// visibility. Modality is read through ModelCapabilities.CanOutput, so a
+// definition that declares no output_modalities counts as text-only.
+func (r *ModelRegistry) GetUserVisibleModelsForModality(modality Modality) []*ModelDefinition {
 	var result []*ModelDefinition
 	for i := range r.models {
 		model := &r.models[i]
 		// Include if visibility is "user" or empty (default)
-		if model.Visibility == VisibilityUser || model.Visibility == "" {
-			result = append(result, model)
+		if model.Visibility != VisibilityUser && model.Visibility != "" {
+			continue
 		}
+		if !model.Capabilities.CanOutput(modality) {
+			continue
+		}
+		result = append(result, model)
 	}
 	return result
 }
@@ -386,6 +415,15 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 			return nil, fmt.Errorf("model not found: %s", selector.ID)
 		}
 
+		// An explicitly named model still has to be able to do the job. Failing
+		// here names both the model and the modality, which is a far better
+		// error than whatever the driver would produce on a generation call to
+		// a text-only endpoint.
+		if selector.RequireOutputModality != "" && !model.Capabilities.CanOutput(selector.RequireOutputModality) {
+			return nil, fmt.Errorf("model %s cannot generate %s (it produces %v)",
+				model.ID, selector.RequireOutputModality, model.Capabilities.EffectiveOutputModalities())
+		}
+
 		// Use driver suffix if present, otherwise use selector's providers
 		// Driver suffix (@provider) is a hard constraint; selector.Providers is a preference
 		preferredProviders := selector.Providers
@@ -409,6 +447,24 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 	candidates := r.findModelsByBestMatch(selector.Tags)
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no models found matching tags: %v", selector.Tags)
+	}
+
+	// Apply the modality filter BEFORE provider selection. Tag scoring degrades
+	// gracefully by design, so without this a request for an image model would
+	// silently settle for whichever text model happened to match a secondary
+	// tag like "cheap".
+	if selector.RequireOutputModality != "" {
+		filtered := make([]*ModelDefinition, 0, len(candidates))
+		for _, model := range candidates {
+			if model.Capabilities.CanOutput(selector.RequireOutputModality) {
+				filtered = append(filtered, model)
+			}
+		}
+		if len(filtered) == 0 {
+			return nil, fmt.Errorf("no models matching tags %v can generate %s",
+				selector.Tags, selector.RequireOutputModality)
+		}
+		candidates = filtered
 	}
 
 	// Find the first candidate (in definition order) with an available provider

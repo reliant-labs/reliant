@@ -287,7 +287,7 @@ generate-all: proto-generate generate
 	@echo "$(GREEN)✅ All code generation complete$(NC)"
 
 ## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
-generate-go: proto-generate-go generate-yaml-bindings sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
+generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
 	@echo "$(GREEN)✅ Go code generation complete$(NC)"
 
 ## generate-yaml-bindings: Generate YAML bindings from proto descriptors
@@ -295,6 +295,12 @@ generate-yaml-bindings: proto-generate-go
 	@echo "$(YELLOW)Generating YAML bindings...$(NC)"
 	@$(GOCMD) generate ./internal/workflow/yaml
 	@echo "$(GREEN)✅ YAML bindings generated$(NC)"
+
+## generate-tool-catalog: Generate the bindable-parameter catalog from the tool registry
+generate-tool-catalog:
+	@echo "$(YELLOW)Generating tool parameter catalog...$(NC)"
+	@$(GOCMD) generate ./internal/llm/tools
+	@echo "$(GREEN)✅ Tool catalog generated$(NC)"
 
 ## migration: Create a new migration file (Usage: make migration NAME=my_changes)
 migration:
@@ -344,7 +350,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate all docs, presets, and skills (run during build)
-generate: generate-yaml-bindings sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+generate: generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types
