@@ -49,6 +49,11 @@ type InlineWorkflowExecutor struct {
 	loopNodeID           string                    // Parent loop node ID (if executing within a loop)
 	loopIteration        int                       // Parent loop iteration (if executing within a loop)
 
+	// heartbeatRestarts bounds how many fresh retry ladders each step may be
+	// granted after losing one to heartbeat RPC failures. See
+	// heartbeat_ladder.go.
+	heartbeatRestarts ladderRestarts
+
 	// nodePathPrefix is the fully-qualified dotted path of the scope CONTAINING
 	// this workflow: node, empty at the top level. This node's own path is that
 	// prefix plus nodeID, and the sub-workflow's nodes hang off that.
@@ -1042,6 +1047,27 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					}
 				}
 
+				// A ladder spent entirely on heartbeat RPC failures is not a
+				// failed step; see the matching comment in loop_executor.go.
+				if stepEvent.RetryExhausted && heartbeatCancelExhausted(stepEvent.Error) &&
+					e.heartbeatRestarts.grantRestart(running.StepID) {
+					e.logger.Warn("[InlineWorkflow] Retry ladder consumed by heartbeat RPC failures; re-dispatching with a fresh ladder instead of pausing",
+						"nodeID", e.nodeID,
+						"subWorkflow", e.subWorkflowName,
+						"stepID", running.StepID,
+						"restart", e.heartbeatRestarts[running.StepID],
+						"maxRestarts", maxHeartbeatLadderRestarts,
+						"error", stepEvent.Error,
+					)
+					_ = workflow.Sleep(e.ctx, 0)
+					newRunning := executor.Start(&core.TriggeredNode{
+						Node:  running.Node,
+						Event: running.Event,
+					})
+					runningSteps = append(runningSteps, newRunning)
+					continue
+				}
+
 				// Handle retry exhaustion - pause workflow and retry on resume.
 				if stepEvent.RetryExhausted {
 					e.logger.Info("[InlineWorkflow] *** RETRY EXHAUSTION DETECTED *** Activity exhausted retries, triggering pause",
@@ -1110,6 +1136,10 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					)
 					return nil, routingErr
 				}
+
+				// The step got through, so forget any ladders it lost to an
+				// earlier burst.
+				e.heartbeatRestarts.clear(stepEvent.StepID)
 
 				events = append(events, stepEvent.ToEvent())
 			}

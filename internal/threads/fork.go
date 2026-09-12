@@ -91,6 +91,25 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 		return nil, nil, fmt.Errorf("failed to create context window: %w", err)
 	}
 
+	// Raise this chat's seq allocator to cover the history the fork INHERITS.
+	//
+	// The allocator only sees rows carrying this chat_id, and a branch's
+	// inherited messages carry the PARENT's. Without this the branch restarts
+	// at seq 0 and every reply the user sends sorts beneath the inherited
+	// transcript above it — the message is saved and streamed correctly but
+	// renders at the top, which reads as "my message never arrived".
+	//
+	// Best-effort by design: a fork whose counter could not be seeded is
+	// recoverable (the next seed, or a save, raises it), whereas failing the
+	// fork outright loses the branch the user just asked for.
+	if err := s.repo.SeedSeqCounterForFork(ctx, opts.ChatID, opts.ForkAtContextWindowID); err != nil {
+		logging.Warn("[ForkThread] Failed to seed seq counter for fork",
+			"error", err,
+			"chatID", opts.ChatID,
+			"threadID", threadID,
+			"forkAtContextWindowID", opts.ForkAtContextWindowID)
+	}
+
 	// FORK-DEBUG: Log forked thread and context window creation
 	logging.Info("[FORK-DEBUG] forkThreadInternal created forked thread and CW",
 		"threadID", createdThread.ID,
@@ -160,6 +179,9 @@ func (s *Service) walkForkChain(ctx context.Context, threadID string, contextWin
 		} else {
 			cw, err = s.repo.GetLatestContextWindow(ctx, currentThreadID)
 			if err != nil {
+				if !isEmptyThread(err) {
+					return fmt.Errorf("failed to get latest context window for thread %s: %w", currentThreadID, err)
+				}
 				// No context window yet - thread has no messages
 				cw = nil
 			}

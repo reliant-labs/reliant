@@ -585,6 +585,36 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts TxOptions, f func(ctx 
 	return errors.New("transaction failed after retries")
 }
 
+// RunTxNoRetry runs f in one transaction attempt and returns its error
+// verbatim, with no retry ladder.
+//
+// This exists to MEASURE contention rather than to survive it. RunTx's retries
+// convert a serialization conflict into either eventual success or a
+// "transaction failed after retries" string, both of which hide the raw
+// conflict rate — and the raw rate is the only honest way to compare two write
+// designs. A benchmark or control test that wants to know "does this shape
+// conflict at all" must not have the answer absorbed before it sees it.
+//
+// Not for production paths: a real writer wants the retries.
+func (r *Repo) RunTxNoRetry(ctx context.Context, f func(ctx context.Context) error) error {
+	if r.DB == nil {
+		return errors.New("database connection not initialized")
+	}
+	if _, ok := ctx.Value(txKey).(pgdb.DBTX); ok {
+		return f(ctx)
+	}
+
+	metrics := &txMetrics{txStartTime: time.Now()}
+	result, err := r.attemptTransaction(ctx, TxOptions{}, f, metrics)
+	if err != nil {
+		return err
+	}
+	if result.committed {
+		return nil
+	}
+	return result.err
+}
+
 // attemptTransaction tries to begin and execute a single transaction
 // Returns (result, nil) if transaction was started, (nil, err) if begin failed
 func (r *Repo) attemptTransaction(ctx context.Context, opts TxOptions, f func(ctx context.Context) error, metrics *txMetrics) (*txResult, error) {

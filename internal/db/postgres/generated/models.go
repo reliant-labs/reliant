@@ -348,6 +348,12 @@ type MessageContentBlock struct {
 	UpdatedAt        time.Time      `json:"updated_at"`
 }
 
+type MessageOrderCounter struct {
+	CounterKind  string `json:"counter_kind"`
+	ScopeID      string `json:"scope_id"`
+	LastAssigned int64  `json:"last_assigned"`
+}
+
 type Plan struct {
 	ID          string         `json:"id"`
 	Title       string         `json:"title"`

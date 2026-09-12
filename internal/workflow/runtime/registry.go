@@ -260,10 +260,13 @@ const (
 	// it means a heartbeat is always ready to go the instant the throttle
 	// window opens, rather than adding its own latency on top of the window.
 	//
-	// The throttle is ALSO the heartbeat RPC's own deadline, but floored at
-	// minRPCTimeout=1s (internal_task_handlers.go internalHeartBeat) — so a
-	// throttle at or below 1s never tightens that budget below 1s. There is
-	// no floor-related reason to keep the throttle above 500ms.
+	// The throttle is ALSO the heartbeat RPC's own deadline, as
+	// max(throttle, minRPCTimeout=1s) (internal_task_handlers.go
+	// internalHeartBeat). The floor only applies BELOW 1s, so raising the
+	// throttle above 1s DOES widen that budget — which is exactly why
+	// maxHeartbeatThrottleInterval is now 2s (internal/workersetup). An
+	// earlier revision of this comment claimed the floor made the budget
+	// insensitive to the throttle; that was wrong and it cost a correct fix.
 	activityHeartbeatInterval = 500 * time.Millisecond
 
 	// activityHeartbeatTimeout is how long Temporal waits for a heartbeat before
@@ -895,6 +898,17 @@ func exhaustionErrorEventID(workflowID string, err error) string {
 	return activityErrorEventID(workflowID, activityID)
 }
 
+// infrastructureActivityMaxAttempts is the ladder the non-graph dispatches
+// configure. Kept as one constant so the reporter and the dispatch sites cannot
+// drift apart silently.
+const infrastructureActivityMaxAttempts int32 = 3
+
+// inlineSaveMessageMaxAttempts is the ladder executeSaveMessageInline
+// dispatches SaveMessage with (save_message.go). It is 5, NOT the
+// infrastructure 3 — the previous reporter's doc comment asserted 3 and was
+// simply wrong, which is part of why this function was mis-reporting.
+const inlineSaveMessageMaxAttempts int32 = 5
+
 // resolveMaxAttempts is the length of the retry ladder this activity is running
 // on, or 0 when it genuinely cannot be determined.
 //
@@ -903,21 +917,29 @@ func exhaustionErrorEventID(workflowID string, err error) string {
 // the SDK documents, and the case that actually occurs here — fall back to the
 // ladder the dispatch site configured.
 //
-// The fallback is deliberately narrow, and it is a SIGNATURE MATCH on the
-// dispatch options rather than a blanket default. Only StepExecutor.activityOptions
-// dispatches the 5-attempt ladder; every infrastructure dispatch (WorkflowError,
-// SaveMessage, ValidateThreadOwnership, …) configures MaximumAttempts: 3. A
-// blanket default would report a confident WRONG denominator for those — worse
-// than reporting none, because "Attempt 2/5" on a 3-attempt ladder tells the
-// user there is headroom that does not exist, and "Attempt 3/5" on an exhausted
-// one renders a dead failure as still-retrying.
+// # Why this is keyed on activity TYPE, not on timeout shape
 //
-// Two options make up the step signature. The heartbeat alone is not enough:
-// the router dispatches CallLLM with the same HeartbeatTimeout but its own
-// 3-attempt ladder and a fixed 5-minute StartToCloseTimeout, so that pair is
-// excluded explicitly. A graph node that happens to declare `timeout: 5m` falls
-// out of the match too — it reports unknown rather than wrong, which is the
-// direction this is built to fail in.
+// The previous version inferred the ladder from a SIGNATURE MATCH on
+// HeartbeatTimeout + StartToCloseTimeout. Two problems, both of which reached
+// users:
+//
+//  1. It only recognised StepExecutor.activityOptions. Inline SaveMessage sets
+//     a 30s StartToCloseTimeout and NO heartbeat, so it missed the match and
+//     resolved to 0 — and 0 makes activityIsRetrying return false. A
+//     SaveMessage failure with four attempts still to come was therefore
+//     written to chat_updates as is_retrying:false and rendered in the
+//     transcript as a TERMINAL red error reading "Attempt 1". Observed exactly
+//     that against a recoverable SQLSTATE 40001.
+//  2. The signature is not a property of the ladder. Any dispatch that happens
+//     to share a timeout shape inherits the wrong denominator, and a graph node
+//     declaring `timeout: 5m` silently fell out of the match entirely.
+//
+// Activity type plus the router's distinguishing timeout is a fact about the
+// dispatch, not a coincidence of its timeouts, so it stays correct when someone
+// changes a timeout. The one genuine ambiguity is CallLLM, which really is
+// dispatched on two different ladders (the router's 3 and a graph step's 5);
+// routerActivityStartToClose is what tells those apart, and it is referenced by
+// the router rather than duplicated as a literal.
 //
 // 0 means unknown, and unknown must stay unknown: the caller omits max_attempts
 // and leaves is_retrying false rather than guessing a failure is recoverable.
@@ -934,12 +956,35 @@ func activityIsRetrying(attemptNumber int, maxAttempts int32, err error) bool {
 }
 
 func resolveMaxAttempts(info activity.Info) int32 {
+	// The server is authoritative when it tells us anything.
 	if info.RetryPolicy != nil && info.RetryPolicy.MaximumAttempts > 0 {
 		return info.RetryPolicy.MaximumAttempts
 	}
-	if info.HeartbeatTimeout == activityHeartbeatTimeout && info.StartToCloseTimeout != routerActivityStartToClose {
+
+	// A graph step carries the heartbeat StepExecutor.activityOptions sets.
+	// The router shares that heartbeat but runs its own shorter ladder, so its
+	// fixed StartToCloseTimeout is what separates the two.
+	if info.HeartbeatTimeout == activityHeartbeatTimeout {
+		if info.StartToCloseTimeout == routerActivityStartToClose {
+			return infrastructureActivityMaxAttempts
+		}
 		return stepActivityMaxAttempts
 	}
+
+	// No heartbeat: one of the infrastructure dispatches. These are named
+	// rather than shape-matched, because their timeouts are incidental.
+	switch info.ActivityType.Name {
+	case "SaveMessage":
+		return inlineSaveMessageMaxAttempts
+	case "WorkflowError",
+		"ValidateThreadOwnership",
+		"WorkflowStatus",
+		"EmitStreamFinalized",
+		"DrainAgentMessages",
+		"Cleanup":
+		return infrastructureActivityMaxAttempts
+	}
+
 	return 0
 }
 
@@ -996,6 +1041,18 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		"attempt_number": attemptNumber,
 		"workflow_id":    workflowID,
 		"is_retrying":    isRetrying,
+	}
+
+	// The UI prefers error_summary and falls back to the raw message, so
+	// supplying one here is what stops a user seeing four layers of Go
+	// wrapping around "SQLSTATE 40001" in a red card. The raw text stays on
+	// error_message for debugging — this is presentation, not redaction.
+	//
+	// Infrastructure failures had no summary before: every producer of this
+	// field was an LLM path, so a storage-layer error fell through to the raw
+	// string by default.
+	if summary := extractLLMErrorSummary(err.Error()); summary != "" {
+		errorData["error_summary"] = summary
 	}
 	// Scope the error to the thread that produced it. Omitted entirely when
 	// the activity has no thread, so the timeline's "no thread means

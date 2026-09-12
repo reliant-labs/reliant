@@ -226,14 +226,38 @@ func TestResolveMaxAttempts(t *testing.T) {
 			want: stepActivityMaxAttempts,
 		},
 		{
-			name: "infrastructure dispatch reports unknown rather than a wrong denominator",
+			// An UNRECOGNISED activity with no heartbeat still reports
+			// unknown. Reporting a confident wrong denominator is worse than
+			// reporting none, so anything not named stays at 0.
+			name: "unknown infrastructure dispatch reports unknown",
 			info: activity.Info{StartToCloseTimeout: 30 * time.Second},
 			want: 0,
 		},
 		{
-			name: "router dispatch is excluded despite sharing the heartbeat",
-			info: activity.Info{HeartbeatTimeout: activityHeartbeatTimeout, StartToCloseTimeout: routerActivityStartToClose},
-			want: 0,
+			// Inline SaveMessage has this exact shape, and used to fall into
+			// the case above — resolving to 0, which made activityIsRetrying
+			// false and rendered a retryable failure as a terminal red error
+			// reading "Attempt 1". It is now named, so it reports the ladder
+			// save_message.go actually dispatches.
+			name: "inline SaveMessage reports its real ladder, not unknown",
+			info: activity.Info{
+				ActivityType:        activity.Type{Name: "SaveMessage"},
+				StartToCloseTimeout: 30 * time.Second,
+			},
+			want: inlineSaveMessageMaxAttempts,
+		},
+		{
+			// The router shares the graph step's heartbeat but runs its own
+			// 3-attempt ladder (router_executor.go), so it must report 3 —
+			// not the step's 5, and no longer 0. Under-reporting as unknown
+			// made every router CallLLM failure render as terminal.
+			name: "router dispatch reports its own shorter ladder",
+			info: activity.Info{
+				ActivityType:        activity.Type{Name: "CallLLM"},
+				HeartbeatTimeout:    activityHeartbeatTimeout,
+				StartToCloseTimeout: routerActivityStartToClose,
+			},
+			want: infrastructureActivityMaxAttempts,
 		},
 	}
 

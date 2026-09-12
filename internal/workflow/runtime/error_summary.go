@@ -170,6 +170,48 @@ func extractProviderReconnectSummary(errLower string) string {
 	}
 }
 
+// extractInfrastructureSummary describes a failure in OUR storage layer rather
+// than at the provider.
+//
+// This exists because the transcript showed users this, verbatim, in a red
+// error card:
+//
+//	failed to save message: failed to create chat_update: failed to get next
+//	sequence number: allocate chat update sequence: ERROR: could not serialize
+//	access due to concurrent update (SQLSTATE 40001)
+//
+// Four layers of Go wrapping and a Postgres error code, describing a transient
+// write conflict the system retries on its own. Nothing in that string is
+// actionable, and its prominence implies the user's work was lost when it
+// almost certainly was not.
+//
+// Each summary names what happened in the user's terms AND whether it is
+// self-correcting, because that is the distinction that decides whether they
+// should wait or intervene. A generic "something went wrong" would hide
+// exactly that.
+func extractInfrastructureSummary(errLower string) string {
+	switch {
+	case strings.Contains(errLower, "sqlstate 40001"),
+		strings.Contains(errLower, "sqlstate 40p01"),
+		strings.Contains(errLower, "could not serialize"),
+		strings.Contains(errLower, "deadlock detected"):
+		return "Busy saving several things at once — retrying automatically"
+
+	case strings.Contains(errLower, "context canceled"):
+		return "Stopped before this step finished"
+
+	case strings.Contains(errLower, "driver: bad connection"):
+		return "Lost the database connection — retrying automatically"
+	}
+
+	// Deliberately NOT handled here: "context deadline exceeded" and bare
+	// "timeout". Both are far more often a provider transport failure than a
+	// storage one, and isNetworkFailure / the provider patterns below already
+	// classify them correctly — claiming them here would relabel a real
+	// network diagnosis as a database problem and send the user the wrong way.
+	return ""
+}
+
 // extractLLMErrorSummary extracts a clean, user-friendly error summary from a
 // potentially deeply-nested error string. It looks for embedded JSON error payloads
 // from LLM APIs (e.g. Anthropic's {"type":"error","error":{"type":"overloaded_error",...}})
@@ -178,6 +220,14 @@ func extractProviderReconnectSummary(errLower string) string {
 // Returns an empty string if no recognizable LLM error is found.
 func extractLLMErrorSummary(errMsg string) string {
 	errLower := strings.ToLower(errMsg)
+
+	// Infrastructure failures first. They are not provider errors at all, and
+	// the provider-shaped patterns below would mis-describe them — a 40001
+	// contains "serialize", not "rate limit", so it would fall through every
+	// branch and reach the user as the raw wrap chain.
+	if summary := extractInfrastructureSummary(errLower); summary != "" {
+		return summary
+	}
 
 	// Before anything else: if the request never reached the provider, no
 	// provider-specific claim about it can be true.

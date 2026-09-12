@@ -38,6 +38,9 @@ func (s *Service) ResolveMessages(ctx context.Context, opts ResolveMessagesOpts)
 	} else {
 		startingCW, err = s.repo.GetLatestContextWindow(ctx, opts.ThreadID)
 		if err != nil {
+			if !isEmptyThread(err) {
+				return nil, fmt.Errorf("failed to load latest context window for thread %s: %w", opts.ThreadID, err)
+			}
 			// No context window yet - thread has no messages
 			return []*db.Message{}, nil
 		}
@@ -278,10 +281,17 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	// Get the latest context window for this thread
+	// Get the latest context window for this thread.
+	//
+	// Only NO ROWS means "empty thread". A failed read — cancellation above
+	// all — must propagate: reporting it as an empty history is what turned a
+	// user interrupt into "cannot call LLM with empty message history" on a
+	// thread holding 344 messages. See isEmptyThread.
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
-		// No context window means empty thread - return empty slice
+		if !isEmptyThread(err) {
+			return nil, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
 		return []*db.Message{}, nil
 	}
 
@@ -341,6 +351,9 @@ func (s *Service) LoadDisplayMessages(ctx context.Context, threadID string) ([]*
 
 	latestCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
 	if err != nil {
+		if !isEmptyThread(err) {
+			return nil, fmt.Errorf("failed to load latest context window for thread %s: %w", threadID, err)
+		}
 		// No context window yet - thread has no messages.
 		return []*db.Message{}, nil
 	}
