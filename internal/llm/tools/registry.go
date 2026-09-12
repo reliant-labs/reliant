@@ -17,6 +17,7 @@ const (
 	ToolEdit           = "edit"
 	ToolFindReplace    = "find_replace"
 	ToolReadAttachment = "read_attachment"
+	ToolSaveAttachment = "save_attachment"
 
 	// Execution tools
 	// Note: the shell tool's own name is ShellToolName, in shell_platform.go.
@@ -30,6 +31,9 @@ const (
 	// Network tools
 	ToolFetch     = "fetch"
 	ToolWebSearch = "websearch"
+
+	// Media tools
+	ToolGenerateImage = "generate_image"
 
 	// Planning tools
 	ToolCreatePlan = "create_plan"
@@ -144,6 +148,7 @@ const (
 	TagAnalysis  ToolTag = "analysis"  // Analysis tools
 	TagWorkflow  ToolTag = "workflow"  // Workflow builder tools
 	TagMCP       ToolTag = "mcp"       // All MCP tools
+	TagMedia     ToolTag = "media"     // Media generation (images, and later audio/video)
 	TagDefault   ToolTag = "default"   // Default toolset (commonly used tools)
 )
 
@@ -425,6 +430,16 @@ func GetToolRegistry() []ToolDefinition {
 		// File tools
 		{ToolView, (*ToolsFactory).View, []ToolTag{TagFile, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
 		{ToolReadAttachment, (*ToolsFactory).ReadAttachment, []ToolTag{TagFile, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
+		// TagDefault, unlike generate_image. The argument that keeps
+		// generate_image out of every workflow is cost: it spends real money
+		// on a provider the user may not have configured. This tool spends
+		// nothing — it moves bytes we already hold — and it is the only way to
+		// turn ANY attachment into a file, which is a file operation every
+		// workflow can want. Withholding it is what forced a model to
+		// regenerate an image it already had. Server-located because the bytes
+		// are in the database; the file still reaches the user's disk through
+		// the daemon client on the tool context.
+		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagDefault}, ToolRunsOnServer},
 		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
 		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
 		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
@@ -472,6 +487,17 @@ func GetToolRegistry() []ToolDefinition {
 		// workflow that never touches the user's machine.
 		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
 		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
+
+		// Media tools. Deliberately NOT TagDefault: generating an image costs
+		// real money on a provider the user may not have configured, and it is
+		// irrelevant to the coding workflows that make up most of the product.
+		// Opt in with `tag:media` or by naming generate_image in tool_filter.
+		//
+		// Server-located because it needs the database and an outbound API
+		// call, neither of which the daemon has. save_to still reaches the
+		// user's disk — through the daemon client on the tool context, the
+		// same way every other server-run tool does.
+		{ToolGenerateImage, (*ToolsFactory).GenerateImage, []ToolTag{TagMedia}, ToolRunsOnServer},
 
 		// Planning tools
 		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},

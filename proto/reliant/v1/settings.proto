@@ -221,6 +221,15 @@ message ProviderStatus {
   bool has_api_key = 3;
   optional string masked_key = 4;
   string display_name = 5;
+  // Output modalities this provider's models can generate ("text", "image").
+  // Derived from the model registry, so a provider gains a modality as soon as
+  // a model declaring it is added — nothing here is hardcoded per provider.
+  //
+  // This is what lets the UI distinguish "no provider configured" from "no
+  // IMAGE-CAPABLE provider configured". Without it a Settings page looks fully
+  // configured while image generation fails, which is indistinguishable to a
+  // user from a bug.
+  repeated string output_modalities = 6;
 }
 
 // ============================================

@@ -16,6 +16,7 @@ const yamlKeyCondition = "condition"
 const yamlKeyTimeout = "timeout"
 const yamlKeySaveMessage = "save_message"
 const yamlKeyDaemon = "daemon"
+const yamlKeyOutcome = "outcome"
 const yamlKeyArgs = "args"
 const yamlKeyFrom = "from"
 const yamlKeyCases = "cases"
@@ -27,6 +28,7 @@ var generatedNodeBaseFieldKeys = map[string]struct{}{
 	"condition":    {},
 	"daemon":       {},
 	"id":           {},
+	"outcome":      {},
 	"save_message": {},
 	"timeout":      {},
 	"type":         {},
@@ -69,6 +71,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"messages":             {},
 			"model":                {},
 			"response_tool":        {},
+			"skills":               {},
 			"system_prompt":        {},
 			"temperature":          {},
 			"thinking_level":       {},
@@ -78,7 +81,9 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 	"compact": {
 		oneofFieldName: "compact",
 		isStructural:   false,
-		argFieldKeys:   map[string]struct{}{},
+		argFieldKeys: map[string]struct{}{
+			"model": {},
+		},
 	},
 	"create_worktree": {
 		oneofFieldName: "create_worktree",
@@ -95,10 +100,19 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "execute_tools",
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
+			"compaction_threshold":    {},
 			"expected_response_tools": {},
 			"resolved_tool_calls":     {},
 			"response_tool_schemas":   {},
 			"tool_calls":              {},
+		},
+	},
+	"invoke_tool": {
+		oneofFieldName: "invoke_tool",
+		isStructural:   false,
+		argFieldKeys: map[string]struct{}{
+			"params": {},
+			"tool":   {},
 		},
 	},
 	"join": {
@@ -156,10 +170,12 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 			"content":                {},
 			"cost":                   {},
 			"display_style":          {},
+			"resolved_agent":         {},
 			"resolved_attachments":   {},
 			"resolved_content":       {},
 			"resolved_display_style": {},
 			"resolved_inject_files":  {},
+			"resolved_model":         {},
 			"resolved_role":          {},
 			"resolved_thinking":      {},
 			"resolved_tool_calls":    {},

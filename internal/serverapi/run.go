@@ -212,6 +212,10 @@ func Run(ctx context.Context, opts Options) error {
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
+		// Binds generate_image to the driver layer's image-model selection.
+		// Injected rather than imported: internal/llm/drivers already imports
+		// internal/llm/tools, so the tool cannot reach drivers directly.
+		ImageGeneratorResolver: resolveImageGenerator,
 	})
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
@@ -547,6 +551,15 @@ func Run(ctx context.Context, opts Options) error {
 
 	logging.Info("API server shut down gracefully")
 	return nil
+}
+
+// resolveImageGenerator adapts the driver layer's image-model selection to the
+// narrow interface the generate_image tool declares. The selector arrives from
+// the tool's bound `model` parameter — tags:[image-gen] unless a human bound
+// something else — and ResolveImageGenerator pins the image output modality on
+// top of it, so no selector can degrade into a text model.
+func resolveImageGenerator(ctx context.Context, userID string, selector models.ModelSelector) (tools.ImageGenerator, error) {
+	return drivers.ResolveImageGenerator(ctx, userID, selector)
 }
 
 // splitAndTrim parses a comma-separated environment list, dropping empties so

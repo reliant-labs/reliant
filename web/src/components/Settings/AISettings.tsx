@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { cn } from "../../lib/utils";
 import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
+import { ToolPreferences } from "./ToolPreferences";
 import { reliantAIAvailable } from "../../services/controlPlane/reliantAI";
 
 // ReliantAISection is code-split out of the main settings chunk — it's only
@@ -21,17 +22,17 @@ interface AISettingsProps {
   onProvidersUpdate?: () => void;
 }
 
-type AITab = "providers" | "reliant";
+type AITab = "providers" | "tools" | "reliant";
 
 /**
- * Single "AI" settings section with internal tabs, collapsing what used to be
- * two separate sidebar entries:
+ * Single "AI" settings section with internal tabs:
  *   - "Your providers" → bring-your-own provider keys ({@link CombinedGeneralSettings}).
+ *   - "Tools"          → global bindings for tools that resolve a model on the
+ *                        user's behalf ({@link ToolPreferences}).
  *   - "Reliant AI"     → Reliant-managed keys/credits/spend (ReliantAISection).
  *
  * The Reliant AI tab only renders when the managed-AI surface is wired up
- * (`reliantAIAvailable`). Without it, this renders just the providers content
- * with no tab bar so self-host / non-cloud users see a clean single AI page.
+ * (`reliantAIAvailable`); self-host / non-cloud users see the other two.
  */
 export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
   const [tab, setTab] = useState<AITab>("providers");
@@ -51,17 +52,29 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
     </div>
   );
 
-  if (!reliantAIAvailable) {
-    return providersContent;
-  }
+  // Global tool preferences. Deliberately NOT part of Model Preferences: that
+  // panel picks the model the CONVERSATION runs on and its rows are quality
+  // tiers, whereas these settings configure tools that resolve a model on the
+  // user's behalf and are never chosen by the agent. Same card treatment as
+  // the providers tab so the two read as siblings.
+  const toolsContent = (
+    <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+      <ToolPreferences providers={providers} />
+    </div>
+  );
+
+  const tabs: Array<{ id: AITab; label: string }> = [
+    { id: "providers", label: "Your providers" },
+    { id: "tools", label: "Tools" },
+    ...(reliantAIAvailable
+      ? [{ id: "reliant" as const, label: "Reliant AI" }]
+      : []),
+  ];
 
   return (
     <>
       <div className="mb-6 flex gap-1 border-b border-border">
-        {([
-          { id: "providers", label: "Your providers" },
-          { id: "reliant", label: "Reliant AI" },
-        ] as const).map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
@@ -80,6 +93,8 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
 
       {tab === "providers" ? (
         providersContent
+      ) : tab === "tools" ? (
+        toolsContent
       ) : (
         // ReliantAISection is styled to expect the `.cloud-settings` scope
         // (Inter + admin-like density), mirroring how the cloud sections render

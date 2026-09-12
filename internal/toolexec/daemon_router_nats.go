@@ -589,14 +589,15 @@ func (r *NATSDaemonRouter) buildDaemonCommand(ctx context.Context, commandType s
 		return nil, "", fmt.Errorf("marshal daemon command: %w", err)
 	}
 
-	// Preflight the request against the connection's max_payload so an
-	// oversize request fails fast with an actionable error instead of the
-	// NATS client's bare "maximum payload exceeded" (or worse, a timeout).
-	// The reply direction is guarded on the bridge side (see nats_bridge.go).
-	if max := r.nc.MaxPayload(); exceedsNATSPayloadLimit(len(data), max) {
+	// A request over the connection's max_payload is CHUNKED, not rejected —
+	// see nats_chunked_request.go. Only the absolute per-request cap is a
+	// hard failure, and preflighting it here means a genuinely impossible
+	// request fails before daemon resolution and before anything hits the
+	// wire, rather than after publishing half a stream.
+	if len(data) > maxChunkedRequestBytes {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "oversize_request").Inc()
 		return nil, "", fmt.Errorf("daemon command %s: %s", commandType,
-			oversizeNATSPayloadError("request", len(data), max, oversizeRequestHint))
+			oversizeNATSPayloadError("request", len(data), maxChunkedRequestBytes, oversizeRequestHint))
 	}
 	return data, requestID, nil
 }
@@ -677,11 +678,12 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 		return nil, fmt.Errorf("marshal tool request: %w", err)
 	}
 
-	// Preflight request size — see SendDaemonCommand for rationale.
-	if max := r.nc.MaxPayload(); exceedsNATSPayloadLimit(len(payload), max) {
+	// Only the absolute cap rejects — anything between max_payload and the
+	// cap is chunked. See buildDaemonCommand for the rationale.
+	if len(payload) > maxChunkedRequestBytes {
 		observability.NATSErrorsTotal.WithLabelValues("tools.request.sync", "oversize_request").Inc()
 		return nil, fmt.Errorf("tool request %s: %s", request.ToolName,
-			oversizeNATSPayloadError("request", len(payload), max, oversizeRequestHint))
+			oversizeNATSPayloadError("request", len(payload), maxChunkedRequestBytes, oversizeRequestHint))
 	}
 
 	timeout := 10 * time.Minute
@@ -744,11 +746,11 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 		return nil, fmt.Errorf("marshal tool request: %w", err)
 	}
 
-	// Preflight request size — see SendDaemonCommand for rationale.
-	if max := r.nc.MaxPayload(); exceedsNATSPayloadLimit(len(payload), max) {
+	// Only the absolute cap rejects — see buildDaemonCommand.
+	if len(payload) > maxChunkedRequestBytes {
 		observability.NATSErrorsTotal.WithLabelValues("tools.request.sync.selector", "oversize_request").Inc()
 		return nil, fmt.Errorf("tool request %s: %s", request.ToolName,
-			oversizeNATSPayloadError("request", len(payload), max, oversizeRequestHint))
+			oversizeNATSPayloadError("request", len(payload), maxChunkedRequestBytes, oversizeRequestHint))
 	}
 
 	timeout := 10 * time.Minute

@@ -31,6 +31,7 @@ func init() {
 	RegisterCommand("fs.pdf_page_count", handleFSPDFPageCount)
 	RegisterCommand("fs.read_pdf_pages", handleFSReadPDFPages)
 	RegisterCommand("fs.write_file", handleFSWriteFile)
+	RegisterCommand("fs.write_binary_file", handleFSWriteBinaryFile)
 	RegisterCommand("fs.patch_file", handleFSPatchFile)
 	RegisterCommand("fs.stat", handleFSStat)
 	RegisterCommand("fs.list_dir", handleFSListDir)
@@ -252,6 +253,78 @@ func handleFSWriteFile(ctx context.Context, payload []byte) ([]byte, error) {
 
 	info, err := os.Stat(path)
 	if err == nil {
+		resp.ModTime = info.ModTime()
+	}
+	resp.BytesWritten = len(content)
+
+	return json.Marshal(resp)
+}
+
+// =============================================================================
+// fs.write_binary_file
+// =============================================================================
+
+// fsWriteBinaryFileRequest carries content that is not text.
+//
+// Data is base64, mirroring fs.read_binary_file's response, because the daemon
+// command envelope is JSON and a JSON string must be valid UTF-8. Handing raw
+// image bytes to fs.write_file's Content field does not fail — encoding/json
+// silently substitutes U+FFFD for every invalid byte, so the daemon writes a
+// file that is the wrong length and the wrong content, with no error anywhere.
+type fsWriteBinaryFileRequest struct {
+	Path string `json:"path"`
+	Data string `json:"data"` // base64-encoded
+}
+
+// fsWriteBinaryFileResponse is daemon.WriteResult without OldContent: the
+// previous content of a binary file is not a diffable string, and returning
+// megabytes of base64 nobody reads would only inflate the envelope.
+type fsWriteBinaryFileResponse struct {
+	Created      bool      `json:"created"`
+	ModTime      time.Time `json:"mod_time"`
+	BytesWritten int       `json:"bytes_written"`
+}
+
+func handleFSWriteBinaryFile(ctx context.Context, payload []byte) ([]byte, error) {
+	var req fsWriteBinaryFileRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	// Resolved with allowMissing, since a write commonly creates the file; the
+	// check then applies to the parent, which is where an escaping symlink
+	// would have to be. A no-op for unconfined callers.
+	path, err := daemonpolicy.ResolveDir(ctx, req.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Decoded before anything touches the filesystem, so a malformed payload
+	// cannot leave a truncated file behind.
+	content, err := base64.StdEncoding.DecodeString(req.Data)
+	if err != nil {
+		return nil, fmt.Errorf("decode base64 content for %s: %w", path, err)
+	}
+
+	resp := fsWriteBinaryFileResponse{}
+	if _, err := os.Stat(path); err != nil {
+		if !os.IsNotExist(err) {
+			return nil, fmt.Errorf("stat %s: %w", path, err)
+		}
+		resp.Created = true
+	}
+
+	// Parent directories are created, matching fs.write_file — callers rely on
+	// writing to a path whose directory does not exist yet.
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", filepath.Dir(path), err)
+	}
+
+	if err := os.WriteFile(path, content, 0644); err != nil {
+		return nil, fmt.Errorf("write %s: %w", path, err)
+	}
+
+	if info, err := os.Stat(path); err == nil {
 		resp.ModTime = info.ModTime()
 	}
 	resp.BytesWritten = len(content)

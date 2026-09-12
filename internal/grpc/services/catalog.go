@@ -161,6 +161,15 @@ func capabilitiesToStrings(caps models.ModelCapabilities) []string {
 	if caps.CanReason {
 		result = append(result, "reasoning")
 	}
+	// Output modalities beyond text. Text is every model's default and would be
+	// noise on every row, so only the generative extras are surfaced — this is
+	// what lets a picker distinguish an image generator from a vision model,
+	// which "attachments" alone cannot express.
+	for _, m := range caps.EffectiveOutputModalities() {
+		if m != models.ModalityText {
+			result = append(result, "generates_"+string(m))
+		}
+	}
 	return result
 }
 

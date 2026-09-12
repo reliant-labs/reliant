@@ -1440,6 +1440,237 @@ models:
     default_temperature: 1.0
 
   # ============================================================================
+  # IMAGE GENERATION MODELS - output_modalities: [image]
+  #
+  # These do NOT serve chat. They are reached through the image-generation call
+  # path (internal/llm/drivers/imagegen), which posts to /v1/images/generations
+  # rather than chat completions, and they are selected by a ModelSelector with
+  # RequireOutputModality=image — a hard filter, so a tag list like
+  # [image-gen, cheap] can never degrade onto a text model.
+  #
+  # No `cost:` block. Image pricing is per image, not per token, so the
+  # per-1M-token fields cannot express it and any number here would be
+  # misleading. Nothing is lost: spend is metered by the control-plane proxy
+  # from LiteLLM's X-Litellm-Response-Cost header, and ModelCost is read only
+  # by the model-picker UI.
+  # ============================================================================
+
+  # OpenAI's current image family. These REPLACED gpt-image-1 and
+  # gpt-image-1-mini, which OpenAI dated for shutdown (2026-10-23 and
+  # 2026-12-01) along with gpt-image-1.5 (2026-12-01) and dall-e-2/3 (already
+  # past, 2026-05-12). A registry entry for a dated model is worse than no
+  # entry — it resolves cleanly, wins provider selection, and then 404s at call
+  # time. Do not re-add them; TestRetiredOpenAIImageModelsAreGone fails if you
+  # do.
+  #
+  # ORDER IS THE DEFAULT. Tag scores tie across every image-gen model, so the
+  # resolver takes the earliest definition with an available provider. Flare is
+  # first because OpenAI states it is the default choice for most applications:
+  # higher quality than gpt-image-2 at roughly half the latency.
+  #
+  # No cost block on any of them. These are billed per image TOKEN
+  # ($30/1M output image tokens), not per 1M text tokens, so the per-1M fields
+  # cannot express it and any number here would be read by the model picker and
+  # shown to a user as fact. Nothing is lost: managed spend is metered by the
+  # control-plane proxy from LiteLLM's X-Litellm-Response-Cost header.
+  - id: gpt-image-2.5-flare
+    name: GPT Image 2.5 Flare
+    tags: [image-gen, fast]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [image]
+    providers:
+      # codex first: on a priority tie findBestProvider breaks by YAML order,
+      # and this is the surface with a verified live 200 behind it (a real
+      # 753,964-byte PNG). A ChatGPT subscription covers it, so it spends no
+      # Reliant credits and no platform API key.
+      - driver: codex
+        api_model: gpt-image-2.5-flare
+      - driver: openai
+        api_model: gpt-image-2.5-flare
+      - driver: reliant
+        api_model: gpt-image-2.5-flare
+
+  # The precision tier: OpenAI positions Sunburst for workflows where editing
+  # accuracy and intricate detail matter most. `flagship` is the registry's
+  # existing vocabulary for a family's top model, so a caller asking for
+  # [image-gen, flagship] lands here rather than on the everyday default.
+  - id: gpt-image-2.5-sunburst
+    name: GPT Image 2.5 Sunburst
+    tags: [image-gen, flagship]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [image]
+    providers:
+      # codex first, for the same reason as Flare: verified served on the
+      # ChatGPT backend, and covered by a subscription rather than credits.
+      - driver: codex
+        api_model: gpt-image-2.5-sunburst
+      - driver: openai
+        api_model: gpt-image-2.5-sunburst
+      - driver: reliant
+        api_model: gpt-image-2.5-sunburst
+
+  # gpt-image-2 is ONE model reachable on THREE surfaces, which is why it is one
+  # id with three mappings rather than three ids:
+  #
+  #   codex   — https://chatgpt.com/backend-api/codex (OAuth bearer plus a
+  #             chatgpt-account-id header). VERIFIED LIVE: a real POST with this
+  #             api_model returned HTTP 200 and a PNG in the same
+  #             data[].b64_json envelope the imagegen client already parses.
+  #   openai  — the platform API (api.openai.com/v1, static sk- key).
+  #   reliant — the managed LiteLLM proxy.
+  #
+  # The api_model string is identical on all three, so there is nothing for
+  # separate ids to distinguish. Splitting would instead force a user with two
+  # credentials to know which surface their key belongs to, when
+  # findBestProvider already picks between the credentials they actually hold.
+  #
+  # This is NOT the speculative-mapping mistake the comment on the Gemini models
+  # below warns about. That harm comes from naming a surface that does not serve
+  # the model: a priority-1 BYO driver WINS selection over `reliant` and then
+  # fails at call time. Here every one of the three genuinely serves it, so
+  # whichever wins the tie produces an image. The rule is "map a surface only
+  # once it is known to serve the model", not "map only one surface".
+  #
+  # Kept alongside the 2.5 entries, not replaced by them: it carries no
+  # deprecation date, and it is the only OpenAI image model the Codex backend is
+  # known to serve, so it is the entire image path for a Codex-only user.
+  - id: gpt-image-2
+    name: GPT Image 2
+    tags: [image-gen]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [image]
+    providers:
+      - driver: codex
+        api_model: gpt-image-2
+      - driver: openai
+        api_model: gpt-image-2
+      - driver: reliant
+        api_model: gpt-image-2
+
+  # Google Gemini image models, reachable through the managed "reliant"
+  # provider AND, since the native client landed, a user's own AI Studio key
+  # via the `gemini` driver.
+  #
+  # These REPLACE the Imagen 4 family, which Google retired: Vertex shut down
+  # the Imagen endpoints on 2026-06-30 and the Gemini-API surface lists
+  # 2026-08-17. A registry entry for a retired model is worse than no entry — it
+  # resolves cleanly and then 404s at call time.
+  #
+  # NOTE the endpoint difference from Imagen. Vertex serves these on
+  # publishers/google/models/<model>:generateContent, not :predict. LiteLLM
+  # routes them to VertexAIGeminiImageGenerationConfig (by the "gemini" model
+  # route) rather than the Imagen predict transformation, and still exposes them
+  # on /v1/images/generations in the OpenAI images shape the imagegen client
+  # speaks.
+  #
+  # The `gemini` mapping is SAFE TO ADD, and the rule that made it unsafe
+  # before is the reason to state why:
+  #
+  #   `gemini` is a priority-1 native driver, and findBestProvider prefers BYO
+  #   over managed on a priority tie. So a `gemini` mapping OUTRANKS `reliant`
+  #   for every user holding an AI Studio key. Adding one without a client that
+  #   can serve it does not fail loudly — the model resolves cleanly and then
+  #   fails at CALL time, after the user has already been told which model they
+  #   are getting.
+  #
+  # That client now exists: imagegen.GeminiClient calls AI Studio natively at
+  # v1beta/models/<model>:generateContent via the genai SDK and decodes the
+  # inlineData envelope those models actually return. It is required because
+  # LiteLLM's `gemini/` route explicitly raises for image generation, so a BYO
+  # Gemini key CANNOT be proxied — only the managed `vertex_ai/` route can.
+  # drivers.newImageGenClient branches on the driver id to pick it.
+  #
+  # There is still deliberately no `vertexai` mapping, and the reasoning from
+  # the Imagen entries is unchanged: neither Vertex schema — :predict or
+  # :generateContent — is the OpenAI images schema, and LiteLLM performs that
+  # translation only for managed traffic. A BYO Vertex credential would need a
+  # client that authenticates with Google service-account credentials rather
+  # than an API key, which is a different credential path from AI Studio's and
+  # does not exist yet. vertexai is likewise priority-1, so mapping it early
+  # would reproduce exactly the failure described above.
+  #
+  # The `reliant` api_model strings must stay EQUAL to the `model_name` entries
+  # in control-plane's deploy/litellm/config.yaml — LiteLLM routes purely by
+  # model_name. Enforced by TestLiteLLMConfigCoversReliantManagedModels.
+  #
+  # The `gemini` api_model strings are AI Studio's own model names, which
+  # happen to be identical. That is a coincidence of naming, not a constraint:
+  # they go into the URL path of a :generateContent call, so they are verified
+  # against AI Studio's ListModels output rather than against LiteLLM's config.
+  # All three appear there.
+  #
+  # No cost block: these are billed per image ($0.0336/$0.0672/$0.134 for
+  # flash-lite/flash/pro), which the per-1M-token cost fields cannot express.
+  - id: gemini-3.1-flash-lite-image
+    name: Gemini 3.1 Flash Lite Image
+    tags: [image-gen, cheap, fast]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [image]
+    providers:
+      - driver: gemini
+        api_model: gemini-3.1-flash-lite-image
+      - driver: reliant
+        api_model: gemini-3.1-flash-lite-image
+
+  - id: gemini-3.1-flash-image
+    name: Gemini 3.1 Flash Image
+    tags: [image-gen]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [image]
+    providers:
+      - driver: gemini
+        api_model: gemini-3.1-flash-image
+      - driver: reliant
+        api_model: gemini-3.1-flash-image
+
+  - id: gemini-3-pro-image
+    name: Gemini 3 Pro Image
+    tags: [image-gen]
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [image]
+    providers:
+      - driver: gemini
+        api_model: gemini-3-pro-image
+      - driver: reliant
+        api_model: gemini-3-pro-image
+
+  # ============================================================================
   # TEST/MOCK MODELS - For testing only
   # ============================================================================
 

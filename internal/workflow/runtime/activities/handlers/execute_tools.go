@@ -469,6 +469,14 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 			var data interface{}
 			if err := json.Unmarshal([]byte(r.Metadata), &data); err == nil {
 				responseData[r.Name] = data
+			} else {
+				// A tool produced metadata the workflow cannot read, so any
+				// expression referencing response_data.<tool> silently gets
+				// nothing. Swallowing this is what hid the truncation bug.
+				activity.GetLogger(ctx).Warn("[ExecuteTools] Tool metadata is not valid JSON; response_data entry dropped",
+					"tool", r.Name,
+					"error", err,
+					"metadataBytes", len(r.Metadata))
 			}
 		}
 	}
@@ -542,25 +550,25 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 			"tool_call_id", toolCallID,
 			"tool_name", toolName,
 			"attempt", attemptNumber)
-		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil)
+		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil)
 	}
 
 	// Check for cancellation before starting work
 	if ctx.Err() != nil {
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Cancelled: %v", ctx.Err()), "", true, nil)
+		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Cancelled: %v", ctx.Err()), "", true, nil, nil)
 	}
 
 	// Validate tool input JSON
 	var inputMap map[string]interface{}
 	if err := json.Unmarshal([]byte(toolInput), &inputMap); err != nil {
-		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Failed to parse tool inputs: %v", err), "", true, nil)
+		return a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Failed to parse tool inputs: %v", err), "", true, nil, nil)
 	}
 
 	// Load execution context (chat -> project -> worktree)
 	// projectPath override allows sub-workflows to run tools in a different directory
 	tec, errMsg := a.loadToolExecutionContext(ctx, chatID, thread, toolName, toolInput, toolCallID, projectPath)
 	if errMsg != "" {
-		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil)
+		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil, nil)
 	}
 
 	// Daemon routing priority: explicit node/workflow selector > the worktree's
@@ -624,9 +632,9 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, too
 		// Terminal row, but no result content survived (e.g. a historical
 		// Cancelled row that predates durable status). Same stub every other
 		// dangling-tool-call repair path uses -- do NOT re-execute.
-		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil), true
+		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil), true
 	}
-	return a.buildToolResult(toolCallID, toolName, result.Content, "", result.IsError, nil), true
+	return a.buildToolResult(toolCallID, toolName, result.Content, "", result.IsError, nil, nil), true
 }
 
 // executeToolWithStatus handles tool execution with proper status emissions
@@ -673,7 +681,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	if ctx.Err() != nil && (execResult == nil || !execResult.Success) {
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "cancelled")
 		completedAt := time.Now()
-		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true, nil)
+		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution cancelled: %v", ctx.Err()), "", true, nil, nil)
 		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusCancelled, toolCallUpsertOpts{
 			startedAt:    &startedAt,
 			completedAt:  &completedAt,
@@ -685,7 +693,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// Check for execution error
 	if execErr != nil {
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "failed")
-		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution failed: %v", execErr), "", true, nil)
+		result := a.buildToolResult(toolCallID, toolName, fmt.Sprintf("Tool execution failed: %v", execErr), "", true, nil, nil)
 		completedAt := time.Now()
 		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
 			startedAt:    &startedAt,
@@ -699,12 +707,12 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	if execResult.Backgrounded {
 		a.emitToolStatus(ctx, chatID, toolCallID, toolName, "backgrounded")
 		a.upsertToolCall(ctx, tec, core.ToolCallStatusBackgrounded, toolCallUpsertOpts{startedAt: &startedAt})
-		return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, false, execResult.BinaryParts)
+		return a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, false, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
 	}
 
 	// The tool ran. Decide the outcome BEFORE announcing it.
 	isError := !execResult.Success || execResult.IsError
-	result := a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, isError, execResult.BinaryParts)
+	result := a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, isError, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
 
 	// What the command actually printed. Captured BEFORE the nudge below,
 	// because this is what gets stored and rendered: a tip appended to the
@@ -817,6 +825,48 @@ func (a *ExecuteToolsActivity) upsertTerminalToolCall(
 	}
 }
 
+// attachmentIDsFromMetadata reads the attachment ids a tool reported in its
+// structured metadata, so SaveMessage can render them as image blocks.
+//
+// The metadata JSON is the tool's own structured output — the same value that
+// already feeds response_data — so a tool that persists an attachment says so
+// once, in the result it already returns, rather than through a second channel
+// added to every executor between here and the tool.
+//
+// Both `attachment_id` (one) and `attachment_ids` (several) are read: the
+// single-image case is by far the common one and forcing it to spell a
+// one-element array would be a trap for the next tool that generates media.
+func attachmentIDsFromMetadata(metadata string) []string {
+	if metadata == "" {
+		return nil
+	}
+
+	var envelope struct {
+		AttachmentID  string   `json:"attachment_id"`
+		AttachmentIDs []string `json:"attachment_ids"`
+	}
+	if err := json.Unmarshal([]byte(metadata), &envelope); err != nil {
+		// Not every tool's metadata is an object, and that is fine — this is
+		// an opt-in read, not a schema. A tool with no attachments simply has
+		// nothing here.
+		return nil
+	}
+
+	ids := make([]string, 0, len(envelope.AttachmentIDs)+1)
+	if envelope.AttachmentID != "" {
+		ids = append(ids, envelope.AttachmentID)
+	}
+	for _, id := range envelope.AttachmentIDs {
+		if id != "" && id != envelope.AttachmentID {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
+}
+
 // buildToolResult creates a message.ToolResult without saving to database
 func (a *ExecuteToolsActivity) buildToolResult(
 	toolCallID string,
@@ -825,6 +875,7 @@ func (a *ExecuteToolsActivity) buildToolResult(
 	metadata string,
 	isError bool,
 	binaryParts []message.BinaryContent,
+	attachmentIDs []string,
 ) message.ToolResult {
 	// Ensure content is never empty
 	if content == "" {
@@ -836,12 +887,13 @@ func (a *ExecuteToolsActivity) buildToolResult(
 	}
 
 	return message.ToolResult{
-		ToolCallID:  toolCallID,
-		Name:        toolName,
-		Content:     content,
-		Metadata:    metadata,
-		IsError:     isError,
-		BinaryParts: binaryParts,
+		ToolCallID:    toolCallID,
+		Name:          toolName,
+		Content:       content,
+		Metadata:      metadata,
+		IsError:       isError,
+		BinaryParts:   binaryParts,
+		AttachmentIDs: attachmentIDs,
 	}
 }
 
@@ -1239,10 +1291,11 @@ func protoToolResultsToMessage(protoTRs []*reliantv1.ToolResultMsg) []message.To
 	result := make([]message.ToolResult, len(protoTRs))
 	for i, tr := range protoTRs {
 		result[i] = message.ToolResult{
-			ToolCallID: tr.GetToolCallId(),
-			Name:       tr.GetName(),
-			Content:    tr.GetContent(),
-			IsError:    tr.GetIsError(),
+			ToolCallID:    tr.GetToolCallId(),
+			Name:          tr.GetName(),
+			Content:       tr.GetContent(),
+			IsError:       tr.GetIsError(),
+			AttachmentIDs: tr.GetAttachmentIds(),
 		}
 	}
 	return result
@@ -1272,10 +1325,11 @@ func messageToolResultsToProto(toolResults []message.ToolResult) []*reliantv1.To
 	result := make([]*reliantv1.ToolResultMsg, len(toolResults))
 	for i, tr := range toolResults {
 		result[i] = &reliantv1.ToolResultMsg{
-			ToolCallId: tr.ToolCallID,
-			Name:       tr.Name,
-			Content:    strings.ToValidUTF8(tr.Content, "\uFFFD"),
-			IsError:    tr.IsError,
+			ToolCallId:    tr.ToolCallID,
+			Name:          tr.Name,
+			Content:       strings.ToValidUTF8(tr.Content, "\uFFFD"),
+			IsError:       tr.IsError,
+			AttachmentIds: tr.AttachmentIDs,
 		}
 	}
 	return result

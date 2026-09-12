@@ -226,7 +226,7 @@ func normalizeCodexTokens(tokenResp TokenRefreshResponse, existingRefreshToken s
 		refreshToken = strings.TrimSpace(existingRefreshToken)
 	}
 
-	accountID, err := extractAccountIDFromAccessToken(accessToken)
+	accountID, err := AccountIDFromAccessToken(accessToken)
 	if err != nil {
 		logging.Warn("Failed to extract account ID from token", "error", err)
 	}
@@ -276,8 +276,11 @@ func mapTokenExchangeError(grantType string, statusCode int, body []byte) error 
 	return fmt.Errorf("token exchange failed with status %d: %s", statusCode, bodyText)
 }
 
-// extractAccountIDFromAccessToken extracts the chatgpt_account_id from a JWT access token.
-func extractAccountIDFromAccessToken(token string) (string, error) {
+// AccountIDFromAccessToken extracts the chatgpt_account_id from a JWT access
+// token. Exported because the account id is half of Codex's credential — every
+// call path needs it as the chatgpt-account-id header, and the stored column is
+// nullable, so callers must be able to recover it from the token itself.
+func AccountIDFromAccessToken(token string) (string, error) {
 	parts := splitJWT(token)
 	if len(parts) != 3 {
 		return "", fmt.Errorf("invalid JWT format")

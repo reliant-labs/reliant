@@ -171,6 +171,18 @@ type ToolResult struct {
 	Metadata    string          `json:"metadata,omitempty"`
 	IsError     bool            `json:"is_error"`
 	BinaryParts []BinaryContent `json:"binary_parts,omitempty"`
+
+	// AttachmentIDs names attachment rows the tool produced. BinaryParts is
+	// what the MODEL sees; this is what the USER sees. The two are separate
+	// because they are durable in different places: BinaryParts lives only as
+	// long as the request that carries it, while an attachment id addresses a
+	// row that outlives the run and is served at /api/attachments/{id}.
+	//
+	// Persisting the id rather than the bytes is deliberate. The bytes are
+	// already in the attachments table; copying them into a content block
+	// would duplicate every generated image into every subsequent read of the
+	// message.
+	AttachmentIDs []string `json:"attachment_ids,omitempty"`
 }
 
 func (ToolResult) isPart() {}

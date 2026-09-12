@@ -219,6 +219,54 @@ func coerceKVArrayMaps(jsonStr string) string {
 	return string(out)
 }
 
+// truncationMetadataKey is the reserved field under which truncation info is
+// recorded inside a tool's metadata document. It is namespaced with a leading
+// underscore so it cannot collide with a field a typed output struct would
+// plausibly declare.
+const truncationMetadataKey = "_truncation"
+
+// withTruncationMetadata records that a response's content was truncated,
+// without breaking the metadata document.
+//
+// Metadata is a tool's typed output marshalled to JSON, and execute_tools.go
+// parses it into response_data, discarding it on any parse error. So anything
+// added here must leave the string parseable: an earlier version appended
+// English prose, which silently emptied response_data for every oversize
+// result. Truncation info therefore goes inside the object under a reserved
+// key rather than beside it.
+//
+// Three cases are left exactly as they were found, because in each one there
+// is no way to add the fields without doing more damage than the note is
+// worth: empty metadata (populating it would create response_data entries for
+// tools that have none), metadata that parses to something other than an
+// object, and metadata that does not parse at all. Truncation is already
+// logged and visible in the content itself.
+func withTruncationMetadata(metadata string, originalBytes, deliveredBytes int) string {
+	if metadata == "" {
+		return metadata
+	}
+
+	var doc map[string]any
+	if err := json.Unmarshal([]byte(metadata), &doc); err != nil || doc == nil {
+		return metadata
+	}
+	if _, taken := doc[truncationMetadataKey]; taken {
+		return metadata
+	}
+
+	doc[truncationMetadataKey] = map[string]any{
+		"truncated":       true,
+		"original_bytes":  originalBytes,
+		"delivered_bytes": deliveredBytes,
+	}
+
+	merged, err := json.Marshal(doc)
+	if err != nil {
+		return metadata
+	}
+	return string(merged)
+}
+
 // Verify that ToolWrapper implements Tool interface
 var _ Tool = (*ToolWrapper[any, any])(nil)
 
@@ -235,6 +283,13 @@ type ToolWrapper[P any, O any] struct {
 	tool       genericTool[P, O]
 	paramsType reflect.Type
 	outputType reflect.Type
+	// bindings are the parameters a human fixed ahead of time. They are
+	// removed from the schema the model sees and merged back in before the
+	// inner tool runs. Nil is the ordinary case and changes nothing.
+	bindings Bindings
+	// resolver evaluates expression-valued bindings. Only consulted when a
+	// binding actually carries an expression.
+	resolver BindingResolver
 }
 
 // NewToolWrapper creates a new tool wrapper
@@ -242,11 +297,84 @@ func NewToolWrapper[P any, O any](t genericTool[P, O]) *ToolWrapper[P, O] {
 	var p P
 	var o O
 
-	return &ToolWrapper[P, O]{
+	wrapper := &ToolWrapper[P, O]{
 		tool:       t,
 		paramsType: reflect.TypeOf(p),
 		outputType: reflect.TypeOf(o),
 	}
+	// A tool may declare bindings that apply when nothing else binds the
+	// parameter. These go through the same path as configured bindings, so
+	// there is exactly one merge rule rather than a separate defaulting one.
+	if provider, ok := any(t).(DefaultBindingsProvider); ok {
+		wrapper.bindings = provider.DefaultBindings()
+	}
+	return wrapper
+}
+
+// Verify ToolWrapper satisfies the optional binding interface.
+var _ BindableTool = (*ToolWrapper[any, any])(nil)
+
+// WithBindings returns a copy of the wrapper with bindings layered over the
+// tool's declared defaults. The receiver is untouched: tool instances are
+// shared by the factory, so mutating one would leak a workflow's configuration
+// into every other caller.
+func (t *ToolWrapper[P, O]) WithBindings(bindings Bindings) (Tool, error) {
+	merged := t.bindings.Merge(bindings)
+	if err := t.validateBindings(merged); err != nil {
+		return t, err
+	}
+	clone := *t
+	clone.bindings = merged
+	return &clone, nil
+}
+
+// Bindings returns the bindings in effect, declared defaults included.
+func (t *ToolWrapper[P, O]) Bindings() Bindings {
+	return t.bindings
+}
+
+// WithBindingResolver returns a copy that can evaluate expression-valued
+// bindings. Separate from WithBindings because the resolver belongs to the
+// execution environment, not to the configuration.
+func (t *ToolWrapper[P, O]) WithBindingResolver(resolver BindingResolver) *ToolWrapper[P, O] {
+	clone := *t
+	clone.resolver = resolver
+	return &clone
+}
+
+// validateBindings rejects a binding that names a parameter the tool does not
+// have. Silently ignoring one would mean a human's configuration quietly does
+// nothing, which is the failure mode this whole mechanism exists to avoid.
+func (t *ToolWrapper[P, O]) validateBindings(bindings Bindings) error {
+	if len(bindings) == 0 {
+		return nil
+	}
+	schema := t.fullParamSchema()
+	if schema == nil || schema.Properties == nil {
+		return nil
+	}
+	for _, name := range bindings.Names() {
+		if _, ok := schema.Properties.Get(name); !ok {
+			return fmt.Errorf("%s: %w: %q", t.tool.Name(), ErrUnknownBoundParam, name)
+		}
+	}
+	return nil
+}
+
+// fullParamSchema reflects P with every parameter present, bound ones
+// included. This is the tool's real input contract; ParamSchema is the subset
+// of it the model is allowed to fill in.
+func (t *ToolWrapper[P, O]) fullParamSchema() *jsonschema.Schema {
+	var p P
+	// OpenAI Responses / Structured Outputs require a strict subset of JSON Schema.
+	// The openai-go docs recommend:
+	// - AllowAdditionalProperties=false
+	// - DoNotReference=true
+	reflector := jsonschema.Reflector{
+		AllowAdditionalProperties: false,
+		DoNotReference:            true,
+	}
+	return ResolveSchemaRefs(reflector.Reflect(&p))
 }
 
 // Unwrap returns the inner tool implementation for interface type assertions.
@@ -264,24 +392,32 @@ func (t *ToolWrapper[P, O]) Description() string {
 	return t.tool.Description()
 }
 
-// ParamSchema returns the JSON schema for parameters
+// ParamSchema returns the JSON schema the MODEL sees. Bound parameters are
+// absent from it — from both the property list and the required list — which
+// is the whole access-control mechanism: the model cannot override or
+// hallucinate a parameter it was never shown.
+//
+// Filtering here rather than at the eight driver call sites is deliberate.
+// Every driver already asks the tool for its schema, so one filter at the
+// source cannot be forgotten by a ninth.
 func (t *ToolWrapper[P, O]) ParamSchema() *jsonschema.Schema {
-	var p P
-	// OpenAI Responses / Structured Outputs require a strict subset of JSON Schema.
-	// The openai-go docs recommend:
-	// - AllowAdditionalProperties=false
-	// - DoNotReference=true
-	reflector := jsonschema.Reflector{
-		AllowAdditionalProperties: false,
-		DoNotReference:            true,
-	}
-	return ResolveSchemaRefs(reflector.Reflect(&p))
+	return withoutBoundParams(t.fullParamSchema(), t.bindings)
 }
 
 // RequiresPermission returns permission requirements for the tool call
 func (t *ToolWrapper[P, O]) RequiresPermission(rctx *rctxpkg.ToolContext, call ToolCall) (bool, error) {
+	// Permission is decided on the parameters the tool will actually run
+	// with, so bound values are merged in first. A binding that turns a
+	// dangerous call into a safe one (or the reverse) has to be visible here.
+	input := stripBoundKeys(call.Input, t.bindings)
+	if resolved, err := resolveBindings(t.bindings, t.resolver, rctx); err == nil {
+		if merged, mergeErr := applyBindingsToInput(input, resolved); mergeErr == nil {
+			input = merged
+		}
+	}
+
 	var typedParams P
-	decoder := json.NewDecoder(strings.NewReader(call.Input))
+	decoder := json.NewDecoder(strings.NewReader(input))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&typedParams); err != nil {
 		logging.Warn("RequiresPermission: unmarshaling failed", "tool", t.tool.Name(), "error", err, "input", truncateString(call.Input, 200))
@@ -297,8 +433,13 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	// Normalize input:
 	// 1) Fix Claude API bug with stringified values
 	// 2) Accept OpenAI-compatible encoding for maps (kv array) and convert back to objects
+	// A bound parameter is not in the schema, so a model that emits one
+	// anyway would trip additionalProperties:false. Drop it instead: the
+	// human's value is authoritative and is merged in below regardless.
+	callInput := stripBoundKeys(call.Input, t.bindings)
+
 	schema := t.ParamSchema()
-	normalizedInput := unwrapStringifiedValues(call.Input, schema)
+	normalizedInput := unwrapStringifiedValues(callInput, schema)
 	normalizedInput = coerceKVArrayMaps(normalizedInput)
 
 	// Validate input against JSON Schema. When validation fails because the
@@ -312,6 +453,22 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 			return NewTextErrorResponse(errMsg), nil
 		}
 		normalizedInput = repairedInput
+	}
+
+	// Merge bound values AFTER schema validation and BEFORE decoding. After,
+	// because the model-facing schema does not contain these parameters and
+	// validating against it would reject them. Before, because the decoder
+	// uses DisallowUnknownFields against the FULL params struct, which does
+	// contain them — that is what carries a bound value into the tool.
+	resolvedBindings, err := resolveBindings(t.bindings, t.resolver, rctx)
+	if err != nil {
+		logging.Warn("Tool binding resolution failed", "tool", toolName, "error", err)
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	normalizedInput, err = applyBindingsToInput(normalizedInput, resolvedBindings)
+	if err != nil {
+		logging.Warn("Tool binding merge failed", "tool", toolName, "error", err)
+		return NewTextErrorResponse(err.Error()), nil
 	}
 
 	// Unmarshal to typed params with strict validation
@@ -366,12 +523,7 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 				// metadata is the ORIGINAL size, captured before the content
 				// is replaced.
 				response.Content = TruncateOutput(toolName, response.Content, true)
-				note := fmt.Sprintf("Output truncated from %d bytes to %d bytes", originalSize, len(response.Content))
-				if response.Metadata == "" {
-					response.Metadata = note
-				} else {
-					response.Metadata += "; " + note
-				}
+				response.Metadata = withTruncationMetadata(response.Metadata, originalSize, len(response.Content))
 				// Loud server-side: an oversize skill is a publishing defect
 				// that must get noticed and fixed at the source, not quietly
 				// degrade every run that loads it.

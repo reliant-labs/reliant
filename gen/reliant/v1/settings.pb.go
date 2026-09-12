@@ -568,14 +568,23 @@ func (x *UserPrompt) GetCategory() string {
 
 // ProviderStatus represents the status of a provider
 type ProviderStatus struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
-	Configured    bool                   `protobuf:"varint,2,opt,name=configured,proto3" json:"configured,omitempty"`
-	HasApiKey     bool                   `protobuf:"varint,3,opt,name=has_api_key,json=hasApiKey,proto3" json:"has_api_key,omitempty"`
-	MaskedKey     *string                `protobuf:"bytes,4,opt,name=masked_key,json=maskedKey,proto3,oneof" json:"masked_key,omitempty"`
-	DisplayName   string                 `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Provider    string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Configured  bool                   `protobuf:"varint,2,opt,name=configured,proto3" json:"configured,omitempty"`
+	HasApiKey   bool                   `protobuf:"varint,3,opt,name=has_api_key,json=hasApiKey,proto3" json:"has_api_key,omitempty"`
+	MaskedKey   *string                `protobuf:"bytes,4,opt,name=masked_key,json=maskedKey,proto3,oneof" json:"masked_key,omitempty"`
+	DisplayName string                 `protobuf:"bytes,5,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	// Output modalities this provider's models can generate ("text", "image").
+	// Derived from the model registry, so a provider gains a modality as soon as
+	// a model declaring it is added — nothing here is hardcoded per provider.
+	//
+	// This is what lets the UI distinguish "no provider configured" from "no
+	// IMAGE-CAPABLE provider configured". Without it a Settings page looks fully
+	// configured while image generation fails, which is indistinguishable to a
+	// user from a bug.
+	OutputModalities []string `protobuf:"bytes,6,rep,name=output_modalities,json=outputModalities,proto3" json:"output_modalities,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ProviderStatus) Reset() {
@@ -641,6 +650,13 @@ func (x *ProviderStatus) GetDisplayName() string {
 		return x.DisplayName
 	}
 	return ""
+}
+
+func (x *ProviderStatus) GetOutputModalities() []string {
+	if x != nil {
+		return x.OutputModalities
+	}
+	return nil
 }
 
 type CreateSettingRequest struct {
@@ -4962,7 +4978,7 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\n" +
 	"\b_defaultB\t\n" +
 	"\a_hotkeyB\v\n" +
-	"\t_category\"\xc2\x01\n" +
+	"\t_category\"\xef\x01\n" +
 	"\x0eProviderStatus\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x1e\n" +
 	"\n" +
@@ -4971,7 +4987,8 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\vhas_api_key\x18\x03 \x01(\bR\thasApiKey\x12\"\n" +
 	"\n" +
 	"masked_key\x18\x04 \x01(\tH\x00R\tmaskedKey\x88\x01\x01\x12!\n" +
-	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayNameB\r\n" +
+	"\fdisplay_name\x18\x05 \x01(\tR\vdisplayName\x12+\n" +
+	"\x11output_modalities\x18\x06 \x03(\tR\x10outputModalitiesB\r\n" +
 	"\v_masked_key\"\xa4\x01\n" +
 	"\x14CreateSettingRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

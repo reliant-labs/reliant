@@ -1034,6 +1034,18 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			activity.GetLogger(ctx).Info("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
 		}
 
+		// Bind configured parameters onto the tools before the driver ever
+		// sees them. This is the chokepoint: below here the list goes to
+		// ParamSchema(), so a parameter bound at any scope is removed from
+		// what the model is offered, and a parameter left open is not.
+		//
+		// It runs after spawn tools are appended so the spawn tool is
+		// bindable too, and before the response tool is appended because a
+		// response tool is a per-node structured-output shape rather than a
+		// registry tool anyone can configure globally.
+		availableTools = applyToolBindings(ctx,
+			availableTools,
+			a.resolveToolBindingScopes(ctx, chat.UserID, tc))
 	}
 
 	// Add custom response tool defined in the workflow

@@ -673,12 +673,21 @@ func (s *Service) createAssistantContentBlocks(ctx context.Context, messageID st
 }
 
 // createToolContentBlocks creates content blocks for tool messages.
+//
+// A tool result may carry attachment ids (see message.ToolResult.AttachmentIDs).
+// Each one becomes a sibling IMAGE block immediately after its tool_result
+// block, in exactly the representation the user-upload path produces: block
+// type IMAGE with the attachment id as Content. Reusing that representation is
+// the whole point — the attachment fetch, the /api/attachments/{id} serving and
+// the existing renderer all key off it, so a generated image travels the same
+// road as an uploaded one rather than needing a second one built for it.
 func (s *Service) createToolContentBlocks(ctx context.Context, messageID string, opts SaveMessageOpts, timestamp time.Time) error {
+	position := 0
 	for i, result := range opts.ToolResults {
 		block := &db.MessageContentBlock{
 			ID:         uuid.New().String(),
 			MessageID:  messageID,
-			Position:   i,
+			Position:   position,
 			BlockType:  reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_RESULT,
 			ToolCallID: &result.ToolCallID,
 			ToolName:   ptr.StringIfNotEmpty(result.Name),
@@ -691,8 +700,68 @@ func (s *Service) createToolContentBlocks(ctx context.Context, messageID string,
 		if err := s.repo.CreateContentBlock(ctx, block); err != nil {
 			return fmt.Errorf("failed to create tool_result block %d: %w", i, err)
 		}
+		position++
+
+		for _, attachmentID := range result.AttachmentIDs {
+			created, err := s.createToolAttachmentBlock(ctx, messageID, attachmentID, position, timestamp)
+			if err != nil {
+				return fmt.Errorf("failed to create attachment block for tool_result %d: %w", i, err)
+			}
+			if created {
+				position++
+			}
+		}
 	}
 	return nil
+}
+
+// createToolAttachmentBlock materializes one attachment id as a content block
+// on a tool message, reporting whether a block was written.
+//
+// A missing or non-image attachment is skipped rather than failing the save.
+// That is the opposite of the user-upload path, and deliberately so: there, the
+// ids come from a request the user just made and a bad one is a bug worth
+// surfacing, whereas here the message also carries the tool's textual result
+// and the model's own view of the image. Failing the whole save would discard a
+// completed turn — including work that cost money — over a thumbnail.
+func (s *Service) createToolAttachmentBlock(ctx context.Context, messageID, attachmentID string, position int, timestamp time.Time) (bool, error) {
+	if attachmentID == "" {
+		return false, nil
+	}
+
+	att, err := s.repo.GetAttachment(ctx, attachmentID)
+	if err != nil {
+		slog.Warn("[SaveMessage] Failed to load tool result attachment; skipping its content block",
+			"error", err, "attachment_id", attachmentID, "message_id", messageID)
+		return false, nil
+	}
+	if att == nil {
+		slog.Warn("[SaveMessage] Tool result attachment not found; skipping its content block",
+			"attachment_id", attachmentID, "message_id", messageID)
+		return false, nil
+	}
+
+	if att.AttachmentType != string(attachment.TypeImage) {
+		slog.Warn("[SaveMessage] Tool result attachment is not an image; skipping its content block",
+			"attachment_id", attachmentID, "attachment_type", att.AttachmentType, "message_id", messageID)
+		return false, nil
+	}
+
+	attachmentRef := attachmentID
+	block := &db.MessageContentBlock{
+		ID:        uuid.New().String(),
+		MessageID: messageID,
+		Position:  position,
+		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE,
+		Content:   &attachmentRef,
+		Version:   ptr.Of(1),
+		CreatedAt: timestamp,
+		UpdatedAt: timestamp,
+	}
+	if err := s.repo.CreateContentBlock(ctx, block); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // createSystemContentBlocks creates content blocks for system messages.

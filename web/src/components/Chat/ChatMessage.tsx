@@ -20,6 +20,7 @@ import { isReadOnlyTool } from "../../lib/toolFormatters";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
+import { MessageGeneratedImages } from "./MessageGeneratedImages";
 import { BranchOptionsMenu } from "./BranchOptionsMenu";
 import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
 import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
@@ -1046,9 +1047,21 @@ function ChatMessageComponent({
                 const runExecutions = segment.executions
                   .map((exec) => enhancedById.get(exec.call.id))
                   .filter((e): e is EnhancedToolExecution => e !== undefined);
+                // Images the tools in this run generated. Rendered AFTER the
+                // tool card and OUTSIDE it: the card explains how the image was
+                // made (and is collapsed by default), the image is the result.
+                // Emitting them per-segment rather than once at the end of the
+                // message keeps text -> image -> text ordering intact when a
+                // turn generates an image and then keeps talking.
+                const runImages = runExecutions.flatMap(
+                  (exec) => exec.result?.attachments ?? [],
+                );
                 return (
                   <Fragment key={`${message.id}-seg-${segIdx}`}>
                     {renderToolRun(runExecutions, `${message.id}-seg-${segIdx}`)}
+                    {runImages.length > 0 && (
+                      <MessageGeneratedImages attachments={runImages} />
+                    )}
                   </Fragment>
                 );
               })}

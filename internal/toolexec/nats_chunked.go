@@ -10,7 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 )
 
-// Transparent chunked replies for the daemon request/reply paths.
+// Transparent chunking for BOTH directions of the daemon request/reply paths.
 //
 // NATS enforces a per-message max_payload (default 1 MB). Daemon command
 // replies (fs.search, worktree.git_changes, file reads, ...) routinely exceed
@@ -23,12 +23,36 @@ import (
 // to a plain msg.Respond, so a mixed old/new pair degrades to exactly the old
 // behavior for anything that fits.
 //
+// REQUESTS use the same envelope in the other direction. A 2.5 MB generated
+// image base64-encodes to ~3.4 MB inside an fs.write_binary_file command, and
+// the old preflight simply rejected it with a hint telling the caller to
+// "split large payloads into smaller chunks" — except the caller is our own
+// tool code, and the transport already knew how to split in the other
+// direction. It splits both ways now.
+//
+// The two directions are NOT symmetric, and the difference is where the
+// subtlety lives:
+//
+//   - A reply goes to a PRIVATE inbox the requester is already subscribed to.
+//     Exactly one stream can arrive there, so requestChunked can reassemble
+//     inline: read messages in order off its own sync subscription, with the
+//     round trip's own timeout bounding the whole thing.
+//   - A request goes to a SHARED subject (daemon.command.{user}.{daemon}) that
+//     every caller for that daemon publishes to. Streams from concurrent
+//     requests interleave arbitrarily, so the receive side cannot read "the
+//     next chunk" — it must demultiplex by correlation id across an unknown
+//     number of live streams, which means holding partial state, which means
+//     that state has to be bounded in both bytes and time or a requester that
+//     dies mid-stream leaks memory on the user's own machine forever. That is
+//     chunkAssembler below.
+//
 // Both ends live in our own binaries and deploy together — no cross-version
 // protocol negotiation. Policy (e.g. truncating what an LLM sees) lives in
 // the layers above; the transport only moves bytes.
 
-// Chunk header keys. Presence of chunkHeaderID on a reply message marks it as
-// part of a chunked stream; its absence means a plain single-message reply.
+// Chunk header keys. Presence of chunkHeaderID on a message marks it as part
+// of a chunked stream; its absence means a plain single message. The same
+// four keys carry both directions.
 const (
 	chunkHeaderID    = "Reliant-Chunk-Id"    // correlation token for one reply stream
 	chunkHeaderSeq   = "Reliant-Chunk-Seq"   // 0-based chunk index
@@ -102,11 +126,15 @@ func publishReply(nc *nats.Conn, reply string, data []byte) (int, error) {
 	return count, nil
 }
 
-// requestWithChunkedReply performs a NATS request whose reply may arrive as a
-// chunked stream published by publishReply. It is a drop-in replacement for
-// nc.RequestMsg: a plain single-message reply (no chunk headers) is returned
-// as-is, preserving today's semantics exactly — including nats.ErrTimeout and
-// nats.ErrNoResponders (NextMsg translates the server's 503 status). A
+// requestWithChunkedReply performs a NATS request where EITHER direction may
+// be chunked. It is a drop-in replacement for nc.RequestMsg.
+//
+// Outbound, an oversize request is split by publishChunkedRequest and
+// reassembled by the receiver's chunkAssembler; a request that fits goes out
+// as one plain message, byte-identical to a bare PublishMsg. Inbound, a plain
+// single-message reply (no chunk headers) is returned as-is, preserving
+// today's semantics exactly — including nats.ErrTimeout and
+// nats.ErrNoResponders (NextMsg translates the server's 503 status) — and a
 // chunked reply is reassembled into a single synthesized message.
 //
 // timeout bounds the wait for the first reply message (like RequestMsg);
@@ -129,7 +157,7 @@ func requestWithChunkedReply(nc *nats.Conn, reqMsg *nats.Msg, timeout time.Durat
 	_ = sub.SetPendingLimits(-1, -1)
 
 	reqMsg.Reply = inbox
-	if err := nc.PublishMsg(reqMsg); err != nil {
+	if _, err := publishChunkedRequest(nc, reqMsg); err != nil {
 		return nil, err
 	}
 

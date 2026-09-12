@@ -38,6 +38,48 @@ func payload(t *testing.T, v any) []byte {
 	return b
 }
 
+// TestBinaryWriteIsGatedLikeTextWrite pins fs.write_binary_file into the same
+// two gates fs.write_file passes through: the per-grant tool allowlist, and
+// path confinement.
+//
+// Neither is automatic. Policy.Tools has no wildcard, so a command added to
+// the daemon is denied until a grant names it — but path confinement depends
+// on the payload carrying its path under a key in pathFields, and a binary
+// write that had named its destination something else would cross this layer
+// unexamined.
+func TestBinaryWriteIsGatedLikeTextWrite(t *testing.T) {
+	root := t.TempDir()
+
+	// Not granted: refused on the tool allowlist alone.
+	p := newTestPolicy(root)
+	err := p.Check("fs.write_binary_file", payload(t, map[string]string{"path": filepath.Join(root, "a.png")}))
+	if !errors.Is(err, ErrDenied) {
+		t.Fatalf("an ungranted binary write should be denied, got %v", err)
+	}
+
+	p.Tools["fs.write_binary_file"] = true
+
+	// Granted and inside the root: permitted, including for a file that does
+	// not exist yet, which is the normal case for a write.
+	inside := filepath.Join(root, "generated", "a.png")
+	if err := p.Check("fs.write_binary_file", payload(t, map[string]string{"path": inside})); err != nil {
+		t.Fatalf("a granted binary write inside the root was denied: %v", err)
+	}
+
+	// Granted but outside the root: still refused. The base64 payload must not
+	// change that, so it is carried here exactly as the real command sends it.
+	for _, escape := range []string{
+		"/etc/planted.png",
+		"../../escape.png",
+		filepath.Join(root, "..", "sibling.png"),
+	} {
+		body := map[string]string{"path": escape, "data": "iVBORw0KGgo="}
+		if err := p.Check("fs.write_binary_file", payload(t, body)); !errors.Is(err, ErrDenied) {
+			t.Fatalf("a binary write to %q outside the root should be denied, got %v", escape, err)
+		}
+	}
+}
+
 func TestNilPolicyAllowsEverything(t *testing.T) {
 	var p *Policy
 	// The first-party path must be entirely unaffected by this package, including
