@@ -2,8 +2,8 @@
 INSERT INTO workflows (
     id, parent_id, chat_id, workflow_name, thread, state, stop_reason,
     spawned_by_node_id, loop_iteration,
-    created_at, completed_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    created_at, completed_at, owner_user_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (id) DO NOTHING
 RETURNING *;
 

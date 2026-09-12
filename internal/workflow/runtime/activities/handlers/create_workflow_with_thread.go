@@ -48,11 +48,17 @@ type CreateWorkflowWithThreadOutput struct {
 // CreateWorkflowWithThreadActivity creates a workflow and its associated thread atomically
 type CreateWorkflowWithThreadActivity struct {
 	threads *threads.Service
+	repo    db.Repository
 }
 
-// NewCreateWorkflowWithThreadActivity creates a new CreateWorkflowWithThreadActivity
-func NewCreateWorkflowWithThreadActivity(threadsService *threads.Service) *CreateWorkflowWithThreadActivity {
-	return &CreateWorkflowWithThreadActivity{threads: threadsService}
+// NewCreateWorkflowWithThreadActivity creates a new CreateWorkflowWithThreadActivity.
+//
+// The repository is needed to resolve the run's owner. This activity creates
+// every spawned run, so leaving the owner unset here would leave a large share
+// of runs without one — and a reader that then fell back to the chat would hide
+// that rather than surface it.
+func NewCreateWorkflowWithThreadActivity(threadsService *threads.Service, repo db.Repository) *CreateWorkflowWithThreadActivity {
+	return &CreateWorkflowWithThreadActivity{threads: threadsService, repo: repo}
 }
 
 // Name returns the activity name for registration
@@ -114,6 +120,7 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		SpawnedByNodeID: input.SpawnedByNodeID,
 		LoopIteration:   input.LoopIteration,
 		CreatedAt:       time.Now().UTC(),
+		OwnerUserID:     resolveRunOwner(ctx, a.repo, input.ParentWorkflowID, input.ChatID),
 	}
 
 	// Build the options for CreateWorkflowWithThread
