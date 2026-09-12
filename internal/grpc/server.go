@@ -213,6 +213,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	approvalPath, approvalHandler := reliantv1connect.NewApprovalServiceHandler(approvalService, opts...)
 	questionPath, questionHandler := reliantv1connect.NewQuestionServiceHandler(questionService, opts...)
 	chatPath, chatHandler := reliantv1connect.NewChatServiceHandler(chatService, opts...)
+	// RunService is the engine's execution API. It delegates to chatService
+	// rather than reimplementing anything, so mounting it adds surface without
+	// adding behavior.
+	runPath, runHandler := reliantv1connect.NewRunServiceHandler(
+		services.NewRunService(database, chatService), opts...)
 	messagePath, messageHandler := reliantv1connect.NewMessageServiceHandler(messageService, opts...)
 	settingsPath, settingsHandler := reliantv1connect.NewSettingsServiceHandler(settingsService, opts...)
 	mcpPath, mcpHandler := reliantv1connect.NewMCPServiceHandler(mcpService, opts...)
@@ -324,6 +329,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	mux.Handle(approvalPath, approvalHandler)
 	mux.Handle(questionPath, questionHandler)
 	mux.Handle(chatPath, chatHandler)
+	mux.Handle(runPath, runHandler)
 	mux.Handle(messagePath, messageHandler)
 	mux.Handle(settingsPath, settingsHandler)
 	mux.Handle(mcpPath, mcpHandler)
