@@ -166,7 +166,7 @@ func Start(opts Options) (*Server, error) {
 	// 127.0.0.1, never 0.0.0.0: this surface starts browsers and hands back
 	// authorization codes, so it must not be reachable from the network.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	ln, err := net.Listen("tcp", addr)
+	ln, err := listenWithBriefRetry(addr)
 	if err != nil {
 		if isAddrInUse(err) {
 			return nil, fmt.Errorf("%w: %s", ErrPortInUse, addr)
@@ -240,6 +240,43 @@ func (s *Server) track(fn func()) {
 // ErrPortInUse reports that the helper port is already bound.
 var ErrPortInUse = errors.New("oauth helper port already in use")
 
+// listenWithBriefRetry binds addr, waiting out a socket that is on its way
+// down rather than failing the click.
+//
+// The case this exists for is the user's SECOND "Connect": the first flow was
+// abandoned, the helper was force-closed to release it, and the replacement
+// binds microseconds later. A forced Close severs connections immediately but
+// the kernel does not always hand the socket back that fast, so a single
+// net.Listen loses a race it would win a few milliseconds later — and the user
+// sees "port already in use" on a machine where nothing is actually using it.
+//
+// Bounded and short: a genuine other holder (a standalone `reliant auth serve`)
+// must still be reported promptly as ErrPortInUse, because deferring to it is
+// a legitimate outcome rather than a failure. oauthcallback.listenWithRetry
+// makes the same distinction for the provider callback port, for the same
+// reason.
+func listenWithBriefRetry(addr string) (net.Listener, error) {
+	const (
+		attempts = 10
+		wait     = 25 * time.Millisecond
+	)
+	var lastErr error
+	for i := range attempts {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		lastErr = err
+		if !isAddrInUse(err) {
+			return nil, err
+		}
+		if i < attempts-1 {
+			time.Sleep(wait)
+		}
+	}
+	return nil, lastErr
+}
+
 // Shutdown stops the server gracefully. Safe to call more than once and from
 // several goroutines — the idle watcher and the owner's defer race by design.
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -255,7 +292,31 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Unlock()
 
 	close(s.stopIdle)
-	return s.srv.Shutdown(ctx)
+
+	// Graceful first, then FORCED — never graceful alone.
+	//
+	// http.Shutdown waits for in-flight requests, and this server's defining
+	// request is one that blocks for as long as a human takes in a browser:
+	// POST /oauth/start holds until the provider redirects back. A user who
+	// closes the tab mid-login leaves it blocked forever, so a graceful-only
+	// Shutdown waits on a flow nobody is coming back to.
+	//
+	// That is the abandoned-session bug: the next "Connect" click asks the
+	// daemon to close and re-open the helper, Shutdown blocks on the stale
+	// request, the re-open hits ErrPortInUse, and the user sees a failure on a
+	// machine whose daemon is perfectly healthy. The idle timer cannot rescue
+	// it either — it treats inFlight > 0 as "busy", which is exactly the state
+	// an abandoned flow is stuck in.
+	//
+	// Close() severs the listener and every connection, which is the right
+	// trade here: the only thing it can interrupt is an OAuth flow, and by the
+	// time anyone calls Shutdown the UI has already decided that flow is over.
+	if err := s.srv.Shutdown(ctx); err != nil {
+		// Includes ctx deadline exceeded — the abandoned-request case.
+		_ = s.srv.Close()
+		return err
+	}
+	return nil
 }
 
 func (s *Server) handler() http.Handler {
