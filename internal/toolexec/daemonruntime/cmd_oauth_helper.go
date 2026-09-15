@@ -83,17 +83,33 @@ func handleOpenOAuthHelper(_ context.Context, payload []byte) ([]byte, error) {
 	helperMu.Lock()
 	defer helperMu.Unlock()
 
-	if helperServer != nil {
-		return json.Marshal(openOAuthHelperResponse{
-			Port:           oauthhelper.DefaultPort,
-			Addr:           helperServer.Addr(),
-			AlreadyRunning: true,
-		})
-	}
-
 	var extra []string
 	if req.WebOrigin != "" {
 		extra = append(extra, req.WebOrigin)
+	}
+
+	// A server WE started is already up. Replace it rather than reusing it.
+	//
+	// Reusing looks right — the port is served, so the browser's probe will
+	// succeed — but it strands the two states this handler exists to repair:
+	//
+	//  1. An ABANDONED FLOW. The previous session's POST /oauth/start is still
+	//     blocked on a browser nobody is looking at. Its listener answers
+	//     /health, so reuse reports success, and then the user's new login
+	//     queues behind a flow that will never complete.
+	//  2. A CHANGED ORIGIN. ExtraOrigins is fixed at Start. A helper opened
+	//     for a previous origin will CORS-reject this caller, and the failure
+	//     surfaces in the browser as an opaque network error rather than
+	//     anything naming the cause.
+	//
+	// Tearing down first makes "open" idempotent in the sense that actually
+	// matters: after it returns, a helper exists that is serving THIS request's
+	// origin with no work in flight. Shutdown is forced (see its comment), so
+	// an abandoned request cannot block the replacement.
+	if helperServer != nil {
+		logging.Info("OAuth helper already open — replacing it for this session",
+			"addr", helperServer.Addr())
+		shutdownHelperLocked()
 	}
 
 	srv, err := oauthhelper.Start(oauthhelper.Options{
@@ -103,11 +119,24 @@ func handleOpenOAuthHelper(_ context.Context, payload []byte) ([]byte, error) {
 		OnIdle:       clearHelperServer,
 	})
 	if err != nil {
-		// Already held — by a standalone `auth serve`, or a daemon that did
-		// not clean up. The browser's probe will succeed either way, so report
-		// success rather than failing a request whose post-condition holds.
+		// Held by something this process does not own — a standalone
+		// `reliant auth serve`, or a previous daemon that died without
+		// releasing the socket.
+		//
+		// Reported as success, because the post-condition the caller actually
+		// needs holds: a reliant helper is serving the port, and the browser's
+		// probe will confirm it. The probe is the authority here, not this
+		// return value — if the holder is NOT a reliant helper, probeOAuthHelper
+		// rejects it on the `service` field and the UI falls back to the
+		// instructions.
+		//
+		// AlreadyRunning is what lets the UI distinguish "we opened this for
+		// you" from "something else was already here", which matters for the
+		// CORS case: a standalone `auth serve` was started with its own origin
+		// allowlist and may not accept this one. That shows up as a failed
+		// probe rather than a confusing half-working panel.
 		if isPortInUse(err) {
-			logging.Info("OAuth helper port already served — reusing it", "error", err)
+			logging.Info("OAuth helper port held by another reliant process — deferring to it", "error", err)
 			return json.Marshal(openOAuthHelperResponse{
 				Port:           oauthhelper.DefaultPort,
 				Addr:           fmt.Sprintf("127.0.0.1:%d", oauthhelper.DefaultPort),
@@ -132,21 +161,37 @@ func handleOpenOAuthHelper(_ context.Context, payload []byte) ([]byte, error) {
 // that keeps the surface open only as long as it is actually needed.
 func handleCloseOAuthHelper(_ context.Context, _ []byte) ([]byte, error) {
 	helperMu.Lock()
-	srv := helperServer
-	helperServer = nil
+	closed := helperServer != nil
+	shutdownHelperLocked()
 	helperMu.Unlock()
 
-	if srv == nil {
+	if !closed {
 		return json.Marshal(map[string]bool{"closed": false})
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(ctx); err != nil {
-		logging.Warn("OAuth helper shutdown returned an error", "error", err)
 	}
 	logging.Info("OAuth helper closed on request")
 	return json.Marshal(map[string]bool{"closed": true})
+}
+
+// shutdownHelperLocked tears the current helper down and clears the reference.
+// Caller must hold helperMu.
+//
+// The 5s budget is for the graceful half only; Server.Shutdown force-closes
+// when it expires, so an abandoned POST /oauth/start — blocked on a browser
+// that is gone — delays this by at most that budget instead of forever.
+func shutdownHelperLocked() {
+	srv := helperServer
+	helperServer = nil
+	if srv == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		// Expected when a flow was abandoned: graceful shutdown times out and
+		// the forced Close follows. Not a failure of this operation — the port
+		// is released either way.
+		logging.Info("OAuth helper needed a forced close", "error", err)
+	}
 }
 
 func clearHelperServer() {

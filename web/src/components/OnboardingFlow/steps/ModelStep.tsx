@@ -283,7 +283,17 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     try {
       const result = await oauthHook.start();
       if (!result.ok) {
-        setValidationResult({ valid: false, message: result.message });
+        // A cancellation is not something to report. Clicking Connect a second
+        // time aborts the first attempt, and showing its result would put a red
+        // banner on screen for the very click that is currently succeeding —
+        // the second flow is still running when this returns.
+        //
+        // Also covers the panel unmounting mid-flow and the user closing the
+        // provider tab: in all three the user either already knows, or is
+        // actively doing the thing that replaces it.
+        if (result.errorCode !== "cancelled") {
+          setValidationResult({ valid: false, message: result.message });
+        }
         return;
       }
 

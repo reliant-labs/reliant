@@ -652,10 +652,13 @@ export function CombinedGeneralSettings({
       const result = await oauthHook.start();
 
       if (!result.ok) {
-        setValidationMessage({
-          valid: false,
-          message: result.message,
-        });
+        // Cancelled is not a failure to report — see lib/oauth-abort.
+        if (result.errorCode !== "cancelled") {
+          setValidationMessage({
+            valid: false,
+            message: result.message,
+          });
+        }
         return;
       }
 

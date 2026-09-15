@@ -179,7 +179,12 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     try {
       const result = await oauthHook.start();
       if (!result.ok) {
-        setValidationResult({ valid: false, message: result.message });
+        // Cancelled is not a failure to report — clicking Connect again aborts
+        // the previous attempt, and the second one is still running. See
+        // lib/oauth-abort.
+        if (result.errorCode !== "cancelled") {
+          setValidationResult({ valid: false, message: result.message });
+        }
         return false;
       }
 

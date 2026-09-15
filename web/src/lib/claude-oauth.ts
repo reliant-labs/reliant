@@ -3,6 +3,7 @@ import { settingsGrpc } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
+import { isAbort } from '@/lib/oauth-abort'
 import {
   InsecureContextError,
   base64UrlEncode,
@@ -133,6 +134,13 @@ export async function runClaudeOAuthFlow(options: ClaudeOAuthOptions = {}): Prom
     })
     return errorResult('token_exchange_failed', result.message || 'Token exchange failed')
   } catch (error: any) {
+    // A cancelled flow is not a failure — see isAbort. Clicking Connect twice
+    // aborts the first run, and without this that abort surfaced as
+    // "signal is aborted without reason" in a failure banner while the second
+    // flow was succeeding.
+    if (isAbort(error, options.signal)) {
+      return errorResult('cancelled', 'Sign-in cancelled.')
+    }
     Sentry.captureException(error, {
       tags: { component: 'oauth', provider: 'claude' },
       level: 'warning',

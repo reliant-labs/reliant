@@ -3,6 +3,7 @@ import { settingsGrpc } from '@/api/settings-grpc'
 import { startOAuthViaDaemon } from '@/api/daemon-grpc'
 import { startOAuthViaLocalServer } from '@/lib/oauth-local'
 import { startOAuthViaDesktop, supportsLocalProviderOAuth } from '@/lib/oauth-desktop'
+import { isAbort } from '@/lib/oauth-abort'
 import {
   InsecureContextError,
   base64UrlEncode,
@@ -150,6 +151,25 @@ export async function runCodexOAuthFlow(options: CodexOAuthOptions = {}): Promis
     })
     return errorResult('token_exchange_failed', result.message || 'Token exchange failed')
   } catch (error: any) {
+    // A cancelled flow is not a failure, and must never be reported as one.
+    //
+    // Clicking Connect a second time aborts the first run's AbortController
+    // (useCodexOAuth.start), which rejects the in-flight fetch. Without this
+    // branch that rejection fell through to `daemon_error` and surfaced the
+    // browser's raw wording — "signal is aborted without reason" — as a
+    // failure banner, while the SECOND flow proceeded and succeeded. The user
+    // saw an error for the exact action that worked.
+    //
+    // The same reaches here when the panel unmounts mid-flow (the hook aborts
+    // on cleanup) and when a user closes the provider tab.
+    //
+    // `signal?.aborted` as well as the error identity: an abort can surface as
+    // a DOMException, as a TypeError from a severed fetch, or — through the
+    // daemon path — as a transport error that names nothing. The signal is the
+    // reliable witness. Mirrors runCopilotOAuthFlow, which already did this.
+    if (isAbort(error, options.signal)) {
+      return errorResult('cancelled', 'Sign-in cancelled.')
+    }
     Sentry.captureException(error, {
       tags: { component: 'oauth', provider: 'codex' },
       level: 'warning',

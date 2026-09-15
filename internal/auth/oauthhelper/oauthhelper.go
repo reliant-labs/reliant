@@ -129,10 +129,70 @@ type Server struct {
 	// flight AND nothing since lastSeen.
 	inFlight int
 	lastSeen time.Time
+	// flowCancel stops the OAuth flow currently holding the provider's
+	// callback port, so a new attempt can take it. nil when no flow is
+	// running. See cancelActiveFlow.
+	flowCancel context.CancelFunc
+	// flowGen identifies the current flow, so a finishing flow only clears
+	// its OWN cancel rather than a newer one's.
+	flowGen uint64
 
 	idleTimeout time.Duration
 	onIdle      func()
 	stopIdle    chan struct{}
+}
+
+// cancelActiveFlow stops a previous OAuth flow and waits for the provider's
+// callback port to come free.
+//
+// THE PORT IS NOT OURS TO CHOOSE. A provider redirects to a URI registered on
+// its side — Codex's is fixed at 127.0.0.1:1455 (see oauthcallback.InferConfig)
+// — so a second sign-in attempt needs the exact port the first one is sitting
+// on. There is no fallback port to move to.
+//
+// The flow that holds it is the one whose browser the user closed. It is alive
+// (its goroutine is blocked in oauthcallback.Run waiting for a callback) but it
+// will never complete, and oauthcallback's own contention handling cannot help:
+// tryReuseExistingListener is for joining a LIVE sibling flow and this one
+// answers that probe, so the new attempt joins a flow that is never coming
+// back; listenWithRetry is for waiting out a DYING flow and this one is not
+// dying. An abandoned flow is a third state, and cancelling it is the only
+// thing that releases the port.
+//
+// Called before starting a new flow rather than when the old one is abandoned,
+// because abandonment has no event: a closed tab produces no request. The next
+// attempt is the first moment anything knows the previous flow is unwanted.
+func (s *Server) cancelActiveFlow() {
+	s.mu.Lock()
+	cancel := s.flowCancel
+	s.flowCancel = nil
+	s.mu.Unlock()
+	if cancel == nil {
+		return
+	}
+	logging.Info("cancelling a previous OAuth flow to free the provider callback port")
+	cancel()
+}
+
+// setActiveFlow records the cancel func for the flow about to run, returning a
+// release that clears it on completion. A flow that finishes normally must not
+// leave a stale cancel behind for the next attempt to fire at.
+func (s *Server) setActiveFlow(cancel context.CancelFunc) func() {
+	s.mu.Lock()
+	s.flowGen++
+	gen := s.flowGen
+	s.flowCancel = cancel
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		// Only clear if still ours. A newer flow may have replaced this one
+		// (the user clicked Connect again); clearing its cancel would strand
+		// the callback port exactly as before.
+		if s.flowGen == gen {
+			s.flowCancel = nil
+		}
+		s.mu.Unlock()
+	}
 }
 
 // Addr returns the address the server is listening on.
@@ -166,7 +226,7 @@ func Start(opts Options) (*Server, error) {
 	// 127.0.0.1, never 0.0.0.0: this surface starts browsers and hands back
 	// authorization codes, so it must not be reachable from the network.
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	ln, err := net.Listen("tcp", addr)
+	ln, err := listenWithBriefRetry(addr)
 	if err != nil {
 		if isAddrInUse(err) {
 			return nil, fmt.Errorf("%w: %s", ErrPortInUse, addr)
@@ -240,6 +300,43 @@ func (s *Server) track(fn func()) {
 // ErrPortInUse reports that the helper port is already bound.
 var ErrPortInUse = errors.New("oauth helper port already in use")
 
+// listenWithBriefRetry binds addr, waiting out a socket that is on its way
+// down rather than failing the click.
+//
+// The case this exists for is the user's SECOND "Connect": the first flow was
+// abandoned, the helper was force-closed to release it, and the replacement
+// binds microseconds later. A forced Close severs connections immediately but
+// the kernel does not always hand the socket back that fast, so a single
+// net.Listen loses a race it would win a few milliseconds later — and the user
+// sees "port already in use" on a machine where nothing is actually using it.
+//
+// Bounded and short: a genuine other holder (a standalone `reliant auth serve`)
+// must still be reported promptly as ErrPortInUse, because deferring to it is
+// a legitimate outcome rather than a failure. oauthcallback.listenWithRetry
+// makes the same distinction for the provider callback port, for the same
+// reason.
+func listenWithBriefRetry(addr string) (net.Listener, error) {
+	const (
+		attempts = 10
+		wait     = 25 * time.Millisecond
+	)
+	var lastErr error
+	for i := range attempts {
+		ln, err := net.Listen("tcp", addr)
+		if err == nil {
+			return ln, nil
+		}
+		lastErr = err
+		if !isAddrInUse(err) {
+			return nil, err
+		}
+		if i < attempts-1 {
+			time.Sleep(wait)
+		}
+	}
+	return nil, lastErr
+}
+
 // Shutdown stops the server gracefully. Safe to call more than once and from
 // several goroutines — the idle watcher and the owner's defer race by design.
 func (s *Server) Shutdown(ctx context.Context) error {
@@ -255,6 +352,18 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.mu.Unlock()
 
 	close(s.stopIdle)
+
+	// Release the provider callback port too. Shutting the helper down while a
+	// flow still holds 1455 would leave the daemon with no listener on 19284
+	// and a stray goroutine owning the port the NEXT sign-in needs — the same
+	// stranding this fix removes, reached by a different route (an idle
+	// timeout, or the UI closing the helper when its panel unmounts).
+	//
+	// Deliberately before srv.Shutdown: the flow's own request is one of the
+	// connections Shutdown waits on, so cancelling first lets it unwind rather
+	// than being waited out.
+	s.cancelActiveFlow()
+
 	return s.srv.Shutdown(ctx)
 }
 
@@ -310,7 +419,28 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		result, err := oauthcallback.Run(r.Context(), req.AuthorizeURLTemplate)
+		// Free the provider callback port before asking for it.
+		//
+		// A previous flow whose browser was closed is still sitting on it and
+		// will never finish. Nothing signals that abandonment — a closed tab
+		// sends nothing — so this click is the first moment we know the old
+		// flow is unwanted. See cancelActiveFlow.
+		s.cancelActiveFlow()
+
+		// NOT r.Context(). The flow outlives its HTTP request on purpose:
+		// tying it to the request means a dropped connection kills a login the
+		// user may still be completing in the provider's tab, and — worse —
+		// leaves the callback port held by a goroutine unwinding at a moment
+		// nobody controls. Owning the lifetime explicitly is what makes
+		// cancellation deterministic when the next attempt arrives.
+		//
+		// The request context still bounds the RESPONSE: if the browser is
+		// gone, writeJSON below simply goes nowhere.
+		flowCtx, cancelFlow := context.WithCancel(context.Background())
+		releaseFlow := s.setActiveFlow(cancelFlow)
+		result, err := oauthcallback.Run(flowCtx, req.AuthorizeURLTemplate)
+		releaseFlow()
+		cancelFlow()
 		if err != nil {
 			logging.Error("OAuth callback failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

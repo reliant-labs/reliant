@@ -438,7 +438,10 @@ export function MobileAIProvidersPanel({
     try {
       const result = await oauthHook.start();
       if (!result.ok) {
-        setOauthBanner({ valid: false, message: result.message });
+        // Cancelled is not a failure to report — see lib/oauth-abort.
+        if (result.errorCode !== "cancelled") {
+          setOauthBanner({ valid: false, message: result.message });
+        }
         return;
       }
       await refreshAfterKeyChange(kind);

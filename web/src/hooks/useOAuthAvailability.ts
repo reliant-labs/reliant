@@ -125,8 +125,36 @@ export function useOAuthAvailability(
   // cadence regardless of the current state.
   useEffect(() => {
     if (isElectron || !enabled) return
+    let inFlight = false
     const id = setInterval(async () => {
-      setAvailable(await pingHealth())
+      // Overlapping ticks would let a slow re-open be judged by a probe fired
+      // before it finished — the same race this guard exists to close.
+      if (inFlight) return
+      inFlight = true
+      try {
+        if (await pingHealth()) {
+          setAvailable(true)
+          return
+        }
+        // A bare probe FAILING does not mean the helper is unavailable — it
+        // may mean the port is not open yet, or not open any more.
+        //
+        // This poll used to `setAvailable(await pingHealth())` directly, which
+        // made it the last writer over the request above: the request asks the
+        // daemon to bind the port (a round trip through the gateway), the
+        // first tick fires before that lands, probes nothing, and latches
+        // `false`. Because a probe never ASKS, it could not recover — so a
+        // healthy local daemon showed the `auth serve` instructions forever.
+        //
+        // Asking again on failure is what makes this self-correcting: it
+        // reopens a port closed by an idle timeout, a daemon restart, or a
+        // Ctrl-C'd `auth serve`, and it cannot mistake "still opening" for
+        // "unavailable". Only when the ASK also fails do we report false —
+        // which is the honest signal the instructions should key off.
+        setAvailable(!!(await requestOAuthHelper())?.ready)
+      } finally {
+        inFlight = false
+      }
     }, POLL_INTERVAL_MS)
     return () => clearInterval(id)
   }, [isElectron, enabled])
