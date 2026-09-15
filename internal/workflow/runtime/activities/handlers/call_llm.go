@@ -1370,6 +1370,26 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	var streamErr error
 	streamInterrupted := false
 
+	// Progress guard, armed above the transport. The idle and content-stall
+	// timers in internal/llm watch bytes, so neither can see a driver that
+	// stopped emitting events after its bytes arrived; that shape previously
+	// ran to an outer deadline and settled as a successful empty turn.
+	//
+	// Reset on every event below, so it measures the gap BETWEEN events rather
+	// than the stream's total duration.
+	progressTimeout := llm.StreamProgressTimeout()
+	progressTimer := time.NewTimer(progressTimeout)
+	defer progressTimer.Stop()
+	resetProgressTimer := func() {
+		if !progressTimer.Stop() {
+			select {
+			case <-progressTimer.C:
+			default:
+			}
+		}
+		progressTimer.Reset(progressTimeout)
+	}
+
 streamLoop:
 	for {
 		// Events the provider has already handed us are part of this turn, even
@@ -1381,6 +1401,7 @@ streamLoop:
 		select {
 		case event, ok := <-eventChan:
 			if ok {
+				resetProgressTimer()
 				if err := a.processStreamEvent(ctx, chat.ID, thread, event, streamState); err != nil {
 					streamErr = err
 					break streamLoop
@@ -1392,20 +1413,51 @@ streamLoop:
 
 		select {
 		case <-streamCtx.Done():
-			// Context cancelled (either Temporal or application-level)
+			// A DEADLINE is not a user decision. Treating every context expiry
+			// as an interrupt made an expired Temporal activity deadline settle
+			// as a successful empty turn: streamInterrupted skips the error
+			// reporting below, and the agent loop reads "no output, no error"
+			// as the model being finished. Only a real cancellation is an
+			// interrupt; a deadline has to fail so the turn is retried.
+			deadlineExpired := errors.Is(streamCtx.Err(), context.DeadlineExceeded)
+
 			activity.GetLogger(ctx).Info("[CallLLM] Streaming cancelled",
 				"chatID", chat.ID,
 				"reason", streamCtx.Err())
 
-			// Notify UI that streaming was cancelled so it can update the UI accordingly
+			// Notify UI that streaming stopped. A deadline is not something the
+			// user did, so do not report it to them as their own cancellation.
+			cancelReason := "user_cancelled"
+			if deadlineExpired {
+				cancelReason = "deadline_exceeded"
+			}
 			// Use the original ctx (not streamCtx) since streamCtx is already cancelled
 			a.writeStreamingDelta(ctx, chat.ID, "stream_cancelled", map[string]interface{}{
-				"reason": "user_cancelled",
+				"reason": cancelReason,
 				"thread": thread,
 			}, streamState)
 
+			if deadlineExpired {
+				streamErr = fmt.Errorf("streaming deadline exceeded: %w", streamCtx.Err())
+				break streamLoop
+			}
+
 			streamErr = errors.New("streaming cancelled by user")
 			streamInterrupted = true
+			break streamLoop
+
+		case <-progressTimer.C:
+			// No event for the whole progress window. Not an interrupt: the
+			// turn failed and must be retried, so streamInterrupted stays
+			// false and the error surfaces below.
+			activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no events; cutting the turn for retry",
+				"chatID", chat.ID,
+				"thread", thread,
+				"provider", resolved.ProviderDriver,
+				"model", resolvedModelID,
+				"progressTimeout", progressTimeout)
+			streamErr = llm.ErrStreamProgressTimeout
+			cancelStream()
 			break streamLoop
 
 		case event, ok := <-eventChan:
@@ -1424,6 +1476,11 @@ streamLoop:
 				// Channel closed, stream complete
 				break streamLoop
 			}
+
+			// An event arrived: the stream is progressing. Reset here as well
+			// as in the drain above, or a healthy stream whose events all
+			// arrive through this branch would trip the progress timer.
+			resetProgressTimer()
 
 			// CRITICAL: Check for cancellation before processing each event
 			// This is necessary because Go's select is non-deterministic, and when

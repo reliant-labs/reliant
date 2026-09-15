@@ -109,11 +109,19 @@ func (pm *ProcessMonitor) checkProcesses() {
 	runningProcessIDs := make(map[string]bool)
 
 	for _, process := range processes {
-		if process.Status != "running" || process.cmd == nil || process.cmd.Process == nil {
+		// Status and cmd are guarded by the process's own outputMu, not by the
+		// manager's map lock that GetAllProcesses released.
+		process.outputMu.RLock()
+		running := process.Status == "running" && process.cmd != nil && process.cmd.Process != nil
+		pid := 0
+		if running {
+			pid = process.cmd.Process.Pid
+		}
+		process.outputMu.RUnlock()
+
+		if !running {
 			continue
 		}
-
-		pid := process.cmd.Process.Pid
 		runningProcessIDs[process.ID] = true
 
 		if !isProcessRunning(pid) {
@@ -249,8 +257,9 @@ func (pm *ProcessMonitor) handleExternalKill(process *BackgroundProcess) {
 		close(process.done)
 	}
 
-	// Persist status change to database and emit event to notify frontend
-	pm.manager.persistStatusChange(process.ID, process.Status, process.ExitCode, process.EndTime)
+	// Persist from the captured event rather than re-reading the process after
+	// the unlock, which would race a concurrent completion or kill.
+	pm.manager.persistStatusChange(event.ProcessID, event.Status, event.ExitCode, event.EndTime)
 	pm.manager.emitEvent(event)
 
 	logging.Info("Process killed externally",

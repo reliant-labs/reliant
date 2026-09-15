@@ -313,6 +313,57 @@ const DefaultStreamContentStallTimeout = 5 * time.Minute
 // StreamContentStallTimeoutEnv overrides DefaultStreamContentStallTimeout.
 const StreamContentStallTimeoutEnv = "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT"
 
+// ErrStreamProgressTimeout is returned when a stream produced no DRIVER EVENT
+// for StreamProgressTimeout.
+//
+// The third and last guard, and the only one above the transport. The two
+// timers above watch bytes on the wire, so they can only see a stall that
+// reaches the socket. They are structurally blind to a driver that received
+// bytes and then stopped emitting events — a translation goroutine that
+// deadlocks or exits silently, or a provider whose frames parse to nothing.
+// From the caller's side that is indistinguishable from a wedged model, and
+// before this it ran until some outer deadline and then settled as a
+// SUCCESSFUL empty turn.
+//
+// Phrased to read as transient so the turn is retried, like its two siblings.
+var ErrStreamProgressTimeout = errors.New("llm stream progress timeout: no stream events before the progress deadline")
+
+// DefaultStreamProgressTimeout bounds how long a stream may deliver no events
+// at all.
+//
+// Deliberately looser than the content-stall timeout it backstops. This timer
+// cannot see keepalives — from up here a provider queueing a 400k-token prompt
+// and a dead driver look identical — so it must not fire on work the
+// transport-level guards would still consider healthy. It is the floor under
+// an unbounded hang, not a promptness guarantee: at 10 minutes, the
+// content-stall timer has already had two full chances to cut a ping-only
+// stream with a more specific error.
+//
+// Override with RELIANT_LLM_STREAM_PROGRESS_TIMEOUT.
+const DefaultStreamProgressTimeout = 10 * time.Minute
+
+// StreamProgressTimeoutEnv overrides DefaultStreamProgressTimeout.
+const StreamProgressTimeoutEnv = "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT"
+
+// StreamProgressTimeout returns the configured stream-progress timeout.
+//
+// Read per call rather than cached at init so a test — or an operator
+// debugging a wedged provider — can set it without rebuilding. The two timeouts
+// above are read per client construction for the same reason.
+func StreamProgressTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv(StreamProgressTimeoutEnv))
+	if raw == "" {
+		return DefaultStreamProgressTimeout
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil || d <= 0 {
+		logging.Warn("[Transport] Ignoring unusable stream progress timeout override",
+			"env", StreamProgressTimeoutEnv, "value", raw, "using", DefaultStreamProgressTimeout)
+		return DefaultStreamProgressTimeout
+	}
+	return d
+}
+
 // StreamContentStallTimeout returns the configured content-stall timeout,
 // read per client construction like StreamIdleTimeout.
 func StreamContentStallTimeout() time.Duration {
