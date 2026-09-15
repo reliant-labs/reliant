@@ -560,6 +560,36 @@ func setRepeatedMessageField(rv protoreflect.Message, fd protoreflect.FieldDescr
 
 // setMapField handles map fields.
 func setMapField(rv protoreflect.Message, fd protoreflect.FieldDescriptor, node *yaml.Node) error {
+	// A whole map supplied as one CEL expression — `tools: "{{inputs.tool_params}}"`.
+	//
+	// This is what lets a PRESET carry tool parameters. A preset is an untyped
+	// bag of values, and a workflow reaches into it by declaring the path; the
+	// workflow author writes this once and every preset for that workflow can
+	// then fill it. Without it, only a parameter the author templated BY NAME
+	// is reachable, so a preset can never introduce one the workflow did not
+	// already anticipate.
+	//
+	// Stored as the same "__cel_expr__" sentinel ResponseTool.schema uses:
+	// ResolveCELFields does not evaluate a map field's shape, so the expression
+	// rides through as a value and is unwrapped after resolution.
+	if node.Kind == yaml.ScalarNode && isInterpolatedCEL(node.Value) {
+		if fd.MapValue().Kind() == protoreflect.MessageKind &&
+			fd.MapValue().Message().FullName() == protoMessageFullNameStruct {
+			sentinel, err := structpb.NewStruct(map[string]interface{}{
+				CELExprSentinelKey: node.Value,
+			})
+			if err != nil {
+				return fmt.Errorf("storing CEL expression for map field: %w", err)
+			}
+			mapVal := rv.Mutable(fd).Map()
+			mapVal.Set(
+				protoreflect.ValueOfString(CELExprSentinelKey).MapKey(),
+				protoreflect.ValueOfMessage(sentinel.ProtoReflect()),
+			)
+			return nil
+		}
+	}
+
 	if node.Kind != yaml.MappingNode {
 		return fmt.Errorf("expected mapping for map field, got kind %v", node.Kind)
 	}
@@ -586,6 +616,20 @@ func setMapField(rv protoreflect.Message, fd protoreflect.FieldDescriptor, node 
 				}
 				mapVal.Set(key, protoreflect.ValueOfMessage(v.ProtoReflect()))
 			} else if valDesc.Message().FullName() == protoMessageFullNameStruct {
+				// One entry supplied as a CEL expression —
+				// `generate_image: "{{inputs.image_params}}"`. Same sentinel as
+				// the whole-map form above, so a preset can fill in one tool's
+				// parameters without the workflow naming each one.
+				if valNode.Kind == yaml.ScalarNode && isInterpolatedCEL(valNode.Value) {
+					sentinel, err := structpb.NewStruct(map[string]interface{}{
+						CELExprSentinelKey: valNode.Value,
+					})
+					if err != nil {
+						return fmt.Errorf("map value %q: storing CEL expression: %w", keyStr, err)
+					}
+					mapVal.Set(key, protoreflect.ValueOfMessage(sentinel.ProtoReflect()))
+					continue
+				}
 				s, err := unmarshalStruct(valNode)
 				if err != nil {
 					return fmt.Errorf("map value %q: %w", keyStr, err)

@@ -31,6 +31,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // GlobalSettingKeyPrefix namespaces one settings row per tool. The tool name
@@ -191,6 +192,52 @@ func DecodeBindings(value string) (tools.Bindings, error) {
 		return nil, nil
 	}
 	return decoded, nil
+}
+
+// FromProtoStructs converts a workflow's `tools_config.tools` block into
+// bindings, one entry per tool.
+//
+// The authoring shape is the natural one — a parameter name straight to its
+// value — rather than the `{literal: ...}` envelope a settings row carries:
+//
+//	tools_config:
+//	  tools:
+//	    generate_image:
+//	      size: "1536x1024"
+//	      model: {tags: [image-gen], providers: [codex]}
+//
+// Every value arrives as a LITERAL, and that is not a limitation. `{{...}}`
+// templates in this block are already evaluated before the activity runs —
+// wfcel.ResolveCELFields walks map<string, google.protobuf.Value> fields, so
+// `size: "{{inputs.image_size}}"` is a concrete string by the time it gets
+// here. Re-encoding it as a BoundValue.Expr would hand the same string to a
+// second, weaker expression engine that cannot see inputs.* at all.
+//
+// The parameter is taken on trust: validateToolsConfigBindings has already
+// checked every tool name and parameter against the generated catalog at load
+// time, and ToolWrapper.WithBindings rejects an unknown name again on the way
+// in. Duplicating the catalog lookup here would put a third copy of that rule
+// in the tree without catching anything the other two miss.
+func FromProtoStructs(byTool map[string]*structpb.Struct) ByTool {
+	if len(byTool) == 0 {
+		return nil
+	}
+	converted := make(ByTool, len(byTool))
+	for toolName, params := range byTool {
+		fields := params.GetFields()
+		if len(fields) == 0 {
+			continue
+		}
+		bindings := make(tools.Bindings, len(fields))
+		for paramName, value := range fields {
+			bindings[paramName] = tools.LiteralBinding(value.AsInterface())
+		}
+		converted[toolName] = bindings
+	}
+	if len(converted) == 0 {
+		return nil
+	}
+	return converted
 }
 
 // EncodeBindings renders bindings back into a settings row's value.

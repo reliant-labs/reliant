@@ -9,6 +9,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -286,6 +287,12 @@ func EvaluateNodeConfig(
 	// CEL expressions as a sentinel Struct with key "__cel_expr__"; evaluate it now.
 	resolveResponseToolSchema(resolvedNode, builder)
 
+	// Same sentinel, same reason, for tools_config.tools — a map whose values
+	// are Structs. This is the path a PRESET's tool parameters travel: the
+	// workflow declares `tools: "{{inputs.tool_params}}"` once, and whatever
+	// the preset put at that key becomes the per-tool bindings.
+	resolveToolsConfigTools(resolvedNode)
+
 	return resolvedNode, nil
 }
 
@@ -363,6 +370,64 @@ func resolveResponseToolSchema(node *reliantv1.Node, builder *CELContextBuilder)
 		rt.Schema = s
 	} else {
 		rt.Schema = nil
+	}
+}
+
+// resolveToolsConfigTools unwraps the "__cel_expr__" sentinel from
+// tools_config.tools, in either of the two places the parser can put it.
+//
+// ResolveCELFields has already EVALUATED the expression by the time this runs —
+// it walks into google.protobuf.Struct values — so the work here is structural:
+// a map whose shape came from an expression cannot be built until that
+// expression has a value.
+//
+//	tools: "{{inputs.tool_params}}"          → whole map is one sentinel entry
+//	tools: {generate_image: "{{inputs.x}}"}  → one tool's params are a sentinel
+//
+// A malformed or non-object result drops that entry rather than failing the
+// node. The binding it would have produced is optional by construction — every
+// tool must work with zero bindings — so refusing to run the whole turn over a
+// preset key that resolved to the wrong shape would trade a missing refinement
+// for a dead workflow. applyToolBindings logs what it could not apply.
+func resolveToolsConfigTools(node *reliantv1.Node) {
+	callLLMArgs := node.GetCallLlm()
+	if callLLMArgs == nil {
+		return
+	}
+	toolsConfig := callLLMArgs.GetToolsConfig()
+	if toolsConfig == nil || len(toolsConfig.GetTools()) == 0 {
+		return
+	}
+
+	tools := toolsConfig.GetTools()
+
+	// Whole-map form. The parser stored {"__cel_expr__": "<expr>"} as the map's
+	// only ENTRY, whose Struct in turn has "__cel_expr__" as its only FIELD.
+	// ResolveCELFields replaced that field's value in place, so the resolved
+	// tool→params mapping is nested two levels down — under the sentinel key
+	// inside the sentinel entry, not spread across the entry's fields.
+	if sentinel, ok := tools[wfyaml.CELExprSentinelKey]; ok && len(tools) == 1 {
+		resolved := make(map[string]*structpb.Struct)
+		for toolName, value := range sentinel.GetFields()[wfyaml.CELExprSentinelKey].GetStructValue().GetFields() {
+			if params := value.GetStructValue(); params != nil {
+				resolved[toolName] = params
+			}
+		}
+		toolsConfig.Tools = resolved
+		return
+	}
+
+	// Per-tool form: each entry may independently be a sentinel.
+	for toolName, params := range tools {
+		sentinelVal, ok := params.GetFields()[wfyaml.CELExprSentinelKey]
+		if !ok || len(params.GetFields()) != 1 {
+			continue
+		}
+		if inner := sentinelVal.GetStructValue(); inner != nil {
+			tools[toolName] = inner
+			continue
+		}
+		delete(tools, toolName)
 	}
 }
 
