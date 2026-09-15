@@ -159,7 +159,10 @@ nodes:
             # request from the response_tool block below, independent of the
             # filter. Same pattern as auditing-agent.yaml.
             tools_config:
-              filter: "{{inputs.tools}}"
+              preloaded_tools: "{{inputs.tools}}"
+              # An assistant: starts with a focused bundle, reaches for the rest
+              # on demand via load_tool.
+              loadable_tools: ["*"]
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: mutating
             response_tool:

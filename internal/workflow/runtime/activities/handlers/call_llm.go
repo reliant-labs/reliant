@@ -991,7 +991,13 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		activity.GetLogger(ctx).Info("[CallLLM] Tools disabled")
 		availableTools = []tools.Tool{}
 	} else {
-		toolFilter := model.CelStringListValue(tc.GetFilter())
+		// preloaded_tools is the current name; filter is its retired alias, kept
+		// so existing workflows keep working. preloaded_tools wins when both are
+		// present.
+		toolFilter := model.CelStringListValue(tc.GetPreloadedTools())
+		if len(toolFilter) == 0 {
+			toolFilter = model.CelStringListValue(tc.GetFilter())
+		}
 		// spawn_send is only meaningful to an agent that has a counterpart to
 		// message: a sub-agent replying to the parent that spawned it, or an
 		// orchestrator actually configured to spawn children. A plain root
@@ -999,7 +1005,13 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// every request.
 		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
 		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, thread, mailboxReachable)
+		// loadable_tools bounds what load_tool may reach. Declaring nothing means
+		// unrestricted — the product's existing behavior, where an agent starts
+		// with a focused bundle and reaches for the rest on demand.
+		loadable := model.CelStringListValue(tc.GetLoadableTools())
+		declaredLoadable := tc.GetLoadableTools() != nil
+
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, declaredLoadable, thread, mailboxReachable)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -1774,7 +1786,7 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 // getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
 // Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
 // Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, thread string, mailboxReachable bool) toolsWithSpawnResult {
+func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, loadableFilter []string, declaredLoadable bool, thread string, mailboxReachable bool) toolsWithSpawnResult {
 	if a.toolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
@@ -1871,27 +1883,27 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// refuse anything load_tool chose to add.
 	//
 	// The two universally-granted tools are admitted explicitly. Both are handed
-	// to every tool-enabled agent AFTER this expansion (see below), so a filter
-	// that never named them would otherwise make the agent unable to use the very
-	// tool it discovers with — load_tool would refuse its own name.
-	if chat != nil && len(filterResult.ToolNames) > 0 {
-		allowed := make([]string, 0, len(filterResult.ToolNames)+2)
-		allowed = append(allowed, filterResult.ToolNames...)
-		allowed = append(allowed, tools.ToolLoadTool, tools.ToolSpawnSend)
-		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chat.ID, thread), allowed)
+	// to every tool-enabled agent AFTER this expansion (see below), so a
+	// loadable list that never named them would otherwise make the agent unable
+	// to use the very tool it discovers with — load_tool would refuse its own
+	// name.
+	if chat != nil {
+		access := tools.ResolveToolAccess(toolFilter, loadableFilter, declaredLoadable, mcpToolNames)
+		if !access.LoadableAll {
+			access.Loadable = append(access.Loadable, tools.ToolLoadTool, tools.ToolSpawnSend)
+		}
+		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chat.ID, thread), access)
 	}
 
-	// Include dynamically loaded tools (via load_tool). These are intersected
-	// against the declared set rather than appended past it: appending is what
-	// let a loaded tool override even an explicit `!write` exclusion. load_tool
-	// already refuses out-of-set tools, so this is the second half of the same
-	// rule — a grant recorded before the filter narrowed cannot outlive it.
+	// Include dynamically loaded tools (via load_tool). Intersected against what
+	// this scope may load rather than appended past it, so a grant recorded
+	// before the workflow narrowed cannot outlive the narrowing.
 	if chat != nil {
 		scopeKey := tools.Scope(chat.ID, thread)
 		store := tools.GetLoadedToolsStore()
 		var admitted []string
 		for _, name := range store.Get(scopeKey) {
-			if store.IsToolAllowed(scopeKey, name) {
+			if store.CanLoadTool(scopeKey, name) {
 				admitted = append(admitted, name)
 			}
 		}

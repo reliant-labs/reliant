@@ -203,9 +203,17 @@ nodes:
             # through the shell, since there are no dedicated grep/glob tools;
             # spawn available in all modes (child inherits preset config).
             #
-            # The FILTER is what makes this a planning agent. It is enforced:
-            # load_tool and execute_tools both check it, so a plan-mode agent
-            # cannot acquire `write` by asking for it.
+            # preloaded_tools is the STARTING BUNDLE — what the agent is handed
+            # with full schemas. In plan mode that is the plan-tagged tools plus
+            # the shell family, which shapes what the agent reaches for first.
+            #
+            # loadable_tools is "*" because this is an assistant: it starts with
+            # a focused set and reaches for the rest on demand. Some tools are
+            # deliberately outside every default bundle for cost rather than
+            # policy — generate_image spends real money on a provider the user
+            # may not have configured — and load_tool is their only route.
+            # Written out rather than left to the default so the intent is
+            # visible, not inferred.
             #
             # `permission` is no longer varied by mode. It used to read
             # 'readonly' for plan, which promised more than it delivered — the
@@ -214,7 +222,8 @@ nodes:
             # to imply a guarantee it never made; a real read-only mode needs OS
             # containment and will return on that footing.
             tools_config:
-              filter: "{{inputs.mode == 'plan' ? ['tag:plan', 'tag:shell'] : inputs.tools}}"
+              preloaded_tools: "{{inputs.mode == 'plan' ? ['tag:plan', 'tag:shell'] : inputs.tools}}"
+              loadable_tools: ["*"]
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: mutating
 

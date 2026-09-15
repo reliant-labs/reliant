@@ -318,8 +318,44 @@ message Node {
 // API surface and break stored workflows. Keeping the schema in a generated Go
 // catalog gets the same build-time rejection without that coupling.
 message ToolsConfig {
-  // Filter specifies which tools are available (names, tags like "tag:search", globs, !exclusions).
+  // Filter is the OLD name for preloaded_tools, kept so existing workflows keep
+  // parsing. Prefer preloaded_tools; when both are set, preloaded_tools wins.
+  //
+  // The name is why this field is being retired: "filter" reads as a closed
+  // set, and reading it that way is what broke load_tool — a list an author
+  // wrote as a starting bundle was enforced as "these and nothing else", which
+  // made every tool outside it permanently unreachable.
   CelStringList filter = 1;
+
+  // PreloadedTools are the tools handed to the model up front, with full
+  // schemas, in its tool array. Names, tags ("tag:search"), globs, and
+  // !exclusions.
+  //
+  // This is a STARTING BUNDLE, not a boundary. It answers "what should the
+  // agent have in hand", and says nothing about what it may reach for later —
+  // that is loadable_tools. Keeping the two separate is deliberate: conflating
+  // them means an omission has to be read as either permission or refusal, and
+  // whichever you pick is wrong for half the workflows.
+  CelStringList preloaded_tools = 5;
+
+  // LoadableTools are the tools load_tool may reach that were not preloaded.
+  //
+  // "*" means anything in the registry, which is what an assistant-style
+  // workflow wants: start with a focused set, reach for the rest on demand.
+  // Some tools are deliberately outside every default bundle for reasons that
+  // are not "nobody should have this" — generate_image costs real money on a
+  // provider the user may not have configured — and load_tool is their only
+  // route.
+  //
+  // UNSET MEANS "*". That is a deliberate default rather than a cautious one:
+  // it is how the product already behaves, so every workflow written before
+  // this field existed keeps working unchanged. Narrowing what an agent can
+  // reach is a real decision and has to be written down, not inferred from a
+  // list that was answering a different question.
+  //
+  // An empty list is NOT unset — it means nothing is loadable, which is how a
+  // workflow says "exactly what I preloaded, nothing more".
+  CelStringList loadable_tools = 6;
   // Spawn configs for child workflow delegation.
   // Each entry is a spawn:workflow(presets) specification.
   CelStringList spawn = 2;
