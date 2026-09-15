@@ -24,7 +24,7 @@ type LoadedToolsStore struct {
 	mu           sync.RWMutex
 	tools        map[string]map[string]bool      // scope -> set of tool names
 	permissions  map[string]string               // scope -> permission level
-	allowed      map[string]map[string]bool      // scope -> workflow-declared allow-set
+	access       map[string]ToolAccess           // scope -> what the workflow declared
 	skills       map[string][]config.StoredSkill // scope -> skills
 	availableMCP map[string][]MCPToolInfo        // scope -> connected/available MCP tools
 }
@@ -58,7 +58,7 @@ type MCPToolInfo struct {
 var globalLoadedToolsStore = &LoadedToolsStore{
 	tools:        make(map[string]map[string]bool),
 	permissions:  make(map[string]string),
-	allowed:      make(map[string]map[string]bool),
+	access:       make(map[string]ToolAccess),
 	skills:       make(map[string][]config.StoredSkill),
 	availableMCP: make(map[string][]MCPToolInfo),
 }
@@ -120,7 +120,7 @@ func (s *LoadedToolsStore) Clear(scopeKey string) {
 
 	delete(s.tools, scopeKey)
 	delete(s.permissions, scopeKey)
-	delete(s.allowed, scopeKey)
+	delete(s.access, scopeKey)
 	delete(s.skills, scopeKey)
 	delete(s.availableMCP, scopeKey)
 }
@@ -175,57 +175,49 @@ func (s *LoadedToolsStore) SetPermission(scopeKey, permission string) {
 	s.permissions[scopeKey] = permission
 }
 
-// SetAllowedTools records the workflow's declared tool set for a scope, already
-// expanded from `tools:` (tags, globs and exclusions resolved to concrete
-// names). It is what makes the declaration a boundary rather than a hint: the
-// expansion used to be computed to build one request's tool array and then
-// thrown away, so load_tool could hand back anything the permission ladder
-// happened to allow — including a tool the author had explicitly excluded.
+// SetToolAccess records what a workflow declared for a scope: the tools handed
+// to the model, and the tools load_tool may reach.
 //
-// An EMPTY set means "no declaration", not "nothing allowed". A workflow with
-// no `tools:` filter places no restriction, and must not be silently reduced to
-// zero tools.
-func (s *LoadedToolsStore) SetAllowedTools(scopeKey string, names []string) {
+// Recording both is the correction to an earlier single "allowed" set. That set
+// was the expansion of `tools:` — a starting bundle — and enforcing it at
+// load_tool read an omission as a refusal. Every tool outside the bundle became
+// unreachable, which broke the one route to tools deliberately excluded from
+// every default bundle for cost rather than policy.
+func (s *LoadedToolsStore) SetToolAccess(scopeKey string, access ToolAccess) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if len(names) == 0 {
-		delete(s.allowed, scopeKey)
-		return
-	}
-	set := make(map[string]bool, len(names))
-	for _, name := range names {
-		set[name] = true
-	}
-	s.allowed[scopeKey] = set
+	s.access[scopeKey] = access
 }
 
-// IsToolAllowed reports whether a tool passes the scope's declared allow-set.
-// Scopes with no declaration allow everything, so an undeclared workflow keeps
-// working and a lost scope (worker restart) does not strand a live run.
+// CanLoadTool reports whether load_tool may reach a tool in this scope.
 //
-// This is deliberately NOT the security boundary — a declared set still hands
-// the agent a shell. It enforces authorial intent: what this workflow said its
-// agent should have.
-func (s *LoadedToolsStore) IsToolAllowed(scopeKey, toolName string) bool {
+// A scope with no recorded access allows everything. That covers the workflow
+// that declared nothing AND the scope lost to a worker restart — neither should
+// strand a live run, and this is not the layer that makes a run safe.
+func (s *LoadedToolsStore) CanLoadTool(scopeKey, toolName string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	set, ok := s.allowed[scopeKey]
+	access, ok := s.access[scopeKey]
 	if !ok {
 		return true
 	}
-	return set[toolName]
+	return access.CanLoad(toolName)
 }
 
-// HasAllowedTools reports whether a scope carries a declaration at all, so
-// callers can tell "allowed because declared" from "allowed because undeclared".
-func (s *LoadedToolsStore) HasAllowedTools(scopeKey string) bool {
+// LoadableIsUnrestricted reports whether this scope can reach anything, so
+// callers can skip per-name checks entirely — which is the common case, since
+// unset means unrestricted.
+func (s *LoadedToolsStore) LoadableIsUnrestricted(scopeKey string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	_, ok := s.allowed[scopeKey]
-	return ok
+	access, ok := s.access[scopeKey]
+	if !ok {
+		return true
+	}
+	return access.LoadableAll
 }
 
 // GetPermission returns the permission level for a scope.
@@ -266,6 +258,15 @@ func DeferredToolNames(scopeKey string, permission string, initialToolNames []st
 		loaded[name] = true
 	}
 
+	// Discovery must agree with enforcement. This list is rendered into
+	// load_tool's own description as "Additional tools available (use load_tool
+	// to enable)", which the model reads as a promise — so a name here that
+	// loadTool would refuse is worse than an omission: the model cannot tell a
+	// policy refusal from a malfunction, and retries something that can never
+	// work. That mismatch is exactly how a workflow ended up advertising
+	// generate_image and then refusing it.
+	unrestricted := store.LoadableIsUnrestricted(scopeKey)
+
 	var deferred []string
 	for _, def := range registry {
 		if loaded[def.Name] {
@@ -275,14 +276,21 @@ func DeferredToolNames(scopeKey string, permission string, initialToolNames []st
 		if !PermissionAtLeast(permission, MinimumPermissionForTool(def.Name)) {
 			continue
 		}
+		if !unrestricted && !store.CanLoadTool(scopeKey, def.Name) {
+			continue
+		}
 		deferred = append(deferred, def.Name)
 	}
 
 	// Include MCP tools that aren't already in the active tool set
 	for _, name := range mcpToolNames {
-		if !loaded[name] {
-			deferred = append(deferred, name)
+		if loaded[name] {
+			continue
 		}
+		if !unrestricted && !store.CanLoadTool(scopeKey, name) {
+			continue
+		}
+		deferred = append(deferred, name)
 	}
 
 	sort.Strings(deferred)

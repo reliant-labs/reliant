@@ -309,24 +309,22 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						return
 					}
 
-					// Enforce the workflow's declared tool set at EXECUTION, not
-					// only when the request was built. The model can name a tool
-					// that was never offered — a stale name from earlier history,
-					// or an outright hallucination — and without this the call
-					// would run purely because the ladder allowed its tier.
-					if !tools.GetLoadedToolsStore().IsToolAllowed(scopeKey, toolName) {
-						resultsChan <- toolCallResult{
-							index: job.index,
-							result: message.ToolResult{
-								ToolCallID: toolCallID,
-								Name:       toolName,
-								Content:    fmt.Sprintf("Tool '%s' is not in this workflow's declared tool set.", toolName),
-								IsError:    true,
-							},
-						}
-						return
-					}
-
+					// No declared-set check here, deliberately.
+					//
+					// An earlier version refused any tool outside the preloaded
+					// bundle at execution. That read an omission as a refusal and
+					// broke the documented path to tools left out of the default
+					// bundle for cost — generate_image among them — because
+					// load_tool grants them legitimately and this then rejected
+					// the call.
+					//
+					// Acquisition is the right place for that decision, and
+					// load_tool makes it against loadable_tools. By the time a
+					// call arrives here the tool was either preloaded or loaded,
+					// and both are answers the workflow already gave. A stale or
+					// hallucinated name fails in the executor, which is where an
+					// unknown tool has always failed.
+					//
 					// Enforce permission-based tool access control.
 					// The granted permission was set by call_llm from the workflow's permission config.
 					requiredPermission := tools.MinimumPermissionForTool(toolName)

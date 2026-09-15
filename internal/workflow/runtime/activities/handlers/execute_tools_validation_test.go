@@ -20,7 +20,19 @@ import (
 // validated at execution against BOTH the declared tool set and the permission
 // level set by call_llm via LoadedToolsStore.
 func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
-	t.Run("Tool outside the declared set is denied", func(t *testing.T) {
+	// A tool the workflow did not preload still EXECUTES here, and that is the
+	// correction rather than a gap.
+	//
+	// An earlier version refused anything outside the preloaded bundle at
+	// execution. That read an omission as a refusal and broke the documented
+	// route to tools deliberately left out of the default bundle for cost —
+	// generate_image among them: load_tool grants one legitimately, and this
+	// then rejected the call.
+	//
+	// Acquisition is where that decision belongs, and load_tool makes it against
+	// loadable_tools. By the time a call reaches execution the tool was either
+	// preloaded or loaded, and both are answers the workflow already gave.
+	t.Run("A loaded tool outside the preloaded bundle still executes", func(t *testing.T) {
 		h := NewIdempotencyTestHelper(t)
 		defer h.Cleanup()
 
@@ -33,13 +45,11 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// Plan mode is expressed as a DECLARED TOOL SET, not a permission tier.
-		// The readonly tier used to carry this and never actually prevented a
-		// write — the shell was granted at that tier too. The filter does, and
-		// is enforced here at execution.
+		// Preloaded: view + shell. write is not in the bundle, but the workflow
+		// placed no restriction on what may be loaded.
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chatID, "0"),
-			[]string{tools.ToolView, tools.ShellToolName})
+		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
+			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, false, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -62,11 +72,9 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 
 		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
-		assert.True(t, output.ToolResults[0].IsError)
-		assert.Contains(t, output.ToolResults[0].Content, "declared tool set")
-
-		// Tool should NOT have been executed
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"))
+		assert.False(t, output.ToolResults[0].IsError,
+			"a tool outside the preloaded bundle must still run: %s", output.ToolResults[0].Content)
+		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_write"))
 	})
 
 	t.Run("Tool inside the declared set runs", func(t *testing.T) {
@@ -82,11 +90,10 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		h.CreateTestProject(ctx, projectID, userID)
 		h.CreateTestChat(ctx, chatID, projectID, userID)
 
-		// A tool inside the declared set runs normally, so the guard above is
-		// not just refusing everything.
+		// A preloaded tool runs normally.
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chatID, "0"),
-			[]string{tools.ToolView, tools.ShellToolName})
+		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
+			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, false, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -442,8 +449,8 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 		// and not a security boundary; a hard boundary lives below the tool
 		// layer.
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetAllowedTools(tools.Scope(chatID, "0"),
-			[]string{tools.ToolView, "bash"})
+		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
+			tools.ResolveToolAccess([]string{tools.ToolView, "bash"}, nil, false, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -482,17 +489,69 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 			resultMap[r.GetToolCallId()] = r
 		}
 
-		// Readonly-tier tools should execute
+		// All three run. view and bash were preloaded; write was not, and that
+		// is no longer a refusal — the preloaded bundle says what the agent is
+		// handed, not what it may use. Acquisition is gated at load_tool
+		// against loadable_tools, and the ladder (below) is what still refuses
+		// at execution.
 		assert.False(t, resultMap["call_view"].IsError)
 		assert.False(t, resultMap["call_bash"].IsError)
+		assert.False(t, resultMap["call_write"].IsError,
+			"write is base-tier and was legitimately acquirable: %s", resultMap["call_write"].Content)
 
-		// Mutating tool should be denied
-		assert.True(t, resultMap["call_write"].IsError)
-		assert.Contains(t, resultMap["call_write"].Content, "declared tool set")
-
-		// Verify execution counts
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"))
+		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_write"))
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_bash"))
+	})
+
+	// The gate that DOES still refuse at execution, so this file keeps testing a
+	// real denial rather than only the permissive path.
+	t.Run("A tool above the agent's tier is denied mid-batch", func(t *testing.T) {
+		h := NewIdempotencyTestHelper(t)
+		defer h.Cleanup()
+
+		ctx := context.Background()
+
+		userID := uuid.New().String()
+		projectID := uuid.New().String()
+		chatID := uuid.New().String()
+
+		h.CreateTestProject(ctx, projectID, userID)
+		h.CreateTestChat(ctx, chatID, projectID, userID)
+
+		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
+		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
+			tools.ResolveToolAccess([]string{tools.ToolView}, nil, false, nil))
+		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
+
+		mockExecutor := newMockToolExecutor()
+		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
+
+		input := ExecuteToolsInput{
+			ChatID: chatID,
+			Thread: "0",
+			ToolCalls: []ToolCall{
+				{ID: "call_view", Name: tools.ToolView, Input: `{"file_path": "test.txt"}`},
+				{ID: "call_spawn", Name: "spawn", Input: `{"preset": "general", "prompt": "x"}`},
+			},
+		}
+
+		var output ExecuteToolsOutput
+		err := h.ExecuteActivity(activity.Execute, input, &output)
+
+		require.NoError(t, err)
+		require.Len(t, output.ToolResults, 2)
+
+		results := make(map[string]*reliantv1.ToolResultMsg)
+		for _, r := range output.ToolResults {
+			results[r.GetToolCallId()] = r
+		}
+
+		assert.False(t, results["call_view"].IsError)
+		assert.True(t, results["call_spawn"].IsError,
+			"spawn is orchestrator-tier and must be refused for a mutating agent")
+		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_spawn"),
+			"a denied tool must never reach the executor")
 	})
 }

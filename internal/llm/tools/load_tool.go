@@ -104,14 +104,16 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
 	store := GetLoadedToolsStore()
 
-	// The workflow's declared tool set is checked FIRST, and independently of
-	// the permission ladder. A tool must pass both: the ladder says what this
-	// agent's tier may ever hold, the filter says what this workflow said its
-	// agent should have. Checking only the ladder is what let an agent load
-	// `write` past a `tools: [view]` declaration.
-	if !store.IsToolAllowed(scopeKey, name) {
+	// What the workflow said load_tool may reach, checked independently of the
+	// permission ladder — a tool must pass both.
+	//
+	// This is loadable_tools, NOT the preloaded bundle. An earlier version
+	// checked the bundle, which read an omission as a refusal and made every
+	// tool outside it unreachable; unset here means unrestricted, which is how
+	// the product already behaves.
+	if !store.CanLoadTool(scopeKey, name) {
 		return NewTextErrorResponse(fmt.Sprintf(
-			"Tool '%s' is not in this workflow's declared tool set.", name))
+			"Tool '%s' is not loadable in this workflow (see loadable_tools).", name))
 	}
 
 	// Check permission
@@ -149,15 +151,13 @@ func (t *loadToolTool) loadMCPTool(rctx *rctx.ToolContext, name string) ToolResp
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
 	}
 
-	// A workflow's declared tool set covers MCP too. The ladder exemption below
-	// is deliberate and stays, but it previously left an author with a
-	// restrictive `tools:` filter no way to refuse a connected MCP tool —
-	// availability was the only check, so MCP was the widest hole in the filter.
-	// `tag:mcp` expands to the connected names, so an author who wants them can
-	// still say so in one line.
-	if !store.IsToolAllowed(scopeKey, name) {
+	// loadable_tools covers MCP too. The ladder exemption below is deliberate
+	// and stays, but availability alone was previously the only check, so a
+	// workflow that wanted to bound what its agent could reach had no way to
+	// include MCP in that. `tag:mcp` expands to the connected names.
+	if !store.CanLoadTool(scopeKey, name) {
 		return NewTextErrorResponse(fmt.Sprintf(
-			"MCP tool '%s' is not in this workflow's declared tool set.", name))
+			"MCP tool '%s' is not loadable in this workflow (see loadable_tools).", name))
 	}
 
 	// Verify the MCP tool is actually connected in this environment before
@@ -200,10 +200,10 @@ func (t *loadToolTool) searchTools(scopeKey, query string, permission string) To
 	// Discovery must agree with enforcement. Advertising a tool that loadTool
 	// will then refuse teaches the model to keep retrying something that cannot
 	// work, and burns a turn each time.
-	if store.HasAllowedTools(scopeKey) {
+	if !store.LoadableIsUnrestricted(scopeKey) {
 		filtered := results[:0]
 		for _, r := range results {
-			if store.IsToolAllowed(scopeKey, r.Name) {
+			if store.CanLoadTool(scopeKey, r.Name) {
 				filtered = append(filtered, r)
 			}
 		}

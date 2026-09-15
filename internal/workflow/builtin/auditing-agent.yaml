@@ -133,7 +133,10 @@ nodes:
             compaction_threshold: "{{inputs.compaction_threshold}}"
             skills: "{{inputs.skills}}"
             tools_config:
-              filter: "{{inputs.tools}}"
+              preloaded_tools: "{{inputs.tools}}"
+              # An assistant: starts with a focused bundle, reaches for the rest
+              # on demand via load_tool.
+              loadable_tools: ["*"]
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: mutating
         - id: audit_check
@@ -167,8 +170,12 @@ nodes:
                 required:
                   - approved
             tools_config:
-              filter:
+              # A closed set, and the one case in the builtins where that is the
+              # point: this node exists to make ONE audit decision, so it is
+              # handed the audit tool and nothing is loadable beyond it.
+              preloaded_tools:
                 - audit
+              loadable_tools: []
         # Only save non-empty guidance (empty on approval pollutes context)
         - id: execute_audit
           type: execute_tools
