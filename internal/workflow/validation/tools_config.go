@@ -8,6 +8,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/tools/toolcatalog"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // validateToolsConfigBindings checks every tools_config.tools entry against the
@@ -43,6 +44,22 @@ func validateToolsConfigBindings(wf *reliantv1.Workflow, result *Result) {
 
 		for _, toolName := range toolNames {
 			path := []string{"nodes", node.GetId(), "tools_config", "tools"}
+
+			// A tools block supplied by expression — `tools: "{{inputs.x}}"`,
+			// the path a preset's tool parameters travel — is carried as the
+			// CEL sentinel and is not a tool name. Its CONTENT cannot be
+			// checked here: it does not exist until the run has inputs, and
+			// which preset supplies it is not known at load time.
+			//
+			// This is a real and deliberate reduction in what this layer
+			// catches, limited to the entry that opted into it. The runtime
+			// still rejects an unknown parameter when the binding is applied
+			// (ToolWrapper.WithBindings), so a bad preset key degrades to a
+			// logged, unapplied binding rather than a silent success. Every
+			// literal entry beside it is still checked in full.
+			if toolName == wfyaml.CELExprSentinelKey {
+				continue
+			}
 
 			if _, known := toolcatalog.Lookup(toolName); !known {
 				result.AddErrorWithSuggestion(

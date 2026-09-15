@@ -38,12 +38,29 @@ func bindingLogger(ctx context.Context) leveledLogger {
 // resolveToolBindingScopes gathers every configuration scope that can bind a
 // tool's parameters for this call, in the order they layer:
 //
-//	tool default  →  global setting  →  workflow YAML  →  preset
+//	tool default  →  global setting  →  workflow YAML
 //
 // The tool's own defaults are not a scope here — ToolWrapper folds
 // DefaultBindings into whatever WithBindings receives, so each layer supplies
 // only what it overrides and an unconfigured tool needs nothing from this
 // function at all.
+//
+// Scopes.Preset is left unset because a preset is not a separate CHANNEL here,
+// not because a preset cannot bind tool parameters — it can, and that is a
+// primary use.
+//
+// A preset is an untyped bag of values applied to workflow INPUTS
+// (preset.ApplyToInputs). The workflow reaches into that bag by declaring the
+// path, either per parameter (`size: "{{inputs.image_size}}"`) or for the whole
+// block (`tools: "{{inputs.tool_params}}"`, which lets a preset configure tools
+// the workflow author never named). CEL resolves both before this activity
+// runs, so a preset's bindings arrive already folded into the workflow scope
+// with the preset's values in them.
+//
+// Populating Preset from the same ToolsConfig would therefore apply one value
+// twice under two names. The field stays in toolbindings because it is the
+// right model for a channel that binds tools DIRECTLY rather than through
+// inputs — a per-run override chosen in the UI is the obvious candidate.
 //
 // A failed global read is logged and dropped rather than returned. Losing a
 // preference degrades to the tool's default, which still produces a working
@@ -52,7 +69,6 @@ func bindingLogger(ctx context.Context) leveledLogger {
 func (a *CallLLMActivity) resolveToolBindingScopes(ctx context.Context, userID string, toolsConfig *reliantv1.ToolsConfig) toolbindings.Scopes {
 	scopes := toolbindings.Scopes{
 		Workflow: workflowScopeBindings(toolsConfig),
-		Preset:   presetScopeBindings(toolsConfig),
 	}
 
 	global, err := toolbindings.LoadGlobal(ctx, a.repo, userID)
@@ -83,19 +99,15 @@ func applyToolBindings(ctx context.Context, toolsList []tools.Tool, scopes toolb
 }
 
 // workflowScopeBindings extracts the bindings a workflow's YAML declares for
-// this node, which arrive on ToolsConfig.
+// this node, which arrive on ToolsConfig.tools.
 //
-// ToolsConfig is availability-only today (filter / spawn / permission); the
-// typed per-tool binding union is generated separately. This is the seam that
-// union plugs into, kept as its own function so the resolution ORDER is
-// already correct and tested before the channel that feeds it exists — the
-// alternative is discovering the ordering is wrong after the codegen lands.
-func workflowScopeBindings(_ *reliantv1.ToolsConfig) toolbindings.ByTool {
-	return nil
-}
-
-// presetScopeBindings extracts the most specific scope: what the preset
-// selected for this run binds. Same seam, same reason, as above.
-func presetScopeBindings(_ *reliantv1.ToolsConfig) toolbindings.ByTool {
-	return nil
+// The values are already CEL-resolved: EvaluateNodeConfig runs over the whole
+// node before the activity is handed it, and ResolveCELFields walks
+// map<string, google.protobuf.Value> fields, so a `{{inputs.x}}` written in
+// the YAML is a concrete value here.
+//
+// A preset reaches this through the SAME path rather than a scope of its own —
+// see presetScopeBindings.
+func workflowScopeBindings(toolsConfig *reliantv1.ToolsConfig) toolbindings.ByTool {
+	return toolbindings.FromProtoStructs(toolsConfig.GetTools())
 }
