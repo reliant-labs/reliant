@@ -625,8 +625,10 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 
 	process.outputMu.Unlock()
 
-	// Persist status change to database
-	m.persistStatusChange(process.ID, process.Status, process.ExitCode, process.EndTime)
+	// Persist from the event captured above, not by re-reading the process.
+	// Re-reading after the unlock races a concurrent kill, and would persist a
+	// status that disagrees with the event emitted a line later.
+	m.persistStatusChange(event.ProcessID, event.Status, event.ExitCode, event.EndTime)
 
 	// Emit event after unlocking
 	m.emitEvent(event)
@@ -665,23 +667,61 @@ func (m *BackgroundManager) GetProcessForGrant(processID, grantID string) (*Back
 	return process, nil
 }
 
+// StatusSafe returns the process status under the lock that guards it.
+//
+// Status is written by the completion, kill and external-death paths while
+// other goroutines are reading it, so a bare `process.Status` outside outputMu
+// is a data race even though a string read looks harmless.
+func (p *BackgroundProcess) StatusSafe() string {
+	p.outputMu.RLock()
+	defer p.outputMu.RUnlock()
+	return p.Status
+}
+
+// refreshPorts re-reads the OS port list for a running process.
+//
+// Status, Ports and cmd are guarded by the process's own outputMu — NOT by the
+// manager's map lock. m.mu protects the SHAPE of the map (which ids exist), and
+// says nothing about the fields of a process already in it. Reading Status
+// under m.mu.RLock alone therefore raced with handleProcessCompletion writing
+// it under outputMu, and assigning Ports there was a write performed under a
+// READ lock, which is unsynchronized against every other reader.
+//
+// getProcessPorts shells out to the OS, so it runs between the two critical
+// sections rather than inside either. Holding a lock across it would serialize
+// every caller of every getter behind a syscall per process.
+func (p *BackgroundProcess) refreshPorts() {
+	p.outputMu.RLock()
+	pid := 0
+	if p.Status == "running" && p.cmd != nil && p.cmd.Process != nil {
+		pid = p.cmd.Process.Pid
+	}
+	p.outputMu.RUnlock()
+
+	if pid == 0 {
+		return
+	}
+
+	ports, err := getProcessPorts(pid)
+	if err != nil {
+		return
+	}
+
+	p.outputMu.Lock()
+	p.Ports = ports
+	p.outputMu.Unlock()
+}
+
 func (m *BackgroundManager) GetProcess(processID string) (*BackgroundProcess, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	process, exists := m.processes[processID]
+	m.mu.RUnlock()
+
 	if !exists {
 		return nil, fmt.Errorf("process %s not found", processID)
 	}
 
-	// Update port information if process is running
-	if process.Status == "running" && process.cmd != nil && process.cmd.Process != nil {
-		pid := process.cmd.Process.Pid
-		ports, err := getProcessPorts(pid)
-		if err == nil {
-			process.Ports = ports
-		}
-	}
+	process.refreshPorts()
 
 	return process, nil
 }
@@ -697,15 +737,11 @@ func (m *BackgroundManager) GetProcessesBySession(sessionID string) []*Backgroun
 	}
 	m.mu.RUnlock()
 
-	// Update port information for running processes
+	// Update port information for running processes. Done outside the map
+	// lock: refreshPorts takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd.
 	for _, process := range processes {
-		if process.Status == "running" && process.cmd != nil && process.cmd.Process != nil {
-			pid := process.cmd.Process.Pid
-			ports, err := getProcessPorts(pid)
-			if err == nil {
-				process.Ports = ports
-			}
-		}
+		process.refreshPorts()
 	}
 
 	return processes
@@ -722,15 +758,11 @@ func (m *BackgroundManager) GetProcessesByChat(chatID string) []*BackgroundProce
 	}
 	m.mu.RUnlock()
 
-	// Update port information for running processes
+	// Update port information for running processes. Done outside the map
+	// lock: refreshPorts takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd.
 	for _, process := range processes {
-		if process.Status == "running" && process.cmd != nil && process.cmd.Process != nil {
-			pid := process.cmd.Process.Pid
-			ports, err := getProcessPorts(pid)
-			if err == nil {
-				process.Ports = ports
-			}
-		}
+		process.refreshPorts()
 	}
 
 	return processes
@@ -747,15 +779,11 @@ func (m *BackgroundManager) GetProcessesByWorktree(worktreeID string) []*Backgro
 	}
 	m.mu.RUnlock()
 
-	// Update port information for running processes
+	// Update port information for running processes. Done outside the map
+	// lock: refreshPorts takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd.
 	for _, process := range processes {
-		if process.Status == "running" && process.cmd != nil && process.cmd.Process != nil {
-			pid := process.cmd.Process.Pid
-			ports, err := getProcessPorts(pid)
-			if err == nil {
-				process.Ports = ports
-			}
-		}
+		process.refreshPorts()
 	}
 
 	return processes
@@ -770,15 +798,11 @@ func (m *BackgroundManager) GetAllProcesses() []*BackgroundProcess {
 	}
 	m.mu.RUnlock()
 
-	// Update port information for running processes
+	// Update port information for running processes. Done outside the map
+	// lock: refreshPorts takes each process's own outputMu, which is what
+	// actually guards Status/Ports/cmd.
 	for _, process := range processes {
-		if process.Status == "running" && process.cmd != nil && process.cmd.Process != nil {
-			pid := process.cmd.Process.Pid
-			ports, err := getProcessPorts(pid)
-			if err == nil {
-				process.Ports = ports
-			}
-		}
+		process.refreshPorts()
 	}
 
 	return processes
@@ -859,8 +883,8 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		return err
 	}
 
-	if process.Status != "running" {
-		return fmt.Errorf("process %s is not running (status: %s)", processID, process.Status)
+	if status := process.StatusSafe(); status != "running" {
+		return fmt.Errorf("process %s is not running (status: %s)", processID, status)
 	}
 
 	// If this is a recovered/ghost process (no exec.Cmd / cancelFunc), fall back to
@@ -916,19 +940,14 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		}
 	}
 
+	// Capture the event under the lock that guards these fields, the same way
+	// handleProcessCompletion and handleExternalKill do. Building it afterwards
+	// read Status, ExitCode, EndTime and Ports unsynchronized.
 	process.outputMu.Lock()
 	process.Status = "killed"
 	endTime := time.Now()
 	process.EndTime = &endTime
-	process.outputMu.Unlock()
-
-	logging.Info("Killed background process", "id", processID, "pid", pid)
-
-	// Persist status change to database
-	m.persistStatusChange(processID, "killed", nil, process.EndTime)
-
-	// Emit killed event
-	m.emitEvent(ProcessEvent{
+	event := ProcessEvent{
 		Type:       "killed",
 		ProcessID:  process.ID,
 		ChatID:     process.ChatID,
@@ -941,7 +960,16 @@ func (m *BackgroundManager) KillProcess(processID string) error {
 		StartTime:  process.StartTime,
 		EndTime:    process.EndTime,
 		Ports:      process.Ports,
-	})
+	}
+	process.outputMu.Unlock()
+
+	logging.Info("Killed background process", "id", processID, "pid", pid)
+
+	// Persist status change to database
+	m.persistStatusChange(event.ProcessID, event.Status, event.ExitCode, event.EndTime)
+
+	// Emit killed event
+	m.emitEvent(event)
 
 	return nil
 }
@@ -1227,13 +1255,20 @@ func (m *BackgroundManager) CleanupOldProcesses(maxAge time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Status and EndTime are read under the process's own outputMu. Taking it
+	// while already holding m.mu follows the established order (map lock, then
+	// process lock) that every write path here uses, so it cannot deadlock.
 	now := time.Now()
 	for id, process := range m.processes {
-		if process.Status != "running" && process.EndTime != nil {
-			if now.Sub(*process.EndTime) > maxAge {
-				delete(m.processes, id)
-				logging.Debug("Cleaned up old process", "id", id)
-			}
+		process.outputMu.RLock()
+		expired := process.Status != "running" &&
+			process.EndTime != nil &&
+			now.Sub(*process.EndTime) > maxAge
+		process.outputMu.RUnlock()
+
+		if expired {
+			delete(m.processes, id)
+			logging.Debug("Cleaned up old process", "id", id)
 		}
 	}
 }
@@ -1249,13 +1284,19 @@ func (m *BackgroundManager) CleanupOldProcesses(maxAge time.Duration) {
 // processes are independent, so nothing is ordered here.
 func (m *BackgroundManager) KillAllRunning() {
 	m.mu.RLock()
-	var runningIDs []string
+	candidates := make(map[string]*BackgroundProcess, len(m.processes))
 	for id, process := range m.processes {
-		if process.Status == "running" {
+		candidates[id] = process
+	}
+	m.mu.RUnlock()
+
+	// Status is read under each process's own outputMu, not the map lock.
+	var runningIDs []string
+	for id, process := range candidates {
+		if process.StatusSafe() == "running" {
 			runningIDs = append(runningIDs, id)
 		}
 	}
-	m.mu.RUnlock()
 
 	if len(runningIDs) == 0 {
 		logging.Debug("No running background processes to kill during shutdown")
