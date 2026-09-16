@@ -121,7 +121,33 @@ nodes:
     # an undelivered message. It sits INSIDE the max_turns conjunction on
     # purpose — a queued message earns another turn, but it must not buy an
     # unbounded number of them.
-    while: (outputs.completed != true || outputs.has_feedback == true || outputs.pending_inbox == true) && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+    #
+    # The stop_kind term is what stops this loop SPINNING on a broken turn.
+    #
+    # This is a sentinel loop: it continues until the response tool is called.
+    # A turn that ends without producing one therefore looks exactly like a
+    # turn that has more work to do — so a turn the provider TRUNCATED
+    # (max_tokens) re-enters, issues an identical full-context request, and
+    # truncates the same way. Nothing about the next attempt differs, so it
+    # never terminates on its own. Refusals behave the same: the request has to
+    # change before the answer will.
+    #
+    # There is no backstop here. max_turns defaults to 0, which means unbounded
+    # — every other sentinel loop in this directory carries an explicit
+    # max_retries, and this one does not. Observed cost of a single such turn
+    # on chat 2308c394: 868 seconds and 64000 output tokens, for nothing.
+    #
+    # Note this is the OPPOSITE polarity from agent.yaml, which continues on a
+    # truncated turn because for a tool-presence loop the work is genuinely
+    # unfinished and re-entering resumes it. Same signal, opposite correct
+    # response — which is why the runtime exposes stop_kind rather than acting
+    # on it.
+    # The stop_kind term is written as a NEGATIVE match on the two values that
+    # cannot make progress, not as `== 'complete'`. Positive-matching would
+    # also stop the loop whenever stop_kind is absent — every replayed shape
+    # and every scenario fixture — which silently turns a working sentinel loop
+    # into one that exits after a single turn.
+    while: (outputs.completed != true || outputs.has_feedback == true || outputs.pending_inbox == true) && outputs.stop_kind != 'truncated' && outputs.stop_kind != 'refused' && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
     inline:
       entry: [call_llm]
 
@@ -138,6 +164,11 @@ nodes:
         # (or a replayed shape where the node output is absent) must evaluate
         # to false, not blow up the whole output evaluation.
         pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
+        # Why the last turn ended: complete | truncated | refused | cancelled.
+        # Defaults to 'complete' when call_llm has not run (or on a replayed
+        # shape with the node output absent), so a missing value cannot by
+        # itself stop the loop — the other terms decide, exactly as before.
+        stop_kind: "{{has(nodes.call_llm) && has(nodes.call_llm.stop_kind) ? nodes.call_llm.stop_kind : 'complete'}}"
 
       nodes:
         - id: call_llm
@@ -214,16 +245,16 @@ nodes:
         - from: call_llm
           cases:
             - to: approval
-              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+              condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
               label: require_approval
             - to: execute_tools
-              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+              condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
               label: auto_approve
             - to: remind_response
-              condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && !inputs.ask
+              condition: size(nodes.call_llm.tool_calls) == 0 && !inputs.ask
               label: no_tools
             - to: ask_question
-              condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask
+              condition: size(nodes.call_llm.tool_calls) == 0 && inputs.ask
               label: ask_user
 
         - from: approval
@@ -266,16 +297,16 @@ nodes:
               y: 148.5
             cases:
               - id: case-0
-                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+                condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
                 label: require_approval
               - id: case-1
-                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+                condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
                 label: auto_approve
               - id: case-2
-                condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && !inputs.ask
+                condition: size(nodes.call_llm.tool_calls) == 0 && !inputs.ask
                 label: no_tools
               - id: case-3
-                condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask
+                condition: size(nodes.call_llm.tool_calls) == 0 && inputs.ask
                 label: ask_user
 
   - id: max_turns_notification

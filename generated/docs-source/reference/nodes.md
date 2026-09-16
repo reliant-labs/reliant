@@ -134,6 +134,8 @@ Send a prompt to a language model and get a response
 | `aborted` | boolean | - |
 | `message_id` | string | - |
 | `last_stream_seq` | integer | - |
+| `stop_kind` | string | - |
+| `finish_reason` | string | - |
 
 ---
 

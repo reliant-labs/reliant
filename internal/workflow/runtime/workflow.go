@@ -1855,7 +1855,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			workflowContext := buildWorkflowContext(workflowID, input.WorkflowName, input.ChatID, input.Inputs)
 
 			// Evaluate workflow outputs
-			outputs, err := EvaluateWorkflowOutputs(wf.Outputs, nodeOutputs, workflowContext)
+			outputs, err := EvaluateDeclaredOutputs(wf.Outputs, nodeOutputs, workflowContext, wf, logger)
 			if err != nil {
 				logger.Error("[Workflow Runtime] Failed to evaluate outputs", "error", err)
 				return nil, fmt.Errorf("failed to evaluate workflow outputs: %w", err)

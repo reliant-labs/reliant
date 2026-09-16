@@ -5288,6 +5288,46 @@ type CallLLMOutput struct {
 	// onto deltas during this call. Lets the finalize marker tell consumers how
 	// much of the stream they should have seen.
 	LastStreamSeq int64 `protobuf:"varint,13,opt,name=last_stream_seq,json=lastStreamSeq,proto3" json:"last_stream_seq,omitempty"`
+	// StopKind is WHY this turn ended, in the four categories a loop can act on.
+	//
+	//	complete   the model finished on its own (end_turn, tool_use)
+	//	truncated  it ran out of room mid-thought (max_tokens)
+	//	refused    the safety system stopped it (refusal)
+	//	cancelled  something cut the stream (cancelled, error, pause_turn)
+	//
+	// This exists because a loop cannot otherwise tell "the model is done" from
+	// "the model was cut off", and BOTH produce zero tool calls. Every
+	// while-condition in this repo tests tool_calls, so a truncated turn reads
+	// as a clean finish.
+	//
+	// The two loop families need OPPOSITE policies from this one field, which is
+	// why it is exposed rather than acted on in the runtime:
+	//
+	//	tool-presence loops (agent.yaml) UNDER-RUN on truncation — the work is
+	//	unfinished and the loop should take another turn.
+	//
+	//	sentinel loops (structured-agent, implement-review, get-it-right) SPIN
+	//	on truncation — no sentinel tool call appears, the condition stays true,
+	//	and the loop re-runs an identical full-context call that truncates the
+	//	same way. structured-agent defaults max_turns to 0, so that is unbounded.
+	//
+	// Observed: chat 2308c394 burned 868s and exactly 64000 output tokens (the
+	// model's cap) producing no text and no tool calls, only a 226KB thinking
+	// signature. The loop read zero tool calls and exited as if complete.
+	//
+	// Prefer this over finish_reason in workflow conditions: it is a closed
+	// vocabulary that does not grow when a provider adds a stop reason, so a
+	// condition written against it cannot silently miss a new case.
+	StopKind string `protobuf:"bytes,16,opt,name=stop_kind,json=stopKind,proto3" json:"stop_kind,omitempty"`
+	// FinishReason is the raw provider stop reason behind stop_kind — one of
+	// end_turn, max_tokens, tool_use, tool_use_error, cancelled, error,
+	// permission_denied, refusal, pause_turn, unknown.
+	//
+	// The escape hatch for conditions that genuinely need provider specifics.
+	// Using it means opting into a vocabulary that can grow, so a condition
+	// written against it should be written as a positive match on the values it
+	// knows rather than a negative list of the ones it excludes.
+	FinishReason  string `protobuf:"bytes,17,opt,name=finish_reason,json=finishReason,proto3" json:"finish_reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5425,6 +5465,20 @@ func (x *CallLLMOutput) GetLastStreamSeq() int64 {
 		return x.LastStreamSeq
 	}
 	return 0
+}
+
+func (x *CallLLMOutput) GetStopKind() string {
+	if x != nil {
+		return x.StopKind
+	}
+	return ""
+}
+
+func (x *CallLLMOutput) GetFinishReason() string {
+	if x != nil {
+		return x.FinishReason
+	}
+	return ""
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.
@@ -7303,7 +7357,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xfd\x04\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xbf\x05\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -7323,7 +7377,9 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\aaborted\x18\x0f \x01(\bR\aaborted\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\f \x01(\tR\tmessageId\x12&\n" +
-	"\x0flast_stream_seq\x18\r \x01(\x03R\rlastStreamSeq\"\xa1\x02\n" +
+	"\x0flast_stream_seq\x18\r \x01(\x03R\rlastStreamSeq\x12\x1b\n" +
+	"\tstop_kind\x18\x10 \x01(\tR\bstopKind\x12#\n" +
+	"\rfinish_reason\x18\x11 \x01(\tR\ffinishReason\"\xa1\x02\n" +
 	"\x12ExecuteToolsOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12<\n" +
 	"\ftool_results\x18\x02 \x03(\v2\x19.reliant.v1.ToolResultMsgR\vtoolResults\x12,\n" +
