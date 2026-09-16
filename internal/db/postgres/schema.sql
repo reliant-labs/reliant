@@ -261,7 +261,8 @@ CREATE TABLE public.workflows (
     worker_stopped_at timestamp with time zone,
     outcome text,
     state integer DEFAULT 2 NOT NULL,
-    stop_reason integer DEFAULT 0 NOT NULL
+    stop_reason integer DEFAULT 0 NOT NULL,
+    owner_user_id text
 );
 
 --

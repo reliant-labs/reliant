@@ -62,7 +62,7 @@ UPDATE workflows SET
         ELSE completed_at
     END
 WHERE id = $3 AND state = $4 AND stop_reason = $5
-RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason
+RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id
 `
 
 type CompareAndSwapWorkflowStatusParams struct {
@@ -104,6 +104,7 @@ func (q *Queries) CompareAndSwapWorkflowStatus(ctx context.Context, arg CompareA
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
@@ -112,10 +113,10 @@ const createWorkflow = `-- name: CreateWorkflow :one
 INSERT INTO workflows (
     id, parent_id, chat_id, workflow_name, thread, state, stop_reason,
     spawned_by_node_id, loop_iteration,
-    created_at, completed_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    created_at, completed_at, owner_user_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 ON CONFLICT (id) DO NOTHING
-RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason
+RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id
 `
 
 type CreateWorkflowParams struct {
@@ -130,6 +131,7 @@ type CreateWorkflowParams struct {
 	LoopIteration   sql.NullInt64  `json:"loop_iteration"`
 	CreatedAt       time.Time      `json:"created_at"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
+	OwnerUserID     sql.NullString `json:"owner_user_id"`
 }
 
 func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error) {
@@ -145,6 +147,7 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 		arg.LoopIteration,
 		arg.CreatedAt,
 		arg.CompletedAt,
+		arg.OwnerUserID,
 	)
 	var i Workflow
 	err := row.Scan(
@@ -162,6 +165,7 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
@@ -241,7 +245,7 @@ func (q *Queries) GetRootWorkflowStatusForChat(ctx context.Context, chatID strin
 }
 
 const getWorkflow = `-- name: GetWorkflow :one
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows WHERE id = $1
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows WHERE id = $1
 `
 
 func (q *Queries) GetWorkflow(ctx context.Context, id string) (Workflow, error) {
@@ -262,12 +266,13 @@ func (q *Queries) GetWorkflow(ctx context.Context, id string) (Workflow, error) 
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
 
 const getWorkflowByThread = `-- name: GetWorkflowByThread :one
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows 
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows 
 WHERE chat_id = $1 AND thread = $2
 `
 
@@ -294,12 +299,13 @@ func (q *Queries) GetWorkflowByThread(ctx context.Context, arg GetWorkflowByThre
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
 
 const listChildWorkflows = `-- name: ListChildWorkflows :many
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows
 WHERE parent_id = $1
 ORDER BY created_at ASC
 `
@@ -328,6 +334,7 @@ func (q *Queries) ListChildWorkflows(ctx context.Context, parentID sql.NullStrin
 			&i.Outcome,
 			&i.State,
 			&i.StopReason,
+			&i.OwnerUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -343,7 +350,7 @@ func (q *Queries) ListChildWorkflows(ctx context.Context, parentID sql.NullStrin
 }
 
 const listRootWorkflows = `-- name: ListRootWorkflows :many
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows
 WHERE chat_id = $1 AND parent_id IS NULL
 ORDER BY created_at DESC
 `
@@ -372,6 +379,7 @@ func (q *Queries) ListRootWorkflows(ctx context.Context, chatID string) ([]Workf
 			&i.Outcome,
 			&i.State,
 			&i.StopReason,
+			&i.OwnerUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -387,7 +395,7 @@ func (q *Queries) ListRootWorkflows(ctx context.Context, chatID string) ([]Workf
 }
 
 const listRootWorkflowsByStatus = `-- name: ListRootWorkflowsByStatus :many
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows
 WHERE parent_id IS NULL AND state = $1 AND stop_reason = $2
 ORDER BY created_at ASC
 `
@@ -423,6 +431,7 @@ func (q *Queries) ListRootWorkflowsByStatus(ctx context.Context, arg ListRootWor
 			&i.Outcome,
 			&i.State,
 			&i.StopReason,
+			&i.OwnerUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -438,7 +447,7 @@ func (q *Queries) ListRootWorkflowsByStatus(ctx context.Context, arg ListRootWor
 }
 
 const listWorkflowsByChat = `-- name: ListWorkflowsByChat :many
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows
 WHERE chat_id = $1
 ORDER BY created_at ASC
 `
@@ -467,6 +476,7 @@ func (q *Queries) ListWorkflowsByChat(ctx context.Context, chatID string) ([]Wor
 			&i.Outcome,
 			&i.State,
 			&i.StopReason,
+			&i.OwnerUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -482,7 +492,7 @@ func (q *Queries) ListWorkflowsByChat(ctx context.Context, chatID string) ([]Wor
 }
 
 const listWorkflowsByStatus = `-- name: ListWorkflowsByStatus :many
-SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason FROM workflows
+SELECT id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id FROM workflows
 WHERE state = $1 AND stop_reason = $2
 ORDER BY created_at ASC
 `
@@ -518,6 +528,7 @@ func (q *Queries) ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsBy
 			&i.Outcome,
 			&i.State,
 			&i.StopReason,
+			&i.OwnerUserID,
 		); err != nil {
 			return nil, err
 		}
@@ -610,7 +621,7 @@ const setWorkflowOutcome = `-- name: SetWorkflowOutcome :one
 UPDATE workflows SET
     outcome = $1
 WHERE id = $2
-RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason
+RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id
 `
 
 type SetWorkflowOutcomeParams struct {
@@ -640,6 +651,7 @@ func (q *Queries) SetWorkflowOutcome(ctx context.Context, arg SetWorkflowOutcome
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
@@ -648,7 +660,7 @@ const updateWorkflowName = `-- name: UpdateWorkflowName :one
 UPDATE workflows SET
     workflow_name = $1
 WHERE id = $2 AND state = 1
-RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason
+RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id
 `
 
 type UpdateWorkflowNameParams struct {
@@ -675,6 +687,7 @@ func (q *Queries) UpdateWorkflowName(ctx context.Context, arg UpdateWorkflowName
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
@@ -689,7 +702,7 @@ UPDATE workflows SET
         ELSE completed_at
     END
 WHERE id = $3
-RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason
+RETURNING id, parent_id, chat_id, workflow_name, thread, spawned_by_node_id, loop_iteration, created_at, completed_at, worker_started_at, worker_stopped_at, outcome, state, stop_reason, owner_user_id
 `
 
 type UpdateWorkflowStatusParams struct {
@@ -720,6 +733,7 @@ func (q *Queries) UpdateWorkflowStatus(ctx context.Context, arg UpdateWorkflowSt
 		&i.Outcome,
 		&i.State,
 		&i.StopReason,
+		&i.OwnerUserID,
 	)
 	return i, err
 }
