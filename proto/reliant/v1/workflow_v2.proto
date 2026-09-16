@@ -1338,6 +1338,48 @@ message CallLLMOutput {
   // onto deltas during this call. Lets the finalize marker tell consumers how
   // much of the stream they should have seen.
   int64 last_stream_seq = 13;
+
+  // StopKind is WHY this turn ended, in the four categories a loop can act on.
+  //
+  //   complete   the model finished on its own (end_turn, tool_use)
+  //   truncated  it ran out of room mid-thought (max_tokens)
+  //   refused    the safety system stopped it (refusal)
+  //   cancelled  something cut the stream (cancelled, error, pause_turn)
+  //
+  // This exists because a loop cannot otherwise tell "the model is done" from
+  // "the model was cut off", and BOTH produce zero tool calls. Every
+  // while-condition in this repo tests tool_calls, so a truncated turn reads
+  // as a clean finish.
+  //
+  // The two loop families need OPPOSITE policies from this one field, which is
+  // why it is exposed rather than acted on in the runtime:
+  //
+  //   tool-presence loops (agent.yaml) UNDER-RUN on truncation — the work is
+  //   unfinished and the loop should take another turn.
+  //
+  //   sentinel loops (structured-agent, implement-review, get-it-right) SPIN
+  //   on truncation — no sentinel tool call appears, the condition stays true,
+  //   and the loop re-runs an identical full-context call that truncates the
+  //   same way. structured-agent defaults max_turns to 0, so that is unbounded.
+  //
+  // Observed: chat 2308c394 burned 868s and exactly 64000 output tokens (the
+  // model's cap) producing no text and no tool calls, only a 226KB thinking
+  // signature. The loop read zero tool calls and exited as if complete.
+  //
+  // Prefer this over finish_reason in workflow conditions: it is a closed
+  // vocabulary that does not grow when a provider adds a stop reason, so a
+  // condition written against it cannot silently miss a new case.
+  string stop_kind = 16;
+
+  // FinishReason is the raw provider stop reason behind stop_kind — one of
+  // end_turn, max_tokens, tool_use, tool_use_error, cancelled, error,
+  // permission_denied, refusal, pause_turn, unknown.
+  //
+  // The escape hatch for conditions that genuinely need provider specifics.
+  // Using it means opting into a vocabulary that can grow, so a condition
+  // written against it should be written as a positive match on the values it
+  // knows rather than a negative list of the ones it excludes.
+  string finish_reason = 17;
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.

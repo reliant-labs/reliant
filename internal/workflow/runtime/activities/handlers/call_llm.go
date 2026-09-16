@@ -644,6 +644,63 @@ func (a *CallLLMActivity) reportContentFreeTurn(
 // explains a content-free turn. Short: one insert, with the turn already over.
 const contentFreeTurnReportTimeout = 5 * time.Second
 
+// Stop-kind vocabulary. Closed by construction: a provider adding a new stop
+// reason maps into one of these four rather than becoming a fifth, so a
+// workflow condition written against them cannot silently miss a new case.
+const (
+	// StopKindComplete: the model finished on its own terms. Nothing was lost.
+	StopKindComplete = "complete"
+	// StopKindTruncated: it ran out of output room mid-turn. The work is a
+	// fragment, and re-running the SAME request truncates identically.
+	StopKindTruncated = "truncated"
+	// StopKindRefused: the safety system declined. Retrying unchanged will be
+	// refused the same way; the request itself has to change.
+	StopKindRefused = "refused"
+	// StopKindCancelled: something cut the stream short — cancellation, a
+	// transport error, or a provider-side pause. Unlike truncation, a retry
+	// may well succeed.
+	StopKindCancelled = "cancelled"
+)
+
+// deriveStopKind collapses a provider stop reason into the four categories a
+// workflow loop can act on.
+//
+// Why a derived vocabulary rather than passing the raw reason through: the
+// alternative is every while-condition carrying a hand-maintained negative
+// list ("!= 'max_tokens' && != 'refusal' && ..."), which has to be updated in
+// ten builtin workflows each time the enum grows, and which silently keeps
+// looping on whichever value someone forgot. A closed set inverts that into a
+// positive test — `stop_kind == 'complete'` — that stays correct as the
+// provider vocabulary changes. The raw value is still exposed alongside for
+// the cases that genuinely need it.
+func deriveStopKind(reason message.FinishReason) string {
+	switch reason {
+	case message.FinishReasonEndTurn, message.FinishReasonToolUse:
+		return StopKindComplete
+	case message.FinishReasonMaxTokens:
+		return StopKindTruncated
+	case message.FinishReasonRefusal:
+		return StopKindRefused
+	case message.FinishReasonCancelled,
+		message.FinishReasonError,
+		message.FinishReasonToolUseError,
+		message.FinishReasonPermissionDenied,
+		// pause_turn is the model suspended mid-turn expecting to be handed
+		// the conversation back. Nothing resumes it here yet, so from the
+		// loop's point of view the turn was cut short — which is `cancelled`,
+		// not `complete`. Calling it complete would tell a loop the answer is
+		// finished when it is a fragment.
+		message.FinishReasonPauseTurn:
+		return StopKindCancelled
+	default:
+		// Includes FinishReasonUnknown and anything a provider adds later.
+		// Deliberately NOT "complete": treating an unrecognized stop as a
+		// clean finish is what makes a new provider behavior look like
+		// success, and that is the exact failure this field exists to end.
+		return StopKindCancelled
+	}
+}
+
 // contentFreeTurnSummary is the one-line headline WorkflowErrorMessage shows
 // collapsed; contentFreeTurnText is the detail behind it.
 func contentFreeTurnSummary(reason message.FinishReason) string {
@@ -1349,6 +1406,13 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				CompactionThreshold: effectiveCompactionThreshold,
 				Model:               resolvedModelID,
 				MessageId:           streamState.messageID,
+				// Yielding without calling the provider IS a complete turn —
+				// the previous turn already had the last word. Saying
+				// "complete" here keeps a stop_kind-gated loop exiting rather
+				// than treating the yield as trouble worth retrying, which
+				// would spin against an unchanged history.
+				StopKind:     StopKindComplete,
+				FinishReason: string(message.FinishReasonEndTurn),
 			}, nil
 		}
 	}
@@ -1699,6 +1763,11 @@ streamLoop:
 		Cost:               streamState.cost,
 		UpstreamRequestId:  streamState.upstreamRequestID,
 		UpstreamProxymanId: streamState.upstreamProxymanID,
+		// Why this turn ended, for the loop to act on. Zero tool calls is
+		// ambiguous on its own — a finished turn and a truncated one look
+		// identical — so the reason is carried explicitly.
+		StopKind:     deriveStopKind(streamState.finishReason),
+		FinishReason: string(streamState.finishReason),
 		Thinking: &reliantv1.ThinkingOutput{
 			Content:   thinkingText,
 			Signature: streamState.thinkingSignature,

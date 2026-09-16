@@ -235,6 +235,22 @@ func dropBlocklessAssistantMessages(msgs []message.Message) ([]message.Message, 
 // isBlocklessAssistant reports whether an assistant message would render as
 // zero content blocks. Mirrors the inputs threads.createAssistantContentBlocks
 // uses, so the two cannot disagree about what "empty" means.
+//
+// The reasoning checks below deliberately do NOT go through
+// ReasoningContent.String(). That method returns only the Thinking text, so a
+// turn the provider signed but left textless reads as empty through it — while
+// threads.validateSaveMessageOpts, which gates the WRITE, admits the same row
+// because ThinkingContent.HasContent() counts a signature or a sealed redacted
+// payload as content. A row the write guard allows and the read guard discards
+// is dropped from history on every single load, forever, and it is the
+// signature that makes a thinking turn replayable: without it the provider's
+// cached prefix breaks and the model re-derives work it already did.
+//
+// Observed on chat 2308c394: one 226KB signature-only row, re-dropped on every
+// turn (messageCountBefore 57 → 59 → 61), with cacheReadPct pinned at 16%.
+//
+// Keep this predicate in lockstep with ThinkingContent.HasContent(). If it ever
+// becomes STRICTER than that one, rows start vanishing again with only a WARN.
 func isBlocklessAssistant(m *message.Message) bool {
 	if strings.TrimSpace(m.Content().String()) != "" {
 		return false
@@ -242,7 +258,16 @@ func isBlocklessAssistant(m *message.Message) bool {
 	if len(m.ToolCalls()) > 0 {
 		return false
 	}
-	if strings.TrimSpace(m.ReasoningContent().String()) != "" {
+	// Signature is opaque provider bytes, not prose: it is never trimmed, and
+	// its mere presence means the provider did real work worth replaying.
+	reasoning := m.ReasoningContent()
+	if strings.TrimSpace(reasoning.Thinking) != "" || reasoning.Signature != "" {
+		return false
+	}
+	// Redacted reasoning has no readable text by construction — String() is
+	// hardcoded empty so ciphertext can never reach a display surface — so it
+	// has to be detected structurally rather than by content.
+	if len(m.RedactedReasoningContent()) > 0 {
 		return false
 	}
 	return true

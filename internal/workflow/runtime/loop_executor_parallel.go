@@ -632,7 +632,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 		// Check completion
 		if len(runningSteps) == 0 && len(events) == 0 {
 			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs)
-			outputs, err := EvaluateWorkflowOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext)
+			outputs, err := EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext, e.subWorkflow, e.logger)
 			if err != nil {
 				result.Error = fmt.Errorf("failed to evaluate sub-workflow outputs: %w", err)
 				return result

@@ -31,10 +31,29 @@ const (
 	// thread 5e3fe370, killed mid-edit and reported to its parent as a
 	// success). Unlike pending_inbox it cannot wedge: it is recomputed from
 	// each turn's own stream, so a healthy turn clears it.
-	agentWhileExpr             = `(outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true || outputs.aborted == true`
-	edgeCallLLMToApproval      = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
-	edgeCallLLMToExecuteTools  = `nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
-	edgeCallLLMToAskQuestion   = `(nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask`
+	// The stop_kind term generalizes aborted to every involuntary ending. The
+	// case that motivated it is TRUNCATION: a turn that hits the model's
+	// output cap produces no text and no tool calls, so the loop read it as a
+	// clean finish and exited mid-task (chat 2308c394 — 868s and 64000 output
+	// tokens spent, nothing but a thinking signature to show for it).
+	//
+	// structured-agent.yaml gates on the INVERSE of this term. That is not an
+	// inconsistency: it is a sentinel loop, where re-entering on a truncated
+	// turn re-issues an identical doomed request, while here re-entering
+	// resumes genuinely unfinished work.
+	//
+	// tool_calls carries no `!= null` guard. It is a repeated proto field, and
+	// StepExecutor.normalizeOutput backfills every registered activity output
+	// to its typed zero value — []interface{}{} for a slice, chosen in
+	// schema.getZeroValue precisely so size() is safe. Confirmed against the
+	// production log: every "Outputs evaluated" line reads tool_calls:[].
+	// stop_kind matches POSITIVELY on 'truncated'. Written as != 'complete' it
+	// also fires when stop_kind is absent (replayed shapes, scenario fixtures)
+	// and the loop never exits — measured at 1000 iterations instead of 2.
+	agentWhileExpr             = `size(outputs.tool_calls) > 0 || outputs.has_feedback == true || outputs.pending_inbox == true || outputs.aborted == true || outputs.stop_kind == 'truncated'`
+	edgeCallLLMToApproval      = `size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'`
+	edgeCallLLMToExecuteTools  = `size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'`
+	edgeCallLLMToAskQuestion   = `size(nodes.call_llm.tool_calls) == 0 && inputs.ask`
 	edgeApprovalToExecuteTools = `nodes.approval.status == 'approved'`
 	edgeExecuteToolsToCompact  = `nodes.execute_tools.thread_token_count > nodes.call_llm.compaction_threshold`
 )

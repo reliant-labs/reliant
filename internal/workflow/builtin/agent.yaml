@@ -167,7 +167,37 @@ nodes:
     # re-entered turn finds history still ending with the assistant, it yields
     # instead of calling the provider, which bounds this term even under a
     # provider that aborts every attempt.
-    while: (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true || outputs.pending_inbox == true || outputs.aborted == true
+    #
+    # `stop_kind != 'complete'` is the fifth term and generalizes `aborted`.
+    # An involuntarily-ended turn produces zero tool calls, which reads here as
+    # "the model is done" — `aborted` covers the cancelled-stream case, and
+    # this covers the rest, of which TRUNCATION is the one that bit: a turn
+    # that hits the model's output cap mid-thought (chat 2308c394: 868s, 64000
+    # output tokens, no text and no tool calls, only a 226KB thinking
+    # signature) exited the loop as if it had finished cleanly.
+    #
+    # Safe for the same reason `aborted` is: it is a fact about THE TURN THAT
+    # JUST RAN, recomputed from its own stream each iteration, so a healthy
+    # turn clears it. It cannot hold true across a good turn the way a stale
+    # pending_inbox could.
+    #
+    # Note structured-agent.yaml gates on the INVERSE (`== 'complete'`). It is
+    # a sentinel loop, so re-entering on a truncated turn re-issues the same
+    # doomed request forever; here, re-entering resumes real unfinished work.
+    #
+    # No `!= null` guard on tool_calls: it is a repeated proto field, and
+    # StepExecutor.normalizeOutput backfills every registered activity output
+    # to its typed zero value — []interface{}{} for a slice, precisely so
+    # size() is safe (schema.getZeroValue). Verified in production: every
+    # "Outputs evaluated" line reads tool_calls:[], never nil.
+    #
+    # The stop_kind term matches POSITIVELY on the one value that earns another
+    # turn, and must keep doing so. Written as `!= 'complete'` it also fires
+    # for an ABSENT stop_kind — which is every replayed shape and every
+    # scenario fixture — and the loop then never exits (measured: 1000
+    # iterations against the agent scenarios instead of 2). Unknown must mean
+    # "do not continue", so only a value we recognize as unfinished continues.
+    while: size(outputs.tool_calls) > 0 || outputs.has_feedback == true || outputs.pending_inbox == true || outputs.aborted == true || outputs.stop_kind == 'truncated'
     inline:
       outputs:
         tool_calls: "{{nodes.call_llm.tool_calls}}"
@@ -180,6 +210,10 @@ nodes:
         pending_inbox: "{{has(nodes.call_llm) && has(nodes.call_llm.pending_inbox) ? nodes.call_llm.pending_inbox : false}}"
         # Guarded like its siblings for the same reason.
         aborted: "{{has(nodes.call_llm) && has(nodes.call_llm.aborted) ? nodes.call_llm.aborted : false}}"
+        # Why the last turn ended: complete | truncated | refused | cancelled.
+        # Defaults to 'complete' when call_llm has not run, so an iteration
+        # that never reached it cannot hold the loop open on this term alone.
+        stop_kind: "{{has(nodes.call_llm) && has(nodes.call_llm.stop_kind) ? nodes.call_llm.stop_kind : 'complete'}}"
 
       entry: [call_llm]
 
@@ -261,18 +295,18 @@ nodes:
         - from: call_llm
           cases:
             - to: approval
-              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+              condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
               label: "require_approval"
             # Plan mode falls through here too — plan-tagged tools are read-only, so auto-approve is safe
             - to: execute_tools
-              condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+              condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
               label: "auto_approve"
 
         # From call_llm: when no tool calls and ask is enabled, go to ask_question
         - from: call_llm
           cases:
             - to: ask_question
-              condition: (nodes.call_llm.tool_calls == null || size(nodes.call_llm.tool_calls) == 0) && inputs.ask
+              condition: size(nodes.call_llm.tool_calls) == 0 && inputs.ask
               label: "ask_user"
 
         # No edge when denied - iteration ends, loop continues (user can re-prompt)
@@ -313,10 +347,10 @@ nodes:
               y: 63
             cases:
               - id: case-0
-                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
+                condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode == 'manual'
                 label: require_approval
               - id: case-1
-                condition: nodes.call_llm.tool_calls != null && size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
+                condition: size(nodes.call_llm.tool_calls) > 0 && inputs.mode != 'manual'
                 label: auto_approve
 
 

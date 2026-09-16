@@ -580,3 +580,78 @@ expect:
   node_outputs:
     agent_loop:
       _iterations: 2
+
+---
+# Truncation: the turn hit the model's output ceiling before producing anything.
+#
+# This is the third instance of the same class as `aborted`, and the one that
+# was NOT covered. A truncated turn returns zero tool calls and no text, which
+# the while-condition cannot tell apart from "the model is done" — so the loop
+# exited and reported a half-finished task as complete.
+#
+# Measured on chat 2308c394: 868 seconds and exactly 64000 output tokens (the
+# model's cap for claude-5.1-fable), producing no text and no tool calls, only a
+# 226KB thinking signature. The loop read that as a clean finish.
+#
+# stop_kind=truncated is what distinguishes them: the work is unfinished, so
+# agent.yaml must take another turn. Note structured-agent.yaml gates on the
+# INVERSE of this — there, re-entering would re-issue the identical request that
+# just truncated, forever.
+name: truncated_turn_continues_loop
+description: A turn that hit the output cap must re-enter the loop, not report the agent as finished
+inputs:
+  mode: auto
+events:
+  # Iteration 0: ran out of output room mid-thought. Nothing to show for it.
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls: []
+      stop_kind: truncated
+  # Iteration 1: the retry completes the work.
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Resuming - the refactor is applied and the suite is green."
+      response_text: "Resuming - the refactor is applied and the suite is green."
+      tool_calls: []
+      stop_kind: complete
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+  node_outputs:
+    agent_loop:
+      _iterations: 2
+
+---
+# The other half of the contract: a turn that ended CLEANLY with no tool calls
+# must still exit after one iteration. Without this, "continue on truncated"
+# could be satisfied by a loop that simply never exits, and the scenario above
+# would pass for the wrong reason.
+name: complete_turn_exits_loop
+description: A cleanly finished turn with no tool calls exits the loop after one iteration
+inputs:
+  mode: auto
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "All done."
+      response_text: "All done."
+      tool_calls: []
+      stop_kind: complete
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+  node_outputs:
+    agent_loop:
+      _iterations: 1

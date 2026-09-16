@@ -100,6 +100,52 @@ func TestDropBlocklessAssistantMessages(t *testing.T) {
 		}
 	})
 
+	// The read guard must not be stricter than the write guard.
+	//
+	// threads.validateSaveMessageOpts admits a row when
+	// ThinkingContent.HasContent() is true, and that counts a SIGNATURE even
+	// with no readable thinking text. ReasoningContent.String() returns only
+	// the Thinking field, so testing through String() made this row look
+	// empty — the write allowed it, every later load deleted it.
+	//
+	// Live case: chat 2308c394 carried a 226KB signature-only row that was
+	// re-dropped on every turn (messageCountBefore 57 → 59 → 61). The
+	// signature is what lets the next turn resume on the provider's cached
+	// prefix, so dropping it broke caching (cacheReadPct stuck at 16%) and
+	// silently discarded 14.5 minutes of model work.
+	t.Run("keeps a signature-only thinking message", func(t *testing.T) {
+		msgs := []message.Message{{
+			ID:   "a1",
+			Role: message.Assistant,
+			Parts: []message.ContentPart{
+				message.ReasoningContent{Thinking: "", Signature: "provider-signed-opaque-bytes"},
+			},
+		}}
+		_, dropped := dropBlocklessAssistantMessages(msgs)
+		if dropped != 0 {
+			t.Fatal("a signature-only thinking message must be kept: the write guard " +
+				"(ThinkingContent.HasContent) admits it, and the signature is the artifact " +
+				"that lets the next turn replay against the provider's cached prefix")
+		}
+	})
+
+	// Same asymmetry, other half. RedactedReasoningContent.String() is
+	// hardcoded to "" on purpose — the payload is ciphertext and must never
+	// reach a display surface — so a content-based check can never see it and
+	// it has to be detected structurally.
+	t.Run("keeps a redacted-reasoning-only message", func(t *testing.T) {
+		msgs := []message.Message{{
+			ID:    "a1",
+			Role:  message.Assistant,
+			Parts: []message.ContentPart{message.RedactedReasoningContent{Data: "sealed-ciphertext"}},
+		}}
+		_, dropped := dropBlocklessAssistantMessages(msgs)
+		if dropped != 0 {
+			t.Fatal("a redacted-reasoning-only message must be kept: the API requires the " +
+				"sealed payload be replayed byte-for-byte on the next turn")
+		}
+	})
+
 	// Only ASSISTANT rows are filtered. An empty tool or user message is a
 	// different bug with a different repair, and silently dropping either would
 	// hide it.

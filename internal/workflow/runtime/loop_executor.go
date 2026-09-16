@@ -1565,7 +1565,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs)
 
 			// Evaluate sub-workflow outputs
-			outputs, err := EvaluateWorkflowOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext)
+			outputs, err := EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext, e.subWorkflow, e.logger)
 			if err != nil {
 				e.logger.Error("[InlineLoop] Failed to evaluate outputs",
 					"loopID", e.loopID,
