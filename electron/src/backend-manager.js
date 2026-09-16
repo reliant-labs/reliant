@@ -86,10 +86,12 @@ class BackendManager {
     // handleCrash), because a daemon that died badly may have left children.
     this.hasSweptOrphans = false;
 
-    // Bounded re-mint attempts for a daemon that idles without credentials
-    // while we hold a session. Reset on each start() so a later cold boot is
-    // not starved by an earlier one. See reensureCredsIfSignedIn.
-    this.credsReensureAttempts = 0;
+    // Credential-repair state for a daemon that idles without credentials
+    // while we hold a session. Driven by the daemon-state watcher, one
+    // episode at a time — see maybeRepairDaemonCredentials.
+    this.resetDaemonCredentialRepair();
+    this._credRepairInFlight = false;
+    this._credRepairTimer = null;
 
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
@@ -520,10 +522,193 @@ class BackendManager {
     // stat() — cheap next to the 5s network poll it replaces.
     fs.watchFile(statePath, { interval: 250 }, check);
     this._daemonStateWatchPath = statePath;
+    // Same file, same lifetime — but a genuinely different mechanism; see
+    // startDaemonCredentialRepairLoop for why the watcher cannot drive it.
+    this.startDaemonCredentialRepairLoop();
     // Fire once immediately: the daemon may already be connected by the time
     // a listener attaches, and a watcher that only reports future changes
     // would miss it and wait forever.
     check();
+  }
+
+  /**
+   * Drive the credential repair on a clock of its own.
+   *
+   * WHY NOT OFF THE FILE WATCHER, which is already polling this exact file.
+   * Because fs.watchFile is a CHANGE notifier, not a tick: its listener fires
+   * only when the file's stat actually moves. And a daemon parked in
+   * awaiting_credentials does not touch its record — `SetStream` is called
+   * once, before the credential poll loop is entered
+   * (waitForCredentialsNonInteractive), and that loop only ever READS
+   * daemon.json. So the record sits byte-identical for as long as the fault
+   * lasts, the watcher fires exactly once, and a repair hung off it would get
+   * exactly one attempt: the same single-shot behaviour whose failure to
+   * cover control-plane's boot window is the bug being fixed here.
+   *
+   * The repair therefore needs a real timer. It stays paired with the
+   * watcher's lifecycle because the two observe the same thing and have
+   * identical lifetimes, and the timer is unref'd so it can never be the
+   * reason a process stays alive.
+   */
+  startDaemonCredentialRepairLoop() {
+    this.stopDaemonCredentialRepairLoop();
+
+    const tick = () => {
+      // isAwaitingCredentials, not a bare stream read: it also checks the
+      // record belongs to OUR live daemon, so a stale record from a previous
+      // process cannot trigger a mint.
+      if (this.isAwaitingCredentials()) {
+        // Fire and forget — the repair rate-limits itself, serializes itself,
+        // and swallows its own failures.
+        this.maybeRepairDaemonCredentials();
+      } else {
+        // Either connected or not ours. Re-arm for the next episode.
+        this.resetDaemonCredentialRepair();
+      }
+    };
+
+    this._credRepairTimer = setInterval(tick, this.credRepairTickMs || BackendManager.CRED_REPAIR_TICK_MS);
+    this._credRepairTimer.unref?.();
+    tick();
+  }
+
+  stopDaemonCredentialRepairLoop() {
+    if (this._credRepairTimer) {
+      clearInterval(this._credRepairTimer);
+      this._credRepairTimer = null;
+    }
+  }
+
+  /**
+   * Repair a daemon that is idling without credentials while we hold a
+   * session that can produce them.
+   *
+   * THE BUG THIS EXISTS FOR. On a cold `forge up` everything starts at once,
+   * and the pre-spawn mint raced control-plane's boot and lost: ECONNREFUSED
+   * on :8090, three attempts inside ~1s (the mint budget is deliberately
+   * short because it blocks daemon spawn), while the API only began listening
+   * ~3.2s later. Electron logged "falling back to daemon flow", the daemon
+   * idled in awaiting_credentials — it cannot do interactive registration
+   * under --non-interactive — and nothing ever tried again, because the mint
+   * only ran pre-spawn. The user saw "no daemon connected" with the cause
+   * 80,000 lines deep in a log.
+   *
+   * WHY HERE AND NOT IN waitForReady. Repairing from the startup promise
+   * requires choosing how long to hold it open, and the thing being waited
+   * for — another process finishing its boot — has no bound worth guessing.
+   * A reconciler on its own clock has no such deadline: it repairs
+   * whenever the condition is observed, which covers a control-plane that
+   * comes up three seconds late, thirty seconds late, or is restarted an hour
+   * later while Electron stays up. No respawn is needed for any of it,
+   * because the daemon POLLS for credentials every 3s
+   * (daemonCredentialPollInterval) and picks up a late write on its own.
+   *
+   * WHY IT DISTINGUISHES OUTCOMES. "It didn't work" is not actionable. A mint
+   * that failed against an API that was not listening is worth retrying a
+   * second later; a store that is already current cannot change no matter how
+   * often it is retried, because ensureDaemonPATForOrigin short-circuits
+   * before the RPC. So this switches on the reported outcome and only backs
+   * off-and-retries the genuinely transient one. (A daemon still idling on an
+   * already-current store is a different fault — wrong origin, wrong account,
+   * a revoked PAT — and minting is not its cure, so this stops and says so
+   * rather than spinning.)
+   *
+   * Called on every repair tick, so it is responsible for its own rate:
+   * at most one attempt in flight, and an escalating gap between attempts
+   * that settles at CRED_REPAIR_MAX_BACKOFF_MS. It does not give up, matching
+   * the daemon's own indefinite poll — a signed-in user whose stack comes up
+   * late should end up connected, not permanently broken with a log line
+   * explaining why. The steady-state cost of the pathological case is one
+   * RPC per 30s.
+   */
+  async maybeRepairDaemonCredentials() {
+    if (this._credRepairInFlight) return;
+    if (this._credRepairStopped) return;
+    if (!this.authStorage) return;
+    if (Date.now() < this._credRepairNextAt) return;
+
+    this._credRepairInFlight = true;
+    try {
+      const outcome = await this.ensureDaemonCreds(); // never throws, by contract
+
+      switch (outcome) {
+        case daemonCreds.ENSURE_MINTED:
+          // Written. The daemon's poll will notice within its interval; the
+          // watcher will see the stream leave awaiting_credentials and clear
+          // this episode. Keep the attempt schedule armed in case the write
+          // turns out not to be enough.
+          log.info(
+            '[BackendManager] Minted daemon credentials for an idling daemon; ' +
+              'waiting for it to pick them up'
+          );
+          this._credRepairAttempt += 1;
+          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          return;
+
+        case daemonCreds.ENSURE_NO_SESSION:
+        case daemonCreds.ENSURE_UNAVAILABLE:
+          // The daemon is correctly waiting for a human. Stay quiet, and keep
+          // checking on the slow schedule rather than every tick — signing in
+          // normally restarts the daemon (restartBackendForAuthPrincipalChange)
+          // and resets this, but a session that appears any other way should
+          // still be picked up without a restart.
+          //
+          // Deliberately does NOT consume an attempt: a long signed-out spell
+          // must not leave a later genuine race with only the long tail of
+          // the schedule to work with.
+          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          return;
+
+        case daemonCreds.ENSURE_ALREADY_CURRENT:
+          log.warn(
+            '[BackendManager] Daemon is idling without credentials, but the store already ' +
+              'holds a current one for this user — minting again cannot help. Suspect an ' +
+              'origin/account mismatch between Electron and the daemon, or a revoked PAT.'
+          );
+          this._credRepairStopped = true;
+          return;
+
+        default:
+          // ENSURE_FAILED, or an outcome a future change adds without
+          // teaching this switch about it. Treat the unknown as transient:
+          // retrying costs one RPC, while wrongly giving up is the bug.
+          this._credRepairAttempt += 1;
+          this._credRepairNextAt = Date.now() + this.credRepairBackoffMs();
+          log.warn(
+            `[BackendManager] Could not mint credentials for the idling daemon ` +
+              `(outcome: ${outcome}); retrying in ${this._credRepairNextAt - Date.now()}ms`
+          );
+          return;
+      }
+    } finally {
+      this._credRepairInFlight = false;
+    }
+  }
+
+  /**
+   * Gap before the next repair attempt: the configured escalation, then flat
+   * at its last value. Read off an instance field so tests can collapse it.
+   */
+  credRepairBackoffMs() {
+    const schedule = this.credRepairBackoffsMs || BackendManager.CRED_REPAIR_BACKOFFS_MS;
+    if (schedule.length === 0) return BackendManager.CRED_REPAIR_MAX_BACKOFF_MS;
+    const i = Math.min(this._credRepairAttempt, schedule.length - 1);
+    return schedule[i];
+  }
+
+  /**
+   * Re-arm the repair for a fresh episode.
+   *
+   * Called on daemon start and whenever the daemon is observed to have left
+   * awaiting_credentials. The budget is per-episode by design: the same fault
+   * recurring after a successful connect deserves its own attempts, and a
+   * lifetime cap would silently disarm the repair for the rest of the app's
+   * run.
+   */
+  resetDaemonCredentialRepair() {
+    this._credRepairAttempt = 0;
+    this._credRepairNextAt = 0;
+    this._credRepairStopped = false;
   }
 
   /**
@@ -632,6 +817,7 @@ class BackendManager {
       fs.unwatchFile(this._daemonStateWatchPath);
       this._daemonStateWatchPath = null;
     }
+    this.stopDaemonCredentialRepairLoop();
   }
 
   /**
@@ -1287,29 +1473,18 @@ class BackendManager {
         // settle immediately rather than either rejecting or blocking the
         // caller for the full startup timeout.
         if (this.isAwaitingCredentials()) {
-          // ...but "the daemon has no credentials" and "the user is not
-          // signed in" are two different things, and this branch used to
-          // conflate them. When we DO hold a session, a credential-less
-          // daemon is a failure we can repair, not a steady state to wait in.
+          // Settle, do not repair. A credential-less daemon may well be a
+          // repairable fault rather than a steady state — see
+          // maybeRepairDaemonCredentials — but the repair does NOT belong on
+          // this promise. This is a one-shot startup gate with a deadline,
+          // and the window it would have to cover (control-plane finishing
+          // its own boot) is open-ended. Trying to repair from here means
+          // picking a timeout, and any timeout picked here is wrong: too
+          // short and it reproduces the original bug, too long and every
+          // genuinely-signed-out launch blocks the caller for it.
           //
-          // The case that forced this: on a cold `forge up` everything starts
-          // at once, and the pre-spawn mint raced control-plane's boot and
-          // lost — ECONNREFUSED on :8090, three attempts inside ~1 second,
-          // while the API only began listening ~3s later. Electron then
-          // logged "falling back to daemon flow" and settled here, and the
-          // daemon (which cannot do interactive registration under
-          // --non-interactive) idled forever. The user saw "no daemon
-          // connected" with the cause 80,000 lines deep in a log.
-          //
-          // Nothing retried, because ensureDaemonCreds only ran pre-spawn.
-          // It does not need a respawn: the daemon POLLS for credentials
-          // every 3s (daemonCredentialPollInterval), so writing them late is
-          // enough for it to pick them up on its own.
-          if (await this.reensureCredsIfSignedIn()) {
-            log.info('[BackendManager] Re-minted daemon credentials; continuing to wait for the stream');
-            setTimeout(checkReady, 50);
-            return;
-          }
+          // So this resolves promptly either way and the reconciler, which
+          // has no deadline to honour, owns the repair.
           log.info('[BackendManager] Daemon awaiting credentials — not ready, but not a crash');
           resolve(false);
           return;
@@ -1330,69 +1505,6 @@ class BackendManager {
       // Start checking
       checkReady();
     });
-  }
-
-  /**
-   * Re-run the credential mint for a daemon that is idling without
-   * credentials, when Electron holds a session that could produce them.
-   *
-   * Returns true when a fresh credential was written (so the caller should
-   * keep waiting for the daemon to notice it), false when there is nothing to
-   * be done — no session, no auth storage, or the mint failed again.
-   *
-   * WHY IT IS BOUNDED. The pre-spawn budget is deliberately ~1s because
-   * "daemon spawn is hot", and that is the right trade for the hot path. This
-   * is the cold path: the daemon is already up and useless, so spending
-   * several seconds here costs nothing that was not already lost. But it must
-   * not retry forever either — a genuinely unauthenticated user would spin.
-   * Hence a small attempt cap, and the signed-in precondition.
-   */
-  async reensureCredsIfSignedIn() {
-    if (!this.authStorage) return false;
-    if (this.credsReensureAttempts >= BackendManager.MAX_CREDS_REENSURE_ATTEMPTS) return false;
-
-    let session = null;
-    try {
-      session = this.authStorage.loadStoredAuth();
-    } catch (e) {
-      log.debug?.('[BackendManager] reensureCreds: auth storage unreadable:', e.message);
-      return false;
-    }
-    // No session means the daemon is correctly waiting for a sign-in. That IS
-    // the steady state this branch was written for; leave it alone.
-    if (!session?.access_token) return false;
-
-    this.credsReensureAttempts += 1;
-    log.info(
-      `[BackendManager] Daemon has no credentials but we are signed in — re-minting ` +
-        `(attempt ${this.credsReensureAttempts}/${BackendManager.MAX_CREDS_REENSURE_ATTEMPTS})`
-    );
-
-    const before = this.readDaemonCredsFingerprint();
-    await this.ensureDaemonCreds(); // never throws, by contract
-    const after = this.readDaemonCredsFingerprint();
-
-    if (after && after !== before) return true;
-
-    log.warn('[BackendManager] re-mint produced no new credential; daemon will keep waiting');
-    return false;
-  }
-
-  /**
-   * A cheap stand-in for "did the credential change?" — mtime+size of the
-   * store. Compared rather than parsed because this only has to distinguish
-   * "something was written" from "nothing happened", and parsing would put
-   * this module back in the business of knowing the file's shape, which is
-   * owned by internal/auth/daemon_file.go and mirrored once, in
-   * daemon-creds.js.
-   */
-  readDaemonCredsFingerprint() {
-    try {
-      const st = fs.statSync(daemonCreds.daemonStorePaths().file);
-      return `${st.mtimeMs}:${st.size}`;
-    } catch {
-      return null;
-    }
   }
 
   /**
@@ -1743,10 +1855,10 @@ class BackendManager {
       //
       // Swallowing is right HERE (a mint failure must not stop the app from
       // starting) but it is not sufficient: this attempt can lose a race with
-      // control-plane's own boot. waitForReady re-attempts while the daemon
-      // idles without credentials — see reensureCredsIfSignedIn. Reset the
-      // budget so each start gets its own.
-      this.credsReensureAttempts = 0;
+      // control-plane's own boot, and on a cold `forge up` it reliably does.
+      // maybeRepairDaemonCredentials retries for as long as the daemon idles
+      // without credentials. Re-arm it so each start gets its own episode.
+      this.resetDaemonCredentialRepair();
       await this.ensureDaemonCreds();
 
       this.process = spawn(binaryPath.command, binaryPath.args, {
@@ -1850,7 +1962,7 @@ class BackendManager {
    * Failure-mode contract (owned by daemon-creds): NEVER throws.
    */
   async ensureDaemonCreds() {
-    await daemonCreds.ensureDaemonPATForOrigin({
+    return daemonCreds.ensureDaemonPATForOrigin({
       authStorage: this.authStorage,
       apiUrl: this.apiUrl,
       gatewayUrl: this.gatewayUrl || process.env.RELIANT_GATEWAY_URL || '',
@@ -2057,6 +2169,18 @@ class BackendManager {
 // ride out a control-plane cold boot (the observed race lost by ~3s and the
 // daemon re-polls every 3s) without spinning for a user who is simply not
 // signed in.
-BackendManager.MAX_CREDS_REENSURE_ATTEMPTS = 3;
+// Gap between credential-repair attempts for an idling daemon, escalating
+// then flat at the last entry. The first is ~immediate because the common
+// case is losing a startup race by a second or two; the tail is long because
+// anything still failing after ~30s is not a race and should cost ~nothing to
+// keep watching. See maybeRepairDaemonCredentials.
+BackendManager.CRED_REPAIR_BACKOFFS_MS = [1_000, 2_000, 4_000, 8_000, 16_000, 30_000];
+// Fallback for an empty schedule, so a misconfiguration cannot turn the
+// repair into a hot loop against the API.
+BackendManager.CRED_REPAIR_MAX_BACKOFF_MS = 30_000;
+// How often the repair loop looks at the daemon's state. Only needs to be
+// fine enough not to add noticeable latency on top of the backoff above,
+// since maybeRepairDaemonCredentials decides for itself whether it is due.
+BackendManager.CRED_REPAIR_TICK_MS = 1_000;
 
 module.exports = BackendManager;
