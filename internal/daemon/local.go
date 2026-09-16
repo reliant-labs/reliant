@@ -789,6 +789,16 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// handler so the two paths cannot bound it differently.
 	cmd.WaitDelay = ExecWaitDelay
 
+	// Cancellation terminates the process GROUP and escalates to a kill only
+	// after ExecGraceDelay, instead of os/exec's default of SIGKILL with no
+	// warning. A SIGKILLed child runs no signal handler, so a cancelled `git
+	// add` leaves .git/index.lock behind and poisons every later write in
+	// that repository; every other tool loses its cleanup just as completely,
+	// only without the evidence. The escalation is on its own timer so
+	// WaitDelay above keeps meaning only the pipe drain — see ExecGraceDelay.
+	stopGrace := osutil.ApplyGracefulCancel(cmd, ExecGraceDelay)
+	defer stopGrace()
+
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
