@@ -28,13 +28,14 @@ function harness() {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-connected-'));
   const manager = new BackendManager();
   manager.daemonDataDir = () => dataDir;
+  manager.instanceWorkspaceOverride = dataDir;
 
   return {
     manager,
     writeState(state) {
       fs.writeFileSync(
         path.join(dataDir, 'daemon-state.json'),
-        JSON.stringify(state),
+        JSON.stringify({ instance: manager.daemonInstanceSlug(), ...state }),
       );
     },
     writeRaw(raw) {

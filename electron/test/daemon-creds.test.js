@@ -10,6 +10,7 @@ const {
   writeDaemonStore,
   upsertEntry,
   deleteEntry,
+  readEntry,
   mintDaemonPAT,
   sessionNeedsRefresh,
   refreshSupabaseSession,
@@ -76,35 +77,189 @@ test('endpointKey: fragment stripped', () => {
 // ~/.reliant/daemon.json. Each test sets up its own tmpdir, exercises the
 // read-modify-write, then asserts:
 //   1. Unrelated entries are preserved (no clobber).
-//   2. The new entry lands under the right origin key.
+//   2. The new entry lands under the right (origin, account) key.
 //   3. The JSON parses and uses the expected snake_case field names.
 //   4. The file mode is 0600 (POSIX only — fs mode bits aren't meaningful
 //      on Windows, so we skip the mode check there).
+//
+// The on-disk shape is nested, and mirroring it exactly is the whole point of
+// these assertions:
+//
+//   { "origins":          { "<origin>": { "<account>": creds } },
+//     "default_accounts": { "<origin>": "<account>" } }
+//
+// Go's readStore treats a document with NO top-level `origins` member as a
+// stale format and returns an EMPTY store. So a mirror that writes the old
+// flat `{[origin]: creds}` shape does not fail loudly — every entry Electron
+// writes is silently discarded on the daemon's next read, presenting as a
+// daemon that behaves as though it was never given a PAT. These tests assert
+// the nested shape structurally rather than round-tripping through our own
+// reader, which would pass just as happily on the wrong format.
 
 function makeTmpFile(name) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-creds-test-'));
   return { dir, file: path.join(dir, name || 'daemon.json') };
 }
 
+/** A store document in the nested on-disk shape. */
+function seedStore(origins, defaultAccounts = {}) {
+  return { origins, default_accounts: defaultAccounts };
+}
+
+test('the on-disk document has the nested shape Go requires', () => {
+  // Structural, deliberately not via readDaemonStore: reading back what we
+  // wrote proves only self-consistency, and self-consistency on the WRONG
+  // format is exactly the failure being guarded against.
+  const { dir, file } = makeTmpFile();
+  try {
+    upsertEntry({
+      apiUrl: 'https://reliantapi.com',
+      pat: 'rlnt_pat_shape',
+      sub: 'user-abc',
+      filePath: file,
+    });
+
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(Object.keys(doc).sort(), ['default_accounts', 'origins']);
+    assert.equal(doc.origins['https://reliantapi.com']['user-abc'].pat, 'rlnt_pat_shape');
+    assert.equal(doc.default_accounts['https://reliantapi.com'], 'user-abc');
+
+    // The old flat shape must not linger anywhere at the root.
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(doc, 'https://reliantapi.com'),
+      false,
+      'a top-level origin key is the OLD flat format — Go discards the whole file'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an account with no sub is stored under _default, matching Go', () => {
+  // "" and "_default" must be ONE entry, not two. The string is shared with
+  // daemoninstance.DefaultSubSegment so a credential and the instance
+  // directory that consumes it agree on what "no account" is called.
+  const { dir, file } = makeTmpFile();
+  try {
+    upsertEntry({ apiUrl: 'http://localhost:3123', pat: 'rlnt_pat_anon', filePath: file });
+
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(Object.keys(doc.origins['http://localhost:3123']), ['_default']);
+    assert.equal(doc.default_accounts['http://localhost:3123'], '_default');
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('two accounts on ONE origin coexist instead of overwriting each other', () => {
+  // The bug the nesting exists to fix. Keyed by origin alone, the second
+  // account's mint clobbered the first's PAT, and whichever user signed in
+  // last silently owned the machine's only credential.
+  const { dir, file } = makeTmpFile();
+  try {
+    upsertEntry({ apiUrl: 'https://reliantapi.com', pat: 'pat-alice', sub: 'alice', filePath: file });
+    upsertEntry({ apiUrl: 'https://reliantapi.com', pat: 'pat-bob', sub: 'bob', filePath: file });
+
+    const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(Object.keys(doc.origins['https://reliantapi.com']).sort(), ['alice', 'bob']);
+    assert.equal(doc.origins['https://reliantapi.com'].alice.pat, 'pat-alice');
+    assert.equal(doc.origins['https://reliantapi.com'].bob.pat, 'pat-bob');
+
+    // Writing claims the default, so the most recently registered account is
+    // what a no-account lookup resolves to.
+    assert.equal(doc.default_accounts['https://reliantapi.com'], 'bob');
+    assert.equal(readEntry({ apiUrl: 'https://reliantapi.com', filePath: file }).pat, 'pat-bob');
+    // Naming an account still gets that account, not the default.
+    assert.equal(
+      readEntry({ apiUrl: 'https://reliantapi.com', sub: 'alice', filePath: file }).pat,
+      'pat-alice'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('lookup resolves default, then a lone entry, and otherwise NOTHING', () => {
+  // The ordering is the contract. An origin holding several accounts with no
+  // recorded default must resolve to nothing rather than to an arbitrary one —
+  // an arbitrary pick resolves differently as iteration order changes, which
+  // is a split-brain that reproduces only sometimes.
+  const { dir, file } = makeTmpFile();
+  const creds = (pat, sub) => ({ pat, server_url: 'https://x.test', sub });
+  try {
+    // Lone entry, no recorded default: unambiguous, so it is used.
+    fs.writeFileSync(file, JSON.stringify(seedStore({ 'https://x.test': { solo: creds('p-solo', 'solo') } })));
+    assert.equal(readEntry({ apiUrl: 'https://x.test', filePath: file }).pat, 'p-solo');
+
+    // Two entries, no recorded default: nothing.
+    fs.writeFileSync(
+      file,
+      JSON.stringify(seedStore({ 'https://x.test': { a: creds('p-a', 'a'), b: creds('p-b', 'b') } }))
+    );
+    assert.equal(readEntry({ apiUrl: 'https://x.test', filePath: file }), null);
+
+    // Two entries WITH a recorded default: the default.
+    fs.writeFileSync(
+      file,
+      JSON.stringify(
+        seedStore(
+          { 'https://x.test': { a: creds('p-a', 'a'), b: creds('p-b', 'b') } },
+          { 'https://x.test': 'b' }
+        )
+      )
+    );
+    assert.equal(readEntry({ apiUrl: 'https://x.test', filePath: file }).pat, 'p-b');
+
+    // An account named explicitly but absent resolves to nothing — NEVER to a
+    // neighbour's credentials.
+    assert.equal(readEntry({ apiUrl: 'https://x.test', sub: 'carol', filePath: file }), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a document in the OLD flat format reads as empty, exactly as Go treats it', () => {
+  // Go: "a successfully-parsed document with no `origins` member is an older
+  // format, not an empty new one". If this mirror read it as data instead, the
+  // two sides would disagree about whether a credential exists at all.
+  const { dir, file } = makeTmpFile();
+  try {
+    fs.writeFileSync(
+      file,
+      JSON.stringify({
+        'https://reliantapi.com': { pat: 'rlnt_pat_flat', server_url: 'https://reliantapi.com' },
+      })
+    );
+    assert.deepEqual(readDaemonStore({ filePath: file }), { origins: {}, default_accounts: {} });
+    assert.equal(readEntry({ apiUrl: 'https://reliantapi.com', filePath: file }), null);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('upsertEntry preserves unrelated entries and adds new one at correct key', () => {
   const { dir, file } = makeTmpFile();
   try {
     // Seed with two unrelated origins. Mimics a user who has registered
     // against staging + a localhost dev origin at some point.
-    const seed = {
+    const seed = seedStore({
       'https://staging.reliantapi.com': {
-        pat: 'rlnt_pat_existing_staging',
-        server_url: 'https://staging.reliantapi.com',
-        gateway_url: '',
-        registered_at: '2025-01-01T00:00:00.000Z',
+        _default: {
+          pat: 'rlnt_pat_existing_staging',
+          server_url: 'https://staging.reliantapi.com',
+          gateway_url: '',
+          registered_at: '2025-01-01T00:00:00.000Z',
+        },
       },
       'http://localhost:3123': {
-        pat: 'rlnt_pat_existing_local',
-        server_url: 'http://localhost:3123',
-        gateway_url: 'http://localhost:3124',
-        registered_at: '2025-01-02T00:00:00.000Z',
+        _default: {
+          pat: 'rlnt_pat_existing_local',
+          server_url: 'http://localhost:3123',
+          gateway_url: 'http://localhost:3124',
+          registered_at: '2025-01-02T00:00:00.000Z',
+        },
       },
-    };
+    });
     fs.writeFileSync(file, JSON.stringify(seed, null, 2));
 
     upsertEntry({
@@ -119,18 +274,18 @@ test('upsertEntry preserves unrelated entries and adds new one at correct key', 
 
     // Both pre-existing entries survive unchanged.
     assert.deepEqual(
-      after['https://staging.reliantapi.com'],
-      seed['https://staging.reliantapi.com'],
+      after.origins['https://staging.reliantapi.com'],
+      seed.origins['https://staging.reliantapi.com'],
       'staging entry must be preserved verbatim'
     );
     assert.deepEqual(
-      after['http://localhost:3123'],
-      seed['http://localhost:3123'],
+      after.origins['http://localhost:3123'],
+      seed.origins['http://localhost:3123'],
       'localhost entry must be preserved verbatim'
     );
 
     // New entry lands at the right key with the right field names.
-    const fresh = after['https://reliantapi.com'];
+    const fresh = after.origins['https://reliantapi.com']._default;
     assert.ok(fresh, 'new entry must be present');
     assert.equal(fresh.pat, 'rlnt_pat_new_prod');
     assert.equal(fresh.server_url, 'https://reliantapi.com');
@@ -151,22 +306,22 @@ test('upsertEntry preserves unrelated entries and adds new one at correct key', 
   }
 });
 
-test('readDaemonStore returns {} on missing file', () => {
+test('readDaemonStore returns an empty store on missing file', () => {
   const { dir, file } = makeTmpFile('does-not-exist.json');
   try {
-    const store = readDaemonStore({ filePath: file });
-    assert.deepEqual(store, {});
+    // Both members present, so every caller can write without a null check —
+    // same contract as Go's newStore.
+    assert.deepEqual(readDaemonStore({ filePath: file }), { origins: {}, default_accounts: {} });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('readDaemonStore returns {} on garbage JSON (matches Go fall-through)', () => {
+test('readDaemonStore returns an empty store on garbage JSON (matches Go fall-through)', () => {
   const { dir, file } = makeTmpFile();
   try {
     fs.writeFileSync(file, 'not json at all{{{');
-    const store = readDaemonStore({ filePath: file });
-    assert.deepEqual(store, {});
+    assert.deepEqual(readDaemonStore({ filePath: file }), { origins: {}, default_accounts: {} });
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -186,31 +341,39 @@ test('upsertEntry throws on invalid apiUrl (empty endpoint key)', () => {
 });
 
 // ----------------------------------------------------------------------------
-// daemon_id preservation + logout clearing
+// daemon_id is NOT in this file + logout clearing
 // ----------------------------------------------------------------------------
 //
-// The Go daemon owns `daemon_id` (server-assigned stable identity persisted
-// per origin). The Electron PAT-mint preflight only rewrites the PAT, so it
-// MUST carry an existing daemon_id forward — clobbering it re-triggers the
-// hostname-churn bug the stable id exists to prevent. Logout, conversely,
-// drops the whole entry (PAT + sub + daemon_id) so the next login starts clean.
+// The stable server-assigned daemon id used to live in the credentials entry,
+// keyed by origin alone — so every worktree on one machine read and
+// re-asserted the SAME id, and the gateway evicted one of them on every
+// registration. It now lives in a `daemon-id` file in the instance's own data
+// dir, owned by the daemon: identity is per INSTANCE (origin, account,
+// workspace) while a PAT is per ACCOUNT. Go has a matching test asserting the
+// key never reappears on disk. Electron neither writes nor manages that file.
 
-test('upsertEntry preserves an existing daemon_id across a PAT rewrite', () => {
+test('upsertEntry never writes a daemon_id — the id is not in this file', () => {
   const { dir, file } = makeTmpFile();
   try {
-    const seed = {
-      'http://localhost:3123': {
-        pat: 'rlnt_pat_old',
-        server_url: 'http://localhost:3123',
-        gateway_url: 'http://localhost:3124',
-        registered_at: '2025-01-02T00:00:00.000Z',
-        sub: 'user-abc',
-        daemon_id: 'stable-daemon-id-123',
-      },
-    };
-    fs.writeFileSync(file, JSON.stringify(seed, null, 2));
+    // Even with a stale key present from an older write, the rewritten entry
+    // must not carry one forward: the field no longer exists on either side,
+    // so preserving it would resurrect a key Go asserts is gone.
+    fs.writeFileSync(
+      file,
+      JSON.stringify(
+        seedStore({
+          'http://localhost:3123': {
+            'user-abc': {
+              pat: 'rlnt_pat_old',
+              server_url: 'http://localhost:3123',
+              sub: 'user-abc',
+              daemon_id: 'stable-daemon-id-123',
+            },
+          },
+        })
+      )
+    );
 
-    // Re-mint the PAT for the same origin (e.g. a fresh app launch).
     upsertEntry({
       apiUrl: 'http://localhost:3123',
       gatewayUrl: 'http://localhost:3124',
@@ -219,73 +382,106 @@ test('upsertEntry preserves an existing daemon_id across a PAT rewrite', () => {
       filePath: file,
     });
 
-    const after = JSON.parse(fs.readFileSync(file, 'utf8'))['http://localhost:3123'];
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'))
+      .origins['http://localhost:3123']['user-abc'];
     assert.equal(after.pat, 'rlnt_pat_new', 'PAT must be updated');
-    assert.equal(
-      after.daemon_id,
-      'stable-daemon-id-123',
-      'daemon_id must survive the PAT rewrite'
-    );
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
-});
-
-test('upsertEntry leaves daemon_id unset when creating a fresh entry', () => {
-  const { dir, file } = makeTmpFile();
-  try {
-    upsertEntry({
-      apiUrl: 'http://localhost:3123',
-      pat: 'rlnt_pat_new',
-      filePath: file,
-    });
-    const after = JSON.parse(fs.readFileSync(file, 'utf8'))['http://localhost:3123'];
-    assert.ok(after, 'entry must exist');
     assert.equal(
       Object.prototype.hasOwnProperty.call(after, 'daemon_id'),
       false,
-      'fresh entry must not carry a daemon_id (server assigns one)'
+      'daemon_id must not be written — it lives in the instance data dir now'
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('deleteEntry removes the origin entry (logout clears PAT + daemon_id)', () => {
+test('a fresh entry carries no daemon_id either', () => {
   const { dir, file } = makeTmpFile();
   try {
-    const seed = {
-      'http://localhost:3123': {
-        pat: 'rlnt_pat_local',
-        server_url: 'http://localhost:3123',
-        gateway_url: '',
-        registered_at: '2025-01-02T00:00:00.000Z',
-        sub: 'user-abc',
-        daemon_id: 'stable-daemon-id-123',
+    upsertEntry({ apiUrl: 'http://localhost:3123', pat: 'rlnt_pat_new', filePath: file });
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'))
+      .origins['http://localhost:3123']._default;
+    assert.ok(after, 'entry must exist');
+    assert.equal(Object.prototype.hasOwnProperty.call(after, 'daemon_id'), false);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('deleteEntry removes one account and leaves other origins alone', () => {
+  const { dir, file } = makeTmpFile();
+  try {
+    const seed = seedStore(
+      {
+        'http://localhost:3123': {
+          'user-abc': {
+            pat: 'rlnt_pat_local',
+            server_url: 'http://localhost:3123',
+            gateway_url: '',
+            registered_at: '2025-01-02T00:00:00.000Z',
+            sub: 'user-abc',
+          },
+        },
+        'https://staging.reliantapi.com': {
+          _default: {
+            pat: 'rlnt_pat_staging',
+            server_url: 'https://staging.reliantapi.com',
+            gateway_url: '',
+            registered_at: '2025-01-01T00:00:00.000Z',
+          },
+        },
       },
-      'https://staging.reliantapi.com': {
-        pat: 'rlnt_pat_staging',
-        server_url: 'https://staging.reliantapi.com',
-        gateway_url: '',
-        registered_at: '2025-01-01T00:00:00.000Z',
-      },
-    };
+      { 'http://localhost:3123': 'user-abc' }
+    );
     fs.writeFileSync(file, JSON.stringify(seed, null, 2));
 
     const removed = deleteEntry({ apiUrl: 'http://localhost:3123', filePath: file });
     assert.equal(removed, true, 'must report the entry was removed');
 
     const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // Emptying an origin removes the origin itself rather than leaving an
+    // empty map behind, so the file shrinks back when the last account goes.
     assert.equal(
-      Object.prototype.hasOwnProperty.call(after, 'http://localhost:3123'),
+      Object.prototype.hasOwnProperty.call(after.origins, 'http://localhost:3123'),
       false,
-      'logged-out origin entry must be gone'
+      'an emptied origin must be removed, not left as an empty map'
+    );
+    assert.equal(
+      Object.prototype.hasOwnProperty.call(after.default_accounts, 'http://localhost:3123'),
+      false,
+      'its default pointer must go too'
     );
     // Unrelated origins are untouched — logout is per-origin, not global.
     assert.deepEqual(
-      after['https://staging.reliantapi.com'],
-      seed['https://staging.reliantapi.com'],
+      after.origins['https://staging.reliantapi.com'],
+      seed.origins['https://staging.reliantapi.com'],
       'unrelated origin must survive logout'
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('logging out one account leaves the other signed in, with a usable default', () => {
+  // Two accounts on one origin. Removing the one the default points at must
+  // repoint the default rather than leave it dangling — a dangling default
+  // makes every no-account lookup fall through to "several entries, no
+  // default" and resolve to nothing, even though a good credential remains.
+  const { dir, file } = makeTmpFile();
+  try {
+    upsertEntry({ apiUrl: 'https://reliantapi.com', pat: 'pat-alice', sub: 'alice', filePath: file });
+    upsertEntry({ apiUrl: 'https://reliantapi.com', pat: 'pat-bob', sub: 'bob', filePath: file });
+
+    // bob is the default (most recent write); log bob out.
+    assert.equal(deleteEntry({ apiUrl: 'https://reliantapi.com', filePath: file }), true);
+
+    const after = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(Object.keys(after.origins['https://reliantapi.com']), ['alice']);
+    assert.equal(after.default_accounts['https://reliantapi.com'], 'alice');
+    assert.equal(
+      readEntry({ apiUrl: 'https://reliantapi.com', filePath: file }).pat,
+      'pat-alice',
+      "alice's credential must still resolve after bob logs out"
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -715,8 +911,8 @@ test('ensureDaemonPATForOrigin: mints + writes when no existing entry', async ()
     const file = path.join(home, '.reliant', 'daemon.json');
     assert.ok(fs.existsSync(file), 'daemon.json should be written');
     const store = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const entry = store['https://reliantapi.com'];
-    assert.ok(entry, 'entry must exist under the origin key');
+    const entry = store.origins['https://reliantapi.com']['user-1'];
+    assert.ok(entry, 'entry must exist under the (origin, account) key');
     assert.equal(entry.pat, 'rlnt_pat_fresh');
     assert.equal(entry.server_url, 'https://reliantapi.com');
     assert.equal(entry.gateway_url, 'http://127.0.0.1:19190/reliant-dev');
@@ -724,21 +920,38 @@ test('ensureDaemonPATForOrigin: mints + writes when no existing entry', async ()
   });
 });
 
-test('ensureDaemonPATForOrigin: re-mints + overwrites when existing entry sub differs', async () => {
+test('ensureDaemonPATForOrigin: mints for the new user and LEAVES the other account intact', async () => {
   await withFakeHome(async (home) => {
     // Seed an existing entry that belongs to a DIFFERENT user.
+    //
+    // This assertion changed with the (origin, account) keying, and the change
+    // is the point rather than an accommodation. The old flat store had ONE
+    // slot per origin, so minting for a second user necessarily destroyed the
+    // first's PAT — "overwrites" was the best available behavior, not the
+    // desired one. Now each account has its own entry, so a user switch adds a
+    // credential instead of replacing one, and switching back does not require
+    // a re-mint.
     const dir = path.join(home, '.reliant');
     fs.mkdirSync(dir, { recursive: true });
     const file = path.join(dir, 'daemon.json');
-    fs.writeFileSync(file, JSON.stringify({
-      'https://reliantapi.com': {
-        pat: 'rlnt_pat_OLD_user',
-        server_url: 'https://reliantapi.com',
-        gateway_url: '',
-        sub: 'user-OLD',
-        registered_at: '2025-01-01T00:00:00.000Z',
-      },
-    }, null, 2));
+    const oldEntry = {
+      pat: 'rlnt_pat_OLD_user',
+      server_url: 'https://reliantapi.com',
+      gateway_url: '',
+      sub: 'user-OLD',
+      registered_at: '2025-01-01T00:00:00.000Z',
+    };
+    fs.writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          origins: { 'https://reliantapi.com': { 'user-OLD': oldEntry } },
+          default_accounts: { 'https://reliantapi.com': 'user-OLD' },
+        },
+        null,
+        2
+      )
+    );
 
     const authStorage = {
       loadStoredAuth: () => ({
@@ -757,9 +970,20 @@ test('ensureDaemonPATForOrigin: re-mints + overwrites when existing entry sub di
       }
     );
     const after = JSON.parse(fs.readFileSync(file, 'utf8'));
-    const entry = after['https://reliantapi.com'];
-    assert.equal(entry.pat, 'rlnt_pat_NEW_user', 'must overwrite with new user\'s PAT');
+    const entry = after.origins['https://reliantapi.com']['user-NEW'];
+    assert.equal(entry.pat, 'rlnt_pat_NEW_user', "must write the new user's PAT");
     assert.equal(entry.sub, 'user-NEW');
+
+    assert.deepEqual(
+      after.origins['https://reliantapi.com']['user-OLD'],
+      oldEntry,
+      "the other account's credential must survive a user switch"
+    );
+    assert.equal(
+      after.default_accounts['https://reliantapi.com'],
+      'user-NEW',
+      'the newly registered account becomes the default'
+    );
   });
 });
 
@@ -776,7 +1000,17 @@ test('ensureDaemonPATForOrigin: skips mint when existing entry sub matches curre
       sub: 'user-1',
       registered_at: '2025-01-01T00:00:00.000Z',
     };
-    fs.writeFileSync(file, JSON.stringify({ 'https://reliantapi.com': seedEntry }, null, 2));
+    fs.writeFileSync(
+      file,
+      JSON.stringify(
+        {
+          origins: { 'https://reliantapi.com': { 'user-1': seedEntry } },
+          default_accounts: { 'https://reliantapi.com': 'user-1' },
+        },
+        null,
+        2
+      )
+    );
 
     const authStorage = {
       loadStoredAuth: () => ({
@@ -798,7 +1032,7 @@ test('ensureDaemonPATForOrigin: skips mint when existing entry sub matches curre
     );
     // File contents unchanged.
     const after = JSON.parse(fs.readFileSync(file, 'utf8'));
-    assert.deepEqual(after['https://reliantapi.com'], seedEntry);
+    assert.deepEqual(after.origins['https://reliantapi.com']['user-1'], seedEntry);
   });
 });
 // ----------------------------------------------------------------------------
@@ -1036,8 +1270,8 @@ test('ensureDaemonPATForOrigin: expired session → refresh, persist, mint with 
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_after_refresh');
-    assert.equal(store['https://reliantapi.com'].sub, 'user-1');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlnt_pat_after_refresh');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].sub, 'user-1');
   });
 });
 
@@ -1066,7 +1300,7 @@ test('ensureDaemonPATForOrigin: fresh session → mints directly, NO refresh cal
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_no_refresh');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlnt_pat_no_refresh');
   });
 });
 
@@ -1105,7 +1339,7 @@ test('ensureDaemonPATForOrigin: fresh-looking token but mint 401s → refresh + 
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_after_401_retry');
+    assert.equal(store.origins['https://reliantapi.com']['user-1'].pat, 'rlnt_pat_after_401_retry');
   });
 });
 
@@ -1192,6 +1426,9 @@ test('ensureDaemonPATForOrigin: saveAuth blowing up does not block the mint (nev
     const store = JSON.parse(
       fs.readFileSync(path.join(home, '.reliant', 'daemon.json'), 'utf8')
     );
-    assert.equal(store['https://reliantapi.com'].pat, 'rlnt_pat_despite_persist_failure');
+    assert.equal(
+      store.origins['https://reliantapi.com']['user-1'].pat,
+      'rlnt_pat_despite_persist_failure'
+    );
   });
 });

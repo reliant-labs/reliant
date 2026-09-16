@@ -32,14 +32,19 @@ function harness() {
 
   manager.daemonDataDir = () => dataDir;
   manager.process = { pid: DAEMON_PID, killed: false };
+  manager.instanceWorkspaceOverride = dataDir;
   // Keep these tests fast — the timeout path is exercised explicitly below
   // with its own short value, not the production 30s default.
   manager.startupTimeout = 300;
 
   return {
     manager,
+    // Stamped with this manager's instance, as a real daemon's record is.
     writeState: (state) =>
-      fs.writeFileSync(path.join(dataDir, 'daemon-state.json'), JSON.stringify(state)),
+      fs.writeFileSync(
+        path.join(dataDir, 'daemon-state.json'),
+        JSON.stringify({ instance: manager.daemonInstanceSlug(), ...state }),
+      ),
   };
 }
 

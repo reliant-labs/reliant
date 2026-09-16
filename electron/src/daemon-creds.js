@@ -34,6 +34,20 @@
  * touches the file MUST match the Go semantics exactly — drift here causes
  * silent split-brain (Electron writes, daemon can't find it).
  *
+ * That failure is not hypothetical and not loud. Go's readStore treats any
+ * document with no top-level `origins` member as a stale format and returns an
+ * EMPTY store, so a mirror still writing the old flat `{[origin]: creds}`
+ * shape has every entry silently discarded on the daemon's next read — no
+ * error, no warning, just a daemon that behaves as though it was never given a
+ * PAT.
+ *
+ * The store is keyed by (origin, account), not origin alone: two accounts on
+ * one machine against one origin used to overwrite each other's PAT. The
+ * daemon's stable id is NOT in this file — it moved to a `daemon-id` file in
+ * the instance's data directory, because identity is per INSTANCE (origin,
+ * account, workspace) while a PAT is per ACCOUNT. That file is the daemon's;
+ * Electron neither writes nor reads it.
+ *
  * No Electron imports
  * -------------------
  * This module deliberately avoids requiring `electron` so it can be loaded
@@ -45,6 +59,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 
 const DAEMON_DIR_NAME = '.reliant';
 const DAEMON_FILE_NAME = 'daemon.json';
@@ -143,14 +158,45 @@ function daemonStorePaths() {
 }
 
 /**
+ * The account name an entry takes when there is no subject to name it by —
+ * not signed in, or self-hosted with no accounts at all.
+ *
+ * A real key rather than "", so the store never holds an entry whose account
+ * is indistinguishable from an absent one. Spelled exactly like Go's
+ * auth.DefaultAccount, which is in turn spelled like
+ * daemoninstance.DefaultSubSegment, so a credential and the instance directory
+ * that consumes it agree about what "no account" is called.
+ */
+const DEFAULT_ACCOUNT = '_default';
+
+/** Normalize an account name. Mirrors Go's accountKey. */
+function accountKey(sub) {
+  const s = String(sub ?? '').trim();
+  return s || DEFAULT_ACCOUNT;
+}
+
+/** An empty, fully-initialized store. Both members present so callers can
+ * write without a null check — same contract as Go's newStore. */
+function emptyStore() {
+  return { origins: {}, default_accounts: {} };
+}
+
+/**
  * Read the daemon credentials store from disk. Treats any of {missing file,
- * unreadable, unparseable JSON, non-object root} as "empty store" rather
- * than throwing. This matches Go's readStore semantics — on a format mismatch
- * we start fresh rather than crash, since the alternative is bricking the
- * mint preflight on a stale file the user can't easily inspect.
+ * unreadable, unparseable JSON, non-object root, NO `origins` member} as
+ * "empty store" rather than throwing.
+ *
+ * The last of those is the load-bearing one and it mirrors Go's readStore
+ * exactly: a successfully-parsed document with no `origins` is an OLDER format
+ * (the file has been through several pre-launch), not an empty new one, and
+ * starting fresh is deliberate. We don't carry stale entries forward or write
+ * migration code for a product that has not shipped — the next mint writes the
+ * right key. Reading it the other way is worse than useless: Electron would
+ * keep a flat entry the daemon discards on every read.
  *
  * @param {{ filePath?: string, logger?: { warn?: Function } }} [opts]
- * @returns {Record<string, object>}
+ * @returns {{ origins: Record<string, Record<string, object>>,
+ *             default_accounts: Record<string, string> }}
  */
 function readDaemonStore(opts = {}) {
   const file = opts.filePath ?? daemonStorePaths().file;
@@ -162,20 +208,78 @@ function readDaemonStore(opts = {}) {
     if (e.code !== 'ENOENT' && logger?.warn) {
       logger.warn('[daemon-creds] daemon.json unreadable, starting fresh:', e.message);
     }
-    return {};
+    return emptyStore();
   }
+  let parsed;
   try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-      return parsed;
-    }
-    return {};
+    parsed = JSON.parse(raw);
   } catch (e) {
     if (logger?.warn) {
       logger.warn('[daemon-creds] daemon.json parse failed, starting fresh:', e.message);
     }
-    return {};
+    return emptyStore();
   }
+  const origins = parsed?.origins;
+  if (!origins || typeof origins !== 'object' || Array.isArray(origins)) {
+    return emptyStore();
+  }
+  const defaults = parsed.default_accounts;
+  return {
+    origins,
+    default_accounts:
+      defaults && typeof defaults === 'object' && !Array.isArray(defaults) ? defaults : {},
+  };
+}
+
+/**
+ * Which account's entry does a lookup mean, for one origin? Mirrors Go's
+ * resolveAccount, and the ORDER matters as much as the cases:
+ *
+ *   - an explicitly named account is used verbatim, present or not. A caller
+ *     that asked for an account and got someone else's credential is exactly
+ *     the split-brain this nesting exists to prevent;
+ *   - with no account named, the recorded default wins;
+ *   - failing that, a lone entry is unambiguous and is used;
+ *   - an origin holding several entries with no recorded default resolves to
+ *     NOTHING. Never an arbitrary pick — that would resolve differently as
+ *     iteration order changed.
+ *
+ * @returns {string} the account key, or '' when nothing resolves
+ */
+function resolveAccount(store, origin, sub) {
+  if (String(sub ?? '').trim()) {
+    return accountKey(sub);
+  }
+  const accounts = store.origins[origin];
+  const recorded = store.default_accounts[origin];
+  if (recorded && accounts && Object.prototype.hasOwnProperty.call(accounts, recorded)) {
+    return recorded;
+  }
+  const names = accounts ? Object.keys(accounts) : [];
+  if (names.length === 1) {
+    return names[0];
+  }
+  if (accounts && Object.prototype.hasOwnProperty.call(accounts, DEFAULT_ACCOUNT)) {
+    return DEFAULT_ACCOUNT;
+  }
+  return '';
+}
+
+/**
+ * The credentials one (origin, account) resolves to, or null.
+ *
+ * @param {{ apiUrl: string, sub?: string, filePath?: string,
+ *           logger?: { warn?: Function } }} args
+ * @returns {object | null}
+ */
+function readEntry({ apiUrl, sub, filePath, logger }) {
+  const origin = endpointKey(apiUrl);
+  if (!origin) return null;
+  const store = readDaemonStore({ filePath, logger });
+  const account = resolveAccount(store, origin, sub);
+  if (!account) return null;
+  const entry = store.origins[origin]?.[account];
+  return entry && typeof entry === 'object' ? entry : null;
 }
 
 /**
@@ -204,104 +308,123 @@ function writeDaemonStore(store, opts = {}) {
 }
 
 /**
- * Read-modify-write a single entry into the daemon credentials store.
- * Snake_case keys (`pat`, `server_url`, `gateway_url`, `registered_at`)
- * match the Go struct tags at internal/auth/daemon_file.go:21-26.
+ * Read-modify-write one account's entry into the daemon credentials store.
+ * Snake_case keys (`pat`, `server_url`, `gateway_url`, `registered_at`, `sub`)
+ * match the Go struct tags on DaemonCredentials.
+ *
+ * Writing also claims the origin's default account, exactly as Go's
+ * WriteDaemonCredentials does, so the most recently registered account is the
+ * one a no-account lookup resolves to. The alternative — leaving a stale
+ * default pointing at an account the user has moved off — is the more
+ * surprising of the two.
  *
  * Throws on an invalid apiUrl (empty endpoint key) — the caller in
  * backend-manager.js wraps everything in try/catch and swallows, so this
  * never blocks daemon spawn. Throwing here keeps the helper honest for
  * tests; the orchestrator decides whether a failure aborts startup.
  *
- * `sub` is the Supabase subject the PAT was minted for. The Go side never
- * sets it but declares it on DaemonCredentials (internal/auth/daemon_file.go)
- * purely so the daemon's own entry rewrites (persisting daemon_id after
- * registration) round-trip it — Go struct unmarshal DROPS unknown JSON keys,
- * so without that field every registration erased `sub` and forced a
- * re-mint on the next cold launch. BackendManager reads it via
- * `entryOwnerSub` to decide whether the cached PAT belongs to the currently
- * signed-in user — without it, sign-out-sign-in-as-different-user reuses the
- * old user's PAT, the daemon registers under the wrong owner, and the new
- * user's ListDaemons returns empty.
+ * `sub` is the Supabase subject the PAT was minted for, and it is now part of
+ * the KEY rather than a passenger field: two accounts against one origin each
+ * keep their own PAT instead of overwriting each other. It is repeated inside
+ * the entry so a credential carries its own identity when passed around
+ * detached from the store. BackendManager reads it via `entryOwnerSub` to
+ * decide whether a cached PAT belongs to the currently signed-in user —
+ * without that check, sign-out-then-in-as-someone-else reuses the old user's
+ * PAT, the daemon registers under the wrong owner, and the new user's
+ * ListDaemons comes back empty.
  *
- * daemon_id preservation: the Go daemon owns `daemon_id` — the server assigns
- * a stable identity on first registration and the daemon persists it into the
- * origin's entry. This preflight only ever rewrites the PAT, so it MUST carry
- * any existing `daemon_id` forward. Clobbering it would orphan the daemon's
- * identity on every PAT re-mint, re-triggering the exact hostname-churn bug
- * the stable id exists to prevent. A fresh entry leaves daemon_id unset so
- * the server assigns one.
+ * There is deliberately no `daemon_id` here. The stable server-assigned id
+ * used to live in this entry, keyed by origin alone, which meant every
+ * worktree on one machine read and re-asserted the SAME id and the gateway
+ * evicted one of them on every registration. It now lives in a `daemon-id`
+ * file inside the instance's own data dir, owned by the daemon — identity is
+ * per instance, a PAT is per account. Go has a test asserting the key never
+ * reappears on disk; do not reintroduce it here.
  *
  * @param {{ apiUrl: string, gatewayUrl?: string, pat: string, sub?: string,
  *           filePath?: string, logger?: { warn?: Function } }} args
  */
 function upsertEntry({ apiUrl, gatewayUrl, pat, sub, filePath, logger }) {
-  const key = endpointKey(apiUrl);
-  if (!key) {
+  const origin = endpointKey(apiUrl);
+  if (!origin) {
     throw new Error(`invalid --server URL: ${apiUrl}`);
   }
   if (!pat) {
     throw new Error('refusing to write empty PAT to daemon.json');
   }
   const store = readDaemonStore({ filePath, logger });
-  const prior = store[key];
-  const priorDaemonId =
-    prior && typeof prior.daemon_id === 'string' ? prior.daemon_id : '';
-  store[key] = {
+  const account = accountKey(sub);
+
+  if (!store.origins[origin]) {
+    store.origins[origin] = {};
+  }
+  store.origins[origin][account] = {
     pat,
     server_url: apiUrl,
     gateway_url: gatewayUrl || '',
     registered_at: new Date().toISOString(),
     ...(sub ? { sub } : {}),
-    ...(priorDaemonId ? { daemon_id: priorDaemonId } : {}),
   };
+  store.default_accounts[origin] = account;
   writeDaemonStore(store, { filePath });
 }
 
 /**
- * Remove the credentials entry for `apiUrl`'s origin from daemon.json.
- * Mirrors Go's DeleteDaemonCredentials — a no-op when no entry exists.
+ * Remove one account's credentials at `apiUrl`'s origin. Mirrors Go's
+ * DeleteDaemonCredentials — a no-op when nothing resolves.
  *
- * Called on logout: dropping the whole origin entry clears the PAT, the
- * owner `sub`, AND the stable `daemon_id` together. That's deliberate —
- * logout may precede a user switch, so the next login should mint a fresh
- * PAT and let the server assign a fresh daemon id rather than resurrecting
- * the prior user's identity.
+ * An empty `sub` deletes whatever the origin resolves to by default, which is
+ * what logout means for the signed-in account. Dropping the entry clears the
+ * PAT and the owner sub together; the daemon's stable id is not here to clear
+ * (it lives in the instance data dir and is the daemon's to manage).
+ *
+ * Emptying an origin removes the origin itself rather than leaving an empty
+ * map behind, so the file shrinks back to nothing when the last account logs
+ * out. And if the removed account WAS the recorded default, the default is
+ * repointed at a remaining entry rather than left dangling — a dangling
+ * default makes every no-account lookup fall through to "several entries, no
+ * default" and resolve to nothing, even though a perfectly good credential
+ * remains.
  *
  * Returns true if an entry was removed, false if there was nothing to remove
  * (missing origin, invalid apiUrl). Never throws on a valid apiUrl.
  *
- * @param {{ apiUrl: string, filePath?: string,
+ * @param {{ apiUrl: string, sub?: string, filePath?: string,
  *           logger?: { warn?: Function } }} args
  * @returns {boolean}
  */
-function deleteEntry({ apiUrl, filePath, logger }) {
-  const key = endpointKey(apiUrl);
-  if (!key) return false;
+function deleteEntry({ apiUrl, sub, filePath, logger }) {
+  const origin = endpointKey(apiUrl);
+  if (!origin) return false;
   const store = readDaemonStore({ filePath, logger });
-  if (!Object.prototype.hasOwnProperty.call(store, key)) {
+  const account = resolveAccount(store, origin, sub);
+  if (!account || !store.origins[origin]?.[account]) {
     return false;
   }
-  delete store[key];
+
+  delete store.origins[origin][account];
+  if (Object.keys(store.origins[origin]).length === 0) {
+    delete store.origins[origin];
+    delete store.default_accounts[origin];
+  } else if (store.default_accounts[origin] === account) {
+    const [remaining] = Object.keys(store.origins[origin]);
+    store.default_accounts[origin] = remaining;
+  }
   writeDaemonStore(store, { filePath });
   return true;
 }
 
 /**
- * Returns the `sub` of the cached entry for `apiUrl`, or null if no entry
- * exists / the entry has no recorded `sub` (e.g. from an older write before
- * we tracked it).
+ * Returns the `sub` of the cached entry `apiUrl` (+ optional account)
+ * resolves to, or null when nothing resolves or the entry records no `sub`.
  *
- * @param {{ apiUrl: string, filePath?: string,
+ * @param {{ apiUrl: string, sub?: string, filePath?: string,
  *           logger?: { warn?: Function } }} args
  * @returns {string | null}
  */
-function entryOwnerSub({ apiUrl, filePath, logger }) {
-  const key = endpointKey(apiUrl);
-  if (!key) return null;
-  const store = readDaemonStore({ filePath, logger });
-  const entry = store[key];
-  if (!entry || typeof entry !== 'object') return null;
+function entryOwnerSub({ apiUrl, sub, filePath, logger }) {
+  const entry = readEntry({ apiUrl, sub, filePath, logger });
+  if (!entry) return null;
   return typeof entry.sub === 'string' ? entry.sub : null;
 }
 
@@ -701,8 +824,11 @@ async function ensureDaemonPATForOrigin({
     let accessToken = session?.access_token;
     let currentSub = session?.user?.id;
 
-    const store = readDaemonStore({ logger: log });
-    const existing = store[key];
+    // Look the entry up under the CURRENT user's account, not under the
+    // origin alone. With the store keyed by (origin, account), another
+    // account's PAT on this origin is simply a different entry — the reuse
+    // check below no longer has to defend against finding it.
+    const existing = readEntry({ apiUrl, sub: currentSub, logger: log });
     const existingPat = existing && typeof existing.pat === 'string' ? existing.pat : '';
     const existingSub = existing && typeof existing.sub === 'string' ? existing.sub : '';
 
@@ -835,8 +961,195 @@ async function ensureDaemonPATForOrigin({
   }
 }
 
+// ─── Instance keying ────────────────────────────────────────────────────────
+//
+// Hand-mirror of internal/daemoninstance (Go). An instance is named by three
+// things — the server origin, the account sub, and the workspace — and that
+// name is projected onto a directory:
+//
+//   ~/.reliant/instances/<origin-slug>/<sub-slug>/<workspace-slug>/
+//
+// It lives beside endpointKey because it REUSES endpointKey for the origin
+// half: the credentials store and the instance directory must collapse a
+// server URL identically, or the daemon reads its PAT from one key and writes
+// its runtime record under another. Keeping the two in one module means the
+// shared half cannot drift by accident.
+//
+// Every segment is "<readable>-<8 hex of sha256>". Both halves are
+// load-bearing. The readable half is lossy by construction — it lowercases,
+// drops "://", collapses runs of unsafe characters and truncates at 32 — so on
+// its own it collides. The hash is taken over the FULL canonical value, never
+// over the truncated prefix, so two inputs that differ only in a character the
+// prefix dropped still differ here.
+//
+// daemoninstance_parity is asserted in daemon-creds.test.js against slugs
+// captured from the real Go implementation. If a row there fails, the Go side
+// is authoritative: fix this mirror, do not adjust the fixture.
+
+const INSTANCES_DIR_NAME = 'instances';
+// An absent account is an explicit segment, not an empty one — an empty
+// segment would collapse the path and silently merge the signed-out instance
+// into its parent directory.
+const DEFAULT_SUB_SEGMENT = '_default';
+// Pins the workspace component explicitly. Read by the Go daemon too
+// (daemoninstance.EnvWorkspace), which is how Electron and the daemon it
+// spawns agree on a workspace without needing a CLI flag on both sides.
+const ENV_INSTANCE_WORKSPACE = 'RELIANT_INSTANCE_WORKSPACE';
+const SLUG_HUMAN_MAX = 32;
+const SLUG_HASH_LEN = 8;
+
+/**
+ * Strip every leading and trailing character that appears in `cutset`.
+ * Mirrors Go's strings.Trim, which takes a character SET rather than a prefix.
+ */
+function trimCutset(value, cutset) {
+  let start = 0;
+  let end = value.length;
+  while (start < end && cutset.includes(value[start])) start += 1;
+  while (end > start && cutset.includes(value[end - 1])) end -= 1;
+  return value.slice(start, end);
+}
+
+/**
+ * Reduce a string to lowercase [a-z0-9._-], collapsing every run of anything
+ * else to a single "-", and cap it at SLUG_HUMAN_MAX bytes.
+ *
+ * "." and "-" survive because they keep hostnames and worktree names legible.
+ * The result is never empty: an input with nothing readable in it degrades to
+ * "x" and leans entirely on the hash suffix, which is correct rather than
+ * merely defensive.
+ *
+ * The length is counted in BYTES, not code points, because the Go original
+ * breaks on strings.Builder.Len().
+ */
+function sanitizeSlugSegment(value) {
+  const lowered = String(value ?? '').trim().toLowerCase();
+  let out = '';
+  let bytes = 0;
+  let pendingDash = false;
+  for (const ch of lowered) {
+    if (/[a-z0-9._-]/.test(ch)) {
+      if (pendingDash && bytes > 0) {
+        out += '-';
+        bytes += 1;
+      }
+      pendingDash = false;
+      out += ch;
+      bytes += Buffer.byteLength(ch, 'utf8');
+    } else {
+      pendingDash = bytes > 0;
+    }
+    if (bytes >= SLUG_HUMAN_MAX) break;
+  }
+  const trimmed = trimCutset(out, '-.');
+  return trimmed || 'x';
+}
+
+/**
+ * One path segment: "<readable>-<hash>". `canonical` is what identity is
+ * derived from; `human` is only what a person reads in `ls`.
+ */
+function slugSegment(human, canonical) {
+  const sum = crypto.createHash('sha256').update(String(canonical), 'utf8').digest('hex');
+  return `${sanitizeSlugSegment(human)}-${sum.slice(0, SLUG_HASH_LEN)}`;
+}
+
+/**
+ * Does this workspace name a directory, or is it a bare label like "ci"?
+ * Anything containing a separator, or beginning with "." or "~", is a path.
+ */
+function workspaceLooksLikePath(workspace) {
+  if (!workspace) return false;
+  if (path.isAbsolute(workspace)) return true;
+  if (workspace.startsWith('.') || workspace.startsWith('~')) return true;
+  return workspace.includes('/') || workspace.includes(path.sep);
+}
+
+/**
+ * Make a path workspace absolute and symlink-free, so that the several
+ * spellings of one directory — a relative path, a trailing slash, macOS's
+ * symlinked /var — resolve to a single instance. A bare label is returned
+ * untouched.
+ *
+ * Symlink resolution is best-effort: a workspace that does not exist yet is
+ * still a legitimate instance name, and failing here would refuse to start
+ * over a directory the caller is about to create.
+ */
+function canonicalWorkspace(workspace) {
+  const value = String(workspace ?? '').trim();
+  if (!workspaceLooksLikePath(value)) return value;
+  const absolute = path.resolve(value);
+  try {
+    return fs.realpathSync(absolute);
+  } catch {
+    return absolute;
+  }
+}
+
+/**
+ * Canonicalize the three components of an instance key. Throws on a server URL
+ * with no parseable origin — the one thing worse than refusing to start is
+ * starting against silently the wrong backend.
+ *
+ * @param {{ apiUrl: string, sub?: string, workspace: string }} args
+ * @returns {{ origin: string, sub: string, workspace: string }}
+ */
+function instanceKey({ apiUrl, sub, workspace }) {
+  const origin = endpointKey(apiUrl);
+  if (!origin) {
+    throw new Error(`invalid --server URL for instance key: ${apiUrl}`);
+  }
+  return {
+    origin,
+    sub: String(sub ?? '').trim(),
+    workspace: canonicalWorkspace(workspace),
+  };
+}
+
+/**
+ * The instance's relative location, "<origin>/<sub>/<workspace>" — always
+ * three non-empty segments, always "/"-separated regardless of OS so it is
+ * stable as a log field, a map key, and the value the daemon stamps into its
+ * runtime record.
+ */
+function instanceSlug(key) {
+  const originSlug = slugSegment(key.origin, key.origin);
+  const subSlug = key.sub ? slugSegment(key.sub, key.sub) : DEFAULT_SUB_SEGMENT;
+
+  let human = key.workspace;
+  if (workspaceLooksLikePath(key.workspace)) {
+    human = path.basename(key.workspace);
+    if (human === path.sep || human === '/' || human === '.' || human === '..' || human === '') {
+      human = 'root';
+    }
+  }
+  const workspaceSlug = slugSegment(human, key.workspace);
+
+  return `${originSlug}/${subSlug}/${workspaceSlug}`;
+}
+
+/**
+ * The absolute directory this instance owns. Does not create anything.
+ *
+ * @param {{ origin: string, sub: string, workspace: string }} key
+ * @param {{ homeDir?: string }} [opts] injectable home for tests — a test must
+ *   never touch the developer's real ~/.reliant.
+ */
+function instanceDataDir(key, opts = {}) {
+  const home = opts.homeDir ?? os.homedir();
+  return path.join(home, DAEMON_DIR_NAME, INSTANCES_DIR_NAME, ...instanceSlug(key).split('/'));
+}
+
 module.exports = {
   endpointKey,
+  instanceKey,
+  instanceSlug,
+  instanceDataDir,
+  canonicalWorkspace,
+  sanitizeSlugSegment,
+  INSTANCES_DIR_NAME,
+  DEFAULT_SUB_SEGMENT,
+  ENV_INSTANCE_WORKSPACE,
   shouldSkipTLSVerify,
   daemonStorePaths,
   readDaemonStore,
@@ -844,6 +1157,10 @@ module.exports = {
   upsertEntry,
   deleteEntry,
   entryOwnerSub,
+  readEntry,
+  resolveAccount,
+  accountKey,
+  DEFAULT_ACCOUNT,
   mintDaemonPAT,
   sessionNeedsRefresh,
   refreshSupabaseSession,

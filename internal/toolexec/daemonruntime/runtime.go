@@ -26,7 +26,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
@@ -323,10 +322,16 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	SetTerminalManager(terminal.NewManager())
 	SetMCPManager(mcpManager)
 
-	// daemonID is seeded from persisted per-origin credentials (bootCfg.DaemonID)
-	// so a returning daemon re-asserts its stable identity in the registration
-	// message. On first-ever registration it's empty; the gateway assigns one
-	// via RegistrationAck and we persist it back to daemon.json.
+	// daemonID is seeded from this instance's own data directory so a returning
+	// daemon re-asserts its stable identity in the registration message. The
+	// CLI normally reads it before constructing bootCfg; re-reading here covers
+	// every other entry point (Electron, tests, the in-process runtime) so no
+	// caller has to know where the id is kept. On first-ever registration it's
+	// empty; the gateway assigns one via RegistrationAck and persistDaemonID
+	// writes it back.
+	if bootCfg.DaemonID == "" {
+		bootCfg.DaemonID = bootstrap.ReadDaemonID(bootCfg.DataDir)
+	}
 	// The default display name carries the stable instance id alongside the
 	// hostname, so two daemons whose hostname flipped mid-session are still
 	// recognizable as the same machine in the daemon list. This is a label
@@ -373,39 +378,42 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	}, nil
 }
 
-// persistDaemonID writes the server-assigned daemon id into the per-origin
-// entry of ~/.reliant/daemon.json so it survives daemon restarts and machine
-// hostname changes. It's a no-op when there's no server origin to key by
-// (server mode / in-process runtime), when the id is empty, or when the
-// persisted value already matches — avoiding needless disk writes on every
-// reconnect. Best-effort: a write failure is logged but never fatal, since
-// the daemon is already connected and functional.
+// persistDaemonID writes the server-assigned daemon id into THIS INSTANCE's
+// data directory so it survives daemon restarts and machine hostname changes.
+//
+// Per instance, not per origin. The id used to live in the per-origin entry of
+// ~/.reliant/daemon.json, which meant every worktree on one machine read back
+// the same id and re-asserted it as DaemonRegister.DaemonId — a field the
+// gateway trusts verbatim — so each registration evicted the other daemon and
+// the two fought indefinitely. The data directory is already the thing that is
+// one-per-instance, so the id belongs beside the runtime record.
+//
+// It's a no-op when there's no server origin to belong to (server mode /
+// in-process runtime), when the id is empty, when there is no data directory,
+// or when the persisted value already matches — avoiding needless disk writes
+// on every reconnect. Best-effort: a write failure is logged but never fatal,
+// since the daemon is already connected and functional.
 func (d *daemonClient) persistDaemonID(daemonID string) {
 	if daemonID == "" || strings.TrimSpace(d.serverURL) == "" {
 		return
 	}
-	creds, err := auth.ReadDaemonCredentials(d.serverURL)
-	if err != nil {
-		logging.Warn(logPrefix+" Failed to read daemon credentials while persisting daemon id",
-			"error", err, "serverURL", d.serverURL)
+	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
+	if dataDir == "" {
+		// Nowhere instance-scoped to put it — the id lives only in memory.
+		// This is the same class of case as the --token flow that never wrote
+		// credentials: functional now, re-assigned on the next start.
 		return
 	}
-	if creds == nil {
-		// No persisted entry for this origin (e.g. --token flow that never
-		// wrote creds). Nothing to update — the id lives only in memory.
+	if bootstrap.ReadDaemonID(dataDir) == daemonID {
 		return
 	}
-	if creds.DaemonID == daemonID {
-		return
-	}
-	creds.DaemonID = daemonID
-	if err := auth.WriteDaemonCredentials(creds); err != nil {
+	if err := bootstrap.WriteDaemonID(dataDir, daemonID); err != nil {
 		logging.Warn(logPrefix+" Failed to persist assigned daemon id",
-			"error", err, "serverURL", d.serverURL, "daemonID", daemonID)
+			"error", err, "dataDir", dataDir, "daemonID", daemonID)
 		return
 	}
-	logging.Info(logPrefix+" Persisted stable daemon id for origin",
-		"daemonID", daemonID, "serverURL", d.serverURL)
+	logging.Info(logPrefix+" Persisted stable daemon id for instance",
+		"daemonID", daemonID, "dataDir", dataDir, "serverURL", d.serverURL)
 }
 
 // registerLabels builds the daemon-registration label map. It advertises the

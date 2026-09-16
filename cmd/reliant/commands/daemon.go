@@ -77,6 +77,7 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 	cmd.AddCommand(newDaemonStatusCmd())
 	cmd.AddCommand(newDaemonStopCmd())
 	cmd.AddCommand(newDaemonLogsCmd())
+	cmd.AddCommand(newDaemonLsCmd())
 
 	return cmd
 }
@@ -96,7 +97,10 @@ the Reliant cloud platform via a bidirectional gRPC stream.`,
 // instead of running the interactive flow. Callers that must idle rather than
 // fail outright (see waitForCredentialsNonInteractive) detect that sentinel
 // with errors.Is.
-func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, nonInteractive bool) error {
+// account names which credential this registration writes. It is part of the
+// store key, so registering account A cannot overwrite account B's PAT at the
+// same origin. Empty means the default account.
+func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) error {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
 	accessToken, err := auth.ReadAccessTokenFromAuthFile()
@@ -150,6 +154,7 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, n
 		ServerURL:    apiURL,
 		GatewayURL:   gwURL,
 		RegisteredAt: time.Now().UTC(),
+		Sub:          account,
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return fmt.Errorf("saving daemon credentials: %w", err)
@@ -187,10 +192,10 @@ func daemonCredsExpiringSoon(creds *auth.DaemonCredentials, now time.Time) bool 
 // (if not already, and unless nonInteractive is set — see registerDaemon),
 // then mints a PAT via CreateDaemonToken. Most users will instead use
 // `--token` to paste a PAT minted from the web UI.
-func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, nonInteractive bool) (*auth.DaemonCredentials, error) {
+func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account string, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
-	creds, err := auth.ReadDaemonCredentials(apiURL)
+	creds, err := auth.ReadDaemonCredentials(apiURL, account)
 	if err != nil {
 		return nil, fmt.Errorf("reading daemon credentials: %w", err)
 	}
@@ -207,7 +212,7 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 			if !nonInteractive {
 				fmt.Fprintln(cmd.OutOrStdout(), "Daemon credentials expired. Re-registering...")
 			}
-			_ = auth.DeleteDaemonCredentials(apiURL)
+			_ = auth.DeleteDaemonCredentials(apiURL, account)
 			creds = nil
 		} else {
 			// Update gateway URL if it changed (e.g. flag override). The in-memory
@@ -224,12 +229,12 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found. Registering...")
 	}
 
-	if err := registerDaemon(ctx, cmd, conn, nonInteractive); err != nil {
+	if err := registerDaemon(ctx, cmd, conn, account, nonInteractive); err != nil {
 		return nil, fmt.Errorf("daemon registration failed: %w", err)
 	}
 
 	// Re-read the credentials we just wrote
-	creds, err = auth.ReadDaemonCredentials(apiURL)
+	creds, err = auth.ReadDaemonCredentials(apiURL, account)
 	if err != nil || creds == nil {
 		return nil, fmt.Errorf("failed to read daemon credentials after registration")
 	}
@@ -255,7 +260,7 @@ var daemonCredentialPollInterval = 3 * time.Second
 // instead of as a crash, and re-checks the credentials file on disk until one
 // appears or ctx is cancelled (SIGINT/SIGTERM are wired to ctx cancellation by
 // watchShutdownSignals, so this loop stays responsive to graceful shutdown).
-func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, conn *connection, dataDir string) (*auth.DaemonCredentials, error) {
+func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string) (*auth.DaemonCredentials, error) {
 	fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found and running non-interactively — waiting for sign-in...")
 	if err := daemonstate.SetStream(dataDir, daemonstate.StreamAwaitingCredentials, "waiting for credentials to appear on disk"); err != nil {
 		logging.Warn("failed to publish awaiting-credentials daemon state", "error", err)
@@ -265,7 +270,7 @@ func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, c
 	// disk (e.g. a slow registerDaemon call lost a race with Electron's own
 	// pre-mint), and there is no reason to make that case wait a full poll
 	// interval.
-	if creds := pollDaemonCredentials(cmd, conn); creds != nil {
+	if creds := pollDaemonCredentials(cmd, conn, account); creds != nil {
 		return creds, nil
 	}
 
@@ -277,7 +282,7 @@ func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, c
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-ticker.C:
-			if creds := pollDaemonCredentials(cmd, conn); creds != nil {
+			if creds := pollDaemonCredentials(cmd, conn, account); creds != nil {
 				return creds, nil
 			}
 		}
@@ -289,8 +294,8 @@ func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, c
 // waitForCredentialsNonInteractive. Returns nil (never an error) when there is
 // nothing usable yet — a bad read or a not-yet-valid credential is exactly the
 // same as "nothing yet" to the caller, which just waits for the next tick.
-func pollDaemonCredentials(cmd *cobra.Command, conn *connection) *auth.DaemonCredentials {
-	creds, err := auth.ReadDaemonCredentials(conn.ServerURL)
+func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string) *auth.DaemonCredentials {
+	creds, err := auth.ReadDaemonCredentials(conn.ServerURL, account)
 	if err != nil {
 		logging.Warn("error re-checking daemon credentials while awaiting sign-in", "error", err)
 		return nil
@@ -315,13 +320,13 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection) *auth.DaemonCre
 // auth.ErrNonInteractiveLoginRequired as a fatal error. This is the seam used
 // by both the initial credential resolution and the auth-failure retry path
 // in `daemon start`, so neither can regress into popping a browser.
-func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	creds, err := ensureDaemonCredentials(ctx, cmd, conn, nonInteractive)
+func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, nonInteractive)
 	if err == nil {
 		return creds, nil
 	}
 	if nonInteractive && errors.Is(err, auth.ErrNonInteractiveLoginRequired) {
-		return waitForCredentialsNonInteractive(ctx, cmd, conn, dataDir)
+		return waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
 	}
 	return nil, err
 }
@@ -330,17 +335,17 @@ func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *co
 // the auth-failure retry path: the caller has already deleted stale
 // credentials and needs a fresh registration, but a non-interactive daemon
 // must idle rather than fail when that requires a login it cannot run.
-func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
-	regErr := registerDaemon(ctx, cmd, conn, nonInteractive)
+func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
+	regErr := registerDaemon(ctx, cmd, conn, account, nonInteractive)
 	if regErr == nil {
-		newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL)
+		newCreds, readErr := auth.ReadDaemonCredentials(conn.ServerURL, account)
 		if readErr != nil || newCreds == nil {
 			return nil, fmt.Errorf("failed to read credentials after re-registration")
 		}
 		return newCreds, nil
 	}
 	if nonInteractive && errors.Is(regErr, auth.ErrNonInteractiveLoginRequired) {
-		return waitForCredentialsNonInteractive(ctx, cmd, conn, dataDir)
+		return waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
 	}
 	return nil, fmt.Errorf("re-registration failed: %w", regErr)
 }
@@ -387,7 +392,7 @@ func isReadOnlyOrPermissionErr(err error) bool {
 // `syscall.read(2)` and cannot itself be canceled — the goroutine outlives
 // this function in that case, but the process is on its way out so the leak
 // is bounded.
-func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connection) (*auth.DaemonCredentials, error) {
+func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connection, account string) (*auth.DaemonCredentials, error) {
 	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
 
 	stat, _ := os.Stdin.Stat()
@@ -447,6 +452,7 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 		ServerURL:    apiURL,
 		GatewayURL:   gwURL,
 		RegisteredAt: time.Now().UTC(),
+		Sub:          account,
 	}
 
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
@@ -458,6 +464,8 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 }
 
 func newDaemonRegisterCmd() *cobra.Command {
+	var account string
+
 	cmd := &cobra.Command{
 		Use:   "register",
 		Short: "Register this machine as a daemon",
@@ -480,7 +488,7 @@ After registering, run 'reliant daemon start' to connect.`,
 			}
 
 			// Check if already registered
-			creds, err := auth.ReadDaemonCredentials(conn.ServerURL)
+			creds, err := auth.ReadDaemonCredentials(conn.ServerURL, account)
 			if err != nil {
 				return fmt.Errorf("reading daemon credentials: %w", err)
 			}
@@ -496,9 +504,12 @@ After registering, run 'reliant daemon start' to connect.`,
 			// `daemon register` is always an explicit, interactive CLI
 			// invocation — never spawned by Electron — so it never passes
 			// nonInteractive.
-			return registerDaemon(cmd.Context(), cmd, conn, false)
+			return registerDaemon(cmd.Context(), cmd, conn, account, false)
 		},
 	}
+
+	cmd.Flags().StringVar(&account, "account", os.Getenv(envAccount),
+		"Account (Supabase subject) to register; separate accounts on one server keep separate credentials")
 
 	return cmd
 }
@@ -541,7 +552,7 @@ func newDaemonStartCmd() *cobra.Command {
 	var (
 		port           string
 		grpcURL        string
-		dataDir        string
+		instance       daemonInstanceFlags
 		background     bool
 		tlsCert        string
 		tlsKey         string
@@ -576,6 +587,25 @@ Credential resolution order:
 			if background {
 				// TODO: implement background fork/detach
 				return fmt.Errorf("--background is not yet implemented")
+			}
+
+			// The target server is resolved before anything else because the
+			// data directory is derived from it: the instance is (origin,
+			// account, workspace), and every subsequent step — logging, the
+			// runtime record, the stable daemon id — lives inside that
+			// directory.
+			//
+			// resolveDaemonServer: the daemon authenticates with its own
+			// daemon-kind PAT, so it neither needs a CLI credential nor should
+			// inherit the api-kind context's server — daemon credentials are
+			// multi-backend and keyed by origin. See resolveDaemonServer.
+			conn, err := resolveDaemonServer(cmd)
+			if err != nil {
+				return err
+			}
+			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			if err != nil {
+				return err
 			}
 
 			// Keep the foreground stdout stream used by Electron/task while also
@@ -615,7 +645,7 @@ Credential resolution order:
 				logging.Info("Starting tools-daemon in server mode",
 					"listen_port", listenPort, "data_dir", dataDir)
 
-				err := daemonruntime.Start(ctx, daemonruntime.StartOptions{
+				err = daemonruntime.Start(ctx, daemonruntime.StartOptions{
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
 						ServerMode: true,
 						ListenPort: listenPort,
@@ -632,24 +662,16 @@ Credential resolution order:
 			}
 
 			// --- Client mode: resolve credentials for outbound connection ---
-			// resolveDaemonServer: the daemon authenticates with its own
-			// daemon-kind PAT, so it neither needs a CLI credential nor should
-			// inherit the api-kind context's server — daemon credentials are
-			// multi-backend and keyed by origin. See resolveDaemonServer.
-			conn, err := resolveDaemonServer(cmd)
-			if err != nil {
-				return err
-			}
 			logging.Info("Daemon target resolved", "server", conn.describeServer(), "gateway", conn.describeGateway())
 
 			var creds *auth.DaemonCredentials
 			if useToken {
-				creds, err = credentialsFromToken(ctx, cmd, conn)
+				creds, err = credentialsFromToken(ctx, cmd, conn, instance.account)
 				if err != nil {
 					return err
 				}
 			} else {
-				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, dataDir, nonInteractive)
+				creds, err = resolveOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
 				if err != nil {
 					return err
 				}
@@ -691,13 +713,18 @@ Credential resolution order:
 			startDaemon := func(c *auth.DaemonCredentials) error {
 				return daemonruntime.Start(ctx, daemonruntime.StartOptions{
 					BootstrapConfig: bootstrap.DaemonBootstrapConfig{
-						AuthToken:  c.PAT,
-						GRPCURL:    daemonGRPCURL,
-						TLSMode:    parsedTLSMode,
-						DataDir:    dataDir,
-						Name:       daemonName,
-						ServerURL:  conn.ServerURL,
-						DaemonID:   c.DaemonID,
+						AuthToken: c.PAT,
+						GRPCURL:   daemonGRPCURL,
+						TLSMode:   parsedTLSMode,
+						DataDir:   dataDir,
+						Name:      daemonName,
+						ServerURL: conn.ServerURL,
+						// Per-instance identity, read from this instance's own
+						// data directory. Keyed by origin it was shared by
+						// every worktree on the machine, and the gateway —
+						// which trusts the asserted id verbatim — evicted one
+						// daemon on every registration.
+						DaemonID:   bootstrap.ReadDaemonID(dataDir),
 						ServerMode: false,
 						ListenPort: listenPort,
 						Verbose:    verbose,
@@ -715,7 +742,7 @@ Credential resolution order:
 				// is a real error — don't silently flip into Supabase OAuth, that
 				// would surprise the user who chose to use a specific PAT.
 				if isAuthFail && useToken {
-					_ = auth.DeleteDaemonCredentials(conn.ServerURL)
+					_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
 					return fmt.Errorf("token rejected by gateway %s (%s) — verify the PAT is correct, not revoked, and was minted by %s",
 						conn.describeGateway(), code.String(), conn.describeServer())
 				}
@@ -725,12 +752,12 @@ Credential resolution order:
 				if isAuthFail {
 					logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
 						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
-					_ = auth.DeleteDaemonCredentials(conn.ServerURL)
+					_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
 
 					if !nonInteractive {
 						fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
 					}
-					newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, dataDir, nonInteractive)
+					newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
 					if regErr != nil {
 						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
 					}
@@ -754,7 +781,7 @@ Credential resolution order:
 	cmd.Flags().StringVar(&port, "port", envOrDefault("TOOLS_DAEMON_PORT", "9190"), "Daemon listen port")
 
 	cmd.Flags().StringVar(&grpcURL, "grpc-url", envOrDefault("DAEMON_GRPC_URL", ""), "gRPC server URL to connect to")
-	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
+	registerDaemonInstanceFlags(cmd, &instance, "Data directory (default: this instance's directory under ~/.reliant/instances)")
 
 	cmd.Flags().BoolVar(&background, "background", false, "Run daemon in background (detached)")
 	cmd.Flags().StringVar(&tlsCert, "tls-cert", envOrDefault("TLS_CERT_FILE", ""), "TLS certificate file path")
@@ -870,7 +897,7 @@ func printDaemonStreamStability(w io.Writer, state daemonstate.State, now time.T
 }
 
 func newDaemonStatusCmd() *cobra.Command {
-	var dataDir string
+	var instance daemonInstanceFlags
 
 	cmd := &cobra.Command{
 		Use:   "status",
@@ -884,6 +911,15 @@ whose stream never came up serves nothing. "Running" therefore means
 stream is not established.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
+
+			conn, err := resolveDaemonServer(cmd)
+			if err != nil {
+				return err
+			}
+			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			if err != nil {
+				return err
+			}
 			recordPath := daemonstate.Path(dataDir)
 
 			state, err := daemonstate.Read(dataDir)
@@ -937,7 +973,7 @@ stream is not established.`,
 		},
 	}
 
-	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
+	registerDaemonInstanceFlags(cmd, &instance, "Data directory (default: this instance's directory under ~/.reliant/instances)")
 
 	return cmd
 }
@@ -1058,8 +1094,8 @@ func clearDaemonRecord(w io.Writer, dataDir string) error {
 
 func newDaemonStopCmd() *cobra.Command {
 	var (
-		force   bool
-		dataDir string
+		force    bool
+		instance daemonInstanceFlags
 	)
 
 	cmd := &cobra.Command{
@@ -1074,10 +1110,20 @@ record in place. A daemon reported as stopped while it is still running keeps
 its gateway registration, and the next 'daemon start' then registers a second
 daemon under the same identity — the two evict each other until one is killed.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := resolveDaemonServer(cmd)
+			if err != nil {
+				return err
+			}
+			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			if err != nil {
+				return err
+			}
+
 			state, err := daemonstate.Read(dataDir)
 			if err != nil {
 				if os.IsNotExist(err) {
 					fmt.Fprintln(cmd.OutOrStdout(), "No daemon running (no runtime record found)")
+					fmt.Fprintf(cmd.OutOrStdout(), "  Record:   %s\n", daemonstate.Path(dataDir))
 					return nil
 				}
 				return fmt.Errorf("reading daemon runtime record: %w", err)
@@ -1087,16 +1133,16 @@ daemon under the same identity — the two evict each other until one is killed.
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Force kill (SIGKILL) instead of graceful shutdown")
-	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory")
+	registerDaemonInstanceFlags(cmd, &instance, "Data directory (default: this instance's directory under ~/.reliant/instances)")
 
 	return cmd
 }
 
 func newDaemonLogsCmd() *cobra.Command {
 	var (
-		follow  bool
-		lines   int
-		dataDir string
+		follow   bool
+		lines    int
+		instance daemonInstanceFlags
 	)
 
 	cmd := &cobra.Command{
@@ -1104,6 +1150,14 @@ func newDaemonLogsCmd() *cobra.Command {
 		Short: "Tail daemon logs",
 		Long:  `Streams daemon log output. Defaults to the last 50 lines with live follow.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			conn, err := resolveDaemonServer(cmd)
+			if err != nil {
+				return err
+			}
+			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+			if err != nil {
+				return err
+			}
 			logPath := toolsDaemonLogPath(dataDir)
 
 			f, err := os.Open(logPath)
@@ -1148,7 +1202,7 @@ func newDaemonLogsCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&follow, "follow", "f", true, "Follow log output")
 	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "Number of lines to show")
-	cmd.Flags().StringVar(&dataDir, "data-dir", envOrDefault("DAEMON_DATA_DIR", "./data"), "Data directory containing logs")
+	registerDaemonInstanceFlags(cmd, &instance, "Data directory containing logs (default: this instance's directory under ~/.reliant/instances)")
 
 	return cmd
 }

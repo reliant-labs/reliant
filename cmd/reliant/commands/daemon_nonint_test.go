@@ -40,7 +40,7 @@ func TestRegisterDaemonNonInteractiveNeverOpensBrowser(t *testing.T) {
 	cmd.SetOut(os.Stderr)
 	conn := &connection{ServerURL: "https://staging.reliantapi.com"}
 
-	err := registerDaemon(context.Background(), cmd, conn, true)
+	err := registerDaemon(context.Background(), cmd, conn, "", true)
 	if err == nil {
 		t.Fatal("registerDaemon(nonInteractive=true) returned nil error, want ErrNonInteractiveLoginRequired wrapped")
 	}
@@ -77,7 +77,7 @@ func TestResolveOrAwaitCredentials_IdlesAndPicksUpCredentials(t *testing.T) {
 		err   error
 	}, 1)
 	go func() {
-		creds, err := resolveOrAwaitCredentials(ctx, cmd, conn, dataDir, true)
+		creds, err := resolveOrAwaitCredentials(ctx, cmd, conn, "", dataDir, true)
 		resultCh <- struct {
 			creds *auth.DaemonCredentials
 			err   error
@@ -143,7 +143,7 @@ func TestWaitForCredentialsNonInteractive_RespectsCancellation(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := waitForCredentialsNonInteractive(ctx, cmd, conn, dataDir)
+		_, err := waitForCredentialsNonInteractive(ctx, cmd, conn, "", dataDir)
 		done <- err
 	}()
 

@@ -18,6 +18,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+
 const BackendManager = require('../src/backend-manager');
 const { DAEMON_STREAM_AWAITING_CREDENTIALS } = require('../src/daemon-contract');
 
@@ -25,11 +26,20 @@ const STAT_INTERVAL_MS = 250;
 /** Long enough for the stat-poll watcher to have observed a write. */
 const SETTLE_MS = 900;
 
-function harness() {
+// t is the test context, so the watcher is torn down by the runner rather than
+// by a line at the end of the test body. A failing assertion returns before any
+// such line, and the leaked fs.watchFile holds the event loop open forever —
+// node:test then reports nothing at all, and the whole run hangs instead of
+// going red. Registering the teardown here makes a broken assertion fail fast,
+// which is the only way that failure is debuggable.
+function harness(t) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'daemon-restart-'));
   const manager = new BackendManager();
   manager.daemonDataDir = () => dataDir;
+  manager.instanceWorkspaceOverride = dataDir;
   const statePath = path.join(dataDir, 'daemon-state.json');
+
+  t.after(() => manager.stopWatchingDaemonConnection());
 
   return {
     manager,
@@ -38,6 +48,7 @@ function harness() {
       fs.writeFileSync(
         statePath,
         JSON.stringify({
+          instance: manager.daemonInstanceSlug(),
           pid,
           stream,
           connected_at: connectedAt,
@@ -57,8 +68,8 @@ function harness() {
 
 const settle = () => new Promise((r) => setTimeout(r, SETTLE_MS));
 
-test('a restart back to connected reports the NEW daemon', async () => {
-  const { manager, write } = harness();
+test('a restart back to connected reports the NEW daemon', async (t) => {
+  const { manager, write } = harness(t);
   write({ stream: 'connected', connectedAt: '2026-08-26T02:00:00Z', pid: 100 });
 
   const fired = [];
@@ -89,14 +100,19 @@ test('a restart back to connected reports the NEW daemon', async () => {
   );
 });
 
-test('repeated writes of the SAME connection do not re-fire', async () => {
+test('repeated writes of the SAME connection do not re-fire', async (t) => {
   // The daemon rewrites this record for reasons unrelated to connectivity —
   // session counts, heartbeats. Those must not each look like a new daemon, or
   // the renderer refetches ListDaemons on every heartbeat.
-  const { manager } = harness();
-  const dataDir = manager.daemonDataDir();
-  const statePath = path.join(dataDir, 'daemon-state.json');
+  const { manager } = harness(t);
+  const statePath = path.join(manager.daemonDataDir(), 'daemon-state.json');
+  // Written longhand rather than through the harness's write() because this
+  // test varies a field write() does not expose (`sessions`). The instance
+  // stamp still has to be here: a record without one is not identifiable as
+  // ours and is ignored, so omitting it would make this pass vacuously by
+  // never seeing any record at all.
   const record = {
+    instance: manager.daemonInstanceSlug(),
     pid: 100,
     stream: 'connected',
     connected_at: '2026-08-26T02:00:00Z',
@@ -117,10 +133,10 @@ test('repeated writes of the SAME connection do not re-fire', async () => {
   assert.equal(fired.length, 1, 'same connection, so still one event');
 });
 
-test('a restart that only changes pid still reports', async () => {
+test('a restart that only changes pid still reports', async (t) => {
   // A daemon can respawn and reconnect fast enough to reuse a connection
   // timestamp at second granularity; the pid still distinguishes it.
-  const { manager, write } = harness();
+  const { manager, write } = harness(t);
   write({ stream: 'connected', connectedAt: '2026-08-26T02:00:00Z', pid: 100 });
 
   const fired = [];
@@ -134,8 +150,8 @@ test('a restart that only changes pid still reports', async () => {
   assert.equal(fired.length, 2);
 });
 
-test('awaiting_credentials is never announced as connected', async () => {
-  const { manager, write } = harness();
+test('awaiting_credentials is never announced as connected', async (t) => {
+  const { manager, write } = harness(t);
   write({
     stream: DAEMON_STREAM_AWAITING_CREDENTIALS,
     connectedAt: '',

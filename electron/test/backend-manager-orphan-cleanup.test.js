@@ -74,6 +74,7 @@ function manager() {
   instance.devProcessSearchPattern = BINARY;
   instance.instanceId = 'reliant';
   instance.daemonDataDir = () => dataDir;
+  instance.instanceWorkspaceOverride = dataDir;
   // The bug's headline condition: a second Electron has not spawned its own
   // daemon yet, so the old `pid === this.process.pid` guard matches nothing.
   instance.process = null;
@@ -247,7 +248,10 @@ test('the lock-file path does not kill or forget a live stack\'s daemon', async 
   const { pid } = await spawnOwnedGrandchild(started);
   const { instance, dataDir } = manager();
   const statePath = path.join(dataDir, 'daemon-state.json');
-  fs.writeFileSync(statePath, JSON.stringify({ pid, stream: 'connected' }));
+  fs.writeFileSync(
+    statePath,
+    JSON.stringify({ instance: instance.daemonInstanceSlug(), pid, stream: 'connected' }),
+  );
 
   const spy = spyExecSync(null);
   t.after(() => spy.restore());
@@ -264,7 +268,14 @@ test('the lock-file path still clears a record whose process is gone', async (t)
 
   // A pid that has certainly exited: spawn and wait for it.
   const dead = childProcess.spawnSync(process.execPath, ['-e', 'process.exit(0)']);
-  fs.writeFileSync(statePath, JSON.stringify({ pid: dead.pid, stream: 'connected' }));
+  fs.writeFileSync(
+    statePath,
+    JSON.stringify({
+      instance: instance.daemonInstanceSlug(),
+      pid: dead.pid,
+      stream: 'connected',
+    }),
+  );
 
   const spy = spyExecSync(null);
   t.after(() => spy.restore());
