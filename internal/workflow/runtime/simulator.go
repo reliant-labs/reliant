@@ -306,6 +306,8 @@ type simLogger struct{}
 
 func (l *simLogger) Info(msg string, keyvals ...interface{}) {}
 
+func (l *simLogger) Warn(msg string, keyvals ...interface{}) {}
+
 func (s *WorkflowSimulator) normalizeNodePath(nodePath string) string {
 	if nodePath == "" {
 		return ""
@@ -1431,7 +1433,7 @@ func (s *WorkflowSimulator) executeLoopIteration(
 			"inputs": subInputs,
 			"iter":   iterCtx, // this iteration's full context (item/key included)
 		}
-		evaluatedOutputs, err := EvaluateWorkflowOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext)
+		evaluatedOutputs, err := EvaluateDeclaredOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext, subWorkflow, &simLogger{})
 		if err != nil {
 			return nil, fmt.Errorf("evaluate workflow outputs for loop %s iteration %d: %w", loopID, iteration, err)
 		}
@@ -1777,7 +1779,7 @@ func (s *WorkflowSimulator) executeNestedLoopIteration(
 			"inputs": subInputs,
 			"iter":   iterCtx, // this iteration's full context (item/key included)
 		}
-		evaluatedOutputs, err := EvaluateWorkflowOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext)
+		evaluatedOutputs, err := EvaluateDeclaredOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext, subWorkflow, &simLogger{})
 		if err != nil {
 			return nil, fmt.Errorf("evaluate workflow outputs for nested loop %s iteration %d: %w", qualifiedPrefix, iteration, err)
 		}
@@ -1815,7 +1817,7 @@ func (s *WorkflowSimulator) GetWorkflowOutputs() (map[string]interface{}, error)
 		"name":   s.rootWorkflowIdentity(),
 		"inputs": s.workflowInputs,
 	}
-	return EvaluateWorkflowOutputs(declared, s.nodeOutputs, workflowContext)
+	return EvaluateDeclaredOutputs(declared, s.nodeOutputs, workflowContext, s.protoWorkflow, &simLogger{})
 }
 
 // GetNodeStates returns one summary state per node. A node that both ran and was
@@ -2128,7 +2130,7 @@ func (s *WorkflowSimulator) executeWorkflowNode(nodePath string, protoNode *reli
 			"name":   workflowIdentity,
 			"inputs": subInputs,
 		}
-		evaluatedOutputs, err := EvaluateWorkflowOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext)
+		evaluatedOutputs, err := EvaluateDeclaredOutputs(subWorkflow.GetOutputs(), innerOutputs, workflowContext, subWorkflow, &simLogger{})
 		if err != nil {
 			return nil, fmt.Errorf("evaluate workflow outputs for workflow node %s: %w", nodePath, err)
 		}

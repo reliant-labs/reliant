@@ -330,6 +330,26 @@ func EvaluateWorkflowOutputs(
 	nodeOutputs map[string]interface{},
 	workflowContext map[string]interface{},
 ) (map[string]interface{}, error) {
+	return EvaluateDeclaredOutputs(outputs, nodeOutputs, workflowContext, nil, nil)
+}
+
+// EvaluateDeclaredOutputs evaluates declared output expressions, falling back to
+// a node field's typed zero value when the expression is a bare reference to a
+// field the node did not produce.
+//
+// Passing a non-nil wf enables that fallback; with a nil wf this behaves exactly
+// as it always has and every failure propagates. The fallback applies uniformly
+// to loop iteration outputs and root workflow outputs: the same expression
+// resolving differently depending on which caller evaluated it would be a worse
+// trap than the wider reach. See loop_output_schema.go for why the substitution
+// happens after a failed evaluation rather than by seeding the nodes namespace.
+func EvaluateDeclaredOutputs(
+	outputs map[string]string,
+	nodeOutputs map[string]interface{},
+	workflowContext map[string]interface{},
+	wf *reliantv1.Workflow,
+	logger outputSubstitutionLogger,
+) (map[string]interface{}, error) {
 	if len(outputs) == 0 {
 		return nodeOutputs, nil
 	}
@@ -357,6 +377,16 @@ func EvaluateWorkflowOutputs(
 	for name, expr := range outputs {
 		val, err := wfcel.EvaluateTemplate(expr, ctx)
 		if err != nil {
+			// The expression failed. If it was a bare reference to a field of a
+			// declared node that simply has not run, resolve it to that field's
+			// typed zero instead of failing the whole evaluation — which, in a
+			// loop, is fatal to the iteration.
+			zero, nodeID, substituted := substituteTypedZero(expr, nodeOutputs, wf)
+			if substituted {
+				logTypedZeroSubstitution(logger, name, expr, nodeID, zero)
+				result[name] = zero
+				continue
+			}
 			return nil, fmt.Errorf("failed to evaluate output %q: %w", name, err)
 		}
 		result[name] = val

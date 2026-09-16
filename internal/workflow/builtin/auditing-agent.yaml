@@ -113,7 +113,7 @@ entry: [audited_loop]
 nodes:
   - id: audited_loop
     type: loop
-    while: outputs.tool_calls != null && size(outputs.tool_calls) > 0
+    while: size(outputs.tool_calls) > 0
     ask: "{{inputs.ask || (inputs.max_turns > 0 && iter.iteration >= inputs.max_turns)}}"
     inline:
       name: audited_loop (Loop Body)
@@ -149,7 +149,7 @@ nodes:
                   Agent just responded:
                   {{nodes.main_agent.response_text}}
 
-                  {{nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0 ? 'Tool calls pending:\n' + string(nodes.main_agent.tool_calls) : 'No tool calls'}}
+                  {{size(nodes.main_agent.tool_calls) > 0 ? 'Tool calls pending:\n' + string(nodes.main_agent.tool_calls) : 'No tool calls'}}
 
                   Use the audit tool to report whether the agent is on track.
             response_tool:
@@ -214,7 +214,7 @@ nodes:
         - from: audit_check
           cases:
             - to: execute_audit
-              condition: nodes.audit_check.tool_calls != null && size(nodes.audit_check.tool_calls) > 0
+              condition: size(nodes.audit_check.tool_calls) > 0
               label: execute_audit_tool
         - from: execute_audit
           cases:
@@ -226,7 +226,7 @@ nodes:
         - from: save_approved_response
           cases:
             - to: execute_tools
-              condition: nodes.main_agent.tool_calls != null && size(nodes.main_agent.tool_calls) > 0
+              condition: size(nodes.main_agent.tool_calls) > 0
               label: has_tools
         - from: execute_tools
           cases:
