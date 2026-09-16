@@ -86,6 +86,11 @@ class BackendManager {
     // handleCrash), because a daemon that died badly may have left children.
     this.hasSweptOrphans = false;
 
+    // Bounded re-mint attempts for a daemon that idles without credentials
+    // while we hold a session. Reset on each start() so a later cold boot is
+    // not starved by an earlier one. See reensureCredsIfSignedIn.
+    this.credsReensureAttempts = 0;
+
     // Optional auth-session source for the pre-spawn PAT mint preflight.
     // Null is fine — ensureDaemonCreds() short-circuits silently in that case.
     this.authStorage = opts?.authStorage ?? null;
@@ -1282,6 +1287,29 @@ class BackendManager {
         // settle immediately rather than either rejecting or blocking the
         // caller for the full startup timeout.
         if (this.isAwaitingCredentials()) {
+          // ...but "the daemon has no credentials" and "the user is not
+          // signed in" are two different things, and this branch used to
+          // conflate them. When we DO hold a session, a credential-less
+          // daemon is a failure we can repair, not a steady state to wait in.
+          //
+          // The case that forced this: on a cold `forge up` everything starts
+          // at once, and the pre-spawn mint raced control-plane's boot and
+          // lost — ECONNREFUSED on :8090, three attempts inside ~1 second,
+          // while the API only began listening ~3s later. Electron then
+          // logged "falling back to daemon flow" and settled here, and the
+          // daemon (which cannot do interactive registration under
+          // --non-interactive) idled forever. The user saw "no daemon
+          // connected" with the cause 80,000 lines deep in a log.
+          //
+          // Nothing retried, because ensureDaemonCreds only ran pre-spawn.
+          // It does not need a respawn: the daemon POLLS for credentials
+          // every 3s (daemonCredentialPollInterval), so writing them late is
+          // enough for it to pick them up on its own.
+          if (await this.reensureCredsIfSignedIn()) {
+            log.info('[BackendManager] Re-minted daemon credentials; continuing to wait for the stream');
+            setTimeout(checkReady, 50);
+            return;
+          }
           log.info('[BackendManager] Daemon awaiting credentials — not ready, but not a crash');
           resolve(false);
           return;
@@ -1302,6 +1330,69 @@ class BackendManager {
       // Start checking
       checkReady();
     });
+  }
+
+  /**
+   * Re-run the credential mint for a daemon that is idling without
+   * credentials, when Electron holds a session that could produce them.
+   *
+   * Returns true when a fresh credential was written (so the caller should
+   * keep waiting for the daemon to notice it), false when there is nothing to
+   * be done — no session, no auth storage, or the mint failed again.
+   *
+   * WHY IT IS BOUNDED. The pre-spawn budget is deliberately ~1s because
+   * "daemon spawn is hot", and that is the right trade for the hot path. This
+   * is the cold path: the daemon is already up and useless, so spending
+   * several seconds here costs nothing that was not already lost. But it must
+   * not retry forever either — a genuinely unauthenticated user would spin.
+   * Hence a small attempt cap, and the signed-in precondition.
+   */
+  async reensureCredsIfSignedIn() {
+    if (!this.authStorage) return false;
+    if (this.credsReensureAttempts >= BackendManager.MAX_CREDS_REENSURE_ATTEMPTS) return false;
+
+    let session = null;
+    try {
+      session = this.authStorage.loadStoredAuth();
+    } catch (e) {
+      log.debug?.('[BackendManager] reensureCreds: auth storage unreadable:', e.message);
+      return false;
+    }
+    // No session means the daemon is correctly waiting for a sign-in. That IS
+    // the steady state this branch was written for; leave it alone.
+    if (!session?.access_token) return false;
+
+    this.credsReensureAttempts += 1;
+    log.info(
+      `[BackendManager] Daemon has no credentials but we are signed in — re-minting ` +
+        `(attempt ${this.credsReensureAttempts}/${BackendManager.MAX_CREDS_REENSURE_ATTEMPTS})`
+    );
+
+    const before = this.readDaemonCredsFingerprint();
+    await this.ensureDaemonCreds(); // never throws, by contract
+    const after = this.readDaemonCredsFingerprint();
+
+    if (after && after !== before) return true;
+
+    log.warn('[BackendManager] re-mint produced no new credential; daemon will keep waiting');
+    return false;
+  }
+
+  /**
+   * A cheap stand-in for "did the credential change?" — mtime+size of the
+   * store. Compared rather than parsed because this only has to distinguish
+   * "something was written" from "nothing happened", and parsing would put
+   * this module back in the business of knowing the file's shape, which is
+   * owned by internal/auth/daemon_file.go and mirrored once, in
+   * daemon-creds.js.
+   */
+  readDaemonCredsFingerprint() {
+    try {
+      const st = fs.statSync(daemonCreds.daemonStorePaths().file);
+      return `${st.mtimeMs}:${st.size}`;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -1649,6 +1740,13 @@ class BackendManager {
       // flow is broken under Electron (no TTY); we mint the PAT here so the
       // daemon finds existing creds and skips registration. Never throws —
       // every failure path inside ensureDaemonCreds is logged and swallowed.
+      //
+      // Swallowing is right HERE (a mint failure must not stop the app from
+      // starting) but it is not sufficient: this attempt can lose a race with
+      // control-plane's own boot. waitForReady re-attempts while the daemon
+      // idles without credentials — see reensureCredsIfSignedIn. Reset the
+      // budget so each start gets its own.
+      this.credsReensureAttempts = 0;
       await this.ensureDaemonCreds();
 
       this.process = spawn(binaryPath.command, binaryPath.args, {
@@ -1954,5 +2052,11 @@ class BackendManager {
     }
   }
 }
+
+// Cap on re-mint attempts for a credential-less daemon. Three is enough to
+// ride out a control-plane cold boot (the observed race lost by ~3s and the
+// daemon re-polls every 3s) without spinning for a user who is simply not
+// signed in.
+BackendManager.MAX_CREDS_REENSURE_ATTEMPTS = 3;
 
 module.exports = BackendManager;
