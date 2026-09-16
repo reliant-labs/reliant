@@ -109,6 +109,18 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// the two paths cannot bound it differently.
 	cmd.WaitDelay = daemon.ExecWaitDelay
 
+	// Cancellation terminates the process GROUP (set just above) and escalates
+	// to a kill only after ExecGraceDelay, instead of os/exec's default of an
+	// immediate SIGKILL that runs no signal handler and loses every cleanup
+	// the child would have done. Shared with LocalClient.RunCommand so the two
+	// exec paths cannot drift on cancellation behaviour either.
+	//
+	// Not stopped with defer: this command may be ADOPTED into the background
+	// manager below, outliving this function, and the timer must stay armed
+	// for as long as cancellation can still fire. It is stopped on every path
+	// where this function owns the command through to completion.
+	stopGrace := osutil.ApplyGracefulCancel(cmd, daemon.ExecGraceDelay)
+
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
 	// Invalid (and therefore inert) on hosts without cgroup v2 accounting.
@@ -128,10 +140,13 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		go func() { waitCh <- cmd.Wait() }()
 
 		if bgResp, backgrounded := pollForBackgroundDetach(ctx, cmd, req, &stdoutBuf, &stderrBuf, waitCh, start); backgrounded {
+			// Adopted: the background manager owns the command now, so the
+			// grace timer stays armed rather than being stopped here.
 			return json.Marshal(bgResp)
 		}
 		err = <-waitCh
 	}
+	stopGrace()
 	duration := time.Since(start)
 
 	// Shared with LocalClient.RunCommand so the two exec paths cannot drift on

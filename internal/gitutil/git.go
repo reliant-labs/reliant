@@ -139,9 +139,9 @@ func CommitWithFallbackIdentity(ctx context.Context, path, message string, allow
 	}
 	args = append(args, "-m", message)
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = path
-	return cmd.CombinedOutput()
+	// Index-writing: goes through the shared helper so a cancelled commit
+	// gets SIGTERM (and removes its own index.lock) instead of SIGKILL.
+	return RunIndexCommand(ctx, path, args...)
 }
 
 // EnsureInitialCommit gives a repository a root commit if it has none, so an
@@ -250,10 +250,9 @@ func InitGitRepository(ctx context.Context, opts InitGitRepositoryOptions) error
 	// that already has commits — there is nothing to "initialize" and
 	// sweeping unrelated files into a fabricated commit would be surprising.
 	if opts.InitialCommit && !hasCommits {
-		// Stage all files
-		cmd := exec.CommandContext(ctx, "git", "add", ".")
-		cmd.Dir = opts.Path
-		if output, err := cmd.CombinedOutput(); err != nil {
+		// Stage all files. Index-writing, so it goes through the shared
+		// helper for graceful cancellation and stranded-lock recovery.
+		if output, err := RunIndexCommand(ctx, opts.Path, "add", "."); err != nil {
 			return fmt.Errorf("failed to stage files: %w, output: %s", err, string(output))
 		}
 

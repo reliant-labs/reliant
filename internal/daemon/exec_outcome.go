@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
+	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
 // TimeoutExitCode is the conventional shell exit status for a command killed
@@ -52,6 +53,42 @@ const TimeoutExitCode = 124
 // A var rather than a const only so tests can shorten it; production never
 // reassigns it.
 var ExecWaitDelay = 10 * time.Second
+
+// ExecGraceDelay is how long a CANCELLED command's process group has to exit
+// on its own after SIGTERM before it is killed outright.
+//
+// This is a second, separate knob on purpose, and the separation is the whole
+// design. cmd.WaitDelay would appear to do this job — once cmd.Cancel is set,
+// os/exec uses WaitDelay as the SIGTERM-to-SIGKILL grace period too — but it
+// is ALREADY spoken for above as the post-exit pipe drain bound, and the two
+// want opposite values:
+//
+//   - grace wants to be SHORT, because a user waiting on a cancel should not
+//     wait on a process that is refusing to stop;
+//   - drain wants to stay FORGIVING, because cutting it short truncates the
+//     output of commands that completed perfectly well. Measured on a command
+//     whose grandchild holds the pipe: at 1s the result was "EARLY" plus
+//     "WaitDelay expired before I/O complete"; at 10s it was the full
+//     "EARLY LATE" with no error.
+//
+// So lowering ExecWaitDelay to get a prompt cancel would silently reintroduce
+// the truncation bug the comment above says it exists to prevent. Instead the
+// escalation runs on its own timer inside osutil.ApplyGracefulCancel, and
+// each number means exactly one thing: this one is grace, ExecWaitDelay is
+// drain.
+//
+// Three seconds: see osutil.DefaultGraceDelay for the reasoning. It is stated
+// here in daemon terms so subprocess shutdown can be reasoned about in one
+// place.
+//
+// Not yet per-call configurable. The shell tool's Timeout
+// (internal/llm/tools/shell.go) is the precedent for exposing it — optional,
+// validated, clamped — but the right clamp bounds are not knowable until this
+// default has run in anger, so the seam is here and the knob is not.
+//
+// A var rather than a const only so tests can shorten it; production never
+// reassigns it.
+var ExecGraceDelay = osutil.DefaultGraceDelay
 
 // LingeringOutputMessage explains a WaitDelay expiry in the one channel every
 // consumer already reads. Phrased for the reader who is looking at a command
@@ -122,6 +159,27 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stderr string, mem OOMChecker, sn
 	if !out.TimedOut && errors.Is(cmdErr, exec.ErrWaitDelay) {
 		out.OutputIncomplete = true
 		out.Stderr = appendStderr(out.Stderr, LingeringOutputMessage)
+		return out
+	}
+
+	// A command that was CANCELLED but whose child then exited cleanly is a
+	// success, not a failure. This case only became reachable when cmd.Cancel
+	// was introduced: os/exec reports the context error from Wait whenever
+	// Cancel ran, even if the child went on to exit 0, so a child that took
+	// the SIGTERM and shut down properly would otherwise be reported as
+	// exit 1 with "context canceled" pasted onto its stderr — inventing a
+	// failure that did not happen, which is the same class of mistake the
+	// ErrWaitDelay branch above exists to prevent, in the opposite direction.
+	//
+	// The discriminator is that a child which actually failed produces an
+	// *exec.ExitError, which takes precedence in Wait and is handled below.
+	// Reaching here with a bare context error means the child exited 0.
+	//
+	// A TIMEOUT keeps precedence and is deliberately NOT swallowed: the
+	// deadline firing is the thing the caller most needs to know, and a
+	// well-behaved process that exits promptly on SIGTERM must still be
+	// reported as timed out rather than as a success.
+	if !out.TimedOut && errors.Is(cmdErr, context.Canceled) {
 		return out
 	}
 

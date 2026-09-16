@@ -917,9 +917,10 @@ func handleWorktreeStage(ctx context.Context, payload []byte) ([]byte, error) {
 		args = append([]string{"add", "--"}, req.Files...)
 	}
 
-	addCmd := exec.CommandContext(ctx, "git", args...)
-	addCmd.Dir = req.WorktreePath
-	if output, err := addCmd.CombinedOutput(); err != nil {
+	// Index-writing: the shared helper gives it graceful cancellation (so a
+	// cancelled stage removes its own index.lock) and clears a lock stranded
+	// by an earlier death.
+	if output, err := gitutil.RunIndexCommand(ctx, req.WorktreePath, args...); err != nil {
 		return json.Marshal(worktreeStageResponse{Error: strings.TrimSpace(string(output))})
 	}
 
@@ -954,9 +955,8 @@ func handleWorktreeUnstage(ctx context.Context, payload []byte) ([]byte, error) 
 		args = append([]string{"restore", "--staged", "--"}, req.Files...)
 	}
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = req.WorktreePath
-	if output, err := cmd.CombinedOutput(); err != nil {
+	// Index-writing (`reset HEAD` / `restore --staged`): same policy as stage.
+	if output, err := gitutil.RunIndexCommand(ctx, req.WorktreePath, args...); err != nil {
 		return json.Marshal(worktreeUnstageResponse{Error: strings.TrimSpace(string(output))})
 	}
 
@@ -984,9 +984,9 @@ func handleWorktreeCommit(ctx context.Context, payload []byte) ([]byte, error) {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
-	commitCmd := exec.CommandContext(ctx, "git", "commit", "-m", req.Message)
-	commitCmd.Dir = req.WorktreePath
-	output, err := commitCmd.CombinedOutput()
+	// Index-writing: a cancelled commit under SIGKILL is the classic way to
+	// strand index.lock, so it goes through the shared helper.
+	output, err := gitutil.RunIndexCommand(ctx, req.WorktreePath, "commit", "-m", req.Message)
 	if err != nil {
 		return json.Marshal(worktreeCommitResponse{
 			Error:  strings.TrimSpace(string(output)),
@@ -1199,10 +1199,9 @@ func handleWorktreeCreatePR(ctx context.Context, payload []byte) ([]byte, error)
 	}
 
 	if hasChanges {
-		// Stage all changes
-		stageCmd := exec.CommandContext(ctx, "git", "add", ".")
-		stageCmd.Dir = req.WorktreePath
-		if output, err := stageCmd.CombinedOutput(); err != nil {
+		// Stage all changes. Index-writing, so it goes through the shared
+		// helper for graceful cancellation and stranded-lock recovery.
+		if output, err := gitutil.RunIndexCommand(ctx, req.WorktreePath, "add", "."); err != nil {
 			resp.Error = fmt.Sprintf("failed to stage changes: %s", strings.TrimSpace(string(output)))
 			return json.Marshal(resp)
 		}
@@ -1366,17 +1365,16 @@ func handleWorktreeRevert(ctx context.Context, payload []byte) ([]byte, error) {
 			}
 			results = append(results, revertResult{File: filePath, Success: true})
 		} else if isStaged {
-			unstageCmd := exec.CommandContext(ctx, "git", "restore", "--staged", "--", filePath)
-			unstageCmd.Dir = req.WorktreePath
-			if _, err := unstageCmd.CombinedOutput(); err != nil {
+			// Index-writing: same policy as worktree.unstage.
+			if _, err := gitutil.RunIndexCommand(ctx, req.WorktreePath, "restore", "--staged", "--", filePath); err != nil {
 				results = append(results, revertResult{File: filePath, Error: "failed to unstage"})
 				continue
 			}
 			results = append(results, revertResult{File: filePath, Success: true})
 		} else if isModified {
-			restoreCmd := exec.CommandContext(ctx, "git", "restore", "--", filePath)
-			restoreCmd.Dir = req.WorktreePath
-			if _, err := restoreCmd.CombinedOutput(); err != nil {
+			// `git restore` takes the index lock to read the index, so it can
+			// strand one too.
+			if _, err := gitutil.RunIndexCommand(ctx, req.WorktreePath, "restore", "--", filePath); err != nil {
 				results = append(results, revertResult{File: filePath, Error: "failed to restore"})
 				continue
 			}
