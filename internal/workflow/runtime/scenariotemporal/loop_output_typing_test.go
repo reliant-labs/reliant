@@ -366,9 +366,26 @@ func TestNotNullRemainsCorrect(t *testing.T) {
 }
 
 // Absent is not the same as wrong. A type error must still raise.
+// Deliberately NOT parallel, and not merely as a style choice.
+//
+// These expressions produce cel-go's "no such overload" error, which is a
+// package-level SINGLETON (celErrNoSuchOverload, common/types/err.go:56).
+// LabelErrNode (err.go:81) then WRITES err.id onto whatever Err it is handed —
+// including that shared instance. Two goroutines hitting an overload error at
+// once therefore write the same struct field, which -race reports as a data
+// race inside cel-go with no application frame at fault.
+//
+// Reproduced upstream in isolation: a 27-line test that only builds its own
+// cel.Env and evaluates `v - 1 > 0` against a string, from 16 parallel
+// subtests, races identically with no reliant code in the stack. Nothing here
+// can fix it — the mutation is in the dependency — so these subtests run
+// serially to avoid manufacturing the collision. The production path is
+// unaffected: activities evaluate one expression at a time per iteration, and
+// the race needs two simultaneous overload failures.
+//
+// If cel-go is upgraded, re-check whether LabelErrNode still mutates the
+// singleton; if it stops, the t.Parallel() calls can come back.
 func TestTypeErrorsStillRaise(t *testing.T) {
-	t.Parallel()
-
 	wf := callLLMWorkflow(nil)
 	workflowContext := map[string]interface{}{
 		"id":     "wf-id",
@@ -384,7 +401,6 @@ func TestTypeErrorsStillRaise(t *testing.T) {
 
 	for name, expr := range cases {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
 			nodeOutputs := map[string]interface{}{
 				"call_llm": map[string]interface{}{"response_data": nil, "response_text": "text"},
 			}
