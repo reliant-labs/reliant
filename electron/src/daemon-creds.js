@@ -64,6 +64,35 @@ const crypto = require('crypto');
 const DAEMON_DIR_NAME = '.reliant';
 const DAEMON_FILE_NAME = 'daemon.json';
 const MINT_RPC_PATH = '/reliant.v1.DaemonTokenService/CreateDaemonToken';
+
+// ─── ensureDaemonPATForOrigin outcomes ──────────────────────────────────────
+//
+// The function is "best effort and never throws", which used to mean it told
+// callers nothing at all. That was fine while its only caller was the
+// pre-spawn mint, which has no decision to make: it fires once and spawns the
+// daemon regardless.
+//
+// It is not fine for the credential RECONCILER (BackendManager.
+// maybeRepairDaemonCredentials), which must decide whether to try again. The
+// distinction it needs is precisely the one an "it didn't work" boolean
+// destroys: a mint that FAILED against an API that was not listening yet is
+// worth retrying a second later, while a store that is ALREADY CURRENT can be
+// retried a thousand times without ever changing, because this function
+// short-circuits before the RPC. Inferring the difference from the store's
+// mtime cannot work — both cases leave the file untouched.
+const ENSURE_MINTED = 'minted';
+// A credential for the current user is already on disk; no RPC was made.
+// Re-calling cannot change anything.
+const ENSURE_ALREADY_CURRENT = 'already-current';
+// No stored session. The daemon is correctly waiting for a human to sign in.
+const ENSURE_NO_SESSION = 'no-session';
+// We are not in a position to mint at all (no auth storage injected, or a
+// --server URL that names no origin). Also not retryable.
+const ENSURE_UNAVAILABLE = 'unavailable';
+// An attempt was made and did not produce a stored credential: the RPC
+// failed, the post-401 refresh failed, or the write failed. THIS is the
+// retryable one.
+const ENSURE_FAILED = 'failed';
 // Per-attempt timeout. mintDaemonPAT retries transient failures up to
 // MINT_MAX_ATTEMPTS times with backoff (see MINT_RETRY_BACKOFFS_MS), so this
 // is *one* attempt — not the budget for the whole mint. Kept short because
@@ -808,13 +837,13 @@ async function ensureDaemonPATForOrigin({
   try {
     if (!authStorage) {
       log.debug?.('[daemon-creds] ensureDaemonPATForOrigin: no authStorage injected, skipping');
-      return;
+      return ENSURE_UNAVAILABLE;
     }
 
     const key = endpointKey(apiUrl);
     if (!key) {
       log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: invalid --server URL, skipping:', apiUrl);
-      return;
+      return ENSURE_UNAVAILABLE;
     }
 
     // Read the current session BEFORE the idempotency check — we need its
@@ -841,7 +870,7 @@ async function ensureDaemonPATForOrigin({
     // re-mint to be safe.
     if (existingPat && existingSub && currentSub && existingSub === currentSub) {
       log.debug?.('[daemon-creds] ensureDaemonPATForOrigin: existing PAT for origin matches current user, skipping mint:', key);
-      return;
+      return ENSURE_ALREADY_CURRENT;
     }
 
     // Need to mint. If no session yet, the user hasn't signed in; the
@@ -849,7 +878,7 @@ async function ensureDaemonPATForOrigin({
     // the renderer is about to surface the sign-in screen.
     if (!accessToken) {
       log.info?.('[daemon-creds] ensureDaemonPATForOrigin: no stored session, skipping mint (user not signed in yet)');
-      return;
+      return ENSURE_NO_SESSION;
     }
 
     if (existingPat && existingSub && currentSub && existingSub !== currentSub) {
@@ -912,7 +941,7 @@ async function ensureDaemonPATForOrigin({
       const retriableAuthFailure = mintErr?.mintStatus === 401 && canRefresh && !refreshed;
       if (!retriableAuthFailure) {
         log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: mint failed, falling back to daemon flow:', mintErr.message);
-        return;
+        return ENSURE_FAILED;
       }
       log.info?.('[daemon-creds] ensureDaemonPATForOrigin: mint got 401 — refreshing session and retrying once');
       try {
@@ -921,7 +950,7 @@ async function ensureDaemonPATForOrigin({
         );
       } catch (refreshErr) {
         log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: session refresh after 401 failed, falling back to daemon flow:', refreshErr.message);
-        return;
+        return ENSURE_FAILED;
       }
       try {
         minted = await mintDaemonPAT({
@@ -932,7 +961,7 @@ async function ensureDaemonPATForOrigin({
         });
       } catch (retryErr) {
         log.warn?.('[daemon-creds] ensureDaemonPATForOrigin: mint retry after refresh failed, falling back to daemon flow:', retryErr.message);
-        return;
+        return ENSURE_FAILED;
       }
     }
 
@@ -951,13 +980,16 @@ async function ensureDaemonPATForOrigin({
         'gateway:', resolvedGatewayUrl || '(empty)',
         'sub:', currentSub || '(unknown)'
       );
+      return ENSURE_MINTED;
     } catch (writeErr) {
       log.error?.('[daemon-creds] ensureDaemonPATForOrigin: failed to persist PAT:', writeErr.message);
+      return ENSURE_FAILED;
     }
   } catch (e) {
     // Top-level safety net — nothing in the body should escape, but if
     // something does (e.g. logger blew up), don't let it block spawn.
     log.error?.('[daemon-creds] ensureDaemonPATForOrigin: unexpected error, swallowing:', e?.message || e);
+    return ENSURE_FAILED;
   }
 }
 
@@ -1165,6 +1197,11 @@ module.exports = {
   sessionNeedsRefresh,
   refreshSupabaseSession,
   ensureDaemonPATForOrigin,
+  ENSURE_MINTED,
+  ENSURE_ALREADY_CURRENT,
+  ENSURE_NO_SESSION,
+  ENSURE_UNAVAILABLE,
+  ENSURE_FAILED,
   MINT_RPC_PATH,
   MINT_TIMEOUT_MS,
   MINT_MAX_ATTEMPTS,

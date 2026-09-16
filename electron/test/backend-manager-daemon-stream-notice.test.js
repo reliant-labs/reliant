@@ -19,6 +19,7 @@ const os = require('node:os');
 const path = require('node:path');
 
 const BackendManager = require('../src/backend-manager');
+const { ENV_INSTANCE_WORKSPACE } = require('../src/daemon-creds');
 const {
   DAEMON_STREAM_NOTICE_PREFIX,
   DAEMON_STREAM_AWAITING_CREDENTIALS,
@@ -36,7 +37,20 @@ const {
 // regression that shows up as "the app feels slower after sign-in" months later
 // and is nearly impossible to attribute, so it gets its own assertion here,
 // beside the parsing tests it protects.
-test('every daemon spawn asks for machine output, or the push path is dead', () => {
+test('every daemon spawn asks for machine output, or the push path is dead', (t) => {
+  // Same reason as the twin assertion in
+  // backend-manager-awaiting-credentials.test.js: buildDaemonArgs resolves an
+  // instance workspace, and without an explicit one that walks either
+  // `app.getPath('userData')` (no Electron `app` under `node --test`) or a
+  // `git rev-parse` of whatever checkout this happens to be. Naming it keeps
+  // the assertion reachable and the arg list deterministic.
+  const prev = process.env[ENV_INSTANCE_WORKSPACE];
+  process.env[ENV_INSTANCE_WORKSPACE] = '/tmp/backend-manager-verbose-test';
+  t.after?.(() => {
+    if (prev === undefined) delete process.env[ENV_INSTANCE_WORKSPACE];
+    else process.env[ENV_INSTANCE_WORKSPACE] = prev;
+  });
+
   const args = new BackendManager().buildDaemonArgs();
   assert.ok(
     args.includes(DAEMON_VERBOSE_FLAG),

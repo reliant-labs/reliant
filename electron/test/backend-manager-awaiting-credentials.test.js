@@ -19,6 +19,7 @@ const os = require('os');
 const path = require('path');
 
 const BackendManager = require('../src/backend-manager');
+const { ENV_INSTANCE_WORKSPACE } = require('../src/daemon-creds');
 const {
   DAEMON_NON_INTERACTIVE_FLAG,
   DAEMON_STREAM_AWAITING_CREDENTIALS,
@@ -48,7 +49,23 @@ function harness() {
   };
 }
 
-test('every daemon spawn passes the non-interactive flag', () => {
+test('every daemon spawn passes the non-interactive flag', (t) => {
+  // Name the instance workspace explicitly. Without it this walks
+  // daemonInstanceWorkspace's PACKAGED branch — `app.getPath('userData')` —
+  // and there is no Electron `app` in a bare `node --test` process, so the
+  // assertion below never ran: the test died with "Cannot read properties of
+  // undefined (reading 'getPath')".
+  //
+  // The override is also what makes it deterministic. The development branch
+  // shells out to `git rev-parse --show-toplevel`, so the arg list would
+  // otherwise depend on where the checkout happens to live.
+  const prev = process.env[ENV_INSTANCE_WORKSPACE];
+  process.env[ENV_INSTANCE_WORKSPACE] = '/tmp/backend-manager-args-test';
+  t.after?.(() => {
+    if (prev === undefined) delete process.env[ENV_INSTANCE_WORKSPACE];
+    else process.env[ENV_INSTANCE_WORKSPACE] = prev;
+  });
+
   const manager = new BackendManager();
   const args = manager.buildDaemonArgs();
   assert.ok(

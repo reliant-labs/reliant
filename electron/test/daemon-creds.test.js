@@ -15,6 +15,11 @@ const {
   sessionNeedsRefresh,
   refreshSupabaseSession,
   ensureDaemonPATForOrigin,
+  ENSURE_MINTED,
+  ENSURE_ALREADY_CURRENT,
+  ENSURE_NO_SESSION,
+  ENSURE_UNAVAILABLE,
+  ENSURE_FAILED,
   MINT_RPC_PATH,
   MINT_MAX_ATTEMPTS,
   REFRESH_TOKEN_PATH,
@@ -1430,5 +1435,130 @@ test('ensureDaemonPATForOrigin: saveAuth blowing up does not block the mint (nev
       store.origins['https://reliantapi.com']['user-1'].pat,
       'rlnt_pat_despite_persist_failure'
     );
+  });
+});
+
+// ─── The outcome contract ───────────────────────────────────────────────────
+//
+// BackendManager.maybeRepairDaemonCredentials SWITCHES on what this function
+// returns: it retries ENSURE_FAILED (the mint lost a race with control-plane's
+// boot and a later attempt can win) and stops on ENSURE_ALREADY_CURRENT
+// (the store is already correct, so the RPC is short-circuited and no number
+// of retries can change anything).
+//
+// Getting that backwards in either direction is a bug with teeth — retrying
+// already-current spins forever against a no-op, while treating a failure as
+// terminal is exactly the single-shot behaviour that left a daemon idling
+// without credentials and the user staring at "no daemon connected". The
+// reconciler's own tests stub this function, so without these the contract
+// they depend on is asserted nowhere.
+
+test('ensureDaemonPATForOrigin outcome: minted, when it writes a fresh credential', async () => {
+  await withFakeHome(async () => {
+    const authStorage = {
+      loadStoredAuth: () => ({ access_token: 'jwt-abc', user: { id: 'user-1' } }),
+    };
+    const outcome = await withFetchStub(
+      async () => jsonResponse(200, { token: 'rlnt_pat_fresh', tokenId: 'tok_1' }),
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        })
+    );
+    assert.equal(outcome, ENSURE_MINTED);
+  });
+});
+
+test('ensureDaemonPATForOrigin outcome: already-current, and NO request is made', async () => {
+  // The short-circuit that makes retrying pointless. Asserted together with
+  // "fetch must not be called", because the outcome name is only meaningful
+  // if it really does mean no RPC happened.
+  await withFakeHome(async (home) => {
+    const authStorage = {
+      loadStoredAuth: () => ({ access_token: 'jwt-abc', user: { id: 'user-1' } }),
+    };
+    // Seed a credential that already belongs to the signed-in user.
+    await withFetchStub(
+      async () => jsonResponse(200, { token: 'rlnt_pat_seeded', tokenId: 'tok_0' }),
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        })
+    );
+    assert.ok(fs.existsSync(path.join(home, '.reliant', 'daemon.json')), 'precondition: seeded');
+
+    const outcome = await withFetchStub(
+      async () => {
+        throw new Error('fetch must not be called when the store is already current');
+      },
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        })
+    );
+    assert.equal(outcome, ENSURE_ALREADY_CURRENT);
+  });
+});
+
+test('ensureDaemonPATForOrigin outcome: failed, when the API is not listening yet', async () => {
+  // THE RACE, in miniature: control-plane has not bound its port, so every
+  // mint attempt is refused. This must come back retryable — it is the one
+  // outcome a second attempt can turn into success.
+  await withFakeHome(async () => {
+    const authStorage = {
+      loadStoredAuth: () => ({ access_token: 'jwt-abc', user: { id: 'user-1' } }),
+    };
+    const outcome = await withFetchStub(
+      async () => {
+        const err = new Error('connect ECONNREFUSED 127.0.0.1:8090');
+        err.code = 'ECONNREFUSED';
+        throw err;
+      },
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage,
+          apiUrl: 'http://localhost:8090',
+          gatewayUrl: '',
+        })
+    );
+    assert.equal(outcome, ENSURE_FAILED);
+  });
+});
+
+test('ensureDaemonPATForOrigin outcome: no-session / unavailable are distinct from failure', async () => {
+  // Both mean "nothing to repair", and the reconciler must stay quiet for
+  // them rather than treating a signed-out user as a fault to retry.
+  await withFakeHome(async () => {
+    const noSession = await withFetchStub(
+      async () => {
+        throw new Error('fetch must not be called without a session');
+      },
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage: { loadStoredAuth: () => null },
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        })
+    );
+    assert.equal(noSession, ENSURE_NO_SESSION);
+
+    const noStorage = await withFetchStub(
+      async () => {
+        throw new Error('fetch must not be called without auth storage');
+      },
+      async () =>
+        ensureDaemonPATForOrigin({
+          authStorage: null,
+          apiUrl: 'https://reliantapi.com',
+          gatewayUrl: '',
+        })
+    );
+    assert.equal(noStorage, ENSURE_UNAVAILABLE);
   });
 });
