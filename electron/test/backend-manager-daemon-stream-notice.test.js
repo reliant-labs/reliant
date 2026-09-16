@@ -51,6 +51,7 @@ function harness({ pid = 4242 } = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'stream-notice-'));
   const instance = new BackendManager();
   instance.daemonDataDir = () => dataDir;
+  instance.instanceWorkspaceOverride = dataDir;
   instance.process = { pid, killed: false };
 
   const events = [];
@@ -63,7 +64,12 @@ function harness({ pid = 4242 } = {}) {
     writeState({ stream, connectedAt = '2026-08-26T00:00:00Z' }) {
       fs.writeFileSync(
         path.join(dataDir, 'daemon-state.json'),
-        JSON.stringify({ pid, stream, connected_at: connectedAt }),
+        JSON.stringify({
+          instance: instance.daemonInstanceSlug(),
+          pid,
+          stream,
+          connected_at: connectedAt,
+        }),
       );
     },
   };

@@ -9,8 +9,58 @@ package bootstrap
 import (
 	"fmt"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 )
+
+// DaemonIDFileName holds the stable server-assigned daemon id, inside the
+// instance's own data directory.
+//
+// It lives HERE, next to the runtime record, rather than in the credentials
+// store, because identity is per INSTANCE and a credential is per ACCOUNT.
+// Keyed by origin in ~/.reliant/daemon.json, every worktree on one machine read
+// back the same id and re-asserted it in DaemonRegister; the gateway trusts that
+// field verbatim, so each registration evicted the other daemon holding the same
+// id and the two fought until one was killed. Distinct data directories alone do
+// not fix that — the id has to be distinct too, and the data directory is
+// already the one thing that is per instance.
+const DaemonIDFileName = "daemon-id"
+
+// DaemonIDPath is where ReadDaemonID and WriteDaemonID keep the id for the
+// instance that owns dataDir.
+func DaemonIDPath(dataDir string) string {
+	return filepath.Join(dataDir, DaemonIDFileName)
+}
+
+// ReadDaemonID returns the stable daemon id previously assigned to this
+// instance, or "" when there is none.
+//
+// Absence is the first-ever-registration case and is not an error: the daemon
+// registers with an empty id, the gateway mints one, and WriteDaemonID records
+// it. An unreadable or corrupt file is treated the same way — re-registering as
+// new is always recoverable, while refusing to start is not.
+func ReadDaemonID(dataDir string) string {
+	if strings.TrimSpace(dataDir) == "" {
+		return ""
+	}
+	data, err := os.ReadFile(DaemonIDPath(dataDir))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// WriteDaemonID records this instance's assigned daemon id.
+func WriteDaemonID(dataDir, daemonID string) error {
+	if strings.TrimSpace(dataDir) == "" {
+		return fmt.Errorf("cannot persist daemon id: no data directory")
+	}
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
+		return fmt.Errorf("creating data directory %s: %w", dataDir, err)
+	}
+	return os.WriteFile(DaemonIDPath(dataDir), []byte(strings.TrimSpace(daemonID)+"\n"), 0o600)
+}
 
 // TLSMode controls daemon transport security/protocol behavior.
 type TLSMode string
@@ -33,16 +83,17 @@ type DaemonBootstrapConfig struct {
 	Name      string // Human-friendly daemon name (default: hostname)
 
 	// ServerURL is the API server origin (scheme://host:port) these
-	// credentials belong to. Used as the per-origin key into
-	// ~/.reliant/daemon.json so the daemon can persist the server-assigned
-	// DaemonID after registration. Empty in server mode (the gateway dials
-	// in and already knows our identity).
+	// credentials belong to. Empty in server mode (the gateway dials in and
+	// already knows our identity).
 	ServerURL string
 
-	// DaemonID is the stable identity previously assigned by the server for
-	// ServerURL's origin, read from persisted credentials at startup. The
-	// daemon re-asserts it in its registration message so identity survives
-	// restarts and hostname changes. Empty on first-ever registration.
+	// DaemonID is the stable identity the server previously assigned to THIS
+	// INSTANCE, read from DataDir at startup (see ReadDaemonID). The daemon
+	// re-asserts it in its registration message so identity survives restarts
+	// and hostname changes. Empty on first-ever registration.
+	//
+	// Per instance, not per origin: the gateway trusts this field verbatim, so
+	// two daemons asserting one id evict each other on every registration.
 	DaemonID string
 
 	// ServerMode, when true, makes the daemon listen on ListenPort for

@@ -69,6 +69,7 @@ function manager() {
   instance.devProcessSearchPattern = '/tmp/reliant-sweep-test/dist/reliant';
   instance.instanceId = 'reliant';
   instance.daemonDataDir = () => dataDir;
+  instance.instanceWorkspaceOverride = dataDir;
   instance.process = null;
   return instance;
 }

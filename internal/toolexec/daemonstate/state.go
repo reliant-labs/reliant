@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 )
@@ -97,6 +98,20 @@ type State struct {
 	TLSMode    string `json:"tls_mode,omitempty"`
 	ServerMode bool   `json:"server_mode,omitempty"`
 
+	// Instance names the daemon instance this record belongs to: the
+	// "<origin>/<sub>/<workspace>" slug from internal/daemoninstance. It is
+	// what makes the record self-describing, so a reader that expects one
+	// instance can reject a record belonging to another instead of trusting
+	// whatever JSON happens to sit at a path and acting on its PID.
+	//
+	// Empty when the data dir is not an instance directory — a container with
+	// an explicit DAEMON_DATA_DIR=/data has no instance identity to claim, and
+	// inventing one would be a lie rather than a default. Readers must treat
+	// "" as "unknown", never as "mine".
+	//
+	// Electron mirrors this field name ("instance") when it verifies ownership.
+	Instance string `json:"instance,omitempty"`
+
 	Stream          Stream    `json:"stream"`
 	StreamChangedAt time.Time `json:"stream_changed_at"`
 	// ConnectedAt is the last time the gateway acknowledged registration. Zero
@@ -145,6 +160,73 @@ var mu sync.Mutex
 // Path returns the record's location inside dataDir.
 func Path(dataDir string) string { return filepath.Join(dataDir, FileName) }
 
+// InstanceFor derives the instance slug a record at dataDir belongs to, or ""
+// when dataDir is not an instance directory.
+//
+// The identity is DERIVED from the directory rather than passed in alongside
+// it, because an instance dir already encodes its own key: daemoninstance
+// projects (origin, sub, workspace) onto exactly three path segments under
+// ~/.reliant/instances. Taking the caller's word for it instead would admit a
+// whole bug class — a record that claims one instance while sitting in
+// another's directory — and that mismatch is precisely what readers are about
+// to start trusting. Derivation cannot disagree with the filesystem.
+//
+// Both sides are resolved through their deepest existing ancestor before being
+// compared, so a symlinked prefix (macOS's /var -> /private/var, which every
+// t.TempDir inherits) does not make a directory look foreign to itself.
+func InstanceFor(dataDir string) string {
+	if dataDir == "" {
+		return ""
+	}
+	root, err := instancesRoot()
+	if err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(resolveThroughSymlinks(root), resolveThroughSymlinks(dataDir))
+	if err != nil {
+		return ""
+	}
+	segments := strings.Split(rel, string(filepath.Separator))
+	if len(segments) != 3 {
+		return ""
+	}
+	for _, segment := range segments {
+		if segment == "" || segment == "." || segment == ".." {
+			return ""
+		}
+	}
+	// "/" regardless of OS: the slug is a stable identifier shared with
+	// Electron and with log fields, not a filesystem path.
+	return strings.Join(segments, "/")
+}
+
+// resolveThroughSymlinks makes a path absolute and resolves symlinks in the
+// part of it that exists, keeping the not-yet-created tail verbatim.
+//
+// filepath.EvalSymlinks fails outright on a path whose leaf does not exist, so
+// resolving only when it happens to succeed would resolve one side of a
+// comparison and not the other — which is how a directory ends up looking like
+// it belongs to somebody else.
+func resolveThroughSymlinks(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return filepath.Clean(path)
+	}
+	var tail []string
+	current := abs
+	for {
+		if resolved, err := filepath.EvalSymlinks(current); err == nil {
+			return filepath.Join(append([]string{resolved}, tail...)...)
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return abs
+		}
+		tail = append([]string{filepath.Base(current)}, tail...)
+		current = parent
+	}
+}
+
 // Init stamps the process and binary identity and marks the stream as not yet
 // established. It is called once, at daemon startup, before the first dial.
 func Init(dataDir, gatewayURL, tlsMode string, serverMode bool) error {
@@ -164,6 +246,7 @@ func Init(dataDir, gatewayURL, tlsMode string, serverMode bool) error {
 	return write(dataDir, State{
 		PID:             os.Getpid(),
 		StartedAt:       now,
+		Instance:        InstanceFor(dataDir),
 		Executable:      exe,
 		BinaryModTime:   exeModTime,
 		Revision:        revision,
@@ -198,6 +281,12 @@ func SetStream(dataDir string, s Stream, detail string) error {
 		state.StartedAt = now
 		state.Executable, state.BinaryModTime = binaryIdentity()
 		state.Revision, state.Dirty = buildIdentity()
+	}
+	if state.Instance == "" {
+		// Heal a record written before the field existed, or by a path that
+		// has since become an instance dir. Derivation cannot disagree with
+		// where the record sits, so this is always safe to re-apply.
+		state.Instance = InstanceFor(dataDir)
 	}
 	if changed := state.Stream != s; changed {
 		state.StreamChangedAt = now

@@ -61,6 +61,19 @@ const DAEMON_STREAM_AWAITING_CREDENTIALS = 'awaiting_credentials';
 const DAEMON_STATE_CONNECTED_AT_FIELD = 'connected_at';
 const DAEMON_STATE_PID_FIELD = 'pid';
 
+// The instance slug the daemon stamps into its own record, e.g.
+// "http-localhost-8090-0bf46daa/_default/reliant-62553a34" — the value of
+// daemoninstance.Key.Slug() for the (origin, sub, workspace) it resolved.
+//
+// This is what makes the record SELF-DESCRIBING, and it is the difference
+// between "a daemon wrote a file at this path" and "MY daemon wrote this".
+// Without it a reader can only trust the path, and the path was the thing that
+// turned out not to be trustworthy: two stacks writing `./data` from different
+// working directories produced records that each looked authoritative to the
+// other's Electron. A record whose instance is absent or different is not
+// evidence about our daemon, and readDaemonState discards it.
+const DAEMON_STATE_INSTANCE_FIELD = 'instance';
+
 // Prefix the daemon prints on stdout when its stream state changes, e.g.
 // `@@RELIANT_STREAM connected`.
 //
@@ -83,5 +96,6 @@ module.exports = {
   DAEMON_STREAM_AWAITING_CREDENTIALS,
   DAEMON_STATE_CONNECTED_AT_FIELD,
   DAEMON_STATE_PID_FIELD,
+  DAEMON_STATE_INSTANCE_FIELD,
   DAEMON_STREAM_NOTICE_PREFIX,
 };

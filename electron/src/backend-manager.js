@@ -12,6 +12,7 @@ const {
   DAEMON_STREAM_AWAITING_CREDENTIALS,
   DAEMON_STATE_CONNECTED_AT_FIELD,
   DAEMON_STATE_PID_FIELD,
+  DAEMON_STATE_INSTANCE_FIELD,
   DAEMON_STREAM_NOTICE_PREFIX,
 } = require('./daemon-contract');
 
@@ -26,6 +27,11 @@ const {
 // API. resolveDaemonServerURL()'s precedence is env > this neutral default.
 const DEFAULT_API_URL = 'http://localhost:8080';
 const DEFAULT_GATEWAY_URL = ''; // Empty means the daemon will derive from the API URL
+
+// Stands in for the instance of a record that carries no stamp, so
+// describeDaemonState can tell "belongs to someone else" apart from "cannot be
+// identified at all". Not a slug — no real instance can collide with it.
+const DAEMON_INSTANCE_UNKNOWN = '(unstamped)';
 
 class BackendManager {
   /**
@@ -54,6 +60,18 @@ class BackendManager {
     this.devBinaryPath = null; // Resolved dev-mode binary path (set by resolveDevBinary / getBinaryPath)
     this.devProcessSearchPattern = null; // Pattern used by orphan cleanup to grep ps output in dev mode
     this.lastDaemonState = null; // Last runtime record checkHealth() read (see daemon-state.json)
+
+    // Instance slug of the most recent record we REJECTED as belonging to
+    // someone else, or null. Only ever read to explain a startup timeout —
+    // "ignored a foreign record" and "no record at all" are different
+    // failures and the message should say which happened.
+    this.lastForeignInstance = null;
+
+    // Explicit workspace component for the instance key, for tests and for a
+    // caller that knows better than the git probe. Highest precedence; see
+    // daemonInstanceWorkspace.
+    this.instanceWorkspaceOverride = opts?.instanceWorkspace ?? null;
+    this._instanceWorkspace = null;
 
     // Whether this process has already swept for orphaned daemons.
     //
@@ -225,10 +243,101 @@ class BackendManager {
       args.push('--port', this.daemonPort.toString());
     }
 
-    // Pass data directory
+    // Pass data directory.
+    //
+    // Explicit rather than left to the daemon's own resolution even though the
+    // two now agree: the daemon derives the same path from the same key, but
+    // this parent READS that directory (the runtime record, orphan cleanup),
+    // so it must state the value it is going to read rather than assume the
+    // child picked it.
     args.push('--data-dir', this.daemonDataDir());
 
     return args;
+  }
+
+  /**
+   * The workspace component of this app's instance key.
+   *
+   * Precedence, matching the Go CLI exactly so Electron and the daemon it
+   * spawns resolve the SAME instance: explicit override, then
+   * RELIANT_INSTANCE_WORKSPACE, then the git worktree root, then cwd.
+   *
+   * The git root is what makes this fix work at all. `reliant/` and
+   * `reliant/electron/` are two directories in one worktree, and launching
+   * from each used to produce two mutually-invisible daemons; `git rev-parse
+   * --show-toplevel` answers the same repo root from both, collapsing them
+   * into one instance. cwd is only the last resort, for a checkout that is not
+   * a git repository at all.
+   *
+   * The probe runs against this file's own directory rather than cwd, so the
+   * answer does not depend on where Electron was launched. In a packaged app
+   * there is no repository and no meaningful worktree, so the workspace is the
+   * per-installation userData directory — already absolute and already
+   * cwd-independent.
+   *
+   * Cached: the record watcher calls this every 250ms and `git rev-parse` is a
+   * blocking subprocess. The value cannot change during a run — cwd and the
+   * source location are both fixed once the process is up.
+   */
+  daemonInstanceWorkspace() {
+    if (this._instanceWorkspace) {
+      return this._instanceWorkspace;
+    }
+
+    const explicit = this.instanceWorkspaceOverride || process.env[daemonCreds.ENV_INSTANCE_WORKSPACE];
+    if (explicit && explicit.trim()) {
+      this._instanceWorkspace = explicit.trim();
+      return this._instanceWorkspace;
+    }
+
+    if (!this.isDevelopment) {
+      this._instanceWorkspace = app.getPath('userData');
+      return this._instanceWorkspace;
+    }
+
+    try {
+      const { execSync } = require('child_process');
+      const toplevel = execSync('git rev-parse --show-toplevel', {
+        cwd: path.join(__dirname, '..'),
+        encoding: 'utf8',
+        timeout: 5000,
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+      if (toplevel) {
+        this._instanceWorkspace = toplevel;
+        return this._instanceWorkspace;
+      }
+    } catch (e) {
+      // Not a git repository, or git is not installed. Fall through.
+    }
+
+    this._instanceWorkspace = process.cwd();
+    return this._instanceWorkspace;
+  }
+
+  /**
+   * This app's instance key: (server origin, account sub, workspace).
+   *
+   * The sub is read fresh from the auth store on every call rather than
+   * cached, because signing in as a different user genuinely moves this app to
+   * a different instance — and the post-sign-in daemon restart depends on the
+   * new key being visible immediately.
+   */
+  daemonInstanceKey() {
+    return daemonCreds.instanceKey({
+      apiUrl: this.apiUrl,
+      sub: this.authStorage?.loadStoredAuth?.()?.user?.id || '',
+      workspace: this.daemonInstanceWorkspace(),
+    });
+  }
+
+  /**
+   * The instance slug the daemon stamps into its runtime record, e.g.
+   * "http-localhost-8090-0bf46daa/_default/reliant-62553a34". Used to tell our
+   * own daemon's record apart from a neighbour's.
+   */
+  daemonInstanceSlug() {
+    return daemonCreds.instanceSlug(this.daemonInstanceKey());
   }
 
   /**
@@ -236,11 +345,16 @@ class BackendManager {
    * Single definition so every reader of what the daemon writes there (the
    * runtime record, orphan cleanup) is resolved from the same value the daemon
    * was told to write to, and cannot drift from it.
+   *
+   * Derived from the instance key, never from the working directory. It used
+   * to be the literal './data' in dev, which meant WHICH daemon this app
+   * managed depended on where it was launched from: one developer machine ran
+   * two live daemons, under `reliant/data` and `reliant/electron/data`, each
+   * invisible to the other and each answering `daemon stop` with "no daemon
+   * running". Same inputs now give the same directory from any cwd.
    */
   daemonDataDir() {
-    return this.isDevelopment
-      ? './data'
-      : path.join(app.getPath('userData'), 'data');
+    return daemonCreds.instanceDataDir(this.daemonInstanceKey());
   }
 
   /**
@@ -248,17 +362,83 @@ class BackendManager {
    * internal/toolexec/daemonstate. Returns null when it is absent, truncated,
    * or unparseable — a record that cannot be read is simply not evidence of a
    * running daemon, and the caller polls again.
+   *
+   * It also returns null for any record we cannot positively identify as
+   * ours. There are exactly three cases and only the first is trusted:
+   *
+   *   - `instance` present and EQUAL to our resolved key — ours.
+   *   - `instance` present and different — another instance's daemon. Not weak
+   *     evidence about ours; no evidence at all. Trusting one is how a pid
+   *     belonging to a neighbouring stack was read as our daemon's health,
+   *     and (via cleanupFromLockFile) as a process we could signal.
+   *   - `instance` ABSENT — unknown, so not ours.
+   *
+   * The absent case is a normal steady state, not a defect and not an upgrade
+   * artifact, so it is not warned about. The Go side derives the field from
+   * the data directory's own position under ~/.reliant/instances, and a
+   * container that sets DAEMON_DATA_DIR=/data (docker-compose.yml and
+   * docker-compose.cloud.yml both do) has no such position, so it legitimately
+   * writes no stamp at all. Deriving it from the path rather than the caller
+   * is also what makes the field trustworthy here: a record cannot claim one
+   * instance while sitting in another's directory.
+   *
+   * Treating unknown as foreign cannot wedge startup. Electron always passes
+   * an instance-derived --data-dir, so its own daemon always writes a stamped
+   * record; an unstamped one at that path means some other process wrote
+   * there. If that ever did happen, it surfaces as a startup timeout that
+   * names the reason (see describeDaemonState) and recovers on the next
+   * spawn, rather than as a silent, permanent wrong answer.
    */
   readDaemonState() {
+    let parsed;
     try {
       const raw = fs.readFileSync(
         path.join(this.daemonDataDir(), 'daemon-state.json'),
         'utf8'
       );
-      return JSON.parse(raw);
+      parsed = JSON.parse(raw);
     } catch (error) {
       return null;
     }
+    if (this.recordBelongsToThisInstance(parsed)) {
+      this.lastForeignInstance = null;
+      return parsed;
+    }
+    // Remembered so the startup-timeout message can name the real problem.
+    // Without this, a rejected record is indistinguishable from no record at
+    // all, and the operator is told "the daemon never started" about a daemon
+    // that started fine and belongs to someone else. Recorded, not logged:
+    // an unstamped record is a legitimate shape (see above), so it must not
+    // produce a warning on a path that polls every 50ms.
+    const stamp = parsed && typeof parsed === 'object'
+      ? parsed[DAEMON_STATE_INSTANCE_FIELD]
+      : null;
+    this.lastForeignInstance = stamp || DAEMON_INSTANCE_UNKNOWN;
+    return null;
+  }
+
+  /**
+   * Does this runtime record describe OUR instance?
+   *
+   * Kept separate from readDaemonState so describeDaemonState can explain a
+   * rejection rather than reporting the indistinguishable "no record".
+   */
+  recordBelongsToThisInstance(state) {
+    if (!state || typeof state !== 'object') return false;
+    // Absent stamp: unknown, which is never "mine". A daemon given an explicit
+    // --data-dir outside ~/.reliant/instances (containers) writes no stamp,
+    // so this is an ordinary case and not an error.
+    if (!state[DAEMON_STATE_INSTANCE_FIELD]) return false;
+    let expected;
+    try {
+      expected = this.daemonInstanceSlug();
+    } catch (e) {
+      // An unparseable --server URL names no instance, so nothing can match
+      // it. Refusing here is the same contract the Go side has: never default
+      // to "probably mine".
+      return false;
+    }
+    return state[DAEMON_STATE_INSTANCE_FIELD] === expected;
   }
 
   /**
@@ -829,9 +1009,21 @@ class BackendManager {
     // lives on the open file description, so unlinking it out from under a live
     // daemon hands the next one a fresh inode to lock and quietly defeats the
     // one-daemon-per-data-dir guarantee.
+    // The runtime record's reader goes through the instance check, not through
+    // a bare JSON.parse. A record for another instance names a pid we have no
+    // claim on — that is exactly the pid this function would otherwise signal
+    // — so it must read as "nothing here", and a NaN pid makes the loop below
+    // treat the file as corrupt and delete it, which is the right outcome for
+    // a file at OUR path that is not ours.
     const lockFiles = [
       { path: path.join(dataDir, '.reliant-backend.lock'), readPid: (raw) => parseInt(raw, 10) },
-      { path: path.join(dataDir, 'daemon-state.json'), readPid: (raw) => JSON.parse(raw).pid },
+      {
+        path: path.join(dataDir, 'daemon-state.json'),
+        readPid: () => {
+          const state = this.readDaemonState();
+          return state ? state.pid : NaN;
+        },
+      },
     ];
 
     for (const { path: lockFilePath, readPid } of lockFiles) {
@@ -1195,6 +1387,20 @@ class BackendManager {
   describeDaemonState() {
     const state = this.lastDaemonState;
     if (!state) {
+      if (this.lastForeignInstance === DAEMON_INSTANCE_UNKNOWN) {
+        return (
+          `the runtime record at this path carries no instance stamp, so it ` +
+          `cannot be identified as ours ("${this.daemonInstanceSlug()}") — ` +
+          `ignored it rather than assuming an unidentified daemon is ours`
+        );
+      }
+      if (this.lastForeignInstance) {
+        return (
+          `the only runtime record at this path belongs to instance ` +
+          `"${this.lastForeignInstance}", not ours ("${this.daemonInstanceSlug()}") — ` +
+          `ignored it rather than treating another instance's daemon as ours`
+        );
+      }
       return 'no runtime record written — the daemon exited or never started';
     }
     if (this.process && state.pid !== this.process.pid) {
@@ -1671,18 +1877,32 @@ class BackendManager {
   }
 
   /**
-   * Logout cleanup: drop the daemon.json entry for the current --server
-   * origin. Clears the PAT, owner sub, and stable daemon_id together so the
-   * next login mints fresh credentials and the server assigns a fresh daemon
-   * id (logout may precede a user switch). Best-effort — swallows errors so
-   * it never blocks the logout path.
+   * Logout cleanup: drop one account's daemon.json entry at the current
+   * --server origin, clearing the PAT and owner sub so the next login mints
+   * fresh credentials. Logout may precede a user switch, so the prior user's
+   * credential must not be left behind to be reused.
    *
+   * WHICH account: the caller's `sub` when it knows one. It usually does not —
+   * auth:clear persists the cleared session BEFORE this runs — so the common
+   * case falls through to the store's own default resolution, which is
+   * precisely Go's logout semantics ("an empty sub deletes whatever the origin
+   * resolves to by default"). That is the signed-in account, because writing a
+   * credential also claims the origin's default. A second account on the same
+   * origin keeps its entry, which is the point of keying by account.
+   *
+   * The daemon's stable id is not cleared here because it is no longer in this
+   * file — it lives in the instance's data dir and belongs to the daemon.
+   *
+   * Best-effort: swallows errors so it never blocks the logout path.
+   *
+   * @param {string} [sub] the account to clear, when the caller knows it
    * @returns {boolean} true if an entry was removed.
    */
-  clearDaemonCredsForOrigin() {
+  clearDaemonCredsForOrigin(sub) {
     try {
       const removed = daemonCreds.deleteEntry({
         apiUrl: this.apiUrl,
+        sub: sub || this.authStorage?.loadStoredAuth?.()?.user?.id || '',
         logger: log,
       });
       if (removed) {

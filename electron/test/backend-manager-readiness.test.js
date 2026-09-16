@@ -28,11 +28,21 @@ function harness() {
 
   manager.daemonDataDir = () => dataDir;
   manager.process = { pid: DAEMON_PID, killed: false };
+  // Pin the workspace so the instance key is deterministic and no `git
+  // rev-parse` subprocess runs per record read.
+  manager.instanceWorkspaceOverride = dataDir;
 
   return {
     manager,
+    // Records carry this manager's instance slug, because a real daemon
+    // stamps its own — see daemon-contract's DAEMON_STATE_INSTANCE_FIELD.
+    // backend-manager-instance-identity.test.js covers the unstamped and
+    // foreign cases directly.
     writeState: (state) =>
-      fs.writeFileSync(path.join(dataDir, 'daemon-state.json'), JSON.stringify(state)),
+      fs.writeFileSync(
+        path.join(dataDir, 'daemon-state.json'),
+        JSON.stringify({ instance: manager.daemonInstanceSlug(), ...state }),
+      ),
   };
 }
 
