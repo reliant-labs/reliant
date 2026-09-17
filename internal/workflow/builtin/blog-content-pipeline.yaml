@@ -42,7 +42,7 @@ inputs:
 
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
     description: Available tools for pipeline agents
 
   spawn_presets:

@@ -18,7 +18,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        preloaded_tools: [tag:coding:default, generate_image]
         tools:
           generate_image:
             model: {tags: [image-gen], providers: [codex]}
@@ -59,7 +59,7 @@ nodes:
 
 	// The availability fields must still work — this is an addition, not a
 	// replacement.
-	if filter := toolsConfig.GetFilter().GetLiteral().GetValues(); len(filter) != 2 {
+	if filter := toolsConfig.GetPreloadedTools().GetLiteral().GetValues(); len(filter) != 2 {
 		t.Errorf("filter should still parse, got %v", filter)
 	}
 }
@@ -76,7 +76,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default]
+        preloaded_tools: [tag:coding:default]
 `)
 
 	wf, err := ParseWorkflow(source)

@@ -2660,7 +2660,7 @@ func resolveParentPermission(workflowInputs map[string]interface{}) string {
 	// Every live mode maps to the same tier. Plan mode used to derive "readonly",
 	// which promised more than it delivered — the shell was granted at that tier
 	// too, so a plan-mode agent could always write. What keeps write out of a
-	// planning agent's hands is its `tools:` filter (['tag:plan', 'tag:shell']),
+	// planning agent's hands is its `tools:` filter (['tag:coding:plan', 'tag:shell']),
 	// which is enforced; see LoadedToolsStore.IsToolAllowed.
 	//
 	// The mode switch is kept rather than collapsed to a constant because an

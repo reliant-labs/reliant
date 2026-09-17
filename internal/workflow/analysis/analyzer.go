@@ -356,7 +356,14 @@ func (a *workflowAnalyzer) analyzeNode(node *reliantv1.Node, workflowInputs map[
 			metrics.reasons = append(metrics.reasons, "structured LLM response tool")
 		}
 		if callArgs != nil && callArgs.GetToolsConfig() != nil {
-			filter := a.resolveToolFilter(callArgs.GetToolsConfig().GetFilter(), workflowInputs)
+			// Preloaded and loadable both widen what the agent can reach, and
+			// a loadable "*" is the broadest access there is — so both feed the
+			// judgement. Previously only the retired `filter` field was read,
+			// which every workflow had stopped setting, so "broad tool access"
+			// was never detected at all.
+			tc := callArgs.GetToolsConfig()
+			filter := a.resolveToolFilter(tc.GetPreloadedTools(), workflowInputs)
+			filter = append(filter, a.resolveToolFilter(tc.GetLoadableTools(), workflowInputs)...)
 			if broadToolAccess(filter) {
 				metrics.broadTools = true
 				metrics.complexity += 12
@@ -942,7 +949,7 @@ func broadToolAccess(filter []string) bool {
 	}
 	for _, tool := range filter {
 		switch tool {
-		case "*", "tag:default", "tag:all":
+		case "*", "tag:coding:default", "tag:all":
 			return true
 		}
 	}

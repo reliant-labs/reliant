@@ -26,11 +26,11 @@ func testPreflightConfig() *PreflightConfig {
 			var result []string
 			for _, spec := range filter {
 				switch spec {
-				case "tag:default":
+				case "tag:coding:default":
 					result = append(result, "shell", "view", "edit", "grep", "glob",
 						"shell_list", "shell_output", "shell_kill", "fetch", "websearch",
 						"create_plan", "update_plan", "get_plan")
-				case "tag:planning":
+				case "tag:coding:planning":
 					result = append(result, "create_plan", "update_plan", "get_plan",
 						"list_tasks", "add_task", "update_task")
 				case "tag:readonly":
@@ -117,10 +117,10 @@ func TestRequiresDaemon_ServerOnlyWorkflow(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
-										Values: []string{"tag:planning"},
+										Values: []string{"tag:coding:planning"},
 									},
 								},
 							},
@@ -137,7 +137,7 @@ func TestRequiresDaemon_ServerOnlyWorkflow(t *testing.T) {
 
 func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
 	t.Parallel()
-	// tag:default includes bash (ToolRunsOnDaemon)
+	// tag:coding:default includes bash (ToolRunsOnDaemon)
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{
 			{
@@ -146,10 +146,10 @@ func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
-										Values: []string{"tag:default"},
+										Values: []string{"tag:coding:default"},
 									},
 								},
 							},
@@ -160,7 +160,7 @@ func TestRequiresDaemon_CallLLMWithDefaultTools(t *testing.T) {
 		},
 	}
 	if !RequiresDaemon(wf, testPreflightConfig()) {
-		t.Error("workflow with tag:default tools should require daemon (includes bash)")
+		t.Error("workflow with tag:coding:default tools should require daemon (includes bash)")
 	}
 }
 
@@ -175,7 +175,7 @@ func TestRequiresDaemon_CELToolFilter(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Expr{
 									Expr: "inputs.tools",
 								},
@@ -269,7 +269,7 @@ func TestRequiresDaemon_NilConfig(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
 										Values: []string{"shell"},
@@ -297,7 +297,7 @@ func TestRequiresDaemon_ReadOnlyToolsOnly(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
 										Values: []string{"tag:readonly"},

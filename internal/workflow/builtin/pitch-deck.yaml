@@ -72,7 +72,7 @@ inputs:
 
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
 
   spawn_presets:
     type: preset

@@ -43,7 +43,7 @@ inputs:
 
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
     ui: hidden
     description: Hidden compatibility input for agent-style presets
 

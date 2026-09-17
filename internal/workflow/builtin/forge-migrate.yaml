@@ -92,7 +92,7 @@ nodes:
       default: forge
     passthrough: [model, mode]
     args:
-      tools: ["tag:default", "ask_user"]
+      tools: ["tag:coding:default", "ask_user"]
       response_tool_name: submit_migration_plan
       response_tool_description: Submit the migration plan summary and the ordered component list
       response_schema:

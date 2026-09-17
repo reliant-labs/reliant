@@ -132,13 +132,39 @@ const (
 	ToolRunsAnywhere ToolLocation = "any"
 )
 
-// ToolTag represents a flexible label for tools
-// Tools can have multiple tags for cross-cutting concerns
+// ToolTag is a label a workflow can name to reach a group of tools at once.
+// A tool may carry several.
+//
+// TAGS CLASSIFY. THEY DO NOT APPLY THEMSELVES. A workflow gets a tag's tools
+// because it named the tag — never because the engine decided the tag was a
+// sensible starting point. That rule is what keeps this registry usable by
+// more than one product, and it is worth stating because the alternative was
+// shipped and broke everything: `default` was auto-reachable and became the
+// implicit answer to "what tools does an agent get", which is a question only
+// a product can answer.
+//
+// Two kinds of tag live here, and the difference is in the name.
+//
+// DESCRIPTIVE tags are facts about a tool: it touches files, it runs a
+// process, it makes network calls. They are bare (`file`, `shell`, `web`) and
+// are true regardless of what is being built. Any product, and any future
+// catalog of a thousand third-party tools, can classify against them.
+//
+// CURATED tags are somebody's opinion about which tools go together for a
+// particular kind of work. They carry a namespace (`coding:default`,
+// `coding:plan`) so that reading one tells you whose opinion it is. The
+// namespace is the honest part: it admits the bundle is a product's editorial
+// choice rather than a property of the tools, and it leaves room for the next
+// bundle — `support:default`, `ops:default` — without either pretending to be
+// THE default.
+//
+// A curated tag is still just a name. `tag:coding:default` grants exactly
+// what a workflow that lists it asked for, the same as `tag:file` does.
 type ToolTag string
 
 const (
-	TagReadOnly  ToolTag = "readonly"  // Read-only tools (don't modify files/code)
-	TagPlan      ToolTag = "plan"      // Tools available in planning mode
+	// Descriptive — properties of the tool itself.
+	TagReadOnly  ToolTag = "readonly"  // Does not modify files/code
 	TagFile      ToolTag = "file"      // File operations
 	TagSearch    ToolTag = "search"    // Search operations
 	TagExecution ToolTag = "execution" // Command execution
@@ -149,8 +175,38 @@ const (
 	TagWorkflow  ToolTag = "workflow"  // Workflow builder tools
 	TagMCP       ToolTag = "mcp"       // All MCP tools
 	TagMedia     ToolTag = "media"     // Media generation (images, and later audio/video)
-	TagDefault   ToolTag = "default"   // Default toolset (commonly used tools)
+
+	// Curated — a product's editorial bundles. Namespaced so no bundle can
+	// masquerade as a universal default. Named explicitly or not granted.
+	TagCodingDefault ToolTag = "coding:default" // The coding agent's starting bundle
+	TagCodingPlan    ToolTag = "coding:plan"    // Safe for the coding agent's plan mode
 )
+
+// TagDescriptions is what a tag means, for anything that presents the tag
+// vocabulary to a human — the generated tool reference, and any future tool
+// browser that has to make sense of a catalog far larger than this one.
+//
+// It lives beside the constants because the alternative was a second list in
+// the doc generator, which drifted exactly as you would expect: it had gone
+// stale on `readonly` (still advertising it as "safe for planning mode", a
+// guarantee the removed readonly tier never actually delivered) and had never
+// heard of `media` at all. TestTagDescriptionsAreComplete keeps this honest.
+var TagDescriptions = map[ToolTag]string{
+	TagReadOnly:  "Does not modify files or code",
+	TagFile:      "File operations",
+	TagSearch:    "Search operations",
+	TagExecution: "Command execution",
+	TagShell:     "Shell tools (bash on Unix, powershell on Windows)",
+	TagWeb:       "Web operations",
+	TagPlanning:  "Planning and task management tools",
+	TagAnalysis:  "Analysis tools",
+	TagWorkflow:  "Workflow builder tools",
+	TagMCP:       "Every tool from the chat's connected MCP servers",
+	TagMedia:     "Media generation (images, and later audio/video)",
+
+	TagCodingDefault: "The coding agent's starting bundle — one product's editorial grouping, granted only when named",
+	TagCodingPlan:    "Tools the coding agent's plan mode starts with",
+}
 
 // ToolDefinition defines a tool's factory function and metadata
 type ToolDefinition struct {
@@ -185,7 +241,7 @@ type ToolFilterResult struct {
 //   - spawn:workflow(preset1,preset2) - Spawn tool configuration
 //
 // Examples:
-//   - ["tag:default", "spawn:builtin://agent(general,researcher)"] -> Default tools + agent spawn
+//   - ["tag:coding:default", "spawn:builtin://agent(general,researcher)"] -> Default tools + agent spawn
 //   - ["tag:core", "spawn:builtin://agent()"] -> Core tools, spawn disabled (empty presets)
 func ExpandToolFilterWithSpawn(filter []string, mcpToolNames []string) ToolFilterResult {
 	result := ToolFilterResult{
@@ -288,9 +344,9 @@ func parseSpawnFilter(spec string) *SpawnFilterConfig {
 //   - plain names - Direct tool names (e.g., "shell", "view")
 //
 // Examples:
-//   - ["tag:default"] -> All default tools
+//   - ["tag:coding:default"] -> All default tools
 //   - ["tag:file", "tag:shell"] -> File tools + shell (platform-specific)
-//   - ["tag:default", "!tag:shell"] -> Default tools minus shell
+//   - ["tag:coding:default", "!tag:shell"] -> Default tools minus shell
 //   - ["tag:readonly", "tag:mcp"] -> All read-only and MCP tools (for planning mode)
 //   - ["mcp__serena__*"] -> All Serena MCP tools
 func ExpandToolFilter(filter []string, mcpToolNames []string) []string {
@@ -428,9 +484,9 @@ func matchGlob(pattern, name string) bool {
 func GetToolRegistry() []ToolDefinition {
 	tools := []ToolDefinition{
 		// File tools
-		{ToolView, (*ToolsFactory).View, []ToolTag{TagFile, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
-		{ToolReadAttachment, (*ToolsFactory).ReadAttachment, []ToolTag{TagFile, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
-		// TagDefault, unlike generate_image. The argument that keeps
+		{ToolView, (*ToolsFactory).View, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsAnywhere},
+		{ToolReadAttachment, (*ToolsFactory).ReadAttachment, []ToolTag{TagFile, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
+		// TagCodingDefault, unlike generate_image. The argument that keeps
 		// generate_image out of every workflow is cost: it spends real money
 		// on a provider the user may not have configured. This tool spends
 		// nothing — it moves bytes we already hold — and it is the only way to
@@ -439,10 +495,10 @@ func GetToolRegistry() []ToolDefinition {
 		// regenerate an image it already had. Server-located because the bytes
 		// are in the database; the file still reaches the user's disk through
 		// the daemon client on the tool context.
-		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagDefault}, ToolRunsOnServer},
-		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
-		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
-		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagDefault}, ToolRunsAnywhere},
+		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagCodingDefault}, ToolRunsOnServer},
+		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagCodingDefault}, ToolRunsAnywhere},
+		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagCodingDefault}, ToolRunsAnywhere},
+		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagCodingDefault}, ToolRunsAnywhere},
 
 		// Search: there are no dedicated grep/glob LLM tools. Agents search with
 		// the shell (ripgrep preferred, degrading to grep -r/find). The shell
@@ -472,23 +528,23 @@ func GetToolRegistry() []ToolDefinition {
 		// whole is what stops the next prompt from drifting the same way — and
 		// `!tag:shell` correspondingly removes the family, which is what an author
 		// excluding the shell means.
-		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagDefault}, ToolRunsOnDaemon},
-		{ToolShellList, (*ToolsFactory).ShellList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolShellOutput, (*ToolsFactory).ShellOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
-		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagDefault}, ToolRunsOnDaemon},
+		{ShellToolName, (*ToolsFactory).Shell, []ToolTag{TagExecution, TagShell, TagSearch, TagCodingDefault}, ToolRunsOnDaemon},
+		{ToolShellList, (*ToolsFactory).ShellList, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
+		{ToolShellOutput, (*ToolsFactory).ShellOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
+		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
+		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, ToolRunsOnDaemon},
 
 		// Network tools. Both are pure net/http plus HTML parsing — no filesystem,
 		// no subprocess — so they carry no daemon requirement. They were daemon-routed
 		// so outbound requests would originate from the user's machine; that is now
 		// paid for elsewhere, because RequiresDaemon treats a daemon-located tool in a
-		// node's filter as proof the whole workflow needs a daemon. With TagDefault on
-		// both, `tag:default` alone was enough to fire the preflight gate and refuse a
+		// node's filter as proof the whole workflow needs a daemon. With TagCodingDefault on
+		// both, `tag:coding:default` alone was enough to fire the preflight gate and refuse a
 		// workflow that never touches the user's machine.
-		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
-		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagPlan, TagDefault}, ToolRunsAnywhere},
+		{ToolFetch, (*ToolsFactory).Fetch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsAnywhere},
+		{ToolWebSearch, (*ToolsFactory).WebSearch, []ToolTag{TagWeb, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsAnywhere},
 
-		// Media tools. Deliberately NOT TagDefault: generating an image costs
+		// Media tools. Deliberately NOT TagCodingDefault: generating an image costs
 		// real money on a provider the user may not have configured, and it is
 		// irrelevant to the coding workflows that make up most of the product.
 		// Opt in with `tag:media` or by naming generate_image in tool_filter.
@@ -500,18 +556,18 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolGenerateImage, (*ToolsFactory).GenerateImage, []ToolTag{TagMedia}, ToolRunsOnServer},
 
 		// Planning tools
-		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolUpdatePlan, (*ToolsFactory).UpdatePlan, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
-		{ToolGetPlan, (*ToolsFactory).GetPlan, []ToolTag{TagPlanning, TagReadOnly, TagPlan}, ToolRunsOnServer},
+		{ToolCreatePlan, (*ToolsFactory).CreatePlan, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
+		{ToolUpdatePlan, (*ToolsFactory).UpdatePlan, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
+		{ToolGetPlan, (*ToolsFactory).GetPlan, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, ToolRunsOnServer},
 
 		// Task tools
-		{ToolListTasks, (*ToolsFactory).ListTasks, []ToolTag{TagPlanning, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolAddTask, (*ToolsFactory).AddTask, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolUpdateTask, (*ToolsFactory).UpdateTask, []ToolTag{TagPlanning, TagPlan, TagDefault}, ToolRunsOnServer},
-		{ToolCreateSubtask, (*ToolsFactory).CreateSubtask, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
-		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
-		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagPlan}, ToolRunsOnServer},
-		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagPlan}, ToolRunsOnServer},
+		{ToolListTasks, (*ToolsFactory).ListTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
+		{ToolAddTask, (*ToolsFactory).AddTask, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
+		{ToolUpdateTask, (*ToolsFactory).UpdateTask, []ToolTag{TagPlanning, TagCodingPlan, TagCodingDefault}, ToolRunsOnServer},
+		{ToolCreateSubtask, (*ToolsFactory).CreateSubtask, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
+		{ToolAddDependency, (*ToolsFactory).AddDependency, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
+		{ToolRemoveDependency, (*ToolsFactory).RemoveDependency, []ToolTag{TagPlanning, TagCodingPlan}, ToolRunsOnServer},
+		{ToolListReadyTasks, (*ToolsFactory).ListReadyTasks, []ToolTag{TagPlanning, TagReadOnly, TagCodingPlan}, ToolRunsOnServer},
 
 		// Spawn observability/messaging tools. An agent that already holds a
 		// handle to a sub-agent it spawned needs no extra privilege to look
@@ -521,16 +577,16 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolSpawnSend, (*ToolsFactory).SpawnSend, []ToolTag{}, ToolRunsOnServer},
 
 		// Analysis tools - conditionally add project analyzer
-		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagPlan}, ToolRunsAnywhere},
+		{ToolSourcegraph, (*ToolsFactory).Sourcegraph, []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
 
 		// code_context is a SYMBOL-graph tool, not a text-search tool, which is
 		// why it exists where the grep/glob tools above were deleted. It answers
 		// "who calls this / what implements this" — questions ripgrep cannot
 		// compute at all, because a call site never names its receiver's type.
-		// It is TagDefault because its value is in replacing a multi-turn grep
+		// It is TagCodingDefault because its value is in replacing a multi-turn grep
 		// walk, and a tool an agent must first discover does not get used.
 		// Daemon-located: it needs the real checkout and a language server.
-		{ToolCodeContext, (*ToolsFactory).CodeContext, []ToolTag{TagAnalysis, TagSearch, TagReadOnly, TagPlan, TagDefault}, ToolRunsOnDaemon},
+		{ToolCodeContext, (*ToolsFactory).CodeContext, []ToolTag{TagAnalysis, TagSearch, TagReadOnly, TagCodingPlan, TagCodingDefault}, ToolRunsOnDaemon},
 
 		// State tools
 		// Note: StateTransition is registered dynamically with flow context
@@ -539,16 +595,16 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, ToolRunsAnywhere},
 
 		// Component tools
-		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagPlan}, ToolRunsAnywhere},
+		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
 
 		// Worktree tools
 		{ToolWorktree, (*ToolsFactory).Worktree, []ToolTag{}, ToolRunsAnywhere},
 
 		// Skill tools
-		{ToolSkill, (*ToolsFactory).Skill, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
+		{ToolSkill, (*ToolsFactory).Skill, []ToolTag{TagCodingDefault, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
 
 		// Load tool (dynamic tool loading)
-		{ToolLoadTool, (*ToolsFactory).LoadTool, []ToolTag{TagDefault, TagReadOnly, TagPlan}, ToolRunsAnywhere},
+		{ToolLoadTool, (*ToolsFactory).LoadTool, []ToolTag{TagCodingDefault, TagReadOnly, TagCodingPlan}, ToolRunsAnywhere},
 
 		// Code manipulation tools
 		{ToolMoveCode, (*ToolsFactory).MoveCode, []ToolTag{TagFile}, ToolRunsAnywhere},
@@ -586,7 +642,7 @@ func GetToolRegistry() []ToolDefinition {
 		tools = append(tools, ToolDefinition{
 			Name:    ToolProjectAnalyzer,
 			Factory: (*ToolsFactory).ProjectAnalyzer,
-			Tags:    []ToolTag{TagAnalysis, TagReadOnly, TagPlan},
+			Tags:    []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan},
 			RunsOn:  ToolRunsAnywhere,
 		})
 	}

@@ -100,21 +100,15 @@ func extractFromRegistry() ([]ToolInfo, []TagInfo) {
 		return toolInfos[i].Name < toolInfos[j].Name
 	})
 
-	// Build tag info from known tags
-	tagInfos := []TagInfo{
-		{Name: "readonly", Description: "Read-only tools (safe for planning mode)"},
-		{Name: "plan", Description: "Planning mode tools (read-only + planning tools)"},
-		{Name: "file", Description: "File operations"},
-		{Name: "search", Description: "Search operations"},
-		{Name: "execution", Description: "Command execution"},
-		{Name: "shell", Description: "Shell tools (bash on Unix, powershell on Windows)"},
-		{Name: "web", Description: "Web operations"},
-		{Name: "planning", Description: "Planning and task management tools"},
-		{Name: "analysis", Description: "Analysis tools"},
-		{Name: "workflow", Description: "Workflow builder tools"},
-		{Name: "mcp", Description: "All MCP tools"},
-		{Name: "default", Description: "Default toolset (commonly used tools)"},
+	// Tag info comes from the registry, like the tool info above. This used to
+	// be a hand-written list here, and it had drifted: `media` was missing and
+	// `readonly` still claimed to be "safe for planning mode", which the
+	// removed readonly tier never actually guaranteed.
+	tagInfos := make([]TagInfo, 0, len(tools.TagDescriptions))
+	for tag, desc := range tools.TagDescriptions {
+		tagInfos = append(tagInfos, TagInfo{Name: string(tag), Description: desc})
 	}
+	sort.Slice(tagInfos, func(i, j int) bool { return tagInfos[i].Name < tagInfos[j].Name })
 
 	return toolInfos, tagInfos
 }

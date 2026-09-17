@@ -102,22 +102,6 @@ const (
 	ToolRunScenario    = "run_scenario"
 )
 
-// Tag constants for tool filtering
-const (
-	TagReadOnly  = "readonly"
-	TagPlan      = "plan"
-	TagFile      = "file"
-	TagSearch    = "search"
-	TagExecution = "execution"
-	TagShell     = "shell" // The shell tool and its background-process family
-	TagWeb       = "web"
-	TagPlanning  = "planning"
-	TagAnalysis  = "analysis"
-	TagWorkflow  = "workflow"
-	TagMCP       = "mcp"
-	TagDefault   = "default"
-)
-
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
@@ -147,10 +131,26 @@ var AllToolNames = []string{
 	ToolListScenarios, ToolViewScenario, ToolEditScenario, ToolWriteScenario, ToolDeleteScenario, ToolRunScenario,
 }
 
-// AllToolTags returns all known tool tags for validation.
+// AllToolTags is the set of tag names a workflow may reference, for
+// validation only.
+//
+// It is a MIRROR of the registry's tags (tools.ToolTag), which cannot be
+// imported here: this package exists precisely to break the cycle between
+// tools and workflow/parser. There were also standalone Tag* constants beside
+// this list; they were a second copy that nothing referenced, so they are
+// gone and the values live here once.
+//
+// A mirror that can drift needs a test, not a promise — TestAllToolTagsMatchRegistry
+// in the tools package asserts this list against the registry, which can see
+// both. If it fails, the registry is authoritative.
+//
+// Curated bundles are namespaced (`coding:*`) because they are one product's
+// editorial grouping rather than a property of the tools; see the ToolTag doc
+// comment in registry.go.
 var AllToolTags = []string{
-	TagReadOnly, TagPlan, TagFile, TagSearch, TagExecution, TagShell, TagWeb,
-	TagPlanning, TagAnalysis, TagWorkflow, TagMCP, TagDefault,
+	"readonly", "file", "search", "execution", "shell", "web",
+	"planning", "analysis", "workflow", "mcp", "media",
+	"coding:default", "coding:plan",
 }
 
 // toolNameSet for O(1) lookup

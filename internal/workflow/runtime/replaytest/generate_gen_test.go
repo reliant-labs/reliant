@@ -158,7 +158,7 @@ inputs:
     default: auto
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
 
 nodes:
   - id: classify

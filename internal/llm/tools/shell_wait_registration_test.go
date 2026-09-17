@@ -9,7 +9,7 @@ import "testing"
 // background process must be able to wait for it.
 func TestShellWait_IsOfferedWithTheShellFamily(t *testing.T) {
 	t.Parallel()
-	for _, filter := range []string{"tag:default", "tag:shell", "tag:plan", "tag:readonly"} {
+	for _, filter := range []string{"tag:coding:default", "tag:shell", "tag:coding:plan", "tag:readonly"} {
 		names := ExpandToolFilter([]string{filter}, nil)
 		found := false
 		for _, n := range names {

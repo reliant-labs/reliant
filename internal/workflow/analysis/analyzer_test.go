@@ -127,7 +127,7 @@ nodes:
         - id: call_llm
           type: call_llm
           tools_config:
-            filter: [tag:default]
+            preloaded_tools: [tag:coding:default]
             spawn: [spawn:builtin://agent]
         - id: execute_tools
           type: execute_tools

@@ -839,22 +839,22 @@ func TestCodeContext_RegisteredAsDefaultReadOnlyTool(t *testing.T) {
 		}
 	}
 	require.NotNil(t, found, "code_context must be in the tool registry")
-	assert.Contains(t, found.Tags, TagDefault, "must be available without discovery")
+	assert.Contains(t, found.Tags, TagCodingDefault, "must be available without discovery")
 	assert.Contains(t, found.Tags, TagReadOnly)
 
 	assert.True(t, IsToolReadOnly(NewCodeContextTool()))
 }
 
 // The tool only pays off if agents have it without discovering it first. A tag
-// alone does not prove that — `tag:default` must actually EXPAND to include it.
+// alone does not prove that — `tag:coding:default` must actually EXPAND to include it.
 func TestCodeContext_IncludedInDefaultToolset(t *testing.T) {
 	t.Parallel()
-	expanded := ExpandToolFilter([]string{"tag:default"}, nil)
+	expanded := ExpandToolFilter([]string{"tag:coding:default"}, nil)
 	assert.Contains(t, expanded, ToolCodeContext,
 		"code_context must arrive without load_tool; got: %v", expanded)
 }
 
-// Presets that navigate code use explicit allowlists, which `tag:default` never
+// Presets that navigate code use explicit allowlists, which `tag:coding:default` never
 // reaches. Those are exactly the agents that spend turns on grep walks, so the
 // tool has to be named in each one.
 func TestCodeContext_ReachesCodeNavigationPresets(t *testing.T) {

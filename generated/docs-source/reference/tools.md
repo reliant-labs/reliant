@@ -19,29 +19,30 @@ Tools are organized by tags for filtering:
 
 | Tag | Description |
 |-----|-------------|
-| `tag:readonly` | Read-only tools (safe for planning mode) |
-| `tag:plan` | Planning mode tools (read-only + planning tools) |
-| `tag:file` | File operations |
-| `tag:search` | Search operations |
+| `tag:analysis` | Analysis tools |
+| `tag:coding:default` | The coding agent's starting bundle — one product's editorial grouping, granted only when named |
+| `tag:coding:plan` | Tools the coding agent's plan mode starts with |
 | `tag:execution` | Command execution |
+| `tag:file` | File operations |
+| `tag:mcp` | Every tool from the chat's connected MCP servers |
+| `tag:media` | Media generation (images, and later audio/video) |
+| `tag:planning` | Planning and task management tools |
+| `tag:readonly` | Does not modify files or code |
+| `tag:search` | Search operations |
 | `tag:shell` | Shell tools (bash on Unix, powershell on Windows) |
 | `tag:web` | Web operations |
-| `tag:planning` | Planning and task management tools |
-| `tag:analysis` | Analysis tools |
 | `tag:workflow` | Workflow builder tools |
-| `tag:mcp` | All MCP tools |
-| `tag:default` | Default toolset (commonly used tools) |
 
 ---
 
 ## Categories
 
-- [Planning & Task Management](#planning--task-management) (23 tools)
-- [File Operations](#file-operations) (4 tools)
-- [Information Retrieval](#information-retrieval) (1 tools)
+- [Planning & Task Management](#planning--task-management) (10 tools)
+- [File Operations](#file-operations) (7 tools)
+- [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (16 tools)
-- [System & Execution](#system--execution) (1 tools)
-- [Other Tools](#other-tools) (5 tools)
+- [System & Execution](#system--execution) (4 tools)
+- [Other Tools](#other-tools) (9 tools)
 
 ---
 
@@ -51,33 +52,20 @@ _Tools for creating plans, managing tasks, and tracking progress._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`add_dependency`](#add_dependency) | planning, plan | Create a dependency between two tasks in the current plan. |
-| [`add_task`](#add_task) | planning, plan, default | Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning. |
-| [`code_context`](#code_context) | analysis, search, readonly, plan, default | Resolve a code symbol to its definition, callers, callees, and implementations in ONE call. |
-| [`component_library`](#component_library) | readonly, plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
-| [`create_plan`](#create_plan) | planning, plan, default | Create a comprehensive plan with tasks for implementing a feature or solving a problem. |
-| [`create_subtask`](#create_subtask) | planning, plan | Create a subtask under an existing task. |
-| [`fetch`](#fetch) | web, readonly, plan, default | Fetches content from a URL and returns it in the specified format. |
-| [`get_plan`](#get_plan) | planning, readonly, plan | Retrieve the current plan for this session. |
-| [`list_ready_tasks`](#list_ready_tasks) | planning, readonly, plan | List tasks that are ready to work on — no unresolved blockers. |
-| [`list_tasks`](#list_tasks) | planning, readonly, plan, default | List all tasks for the current plan. |
-| [`load_tool`](#load_tool) | default, readonly, plan | Dynamically load a tool by name or search for available tools. |
-| [`project_analyzer`](#project_analyzer) | analysis, readonly, plan | Analyzes project structure, detects languages, build systems, and test frameworks |
-| [`read_attachment`](#read_attachment) | file, readonly, plan, default | Read the contents of a file the user attached to the conversation. |
-| [`remove_dependency`](#remove_dependency) | planning, plan | Remove a dependency between two tasks. |
-| [`shell_list`](#shell_list) | execution, shell, readonly, plan, default | Lists background processes in the current workspace. |
-| [`shell_output`](#shell_output) | execution, shell, readonly, plan, default | Retrieves output from a background process with pagination and regex filtering support. |
-| [`shell_wait`](#shell_wait) | execution, shell, readonly, plan, default | Block until a background process exits, then return its exit code and recent output. |
-| [`skill`](#skill) | default, readonly, plan | Load skills — specialized knowledge and instructions for specific tasks. |
-| [`sourcegraph`](#sourcegraph) | analysis, readonly, plan | Search code across public repositories using Sourcegraph's GraphQL API. |
-| [`update_plan`](#update_plan) | planning, plan | Update an existing plan's details or status. |
-| [`update_task`](#update_task) | planning, plan, default | Update a task's status, details, or metadata. |
-| [`view`](#view) | file, readonly, plan, default | File viewing tool that reads and displays the contents of files with line numbers, allowing you t... |
-| [`websearch`](#websearch) | web, readonly, plan, default | Search the web using DuckDuckGo's HTML search. |
+| [`add_dependency`](#add_dependency) | planning, coding:plan | Create a dependency between two tasks in the current plan. |
+| [`add_task`](#add_task) | planning, coding:plan, coding:default | Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning. |
+| [`create_plan`](#create_plan) | planning, coding:plan, coding:default | Create a comprehensive plan with tasks for implementing a feature or solving a problem. |
+| [`create_subtask`](#create_subtask) | planning, coding:plan | Create a subtask under an existing task. |
+| [`get_plan`](#get_plan) | planning, readonly, coding:plan | Retrieve the current plan for this session. |
+| [`list_ready_tasks`](#list_ready_tasks) | planning, readonly, coding:plan | List tasks that are ready to work on — no unresolved blockers. |
+| [`list_tasks`](#list_tasks) | planning, readonly, coding:plan, coding:default | List all tasks for the current plan. |
+| [`remove_dependency`](#remove_dependency) | planning, coding:plan | Remove a dependency between two tasks. |
+| [`update_plan`](#update_plan) | planning, coding:plan | Update an existing plan's details or status. |
+| [`update_task`](#update_task) | planning, coding:plan, coding:default | Update a task's status, details, or metadata. |
 
 ### add_dependency
 
-**Tags:** `planning`, `plan`
+**Tags:** `planning`, `coding:plan`
 
 Create a dependency between two tasks in the current plan.
 
@@ -104,7 +92,7 @@ have no unresolved blockers and are ready to work on.
 
 ### add_task
 
-**Tags:** `planning`, `plan`, `default`
+**Tags:** `planning`, `coding:plan`, `coding:default`
 
 Add a new task to the current plan. This is your primary tool for dynamic planning and sub-planning.
 
@@ -156,134 +144,9 @@ BEST PRACTICES:
 
 ---
 
-### code_context
-
-**Tags:** `analysis`, `search`, `readonly`, `plan`, `default`
-
-Resolve a code symbol to its definition, callers, callees, and implementations in ONE call.
-
-⚠️ GO AND TYPESCRIPT/JAVASCRIPT ONLY. Call graphs are resolved by a language server
-(gopls for .go, tsserver for .ts/.tsx/.js/.jsx), and only those two are supported.
-For any other language — Python, Ruby, Java, Rust, C# — this falls back to a text
-search that CANNOT resolve call edges, and you should use bash + rg instead.
-
-Use this INSTEAD of a multi-step grep walk whenever the question is about a symbol's
-relationships. A grep walk costs one turn per hop and each turn re-derives what to
-search next; this returns the whole neighborhood at once.
-
-WHEN TO USE THIS TOOL:
-- "Who calls X?" / "What does X call?" — the answers grep cannot compute, because a
-  call site never names the receiver's type.
-- "What implements this interface?" — neither Go nor TypeScript records that at the
-  implementation site, so there is no text to search for.
-- "Where is X defined?" when the name is ambiguous across packages or modules.
-- Orienting in unfamiliar code: one call replaces the definition->callers->callees walk.
-
-LANGUAGE SUPPORT:
-- Go (.go) — resolved by gopls. Authoritative.
-- TypeScript / JavaScript (.ts .tsx .js .jsx .mts .cts) — resolved by tsserver from
-  the project's own TypeScript install. Authoritative.
-- Everything else (Python, Ruby, Java, ...) — a text engine reports call sites and
-  their enclosing function. Useful for locating, but approximate: it cannot see
-  dynamic dispatch and may include same-named methods on unrelated types. The
-  response labels this explicitly.
-
-WHEN NOT TO USE THIS TOOL:
-- Full-text or pattern search ("find every TODO", "which files mention retry") — use bash + rg.
-- Reading a file you already located — use view.
-
-PREFER THIS OVER GREP FOR ANY NAMED SYMBOL. If you are about to run
-`rg 'SomeFunction'` or `grep -n 'SomeType'` against Go or TypeScript,
-call this instead — it returns everything that search would have found plus the
-things it cannot find, in one call rather than one call per hop.
-
-HOW TO USE:
-Usually just: code_context(symbol: "ResolveDaemon"). The defaults are the common case —
-the definition, its source, and a 3-level call map, which is what "how does this work"
-actually needs. Every parameter below is optional.
-
-- symbol (REQUIRED): the identifier alone, unqualified and with no regex.
-  Good: "ResolveDaemon", "classifyDaemonWait", "DaemonRegistryService".
-  Bad: "svc.ResolveDaemon" (drop the receiver), "Resolve.*" (not a pattern),
-  "func ResolveDaemon" (just the name).
-
-- want: which relationships to return. Default "all".
-  "all"             definition + source + call map + implementations
-  "callers"         who reaches this — trace a request path inbound
-  "callees"         what this drives — see the work a function delegates
-  "implementations" on an interface: who implements it. On a concrete method:
-                    which interfaces it satisfies (the reverse lookup).
-  "definition"      still includes the graph; narrows the emphasis, not the answer.
-
-- depth: levels of call graph to expand as a tree. Default 3, max 5. Depth 3
-  answers "who ultimately triggers this" for typical handler->service->repo
-  layering. Use depth 1 when you only want the immediate neighbors as flat lists.
-
-- file: a path FRAGMENT to disambiguate when a name is declared many times
-  (`Execute` has dozens here). The response tells you when this is needed and
-  lists the alternatives — pass e.g. file: "daemon_router_nats.go".
-
-- include_source: first ~30 lines of the definition. On by default, because the
-  usual next question is "what does it do" and that would cost another turn.
-  Set false when you want only the graph.
-
-- scope: "project" (default) keeps results in this workspace INCLUDING sibling
-  repos linked into it, and excludes the standard library, node_modules and
-  vendored code. Use "all" only to deliberately read into a dependency.
-
-- repo: multi-repo projects only — "root" or a repo name. Omit otherwise.
-
-- limit: max entries per flat section. Default 25, max 200. The response says
-  when a section was truncated.
-
-OUTPUT:
-An ENGINE line naming what resolved the query and how far to trust it, a DEFINITION
-line with the first ~30 lines of source, then either a CALL MAP tree (depth > 1) or
-flat CALLERS / CALLEES / IMPLEMENTATIONS sections. Truncation is always stated.
-
-NOTES:
-- The first call in a large repo pays a one-time index cost (a few seconds); later calls are fast.
-- Results include test files; they are real callers.
-- If a language server is missing, the response says so and names the install command.
-
----
-
-### component_library
-
-**Tags:** `readonly`, `plan`
-
-Component library with 61 production-ready React/TypeScript components for building UIs, dashboards, landing pages, pitch decks, charts, and diagrams.
-
-WHEN TO USE:
-- Building any UI — search for relevant components first
-- Creating charts or diagrams — components handle all coordinate math
-- Building pitch deck slides — use deck components as templates
-- Need a layout pattern — search by use case (dashboard, landing, portal, crm)
-- Building CRUD/admin interfaces — badge, modal, tabs, pagination, toast, etc.
-
-ACTIONS:
-- search: Find components with unified keyword search
-  Examples: search(query="crud table admin"), search(query="chart dashboard"), search(tag="deck")
-- get: Retrieve full source code for a specific component
-  Example: get(name="quadrant_chart")
-- install: Write a component file to disk at the given path
-  Example: install(name="sidebar_left", path="src/components/layouts/sidebar_left.tsx")
-- list: Browse all components (optionally filtered by tag or category)
-
-CATEGORIES: layouts (11), charts (6), diagrams (5), deck (7), ui (32)
-
-TAGS: layout, chart, diagram, deck, ui, landing, marketing, dashboard, analytics, admin, portal, crm, comparison, pricing, hero, form, auth, slide, presentation, saas, funnel, competitive, market, pipeline, process, team, docs, technical, crud, table, stats, detail, search, navigation, modal, dialog, filter, badge, status, tabs, pagination, toast, notification, avatar, dropdown, menu, skeleton, loading, toggle, switch, alert, banner, activity, feed, metric, breadcrumb
-
-OPTIONS:
-- forge_integrated: Set to true in forge-generated projects to get integration guidance for useUiStore, useEventBus, and useAuth
-
-CHARTS handle all coordinate math internally — pass data, get pixels. No spatial reasoning required.
-
----
-
 ### create_plan
 
-**Tags:** `planning`, `plan`, `default`
+**Tags:** `planning`, `coding:plan`, `coding:default`
 
 Create a comprehensive plan with tasks for implementing a feature or solving a problem.
 WHEN TO USE:
@@ -378,7 +241,7 @@ BEST PRACTICES:
 
 ### create_subtask
 
-**Tags:** `planning`, `plan`
+**Tags:** `planning`, `coding:plan`
 
 Create a subtask under an existing task.
 WHEN TO USE:
@@ -393,68 +256,9 @@ BEST PRACTICES:
 
 ---
 
-### fetch
-
-**Tags:** `web`, `readonly`, `plan`, `default`
-
-Fetches content from a URL and returns it in the specified format.
-
-Uses Mozilla Readability to automatically extract main page content, stripping navigation,
-footers, ads, and other chrome. Returns only the readable content for text and markdown formats.
-
-WHEN TO USE THIS TOOL:
-- Use when you need to download content from a URL
-- Helpful for retrieving documentation, API responses, or web content
-- Useful for getting external information to assist with tasks
-
-HOW TO USE:
-- Provide the URL to fetch content from
-- Specify the desired output format (text, markdown, or html)
-- Optionally set a timeout for the request
-
-FEATURES:
-- Automatic content extraction using Mozilla Readability (strips nav, ads, footers)
-- Supports three output formats: text, markdown, and html
-- Automatically handles HTTP redirects
-- Detects likely JavaScript-rendered pages and warns you
-- Sets reasonable timeouts to prevent hanging
-
-PARAMETERS:
-- max_size: Maximum bytes to fetch (default: 16000, ~16KB)
-  Prevents downloading huge files that could overwhelm context
-
-IMPORTANT LIMITATIONS:
-- Cannot render JavaScript. Single-page apps (SPAs) will return little or no content.
-  The response metadata will include possible_js_rendered=true when this is detected.
-  For JS-heavy sites, consider using browser tools instead.
-- Default maximum response size is 16KB (use max_size to adjust)
-- Only supports HTTP and HTTPS protocols
-- Cannot handle authentication or cookies
-- Some websites may block automated requests
-
-TIPS FOR BETTER RESULTS:
-- For GitHub repos, use raw.githubusercontent.com URLs instead of github.com
-  (e.g., https://raw.githubusercontent.com/org/repo/main/README.md)
-- For API docs that are JS-rendered SPAs, look for the OpenAPI/Swagger JSON spec URL instead
-- Use text or markdown format for documentation (html returns raw markup with all chrome)
-- If the response says possible_js_rendered=true, the page needs JavaScript to render.
-  Try finding an alternative URL, a raw content source, or use browser tools.
-- Adjust max_size for larger documents (but consider context limits)
-
-RESPONSE METADATA:
-- content_length: Size of the extracted content
-- raw_html_size: Size of the original HTML before extraction (for HTML pages)
-- truncated: Whether content was truncated to fit max_size
-- encoding_used: The format that was applied
-- page_title: Page title extracted by Readability (when available)
-- possible_js_rendered: True if the page appears to be JavaScript-rendered (very little content extracted)
-- used_readability: True if Readability content extraction was applied
-
----
-
 ### get_plan
 
-**Tags:** `planning`, `readonly`, `plan`
+**Tags:** `planning`, `readonly`, `coding:plan`
 
 Retrieve the current plan for this session.
 WHEN TO USE:
@@ -470,7 +274,7 @@ RETURNS:
 
 ### list_ready_tasks
 
-**Tags:** `planning`, `readonly`, `plan`
+**Tags:** `planning`, `readonly`, `coding:plan`
 
 List tasks that are ready to work on — no unresolved blockers.
 
@@ -489,7 +293,7 @@ RETURNS:
 
 ### list_tasks
 
-**Tags:** `planning`, `readonly`, `plan`, `default`
+**Tags:** `planning`, `readonly`, `coding:plan`, `coding:default`
 
 List all tasks for the current plan.
 WHEN TO USE:
@@ -513,51 +317,9 @@ update the status of a task assigned to you.
 
 ---
 
-### load_tool
-
-**Tags:** `default`, `readonly`, `plan`
-
-Dynamically load a tool by name or search for available tools.
-
-Use this when you need a tool that isn't currently loaded. You can:
-- Load a specific tool by name: {"name": "sourcegraph"}
-- Search for tools by keyword: {"query": "workflow"}
-
-Loaded tools become available immediately on the next turn.
-
----
-
-### project_analyzer
-
-**Tags:** `analysis`, `readonly`, `plan`
-
-Analyzes project structure, detects languages, build systems, and test frameworks
-
----
-
-### read_attachment
-
-**Tags:** `file`, `readonly`, `plan`, `default`
-
-Read the contents of a file the user attached to the conversation.
-
-WHEN TO USE:
-- When the conversation references an attachment (by id) whose contents you have not yet seen.
-- Specifically for PDF attachments: their pages are read on demand through this tool.
-
-HOW TO USE:
-- Provide the attachment_id from the attachment reference.
-- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
-
-NOTES:
-- PDF pages are returned as a native document block the model can read directly (text and layout).
-- Image and text attachments are already provided inline in the conversation and do not need this tool.
-
----
-
 ### remove_dependency
 
-**Tags:** `planning`, `plan`
+**Tags:** `planning`, `coding:plan`
 
 Remove a dependency between two tasks.
 
@@ -565,311 +327,9 @@ Specify from_task, to_task, and type to identify which dependency to remove.
 
 ---
 
-### shell_list
-
-**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
-
-Lists background processes in the current workspace.
-
-WORKSPACE SCOPING:
-- Processes are scoped to the current workspace (worktree)
-- Multiple chats in the same workspace share the same process list
-- This enables coordination: one chat can start a server, another can check its status
-- Use shell_output to view output and shell_kill to terminate any workspace process
-
-Usage notes:
-- By default, shows only running processes in the current workspace
-- Use 'all: true' to include completed, failed, and killed processes
-- Process IDs can be used with shell_output and shell_kill tools
-
-Example outputs:
-- Running processes: Shows ID, command, and how long they've been running
-- Completed processes: Shows ID, command, exit code, and duration
-- Failed processes: Shows ID, command, exit code, and error indication
-
-Examples:
-1. List running processes: shell_list()
-2. List all processes including completed: shell_list(all=true)
-
----
-
-### shell_output
-
-**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
-
-Retrieves output from a background process with pagination and regex filtering support.
-
-WORKSPACE SCOPING:
-- Can read output from any process in the current workspace, regardless of which chat started it
-- Multiple chats in the same workspace share process visibility
-- This enables monitoring: check on servers or builds started by other chats
-
-This tool allows you to check the stdout and stderr output of a process running in the background,
-with support for reading in chunks to handle large outputs efficiently and filtering with regex.
-
-Usage notes:
-- Process IDs are provided when you start a background process with run_in_background: true
-- The tool will indicate if the process is still running or has completed
-- If the process has completed, the exit code will be provided
-- Output is not cleared after reading - you can re-read from any position
-
-MODES OF OPERATION:
-
-1. Standard Pagination (default):
-   - offset: Start reading from byte N (default: 0)
-   - limit: Read up to N bytes (default: 16000)
-   - Can be combined: offset + limit
-
-2. Tail Mode:
-   - tail: Get last N lines
-   - Cannot be combined with: regex, offset, limit
-
-3. Regex Filter Mode:
-   - regex: Filter output to lines matching pattern
-   - When set, tool filters FIRST, then applies offset/limit to filtered results
-   - Can be combined with: offset, limit, regex_case_insensitive, regex_context_before, regex_context_after
-   - Cannot be combined with: tail
-   - Optional parameters:
-     * regex_case_insensitive: Case-insensitive matching
-     * regex_context_before: Include N lines before match (like grep -B)
-     * regex_context_after: Include N lines after match (like grep -A)
-
-PARAMETER COMPATIBILITY:
-Valid combinations:
-  - offset + limit (standard pagination)
-  - tail (alone)
-  - regex (alone)
-  - regex + offset + limit (filtered pagination)
-  - regex + regex_case_insensitive + regex_context_before + regex_context_after
-
-Invalid combinations (will error):
-  - tail + regex
-  - tail + offset
-  - tail + limit
-  - regex_case_insensitive without regex
-  - regex_context_before/after without regex
-
-Examples:
-1. Start a background process:
-   bash(command="npm run dev", run_in_background=true)
-
-2. Get first chunk:
-   shell_output(process_id="<id>")
-
-3. Get next chunk:
-   shell_output(process_id="<id>", offset=16000)
-
-4. Get last 100 lines:
-   shell_output(process_id="<id>", tail=100)
-
-5. Filter for errors:
-   shell_output(process_id="<id>", regex="ERROR|FATAL")
-
-6. Filter with context:
-   shell_output(process_id="<id>", regex="ERROR", regex_context_after=3)
-
-7. Filter and paginate:
-   shell_output(process_id="<id>", regex="WARN", offset=0, limit=10000)
-
-The response includes metadata:
-- has_more: true if more output is available
-- next_offset: where to start reading for the next chunk
-- total_available: total bytes available in the (filtered or original) output
-- filter_applied: true if regex was used
-- total_matches: number of matching lines (when filtered)
-- matches_in_response: number of matches in this chunk
-
----
-
-### shell_wait
-
-**Tags:** `execution`, `shell`, `readonly`, `plan`, `default`
-
-Block until a background process exits, then return its exit code and recent output.
-
-WHY THIS EXISTS:
-Waiting by running a sleep command is the wrong tool and costs far more than it
-looks. `sleep 300; tail log` occupies a whole turn doing nothing, and it
-frequently exceeds the tool timeout and dies, losing the wait entirely. Polling
-shell_output in a loop is better but spends a model round-trip on every check.
-shell_wait blocks server-side: one tool call, no round-trips, no lost work.
-
-WHEN TO USE:
-- Waiting for a long build, test suite, or install to finish
-- Any time the next thing you do depends on a background process being done
-
-WHEN NOT TO USE:
-- A long-running server you never expect to exit (use shell_output to check on it)
-- You only want progress so far, not completion (use shell_output)
-
-HOW TO USE:
-1. Start the work in the background:
-   bash(command="npm test", run_in_background=true)
-2. Do any useful work that does not depend on the result — read the next file,
-   prepare the following edit. The process runs while you do.
-3. Wait for it:
-   shell_wait(process_id="<id>")
-
-TIMEOUTS ARE NOT FAILURES:
-If the process is still running when the budget elapses, this returns normally
-with timed_out: true and the process untouched. Call shell_wait again to keep
-waiting. It never kills the process — use shell_kill for that.
-
-Because a single call cannot block past the tool-execution ceiling, a very long
-build may need a few consecutive shell_wait calls. That is still dramatically
-cheaper than polling, and unlike a sleep it cannot lose the wait.
-
-RETURNS:
-- Exit code and status once the process has exited
-- The last tail_lines lines of output (default 50), so a passing build or a
-  failing test usually needs no follow-up call
-- timed_out: true, with no exit code, if the budget elapsed first
-
-Use shell_output for the full log, for pagination, or for regex filtering.
-
----
-
-### skill
-
-**Tags:** `default`, `readonly`, `plan`
-
-Load skills — specialized knowledge and instructions for specific tasks.
-Skills provide detailed guidance on how to perform particular operations.
-Use 'list' to see available skills, 'load' to load a skill's instructions,
-or 'search' to find skills by keyword.
-When you load a skill, its instructions become available in the conversation.
-Skills may suggest tools to load — use the load_tool tool if suggested tools are needed.
-
-In multi-repo projects, skills are discovered recursively across all nested
-repos. Each skill's source repo is shown in brackets after its description
-(e.g. "[source: api]") and is reflected as a prefix on its path
-(e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.
-
-READING A LARGE SKILL (action=load):
-Every load ends with its total size and whether anything remains, so ONE call
-tells you if you have the whole skill. Do not page defensively — page only when
-a result says bytes remain, and it will name the exact call to continue with.
-
-A skill too large to deliver at once is read with these, mirroring shell_output:
-- section: fetch one markdown section by heading. Preferred — every load lists
-  the skill's sections, so this is usually one targeted call rather than
-  guessing byte ranges.
-- offset / limit: page through the current view by byte range.
-- regex (+ regex_case_insensitive, regex_context_before, regex_context_after):
-  deliver only matching lines, numbered, to locate content before fetching it.
-
-Examples:
-  skill(action="load", path="db")                      whole skill + size report
-  skill(action="load", path="db", section="Seeding")   one section
-  skill(action="load", path="db", offset=23000)        continue where a window ended
-  skill(action="load", path="db", regex="foreign key") find the relevant part first
-
----
-
-### sourcegraph
-
-**Tags:** `analysis`, `readonly`, `plan`
-
-Search code across public repositories using Sourcegraph's GraphQL API.
-
-WHEN TO USE THIS TOOL:
-- Use when you need to find code examples or implementations across public repositories
-- Helpful for researching how others have solved similar problems
-- Useful for discovering patterns and best practices in open source code
-
-HOW TO USE:
-- Provide a search query using Sourcegraph's query syntax
-- Optionally specify the number of results to return (default: 10)
-- Optionally set a timeout for the request
-
-QUERY SYNTAX:
-- Basic search: "fmt.Println" searches for exact matches
-- File filters: "file:.go fmt.Println" limits to Go files
-- Repository filters: "repo:^github\.com/golang/go$ fmt.Println" limits to specific repos
-- Language filters: "lang:go fmt.Println" limits to Go code
-- Boolean operators: "fmt.Println AND log.Fatal" for combined terms
-- Regular expressions: "fmt\.(Print|Printf|Println)" for pattern matching
-- Quoted strings: "\"exact phrase\"" for exact phrase matching
-- Exclude filters: "-file:test" or "-repo:forks" to exclude matches
-
-ADVANCED FILTERS:
-- Repository filters:
-  * "repo:name" - Match repositories with name containing "name"
-  * "repo:^github\.com/org/repo$" - Exact repository match
-  * "repo:org/repo@branch" - Search specific branch
-  * "repo:org/repo rev:branch" - Alternative branch syntax
-  * "-repo:name" - Exclude repositories
-  * "fork:yes" or "fork:only" - Include or only show forks
-  * "archived:yes" or "archived:only" - Include or only show archived repos
-  * "visibility:public" or "visibility:private" - Filter by visibility
-
-- File filters:
-  * "file:\.js$" - Files with .js extension
-  * "file:internal/" - Files in internal directory
-  * "-file:test" - Exclude test files
-  * "file:has.content(Copyright)" - Files containing "Copyright"
-  * "file:has.contributor([email protected])" - Files with specific contributor
-
-- Content filters:
-  * "content:\"exact string\"" - Search for exact string
-  * "-content:\"unwanted\"" - Exclude files with unwanted content
-  * "case:yes" - Case-sensitive search
-
-- Type filters:
-  * "type:symbol" - Search for symbols (functions, classes, etc.)
-  * "type:file" - Search file content only
-  * "type:path" - Search filenames only
-  * "type:diff" - Search code changes
-  * "type:commit" - Search commit messages
-
-- Commit/diff search:
-  * "after:\"1 month ago\"" - Commits after date
-  * "before:\"2023-01-01\"" - Commits before date
-  * "author:name" - Commits by author
-  * "message:\"fix bug\"" - Commits with message
-
-- Result selection:
-  * "select:repo" - Show only repository names
-  * "select:file" - Show only file paths
-  * "select:content" - Show only matching content
-  * "select:symbol" - Show only matching symbols
-
-- Result control:
-  * "count:100" - Return up to 100 results
-  * "count:all" - Return all results
-  * "timeout:30s" - Set search timeout
-
-EXAMPLES:
-- "file:.go context.WithTimeout" - Find Go code using context.WithTimeout
-- "lang:typescript useState type:symbol" - Find TypeScript React useState hooks
-- "repo:^github\.com/kubernetes/kubernetes$ pod list type:file" - Find Kubernetes files related to pod listing
-- "repo:sourcegraph/sourcegraph$ after:\"3 months ago\" type:diff database" - Recent changes to database code
-- "file:Dockerfile (alpine OR ubuntu) -content:alpine:latest" - Dockerfiles with specific base images
-- "repo:has.path(\.py) file:requirements.txt tensorflow" - Python projects using TensorFlow
-
-BOOLEAN OPERATORS:
-- "term1 AND term2" - Results containing both terms
-- "term1 OR term2" - Results containing either term
-- "term1 NOT term2" - Results with term1 but not term2
-- "term1 and (term2 or term3)" - Grouping with parentheses
-
-LIMITATIONS:
-- Only searches public repositories
-- Rate limits may apply
-- Complex queries may take longer to execute
-- Maximum of 20 results per query
-
-TIPS:
-- Use specific file extensions to narrow results
-- Add repo: filters for more targeted searches
-- Use type:symbol to find function/method definitions
-- Use type:file to find relevant files
-
----
-
 ### update_plan
 
-**Tags:** `planning`, `plan`
+**Tags:** `planning`, `coding:plan`
 
 Update an existing plan's details or status.
 WHEN TO USE:
@@ -892,7 +352,7 @@ BEST PRACTICES:
 
 ### update_task
 
-**Tags:** `planning`, `plan`, `default`
+**Tags:** `planning`, `coding:plan`, `coding:default`
 
 Update a task's status, details, or metadata.
 WHEN TO USE:
@@ -934,140 +394,23 @@ BEST PRACTICES:
 
 ---
 
-### view
-
-**Tags:** `file`, `readonly`, `plan`, `default`
-
-File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
-
-WHEN TO USE:
-- Reading contents of specific files (source code, configs, logs)
-- Examining text-based file formats
-
-HOW TO USE:
-- Provide the file path
-- Optional: offset (starting line) and limit (number of lines)
-- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
-- Issue multiple view tools in a single request for improved performance
-
-FEATURES:
-- Displays file contents with line numbers for easy reference
-- Can read from any position in a file using the offset parameter
-- Handles large files by limiting the number of lines read
-- Automatically truncates very long lines for better display
-- Suggests similar file names when the requested file isn't found
-
-LIMITATIONS:
-- Maximum output size is 64KB (~16K tokens) - larger files are truncated with head+tail
-- Default reading limit is 1500 lines, which reads most source files whole
-- Lines longer than 500 characters are truncated
-- Cannot display binary files (executables, archives, etc.)
-- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
-- PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
-
-TIPS:
-- Prefer ONE whole-file read over several paged reads: each call costs a model
-  round-trip, while the read itself takes milliseconds. Omit offset/limit unless
-  the file is genuinely too big to arrive in one piece.
-- A file OVER ~64KB cannot arrive whole whatever limit you pass — the response is
-  capped and you get head+tail with the middle removed. Two calls settle it, and
-  neither is a search: read the head (default) to get the shape, then ONE offset
-  read for the region you need. The truncation notice tells you the total line
-  count, so you can aim the second call directly.
-- Do NOT fall back to repeated 'grep' on a large file to page through it by
-  symbol. Measured: eleven agents greping one 52KB proto one message at a time
-  was the single largest recoverable cost in a long run — each grep is a whole
-  turn and returns less context than one offset read.
-- Issue several view calls in a SINGLE message to read independent files at once
-- Use with Glob tool to first find files you want to view
-- For code exploration, first use Grep to find relevant files, then View to examine them
-- If output is truncated, use offset to read the remaining section
-
----
-
-### websearch
-
-**Tags:** `web`, `readonly`, `plan`, `default`
-
-Search the web using DuckDuckGo's HTML search.
-
-WHEN TO USE THIS TOOL:
-- Finding current information not available in the assistant's training data
-- Researching documentation, tutorials, or examples online
-- Looking up error messages or debugging information
-- Finding libraries, tools, or frameworks
-- Checking current status of services or projects
-- Discovering recent developments or news about technologies
-
-HOW TO USE:
-- Provide a search query as you would in a web browser
-- Optionally specify the number of results (default: 10, max: 20)
-
-QUERY GUIDELINES:
-- Use simple, natural language queries with specific keywords
-- Keep queries short and focused (3-8 words works best)
-- Use minus (-) to exclude terms: python tutorial -django
-- Quotes work for simple exact phrases: "react hooks" tutorial
-
-IMPORTANT - UNSUPPORTED QUERY SYNTAX:
-DuckDuckGo's HTML search does NOT support these features (they will return zero results):
-- Boolean operators: OR, AND (e.g. "PUT" OR "POST" will FAIL)
-- Complex quoted phrase combinations (multiple quoted phrases with operators)
-- site: operator is unreliable and often returns no results
-- filetype: operator is unreliable
-If you need boolean-style searches, run multiple simple queries instead.
-
-EXAMPLES OF GOOD QUERIES:
-- "golang context timeout example" - Simple keywords
-- "anthropic claude api documentation" - Natural language
-- "Customer.io transactional API" - Product + feature
-- "react hooks tutorial 2024" - Topic + timeframe
-
-EXAMPLES OF BAD QUERIES (will return 0 results):
-- "PUT" OR "POST" OR "PATCH" email content - Boolean operators don't work
-- site:customer.io/docs/api specific-page - site: is unreliable
-- "exact phrase 1" OR "exact phrase 2" - Complex boolean combos fail
-
-RESEARCH STRATEGY:
-- Start with broad queries, then narrow based on results
-- If a search returns 0 results, SIMPLIFY the query - don't add complexity
-- After 3-4 searches on the same topic, synthesize what you have rather than keep searching
-- For API documentation, search for the official SDK/client library on GitHub instead
-- For GitHub content, prefer fetching raw.githubusercontent.com URLs over github.com
-
-RESPONSE FORMAT:
-Returns a list of search results with:
-- Title: The title of the search result
-- Description: A brief description/snippet from the page
-- URL: The link to the resource
-
-LIMITATIONS:
-- Maximum of 20 results per query
-- May have rate limits if used excessively
-- DuckDuckGo HTML search has limited query syntax (see above)
-- Results may be less comprehensive than Google for niche technical queries
-
-TIPS:
-- Start with fewer results (5-10) for faster responses
-- Use specific queries to get more relevant results
-- Combine with the fetch tool to retrieve full page content from results
-
----
-
 ## File Operations
 
 _Tools for reading, writing, and modifying files._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`edit`](#edit) | file, default | Make a precise text replacement in a single file, or create/delete file content. One edit per call. |
-| [`find_replace`](#find_replace) | file, default | Performs find and replace operations across multiple files matching a glob pattern. |
+| [`edit`](#edit) | file, coding:default | Make a precise text replacement in a single file, or create/delete file content. One edit per call. |
+| [`find_replace`](#find_replace) | file, coding:default | Performs find and replace operations across multiple files matching a glob pattern. |
 | [`move_code`](#move_code) | file | Move or copy a block of code from one location to another, within the same file or across files. |
-| [`write`](#write) | file, default | File writing tool that creates or updates files in the filesystem. |
+| [`read_attachment`](#read_attachment) | file, readonly, coding:plan, coding:default | Read the contents of a file the user attached to the conversation. |
+| [`save_attachment`](#save_attachment) | file, coding:default | Write an already-stored attachment to a file on disk. |
+| [`view`](#view) | file, readonly, coding:plan, coding:default | File viewing tool that reads and displays the contents of files with line numbers, allowing you t... |
+| [`write`](#write) | file, coding:default | File writing tool that creates or updates files in the filesystem. |
 
 ### edit
 
-**Tags:** `file`, `default`
+**Tags:** `file`, `coding:default`
 
 Make a precise text replacement in a single file, or create/delete file content. One edit per call.
 
@@ -1164,7 +507,7 @@ Remember: This tool requires EXACT text matching including all whitespace and in
 
 ### find_replace
 
-**Tags:** `file`, `default`
+**Tags:** `file`, `coding:default`
 
 Performs find and replace operations across multiple files matching a glob pattern.
 WHEN TO USE:
@@ -1311,9 +654,114 @@ BEST PRACTICES:
 
 ---
 
+### read_attachment
+
+**Tags:** `file`, `readonly`, `coding:plan`, `coding:default`
+
+Read the contents of a file the user attached to the conversation.
+
+WHEN TO USE:
+- When the conversation references an attachment (by id) whose contents you have not yet seen.
+- Specifically for PDF attachments: their pages are read on demand through this tool.
+
+HOW TO USE:
+- Provide the attachment_id from the attachment reference.
+- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
+
+NOTES:
+- PDF pages are returned as a native document block the model can read directly (text and layout).
+- Image and text attachments are already provided inline in the conversation and do not need this tool.
+
+---
+
+### save_attachment
+
+**Tags:** `file`, `coding:default`
+
+Write an already-stored attachment to a file on disk.
+
+WHEN TO USE:
+- An image, PDF or file already exists as an attachment and the user now wants
+  it as a file in the project.
+- A previous generate_image call reported an attachment id but was not given
+  save_to, or its save_to write failed.
+
+WHY THIS RATHER THAN REGENERATING:
+- The bytes already exist and are addressable. Calling generate_image again
+  costs another billed generation AND produces a DIFFERENT image — image models
+  are not deterministic, so the file you would write is not the image the user
+  approved. Always prefer save_attachment for an image you already have.
+
+THIS IS NOT read_attachment:
+- read_attachment pulls the contents into the conversation so you can LOOK at
+  them. This tool moves the bytes server-side, straight from storage to the
+  file, without routing them through the conversation. Use this one to produce
+  a file; use that one to inspect contents.
+
+HOW TO USE:
+- Pass the attachment_id and the destination path. Relative paths resolve
+  against the working directory; use repo in a multi-repo project.
+
+NOTES:
+- Binary content is written byte-for-byte, so images and PDFs stay valid.
+- Parent directories are created as needed.
+
+---
+
+### view
+
+**Tags:** `file`, `readonly`, `coding:plan`, `coding:default`
+
+File viewing tool that reads and displays the contents of files with line numbers, allowing you to examine code, logs, or text data.
+
+WHEN TO USE:
+- Reading contents of specific files (source code, configs, logs)
+- Examining text-based file formats
+
+HOW TO USE:
+- Provide the file path
+- Optional: offset (starting line) and limit (number of lines)
+- For PDFs: use the pages parameter to read a page range (e.g. "1-5"). PDFs larger than 10 pages require a page range; max 20 pages per request.
+- Issue multiple view tools in a single request for improved performance
+
+FEATURES:
+- Displays file contents with line numbers for easy reference
+- Can read from any position in a file using the offset parameter
+- Handles large files by limiting the number of lines read
+- Automatically truncates very long lines for better display
+- Suggests similar file names when the requested file isn't found
+
+LIMITATIONS:
+- Maximum output size is 64KB (~16K tokens) - larger files are truncated with head+tail
+- Default reading limit is 1500 lines, which reads most source files whole
+- Lines longer than 500 characters are truncated
+- Cannot display binary files (executables, archives, etc.)
+- Images up to 5MB are supported (JPEG, PNG, GIF, BMP, SVG, WebP)
+- PDFs up to 5MB are supported; large PDFs are read a page range at a time via the pages parameter
+
+TIPS:
+- Prefer ONE whole-file read over several paged reads: each call costs a model
+  round-trip, while the read itself takes milliseconds. Omit offset/limit unless
+  the file is genuinely too big to arrive in one piece.
+- A file OVER ~64KB cannot arrive whole whatever limit you pass — the response is
+  capped and you get head+tail with the middle removed. Two calls settle it, and
+  neither is a search: read the head (default) to get the shape, then ONE offset
+  read for the region you need. The truncation notice tells you the total line
+  count, so you can aim the second call directly.
+- Do NOT fall back to repeated 'grep' on a large file to page through it by
+  symbol. Measured: eleven agents greping one 52KB proto one message at a time
+  was the single largest recoverable cost in a long run — each grep is a whole
+  turn and returns less context than one offset read.
+- Issue several view calls in a SINGLE message to read independent files at once
+- Use with Glob tool to first find files you want to view
+- For code exploration, first use Grep to find relevant files, then View to examine them
+- If output is truncated, use offset to read the remaining section
+
+---
+
 ### write
 
-**Tags:** `file`, `default`
+**Tags:** `file`, `coding:default`
 
 File writing tool that creates or updates files in the filesystem.
 
@@ -1366,11 +814,175 @@ _Tools for searching code, finding files, and fetching external content._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`shell`](#shell) | execution, shell, search, default | Execute shell commands for building, testing, and system operations in a stateless shell. |
+| [`code_context`](#code_context) | analysis, search, readonly, coding:plan, coding:default | Resolve a code symbol to its definition, callers, callees, and implementations in ONE call. |
+| [`fetch`](#fetch) | web, readonly, coding:plan, coding:default | Fetches content from a URL and returns it in the specified format. |
+| [`project_analyzer`](#project_analyzer) | analysis, readonly, coding:plan | Analyzes project structure, detects languages, build systems, and test frameworks |
+| [`shell`](#shell) | execution, shell, search, coding:default | Execute shell commands for building, testing, and system operations in a stateless shell. |
+| [`sourcegraph`](#sourcegraph) | analysis, readonly, coding:plan | Search code across public repositories using Sourcegraph's GraphQL API. |
+| [`websearch`](#websearch) | web, readonly, coding:plan, coding:default | Search the web using DuckDuckGo's HTML search. |
+
+### code_context
+
+**Tags:** `analysis`, `search`, `readonly`, `coding:plan`, `coding:default`
+
+Resolve a code symbol to its definition, callers, callees, and implementations in ONE call.
+
+⚠️ GO AND TYPESCRIPT/JAVASCRIPT ONLY. Call graphs are resolved by a language server
+(gopls for .go, tsserver for .ts/.tsx/.js/.jsx), and only those two are supported.
+For any other language — Python, Ruby, Java, Rust, C# — this falls back to a text
+search that CANNOT resolve call edges, and you should use bash + rg instead.
+
+Use this INSTEAD of a multi-step grep walk whenever the question is about a symbol's
+relationships. A grep walk costs one turn per hop and each turn re-derives what to
+search next; this returns the whole neighborhood at once.
+
+WHEN TO USE THIS TOOL:
+- "Who calls X?" / "What does X call?" — the answers grep cannot compute, because a
+  call site never names the receiver's type.
+- "What implements this interface?" — neither Go nor TypeScript records that at the
+  implementation site, so there is no text to search for.
+- "Where is X defined?" when the name is ambiguous across packages or modules.
+- Orienting in unfamiliar code: one call replaces the definition->callers->callees walk.
+
+LANGUAGE SUPPORT:
+- Go (.go) — resolved by gopls. Authoritative.
+- TypeScript / JavaScript (.ts .tsx .js .jsx .mts .cts) — resolved by tsserver from
+  the project's own TypeScript install. Authoritative.
+- Everything else (Python, Ruby, Java, ...) — a text engine reports call sites and
+  their enclosing function. Useful for locating, but approximate: it cannot see
+  dynamic dispatch and may include same-named methods on unrelated types. The
+  response labels this explicitly.
+
+WHEN NOT TO USE THIS TOOL:
+- Full-text or pattern search ("find every TODO", "which files mention retry") — use bash + rg.
+- Reading a file you already located — use view.
+
+PREFER THIS OVER GREP FOR ANY NAMED SYMBOL. If you are about to run
+`rg 'SomeFunction'` or `grep -n 'SomeType'` against Go or TypeScript,
+call this instead — it returns everything that search would have found plus the
+things it cannot find, in one call rather than one call per hop.
+
+HOW TO USE:
+Usually just: code_context(symbol: "ResolveDaemon"). The defaults are the common case —
+the definition, its source, and a 3-level call map, which is what "how does this work"
+actually needs. Every parameter below is optional.
+
+- symbol (REQUIRED): the identifier alone, unqualified and with no regex.
+  Good: "ResolveDaemon", "classifyDaemonWait", "DaemonRegistryService".
+  Bad: "svc.ResolveDaemon" (drop the receiver), "Resolve.*" (not a pattern),
+  "func ResolveDaemon" (just the name).
+
+- want: which relationships to return. Default "all".
+  "all"             definition + source + call map + implementations
+  "callers"         who reaches this — trace a request path inbound
+  "callees"         what this drives — see the work a function delegates
+  "implementations" on an interface: who implements it. On a concrete method:
+                    which interfaces it satisfies (the reverse lookup).
+  "definition"      still includes the graph; narrows the emphasis, not the answer.
+
+- depth: levels of call graph to expand as a tree. Default 3, max 5. Depth 3
+  answers "who ultimately triggers this" for typical handler->service->repo
+  layering. Use depth 1 when you only want the immediate neighbors as flat lists.
+
+- file: a path FRAGMENT to disambiguate when a name is declared many times
+  (`Execute` has dozens here). The response tells you when this is needed and
+  lists the alternatives — pass e.g. file: "daemon_router_nats.go".
+
+- include_source: first ~30 lines of the definition. On by default, because the
+  usual next question is "what does it do" and that would cost another turn.
+  Set false when you want only the graph.
+
+- scope: "project" (default) keeps results in this workspace INCLUDING sibling
+  repos linked into it, and excludes the standard library, node_modules and
+  vendored code. Use "all" only to deliberately read into a dependency.
+
+- repo: multi-repo projects only — "root" or a repo name. Omit otherwise.
+
+- limit: max entries per flat section. Default 25, max 200. The response says
+  when a section was truncated.
+
+OUTPUT:
+An ENGINE line naming what resolved the query and how far to trust it, a DEFINITION
+line with the first ~30 lines of source, then either a CALL MAP tree (depth > 1) or
+flat CALLERS / CALLEES / IMPLEMENTATIONS sections. Truncation is always stated.
+
+NOTES:
+- The first call in a large repo pays a one-time index cost (a few seconds); later calls are fast.
+- Results include test files; they are real callers.
+- If a language server is missing, the response says so and names the install command.
+
+---
+
+### fetch
+
+**Tags:** `web`, `readonly`, `coding:plan`, `coding:default`
+
+Fetches content from a URL and returns it in the specified format.
+
+Uses Mozilla Readability to automatically extract main page content, stripping navigation,
+footers, ads, and other chrome. Returns only the readable content for text and markdown formats.
+
+WHEN TO USE THIS TOOL:
+- Use when you need to download content from a URL
+- Helpful for retrieving documentation, API responses, or web content
+- Useful for getting external information to assist with tasks
+
+HOW TO USE:
+- Provide the URL to fetch content from
+- Specify the desired output format (text, markdown, or html)
+- Optionally set a timeout for the request
+
+FEATURES:
+- Automatic content extraction using Mozilla Readability (strips nav, ads, footers)
+- Supports three output formats: text, markdown, and html
+- Automatically handles HTTP redirects
+- Detects likely JavaScript-rendered pages and warns you
+- Sets reasonable timeouts to prevent hanging
+
+PARAMETERS:
+- max_size: Maximum bytes to fetch (default: 16000, ~16KB)
+  Prevents downloading huge files that could overwhelm context
+
+IMPORTANT LIMITATIONS:
+- Cannot render JavaScript. Single-page apps (SPAs) will return little or no content.
+  The response metadata will include possible_js_rendered=true when this is detected.
+  For JS-heavy sites, consider using browser tools instead.
+- Default maximum response size is 16KB (use max_size to adjust)
+- Only supports HTTP and HTTPS protocols
+- Cannot handle authentication or cookies
+- Some websites may block automated requests
+
+TIPS FOR BETTER RESULTS:
+- For GitHub repos, use raw.githubusercontent.com URLs instead of github.com
+  (e.g., https://raw.githubusercontent.com/org/repo/main/README.md)
+- For API docs that are JS-rendered SPAs, look for the OpenAPI/Swagger JSON spec URL instead
+- Use text or markdown format for documentation (html returns raw markup with all chrome)
+- If the response says possible_js_rendered=true, the page needs JavaScript to render.
+  Try finding an alternative URL, a raw content source, or use browser tools.
+- Adjust max_size for larger documents (but consider context limits)
+
+RESPONSE METADATA:
+- content_length: Size of the extracted content
+- raw_html_size: Size of the original HTML before extraction (for HTML pages)
+- truncated: Whether content was truncated to fit max_size
+- encoding_used: The format that was applied
+- page_title: Page title extracted by Readability (when available)
+- possible_js_rendered: True if the page appears to be JavaScript-rendered (very little content extracted)
+- used_readability: True if Readability content extraction was applied
+
+---
+
+### project_analyzer
+
+**Tags:** `analysis`, `readonly`, `coding:plan`
+
+Analyzes project structure, detects languages, build systems, and test frameworks
+
+---
 
 ### shell
 
-**Tags:** `execution`, `shell`, `search`, `default`
+**Tags:** `execution`, `shell`, `search`, `coding:default`
 
 Execute shell commands for building, testing, and system operations in a stateless shell.
 
@@ -1488,6 +1100,176 @@ cd /foo/bar && pytest tests
 Important:
 - Return an empty response - the user will see the output directly
 - Never update git config
+
+---
+
+### sourcegraph
+
+**Tags:** `analysis`, `readonly`, `coding:plan`
+
+Search code across public repositories using Sourcegraph's GraphQL API.
+
+WHEN TO USE THIS TOOL:
+- Use when you need to find code examples or implementations across public repositories
+- Helpful for researching how others have solved similar problems
+- Useful for discovering patterns and best practices in open source code
+
+HOW TO USE:
+- Provide a search query using Sourcegraph's query syntax
+- Optionally specify the number of results to return (default: 10)
+- Optionally set a timeout for the request
+
+QUERY SYNTAX:
+- Basic search: "fmt.Println" searches for exact matches
+- File filters: "file:.go fmt.Println" limits to Go files
+- Repository filters: "repo:^github\.com/golang/go$ fmt.Println" limits to specific repos
+- Language filters: "lang:go fmt.Println" limits to Go code
+- Boolean operators: "fmt.Println AND log.Fatal" for combined terms
+- Regular expressions: "fmt\.(Print|Printf|Println)" for pattern matching
+- Quoted strings: "\"exact phrase\"" for exact phrase matching
+- Exclude filters: "-file:test" or "-repo:forks" to exclude matches
+
+ADVANCED FILTERS:
+- Repository filters:
+  * "repo:name" - Match repositories with name containing "name"
+  * "repo:^github\.com/org/repo$" - Exact repository match
+  * "repo:org/repo@branch" - Search specific branch
+  * "repo:org/repo rev:branch" - Alternative branch syntax
+  * "-repo:name" - Exclude repositories
+  * "fork:yes" or "fork:only" - Include or only show forks
+  * "archived:yes" or "archived:only" - Include or only show archived repos
+  * "visibility:public" or "visibility:private" - Filter by visibility
+
+- File filters:
+  * "file:\.js$" - Files with .js extension
+  * "file:internal/" - Files in internal directory
+  * "-file:test" - Exclude test files
+  * "file:has.content(Copyright)" - Files containing "Copyright"
+  * "file:has.contributor([email protected])" - Files with specific contributor
+
+- Content filters:
+  * "content:\"exact string\"" - Search for exact string
+  * "-content:\"unwanted\"" - Exclude files with unwanted content
+  * "case:yes" - Case-sensitive search
+
+- Type filters:
+  * "type:symbol" - Search for symbols (functions, classes, etc.)
+  * "type:file" - Search file content only
+  * "type:path" - Search filenames only
+  * "type:diff" - Search code changes
+  * "type:commit" - Search commit messages
+
+- Commit/diff search:
+  * "after:\"1 month ago\"" - Commits after date
+  * "before:\"2023-01-01\"" - Commits before date
+  * "author:name" - Commits by author
+  * "message:\"fix bug\"" - Commits with message
+
+- Result selection:
+  * "select:repo" - Show only repository names
+  * "select:file" - Show only file paths
+  * "select:content" - Show only matching content
+  * "select:symbol" - Show only matching symbols
+
+- Result control:
+  * "count:100" - Return up to 100 results
+  * "count:all" - Return all results
+  * "timeout:30s" - Set search timeout
+
+EXAMPLES:
+- "file:.go context.WithTimeout" - Find Go code using context.WithTimeout
+- "lang:typescript useState type:symbol" - Find TypeScript React useState hooks
+- "repo:^github\.com/kubernetes/kubernetes$ pod list type:file" - Find Kubernetes files related to pod listing
+- "repo:sourcegraph/sourcegraph$ after:\"3 months ago\" type:diff database" - Recent changes to database code
+- "file:Dockerfile (alpine OR ubuntu) -content:alpine:latest" - Dockerfiles with specific base images
+- "repo:has.path(\.py) file:requirements.txt tensorflow" - Python projects using TensorFlow
+
+BOOLEAN OPERATORS:
+- "term1 AND term2" - Results containing both terms
+- "term1 OR term2" - Results containing either term
+- "term1 NOT term2" - Results with term1 but not term2
+- "term1 and (term2 or term3)" - Grouping with parentheses
+
+LIMITATIONS:
+- Only searches public repositories
+- Rate limits may apply
+- Complex queries may take longer to execute
+- Maximum of 20 results per query
+
+TIPS:
+- Use specific file extensions to narrow results
+- Add repo: filters for more targeted searches
+- Use type:symbol to find function/method definitions
+- Use type:file to find relevant files
+
+---
+
+### websearch
+
+**Tags:** `web`, `readonly`, `coding:plan`, `coding:default`
+
+Search the web using DuckDuckGo's HTML search.
+
+WHEN TO USE THIS TOOL:
+- Finding current information not available in the assistant's training data
+- Researching documentation, tutorials, or examples online
+- Looking up error messages or debugging information
+- Finding libraries, tools, or frameworks
+- Checking current status of services or projects
+- Discovering recent developments or news about technologies
+
+HOW TO USE:
+- Provide a search query as you would in a web browser
+- Optionally specify the number of results (default: 10, max: 20)
+
+QUERY GUIDELINES:
+- Use simple, natural language queries with specific keywords
+- Keep queries short and focused (3-8 words works best)
+- Use minus (-) to exclude terms: python tutorial -django
+- Quotes work for simple exact phrases: "react hooks" tutorial
+
+IMPORTANT - UNSUPPORTED QUERY SYNTAX:
+DuckDuckGo's HTML search does NOT support these features (they will return zero results):
+- Boolean operators: OR, AND (e.g. "PUT" OR "POST" will FAIL)
+- Complex quoted phrase combinations (multiple quoted phrases with operators)
+- site: operator is unreliable and often returns no results
+- filetype: operator is unreliable
+If you need boolean-style searches, run multiple simple queries instead.
+
+EXAMPLES OF GOOD QUERIES:
+- "golang context timeout example" - Simple keywords
+- "anthropic claude api documentation" - Natural language
+- "Customer.io transactional API" - Product + feature
+- "react hooks tutorial 2024" - Topic + timeframe
+
+EXAMPLES OF BAD QUERIES (will return 0 results):
+- "PUT" OR "POST" OR "PATCH" email content - Boolean operators don't work
+- site:customer.io/docs/api specific-page - site: is unreliable
+- "exact phrase 1" OR "exact phrase 2" - Complex boolean combos fail
+
+RESEARCH STRATEGY:
+- Start with broad queries, then narrow based on results
+- If a search returns 0 results, SIMPLIFY the query - don't add complexity
+- After 3-4 searches on the same topic, synthesize what you have rather than keep searching
+- For API documentation, search for the official SDK/client library on GitHub instead
+- For GitHub content, prefer fetching raw.githubusercontent.com URLs over github.com
+
+RESPONSE FORMAT:
+Returns a list of search results with:
+- Title: The title of the search result
+- Description: A brief description/snippet from the page
+- URL: The link to the resource
+
+LIMITATIONS:
+- Maximum of 20 results per query
+- May have rate limits if used excessively
+- DuckDuckGo HTML search has limited query syntax (see above)
+- Results may be less comprehensive than Google for niche technical queries
+
+TIPS:
+- Start with fewer results (5-10) for faster responses
+- Use specific queries to get more relevant results
+- Combine with the fetch tool to retrieve full page content from results
 
 ---
 
@@ -1903,11 +1685,14 @@ _Tools for executing shell commands and managing system processes._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`shell_kill`](#shell_kill) | execution, shell, default | Terminates a background process in the current workspace. |
+| [`shell_kill`](#shell_kill) | execution, shell, coding:default | Terminates a background process in the current workspace. |
+| [`shell_list`](#shell_list) | execution, shell, readonly, coding:plan, coding:default | Lists background processes in the current workspace. |
+| [`shell_output`](#shell_output) | execution, shell, readonly, coding:plan, coding:default | Retrieves output from a background process with pagination and regex filtering support. |
+| [`shell_wait`](#shell_wait) | execution, shell, readonly, coding:plan, coding:default | Block until a background process exits, then return its exit code and recent output. |
 
 ### shell_kill
 
-**Tags:** `execution`, `shell`, `default`
+**Tags:** `execution`, `shell`, `coding:default`
 
 Terminates a background process in the current workspace.
 
@@ -1931,6 +1716,170 @@ Example:
 
 ---
 
+### shell_list
+
+**Tags:** `execution`, `shell`, `readonly`, `coding:plan`, `coding:default`
+
+Lists background processes in the current workspace.
+
+WORKSPACE SCOPING:
+- Processes are scoped to the current workspace (worktree)
+- Multiple chats in the same workspace share the same process list
+- This enables coordination: one chat can start a server, another can check its status
+- Use shell_output to view output and shell_kill to terminate any workspace process
+
+Usage notes:
+- By default, shows only running processes in the current workspace
+- Use 'all: true' to include completed, failed, and killed processes
+- Process IDs can be used with shell_output and shell_kill tools
+
+Example outputs:
+- Running processes: Shows ID, command, and how long they've been running
+- Completed processes: Shows ID, command, exit code, and duration
+- Failed processes: Shows ID, command, exit code, and error indication
+
+Examples:
+1. List running processes: shell_list()
+2. List all processes including completed: shell_list(all=true)
+
+---
+
+### shell_output
+
+**Tags:** `execution`, `shell`, `readonly`, `coding:plan`, `coding:default`
+
+Retrieves output from a background process with pagination and regex filtering support.
+
+WORKSPACE SCOPING:
+- Can read output from any process in the current workspace, regardless of which chat started it
+- Multiple chats in the same workspace share process visibility
+- This enables monitoring: check on servers or builds started by other chats
+
+This tool allows you to check the stdout and stderr output of a process running in the background,
+with support for reading in chunks to handle large outputs efficiently and filtering with regex.
+
+Usage notes:
+- Process IDs are provided when you start a background process with run_in_background: true
+- The tool will indicate if the process is still running or has completed
+- If the process has completed, the exit code will be provided
+- Output is not cleared after reading - you can re-read from any position
+
+MODES OF OPERATION:
+
+1. Standard Pagination (default):
+   - offset: Start reading from byte N (default: 0)
+   - limit: Read up to N bytes (default: 16000)
+   - Can be combined: offset + limit
+
+2. Tail Mode:
+   - tail: Get last N lines
+   - Cannot be combined with: regex, offset, limit
+
+3. Regex Filter Mode:
+   - regex: Filter output to lines matching pattern
+   - When set, tool filters FIRST, then applies offset/limit to filtered results
+   - Can be combined with: offset, limit, regex_case_insensitive, regex_context_before, regex_context_after
+   - Cannot be combined with: tail
+   - Optional parameters:
+     * regex_case_insensitive: Case-insensitive matching
+     * regex_context_before: Include N lines before match (like grep -B)
+     * regex_context_after: Include N lines after match (like grep -A)
+
+PARAMETER COMPATIBILITY:
+Valid combinations:
+  - offset + limit (standard pagination)
+  - tail (alone)
+  - regex (alone)
+  - regex + offset + limit (filtered pagination)
+  - regex + regex_case_insensitive + regex_context_before + regex_context_after
+
+Invalid combinations (will error):
+  - tail + regex
+  - tail + offset
+  - tail + limit
+  - regex_case_insensitive without regex
+  - regex_context_before/after without regex
+
+Examples:
+1. Start a background process:
+   bash(command="npm run dev", run_in_background=true)
+
+2. Get first chunk:
+   shell_output(process_id="<id>")
+
+3. Get next chunk:
+   shell_output(process_id="<id>", offset=16000)
+
+4. Get last 100 lines:
+   shell_output(process_id="<id>", tail=100)
+
+5. Filter for errors:
+   shell_output(process_id="<id>", regex="ERROR|FATAL")
+
+6. Filter with context:
+   shell_output(process_id="<id>", regex="ERROR", regex_context_after=3)
+
+7. Filter and paginate:
+   shell_output(process_id="<id>", regex="WARN", offset=0, limit=10000)
+
+The response includes metadata:
+- has_more: true if more output is available
+- next_offset: where to start reading for the next chunk
+- total_available: total bytes available in the (filtered or original) output
+- filter_applied: true if regex was used
+- total_matches: number of matching lines (when filtered)
+- matches_in_response: number of matches in this chunk
+
+---
+
+### shell_wait
+
+**Tags:** `execution`, `shell`, `readonly`, `coding:plan`, `coding:default`
+
+Block until a background process exits, then return its exit code and recent output.
+
+WHY THIS EXISTS:
+Waiting by running a sleep command is the wrong tool and costs far more than it
+looks. `sleep 300; tail log` occupies a whole turn doing nothing, and it
+frequently exceeds the tool timeout and dies, losing the wait entirely. Polling
+shell_output in a loop is better but spends a model round-trip on every check.
+shell_wait blocks server-side: one tool call, no round-trips, no lost work.
+
+WHEN TO USE:
+- Waiting for a long build, test suite, or install to finish
+- Any time the next thing you do depends on a background process being done
+
+WHEN NOT TO USE:
+- A long-running server you never expect to exit (use shell_output to check on it)
+- You only want progress so far, not completion (use shell_output)
+
+HOW TO USE:
+1. Start the work in the background:
+   bash(command="npm test", run_in_background=true)
+2. Do any useful work that does not depend on the result — read the next file,
+   prepare the following edit. The process runs while you do.
+3. Wait for it:
+   shell_wait(process_id="<id>")
+
+TIMEOUTS ARE NOT FAILURES:
+If the process is still running when the budget elapses, this returns normally
+with timed_out: true and the process untouched. Call shell_wait again to keep
+waiting. It never kills the process — use shell_kill for that.
+
+Because a single call cannot block past the tool-execution ceiling, a very long
+build may need a few consecutive shell_wait calls. That is still dramatically
+cheaper than polling, and unlike a sleep it cannot lose the wait.
+
+RETURNS:
+- Exit code and status once the process has exited
+- The last tail_lines lines of output (default 50), so a passing build or a
+  failing test usually needs no follow-up call
+- timed_out: true, with no exit code, if the budget elapsed first
+
+Use shell_output for the full log, for pagination, or for regex filtering.
+
+---
+
 ## Other Tools
 
 _Miscellaneous tools and utilities._
@@ -1938,7 +1887,11 @@ _Miscellaneous tools and utilities._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`ask_user`](#ask_user) | - | Ask the user one or more questions and wait for their responses. Use this when you need to: |
+| [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
+| [`generate_image`](#generate_image) | media | Generate an image from a text description. |
+| [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
 | [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
@@ -1959,9 +1912,125 @@ Usage notes:
 
 ---
 
+### component_library
+
+**Tags:** `readonly`, `coding:plan`
+
+Component library with 61 production-ready React/TypeScript components for building UIs, dashboards, landing pages, pitch decks, charts, and diagrams.
+
+WHEN TO USE:
+- Building any UI — search for relevant components first
+- Creating charts or diagrams — components handle all coordinate math
+- Building pitch deck slides — use deck components as templates
+- Need a layout pattern — search by use case (dashboard, landing, portal, crm)
+- Building CRUD/admin interfaces — badge, modal, tabs, pagination, toast, etc.
+
+ACTIONS:
+- search: Find components with unified keyword search
+  Examples: search(query="crud table admin"), search(query="chart dashboard"), search(tag="deck")
+- get: Retrieve full source code for a specific component
+  Example: get(name="quadrant_chart")
+- install: Write a component file to disk at the given path
+  Example: install(name="sidebar_left", path="src/components/layouts/sidebar_left.tsx")
+- list: Browse all components (optionally filtered by tag or category)
+
+CATEGORIES: layouts (11), charts (6), diagrams (5), deck (7), ui (32)
+
+TAGS: layout, chart, diagram, deck, ui, landing, marketing, dashboard, analytics, admin, portal, crm, comparison, pricing, hero, form, auth, slide, presentation, saas, funnel, competitive, market, pipeline, process, team, docs, technical, crud, table, stats, detail, search, navigation, modal, dialog, filter, badge, status, tabs, pagination, toast, notification, avatar, dropdown, menu, skeleton, loading, toggle, switch, alert, banner, activity, feed, metric, breadcrumb
+
+OPTIONS:
+- forge_integrated: Set to true in forge-generated projects to get integration guidance for useUiStore, useEventBus, and useAuth
+
+CHARTS handle all coordinate math internally — pass data, get pixels. No spatial reasoning required.
+
+---
+
+### generate_image
+
+**Tags:** `media`
+
+Generate an image from a text description.
+
+WHEN TO USE:
+- The user asks for an image, illustration, diagram, icon, logo or mockup.
+- You need a visual asset to write into the project (pair with save_to).
+
+HOW TO USE:
+- Describe the image in detail. Prompt quality dominates the result: name the
+  subject, the style, the composition, the palette, and any text that must
+  appear. A one-line prompt gets a one-line-prompt image.
+- Use size to choose orientation, quality to trade cost for fidelity, and
+  background=transparent for anything that will sit on top of other content.
+- Set save_to to also write the file into the project. Without it the image is
+  still generated and returned; it just is not written to disk.
+
+WHAT YOU GET BACK:
+- The image itself, which you can see and describe or critique.
+- An attachment id. Cite that id when referring to this image later, and pass
+  it to read_attachment to look at it again in a future turn.
+
+NOTES:
+- One image per call. Call again to iterate; say what to change rather than
+  repeating the original prompt verbatim.
+- You do not choose the model. It is resolved from the user's configured image
+  model preference.
+
+---
+
+### load_tool
+
+**Tags:** `coding:default`, `readonly`, `coding:plan`
+
+Dynamically load a tool by name or search for available tools.
+
+Use this when you need a tool that isn't currently loaded. You can:
+- Load a specific tool by name: {"name": "sourcegraph"}
+- Search for tools by keyword: {"query": "workflow"}
+
+Loaded tools become available immediately on the next turn.
+
+---
+
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### skill
+
+**Tags:** `coding:default`, `readonly`, `coding:plan`
+
+Load skills — specialized knowledge and instructions for specific tasks.
+Skills provide detailed guidance on how to perform particular operations.
+Use 'list' to see available skills, 'load' to load a skill's instructions,
+or 'search' to find skills by keyword.
+When you load a skill, its instructions become available in the conversation.
+Skills may suggest tools to load — use the load_tool tool if suggested tools are needed.
+
+In multi-repo projects, skills are discovered recursively across all nested
+repos. Each skill's source repo is shown in brackets after its description
+(e.g. "[source: api]") and is reflected as a prefix on its path
+(e.g. "api/deploy" vs "web/deploy"). Use the prefixed path with 'load'.
+
+READING A LARGE SKILL (action=load):
+Every load ends with its total size and whether anything remains, so ONE call
+tells you if you have the whole skill. Do not page defensively — page only when
+a result says bytes remain, and it will name the exact call to continue with.
+
+A skill too large to deliver at once is read with these, mirroring shell_output:
+- section: fetch one markdown section by heading. Preferred — every load lists
+  the skill's sections, so this is usually one targeted call rather than
+  guessing byte ranges.
+- offset / limit: page through the current view by byte range.
+- regex (+ regex_case_insensitive, regex_context_before, regex_context_after):
+  deliver only matching lines, numbered, to locate content before fetching it.
+
+Examples:
+  skill(action="load", path="db")                      whole skill + size report
+  skill(action="load", path="db", section="Seeding")   one section
+  skill(action="load", path="db", offset=23000)        continue where a window ended
+  skill(action="load", path="db", regex="foreign key") find the relevant part first
 
 ---
 

@@ -49,7 +49,7 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		// placed no restriction on what may be loaded.
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
 		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, false, nil))
+			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -93,7 +93,7 @@ func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
 		// A preloaded tool runs normally.
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
 		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, false, nil))
+			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -450,7 +450,7 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 		// layer.
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
 		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView, "bash"}, nil, false, nil))
+			tools.ResolveToolAccess([]string{tools.ToolView, "bash"}, nil, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()
@@ -521,7 +521,7 @@ func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
 
 		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
 		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView}, nil, false, nil))
+			tools.ResolveToolAccess([]string{tools.ToolView}, nil, nil))
 		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
 
 		mockExecutor := newMockToolExecutor()

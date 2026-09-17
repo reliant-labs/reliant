@@ -216,7 +216,7 @@ func TestSaveAttachment_Errors(t *testing.T) {
 }
 
 // TestSaveAttachment_Registration pins the registry facts that decide who gets
-// this tool. Unlike generate_image it IS in tag:default: it costs nothing, and
+// this tool. Unlike generate_image it IS in tag:coding:default: it costs nothing, and
 // withholding it is precisely what forced a model to regenerate an image it
 // already held.
 func TestSaveAttachment_Registration(t *testing.T) {
@@ -232,12 +232,12 @@ func TestSaveAttachment_Registration(t *testing.T) {
 	require.NotNil(t, found, "save_attachment must be registered")
 	assert.Equal(t, ToolRunsOnServer, found.RunsOn,
 		"the bytes live in the database, which the daemon cannot reach")
-	assert.Contains(t, found.Tags, TagDefault,
+	assert.Contains(t, found.Tags, TagCodingDefault,
 		"saving an existing attachment is free and is the only alternative to regenerating")
 	assert.NotContains(t, found.Tags, TagReadOnly,
 		"it writes a file to the user's disk")
 
-	assert.Contains(t, ExpandToolFilter([]string{"tag:default"}, nil), ToolSaveAttachment)
+	assert.Contains(t, ExpandToolFilter([]string{"tag:coding:default"}, nil), ToolSaveAttachment)
 }
 
 // TestSaveAttachment_ParamSchema pins the agent-visible contract, including

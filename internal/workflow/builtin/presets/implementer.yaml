@@ -8,6 +8,6 @@ params:
   skills:
     - code-search
   tools:
-    - tag:default
+    - tag:coding:default
   spawn_presets:
     - researcher

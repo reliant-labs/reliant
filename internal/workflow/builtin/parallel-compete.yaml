@@ -68,7 +68,7 @@ inputs:
         description: Maximum agent loop iterations
       tools:
         type: tools
-        default: ["tag:default"]
+        default: ["tag:coding:default"]
         description: Available tools for implementers
       system_prompt:
         type: string

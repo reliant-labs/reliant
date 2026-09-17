@@ -45,7 +45,7 @@ nodes:
       You are a test assistant.
       This is a multi-line prompt.
     tools_config:
-      filter: "{{inputs.tools + ['spawn:builtin://agent']}}"
+      preloaded_tools: "{{inputs.tools + ['spawn:builtin://agent']}}"
 `
 
 	protoWf, err := parseDraftDefinitionV2([]byte(yamlWorkflow))
@@ -58,7 +58,7 @@ nodes:
 	assert.Equal(t, "{{inputs.model}}", modelSelectorRaw(callLLMArgs.Model))
 	assert.Contains(t, model.CelStringRaw(callLLMArgs.SystemPrompt), "You are a test assistant")
 	require.NotNil(t, callLLMArgs.GetToolsConfig())
-	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs.GetToolsConfig().GetFilter()))
+	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs.GetToolsConfig().GetPreloadedTools()))
 
 	yamlBytes, err := rpcWorkflowToYAML(protoWf)
 	require.NoError(t, err)
@@ -73,7 +73,7 @@ nodes:
 	assert.Equal(t, "{{inputs.model}}", modelSelectorRaw(callLLMArgs2.Model))
 	assert.Contains(t, model.CelStringRaw(callLLMArgs2.SystemPrompt), "You are a test assistant")
 	require.NotNil(t, callLLMArgs2.GetToolsConfig())
-	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs2.GetToolsConfig().GetFilter()))
+	assert.Equal(t, "{{inputs.tools + ['spawn:builtin://agent']}}", model.CelStringListExpr(callLLMArgs2.GetToolsConfig().GetPreloadedTools()))
 }
 
 func TestWorkflowRoundTrip_NestedLoopNode(t *testing.T) {

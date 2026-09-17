@@ -318,14 +318,13 @@ message Node {
 // API surface and break stored workflows. Keeping the schema in a generated Go
 // catalog gets the same build-time rejection without that coupling.
 message ToolsConfig {
-  // Filter is the OLD name for preloaded_tools, kept so existing workflows keep
-  // parsing. Prefer preloaded_tools; when both are set, preloaded_tools wins.
-  //
-  // The name is why this field is being retired: "filter" reads as a closed
-  // set, and reading it that way is what broke load_tool — a list an author
-  // wrote as a starting bundle was enforced as "these and nothing else", which
-  // made every tool outside it permanently unreachable.
-  CelStringList filter = 1;
+  // Field 1 was `filter`, the original name for preloaded_tools. It is gone
+  // rather than deprecated: two names for one list is what caused the outage.
+  // The rename was done correctly everywhere that EXPANDED the list, and
+  // missed in the one place that decided whether tools were enabled at all,
+  // which then read every migrated workflow as "no tools". An alias nobody is
+  // obliged to read is an alias somebody will forget.
+  reserved 1;
 
   // PreloadedTools are the tools handed to the model up front, with full
   // schemas, in its tool array. Names, tags ("tag:search"), globs, and
@@ -359,9 +358,14 @@ message ToolsConfig {
   // Spawn configs for child workflow delegation.
   // Each entry is a spawn:workflow(presets) specification.
   CelStringList spawn = 2;
-  // Permission level (readonly, mutating).
-  // Supersedes filter — tools exceeding this permission level are excluded
-  // even if they match the filter.
+  // Permission level. `mutating` is the only tier; `readonly` was removed
+  // because it promised containment it never delivered — the shell was granted
+  // at that tier too, so a "read-only" agent could always redirect into a
+  // file. A real read-only mode needs OS containment and will return on that
+  // footing.
+  //
+  // Applied AFTER the lists: a tool exceeding this tier is excluded even when
+  // preloaded_tools names it.
   CelString permission = 3;
   // Per-tool parameter bindings, keyed by tool name. Each value is that tool's
   // own parameter object: keys are the tool's parameter names, values are the

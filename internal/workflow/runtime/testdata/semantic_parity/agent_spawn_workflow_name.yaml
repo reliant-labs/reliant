@@ -27,7 +27,7 @@ simulator:
       planning_prompt: ""
       model:
         id: gpt-5
-      tools: [tag:default]
+      tools: [tag:coding:default]
       spawn_presets: [general, researcher]
       ask: false
     events:
@@ -51,7 +51,7 @@ runtime:
         planning_prompt: ""
         model:
           id: gpt-5
-        tools: [tag:default]
+        tools: [tag:coding:default]
         spawn_presets: [general, researcher]
       expected_spawn_ref: builtin://agent
       expected_spawn_presets: [general, researcher]

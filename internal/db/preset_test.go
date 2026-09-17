@@ -68,7 +68,7 @@ func TestPresetCRUD(t *testing.T) {
 			Slug:   "tool-preset",
 			Tag:    "agent",
 			Params: map[string]interface{}{
-				"tools": []interface{}{"tag:default"},
+				"tools": []interface{}{"tag:coding:default"},
 			},
 		}
 
@@ -81,8 +81,8 @@ func TestPresetCRUD(t *testing.T) {
 		if !ok {
 			t.Fatalf("Params[tools] has unexpected type %T", saved.Params["tools"])
 		}
-		if len(tools) != 1 || tools[0] != "tag:default" {
-			t.Errorf("Params[tools] = %v, want [tag:default]", tools)
+		if len(tools) != 1 || tools[0] != "tag:coding:default" {
+			t.Errorf("Params[tools] = %v, want [tag:coding:default]", tools)
 		}
 	})
 

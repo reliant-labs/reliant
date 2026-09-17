@@ -12,7 +12,7 @@ import (
 
 // scopeWithAccess records a workflow's declared access and returns a tool
 // context bound to the same scope.
-func scopeWithAccess(t *testing.T, name string, preloaded, loadable []string, declaredLoadable bool) (*rctx.ToolContext, string) {
+func scopeWithAccess(t *testing.T, name string, preloaded, loadable []string) (*rctx.ToolContext, string) {
 	t.Helper()
 
 	chatID := name
@@ -22,7 +22,7 @@ func scopeWithAccess(t *testing.T, name string, preloaded, loadable []string, de
 	store := GetLoadedToolsStore()
 	store.Clear(scopeKey)
 	store.SetPermission(scopeKey, PermissionMutating)
-	store.SetToolAccess(scopeKey, ResolveToolAccess(preloaded, loadable, declaredLoadable, nil))
+	store.SetToolAccess(scopeKey, ResolveToolAccess(preloaded, loadable, nil))
 	t.Cleanup(func() { store.Clear(scopeKey) })
 
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
@@ -31,8 +31,8 @@ func scopeWithAccess(t *testing.T, name string, preloaded, loadable []string, de
 
 // TestDefaultAgentCanStillLoadGenerateImage is the regression that shipped.
 //
-// The default coding agent preloads `tag:default`, and generate_image is
-// deliberately NOT TagDefault — it spends real money on a provider the user may
+// The default coding agent preloads `tag:coding:default`, and generate_image is
+// deliberately NOT TagCodingDefault — it spends real money on a provider the user may
 // not have configured. No builtin or preset names it anywhere, so load_tool is
 // its ONLY route.
 //
@@ -42,12 +42,13 @@ func scopeWithAccess(t *testing.T, name string, preloaded, loadable []string, de
 func TestDefaultAgentCanStillLoadGenerateImage(t *testing.T) {
 	t.Parallel()
 
-	defaultTools := ExpandToolFilter([]string{"tag:default"}, nil)
+	defaultTools := ExpandToolFilter([]string{"tag:coding:default"}, nil)
 	require.NotContains(t, defaultTools, ToolGenerateImage,
-		"precondition: generate_image is deliberately not in tag:default")
+		"precondition: generate_image is deliberately not in tag:coding:default")
 
 	// The default agent declares no loadable_tools, which means unrestricted.
-	ctx, _ := scopeWithAccess(t, "default-agent-"+t.Name(), []string{"tag:default"}, nil, false)
+	ctx, _ := scopeWithAccess(t, "default-agent-"+t.Name(),
+		[]string{"tag:coding:default"}, []string{LoadableWildcard})
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolGenerateImage})
@@ -56,19 +57,28 @@ func TestDefaultAgentCanStillLoadGenerateImage(t *testing.T) {
 		"the default agent must be able to opt into generate_image via load_tool: %s", resp.Content)
 }
 
-// TestUndeclaredLoadableMeansEverything states the default directly. Every
-// workflow written before loadable_tools existed relies on it.
-func TestUndeclaredLoadableMeansEverything(t *testing.T) {
+// TestUndeclaredLoadableMeansNothing is the inversion of what this file used
+// to assert, and the inversion is the point.
+//
+// Declaring nothing used to mean EVERYTHING: a node that configured two
+// preloaded tools silently granted load access to the whole registry,
+// generate_image included — a tool kept out of every bundle precisely because
+// calling it spends the user's money. "Say nothing, get everything" is the
+// wrong direction for a default, and it could not be stated without a reader
+// asking "wait, really?".
+//
+// Reaching everything is still one word: loadable_tools: ["*"].
+func TestUndeclaredLoadableMeansNothing(t *testing.T) {
 	t.Parallel()
 
-	ctx, _ := scopeWithAccess(t, "undeclared-"+t.Name(), []string{ToolView}, nil, false)
+	ctx, _ := scopeWithAccess(t, "undeclared-"+t.Name(), []string{ToolView}, nil)
 
 	tool := &loadToolTool{}
 	for _, name := range []string{ToolWrite, ToolEdit, ToolGenerateImage} {
 		resp, err := tool.Execute(ctx, LoadToolParams{Name: name})
 		require.NoError(t, err)
-		assert.False(t, resp.IsError,
-			"an undeclared loadable set must not restrict %q: %s", name, resp.Content)
+		assert.True(t, resp.IsError,
+			"a node that declared no loadable tools must not reach %q", name)
 	}
 }
 
@@ -78,7 +88,7 @@ func TestWildcardLoadableMeansEverything(t *testing.T) {
 	t.Parallel()
 
 	ctx, _ := scopeWithAccess(t, "wildcard-"+t.Name(),
-		[]string{ToolView}, []string{LoadableWildcard}, true)
+		[]string{ToolView}, []string{LoadableWildcard})
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolGenerateImage})
@@ -92,7 +102,7 @@ func TestDeclaredLoadableRestricts(t *testing.T) {
 	t.Parallel()
 
 	ctx, _ := scopeWithAccess(t, "restricted-"+t.Name(),
-		[]string{ToolView}, []string{ToolEdit}, true)
+		[]string{ToolView}, []string{ToolEdit})
 
 	tool := &loadToolTool{}
 
@@ -106,21 +116,36 @@ func TestDeclaredLoadableRestricts(t *testing.T) {
 		"a tool outside a DECLARED loadable set must be refused")
 }
 
-// TestEmptyLoadableIsNotUnset pins the distinction the API depends on: absent
-// means unrestricted, present-but-empty means nothing. Both arrive as len 0, so
-// only the declared flag separates them — and collapsing them would either
-// break every existing workflow or make "exactly what I preloaded"
-// inexpressible.
-func TestEmptyLoadableIsNotUnset(t *testing.T) {
+// TestAbsentAndEmptyLoadableAgree replaces a test that pinned them as
+// DIFFERENT — absent meaning unrestricted, empty meaning nothing.
+//
+// That distinction could not be carried by the slice, since both arrive as
+// len 0, so it needed a companion bool threaded through every caller; and it
+// was the one place in tool resolution where saying less got you more.
+// Collapsing the two is what lets the rule be one sentence — a workflow gets
+// what it declares — and lets the "was it declared?" flag disappear from four
+// signatures.
+func TestAbsentAndEmptyLoadableAgree(t *testing.T) {
 	t.Parallel()
 
-	ctx, _ := scopeWithAccess(t, "empty-"+t.Name(), []string{ToolView}, []string{}, true)
+	for _, tc := range []struct {
+		name     string
+		loadable []string
+	}{
+		{"absent", nil},
+		{"empty", []string{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, _ := scopeWithAccess(t, tc.name+"-"+t.Name(), []string{ToolView}, tc.loadable)
 
-	tool := &loadToolTool{}
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
-	require.NoError(t, err)
-	assert.True(t, resp.IsError,
-		"an empty-but-declared loadable set must allow nothing beyond the preloaded bundle")
+			tool := &loadToolTool{}
+			resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
+			require.NoError(t, err)
+			assert.True(t, resp.IsError,
+				"%s loadable must allow nothing beyond the preloaded bundle", tc.name)
+		})
+	}
 }
 
 // TestPreloadedToolIsAlwaysLoadable — refusing to "load" a tool the agent is
@@ -130,7 +155,7 @@ func TestPreloadedToolIsAlwaysLoadable(t *testing.T) {
 	t.Parallel()
 
 	ctx, _ := scopeWithAccess(t, "preloaded-"+t.Name(),
-		[]string{ToolWrite}, []string{ToolEdit}, true)
+		[]string{ToolWrite}, []string{ToolEdit})
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
@@ -148,7 +173,7 @@ func TestDiscoveryMatchesEnforcement(t *testing.T) {
 	t.Parallel()
 
 	ctx, scopeKey := scopeWithAccess(t, "discovery-"+t.Name(),
-		[]string{ToolView}, []string{ToolEdit, ToolLoadTool}, true)
+		[]string{ToolView}, []string{ToolEdit, ToolLoadTool})
 
 	advertised := DeferredToolNames(scopeKey, PermissionMutating, []string{ToolView, ToolLoadTool}, nil)
 	require.NotEmpty(t, advertised, "precondition: something must be advertised")
@@ -168,7 +193,8 @@ func TestDiscoveryMatchesEnforcement(t *testing.T) {
 func TestDiscoveryUnrestrictedAdvertisesBeyondThePreloadedSet(t *testing.T) {
 	t.Parallel()
 
-	_, scopeKey := scopeWithAccess(t, "wide-discovery-"+t.Name(), []string{ToolView}, nil, false)
+	_, scopeKey := scopeWithAccess(t, "wide-discovery-"+t.Name(),
+		[]string{ToolView}, []string{LoadableWildcard})
 
 	advertised := DeferredToolNames(scopeKey, PermissionMutating, []string{ToolView}, nil)
 	assert.Contains(t, advertised, ToolGenerateImage,
