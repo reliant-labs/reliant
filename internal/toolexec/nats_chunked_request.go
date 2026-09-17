@@ -130,6 +130,21 @@ func publishChunkedRequest(nc *nats.Conn, msg *nats.Msg) (int, error) {
 // request is too large even for chunking.
 var errRequestExceedsAbsoluteCap = errors.New("request exceeds absolute chunked-request cap")
 
+// payloadEdge returns a short excerpt from the head or tail of a payload, for
+// an error that must not quote megabytes of base64. The head shows whether the
+// envelope began correctly; the tail shows whether it was cut off, which is
+// what separates a truncated transfer from a malformed request.
+func payloadEdge(payload []byte, head bool) string {
+	const edge = 48
+	if len(payload) <= edge {
+		return string(payload)
+	}
+	if head {
+		return string(payload[:edge])
+	}
+	return string(payload[len(payload)-edge:])
+}
+
 // chunkAssembly is one in-progress reassembly.
 type chunkAssembly struct {
 	buf        []byte

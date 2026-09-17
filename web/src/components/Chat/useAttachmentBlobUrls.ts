@@ -37,13 +37,28 @@ export function useAttachmentBlobUrls(
   const blobUrlsRef = useRef<Map<string, string>>(blobUrls);
   blobUrlsRef.current = blobUrls;
 
+  // Both callers build their array during render — `.filter()` in
+  // MessageGeneratedImages, `.flatMap()` inside a `segments.map()` callback in
+  // ChatMessage — so the reference changes every render and neither can hoist
+  // it into a useMemo (the ChatMessage one sits in a loop body, where hooks are
+  // illegal). Keying the effect on the array identity therefore re-ran it on
+  // every render; the ids are what the effect actually depends on.
+  const imageIdsKey = (attachments || [])
+    .filter((attachment) => isImageMimeType(attachment.mimeType))
+    .map((attachment) => attachment.id)
+    .join(",");
+
+  // Read through a ref so the array itself is not a dependency.
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
+
   useEffect(() => {
     let cancelled = false;
 
     const loadImages = async () => {
       const loaded = new Map<string, string>();
 
-      for (const attachment of attachments || []) {
+      for (const attachment of attachmentsRef.current || []) {
         if (cancelled) break;
         if (!isImageMimeType(attachment.mimeType)) continue;
         if (blobUrlsRef.current.has(attachment.id)) continue;
@@ -72,12 +87,24 @@ export function useAttachmentBlobUrls(
 
     void loadImages();
 
+    // Only the in-flight load is cancelled here. Revoking on every effect run
+    // destroyed URLs that the <img> tags were still displaying, and clearing
+    // blobUrlsRef defeated the "already loaded" guard above, so each run
+    // refetched everything it had just fetched.
     return () => {
       cancelled = true;
-      blobUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
-      blobUrlsRef.current = new Map();
     };
-  }, [attachments]);
+  }, [imageIdsKey]);
+
+  // The blob URLs are owned for the component's lifetime, so they are released
+  // on unmount — not when the effect happens to re-run.
+  useEffect(() => {
+    const urls = blobUrlsRef;
+    return () => {
+      urls.current.forEach((url) => URL.revokeObjectURL(url));
+      urls.current = new Map();
+    };
+  }, []);
 
   return { blobUrls, failedIds };
 }
