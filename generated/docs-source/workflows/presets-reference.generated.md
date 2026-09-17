@@ -21,12 +21,12 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 | `code_reviewer` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Code review orchestrator that spawns specialized reviewers for comprehensive ... |
 | `debug` | `tags:flagship` | `view`, `tag:shell`, `code_context` | Debugging orchestrator that coordinates research and testing to isolate bugs ... |
 | `documentation` | `tags:moderate` | `view`, `write`, `edit`, `tag:shell`, `fetch` | Documentation specialist creating comprehensive, narrative-driven technical d... |
-| `forge` | `tags:flagship` | `tag:default` (+13 more) | Balanced general-purpose agent for Forge app generation workflows with full t... |
-| `forge_implementer` | `tags:moderate` | `tag:default`, `component_library` | Implementation specialist for a single seam of a Forge app — same tier as `... |
-| `general` | `tags:flagship` | `tag:default` (+2 more) | Balanced general-purpose agent with full tool access including file modificat... |
+| `forge` | `tags:flagship` | `tag:coding:default` (+13 more) | Balanced general-purpose agent for Forge app generation workflows with full t... |
+| `forge_implementer` | `tags:moderate` | `tag:coding:default`, `component_library` | Implementation specialist for a single seam of a Forge app — same tier as `... |
+| `general` | `tags:flagship` | `tag:coding:default` (+2 more) | Balanced general-purpose agent with full tool access including file modificat... |
 | `git` | `tags:fast` | `tag:shell`, `view` | Git specialist for commits, branching, and version control operations - loads... |
-| `implementer` | `tags:flagship` | `tag:default` | Implementation specialist for well-specified code changes — follows detaile... |
-| `migrate` | `tags:flagship` | `tag:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
+| `implementer` | `tags:flagship` | `tag:coding:default` | Implementation specialist for well-specified code changes — follows detaile... |
+| `migrate` | `tags:flagship` | `tag:coding:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
 | `planner` | `tags:flagship` | `view`, `tag:shell`, `code_context`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
 | `refactor` | `tags:moderate` | `view` (+6 more) | Code refactoring specialist who reorganizes and improves code structure while... |
 | `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Research and analysis specialist conducting comprehensive investigations of t... |
@@ -83,7 +83,7 @@ Balanced general-purpose agent for Forge app generation workflows with full tool
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `tag:default`, `ask_user`, `tag:web`, `mcp__chrome-devtools__take_screenshot`, `mcp__chrome-devtools__take_snapshot`, `mcp__chrome-devtools__new_page`, `mcp__chrome-devtools__select_page`, `mcp__chrome-devtools__list_pages`, `mcp__chrome-devtools__list_console_messages`, `mcp__chrome-devtools__click`, `mcp__chrome-devtools__fill`, `mcp__chrome-devtools__press_key`, `mcp__chrome-devtools__evaluate_script`, `component_library` |
+| **Tools** | `tag:coding:default`, `ask_user`, `tag:web`, `mcp__chrome-devtools__take_screenshot`, `mcp__chrome-devtools__take_snapshot`, `mcp__chrome-devtools__new_page`, `mcp__chrome-devtools__select_page`, `mcp__chrome-devtools__list_pages`, `mcp__chrome-devtools__list_console_messages`, `mcp__chrome-devtools__click`, `mcp__chrome-devtools__fill`, `mcp__chrome-devtools__press_key`, `mcp__chrome-devtools__evaluate_script`, `component_library` |
 | **Spawn Presets** | `general`, `forge`, `researcher`, `planner`, `implementer`, `forge_implementer`, `code_reviewer`, `documentation`, `refactor`, `debug`, `tester`, `git`, `ux` |
 
 ---
@@ -96,7 +96,7 @@ Implementation specialist for a single seam of a Forge app — same tier as `imp
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `tag:default`, `component_library` |
+| **Tools** | `tag:coding:default`, `component_library` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -109,7 +109,7 @@ Balanced general-purpose agent with full tool access including file modification
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `tag:default`, `mcp__reliant-docs__search_reliant`, `mcp__reliant-docs__query_docs_filesystem_reliant` |
+| **Tools** | `tag:coding:default`, `mcp__reliant-docs__search_reliant`, `mcp__reliant-docs__query_docs_filesystem_reliant` |
 | **Spawn Presets** | `general`, `researcher`, `planner`, `implementer`, `code_reviewer`, `documentation`, `refactor`, `debug`, `tester`, `git`, `ux` |
 
 ---
@@ -134,7 +134,7 @@ Implementation specialist for well-specified code changes — follows detailed i
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `tag:default` |
+| **Tools** | `tag:coding:default` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -147,7 +147,7 @@ Guided migration assistant for moving from Claude Code, Cursor, Codex, or Windsu
 |-----------|-------|
 | **Model** | `tags:flagship` |
 | **Tag** | `agent` |
-| **Tools** | `tag:default` |
+| **Tools** | `tag:coding:default` |
 | **Spawn Presets** | `general`, `researcher`, `planner`, `implementer`, `documentation`, `refactor`, `tester`, `debug` |
 
 ---

@@ -548,7 +548,7 @@ func TestShellTagCarriesTheToolsTheShellToolTellsAgentsToUse(t *testing.T) {
 	}
 
 	// The inverse has to hold too, or `!tag:shell` stops meaning "no shell".
-	excluded := tools.ExpandToolFilter([]string{"tag:default", "!tag:shell"}, nil)
+	excluded := tools.ExpandToolFilter([]string{"tag:coding:default", "!tag:shell"}, nil)
 	for _, name := range excluded {
 		require.NotContains(t, []string{tools.ShellToolName, tools.ToolShellOutput, tools.ToolShellList, tools.ToolShellKill}, name,
 			fmt.Sprintf("!tag:shell must remove the whole family, but %q survived", name))

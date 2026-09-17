@@ -24,7 +24,7 @@ func newLoadableCtx(t *testing.T, permission string, loadable []string) *rctx.To
 	store := GetLoadedToolsStore()
 	store.Clear(scopeKey)
 	store.SetPermission(scopeKey, permission)
-	store.SetToolAccess(scopeKey, ResolveToolAccess([]string{ToolView}, loadable, true, nil))
+	store.SetToolAccess(scopeKey, ResolveToolAccess([]string{ToolView}, loadable, nil))
 	t.Cleanup(func() { store.Clear(scopeKey) })
 
 	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
@@ -104,7 +104,9 @@ func TestLoadTool_MCPUnrestrictedLoads(t *testing.T) {
 	store := GetLoadedToolsStore()
 	store.Clear(scopeKey)
 	store.SetPermission(scopeKey, PermissionMutating)
-	store.SetToolAccess(scopeKey, ResolveToolAccess([]string{ToolView}, nil, false, nil))
+	// "Unrestricted" is now something a workflow SAYS rather than something it
+	// gets by omission — the wildcard is how the shipped workflows spell it.
+	store.SetToolAccess(scopeKey, ResolveToolAccess([]string{ToolView}, []string{LoadableWildcard}, nil))
 	store.SetAvailableMCPTools(scopeKey, []MCPToolInfo{
 		{Name: mcpName, Description: "Capture a screenshot"},
 	})

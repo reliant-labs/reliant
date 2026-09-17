@@ -32,7 +32,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default]
+        filter: [tag:coding:default]
         tools: "{{inputs.tool_params}}"
 `)
 	for _, e := range result.Errors() {
@@ -58,7 +58,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default]
+        filter: [tag:coding:default]
         tools:
           generate_image: "{{inputs.img}}"
           no_such_tool:
@@ -90,7 +90,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default]
+        filter: [tag:coding:default]
         tools:
           generate_image:
             not_a_real_param: 1

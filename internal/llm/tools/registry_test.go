@@ -23,8 +23,8 @@ func TestExpandToolFilter(t *testing.T) {
 			expectNotContains: []string{"view", "edit", ShellToolName, "mcp__test__foo"},
 		},
 		{
-			name:           "tag:default returns default tools",
-			filter:         []string{"tag:default"},
+			name:           "tag:coding:default returns default tools",
+			filter:         []string{"tag:coding:default"},
 			mcpTools:       []string{"mcp__test__foo"},
 			expectContains: []string{"view", "edit", ShellToolName},
 		},
@@ -60,8 +60,8 @@ func TestExpandToolFilter(t *testing.T) {
 			expectNotContains: []string{"write", "edit", "find_replace", ShellToolName, "worktree", "move_code"},
 		},
 		{
-			name:              "tag:plan includes planning mode tools",
-			filter:            []string{"tag:plan"},
+			name:              "tag:coding:plan includes planning mode tools",
+			filter:            []string{"tag:coding:plan"},
 			mcpTools:          []string{},
 			expectContains:    []string{"view", "fetch", "websearch", "create_plan", "update_plan", "get_plan", "list_tasks", "add_task", "update_task", "add_dependency", "remove_dependency", "list_ready_tasks"},
 			expectNotContains: []string{"write", "edit", "find_replace", ShellToolName, "worktree", "move_code"},
@@ -182,7 +182,7 @@ func TestExpandToolFilterDeduplication(t *testing.T) {
 		},
 		{
 			name:   "overlapping tags",
-			filter: []string{"tag:file", "tag:default"},
+			filter: []string{"tag:file", "tag:coding:default"},
 		},
 		{
 			name:   "explicit tool specified twice",
@@ -203,7 +203,7 @@ func TestExpandToolFilterDeduplication(t *testing.T) {
 			unique := make(map[string]bool)
 			for _, name := range result {
 				if unique[name] {
-					t.Errorf("Duplicate tool found: %q. Filter: %v, Result: %v", name, tt.filter, result)
+					t.Errorf("Duplicate tool found: %q. PreloadedTools: %v, Result: %v", name, tt.filter, result)
 				}
 				unique[name] = true
 			}
@@ -217,9 +217,9 @@ func TestExpandToolFilterDeduplication(t *testing.T) {
 
 func TestTagDefault(t *testing.T) {
 	t.Parallel()
-	// Verify that tag:default includes the expected default tools
+	// Verify that tag:coding:default includes the expected default tools
 	mcpTools := []string{"mcp__test__foo"}
-	result := ExpandToolFilter([]string{"tag:default"}, mcpTools)
+	result := ExpandToolFilter([]string{"tag:coding:default"}, mcpTools)
 
 	// Sort for consistent comparison
 	sort.Strings(result)
@@ -255,7 +255,7 @@ func TestTagDefault(t *testing.T) {
 	}
 	for _, deferred := range deferredTools {
 		if resultMap[deferred] {
-			t.Errorf("Deferred tool %q should NOT be in tag:default", deferred)
+			t.Errorf("Deferred tool %q should NOT be in tag:coding:default", deferred)
 		}
 	}
 
@@ -312,9 +312,9 @@ func TestTagReadOnly(t *testing.T) {
 
 func TestTagPlan(t *testing.T) {
 	t.Parallel()
-	// Verify that tag:plan includes all tools available in planning mode
+	// Verify that tag:coding:plan includes all tools available in planning mode
 	mcpTools := []string{}
-	result := ExpandToolFilter([]string{"tag:plan"}, mcpTools)
+	result := ExpandToolFilter([]string{"tag:coding:plan"}, mcpTools)
 
 	resultMap := make(map[string]bool)
 	for _, name := range result {
@@ -343,13 +343,13 @@ func TestTagPlan(t *testing.T) {
 
 	for _, expected := range expectedPlan {
 		if !resultMap[expected] && expected != "project_analyzer" { // project_analyzer may be disabled
-			t.Errorf("Expected planning tool %q to be included in tag:plan", expected)
+			t.Errorf("Expected planning tool %q to be included in tag:coding:plan", expected)
 		}
 	}
 
 	for _, notExpected := range notExpectedPlan {
 		if resultMap[notExpected] {
-			t.Errorf("Non-planning tool %q should NOT be included in tag:plan", notExpected)
+			t.Errorf("Non-planning tool %q should NOT be included in tag:coding:plan", notExpected)
 		}
 	}
 
@@ -403,7 +403,7 @@ func TestParseSpawnFilter(t *testing.T) {
 		},
 		{
 			name: "not a spawn prefix",
-			spec: "tag:default",
+			spec: "tag:coding:default",
 			want: nil,
 		},
 		{
@@ -535,7 +535,7 @@ func TestExpandToolFilterWithSpawn_AskUser(t *testing.T) {
 	mcpTools := []string{}
 
 	t.Run("ask_user in filter appears in ToolNames", func(t *testing.T) {
-		filter := []string{"tag:default", "ask_user"}
+		filter := []string{"tag:coding:default", "ask_user"}
 		result := ExpandToolFilterWithSpawn(filter, mcpTools)
 
 		found := false
@@ -551,7 +551,7 @@ func TestExpandToolFilterWithSpawn_AskUser(t *testing.T) {
 	})
 
 	t.Run("ask_user not in ToolNames when not in filter", func(t *testing.T) {
-		filter := []string{"tag:default"}
+		filter := []string{"tag:coding:default"}
 		result := ExpandToolFilterWithSpawn(filter, mcpTools)
 
 		for _, name := range result.ToolNames {
@@ -599,13 +599,13 @@ func TestExpandToolFilterMCPTags(t *testing.T) {
 		},
 		{
 			name:         "exclude tag:mcp",
-			filter:       []string{"tag:default", "tag:mcp", "!tag:mcp"},
+			filter:       []string{"tag:coding:default", "tag:mcp", "!tag:mcp"},
 			mcpToolNames: []string{"mcp__server__tool1", "mcp__server__tool2"},
 			wantExcluded: []string{"mcp__server__tool1", "mcp__server__tool2"},
 		},
 		{
 			name:         "include default exclude mcp",
-			filter:       []string{"tag:default", "!tag:mcp"},
+			filter:       []string{"tag:coding:default", "!tag:mcp"},
 			mcpToolNames: []string{"mcp__server__tool1"},
 			wantIncluded: []string{"view", "edit", ShellToolName}, // some default tools
 			wantExcluded: []string{"mcp__server__tool1"},

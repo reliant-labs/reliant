@@ -244,7 +244,7 @@ optional `id` (UUID/slug/name) described above except `create_workflow`, which m
 | `get_workflow_suggestions` | Get AI-powered suggestions for workflow improvements |
 
 Outside a workflow-building chat, these tools aren't preloaded, but `load_tool(query="workflow")`
-is always available (it's in `tag:default`) and loads the full set on demand.
+is always available (it's in `tag:coding:default`) and loads the full set on demand.
 
 ## CEL Reference
 

@@ -199,7 +199,7 @@ func TestPresetToolsAreValid(t *testing.T) {
 
 				// Tools can be:
 				// - Simple names: "view", "edit", "shell"
-				// - Tag references: "tag:default", "tag:search", "tag:mcp"
+				// - Tag references: "tag:coding:default", "tag:search", "tag:mcp"
 				// - External MCP names: "mcp__server__tool"
 				if strings.HasPrefix(toolStr, "spawn:") {
 					t.Errorf("spawn references should not be in tools list: %q", toolStr)

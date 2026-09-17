@@ -846,42 +846,6 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 	return bound.MCP
 }
 
-// toolsConfigEnablesTools reports whether a node's tools_config declares any
-// tools at all. A node that declares none gets an empty tool list and a model
-// that cannot call anything.
-//
-// IT MUST NAME EVERY TOOL-DECLARING FIELD. This gate used to read only
-// `filter`, which was the original name for what is now `preloaded_tools`.
-// When the builtin workflows were migrated to the new field names, the body
-// below learned to read both — but this gate did not, so `tc.GetFilter()` was
-// nil for every migrated workflow and tools were switched off wholesale.
-//
-// The failure is silent and does not look like a tools bug from the outside.
-// A model handed zero tools does not error; it DESCRIBES the call it wanted to
-// make, in prose — "[Tool call: bash]" plus a JSON blob, in a vocabulary
-// borrowed from whatever it was trained on rather than this product's actual
-// tool names. That renders as plain text (correctly — it IS text), and because
-// a text-only turn carries no tool_use, the agent turn then legitimately ends.
-// Two symptoms that look like a broken UI and a broken agent loop, from one
-// nil check.
-//
-// So: when a field that declares tools is added or renamed, it belongs here
-// too. TestBuiltinWorkflowsEnableTools pins that for the shipped workflows.
-func toolsConfigEnablesTools(tc *reliantv1.ToolsConfig) bool {
-	if tc == nil {
-		return false
-	}
-	// Set-but-empty is deliberately "enabled": it means "this node declares an
-	// empty toolset", which the expansion below resolves to zero tools anyway.
-	// Only an unset field means "not declared".
-	//
-	// loadable_tools counts. A node may preload nothing and expect the model to
-	// reach for tools through load_tool, and that still needs load_tool offered.
-	return tc.GetPreloadedTools() != nil ||
-		tc.GetLoadableTools() != nil ||
-		tc.GetFilter() != nil
-}
-
 // streamLLMResponse streams an LLM response to content_block_chunks (UI-only) and collects data in memory
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
@@ -889,9 +853,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	const maxSpawnDepth = 1
 	spawnDisabled := rtx.SpawnDepth >= maxSpawnDepth
 
-	// Resolve tools configuration
+	// Resolve tools configuration. There is no separate "are tools enabled"
+	// switch: the expanded list IS the answer, and a node that declares nothing
+	// expands to nothing. The tool-list assembly below records why a switch
+	// derived from field presence was the wrong shape.
 	tc := args.GetToolsConfig()
-	toolsEnabled := toolsConfigEnablesTools(tc)
 
 	// Resolve permission level (defaults to mutating when no tools_config)
 	permission := tools.PermissionMutating
@@ -1080,17 +1046,20 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	var availableTools []tools.Tool
 	var spawnPresets []string            // Track spawn presets for tool call validation
 	var toolsResult toolsWithSpawnResult // Hoisted for deferred tools announcement
-	if !toolsEnabled {
-		activity.GetLogger(ctx).Info("[CallLLM] Tools disabled")
+	if tc == nil {
+		// No tools_config is the same statement as an empty one: this node's
+		// model calls nothing. Formerly a `toolsEnabled` boolean said this,
+		// derived from whether a particular FIELD was set — a second encoding
+		// of a fact the expansion below already knows. The two could disagree,
+		// and did: when the list field was renamed, the gate kept checking the
+		// old name, read every migrated workflow as "no tools", and switched
+		// tools off product-wide. A model handed nothing does not error — it
+		// narrates the call it wanted in prose — so this surfaced as broken
+		// tool rendering and an agent that stopped early, naming neither tools
+		// nor the gate. One source of truth now: the list.
 		availableTools = []tools.Tool{}
 	} else {
-		// preloaded_tools is the current name; filter is its retired alias, kept
-		// so existing workflows keep working. preloaded_tools wins when both are
-		// present.
 		toolFilter := model.CelStringListValue(tc.GetPreloadedTools())
-		if len(toolFilter) == 0 {
-			toolFilter = model.CelStringListValue(tc.GetFilter())
-		}
 		// spawn_send is only meaningful to an agent that has a counterpart to
 		// message: a sub-agent replying to the parent that spawned it, or an
 		// orchestrator actually configured to spawn children. A plain root
@@ -1098,13 +1067,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// every request.
 		canSpawnChildren := !spawnDisabled && len(model.CelStringListValue(tc.GetSpawn())) > 0
 		mailboxReachable := rtx.SpawnDepth > 0 || canSpawnChildren
-		// loadable_tools bounds what load_tool may reach. Declaring nothing means
-		// unrestricted — the product's existing behavior, where an agent starts
-		// with a focused bundle and reaches for the rest on demand.
+		// loadable_tools bounds what load_tool may reach, and declaring nothing
+		// means nothing: reaching the whole registry is spelled ["*"].
 		loadable := model.CelStringListValue(tc.GetLoadableTools())
-		declaredLoadable := tc.GetLoadableTools() != nil
 
-		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, declaredLoadable, thread, mailboxReachable)
+		toolsResult = a.getAvailableToolsWithSpawn(ctx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, thread, mailboxReachable)
 		availableTools = toolsResult.Tools
 
 		// Emit warning to chat if MCP servers failed to load
@@ -1190,7 +1157,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	)
 
 	// Set deferred tools on the load_tool so its description advertises them
-	if toolsEnabled && len(availableTools) > 0 {
+	if len(availableTools) > 0 {
 		currentToolNames := make([]string, len(availableTools))
 		for i, t := range availableTools {
 			currentToolNames[i] = t.Name()
@@ -1948,7 +1915,7 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 // getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
 // Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
 // Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, loadableFilter []string, declaredLoadable bool, thread string, mailboxReachable bool) toolsWithSpawnResult {
+func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, loadableFilter []string, thread string, mailboxReachable bool) toolsWithSpawnResult {
 	if a.toolsFactory == nil {
 		return toolsWithSpawnResult{}
 	}
@@ -2049,12 +2016,23 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// loadable list that never named them would otherwise make the agent unable
 	// to use the very tool it discovers with — load_tool would refuse its own
 	// name.
+	//
+	// Resolved once, here, and read in two places: recorded as the scope's
+	// allow-set below, and consulted further down to decide whether load_tool
+	// is worth offering at all. That second read must see the AUTHOR'S
+	// declaration, which is why it cannot come from the struct after the two
+	// tools above are admitted into it — post-admission, a node that declared
+	// no loadable reach has a non-empty Loadable list and would look like it
+	// wanted discovery.
+	access := tools.ResolveToolAccess(toolFilter, loadableFilter, mcpToolNames)
+	declaredAnyLoadable := access.LoadableAll || len(access.Loadable) > 0
+
 	if chat != nil {
-		access := tools.ResolveToolAccess(toolFilter, loadableFilter, declaredLoadable, mcpToolNames)
-		if !access.LoadableAll {
-			access.Loadable = append(access.Loadable, tools.ToolLoadTool, tools.ToolSpawnSend)
+		scoped := access
+		if !scoped.LoadableAll {
+			scoped.Loadable = append(scoped.Loadable, tools.ToolLoadTool, tools.ToolSpawnSend)
 		}
-		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chat.ID, thread), access)
+		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chat.ID, thread), scoped)
 	}
 
 	// Include dynamically loaded tools (via load_tool). Intersected against what
@@ -2130,23 +2108,32 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 			"tools", unfound)
 	}
 
-	// load_tool must be available to EVERY tool-enabled agent so any preset —
-	// including restrictive read-only ones like code_reviewer whose filter omits
-	// tag:default — can discover and load additional tools on demand, built-in or
-	// MCP (e.g. an agent whose instructions require chrome-devtools can load
-	// mcp__chrome-devtools__* even though its filter never listed them). load_tool
-	// is read-only and each load is permission-gated per target tool, so granting
-	// it universally never escalates privileges. Skip only if the filter already
-	// pulled it in (via tag:default or an explicit entry).
-	loadToolPresent := false
-	for _, t := range toolsList {
-		if t.Name() == tools.ToolLoadTool {
-			loadToolPresent = true
-			break
+	// load_tool is offered when, and only when, this node declared something
+	// for it to reach. A workflow that lists `loadable_tools` wants discovery —
+	// including restrictive presets whose preloaded bundle is deliberately
+	// small, and MCP tools no list could name ahead of time
+	// (mcp__chrome-devtools__* and friends). A workflow that declared no
+	// loadable tools wants exactly what it preloaded, and handing it a
+	// discovery tool with an empty reach is a schema the model has to read and
+	// can never use.
+	//
+	// It used to be appended unconditionally, on the reasoning that load_tool
+	// is read-only and each load is permission-gated per target, so granting it
+	// everywhere escalates nothing. True in itself — but it made the tool list
+	// something a workflow could not fully state, and paired with a loadable
+	// default of "everything" it meant declaring a couple of tools silently
+	// granted reach to the whole registry.
+	if declaredAnyLoadable {
+		loadToolPresent := false
+		for _, t := range toolsList {
+			if t.Name() == tools.ToolLoadTool {
+				loadToolPresent = true
+				break
+			}
 		}
-	}
-	if !loadToolPresent {
-		toolsList = append(toolsList, projectScopedToolsFactory.LoadTool())
+		if !loadToolPresent {
+			toolsList = append(toolsList, projectScopedToolsFactory.LoadTool())
+		}
 	}
 
 	// spawn_send must reach a depth-1 sub-agent talking back to its parent

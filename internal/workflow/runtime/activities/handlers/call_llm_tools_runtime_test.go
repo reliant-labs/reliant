@@ -101,13 +101,13 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 	}{
 		{
 			name:               "default/preset tools available",
-			toolFilter:         []string{"tag:default"},
+			toolFilter:         []string{"tag:coding:default"},
 			expectContainsTool: "view",
 		},
 		{
 			name: "empty tools override does not wipe tools",
 			// Runtime receives preset/default tool filter after upstream input merge.
-			toolFilter:         []string{"tag:default"},
+			toolFilter:         []string{"tag:coding:default"},
 			expectContainsTool: "view",
 		},
 		{
@@ -138,7 +138,7 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 			}
 			if !tc.noToolsConfig {
 				callLLMArgs.ToolsConfig = &reliantv1.ToolsConfig{
-					Filter: celStringListLiteral(tc.toolFilter),
+					PreloadedTools: celStringListLiteral(tc.toolFilter),
 				}
 			}
 			input := ActivityInput{
@@ -164,12 +164,14 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 			}
 
 			if tc.expectExactlyOneTool != "" {
-				// load_tool rides along with every tool-enabled agent (see
-				// call_llm.go), so the filter's one tool plus load_tool is the
-				// whole set — naming both keeps this pinned to the filter
-				// rather than to a count.
+				// The declared tool is the WHOLE set. load_tool used to ride
+				// along with every tool-enabled agent, so this once expected it
+				// here too; it is now offered only when a node declares
+				// loadable_tools for it to reach, and these cases declare none.
+				// A discovery tool with nothing to discover is schema the model
+				// must read and can never use.
 				assert.ElementsMatch(t,
-					[]string{tc.expectExactlyOneTool, tools.ToolLoadTool},
+					[]string{tc.expectExactlyOneTool},
 					mockDriver.capturedTools)
 				return
 			}
@@ -207,7 +209,7 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 
 	// With ToolsConfig, filter and spawn are separate fields.
 	// filter contains tag-based tools, spawn contains spawn entries.
-	resolvedFilter := []string{"tag:default"}
+	resolvedFilter := []string{"tag:coding:default"}
 	resolvedSpawn := []string{"spawn:builtin://agent(general,researcher)"}
 
 	input := ActivityInput{
@@ -225,8 +227,8 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 						},
 					},
 					ToolsConfig: &reliantv1.ToolsConfig{
-						Filter: celStringListLiteral(resolvedFilter),
-						Spawn:  celStringListLiteral(resolvedSpawn),
+						PreloadedTools: celStringListLiteral(resolvedFilter),
+						Spawn:          celStringListLiteral(resolvedSpawn),
 					},
 				},
 			},
@@ -267,7 +269,7 @@ func TestCallLLMActivity_ResolvedToolFilterContainsNoTemplates(t *testing.T) {
 		nil,
 	)
 
-	resolvedToolFilter := []string{"tag:default", "spawn:builtin://agent(general,researcher)"}
+	resolvedToolFilter := []string{"tag:coding:default", "spawn:builtin://agent(general,researcher)"}
 	for _, filter := range resolvedToolFilter {
 		require.NotContains(t, filter, "{{")
 		require.NotContains(t, filter, "}}")
@@ -288,7 +290,7 @@ func TestCallLLMActivity_ResolvedToolFilterContainsNoTemplates(t *testing.T) {
 						},
 					},
 					ToolsConfig: &reliantv1.ToolsConfig{
-						Filter: celStringListLiteral(resolvedToolFilter),
+						PreloadedTools: celStringListLiteral(resolvedToolFilter),
 					},
 				},
 			},
@@ -371,7 +373,7 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 						},
 					},
 					ToolsConfig: &reliantv1.ToolsConfig{
-						Filter: celStringListLiteral([]string{"mcp__chrome-devtools__new_page"}),
+						PreloadedTools: celStringListLiteral([]string{"mcp__chrome-devtools__new_page"}),
 					},
 				},
 			},
@@ -382,9 +384,12 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 	err := h.ExecuteActivity(activityInstance.Execute, input, &output)
 	require.NoError(t, err)
 	require.Equal(t, worktreePath, resolver.lastProjectPath)
-	// This case declares no tools, so only the universal load_tool is handed
-	// over. The subject here is the path MCP enumeration is scoped to, above.
-	assert.Equal(t, []string{tools.ToolLoadTool}, mockDriver.capturedTools)
+	// The subject here is the path MCP enumeration is scoped to, asserted
+	// above. The tool list is incidental and empty: the only name declared is
+	// an MCP tool from a server this chat has not connected, so it expands to
+	// nothing — and nothing rides along any more, since load_tool is offered
+	// only where a node declared loadable_tools for it to reach.
+	assert.Empty(t, mockDriver.capturedTools)
 }
 
 // spawn_send rides along only where there is a counterpart to message: a
@@ -441,7 +446,7 @@ func TestCallLLMActivity_SpawnSendOfferedOnlyWhenMailboxReachable(t *testing.T) 
 			)
 
 			toolsConfig := &reliantv1.ToolsConfig{
-				Filter: celStringListLiteral([]string{"view"}),
+				PreloadedTools: celStringListLiteral([]string{"view"}),
 			}
 			if len(tc.spawnEntries) > 0 {
 				toolsConfig.Spawn = celStringListLiteral(tc.spawnEntries)

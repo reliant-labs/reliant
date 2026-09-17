@@ -73,7 +73,7 @@ nodes:
             model: "{{inputs.model}}"
             system_prompt: "PHASE-TWO-WORKER"
             tools_config:
-              filter: ["tag:default"]
+              preloaded_tools: ["tag:coding:default"]
               permission: "mutating"
         - id: execute_tools
           type: execute_tools

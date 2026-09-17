@@ -360,7 +360,7 @@ func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	customTools := []interface{}{"tag:default"}
+	customTools := []interface{}{"tag:coding:default"}
 	_, err = repo.CreatePreset(ctx, &db.Preset{
 		ID:        uuid.New().String(),
 		UserID:    userID,

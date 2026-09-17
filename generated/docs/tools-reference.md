@@ -20,17 +20,17 @@ Tools are organized by tags for filtering:
 | Tag | Description |
 |-----|-------------|
 | `tag:readonly` | Read-only tools (safe for planning mode) |
-| `tag:plan` | Planning mode tools (read-only + planning tools) |
+| `tag:coding:plan` | Planning mode tools (read-only + planning tools) |
 | `tag:file` | File operations |
 | `tag:search` | Search operations |
 | `tag:execution` | Command execution |
 | `tag:shell` | Shell tools (bash on Unix, powershell on Windows) |
 | `tag:web` | Web operations |
-| `tag:planning` | Planning and task management tools |
+| `tag:coding:planning` | Planning and task management tools |
 | `tag:analysis` | Analysis tools |
 | `tag:workflow` | Workflow builder tools |
 | `tag:mcp` | All MCP tools |
-| `tag:default` | Default toolset (commonly used tools) |
+| `tag:coding:default` | Default toolset (commonly used tools) |
 
 ---
 

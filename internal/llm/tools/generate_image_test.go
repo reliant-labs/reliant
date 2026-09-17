@@ -348,7 +348,7 @@ func TestGenerateImage_FilenameFollowsSniffedMIMEType(t *testing.T) {
 }
 
 // TestGenerateImage_Registration pins the registry facts that decide who gets
-// this tool: opt-in via tag:media, never in tag:default, and server-located.
+// this tool: opt-in via tag:media, never in tag:coding:default, and server-located.
 func TestGenerateImage_Registration(t *testing.T) {
 	t.Parallel()
 
@@ -363,11 +363,11 @@ func TestGenerateImage_Registration(t *testing.T) {
 	assert.Equal(t, ToolRunsOnServer, found.RunsOn,
 		"generation needs the database and network, which the daemon does not have")
 	assert.Contains(t, found.Tags, TagMedia)
-	assert.NotContains(t, found.Tags, TagDefault,
+	assert.NotContains(t, found.Tags, TagCodingDefault,
 		"generate_image costs money and must not appear in every coding workflow")
 
 	assert.Contains(t, ExpandToolFilter([]string{"tag:media"}, nil), ToolGenerateImage)
-	assert.NotContains(t, ExpandToolFilter([]string{"tag:default"}, nil), ToolGenerateImage)
+	assert.NotContains(t, ExpandToolFilter([]string{"tag:coding:default"}, nil), ToolGenerateImage)
 }
 
 // TestGenerateImage_ParamSchemaOffersNoModelChoice pins the deliberate absence

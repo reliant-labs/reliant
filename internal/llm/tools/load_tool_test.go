@@ -76,7 +76,7 @@ func TestLoadTool_SearchByQuery_ReturnsMatches(t *testing.T) {
 // TestLoadTool_GeneralPresetAgentCanReachWorkflowTools pins the requirement
 // that a plain chat gets the same workflow-building capability as the
 // dedicated workflow-builder UI. Workflow tools carry only TagWorkflow — they
-// are absent from tag:default and thus never in a general-preset agent's
+// are absent from tag:coding:default and thus never in a general-preset agent's
 // initial tool set — so the only path to them is load_tool. This asserts that
 // path is not blocked by permission gating (general runs at "mutating", not
 // "orchestrator") and that the tools are actually loadable, not just named in

@@ -67,7 +67,7 @@ inputs:
 
   tools:
     type: tools
-    default: ["tag:default", "ask_user"]
+    default: ["tag:coding:default", "ask_user"]
     description: |
       Tools the scoping agent gets. `ask_user` is what drives the conversation, so
       keep it in any override. Add `tag:web` (websearch + fetch) when the caller

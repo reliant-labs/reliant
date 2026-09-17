@@ -23,7 +23,7 @@ inputs:
 
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
     description: Available tools for the agent (empty = no tools)
   spawn_presets:
     type: preset
@@ -256,7 +256,7 @@ nodes:
             # to imply a guarantee it never made; a real read-only mode needs OS
             # containment and will return on that footing.
             tools_config:
-              preloaded_tools: "{{inputs.mode == 'plan' ? ['tag:plan', 'tag:shell'] : inputs.tools}}"
+              preloaded_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan', 'tag:shell'] : inputs.tools}}"
               loadable_tools: ["*"]
               spawn: "{{[spawn(workflow.name, inputs.spawn_presets)]}}"
               permission: mutating

@@ -56,7 +56,7 @@ func TestRequiresDaemon_NetworkOnlyAgentNeedsNoDaemon(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
 										Values: []string{"tag:web"},
@@ -88,7 +88,7 @@ func TestRequiresDaemon_ShellStillRequiresDaemon(t *testing.T) {
 				Args: &reliantv1.Node_CallLlm{
 					CallLlm: &reliantv1.CallLLMArgs{
 						ToolsConfig: &reliantv1.ToolsConfig{
-							Filter: &reliantv1.CelStringList{
+							PreloadedTools: &reliantv1.CelStringList{
 								Value: &reliantv1.CelStringList_Literal{
 									Literal: &reliantv1.StringList{
 										Values: []string{"shell"},

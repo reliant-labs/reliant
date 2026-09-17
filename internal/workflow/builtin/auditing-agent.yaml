@@ -37,7 +37,7 @@ inputs:
   tools:
     type: tools
     default:
-      - tag:default
+      - tag:coding:default
     description: Available tools for main agent
   spawn_presets:
     type: preset

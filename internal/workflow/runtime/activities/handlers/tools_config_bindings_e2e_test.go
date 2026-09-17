@@ -59,7 +59,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        filter: [tag:coding:default, generate_image]
         tools:
           generate_image:
             size: "1536x1024"
@@ -88,7 +88,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        filter: [tag:coding:default, generate_image]
         tools:
           generate_image:
             size: "1536x1024"
@@ -131,7 +131,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        filter: [tag:coding:default, generate_image]
         tools:
           generate_image:
             size: "{{inputs.image_size}}"
@@ -159,7 +159,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        filter: [tag:coding:default, generate_image]
         tools:
           generate_image:
             model: {tags: [image-gen], providers: [codex]}
@@ -189,7 +189,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default]
+        filter: [tag:coding:default]
 `)
 
 	scopes := resolveNodeToolBindings(t, source, nil)

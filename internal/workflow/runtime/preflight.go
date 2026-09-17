@@ -91,10 +91,23 @@ func requiresDaemonNode(node *reliantv1.Node, cfg *PreflightConfig) bool {
 		return true
 	}
 
-	// Check call_llm nodes for daemon-bound tools in tool_filter.
+	// Check call_llm nodes for daemon-bound tools.
+	//
+	// BOTH lists count. A tool the model can load on demand still has to run
+	// somewhere, so a workflow whose loadable set reaches daemon-bound tools
+	// needs a daemon just as much as one that preloads them.
+	//
+	// This read `GetToolsConfig().GetFilter()` until that field was deleted,
+	// and had been returning nil since the field was renamed — so this check
+	// silently answered "no daemon-bound tools" for every workflow, whatever
+	// it declared. Same rename, same silent nil, different blast radius: here
+	// it means a workflow that needs the user's machine is not recognised as
+	// needing it.
 	if nodeType == model.NodeTypeCallLLM {
 		if args := node.GetCallLlm(); args != nil {
-			if toolFilterHasDaemonTools(args.GetToolsConfig().GetFilter(), cfg) {
+			tc := args.GetToolsConfig()
+			if toolFilterHasDaemonTools(tc.GetPreloadedTools(), cfg) ||
+				toolFilterHasDaemonTools(tc.GetLoadableTools(), cfg) {
 				return true
 			}
 		}

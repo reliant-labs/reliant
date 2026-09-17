@@ -54,7 +54,7 @@ func loadBuiltin(t *testing.T, name string) *reliantv1.Workflow {
 // TestBuiltinAgentCanLoadAnyTool is the end-to-end guard for a regression that
 // shipped: the default coding agent must be able to reach generate_image.
 //
-// generate_image is deliberately not in tag:default — it spends real money on a
+// generate_image is deliberately not in tag:coding:default — it spends real money on a
 // provider the user may not have configured — and no builtin or preset names it
 // anywhere, so load_tool is its only route. Enforcing the preloaded bundle at
 // the load site closed that route and broke a shipped feature.
@@ -84,7 +84,7 @@ func TestBuiltinAgentPreloadsTheDefaultBundle(t *testing.T) {
 
 	require.NotNil(t, tc.GetPreloadedTools(), "builtin://agent must declare preloaded_tools")
 	assert.Contains(t, tc.GetPreloadedTools().GetExpr(), "inputs.tools",
-		"the non-plan branch must still come from inputs.tools, which defaults to tag:default")
+		"the non-plan branch must still come from inputs.tools, which defaults to tag:coding:default")
 }
 
 // TestAssistantBuiltinsDeclareLoadable keeps the fix from decaying. Every

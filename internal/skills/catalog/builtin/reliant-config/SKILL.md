@@ -495,7 +495,7 @@ params:
     - Performance issues
     - Code style consistency
   tools:
-  - tag:default
+  - tag:coding:default
   spawn_presets:
   - researcher
   temperature: 0.2
@@ -512,7 +512,7 @@ params:
 | `params.permission` | `readonly`, `mutating`, or `orchestrator` |
 | `params.model` | Use `tags: [flagship]`, `tags: [moderate]`, etc. Never hardcode model names. |
 | `params.system_prompt` | System instructions for the spawned agent |
-| `params.tools` | Tool access: `tag:default`, `tag:mcp`, etc. |
+| `params.tools` | Tool access: `tag:coding:default`, `tag:mcp`, etc. |
 | `params.spawn_presets` | Which presets this agent can use to spawn sub-agents |
 | `params.temperature` | Sampling temperature (0.0–1.0) |
 | `params.thinking_level` | `high`, `medium`, `low` |
@@ -532,7 +532,7 @@ params:
   system_prompt: |
     You specialize in our internal API patterns.
   tools:
-  - tag:default
+  - tag:coding:default
   spawn_presets:
   - researcher
   - general

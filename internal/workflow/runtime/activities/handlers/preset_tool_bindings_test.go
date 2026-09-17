@@ -62,7 +62,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        filter: [tag:coding:default, generate_image]
         tools: "{{inputs.tool_params}}"
 `
 
@@ -153,7 +153,7 @@ nodes:
     args:
       model: {tags: [flagship]}
       tools_config:
-        filter: [tag:default, generate_image]
+        filter: [tag:coding:default, generate_image]
         tools:
           generate_image: "{{inputs.image_params}}"
 `)

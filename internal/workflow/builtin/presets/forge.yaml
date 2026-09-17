@@ -21,7 +21,7 @@ params:
   - git
   - ux
   tools:
-  - tag:default   # Focused default toolset (~18 tools)
+  - tag:coding:default   # Focused default toolset (~18 tools)
   - ask_user      # Ask the human directly — scoping questions, product judgement calls
   - tag:web       # websearch + fetch — check how a real domain models its data
   - mcp__chrome-devtools__take_screenshot

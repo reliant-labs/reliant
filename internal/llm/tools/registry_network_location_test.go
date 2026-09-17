@@ -11,7 +11,7 @@ import "testing"
 // of the old marking was not just a wasted hop: RequiresDaemon (see
 // internal/workflow/runtime/preflight.go) treats any daemon-located tool in a
 // node's filter as proof the whole workflow needs a daemon, and both tools carry
-// TagDefault. That made `tag:default` — the most common filter there is — enough
+// TagCodingDefault. That made `tag:coding:default` — the most common filter there is — enough
 // to fire the preflight gate and refuse to start a workflow that never touches
 // the user's machine.
 //

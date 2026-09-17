@@ -403,7 +403,7 @@ nodes:
         tags: [flagship]
       system_prompt: You are helpful
       tools_config:
-        filter: [view, edit]
+        preloaded_tools: [view, edit]
         permission: readonly
 `
 	// `readonly` is the RETIRED permission tier, deliberately left in this
@@ -428,9 +428,9 @@ nodes:
 	if tc == nil {
 		t.Fatal("expected ToolsConfig")
 	}
-	toolFilter := model.CelStringListValue(tc.GetFilter())
+	toolFilter := model.CelStringListValue(tc.GetPreloadedTools())
 	if len(toolFilter) != 2 || toolFilter[0] != "view" || toolFilter[1] != "edit" {
-		t.Errorf("tools_config.filter: got %v", toolFilter)
+		t.Errorf("tools_config.preloaded_tools: got %v", toolFilter)
 	}
 	if tc.GetPermission().GetLiteral() != "readonly" {
 		t.Errorf("tools_config.permission: got %q", tc.GetPermission().GetLiteral())
@@ -1153,7 +1153,7 @@ name: test
 inputs:
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
 `
 	wf, err := ParseWorkflow([]byte(yaml))
 	if err != nil {
@@ -1394,7 +1394,7 @@ nodes:
         tags: [flagship]
       temperature: 0.7
       tools_config:
-        filter: ["tag:default"]
+        preloaded_tools: ["tag:coding:default"]
 edges:
   - from: llm
     default: done

@@ -17,7 +17,7 @@ params:
   # search.
   skills:
     - forge-libraries
-  # tag:default plus the component library (the charter requires a unit to search
+  # tag:coding:default plus the component library (the charter requires a unit to search
   # for a component before hand-rolling one).
   #
   # `load_tool` returns "available on your NEXT turn", so a tool an agent is
@@ -47,7 +47,7 @@ params:
   # attribute what it sees, and holds the full chrome grant plus a schema that
   # rejects a review submitting no snapshots.
   tools:
-    - tag:default
+    - tag:coding:default
     - component_library
   spawn_presets:
     - researcher

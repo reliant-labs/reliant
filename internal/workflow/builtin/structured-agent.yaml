@@ -31,7 +31,7 @@ inputs:
 
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
     description: Available tools for the agent
   system_prompt:
     type: string

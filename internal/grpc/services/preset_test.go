@@ -277,7 +277,7 @@ inputs:
     default: "orchestrator"
   tools:
     type: tools
-    default: ["tag:default"]
+    default: ["tag:coding:default"]
   skills:
     type: array
     default: []
@@ -373,7 +373,7 @@ func TestPresetService_CreatePreset(t *testing.T) {
 	})
 
 	t.Run("CreatePreset_PreservesToolParams", func(t *testing.T) {
-		toolParams, err := structpb.NewValue([]interface{}{"tag:default"})
+		toolParams, err := structpb.NewValue([]interface{}{"tag:coding:default"})
 		if err != nil {
 			t.Fatalf("failed to build tools value: %v", err)
 		}
@@ -399,7 +399,7 @@ func TestPresetService_CreatePreset(t *testing.T) {
 		if tools == nil || len(tools.Values) != 1 {
 			t.Fatalf("expected tools list of len 1, got %v", resp.Msg.Preset.Params["tools"])
 		}
-		if tools.Values[0].GetStringValue() != "tag:default" {
+		if tools.Values[0].GetStringValue() != "tag:coding:default" {
 			t.Errorf("unexpected tools list: %v", tools.Values)
 		}
 	})

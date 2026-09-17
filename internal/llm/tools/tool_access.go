@@ -11,7 +11,7 @@ const LoadableWildcard = "*"
 //
 // They are separate because collapsing them forces an omission to be read as
 // either permission or refusal, and whichever you choose is wrong for half of
-// all workflows. A list like ["tag:default"] is a starting bundle; it says
+// all workflows. A list like ["tag:coding:default"] is a starting bundle; it says
 // nothing about the tools outside it. Treating that omission as refusal is what
 // made generate_image — deliberately kept out of every default bundle because
 // it spends real money on a provider the user may not have configured —
@@ -57,19 +57,24 @@ func (a ToolAccess) CanLoad(name string) bool {
 
 // ResolveToolAccess expands a workflow's declared lists into the two sets.
 //
-// declaredLoadable distinguishes "the workflow said nothing" from "the workflow
-// said nothing is loadable". Absent resolves to ALL; an empty-but-present list
-// resolves to nothing, which is how a workflow says "exactly what I preloaded".
-// That distinction cannot be carried by the slice alone, since both arrive as
-// len 0.
-func ResolveToolAccess(preloaded []string, loadable []string, declaredLoadable bool, mcpToolNames []string) ToolAccess {
+// A WORKFLOW GETS WHAT IT DECLARES. An absent list and an empty list both mean
+// nothing, so nothing here has to distinguish them and no caller has to carry
+// a "was it declared?" flag alongside the slice.
+//
+// It used to. `declaredLoadable` separated "said nothing" from "said nothing is
+// loadable", and absent resolved to ALL — so a node that configured a couple of
+// preloaded tools silently also granted load access to every tool in the
+// registry, including ones deliberately left out of every bundle because they
+// cost money to call. Least privilege is the right default, and it is also the
+// only one that can be stated in a sentence.
+//
+// Reaching everything is still available; it just has to be asked for, with
+// `loadable_tools: ["*"]`. The builtin workflows already wrote that out —
+// there was a comment explaining that the intent should be visible rather than
+// inferred — so this promotes a convention they already followed into the rule.
+func ResolveToolAccess(preloaded []string, loadable []string, mcpToolNames []string) ToolAccess {
 	access := ToolAccess{
 		Preloaded: ExpandToolFilter(preloaded, mcpToolNames),
-	}
-
-	if !declaredLoadable {
-		access.LoadableAll = true
-		return access
 	}
 
 	for _, entry := range loadable {
