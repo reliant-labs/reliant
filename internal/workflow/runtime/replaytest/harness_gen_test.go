@@ -269,6 +269,25 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 		LastActive: now,
 	}), "create scenario project's main worktree")
 
+	// Stand in for the daemon's config-snapshot push.
+	//
+	// CreateProject seeds a placeholder project_configs row stamped
+	// config.SeedDaemonID, and a real daemon overwrites it on connect. This
+	// harness has no daemon (DaemonRouter is nil), so without this the row
+	// keeps the seed id forever and Config.SnapshotSynced stays false — which
+	// is a hard blocker, not a cosmetic gap: a node that preloads skills
+	// (builtin://agent's `implementer` preset requests code-search) treats an
+	// unsynced catalog as RETRYABLE, so CallLLM retries to its attempt limit
+	// and the workflow fails. Pushing an empty snapshot under a non-seed
+	// daemon id is the truthful hermetic answer: a daemon has reported, and
+	// this project genuinely has no skills, so the miss is permanent rather
+	// than not-yet-known.
+	require.NoError(t, s.Repo.UpsertProjectConfigRecord(ctx, &db.ProjectConfigRecord{
+		ProjectID: projectID,
+		DaemonID:  "replayfix-daemon-" + shortID(),
+		PushedAt:  now,
+	}), "seed synced (empty) project config snapshot")
+
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
 	executor := newLocalDaemonExecutor(toolsFactory)
 
@@ -487,8 +506,34 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 // encoding/json to keep the file layout stable. Event CONTENT (timestamps,
 // run IDs, DB-generated IDs inside payloads) necessarily differs between
 // generation runs — see fixtures/README.md.
+//
+// It also refuses to export a fixture whose scenario did not play its whole
+// script. A partially-consumed script means the recorded history is a shorter
+// shape than the scenario describes, and such a fixture still replays green —
+// so it silently pins the wrong contract instead of failing. See
+// ScriptedLLM.Consumed.
 func (h *Harness) ExportHistory(workflowID, name string) {
 	h.T.Helper()
+
+	// Exhausted means the loop asked for a turn the script did not have, so it
+	// got the SCRIPT EXHAUSTED filler instead of the intended reply. The
+	// scenarios already assert this, but with assert (not require), so the
+	// export still ran and overwrote a good fixture with a degenerate one —
+	// which is exactly how the turn-stealing regression reached main wearing a
+	// green suite. Refusing to write is the part that makes the check bite.
+	require.False(h.T, h.LLM.Exhausted(),
+		"fixture %s: the scenario ran past the end of its script, so at least one turn "+
+			"was the SCRIPT EXHAUSTED filler rather than the reply the scenario intended. "+
+			"Refusing to export. An auxiliary LLM request (title generation, compaction) "+
+			"consuming a scripted turn is the usual cause — see ScriptedLLM.StreamResponse.",
+		name)
+
+	require.Equal(h.T, h.LLM.Scripted(), h.LLM.Consumed(),
+		"fixture %s: scenario consumed %d of %d scripted turns — the exported history "+
+			"would pin a shorter shape than this scenario describes. An auxiliary LLM "+
+			"request (title generation, compaction) most likely consumed a turn; see "+
+			"ScriptedLLM.StreamResponse.",
+		name, h.LLM.Consumed(), h.LLM.Scripted())
 
 	ctx, cancel := context.WithTimeout(h.Ctx, 30*time.Second)
 	defer cancel()

@@ -99,6 +99,49 @@ Add a new fixture by adding a `TestGenerateFixture_*` scenario in
 (`e2e/stories/`) so the pinned history corresponds to a flow that is verified
 end-to-end.
 
+### The scripted LLM is shared — auxiliary requests must not consume turns
+
+A scenario's `Turn`s are for the AGENT LOOP. Other production code paths share
+the same injected driver and are not part of that sequence: the compaction
+summary, and **chat title generation**, which `CreateChat` dispatches as its
+own workflow that races the agent loop. `ScriptedLLM.StreamResponse` recognizes
+each and answers it with a canned reply instead of advancing the script.
+
+This is the sharp edge, and it has drawn blood once. Titling used to call
+`SendMessages`, so it stayed off the scripted path by construction; #229
+switched it to `accumulator.StreamAndAccumulate` (the Codex backend requires
+`stream: true`) and it silently began consuming turn 1 of every scenario. Each
+fixture then recorded a shape one turn short — `agent_tool_loop` lost its
+`ExecuteTools` entirely — and those truncated histories still replayed **green**,
+so the suite looked healthy while pinning the wrong contract.
+
+Two guards in `ExportHistory` now make that loud instead of silent: a scenario
+that runs past the end of its script, or that consumes fewer turns than it
+scripted, **refuses to export** rather than overwriting a good fixture with a
+degenerate one. If you add a consumer that calls the LLM outside the agent
+loop, teach `StreamResponse` to recognize it — identify it by something
+structural (the tool the request is pinned to), not by prompt wording, which
+drifts.
+
+Sanity-check a regenerated fixture by its activity mix, where a truncated shape
+is obvious at a glance:
+
+```
+jq -r '.events[] | select(.eventType=="EVENT_TYPE_ACTIVITY_TASK_SCHEDULED")
+       | .activityTaskScheduledEventAttributes.activityType.name' \
+  fixtures/agent_tool_loop.json | sort | uniq -c
+```
+
+### The generator needs a synced config snapshot
+
+`newHarness` writes a `project_configs` row under a non-seed daemon id, standing
+in for the daemon's config push. Without it `Config.SnapshotSynced` stays false,
+and a node that preloads skills (the `implementer` preset requests
+`code-search`) treats the empty catalog as *not yet known* and therefore
+RETRYABLE — so `CallLLM` retries to its limit and the workflow fails. The
+generator has no daemon, so an empty snapshot from a real-looking daemon is the
+truthful answer: a daemon has reported, and this project genuinely has no skills.
+
 ## Determinism of regeneration
 
 Two generation runs do **not** produce byte-identical files: histories embed

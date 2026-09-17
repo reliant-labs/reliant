@@ -68,6 +68,29 @@ func (s *ScriptedLLM) Exhausted() bool {
 	return s.exhausted
 }
 
+// Consumed reports how many scripted turns the agent loop actually played.
+//
+// Generators assert this equals the script length. Exhausted() alone is not
+// enough: it only catches the loop asking for MORE turns than scripted, and
+// the damaging failure is the opposite one. When an auxiliary request stole a
+// turn, every scenario ran one turn short — the agent loop received a later
+// turn than intended, ended early, and the exported history was a truncated
+// shape (agent_tool_loop lost its ExecuteTools entirely) that still replayed
+// green, pinning the wrong contract. Under-consumption is silent unless
+// something checks for it, so this is what checks for it.
+func (s *ScriptedLLM) Consumed() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.next
+}
+
+// Scripted reports how many turns were scripted.
+func (s *ScriptedLLM) Scripted() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.turns)
+}
+
 func (s *ScriptedLLM) Name() string { return "scripted-replayfixtures" }
 
 func (s *ScriptedLLM) Model() models.Model {
@@ -82,8 +105,10 @@ func (s *ScriptedLLM) Model() models.Model {
 
 func (s *ScriptedLLM) ValidateKey(ctx context.Context) error { return nil }
 
-// SendMessages serves auxiliary consumers (title generation). It never
-// consumes the scripted agent-loop turns.
+// SendMessages is part of the llm.Driver interface but is no longer on any
+// production path this harness drives — every auxiliary consumer streams. It
+// returns a canned response so an unexpected caller is harmless, and, like the
+// auxiliary paths below, never consumes the scripted agent-loop turns.
 func (s *ScriptedLLM) SendMessages(ctx context.Context, prompts []string, msgs []message.Message, tls []tools.Tool) (*llm.DriverResponse, error) {
 	return &llm.DriverResponse{
 		Content:      "scripted title",
@@ -93,14 +118,43 @@ func (s *ScriptedLLM) SendMessages(ctx context.Context, prompts []string, msgs [
 }
 
 // StreamResponse plays the next scripted turn using the same event protocol
-// as the real drivers. Compaction summary requests are routed to a canned
-// summary and never consume the script.
+// as the real drivers.
+//
+// AUXILIARY REQUESTS MUST NOT CONSUME THE SCRIPT. Two production consumers
+// share this injected driver with the agent loop but are not part of any
+// scenario's turn sequence: the compaction summary and chat title generation.
+// Both are recognized here and answered with a canned reply.
+//
+// Titling is the one that bit us. It used to call SendMessages, so routing it
+// away from the script was automatic. #229 switched it to
+// accumulator.StreamAndAccumulate — the Codex backend requires stream: true and
+// answers a non-streaming request with a bare 400, which became reachable once
+// title model selection opened up beyond Anthropic. That made titling land
+// HERE, where it silently ate turn 1 of every scenario, because
+// GenerateTitleWorkflow is dispatched by CreateChat and races the agent loop.
+// Every scripted scenario then ran one turn off-by-one. It is recognized by the
+// tool the request is pinned to (set_title), which is the request's actual
+// identity rather than prompt wording that can be reworded.
 func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs []message.Message, tls []tools.Tool) <-chan llm.DriverEvent {
 	s.mu.Lock()
 
 	if isCompactionRequest(prompts) {
 		s.mu.Unlock()
 		return s.streamCanned(Turn{Text: compactionSummaryText, TokenCount: 20})
+	}
+
+	// Answer with the pinned set_title call the production path reads, so
+	// titling exercises its real tool-call extraction instead of falling back
+	// to the truncated first message.
+	if isTitleRequest(tls) {
+		s.mu.Unlock()
+		return s.streamCanned(Turn{
+			ToolCalls: []message.ToolCall{
+				ToolCall("call-set-title-1", tools.SetTitleToolName,
+					`{"`+tools.SetTitleTitleField+`":"Scripted Fixture Chat"}`),
+			},
+			TokenCount: 10,
+		})
 	}
 
 	var turn Turn
@@ -164,4 +218,15 @@ func isCompactionRequest(prompts []string) bool {
 		}
 	}
 	return false
+}
+
+// isTitleRequest reports whether this is the title-generation call. That
+// request pins tool_choice to set_title and offers nothing else, so the tool
+// list identifies it exactly — and unlike a prompt substring, it cannot drift
+// when the prompt is reworded.
+func isTitleRequest(tls []tools.Tool) bool {
+	if len(tls) != 1 {
+		return false
+	}
+	return tls[0].Name() == tools.SetTitleToolName
 }

@@ -162,9 +162,21 @@ func (s *ScriptedLLM) SendMessages(ctx context.Context, prompts []string, msgs [
 }
 
 // StreamResponse plays the next scripted turn using the same event protocol
-// as the real drivers (content, tool_use start/stop, complete). Compaction
-// summary requests (which share this path) are routed to a canned summary
-// and never consume the story's turns.
+// as the real drivers (content, tool_use start/stop, complete).
+//
+// AUXILIARY REQUESTS MUST NOT CONSUME THE STORY'S TURNS. Compaction summaries
+// and chat title generation share this injected driver with the agent loop but
+// are not part of any story's turn sequence, so both are recognized here and
+// answered with a canned reply.
+//
+// Titling used to call SendMessages, which kept it off this path for free.
+// #229 switched it to accumulator.StreamAndAccumulate (the Codex backend
+// requires stream: true and rejects a non-streaming request with a bare 400),
+// so it lands here now — and GenerateTitleWorkflow is dispatched by CreateChat,
+// racing the agent loop. Unrecognized, it silently ate turn 1 and shifted every
+// story one turn off. It is recognized by the tool the request is pinned to
+// (set_title), which is what the request actually IS, rather than prompt
+// wording that can be reworded.
 func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs []message.Message, tls []tools.Tool) <-chan llm.DriverEvent {
 	s.mu.Lock()
 
@@ -172,6 +184,22 @@ func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs
 		s.compactionCalls = append(s.compactionCalls, newLLMCall(prompts, msgs, tls))
 		s.mu.Unlock()
 		return s.streamCanned(Turn{Text: CompactionSummaryText, TokenCount: 20})
+	}
+
+	// Answer with the pinned set_title call the production path reads, so
+	// titling exercises its real tool-call extraction rather than falling back
+	// to the truncated first message. Recorded on sendCalls, which is where
+	// title-generation calls have always been counted.
+	if isTitleRequest(tls) {
+		s.sendCalls = append(s.sendCalls, newLLMCall(prompts, msgs, tls))
+		s.mu.Unlock()
+		return s.streamCanned(Turn{
+			ToolCalls: []message.ToolCall{
+				ToolCall("call-set-title-1", tools.SetTitleToolName,
+					`{"`+tools.SetTitleTitleField+`":"Scripted Story Chat"}`),
+			},
+			TokenCount: 10,
+		})
 	}
 
 	s.streamCalls = append(s.streamCalls, newLLMCall(prompts, msgs, tls))
@@ -228,6 +256,17 @@ func (s *ScriptedLLM) streamCanned(turn Turn) <-chan llm.DriverEvent {
 		ch <- llm.DriverEvent{Type: llm.EventComplete, Model: model, Response: resp}
 	}()
 	return ch
+}
+
+// isTitleRequest reports whether this is the title-generation call. That
+// request pins tool_choice to set_title and offers nothing else, so the tool
+// list identifies it exactly — and unlike a prompt substring, it cannot drift
+// when the prompt is reworded.
+func isTitleRequest(tls []tools.Tool) bool {
+	if len(tls) != 1 {
+		return false
+	}
+	return tls[0].Name() == tools.SetTitleToolName
 }
 
 // isCompactionRequest detects the Compact activity's summary request by its
