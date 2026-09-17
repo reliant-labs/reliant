@@ -276,6 +276,21 @@ type fsWriteBinaryFileRequest struct {
 	Data string `json:"data"` // base64-encoded
 }
 
+// payloadEdge returns a short excerpt from the head or tail of a payload, for
+// an error that must not quote megabytes of base64. The head shows whether the
+// JSON envelope began correctly; the tail shows whether it was cut off, which
+// is the difference between a malformed request and a truncated transfer.
+func payloadEdge(payload []byte, head bool) string {
+	const edge = 48
+	if len(payload) <= edge {
+		return string(payload)
+	}
+	if head {
+		return string(payload[:edge])
+	}
+	return string(payload[len(payload)-edge:])
+}
+
 // fsWriteBinaryFileResponse is daemon.WriteResult without OldContent: the
 // previous content of a binary file is not a diffable string, and returning
 // megabytes of base64 nobody reads would only inflate the envelope.
@@ -288,7 +303,13 @@ type fsWriteBinaryFileResponse struct {
 func handleFSWriteBinaryFile(ctx context.Context, payload []byte) ([]byte, error) {
 	var req fsWriteBinaryFileRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid payload: %w", err)
+		// Self-describing: a bare "invalid payload" from a command whose
+		// envelope is megabytes of base64 says nothing about WHERE it went
+		// wrong, and the payload is far too large to log. The size and the
+		// edges are what distinguish a truncated transfer from a malformed
+		// one, and they are what this error was missing.
+		return nil, fmt.Errorf("invalid payload (%d bytes, starts %q, ends %q): %w",
+			len(payload), payloadEdge(payload, true), payloadEdge(payload, false), err)
 	}
 
 	// Resolved with allowMissing, since a write commonly creates the file; the

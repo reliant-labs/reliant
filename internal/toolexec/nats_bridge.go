@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -447,7 +448,20 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 		var req daemonCommandWire
 		if err := json.Unmarshal(msg.Data, &req); err != nil {
 			span.End()
-			_ = msg.Respond([]byte(`{"success":false,"error_message":"invalid payload"}`))
+			// Self-describing, because this is where a reassembled request
+			// surfaces as garbage. A bare "invalid payload" cannot distinguish
+			// a malformed command from a chunked stream that reassembled to the
+			// wrong bytes, and the envelope is far too large to log — so report
+			// the size and the edges, which is what tells the two apart.
+			logging.Error("[NATSToolBridge] daemon.command payload did not parse",
+				"requestBytes", len(msg.Data), "error", err,
+				"head", payloadEdge(msg.Data, true), "tail", payloadEdge(msg.Data, false))
+			errResp, _ := json.Marshal(map[string]any{
+				"success": false,
+				"error_message": fmt.Sprintf("invalid payload (%d bytes): %v",
+					len(msg.Data), err),
+			})
+			_ = msg.Respond(errResp)
 			return
 		}
 
