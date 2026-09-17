@@ -1,12 +1,35 @@
 name: PR CI
 
+# Runs on PRs AND on pushes to main.
+#
+# WHY THE PUSH TRIGGER EXISTS. This workflow was pull_request-only, so nothing
+# verified main after a merge. TestReplayFixtures sat broken on main for WEEKS
+# and only surfaced when an unrelated release PR went red against it — by which
+# point the change that broke it was long buried, and the engineer who paid for
+# it had nothing to do with it. A PR is tested against its merge BASE, not
+# against the merge RESULT, so two independently-green PRs can still merge into
+# a red main. Post-merge verification is the only thing that catches that, and
+# it is also what gives `main` an authoritative last-known-good signal.
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [main]
 
+# Cancellation is right for a PR and WRONG for main.
+#
+# On a PR, a new push obsoletes the previous run: cancel it and save the runner.
+# github.ref is the PR ref, so every PR gets its own group and they never
+# interfere.
+#
+# On main, consecutive merges would land in one group and cancel each other —
+# merge A gets killed by merge B, so A is never verified and a break introduced
+# by A is attributed to B (or to nothing at all, if B is green). That is the
+# exact failure this trigger was added to prevent, so main runs are grouped per
+# COMMIT SHA and never cancelled: every merged commit gets its own verdict.
 concurrency:
-  group: pr-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: pr-ci-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
   contents: read
@@ -36,6 +59,16 @@ jobs:
   # express: the Go jobs below deliberately keep running on a go.mod change,
   # because compiling against the new dependency is the entire point of the
   # bump.
+  #
+  # ON A PUSH TO MAIN the inputs are different and both PR-only: `github.base_ref`
+  # is EMPTY (there is no base branch) and `github.event.pull_request.head.sha`
+  # does not exist. Left as-is, `git merge-base "origin/" ""` would fail the step
+  # under `set -euo pipefail` and take every dependent job down with it. The push
+  # branch below uses `github.event.before`..`github.sha` instead — the range the
+  # push actually introduced — and falls back to running everything whenever that
+  # range is not usable (first push, force-push, or a `before` that is not an
+  # ancestor after history rewriting). Every uncertain case resolves to "run more",
+  # which is the safe direction.
   changes:
     name: Detect what changed
     runs-on: ubuntu-latest
@@ -58,19 +91,42 @@ jobs:
       - name: Classify changed files
         id: filter
         env:
+          EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
-          # Compare against the MERGE BASE, not the branch tip: a PR branched
-          # from an older main must be judged on its own commits, otherwise
-          # every unrelated commit that landed on main meanwhile counts as
-          # "changed" and the skip never fires.
-          base="$(git merge-base "origin/${BASE_REF}" "${HEAD_SHA}")"
-          echo "merge base: ${base}"
+          if [ "${EVENT_NAME}" = "push" ]; then
+            # A push has no base branch and no merge base. The right comparison
+            # is the range the push introduced: event.before..sha.
+            head="${PUSH_SHA}"
+            base="${PUSH_BEFORE}"
 
-          changed="$(git diff --name-only "${base}" "${HEAD_SHA}")"
+            # event.before is all-zeroes on a branch's first push, and after a
+            # force-push it can name a commit that no longer exists. Either way
+            # the range is unusable, so run everything rather than guess.
+            if [ -z "${base}" ] \
+              || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+              || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+              echo "non_gomod=true" >> "$GITHUB_OUTPUT"
+              echo "push with no usable 'before' (${base:-unset}) — running everything"
+              exit 0
+            fi
+            echo "push range: ${base}..${head}"
+          else
+            head="${HEAD_SHA}"
+            # Compare against the MERGE BASE, not the branch tip: a PR branched
+            # from an older main must be judged on its own commits, otherwise
+            # every unrelated commit that landed on main meanwhile counts as
+            # "changed" and the skip never fires.
+            base="$(git merge-base "origin/${BASE_REF}" "${head}")"
+            echo "merge base: ${base}"
+          fi
+
+          changed="$(git diff --name-only "${base}" "${head}")"
           echo "--- changed files ---"
           echo "${changed}"
           echo "---------------------"
@@ -137,7 +193,32 @@ jobs:
         with:
           fetch-depth: 0
 
+      # The script takes <base> <head> and inspects only files ADDED in that
+      # range. `github.base_ref` is PR-only and EMPTY on a push, which would
+      # pass the literal ref "origin/" — so the base is chosen per event.
+      #
+      # On push that base is `github.event.before`, falling back to the parent
+      # commit (HEAD^) when `before` is unusable: all-zeroes on a branch's first
+      # push, or a vanished commit after a force-push. A merge commit's HEAD^ is
+      # the previous main, which is the range wanted anyway.
+      - name: Reject compiled binaries added by this push
+        if: github.event_name == 'push'
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_SHA: ${{ github.sha }}
+        run: |
+          set -uo pipefail
+          base="${PUSH_BEFORE}"
+          if [ -z "${base}" ] \
+            || [ "${base}" = "0000000000000000000000000000000000000000" ] \
+            || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            base="${PUSH_SHA}^"
+            echo "push 'before' unusable — comparing against ${base}"
+          fi
+          .githooks/check-binary-files-ci.sh "${base}" "${PUSH_SHA}"
+
       - name: Reject compiled binaries added by this PR
+        if: github.event_name == 'pull_request'
         run: .githooks/check-binary-files-ci.sh "origin/${{ github.base_ref }}" "${{ github.sha }}"
 
   # electron/release.config.json is GENERATED from control-plane's KCL
