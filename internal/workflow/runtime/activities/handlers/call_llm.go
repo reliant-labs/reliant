@@ -846,6 +846,42 @@ func (a *CallLLMActivity) mcpRuntimeFromContext(ctx context.Context) tools.MCPRu
 	return bound.MCP
 }
 
+// toolsConfigEnablesTools reports whether a node's tools_config declares any
+// tools at all. A node that declares none gets an empty tool list and a model
+// that cannot call anything.
+//
+// IT MUST NAME EVERY TOOL-DECLARING FIELD. This gate used to read only
+// `filter`, which was the original name for what is now `preloaded_tools`.
+// When the builtin workflows were migrated to the new field names, the body
+// below learned to read both — but this gate did not, so `tc.GetFilter()` was
+// nil for every migrated workflow and tools were switched off wholesale.
+//
+// The failure is silent and does not look like a tools bug from the outside.
+// A model handed zero tools does not error; it DESCRIBES the call it wanted to
+// make, in prose — "[Tool call: bash]" plus a JSON blob, in a vocabulary
+// borrowed from whatever it was trained on rather than this product's actual
+// tool names. That renders as plain text (correctly — it IS text), and because
+// a text-only turn carries no tool_use, the agent turn then legitimately ends.
+// Two symptoms that look like a broken UI and a broken agent loop, from one
+// nil check.
+//
+// So: when a field that declares tools is added or renamed, it belongs here
+// too. TestBuiltinWorkflowsEnableTools pins that for the shipped workflows.
+func toolsConfigEnablesTools(tc *reliantv1.ToolsConfig) bool {
+	if tc == nil {
+		return false
+	}
+	// Set-but-empty is deliberately "enabled": it means "this node declares an
+	// empty toolset", which the expansion below resolves to zero tools anyway.
+	// Only an unset field means "not declared".
+	//
+	// loadable_tools counts. A node may preload nothing and expect the model to
+	// reach for tools through load_tool, and that still needs load_tool offered.
+	return tc.GetPreloadedTools() != nil ||
+		tc.GetLoadableTools() != nil ||
+		tc.GetFilter() != nil
+}
+
 // streamLLMResponse streams an LLM response to content_block_chunks (UI-only) and collects data in memory
 func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, thread string, history []message.Message, rtx RuntimeContext, args *reliantv1.CallLLMArgs) (*reliantv1.CallLLMOutput, error) {
 	// Extract options from runtime context
@@ -855,7 +891,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 
 	// Resolve tools configuration
 	tc := args.GetToolsConfig()
-	toolsEnabled := tc != nil && tc.GetFilter() != nil
+	toolsEnabled := toolsConfigEnablesTools(tc)
 
 	// Resolve permission level (defaults to mutating when no tools_config)
 	permission := tools.PermissionMutating
