@@ -645,8 +645,34 @@ jobs:
       - name: Build and Publish macOS apps (Signed & Notarized)
         working-directory: electron
         env:
+          # NOTARIZATION IDENTITY — two strategies, both passed; the hook
+          # (electron/build/notarize-core.js) prefers the API key and falls back
+          # to the Apple ID when the key secrets are absent.
+          #
+          # An App Store Connect API key belongs to the TEAM, an Apple ID belongs
+          # to a PERSON. v1.7.14 shipped Windows and Linux but not macOS because
+          # the account holder changed: signing kept working (certificate),
+          # notarization began returning "HTTP status code: 403. A required
+          # agreement is missing or has expired" (account identity). A key
+          # survives that change, which is why it is preferred.
+          #
+          # APPLE_API_KEY holds the .p8 key's CONTENTS (the whole
+          # -----BEGIN PRIVATE KEY----- block), not a path — a GitHub secret
+          # cannot carry a file. The hook writes it to a 0600 temp file for the
+          # duration of the call, because notarytool requires a path, and
+          # removes it afterwards.
+          #
+          # Create the key at App Store Connect -> Users and Access ->
+          # Integrations -> Keys (Developer role). The .p8 downloads ONCE.
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          # Fallback. Keep these set until the API key has notarized a real
+          # release; an unset secret is an empty string, and the hook treats a
+          # partial API-key config as "use the Apple ID" rather than failing.
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          # Still required for SIGNING regardless of the notarization strategy.
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
