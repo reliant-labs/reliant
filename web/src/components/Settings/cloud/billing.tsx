@@ -813,14 +813,19 @@ function OverviewTab({
             planName={computeUi.planName}
             pricePerMonthLabel={computeUi.pricePerMonthLabel}
             renewsOnLabel={computeUi.renewsOnLabel}
-            includedHoursLabel={computeUi.includedHoursLabel}
-            usedHoursLabel={computeUi.usedHoursLabel}
             allowedSizesLabel={computeUi.allowedSizesLabel}
-            capacity={computeUi.capacity}
+            dimensions={[
+              {
+                id: "daemon_compute",
+                includedHoursLabel: computeUi.includedHoursLabel,
+                usedHoursLabel: computeUi.usedHoursLabel,
+                capacity: computeUi.capacity,
+                estimatedOverageCostLabel: computeUi.estimatedOverageCostLabel,
+              },
+            ]}
             grantedMinutesRemaining={computeUi.grantedMinutesRemaining}
             planDetailUnavailable={computeUi.planDetailUnavailable}
             usageUnavailable={computeUi.usageUnavailable}
-            estimatedOverageCostLabel={computeUi.estimatedOverageCostLabel}
             onChangePlan={onGoToPlans}
             onRetryUsage={() => void usageQ.refetch()}
             renderOverageControl={({ disabled, reason }) => (

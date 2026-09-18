@@ -3,6 +3,7 @@ import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet,
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
+import { isForgeUIEnabled } from './lib/forgeFeature'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -92,6 +93,12 @@ const MobileWorkflowDetailRoute = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileWorkflowDetailRoute')
 const MobileChatWorkflowRoute = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
+const ForgeTopologyPage = lazyRouteComponent(
+  () => import('./components/Forge/ForgeTopologyPage'), 'ForgeTopologyPage')
+const ForgeStatusPage = lazyRouteComponent(
+  () => import('./components/Forge/Status/ForgeStatusPage'), 'ForgeStatusPage')
+const ForgeSecretsPage = lazyRouteComponent(
+  () => import('./components/Forge/Secrets/ForgeSecretsPage'), 'ForgeSecretsPage')
 const App = lazyRouteComponent(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
@@ -411,6 +418,55 @@ const workflowBuilderRoute = createRoute({
   component: () => <WorkflowPage />,
 })
 
+// ── forge UI (experimental, gated) ───────────────────────────────────────────
+//
+// All three routes go through ForgeGate. Hiding the sidebar entry is NOT enough
+// on its own: a route left registered stays reachable by pasting its URL, and
+// two of these screens front write paths (promote, and a deploy that applies to
+// a live cluster). So the GATE IS ON THE ROUTE, and the nav entry is a second,
+// independent check — the feature cannot be half-off.
+//
+// A disabled route redirects to / rather than rendering an explanation, which is
+// how the root already treats a route that does not exist
+// (rootRoute.notFoundComponent). To a user who has not opted in, these URLs
+// behave exactly as they did before the feature was written.
+function ForgeGate({ children }: { children: React.ReactNode }) {
+  // Read at render, never at module scope: the Developer settings toggle
+  // changes this within a session and a snapshot would need a reload.
+  if (!isForgeUIEnabled()) return <Navigate to="/" search={{}} />
+  return <>{children}</>
+}
+
+// The forge release/environment topology for the currently-selected project.
+// It reads projectStore.currentProject rather than taking a param, so it is
+// scoped by the same selection the rest of the app uses and needs no id in the
+// URL. Sits under authenticatedLayoutRoute because the RPCs it makes are
+// per-user and resolve the project against the caller's ownership.
+const forgeTopologyRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/forge/topology',
+  component: () => <ForgeGate><ForgeTopologyPage /></ForgeGate>,
+})
+
+// The forge env-runtime checks and project-audit strip, both read-only. Same
+// project resolution as the topology route above (projectStore.currentProject,
+// no id in the URL) for the same reason: the RPCs are per-user and resolve the
+// project against the caller's ownership on the daemon side.
+const forgeStatusRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/forge/status',
+  component: () => <ForgeGate><ForgeStatusPage /></ForgeGate>,
+})
+
+// Per-environment secret PRESENCE for the currently-selected project. Read-only,
+// and structurally incapable of showing a value — see Secrets/SecretRow.tsx.
+// Scoped like the topology route: no id in the URL, ownership enforced server-side.
+const forgeSecretsRoute = createRoute({
+  getParentRoute: () => authenticatedLayoutRoute,
+  path: '/forge/secrets',
+  component: () => <ForgeGate><ForgeSecretsPage /></ForgeGate>,
+})
+
 // Onboarding lives at its own URL now. Previously the OnboardingPage was a
 // branch inside ModernApp's render based on currentUser.onboardingCompleted —
 // no URL, no deep-link, no way to navigate between onboarding and the app
@@ -571,6 +627,9 @@ const routeTree = rootRoute.addChildren([
       mobileGitHubRoute,
     ]),
     onboardingRoute,
+    forgeTopologyRoute,
+    forgeSecretsRoute,
+    forgeStatusRoute,
     settingsRoute,
     connectorConsentRoute,
     settingsSectionRoute,

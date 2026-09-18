@@ -1880,6 +1880,9 @@ function App() {
                 onNavigateToSettings={() => {
                   navigate({ to: '/settings' });
                 }}
+                onOpenForge={() => {
+                  navigate({ to: '/forge/topology' });
+                }}
               />
             </div>
           </ResizableSidebar>
@@ -1906,6 +1909,9 @@ function App() {
                   onOpenChatSearch={() => setShowChatSearch(true)}
                   onNavigateToSettings={() => {
                     navigate({ to: '/settings' });
+                  }}
+                  onOpenForge={() => {
+                    navigate({ to: '/forge/topology' });
                   }}
                 />
               </div>
