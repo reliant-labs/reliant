@@ -264,9 +264,13 @@ models:
   # sending the same version/originator headers the driver sends (codex-tui
   # 0.153.4):
   #
-  #   ACCEPTED  gpt-5.5, gpt-6-astra, gpt-5.6-sol, gpt-5.6-luna, gpt-5.6-terra,
-  #             gpt-5.4-mini
-  #   REFUSED   gpt-5.4, gpt-5.3-codex, gpt-5.3-codex-spark, gpt-5.2-codex
+  #   ACCEPTED  gpt-5.5, gpt-6-astra, gpt-5.6-sol, gpt-5.6-luna, gpt-5.6-terra
+  #   REFUSED   gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark,
+  #             gpt-5.2-codex
+  #
+  # gpt-5.4-mini was listed ACCEPTED on the family pattern rather than its own
+  # probe; it is refused exactly like its parent. A `-mini` does not inherit
+  # the family's acceptance — probe each id.
   #
   # The refused models stay in this catalog served by `openai`/`openrouter`,
   # which reach them with an API key. Only their codex mapping was wrong.
@@ -411,10 +415,16 @@ models:
     default_thinking_level: xhigh
 
   # Terra is the faster/cheaper member of the 5.6 family, but it is deliberately
-  # NOT tagged `fast`: that tag routes @fast for the whole codex driver — chat
-  # titling and compaction resolve it too — and it stays pointed at
-  # gpt-5.3-codex-spark. Terra carries `moderate` instead, so it is picked on
-  # cost/quality balance rather than by repointing a latency-critical path.
+  # NOT tagged `fast`. Two reasons, and the second is the one that bites:
+  # `fast` is resolved globally by definition order, so tagging terra would
+  # repoint @fast away from gemini-3.5-flash for every user; and terra bills at
+  # $2.5/$15 per 1M, the same as gpt-5.5, which is not a fast-tier price.
+  #
+  # The codex driver therefore has no `fast` model at all, by design. Callers
+  # that need one (chat titling, compaction) pass a PREFERENCE ladder of tags
+  # and let the resolver degrade — see titleModelSelector in
+  # internal/workflow/runtime/activities/handlers/compact.go. Capability is the
+  # hard filter; the tag is only a preference.
   - id: gpt-5.6-terra
     name: GPT-5.6 Terra
     tags: [moderate, reasoning]
@@ -445,8 +455,8 @@ models:
   # Luna is the ChatGPT-family flagship. It is deliberately NOT tagged `fast`,
   # even though the backend names it as the safety-buffering "faster model":
   # luna's job is to be the default good-quality pick, not the latency-optimized
-  # one. `fast` routes @fast for the whole codex driver and stays on
-  # gpt-5.3-codex-spark.
+  # one. `fast` routes @fast for the whole codex driver and points at
+  # gpt-5.6-terra.
   - id: gpt-5.6-luna
     name: GPT-5.6 Luna
     tags: [flagship, reasoning]
@@ -649,6 +659,12 @@ models:
       - driver: openrouter
         api_model: google/gemini-3.8-flash
       - driver: reliant
+        api_model: gemini-3.8-flash
+      # Antigravity addresses effort as a model-id SUFFIX (`gemini-3.8-flash-high`)
+      # on the top-level `model` field, not as a request parameter. api_model
+      # stays the BASE id; the driver composes the suffix from the thinking
+      # levels this model already declares above.
+      - driver: antigravity
         api_model: gemini-3.8-flash
     default_thinking_level: high
     default_temperature: 1.0
@@ -1033,10 +1049,12 @@ models:
       output_per_1m: 2.0
       cached_input_per_1m: 0.025
     providers:
-      - driver: codex
-        api_model: gpt-5.4-mini
-        # ChatGPT/Codex backend caps GPT-5.x at ~272k (see gpt-5.5 note).
-        max_context_window: 272000
+      # No codex mapping: the ChatGPT-account backend refuses this model with
+      # the same 400 as its non-mini parent. It was mapped here on the family
+      # pattern rather than an individual probe, and because it was the only
+      # codex model tagged `fast` it was what chat titling resolved to — so
+      # every title 400'd for a codex-only user. See the ACCEPTED/REFUSED note
+      # above gpt-5.5.
       - driver: openai
         api_model: gpt-5.4-mini
       - driver: openrouter
@@ -1651,6 +1669,11 @@ models:
       - driver: gemini
         api_model: gemini-3.1-flash-image
       - driver: reliant
+        api_model: gemini-3.1-flash-image
+      # Antigravity serves this model on v1internal:generateContent, the same
+      # double-wrapped envelope its chat surface uses. Unlike the chat models
+      # there is no effort suffix — api_model is sent verbatim.
+      - driver: antigravity
         api_model: gemini-3.1-flash-image
 
   - id: gemini-3-pro-image

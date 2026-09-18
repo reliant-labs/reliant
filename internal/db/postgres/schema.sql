@@ -53,6 +53,22 @@ CREATE TABLE public.agent_messages (
 );
 
 --
+-- Name: antigravity_auth_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.antigravity_auth_tokens (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    access_token text NOT NULL,
+    refresh_token text,
+    expires_at timestamp with time zone,
+    id_token text,
+    scope text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
 -- Name: api_keys; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -938,6 +954,20 @@ ALTER TABLE ONLY public.agent_messages
     ADD CONSTRAINT agent_messages_pkey PRIMARY KEY (id);
 
 --
+-- Name: antigravity_auth_tokens antigravity_auth_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.antigravity_auth_tokens
+    ADD CONSTRAINT antigravity_auth_tokens_pkey PRIMARY KEY (id);
+
+--
+-- Name: antigravity_auth_tokens antigravity_auth_tokens_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.antigravity_auth_tokens
+    ADD CONSTRAINT antigravity_auth_tokens_user_id_key UNIQUE (user_id);
+
+--
 -- Name: api_keys api_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1431,6 +1461,12 @@ CREATE INDEX idx_agent_messages_inbox ON public.agent_messages USING btree (to_t
 --
 
 CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_spawn ON public.agent_messages USING btree (tool_call_id) WHERE (kind = ANY (ARRAY[2, 3, 4]));
+
+--
+-- Name: idx_antigravity_auth_tokens_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_antigravity_auth_tokens_user ON public.antigravity_auth_tokens USING btree (user_id);
 
 --
 -- Name: idx_api_keys_provider; Type: INDEX; Schema: public; Owner: -

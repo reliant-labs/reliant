@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
@@ -958,6 +959,7 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 		"claude",
 		"codex",
 		"copilot",
+		antigravity.DriverID,
 		"openrouter",
 		"anthropic",
 		"openai",
@@ -965,13 +967,14 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 	}
 
 	providerDisplayNames := map[models.Family]string{
-		"claude":     "Claude Code",
-		"codex":      "Codex (ChatGPT)",
-		"copilot":    "GitHub Copilot",
-		"openrouter": "OpenRouter",
-		"anthropic":  "Anthropic",
-		"openai":     "OpenAI",
-		"gemini":     "Google Gemini",
+		"claude":             "Claude Code",
+		"codex":              "Codex (ChatGPT)",
+		"copilot":            "GitHub Copilot",
+		antigravity.DriverID: "Antigravity",
+		"openrouter":         "OpenRouter",
+		"anthropic":          "Anthropic",
+		"openai":             "OpenAI",
+		"gemini":             "Google Gemini",
 	}
 
 	statuses := make([]*reliantv1.ProviderStatus, 0, len(providers))
@@ -1024,6 +1027,26 @@ func (s *SettingsService) GetProviderStatuses(ctx context.Context, req *connect.
 			status.Configured = configured
 			status.HasApiKey = configured
 			// Don't set MaskedKey for Codex - no API key to display
+		case antigravity.DriverID:
+			// Antigravity uses Google OAuth tokens persisted by Reliant. The
+			// expiry is stored (Google's token is opaque), and the transport
+			// refreshes it, so an expired token with a refresh token still
+			// counts as connected — the same rule Claude uses.
+			tokens, tokenErr := s.database.GetAntigravityAuthTokens(ctx, userID)
+			if tokenErr != nil {
+				logging.Warn("Failed to load Antigravity auth tokens", "error", tokenErr)
+			}
+
+			configured := tokenErr == nil && tokens != nil && strings.TrimSpace(tokens.AccessToken) != ""
+			if configured {
+				if antigravity.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
+					configured = false
+				}
+			}
+
+			status.Configured = configured
+			status.HasApiKey = configured
+			// Don't set MaskedKey for Antigravity - no API key to display
 		case "copilot":
 			// Copilot uses GitHub device-flow OAuth tokens persisted by Reliant.
 			tokens, tokenErr := s.database.GetCopilotAuthTokens(ctx, userID)
@@ -1364,6 +1387,66 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 	return connect.NewResponse(&reliantv1.CompleteCodexOAuthResponse{
 		Success: true,
 		Message: "Connected to Codex",
+	}), nil
+}
+
+// CompleteAntigravityOAuth exchanges a Google OAuth authorization code + PKCE
+// verifier for Antigravity tokens and marks the provider connected.
+//
+// Unlike CompleteClaudeOAuth there is no state parameter: Google's token
+// endpoint does not require it echoed back. The frontend still generates and
+// verifies state — it just never reaches the backend.
+func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *connect.Request[reliantv1.CompleteAntigravityOAuthRequest]) (*connect.Response[reliantv1.CompleteAntigravityOAuthResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+	code := strings.TrimSpace(req.Msg.Code)
+	codeVerifier := strings.TrimSpace(req.Msg.CodeVerifier)
+	redirectURI := strings.TrimSpace(req.Msg.RedirectUri)
+
+	if code == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("authorization code is required"))
+	}
+	if codeVerifier == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("code_verifier is required"))
+	}
+	if redirectURI == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
+	}
+
+	tokens, err := antigravity.ExchangeAntigravityAuthorizationCode(code, codeVerifier, redirectURI)
+	if err != nil {
+		logging.Error("Antigravity OAuth code exchange failed", "error", err)
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Antigravity OAuth: %w", err))
+	}
+
+	if err := s.database.SetAntigravityAuthTokens(ctx, userID, db.AntigravityAuthTokens{
+		AccessToken:  tokens.AccessToken,
+		RefreshToken: tokens.RefreshToken,
+		ExpiresAt:    tokens.ExpiresAt,
+		IDToken:      tokens.IDToken,
+		Scope:        tokens.Scope,
+	}); err != nil {
+		logging.Error("Failed to persist Antigravity auth tokens", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Antigravity credentials"))
+	}
+
+	if err := s.database.SetProviderAPIKey(ctx, userID, antigravity.DriverID, "oauth"); err != nil {
+		logging.Error("Failed to set Antigravity provider marker", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Antigravity provider"))
+	}
+
+	analytics.GetClientForUser(ctx, userID).TrackProviderSettingsUpdated(analytics.ProviderSettingsUpdatedMetrics{
+		Provider:   antigravity.DriverID,
+		Action:     "connected",
+		AuthMethod: "oauth",
+	})
+
+	if err := s.database.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
+		logging.Warn("Failed to emit config_health refetch after Antigravity OAuth connect", "error", err)
+	}
+
+	return connect.NewResponse(&reliantv1.CompleteAntigravityOAuthResponse{
+		Success: true,
+		Message: "Connected to Antigravity",
 	}), nil
 }
 

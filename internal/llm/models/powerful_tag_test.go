@@ -14,6 +14,7 @@ import (
 var allTestProviders = []string{
 	"anthropic", "openai", "openrouter", "reliant",
 	"gemini", "vertexai", "codex", "copilot", "xai", "ollama",
+	"antigravity",
 }
 
 // `powerful` is the frontier tier that sits above flagship. Definition order is
@@ -211,8 +212,11 @@ func TestClaude51FableProviderMappings(t *testing.T) {
 // family flagship, terra the faster/cheaper one. Pin it — these three are
 // distinguished only by tags, so a mistaken edit is invisible at runtime.
 //
-// Terra carries `moderate`, NOT `fast`: TagFast routes @fast, chat titling and
-// compaction for the whole codex driver and stays on gpt-5.3-codex-spark.
+// Terra carries `moderate`, NOT `fast`. `fast` resolves globally by definition
+// order, so tagging terra would repoint @fast away from gemini-3.5-flash for
+// every user, and terra bills at gpt-5.5's rate, which is not a fast-tier
+// price. The codex driver has no fast model by design; titling and compaction
+// pass a [fast, moderate] preference ladder and degrade to gpt-5.5 instead.
 func TestGPT56FamilyTagLadder(t *testing.T) {
 	reg := MustGetRegistry()
 

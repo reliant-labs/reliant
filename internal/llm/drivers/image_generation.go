@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/agywire"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/imagegen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -39,10 +41,16 @@ const DefaultImageGenTag = "image-gen"
 // which appends /v1beta/models/<model>:generateContent itself; the entry exists
 // so a user-configured BaseURL still overrides it through the same path every
 // other driver uses.
+// The antigravity entry is a COMPLETE endpoint URL, not a root, because that
+// surface has no path to compose: the model travels in the request body, so
+// v1internal:generateContent is the whole address. It is also NOT the chat
+// URL — that one is :streamGenerateContent?alt=sse, and sending an image
+// request there would ask for a stream this client does not read.
 var imageGenBaseURLs = map[string]string{
-	"openai": "https://api.openai.com/v1",
-	"codex":  codex.CodexBaseURL,
-	"gemini": "https://generativelanguage.googleapis.com/",
+	"openai":      "https://api.openai.com/v1",
+	"codex":       codex.CodexBaseURL,
+	"gemini":      "https://generativelanguage.googleapis.com/",
+	"antigravity": agywire.GenerateEndpointURL,
 }
 
 // Codex client identity for the image endpoint, copied from the request that
@@ -134,22 +142,33 @@ func ResolveImageGenerator(ctx context.Context, userID string, selector models.M
 // newImageGenClient picks the client whose wire format the resolved provider
 // actually speaks.
 //
-// Only "gemini" is native here. The managed "reliant" driver reaches the same
-// Gemini models through the control-plane LiteLLM proxy, which translates them
-// into the OpenAI images shape, so managed traffic keeps using the
-// OpenAI-shaped client no matter which model it resolved to. The branch is on
-// the DRIVER, not the model id, for exactly that reason.
+// "gemini" and "antigravity" are native here. The managed "reliant" driver
+// reaches the same Gemini models through the control-plane LiteLLM proxy,
+// which translates them into the OpenAI images shape, so managed traffic keeps
+// using the OpenAI-shaped client no matter which model it resolved to. The
+// branch is on the DRIVER, not the model id, for exactly that reason.
 //
-// Both branches inject their SDK constructor from here rather than calling the
-// vendor one, because each vendor default ships an http.Client with no idle
-// timeout on the response body — a provider that sends headers and then goes
-// silent would hang the worker. imagegen cannot import internal/llm itself
-// (that would be a cycle), so the sanctioned constructors are passed in.
+// Antigravity is hand-rolled HTTP rather than an SDK because its bodies are
+// double-wrapped ({"response":{…}}) in both directions; the genai SDK decodes
+// such a body into an empty struct, i.e. a 200 with no image and no error.
+// imagegen.NewAntigravity therefore takes the http.Client directly, and it is
+// the sanctioned one for the same reason the SDK constructors are injected:
+// the vendor default has no idle timeout on the response body, so a provider
+// that sends headers and then goes silent would hang the worker. imagegen
+// cannot import internal/llm itself (that would be a cycle), so what it needs
+// is passed in from here.
 func newImageGenClient(config imagegen.Config) (ImageGenerator, error) {
-	if config.Driver == "gemini" {
+	switch config.Driver {
+	case "gemini":
 		return imagegen.NewGemini(config, llm.NewGenAISDKClient)
+	case antigravity.DriverID:
+		if config.HTTPClient == nil {
+			config.HTTPClient = llm.StreamingHTTPClient()
+		}
+		return imagegen.NewAntigravity(config)
+	default:
+		return imagegen.New(config, llm.NewOpenAISDKClient)
 	}
-	return imagegen.New(config, llm.NewOpenAISDKClient)
 }
 
 // configuredProviderIDs lists the drivers the user actually has credentials
@@ -190,7 +209,9 @@ func imageGenConfig(resolved *models.ResolvedModel, driverConfig models.DriverCo
 	}
 
 	baseURL := strings.TrimSpace(driverConfig.BaseURL)
-	if baseURL == "" {
+	if driverID == antigravity.DriverID {
+		baseURL = antigravityImageBaseURL(baseURL)
+	} else if baseURL == "" {
 		baseURL = imageGenBaseURLs[driverID]
 	}
 	if baseURL == "" {
@@ -207,6 +228,31 @@ func imageGenConfig(resolved *models.ResolvedModel, driverConfig models.DriverCo
 	}
 
 	return config, nil
+}
+
+// antigravityImageBaseURL resolves the endpoint for the Antigravity image
+// surface.
+//
+// It is a special case because DriverConfig.BaseURL, for this provider, is the
+// CHAT url — v1internal:streamGenerateContent?alt=sse — and honoring it would
+// send an image request to a streaming endpoint. The image surface is a
+// sibling path on the same host, so a configured base is respected only as a
+// host override: the :generateContent path is re-derived from it.
+//
+// This does not exist for the other providers because none of them has one
+// DriverConfig serving two endpoints with different paths.
+func antigravityImageBaseURL(configured string) string {
+	configured = strings.TrimSpace(configured)
+	if configured == "" || strings.Contains(configured, ":generateContent") {
+		if configured == "" {
+			return imageGenBaseURLs[antigravity.DriverID]
+		}
+		return configured
+	}
+	if host, _, found := strings.Cut(configured, "/v1internal"); found {
+		return host + "/v1internal:generateContent"
+	}
+	return imageGenBaseURLs[antigravity.DriverID]
 }
 
 // codexImageHeaders builds the non-bearer half of Codex's credential. The

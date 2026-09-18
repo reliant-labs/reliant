@@ -87,8 +87,20 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	exec(`UPDATE context_windows SET fork_at_message_id = $2 WHERE id = $1`, id("cw"), id("msg"))
 	exec(`UPDATE threads SET fork_at_message_id = $2 WHERE id = $1`, id("thread"), id("msg"))
 
+	// Every provider token table, not just Claude's. A credential table that
+	// is seeded but never asserted on is indistinguishable from one the purge
+	// forgot, which is precisely the bug these tables keep reintroducing.
 	exec(`INSERT INTO claude_auth_tokens (id, user_id, access_token, refresh_token, expires_at, created_at, updated_at)
 	      VALUES ($1,$2,'at','rt',$3,$3,$3)`, id("cat"), userID, now)
+
+	exec(`INSERT INTO codex_auth_tokens (id, user_id, access_token, refresh_token, created_at, updated_at)
+	      VALUES ($1,$2,'at','rt',$3,$3)`, id("codextok"), userID, now)
+
+	exec(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token, created_at, updated_at)
+	      VALUES ($1,$2,'gho_at',$3,$3)`, id("copilottok"), userID, now)
+
+	exec(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token, refresh_token, expires_at, created_at, updated_at)
+	      VALUES ($1,$2,'ya29.at','rt',$3,$3,$3)`, id("agytok"), userID, now)
 
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
@@ -99,10 +111,13 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 // workflows through chat_id, which is exactly the kind of detail a purge gets
 // wrong, so the test spells the real path out rather than assuming a column.
 var ownershipCount = map[string]string{
-	"projects":           `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
-	"chats":              `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
-	"settings":           `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
-	"claude_auth_tokens": `SELECT COUNT(*) FROM claude_auth_tokens WHERE user_id = $1`,
+	"projects":                `SELECT COUNT(*) FROM projects WHERE user_id = $1`,
+	"chats":                   `SELECT COUNT(*) FROM chats WHERE user_id = $1`,
+	"settings":                `SELECT COUNT(*) FROM settings WHERE user_id = $1`,
+	"claude_auth_tokens":      `SELECT COUNT(*) FROM claude_auth_tokens WHERE user_id = $1`,
+	"codex_auth_tokens":       `SELECT COUNT(*) FROM codex_auth_tokens WHERE user_id = $1`,
+	"copilot_auth_tokens":     `SELECT COUNT(*) FROM copilot_auth_tokens WHERE user_id = $1`,
+	"antigravity_auth_tokens": `SELECT COUNT(*) FROM antigravity_auth_tokens WHERE user_id = $1`,
 	"worktrees": `SELECT COUNT(*) FROM worktrees w
 	                JOIN projects p ON p.id = w.project_id WHERE p.user_id = $1`,
 	"messages": `SELECT COUNT(*) FROM messages m
@@ -148,13 +163,96 @@ func TestPurge_RemovesEverythingForUser(t *testing.T) {
 
 	// Includes the join-reached tables (messages, threads, tool_calls,
 	// worktrees) — the ones a user_id-only purge would silently orphan.
-	for _, table := range []string{
-		"projects", "chats", "worktrees", "settings", "claude_auth_tokens",
+	for _, table := range append([]string{
+		"projects", "chats", "worktrees", "settings",
 		"messages", "threads", "tool_calls",
-	} {
+	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, userID); n != 0 {
 			t.Errorf("%s: %d rows survived the purge, want 0", table, n)
 		}
+	}
+}
+
+// credentialTables is every per-provider OAuth token table. Adding a provider
+// means adding a table here, to purgeSteps, AND to the EXISTS union in
+// Preview — the two lists in accountpurge.go are separate and a provider has
+// previously been added to one and not the other.
+var credentialTables = []string{
+	"claude_auth_tokens",
+	"codex_auth_tokens",
+	"copilot_auth_tokens",
+	"antigravity_auth_tokens",
+}
+
+// TestPurge_RemovesEveryProviderCredential is the regression test for the
+// quietest failure in this package: a new provider's token table missing from
+// purgeSteps. Nothing errors — the account is deleted, the UI reports success,
+// and a live third-party OAuth refresh token stays in the database forever.
+//
+// It asserts per-table rather than in aggregate so a failure names the exact
+// provider that was missed.
+func TestPurge_RemovesEveryProviderCredential(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	const userID = "user-credentials"
+	seedUser(t, rawDB, userID)
+
+	// The seed must actually populate every table, or this test passes by
+	// asserting 0 == 0 on a row that was never there.
+	for _, table := range credentialTables {
+		if n := countRows(t, rawDB, table, userID); n != 1 {
+			t.Fatalf("%s: seeded %d rows, want 1 — the seed is not exercising this table", table, n)
+		}
+	}
+
+	if _, err := accountpurge.Purge(context.Background(), rawDB, userID); err != nil {
+		t.Fatalf("Purge: %v", err)
+	}
+
+	for _, table := range credentialTables {
+		if n := countRows(t, rawDB, table, userID); n != 0 {
+			t.Errorf("%s: %d credential rows SURVIVED account deletion, want 0 "+
+				"— add the table to purgeSteps in accountpurge.go", table, n)
+		}
+	}
+}
+
+// TestPreview_DetectsEachProviderCredentialAlone pins the OTHER hardcoded
+// list: Preview's EXISTS union. A table missing there makes the deletion
+// dialog tell the user they have no stored credentials while they do.
+//
+// Each provider is checked in isolation — with all four seeded, a union that
+// covers only one still reports true and the gap stays invisible.
+func TestPreview_DetectsEachProviderCredentialAlone(t *testing.T) {
+	for _, table := range credentialTables {
+		t.Run(table, func(t *testing.T) {
+			_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+			defer cleanup()
+
+			const userID = "user-single-credential"
+			seedUser(t, rawDB, userID)
+
+			// Leave exactly one credential table populated.
+			for _, other := range credentialTables {
+				if other == table {
+					continue
+				}
+				if _, err := rawDB.Exec(
+					fmt.Sprintf(`DELETE FROM %s WHERE user_id = $1`, other), userID); err != nil {
+					t.Fatalf("clear %s: %v", other, err)
+				}
+			}
+
+			counts, err := accountpurge.Preview(context.Background(), rawDB, userID)
+			if err != nil {
+				t.Fatalf("Preview: %v", err)
+			}
+			if !counts.HasProviderCredentials {
+				t.Errorf("HasProviderCredentials = false with only %s populated "+
+					"— add it to the EXISTS union in Preview", table)
+			}
+		})
 	}
 }
 
@@ -200,10 +298,10 @@ func TestPurge_LeavesOtherUsersIntact(t *testing.T) {
 		t.Fatalf("Purge: %v", err)
 	}
 
-	for _, table := range []string{
-		"projects", "chats", "worktrees", "settings", "claude_auth_tokens",
+	for _, table := range append([]string{
+		"projects", "chats", "worktrees", "settings",
 		"messages", "threads", "tool_calls",
-	} {
+	}, credentialTables...) {
 		if n := countRows(t, rawDB, table, victim); n != 0 {
 			t.Errorf("%s: victim left %d rows, want 0", table, n)
 		}

@@ -141,6 +141,9 @@ type CodexAuthTokens = core.CodexAuthTokens
 // CopilotAuthTokens is an alias to the shared core Copilot OAuth token model.
 type CopilotAuthTokens = core.CopilotAuthTokens
 
+// AntigravityAuthTokens is an alias to the shared core Antigravity OAuth token model.
+type AntigravityAuthTokens = core.AntigravityAuthTokens
+
 // ClaudeAuthTokens is an alias to the shared core Claude OAuth token model.
 type ClaudeAuthTokens = core.ClaudeAuthTokens
 

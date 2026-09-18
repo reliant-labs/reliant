@@ -48,6 +48,7 @@ export const launchPlanSchema = z
         "anthropic",
         "openrouter",
         "copilot",
+        "antigravity",
         "other",
         "not_configured",
       ])

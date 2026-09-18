@@ -88,9 +88,11 @@ func TestGeminiImageModels_RouteOnlyThroughServeableProviders(t *testing.T) {
 	registry := models.MustGetRegistry()
 
 	// Serveable == a client exists that speaks this provider's image API.
-	//   reliant — LiteLLM translates to the OpenAI images shape.
-	//   gemini  — imagegen.GeminiClient calls AI Studio natively.
-	serveable := map[string]bool{"reliant": true, "gemini": true}
+	//   reliant     — LiteLLM translates to the OpenAI images shape.
+	//   gemini      — imagegen.GeminiClient calls AI Studio natively.
+	//   antigravity — imagegen.AntigravityClient calls v1internal:generateContent
+	//                 and unwraps the double envelope.
+	serveable := map[string]bool{"reliant": true, "gemini": true, "antigravity": true}
 
 	for _, modelID := range geminiImageModelIDs {
 		definition, ok := registry.GetDefinition(modelID)

@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const codexCancelMock = vi.fn()
 const claudeCancelMock = vi.fn()
+const antigravityCancelMock = vi.fn()
 
 vi.mock('@/hooks', () => ({
   useCodexOAuth: () => ({ isRunning: false, lastResult: null, start: vi.fn(), cancel: codexCancelMock, reset: vi.fn() }),
   useClaudeOAuth: () => ({ isRunning: false, lastResult: null, start: vi.fn(), cancel: claudeCancelMock, reset: vi.fn() }),
+  useAntigravityOAuth: () => ({ isRunning: false, lastResult: null, start: vi.fn(), cancel: antigravityCancelMock, reset: vi.fn() }),
   useCopilotOAuth: () => ({
     phase: 'idle',
     isActive: false,
@@ -48,6 +50,7 @@ describe('ApiKeySetupModal OAuth cancellation', () => {
 
     expect(codexCancelMock).not.toHaveBeenCalled()
     expect(claudeCancelMock).not.toHaveBeenCalled()
+    expect(antigravityCancelMock).not.toHaveBeenCalled()
 
     act(() => {
       useApiKeySetupStore.setState({ showModal: false })
@@ -56,6 +59,7 @@ describe('ApiKeySetupModal OAuth cancellation', () => {
 
     expect(codexCancelMock).toHaveBeenCalled()
     expect(claudeCancelMock).toHaveBeenCalled()
+    expect(antigravityCancelMock).toHaveBeenCalled()
   })
 
   it('does not offer manual Reliant entry in the modal', () => {
