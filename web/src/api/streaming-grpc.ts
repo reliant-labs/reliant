@@ -102,6 +102,20 @@ const MAX_RECONNECT_DELAY_MS = 30_000;
 // Cap the exponent so Math.pow stays finite over a long outage.
 const MAX_RECONNECT_EXPONENT = 6;
 
+// A connection must stay up at least this long before we treat it as healthy
+// and reset the backoff.
+//
+// Backoff used to reset the moment the stream reached "connected", which is the
+// wrong signal: a server that accepts the stream and then immediately ends it
+// is NOT a recovered server, but it looked like one, so every cycle restarted
+// at attempt 1 and the exponential backoff never engaged. A server-side bug
+// that ended each stream in ~5ms therefore produced an unthrottled reconnect
+// storm (~20/sec for hours in dev), each cycle firing a full chat refetch.
+//
+// Requiring the connection to survive this window means genuine recoveries
+// still reset promptly, while connect/drop churn keeps escalating the delay.
+const SHORT_LIVED_CONNECTION_MS = 10_000;
+
 // Liveness watchdog. The server sends a heartbeat every 30s (see
 // internal/grpc/services/streaming.go heartbeatInterval). A half-open
 // connection — backend SIGKILLed under `air`, laptop slept, proxy dropped the
@@ -405,6 +419,10 @@ export class UserStreamingService {
   private projectId: string | undefined = undefined;
   private isIntentionallyClosed = false;
   private reconnectAttempts = 0;
+  // Timestamp of the last connection that stayed up long enough to count as
+  // healthy. Used to distinguish a real recovery from a connect/drop churn
+  // loop — see SHORT_LIVED_CONNECTION_MS.
+  private connectionOpenedAt = 0;
   private lastSequence: bigint = 0n;
   private lastChatSequence: bigint = 0n;
   private isConnected_ = false;
@@ -465,6 +483,18 @@ export class UserStreamingService {
     if (this.watchdogTimer !== null) return;
     this.watchdogTimer = setInterval(() => {
       if (!this.isConnected_ || this.isIntentionallyClosed) return;
+
+      // A connection that has stayed up this long is genuinely healthy (as
+      // opposed to a server accepting and instantly ending each stream), so
+      // the next disconnect starts from a fresh backoff.
+      if (
+        this.reconnectAttempts > 0 &&
+        this.connectionOpenedAt > 0 &&
+        Date.now() - this.connectionOpenedAt >= SHORT_LIVED_CONNECTION_MS
+      ) {
+        this.reconnectAttempts = 0;
+      }
+
       const silentFor = Date.now() - this.lastEventAt;
       if (silentFor < STREAM_STALE_TIMEOUT_MS) return;
 
@@ -687,8 +717,30 @@ export class UserStreamingService {
     }
     this.isConnected_ = false;
     this.disarmWatchdog();
-    this.reconnectAttempts = 0;
-    logger.info(`${LOG_PREFIX_STREAM} Immediate reconnect`, { reason });
+
+    // Only a user-driven wake (back online, tab visible) may collapse the
+    // backoff — those are real signals that the world changed. Internal
+    // triggers (resubscribe, gap resync, stale watchdog) must NOT reset it:
+    // they fire in exactly the situation the backoff exists to damp, and
+    // zeroing it here is what let a resubscribe-per-cycle loop reconnect at
+    // full speed indefinitely.
+    const isUserWake = reason === "online" || reason === "visible";
+    if (isUserWake) {
+      this.reconnectAttempts = 0;
+    }
+
+    logger.info(`${LOG_PREFIX_STREAM} Immediate reconnect`, {
+      reason,
+      attempts: this.reconnectAttempts,
+    });
+
+    // A churning internal trigger goes through the backoff path instead of
+    // reconnecting instantly, so a persistent server-side fault degrades to a
+    // slow retry rather than a storm.
+    if (!isUserWake && this.reconnectAttempts > 0) {
+      this.attemptReconnect();
+      return;
+    }
 
     // Establish new connection (creates a new AbortController)
     void this.establishConnection();
@@ -734,8 +786,15 @@ export class UserStreamingService {
         if (!this.isConnected_) {
           this.isConnected_ = true;
           this.connectAttemptInFlight = false;
+          this.connectionOpenedAt = Date.now();
           this.callbacks.onStatusChange("connected");
-          this.reconnectAttempts = 0;
+          // Deliberately does NOT reset reconnectAttempts. Reaching
+          // "connected" only proves the server accepted the stream, not that
+          // it will keep it — a server that ends every stream immediately hits
+          // this line on each cycle, and resetting here is what let a
+          // server-side fault spin an unthrottled reconnect loop. The reset
+          // now happens once the connection has survived
+          // SHORT_LIVED_CONNECTION_MS (see the watchdog tick).
           this.armWatchdog();
         }
 

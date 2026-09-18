@@ -9,6 +9,7 @@ package streaming
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -28,9 +29,8 @@ const (
 // NATSHub implements StreamingHub using NATS JetStream.
 // It uses a memory-backed stream with short retention for ephemeral streaming deltas.
 type NATSHub struct {
-	nc     *nats.Conn
-	js     jetstream.JetStream
-	stream jetstream.Stream
+	nc *nats.Conn
+	js jetstream.JetStream
 
 	// Track subscribers for stats
 	subscribers sync.Map // map[string]*sync.Map[uint64]*NATSSubscription
@@ -66,6 +66,19 @@ func (s *NATSSubscription) Unsubscribe() {
 	s.cancel()
 }
 
+// streamConfig is the declared shape of the deltas stream. It is used both at
+// startup and by ensureStream on the subscribe path, so the two can never
+// drift into describing different streams.
+func streamConfig() jetstream.StreamConfig {
+	return jetstream.StreamConfig{
+		Name:     natsStreamName,
+		Subjects: []string{natsSubjectPfx + "*"},
+		Storage:  jetstream.MemoryStorage,
+		MaxAge:   5 * time.Minute,
+		MaxBytes: 128 * 1024 * 1024, // 128 MB cap
+	}
+}
+
 // NewNATSHub creates a new NATS JetStream streaming hub.
 func NewNATSHub(natsURL string) (*NATSHub, error) {
 	nc, err := natsutil.Connect(natsURL)
@@ -82,23 +95,35 @@ func NewNATSHub(natsURL string) (*NATSHub, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	stream, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:     natsStreamName,
-		Subjects: []string{natsSubjectPfx + "*"},
-		Storage:  jetstream.MemoryStorage,
-		MaxAge:   5 * time.Minute,
-		MaxBytes: 128 * 1024 * 1024, // 128 MB cap
-	})
-	if err != nil {
+	if _, err := js.CreateOrUpdateStream(ctx, streamConfig()); err != nil {
 		nc.Close()
 		return nil, err
 	}
 
 	return &NATSHub{
-		nc:     nc,
-		js:     js,
-		stream: stream,
+		nc: nc,
+		js: js,
 	}, nil
+}
+
+// ensureStream recreates the deltas stream if it has gone missing.
+//
+// The stream is MemoryStorage, so it does not survive a NATS restart — and
+// nothing else recreates it, because it was only ever created in NewNATSHub at
+// process start. A NATS restart underneath a running api-server therefore left
+// every OrderedConsumer call failing with "stream not found" forever. That is
+// not a quiet degradation: the subscribe failure ends the StreamUserUpdates
+// RPC, the client reconnects, resubscribes, fails again, and the resulting
+// reconnect loop ran at ~20 cycles/second with a full chat refetch per cycle.
+//
+// Recreating on demand is safe and cheap: CreateOrUpdateStream is idempotent,
+// and we only pay the round-trip when the consumer could not be created.
+// Losing the buffered deltas is acceptable — the stream is a 5-minute
+// ephemeral buffer, and durable state is replayed from the DB by the snapshot
+// and since_seq catch-up.
+func (h *NATSHub) ensureStream(ctx context.Context) error {
+	_, err := h.js.CreateOrUpdateStream(ctx, streamConfig())
+	return err
 }
 
 // Publish broadcasts a streaming delta to all subscribers of a chat via NATS.
@@ -190,9 +215,28 @@ func (h *NATSHub) consumeLoop(ctx context.Context, sub *NATSSubscription) {
 		close(sub.events)
 	}()
 
-	consumer, err := h.js.OrderedConsumer(ctx, natsStreamName, jetstream.OrderedConsumerConfig{
+	consumerCfg := jetstream.OrderedConsumerConfig{
 		FilterSubjects: []string{natsSubjectPfx + sub.chatID},
-	})
+	}
+	consumer, err := h.js.OrderedConsumer(ctx, natsStreamName, consumerCfg)
+	// A missing stream means NATS restarted under us and wiped this
+	// memory-backed stream. Recreate it and retry once rather than failing the
+	// subscribe — a failed subscribe ends the caller's stream RPC and drives a
+	// client reconnect loop that never heals on its own.
+	if errors.Is(err, jetstream.ErrStreamNotFound) {
+		observability.StreamingErrorsTotal.WithLabelValues("stream_missing").Inc()
+		logging.Warn("[NATSHub] Deltas stream missing — recreating",
+			"chatID", sub.chatID[:min(8, len(sub.chatID))],
+			"stream", natsStreamName)
+		if ensureErr := h.ensureStream(ctx); ensureErr != nil {
+			observability.StreamingErrorsTotal.WithLabelValues("stream_recreate").Inc()
+			logging.Warn("[NATSHub] Failed to recreate deltas stream",
+				"chatID", sub.chatID[:min(8, len(sub.chatID))],
+				"error", ensureErr)
+			return
+		}
+		consumer, err = h.js.OrderedConsumer(ctx, natsStreamName, consumerCfg)
+	}
 	if err != nil {
 		observability.StreamingErrorsTotal.WithLabelValues("consumer_create").Inc()
 		logging.Warn("[NATSHub] Failed to create ordered consumer",

@@ -26,9 +26,16 @@ import {
 import {
   useCodexOAuth,
   useClaudeOAuth,
+  useAntigravityOAuth,
   useCopilotOAuth,
   useOAuthAvailability,
 } from "../../hooks";
+import {
+  REDIRECT_OAUTH_DISPLAY_NAMES,
+  isRedirectOAuthProvider,
+  resolveOAuthFlow,
+  type RedirectOAuthProvider,
+} from "../../lib/oauth-providers";
 import { useWalletOverview } from "../../hooks/useReliantAIQueries";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
@@ -62,6 +69,7 @@ interface CombinedGeneralSettingsProps {
 export const VISIBLE_PROVIDERS = [
   "claude",
   "codex",
+  "antigravity",
   "copilot",
   "reliant",
   "anthropic",
@@ -86,6 +94,14 @@ export const providerConfigs = {
     description:
       "GPT-5.3 Codex (flagship) via ChatGPT backend (uses Codex authentication)",
     usesOAuth: "codex" as const,
+  },
+  antigravity: {
+    name: "Antigravity",
+    docsUrl: "https://antigravity.google",
+    keyFormat: "",
+    description:
+      "Gemini 3.x models via Antigravity's Google sign-in (uses your Google account)",
+    usesOAuth: "antigravity" as const,
   },
   reliant: {
     name: "Reliant",
@@ -228,6 +244,22 @@ export const parseErrorMessage = (errorText: string, provider: string): string =
     }
     if (lowerError.includes("session") || lowerError.includes("invalid")) {
       return "Codex session error. Please reconnect with Login with Codex.";
+    }
+  }
+
+  // Antigravity (Google OAuth) specific errors
+  if (provider === "antigravity") {
+    if (lowerError.includes("not authenticated")) {
+      return "Antigravity is not connected. Please use Login with Antigravity.";
+    }
+    if (lowerError.includes("expired")) {
+      return "Antigravity session expired. Please reconnect with Login with Antigravity.";
+    }
+    if (lowerError.includes("unauthorized") || lowerError.includes("401")) {
+      return "Antigravity authentication failed. Please reconnect with Login with Antigravity.";
+    }
+    if (lowerError.includes("rate limit") || lowerError.includes("429")) {
+      return "Antigravity rate limit exceeded. Please wait a moment before trying again.";
     }
   }
 
@@ -431,13 +463,26 @@ export function CombinedGeneralSettings({
 
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
+  const antigravityOAuth = useAntigravityOAuth();
   const copilotOAuth = useCopilotOAuth();
+
+  // Keyed by provider id, not chosen by a ternary — see lib/oauth-providers
+  // for why the two-way ternary this replaces was a silent-wrong-account bug.
+  const redirectOAuthFlows: Record<
+    RedirectOAuthProvider,
+    ReturnType<typeof useClaudeOAuth>
+  > = {
+    claude: claudeOAuth,
+    codex: codexOAuth,
+    antigravity: antigravityOAuth,
+  };
+
   const selectedOAuth = providerConfigs[selectedProvider as ProviderId]?.usesOAuth;
   // Only probe the localhost OAuth helper once the user picks a redirect-based
   // OAuth provider (the OAuthHelperPanel is shown) — never on mount. Copilot
   // uses the device flow and needs no local helper.
   const oauthAvailability = useOAuthAvailability({
-    enabled: selectedOAuth === "claude" || selectedOAuth === "codex",
+    enabled: isRedirectOAuthProvider(selectedOAuth),
   });
   const walletQ = useWalletOverview();
   const [enablingReliant, setEnablingReliant] = useState(false);
@@ -641,12 +686,12 @@ export function CombinedGeneralSettings({
     }
   };
 
-  const handleConnectOAuth = async (oauthType: string) => {
+  const handleConnectOAuth = async (oauthType: RedirectOAuthProvider) => {
     setValidating(true);
     setValidationMessage(null);
 
-    const oauthHook = oauthType === "claude" ? claudeOAuth : codexOAuth;
-    const displayName = oauthType === "claude" ? "Claude Code" : "Codex";
+    const oauthHook = resolveOAuthFlow(redirectOAuthFlows, oauthType);
+    const displayName = REDIRECT_OAUTH_DISPLAY_NAMES[oauthType];
 
     try {
       const result = await oauthHook.start();
@@ -804,7 +849,9 @@ export function CombinedGeneralSettings({
                   oauth={copilotOAuth}
                   onStart={handleConnectCopilot}
                 />
-              ) : providerConfigs[selectedProvider as ProviderId]?.usesOAuth ? (
+              ) : isRedirectOAuthProvider(
+                  providerConfigs[selectedProvider as ProviderId]?.usesOAuth
+                ) ? (
                 /* OAuth Section */
                 <div className="space-y-4">
                   <OAuthHelperPanel
@@ -812,7 +859,12 @@ export function CombinedGeneralSettings({
                     available={oauthAvailability.available}
                     loading={oauthAvailability.loading}
                     onRetry={oauthAvailability.recheck}
-                    onConnect={() => handleConnectOAuth(providerConfigs[selectedProvider as ProviderId]?.usesOAuth as string)}
+                    onConnect={() =>
+                      handleConnectOAuth(
+                        providerConfigs[selectedProvider as ProviderId]
+                          ?.usesOAuth as RedirectOAuthProvider
+                      )
+                    }
                     connecting={validating}
                     buttonVariant="subtle"
                   />

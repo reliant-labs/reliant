@@ -340,7 +340,7 @@ func TestRoutingHint(t *testing.T) {
 		t.Errorf("routingHint(astra) = %q, want %q", got, want)
 	}
 
-	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT55, models.GPT54Mini} {
+	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT55, models.GPT56Terra} {
 		if hint := routingHint(id, string(id)); hint != "" {
 			t.Errorf("expected no routing hint for %s, got %q", id, hint)
 		}

@@ -13,6 +13,7 @@ import (
 	// its init() has registered before the agreement is checked. A driver
 	// missing from this list is invisible to the test AND to the resolver.
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
+	_ "github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/gemini"

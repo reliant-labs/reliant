@@ -29,6 +29,8 @@ type ServiceInternals = {
   lastSequence: bigint;
   abortController: AbortController | null;
   subscribedChatId: string | undefined;
+  connectionOpenedAt: number;
+  reconnectNow(reason: string): void;
 };
 
 function makeService() {
@@ -178,5 +180,99 @@ describe("start() after a dead connection", () => {
     service.start(1, "c1", 1);
 
     expect(connectSpy).not.toHaveBeenCalled();
+  });
+});
+
+// Regression tests for the reconnect storm.
+//
+// A server-side fault (NATS restart wiped the memory-backed STREAMING_DELTAS
+// stream, so the per-chat subscribe 404'd and ended the RPC) made every stream
+// connect successfully and then end within milliseconds. The client treated
+// each "connected" as a recovery and reset its backoff, so the exponential
+// delay never engaged: measured at ~20 reconnect cycles/second for three-plus
+// hours, each cycle dragging a full ListChats/GetChat/ListArchivedChats
+// refetch behind it.
+//
+// The client cannot fix the server, but it must not amplify it. These pin the
+// two rules that turn a storm into a slow retry.
+describe("reconnect storm damping", () => {
+  it("does not reset backoff for a connection that dies immediately", () => {
+    const { internals } = makeService();
+
+    // Cycle: attempt -> connects -> ends almost instantly. This is exactly the
+    // observed loop, and it must escalate rather than stay pinned at attempt 1.
+    for (let i = 0; i < 5; i++) {
+      internals.attemptReconnect();
+      vi.advanceTimersByTime(60_000);
+      internals.isConnected_ = true;
+      internals.connectionOpenedAt = Date.now();
+      internals.armWatchdog();
+      // Dies well inside the healthy-connection window.
+      vi.advanceTimersByTime(50);
+      internals.isConnected_ = false;
+    }
+
+    expect(internals.reconnectAttempts).toBe(5);
+  });
+
+  it("resets backoff once a connection survives the healthy window", () => {
+    const { internals } = makeService();
+
+    // Advance between calls: attemptReconnect no-ops while a timer is pending.
+    internals.attemptReconnect();
+    vi.advanceTimersByTime(60_000);
+    internals.attemptReconnect();
+    vi.advanceTimersByTime(60_000);
+    expect(internals.reconnectAttempts).toBe(2);
+
+    // A genuinely healthy connection: stays up past SHORT_LIVED_CONNECTION_MS
+    // and keeps receiving events, so the watchdog promotes it.
+    internals.isConnected_ = true;
+    internals.connectionOpenedAt = Date.now();
+    internals.armWatchdog();
+    for (let i = 0; i < 4; i++) {
+      vi.advanceTimersByTime(15_000);
+      internals.lastEventAt = Date.now();
+    }
+
+    expect(internals.reconnectAttempts).toBe(0);
+  });
+
+  it("routes a churning internal resubscribe through backoff, not an instant reconnect", () => {
+    const { internals, connectSpy } = makeService();
+
+    // Backoff already engaged from prior failures.
+    internals.attemptReconnect();
+    vi.advanceTimersByTime(60_000);
+    connectSpy.mockClear();
+
+    // An internal trigger (resubscribe / gap resync) must NOT reconnect
+    // instantly while the backoff is engaged — that is the bypass that let the
+    // loop run at full speed.
+    internals.reconnectNow(
+      "resubscribe",
+    );
+    expect(connectSpy).not.toHaveBeenCalled();
+
+    // It is scheduled, not dropped: the stream still heals.
+    vi.advanceTimersByTime(60_000);
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("still collapses backoff instantly for a real user wake", () => {
+    const { internals, connectSpy } = makeService();
+
+    internals.attemptReconnect();
+    vi.advanceTimersByTime(60_000);
+    connectSpy.mockClear();
+
+    // Back online / tab visible are genuine signals that the world changed,
+    // so these keep reconnecting immediately.
+    internals.reconnectNow(
+      "online",
+    );
+
+    expect(connectSpy).toHaveBeenCalledTimes(1);
+    expect(internals.reconnectAttempts).toBe(0);
   });
 });

@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -315,14 +316,7 @@ func (g *GeminiClient) buildToolConfig(toolsList []tools.Tool) *genai.ToolConfig
 }
 
 func (g *GeminiClient) finishReason(reason genai.FinishReason) message.FinishReason {
-	switch reason {
-	case genai.FinishReasonStop:
-		return message.FinishReasonEndTurn
-	case genai.FinishReasonMaxTokens:
-		return message.FinishReasonMaxTokens
-	default:
-		return message.FinishReasonUnknown
-	}
+	return geminiwire.FinishReason(geminiwire.SourceGemini, string(reason))
 }
 
 func (g *GeminiClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) (*llm.DriverResponse, error) {

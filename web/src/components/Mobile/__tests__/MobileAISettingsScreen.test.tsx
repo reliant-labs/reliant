@@ -44,6 +44,7 @@ vi.mock("../../../store/apiKeySetupStore", () => ({
 vi.mock("../../../hooks", () => ({
   useCodexOAuth: () => ({ start: vi.fn(), cancel: vi.fn() }),
   useClaudeOAuth: () => ({ start: vi.fn(), cancel: vi.fn() }),
+  useAntigravityOAuth: () => ({ start: vi.fn(), cancel: vi.fn() }),
   useCopilotOAuth: () => ({
     phase: "idle",
     isActive: false,
@@ -78,7 +79,7 @@ beforeEach(() => {
 describe("MobileAISettingsScreen", () => {
   it("always shows the desktop-only Claude/Codex OAuth notice", async () => {
     render(<MobileAISettingsScreen onBack={vi.fn()} />);
-    const notice = await screen.findByText(/claude and codex sign-in needs/i);
+    const notice = await screen.findByText(/claude, codex and antigravity sign-in needs/i);
     expect(notice).toBeInTheDocument();
     // Not gated on live availability — Copilot is named as the on-device path.
     expect(notice.textContent).toMatch(/github copilot/i);
@@ -86,7 +87,7 @@ describe("MobileAISettingsScreen", () => {
 
   it("fetches provider statuses on mount", async () => {
     render(<MobileAISettingsScreen onBack={vi.fn()} />);
-    await screen.findByText(/claude and codex sign-in needs/i);
+    await screen.findByText(/claude, codex and antigravity sign-in needs/i);
     expect(mocks.getProviders).toHaveBeenCalled();
   });
 

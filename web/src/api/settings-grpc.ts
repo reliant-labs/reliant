@@ -37,6 +37,7 @@ import {
   SyncReliantProviderRequestSchema,
   CompleteCodexOAuthRequestSchema,
   CompleteClaudeOAuthRequestSchema,
+  CompleteAntigravityOAuthRequestSchema,
   StartCopilotDeviceAuthRequestSchema,
   PollCopilotDeviceAuthRequestSchema,
   PollCopilotDeviceAuthResponse_Status,
@@ -537,6 +538,34 @@ export const settingsGrpc = {
       state,
     });
     const response = await client.completeClaudeOAuth(request);
+    return {
+      success: response.success,
+      message: response.message,
+    };
+  },
+
+  /**
+   * Exchange an Antigravity (Google) OAuth authorization code for tokens.
+   *
+   * Takes no `state`: Google's token endpoint does not want it echoed back on
+   * the exchange. State is still generated and verified in the browser against
+   * the redirect — see lib/antigravity-oauth.
+   */
+  async completeAntigravityOAuth(
+    code: string,
+    codeVerifier: string,
+    redirectURI: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    const client = grpcClient.settings();
+    const request = create(CompleteAntigravityOAuthRequestSchema, {
+      code,
+      codeVerifier,
+      redirectUri: redirectURI,
+    });
+    const response = await client.completeAntigravityOAuth(request);
     return {
       success: response.success,
       message: response.message,

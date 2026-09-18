@@ -52,6 +52,7 @@ export type ModelProvider =
   | "anthropic"
   | "openrouter"
   | "copilot"
+  | "antigravity"
   | "other"
   | "not_configured";
 

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -100,6 +101,32 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 				AccountUUID:    tokens.AccountID,
 				RefreshToken:   tokens.RefreshToken,
 				TokenExpiresAt: expiresAt,
+			}
+			continue
+		}
+
+		if driverID == antigravity.DriverID {
+			tokens, err := repo.GetAntigravityAuthTokens(ctx, userID)
+			if err != nil || tokens == nil {
+				continue
+			}
+			accessToken := strings.TrimSpace(tokens.AccessToken)
+			if accessToken == "" {
+				continue
+			}
+			// Don't skip expired tokens here — the transport interceptor will
+			// refresh them. Only skip when there is no refresh token AND the
+			// token is expired, which is a session the user must reconnect.
+			if antigravity.IsTokenExpired(tokens.ExpiresAt) && strings.TrimSpace(tokens.RefreshToken) == "" {
+				continue
+			}
+			drivers[models.DriverID(driverID)] = models.DriverConfig{
+				DriverID:       models.DriverID(driverID),
+				APIKey:         accessToken,
+				Enabled:        true,
+				UserID:         userID,
+				RefreshToken:   tokens.RefreshToken,
+				TokenExpiresAt: tokens.ExpiresAt,
 			}
 			continue
 		}

@@ -39,6 +39,10 @@ func (r *claudeTokenRepo) GetCopilotAuthTokens(context.Context, string) (*db.Cop
 	return nil, nil
 }
 
+func (r *claudeTokenRepo) GetAntigravityAuthTokens(context.Context, string) (*db.AntigravityAuthTokens, error) {
+	return nil, nil
+}
+
 func (r *claudeTokenRepo) GetProviderAPIKeys(context.Context, string) (map[string]string, error) {
 	if r.apiKeys == nil {
 		return map[string]string{}, nil

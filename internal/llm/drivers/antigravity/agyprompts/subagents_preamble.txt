@@ -1,0 +1,12 @@
+<subagents>
+## Invoking Subagents
+
+Subagents can be invoked using the invoke_subagent tool. You can invoke an existing subagent by name, or define a new subagent for this conversation using the define_subagent tool, and then invoke it. Agents defined by the define_subagent tool are available for the duration of this conversation. After launching a subagent, you do NOT need to poll or check your inbox in a loop. The system will automatically notify you when the subagent sends a message. Simply proceed with other work or stop calling tools, and you will be notified when there is a message to process.
+
+## Communicating with Another Agent
+
+Use the send_message tool to send a message to another agent by its conversation ID (returned by invoke_subagent). This tool is ONLY for communicating with other agents.
+
+**Do NOT use send_message to communicate with the user.** Instead, output visible text to communicate with the user.
+
+Available subagents:

@@ -12,7 +12,18 @@ import {
 import { api } from "@/api/client";
 import { cn } from "@/lib/utils";
 import { logger } from "@/lib/logger";
-import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } from "@/hooks";
+import {
+  useCodexOAuth,
+  useClaudeOAuth,
+  useAntigravityOAuth,
+  useCopilotOAuth,
+  useOAuthAvailability,
+} from "@/hooks";
+import {
+  isRedirectOAuthProvider,
+  resolveOAuthFlow,
+  type RedirectOAuthProvider,
+} from "@/lib/oauth-providers";
 import { OAuthHelperPanel } from "@/components/OAuthHelperPanel";
 import { CopilotDevicePanel } from "@/components/CopilotDevicePanel";
 import { useWalletOverview } from "@/hooks/useReliantAIQueries";
@@ -55,6 +66,15 @@ const PROVIDERS = [
     docsUrl: "https://github.com/openai/codex",
     keyFormat: "",
     usesOAuth: "codex" as const,
+    builtIn: false as const,
+  },
+  {
+    id: "antigravity" as const,
+    modelProvider: "antigravity" as ModelProvider,
+    name: "Antigravity",
+    docsUrl: "https://antigravity.google",
+    keyFormat: "",
+    usesOAuth: "antigravity" as const,
     builtIn: false as const,
   },
   {
@@ -125,7 +145,19 @@ function parseErrorMessage(errorText: string, provider: string): string {
 export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
+  const antigravityOAuth = useAntigravityOAuth();
   const copilotOAuth = useCopilotOAuth();
+
+  // Keyed by provider id — see lib/oauth-providers for why the ternary this
+  // replaces silently ran Codex's flow for any non-Claude redirect provider.
+  const redirectOAuthFlows: Record<
+    RedirectOAuthProvider,
+    ReturnType<typeof useClaudeOAuth>
+  > = {
+    claude: claudeOAuth,
+    codex: codexOAuth,
+    antigravity: antigravityOAuth,
+  };
   // getIsDev() is deliberately NOT an input here. It used to force this step
   // into its "eligible" branch in dev, which meant a dev build claimed "you
   // have credit available" against an empty wallet AND hid the coupon field
@@ -161,7 +193,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   // OAuth provider (the OAuthHelperPanel is shown) — never proactively on mount.
   // Copilot uses the device flow and needs no local helper.
   const oauthAvailability = useOAuthAvailability({
-    enabled: provider.usesOAuth === "claude" || provider.usesOAuth === "codex",
+    enabled: isRedirectOAuthProvider(provider.usesOAuth),
   });
 
   const validateKeyMutation = useMutation({
@@ -274,12 +306,11 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   );
 
   const handleConnectOAuth = useCallback(async () => {
-    if (!provider.usesOAuth) return;
+    if (!isRedirectOAuthProvider(provider.usesOAuth)) return;
     setError(null);
     setValidationResult(null);
 
-    const oauthHook =
-      provider.usesOAuth === "claude" ? claudeOAuth : codexOAuth;
+    const oauthHook = resolveOAuthFlow(redirectOAuthFlows, provider.usesOAuth);
     try {
       const result = await oauthHook.start();
       if (!result.ok) {
@@ -313,7 +344,7 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
         message: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [claudeOAuth, codexOAuth, finishOnboarding, provider]);
+  }, [claudeOAuth, codexOAuth, antigravityOAuth, finishOnboarding, provider]);
 
   // GitHub Copilot uses the device-authorization flow (device code → poll),
   // driven by the shared CopilotDevicePanel. The panel surfaces its own

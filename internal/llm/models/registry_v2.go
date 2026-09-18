@@ -26,16 +26,17 @@ type ModelRegistry struct {
 // ProviderPriority defines the resolution priority for providers.
 // Lower numbers have higher priority.
 var ProviderPriority = map[string]int{
-	"anthropic":  1,
-	"codex":      1,
-	"copilot":    1,
-	"openai":     1,
-	"gemini":     1,
-	"xai":        1,
-	"vertexai":   1,
-	"reliant":    1,
-	"local":      2,
-	"openrouter": 10,
+	"anthropic":   1,
+	"antigravity": 1,
+	"codex":       1,
+	"copilot":     1,
+	"openai":      1,
+	"gemini":      1,
+	"xai":         1,
+	"vertexai":    1,
+	"reliant":     1,
+	"local":       2,
+	"openrouter":  10,
 }
 
 var (

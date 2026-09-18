@@ -598,24 +598,38 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
 	reg := MustGetRegistry()
 
-	// TagFast is gpt-5.4-mini. It was gpt-5.3-codex-spark until the
-	// ChatGPT-account Codex backend was found to refuse that model outright
-	// (400 "not supported when using Codex with a ChatGPT account"), which made
-	// every titling and compaction call fail for a codex user. The 5.6 family's
-	// faster/cheaper member (terra) still carries `moderate` rather than `fast`
-	// to keep it off this path: @fast, chat titling and compaction all resolve
-	// TagFast for a codex user, so repointing it is a latency decision, not a
-	// catalog one.
+	// The codex driver has NO fast-tagged model, deliberately. TagFast pointed
+	// at gpt-5.3-codex-spark and then at gpt-5.4-mini; the ChatGPT-account
+	// backend refuses both with a 400 ("not supported when using Codex with a
+	// ChatGPT account"), so every titling and compaction call failed for a
+	// codex user — invisibly, because titling falls back to a truncated first
+	// message that looks real. Tagging terra instead would have repointed
+	// @fast globally, away from gemini-3.5-flash, for every user.
+	//
+	// Callers that want speed pass a preference ladder and degrade; see
+	// TestResolve_CodexTitlingDegradesToAServableModel below.
 	for tag, want := range map[string]string{
 		TagFlagship:  "gpt-5.5",
 		TagModerate:  "gpt-5.5",
-		TagFast:      "gpt-5.4-mini",
 		TagReasoning: "gpt-5.5",
 	} {
 		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}}, []string{"codex"})
 		require.NoError(t, err, "resolving tag %q", tag)
 		assert.Equal(t, want, resolved.Definition.ID, "codex tag %q resolved to an unexpected model", tag)
 	}
+
+	// Bare TagFast on codex resolves to gpt-image-2.5-flare — an IMAGE model,
+	// which carries `fast` and is the only fast-tagged codex entry left. That
+	// is precisely why every text caller must pin RequireOutputModality: this
+	// assertion documents the trap rather than pretending it is closed. A
+	// text-modality requirement is what makes the [fast, moderate] ladder land
+	// on gpt-5.5 instead.
+	bare, err := reg.Resolve(ModelSelector{Tags: []string{TagFast}}, []string{"codex"})
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-image-2.5-flare", bare.Definition.ID,
+		"bare TagFast on codex is expected to hit an image model; text callers "+
+			"must set RequireOutputModality=text to avoid it")
+	assert.False(t, bare.Definition.Capabilities.CanOutput(ModalityText))
 }
 
 func TestResolve_ReliantThinkingPolicyRegressionModels(t *testing.T) {

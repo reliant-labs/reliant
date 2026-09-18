@@ -350,6 +350,71 @@ func (s *settingStore) DeleteClaudeAuthTokens(ctx context.Context, userID string
 	return err
 }
 
+func (s *settingStore) GetAntigravityAuthTokens(ctx context.Context, userID string) (*core.AntigravityAuthTokens, error) {
+	query := s.bind(`SELECT access_token, refresh_token, expires_at, id_token, scope
+		FROM antigravity_auth_tokens
+		WHERE user_id = ?`)
+	row := s.db.QueryRowContext(ctx, query, userID)
+
+	var tokens core.AntigravityAuthTokens
+	if err := row.Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt, &tokens.IDToken, &tokens.Scope); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &tokens, nil
+}
+
+func (s *settingStore) SetAntigravityAuthTokens(ctx context.Context, userID string, tokens core.AntigravityAuthTokens) error {
+	now := time.Now().UTC()
+	id := uuid.New().String()
+	query := s.bind(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token, refresh_token, expires_at, id_token, scope, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET
+		   access_token = excluded.access_token,
+		   refresh_token = excluded.refresh_token,
+		   expires_at = excluded.expires_at,
+		   id_token = excluded.id_token,
+		   scope = excluded.scope,
+		   updated_at = excluded.updated_at`)
+	_, err := s.db.ExecContext(ctx, query, id, userID, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, tokens.IDToken, tokens.Scope, now, now)
+	return err
+}
+
+// CompareAndSwapAntigravityAuthTokens persists tokens only if the stored
+// refresh token still equals expectedRefreshToken. See core.SettingStore for
+// semantics. The conditional UPDATE is atomic, so two processes racing to
+// persist a refresh cannot both win.
+func (s *settingStore) CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.AntigravityAuthTokens) (bool, error) {
+	now := time.Now().UTC()
+	query := s.bind(`UPDATE antigravity_auth_tokens SET
+		   access_token = ?,
+		   refresh_token = ?,
+		   expires_at = ?,
+		   id_token = ?,
+		   scope = ?,
+		   updated_at = ?
+		 WHERE user_id = ? AND refresh_token = ?`)
+	res, err := s.db.ExecContext(ctx, query,
+		tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, tokens.IDToken, tokens.Scope,
+		now, userID, expectedRefreshToken)
+	if err != nil {
+		return false, err
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected > 0, nil
+}
+
+func (s *settingStore) DeleteAntigravityAuthTokens(ctx context.Context, userID string) error {
+	query := s.bind("DELETE FROM antigravity_auth_tokens WHERE user_id = ?")
+	_, err := s.db.ExecContext(ctx, query, userID)
+	return err
+}
+
 func (s *settingStore) GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error) {
 	isVisible, err := s.q.GetVisibilityOverride(ctx, pgdb.GetVisibilityOverrideParams{UserID: userID, ItemType: itemType, Slug: slug})
 	if err != nil {

@@ -27,6 +27,18 @@ type AgentMessage struct {
 	Attachments        pqtype.NullRawMessage `json:"attachments"`
 }
 
+type AntigravityAuthToken struct {
+	ID           string         `json:"id"`
+	UserID       string         `json:"user_id"`
+	AccessToken  string         `json:"access_token"`
+	RefreshToken sql.NullString `json:"refresh_token"`
+	ExpiresAt    sql.NullTime   `json:"expires_at"`
+	IDToken      sql.NullString `json:"id_token"`
+	Scope        sql.NullString `json:"scope"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+}
+
 type ApiKey struct {
 	ID        string    `json:"id"`
 	UserID    string    `json:"user_id"`

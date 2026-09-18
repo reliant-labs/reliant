@@ -55,9 +55,16 @@ import {
 import {
   useCodexOAuth,
   useClaudeOAuth,
+  useAntigravityOAuth,
   useCopilotOAuth,
   useOAuthAvailability,
 } from "../../hooks";
+import {
+  REDIRECT_OAUTH_DISPLAY_NAMES,
+  isRedirectOAuthProvider,
+  resolveOAuthFlow,
+  type RedirectOAuthProvider,
+} from "../../lib/oauth-providers";
 import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
@@ -304,8 +311,20 @@ export function MobileAIProvidersPanel({
 }: MobileAIProvidersPanelProps) {
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
+  const antigravityOAuth = useAntigravityOAuth();
   const copilotOAuth = useCopilotOAuth();
   const cloudEligibility = useCloudEligibility();
+
+  // Keyed by provider id — see lib/oauth-providers. The ternary this replaces
+  // sent every non-Claude redirect provider through the Codex flow.
+  const redirectOAuthFlows: Record<
+    RedirectOAuthProvider,
+    ReturnType<typeof useClaudeOAuth>
+  > = {
+    claude: claudeOAuth,
+    codex: codexOAuth,
+    antigravity: antigravityOAuth,
+  };
 
   const [addSheetProvider, setAddSheetProvider] = useState<ProviderId | null>(null);
   const [savingKey, setSavingKey] = useState(false);
@@ -321,7 +340,7 @@ export function MobileAIProvidersPanel({
     ? providerConfigs[addSheetProvider]?.usesOAuth
     : undefined;
   const oauthAvailability = useOAuthAvailability({
-    enabled: selectedOAuth === "claude" || selectedOAuth === "codex",
+    enabled: isRedirectOAuthProvider(selectedOAuth),
   });
 
   useEffect(() => {
@@ -430,11 +449,11 @@ export function MobileAIProvidersPanel({
     }
   };
 
-  const handleConnectOAuth = async (kind: "claude" | "codex") => {
+  const handleConnectOAuth = async (kind: RedirectOAuthProvider) => {
     setConnectingOAuth(true);
     setOauthBanner(null);
-    const oauthHook = kind === "claude" ? claudeOAuth : codexOAuth;
-    const displayName = kind === "claude" ? "Claude Code" : "Codex";
+    const oauthHook = resolveOAuthFlow(redirectOAuthFlows, kind);
+    const displayName = REDIRECT_OAUTH_DISPLAY_NAMES[kind];
     try {
       const result = await oauthHook.start();
       if (!result.ok) {
@@ -481,9 +500,9 @@ export function MobileAIProvidersPanel({
       <div className="mx-4 mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-700 dark:text-amber-400">
         <Info className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
-          Claude and Codex sign-in needs <code>reliant auth serve</code> running on
-          a computer — a phone can&apos;t start it. Connect those from desktop, or
-          use GitHub Copilot, which signs in entirely on this device.
+          Claude, Codex and Antigravity sign-in needs <code>reliant auth serve</code>{" "}
+          running on a computer — a phone can&apos;t start it. Connect those from
+          desktop, or use GitHub Copilot, which signs in entirely on this device.
         </p>
       </div>
 
@@ -595,7 +614,7 @@ export function MobileAIProvidersPanel({
             );
           }
 
-          if (config.usesOAuth === "claude" || config.usesOAuth === "codex") {
+          if (isRedirectOAuthProvider(config.usesOAuth)) {
             return (
               <AddProviderSheet title={config.name} onClose={closeAddSheet}>
                 <OAuthHelperPanel
@@ -604,7 +623,7 @@ export function MobileAIProvidersPanel({
                   loading={oauthAvailability.loading}
                   onRetry={oauthAvailability.recheck}
                   onConnect={() =>
-                    void handleConnectOAuth(config.usesOAuth as "claude" | "codex")
+                    void handleConnectOAuth(config.usesOAuth as RedirectOAuthProvider)
                   }
                   connecting={connectingOAuth}
                   buttonAlign="stretch"

@@ -269,6 +269,11 @@ type Repository interface {
 	SetCopilotAuthTokens(ctx context.Context, userID string, tokens core.CopilotAuthTokens) error
 	DeleteCopilotAuthTokens(ctx context.Context, userID string) error
 
+	GetAntigravityAuthTokens(ctx context.Context, userID string) (*core.AntigravityAuthTokens, error)
+	SetAntigravityAuthTokens(ctx context.Context, userID string, tokens core.AntigravityAuthTokens) error
+	CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.AntigravityAuthTokens) (bool, error)
+	DeleteAntigravityAuthTokens(ctx context.Context, userID string) error
+
 	GetClaudeAuthTokens(ctx context.Context, userID string) (*core.ClaudeAuthTokens, error)
 	SetClaudeAuthTokens(ctx context.Context, userID string, tokens core.ClaudeAuthTokens) error
 	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error)

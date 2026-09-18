@@ -92,6 +92,9 @@ const (
 	// SettingsServiceCompleteClaudeOAuthProcedure is the fully-qualified name of the SettingsService's
 	// CompleteClaudeOAuth RPC.
 	SettingsServiceCompleteClaudeOAuthProcedure = "/reliant.v1.SettingsService/CompleteClaudeOAuth"
+	// SettingsServiceCompleteAntigravityOAuthProcedure is the fully-qualified name of the
+	// SettingsService's CompleteAntigravityOAuth RPC.
+	SettingsServiceCompleteAntigravityOAuthProcedure = "/reliant.v1.SettingsService/CompleteAntigravityOAuth"
 	// SettingsServiceStartCopilotDeviceAuthProcedure is the fully-qualified name of the
 	// SettingsService's StartCopilotDeviceAuth RPC.
 	SettingsServiceStartCopilotDeviceAuthProcedure = "/reliant.v1.SettingsService/StartCopilotDeviceAuth"
@@ -180,6 +183,9 @@ type SettingsServiceClient interface {
 	// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Claude as connected for the current user.
 	CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error)
+	// CompleteAntigravityOAuth exchanges an OAuth authorization code + PKCE
+	// verifier and marks Antigravity as connected for the current user.
+	CompleteAntigravityOAuth(context.Context, *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error)
 	// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
 	// and returns the device/user codes plus polling parameters. The frontend
 	// drives polling via PollCopilotDeviceAuth.
@@ -337,6 +343,12 @@ func NewSettingsServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(settingsServiceMethods.ByName("CompleteClaudeOAuth")),
 			connect.WithClientOptions(opts...),
 		),
+		completeAntigravityOAuth: connect.NewClient[v1.CompleteAntigravityOAuthRequest, v1.CompleteAntigravityOAuthResponse](
+			httpClient,
+			baseURL+SettingsServiceCompleteAntigravityOAuthProcedure,
+			connect.WithSchema(settingsServiceMethods.ByName("CompleteAntigravityOAuth")),
+			connect.WithClientOptions(opts...),
+		),
 		startCopilotDeviceAuth: connect.NewClient[v1.StartCopilotDeviceAuthRequest, v1.StartCopilotDeviceAuthResponse](
 			httpClient,
 			baseURL+SettingsServiceStartCopilotDeviceAuthProcedure,
@@ -439,6 +451,7 @@ type settingsServiceClient struct {
 	syncReliantProvider         *connect.Client[v1.SyncReliantProviderRequest, v1.SyncReliantProviderResponse]
 	completeCodexOAuth          *connect.Client[v1.CompleteCodexOAuthRequest, v1.CompleteCodexOAuthResponse]
 	completeClaudeOAuth         *connect.Client[v1.CompleteClaudeOAuthRequest, v1.CompleteClaudeOAuthResponse]
+	completeAntigravityOAuth    *connect.Client[v1.CompleteAntigravityOAuthRequest, v1.CompleteAntigravityOAuthResponse]
 	startCopilotDeviceAuth      *connect.Client[v1.StartCopilotDeviceAuthRequest, v1.StartCopilotDeviceAuthResponse]
 	pollCopilotDeviceAuth       *connect.Client[v1.PollCopilotDeviceAuthRequest, v1.PollCopilotDeviceAuthResponse]
 	getPrivacySettings          *connect.Client[v1.GetPrivacySettingsRequest, v1.GetPrivacySettingsResponse]
@@ -547,6 +560,11 @@ func (c *settingsServiceClient) CompleteCodexOAuth(ctx context.Context, req *con
 // CompleteClaudeOAuth calls reliant.v1.SettingsService.CompleteClaudeOAuth.
 func (c *settingsServiceClient) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error) {
 	return c.completeClaudeOAuth.CallUnary(ctx, req)
+}
+
+// CompleteAntigravityOAuth calls reliant.v1.SettingsService.CompleteAntigravityOAuth.
+func (c *settingsServiceClient) CompleteAntigravityOAuth(ctx context.Context, req *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error) {
+	return c.completeAntigravityOAuth.CallUnary(ctx, req)
 }
 
 // StartCopilotDeviceAuth calls reliant.v1.SettingsService.StartCopilotDeviceAuth.
@@ -661,6 +679,9 @@ type SettingsServiceHandler interface {
 	// CompleteClaudeOAuth exchanges an OAuth authorization code + PKCE verifier
 	// and marks Claude as connected for the current user.
 	CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error)
+	// CompleteAntigravityOAuth exchanges an OAuth authorization code + PKCE
+	// verifier and marks Antigravity as connected for the current user.
+	CompleteAntigravityOAuth(context.Context, *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error)
 	// StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
 	// and returns the device/user codes plus polling parameters. The frontend
 	// drives polling via PollCopilotDeviceAuth.
@@ -814,6 +835,12 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 		connect.WithSchema(settingsServiceMethods.ByName("CompleteClaudeOAuth")),
 		connect.WithHandlerOptions(opts...),
 	)
+	settingsServiceCompleteAntigravityOAuthHandler := connect.NewUnaryHandler(
+		SettingsServiceCompleteAntigravityOAuthProcedure,
+		svc.CompleteAntigravityOAuth,
+		connect.WithSchema(settingsServiceMethods.ByName("CompleteAntigravityOAuth")),
+		connect.WithHandlerOptions(opts...),
+	)
 	settingsServiceStartCopilotDeviceAuthHandler := connect.NewUnaryHandler(
 		SettingsServiceStartCopilotDeviceAuthProcedure,
 		svc.StartCopilotDeviceAuth,
@@ -932,6 +959,8 @@ func NewSettingsServiceHandler(svc SettingsServiceHandler, opts ...connect.Handl
 			settingsServiceCompleteCodexOAuthHandler.ServeHTTP(w, r)
 		case SettingsServiceCompleteClaudeOAuthProcedure:
 			settingsServiceCompleteClaudeOAuthHandler.ServeHTTP(w, r)
+		case SettingsServiceCompleteAntigravityOAuthProcedure:
+			settingsServiceCompleteAntigravityOAuthHandler.ServeHTTP(w, r)
 		case SettingsServiceStartCopilotDeviceAuthProcedure:
 			settingsServiceStartCopilotDeviceAuthHandler.ServeHTTP(w, r)
 		case SettingsServicePollCopilotDeviceAuthProcedure:
@@ -1041,6 +1070,10 @@ func (UnimplementedSettingsServiceHandler) CompleteCodexOAuth(context.Context, *
 
 func (UnimplementedSettingsServiceHandler) CompleteClaudeOAuth(context.Context, *connect.Request[v1.CompleteClaudeOAuthRequest]) (*connect.Response[v1.CompleteClaudeOAuthResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CompleteClaudeOAuth is not implemented"))
+}
+
+func (UnimplementedSettingsServiceHandler) CompleteAntigravityOAuth(context.Context, *connect.Request[v1.CompleteAntigravityOAuthRequest]) (*connect.Response[v1.CompleteAntigravityOAuthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.SettingsService.CompleteAntigravityOAuth is not implemented"))
 }
 
 func (UnimplementedSettingsServiceHandler) StartCopilotDeviceAuth(context.Context, *connect.Request[v1.StartCopilotDeviceAuthRequest]) (*connect.Response[v1.StartCopilotDeviceAuthResponse], error) {

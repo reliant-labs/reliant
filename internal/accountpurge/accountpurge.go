@@ -65,7 +65,10 @@ type Counts struct {
 	Worktrees int64
 	Messages  int64
 	// HasProviderCredentials reports stored third-party credentials (Claude /
-	// Codex / Copilot OAuth tokens, or provider API keys). Surfaced separately
+	// Codex / Copilot / Antigravity OAuth tokens, or provider API keys).
+	// Every provider token table must be listed in both the EXISTS union
+	// below and purgeSteps; a table missed in either one leaves live
+	// credentials behind after the account is deleted. Surfaced separately
 	// because losing a credential differs in kind from losing content.
 	HasProviderCredentials bool
 }
@@ -85,10 +88,11 @@ func Preview(ctx context.Context, db *sql.DB, userID string) (Counts, error) {
 			(SELECT COUNT(*) FROM messages m
 			   JOIN chats c ON c.id = m.chat_id
 			  WHERE c.user_id = $1),
-			(EXISTS (SELECT 1 FROM claude_auth_tokens  WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM codex_auth_tokens   WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM copilot_auth_tokens WHERE user_id = $1)
-			 OR EXISTS (SELECT 1 FROM api_keys            WHERE user_id = $1))`,
+			(EXISTS (SELECT 1 FROM claude_auth_tokens      WHERE user_id = $1)
+			 OR EXISTS (SELECT 1 FROM codex_auth_tokens       WHERE user_id = $1)
+			 OR EXISTS (SELECT 1 FROM copilot_auth_tokens     WHERE user_id = $1)
+			 OR EXISTS (SELECT 1 FROM antigravity_auth_tokens WHERE user_id = $1)
+			 OR EXISTS (SELECT 1 FROM api_keys                WHERE user_id = $1))`,
 		userID)
 	if err := row.Scan(&c.Projects, &c.Chats, &c.Worktrees, &c.Messages, &c.HasProviderCredentials); err != nil {
 		return Counts{}, fmt.Errorf("accountpurge: preview: %w", err)
@@ -242,6 +246,7 @@ var purgeSteps = []step{
 	{"claude_auth_tokens", `DELETE FROM claude_auth_tokens WHERE user_id = $1`},
 	{"codex_auth_tokens", `DELETE FROM codex_auth_tokens WHERE user_id = $1`},
 	{"copilot_auth_tokens", `DELETE FROM copilot_auth_tokens WHERE user_id = $1`},
+	{"antigravity_auth_tokens", `DELETE FROM antigravity_auth_tokens WHERE user_id = $1`},
 	{"api_keys", `DELETE FROM api_keys WHERE user_id = $1`},
 }
 

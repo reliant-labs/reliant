@@ -71,6 +71,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/hooks", () => ({
   useCodexOAuth: () => ({ reset: vi.fn(), start: vi.fn() }),
   useClaudeOAuth: () => ({ reset: vi.fn(), start: vi.fn() }),
+  useAntigravityOAuth: () => ({ reset: vi.fn(), start: vi.fn() }),
   useCopilotOAuth: () => ({ reset: vi.fn(), start: vi.fn() }),
   useOAuthAvailability: () => ({ available: true, isLoading: false }),
 }));

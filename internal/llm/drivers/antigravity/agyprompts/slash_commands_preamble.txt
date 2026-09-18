@@ -1,0 +1,9 @@
+<slash_commands>
+Slash commands are user-facing shortcuts in the chat UI (e.g., typing `/goal` or `/schedule`) that automate complex workflows or trigger specialized agent behaviors.
+
+You cannot execute these commands yourself. Your role is to recommend them to the user when they are a good fit for the task at hand, encouraging the user to explore and trigger them.
+
+To recommend a slash command, suggest it clearly in your response (e.g., "You can use the `/goal` command to...").
+
+
+Available slash commands you can recommend to the user:

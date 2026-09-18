@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/replay"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -17,6 +18,7 @@ import (
 
 	// Import drivers to trigger their init() functions for registry registration
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
+	_ "github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/codex"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
 	_ "github.com/reliant-labs/reliant/internal/llm/drivers/gemini"
@@ -145,6 +147,44 @@ func ParseModelIDWithDriver(modelID string) (string, string) {
 	return modelID, ""
 }
 
+// oauthRefresherBuilders maps a driver id to the refresher/reloader pair that
+// knows that provider's token endpoint, persistence row and rotation lineage.
+//
+// This is a REGISTRY rather than a switch on purpose. It previously was a
+// switch whose `default` arm built Claude's refresher, which meant a new OAuth
+// provider that set RefreshToken without adding an arm silently got Claude's
+// token endpoint — and failed at the first refresh, roughly an hour after
+// sign-in appeared to work, nowhere near the code that was actually wrong. A
+// map has no default: an unregistered driver id returns nothing and the caller
+// installs no refresher, which fails visibly and immediately instead.
+//
+// Note the KEY is the driver id, which is not always the provider name: Claude
+// OAuth registers under "anthropic" because its access token routes to the
+// anthropic driver (see BuildAvailableDrivers).
+var oauthRefresherBuilders = map[models.DriverID]func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)){
+	models.DriverID("anthropic"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
+		return BuildClaudeTokenRefresher(ctx, userID), BuildClaudeTokenReloader(ctx, userID)
+	},
+	models.DriverID("codex"): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
+		return BuildCodexTokenRefresher(ctx, userID), BuildCodexTokenReloader(ctx, userID)
+	},
+	models.DriverID(antigravity.DriverID): func(ctx context.Context, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
+		return BuildAntigravityTokenRefresher(ctx, userID), BuildAntigravityTokenReloader(ctx, userID)
+	},
+}
+
+// tokenRefresherForDriver returns the refresher/reloader pair for driverID, or
+// (nil, nil) when the provider has no OAuth refresh path registered.
+func tokenRefresherForDriver(ctx context.Context, driverID models.DriverID, userID string) (func(llm.OAuthTokens) (llm.OAuthTokens, error), func() (*llm.OAuthTokens, error)) {
+	build, ok := oauthRefresherBuilders[driverID]
+	if !ok {
+		logging.Warn("OAuth driver has a refresh token but no registered refresher; token will not be refreshed",
+			"driver_id", driverID, "user_id", userID)
+		return nil, nil
+	}
+	return build(ctx, userID)
+}
+
 // defaultGetDriver tries to get a driver using the provided model preferences
 func defaultGetDriver(ctx context.Context, userID string, preferences models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
 	// Check if we're in replay mode
@@ -236,22 +276,9 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		// Previously this was gated on AccountUUID != "", so codex/copilot never
 		// received UserID and their derivations fell back to random values.
 		driverOpts = append(driverOpts, llm.WithAccountMetadata(userID, driverConfig.AccountUUID, driverConfig.AccountEmail, driverConfig.OrganizationUUID))
-		// OAuth-backed providers refresh their access token transparently in
-		// the driver's transport. The refresher is provider-specific because
-		// each one has its own token endpoint, its own persistence row and its
-		// own rotation lineage — so it is selected by driver ID rather than
-		// assumed to be Claude's.
 		if driverConfig.RefreshToken != "" {
-			switch driverConfig.DriverID {
-			case models.DriverID("codex"):
-				refresher := BuildCodexTokenRefresher(ctx, userID)
-				reloader := BuildCodexTokenReloader(ctx, userID)
-				driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
-			default:
-				refresher := BuildClaudeTokenRefresher(ctx, userID)
-				reloader := BuildClaudeTokenReloader(ctx, userID)
-				driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
-			}
+			refresher, reloader := tokenRefresherForDriver(ctx, driverConfig.DriverID, userID)
+			driverOpts = append(driverOpts, llm.WithTokenRefresher(refresher, reloader, driverConfig.RefreshToken, driverConfig.TokenExpiresAt))
 		}
 
 		// Add temperature if specified in preference AND supported by the model.
