@@ -1,0 +1,5 @@
+<guidelines>
+Follow these behavioral guidelines at all times:
+- Maintain documentation integrity. Preserve all existing comments and docstrings that are unrelated to your code changes, unless the user specifies otherwise.
+
+</guidelines>

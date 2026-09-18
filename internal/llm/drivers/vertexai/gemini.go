@@ -10,6 +10,7 @@ import (
 
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -440,35 +441,12 @@ func (c *VertexAIClient) convertSchemaProperty(prop *jsonschema.Schema) *genai.S
 
 // convertGeminiFinishReason converts Gemini finish reason to internal format
 func (c *VertexAIClient) convertGeminiFinishReason(reason genai.FinishReason) message.FinishReason {
-	switch reason {
-	case genai.FinishReasonStop:
-		return message.FinishReasonEndTurn
-	case genai.FinishReasonMaxTokens:
-		return message.FinishReasonMaxTokens
-	case genai.FinishReasonMalformedFunctionCall, genai.FinishReasonUnexpectedToolCall:
-		return message.FinishReasonToolUseError
-	case genai.FinishReasonSafety, genai.FinishReasonRecitation, genai.FinishReasonBlocklist,
-		genai.FinishReasonProhibitedContent, genai.FinishReasonSPII:
-		return message.FinishReasonError
-	default:
-		return message.FinishReasonUnknown
-	}
+	return geminiwire.FinishReason(geminiwire.SourceVertexAI, string(reason))
 }
 
 // isErrorFinishReason returns true if the finish reason should be treated as an error
 func isErrorFinishReason(reason genai.FinishReason) bool {
-	switch reason {
-	case genai.FinishReasonMalformedFunctionCall,
-		genai.FinishReasonUnexpectedToolCall,
-		genai.FinishReasonSafety,
-		genai.FinishReasonRecitation,
-		genai.FinishReasonBlocklist,
-		genai.FinishReasonProhibitedContent,
-		genai.FinishReasonSPII:
-		return true
-	default:
-		return false
-	}
+	return geminiwire.IsErrorFinishReason(string(reason))
 }
 
 // getSafetySettings returns safety settings based on configuration

@@ -68,6 +68,17 @@ type ClaudeAuthTokens struct {
 	Scope            string
 }
 
+// AntigravityAuthTokens stores persisted Antigravity (Google) OAuth
+// credentials for a user. The expiry is stored rather than derived: Google's
+// access token is opaque and its token response carries expires_in directly.
+type AntigravityAuthTokens struct {
+	AccessToken  string
+	RefreshToken string
+	ExpiresAt    time.Time
+	IDToken      string
+	Scope        string
+}
+
 // SettingStore is the shared contract for settings persistence across drivers.
 type SettingStore interface {
 	CreateSetting(ctx context.Context, setting *Setting) error
@@ -107,6 +118,18 @@ type SettingStore interface {
 	// upsert would let a stale rotation clobber the live token lineage.
 	CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens ClaudeAuthTokens) (bool, error)
 	DeleteClaudeAuthTokens(ctx context.Context, userID string) error
+
+	GetAntigravityAuthTokens(ctx context.Context, userID string) (*AntigravityAuthTokens, error)
+	SetAntigravityAuthTokens(ctx context.Context, userID string, tokens AntigravityAuthTokens) error
+	// CompareAndSwapAntigravityAuthTokens persists tokens only if the
+	// currently stored refresh token still equals expectedRefreshToken.
+	// Returns true when the row was updated. Google does not rotate the
+	// refresh token on refresh, so the expected value is usually unchanged —
+	// but the row can still be replaced by a fresh sign-in (which DOES issue a
+	// new refresh token) or deleted by a disconnect, and last-writer-wins
+	// would let a stale in-flight rotation clobber either.
+	CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens AntigravityAuthTokens) (bool, error)
+	DeleteAntigravityAuthTokens(ctx context.Context, userID string) error
 
 	GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error)
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)

@@ -1,0 +1,16 @@
+<messaging>
+You are connected to a messaging system where you may receive messages from: agents, background tasks, user-queued messages.
+
+## Receiving Messages
+
+You receive messages automatically at the start of each invocation. All messages are delivered in full directly into your context — no manual retrieval is needed.
+
+## Reactive Wakeup (No Polling Needed)
+
+The system automatically resumes your execution when:
+- A message arrives from a subagent or peer agent
+- A **background task** completes or sends you a notification
+- A **user-queued message** is ready to be dequeued
+
+This means you do **NOT** need to poll in a loop while waiting for messages or updates. After launching anything that performs work asynchronously, you may continue other work or simply stop by calling no more tools. The system will notify you when there is something to process.
+</messaging>

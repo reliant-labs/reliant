@@ -438,6 +438,10 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 			ID:        preferred.GetId(),
 			Tags:      preferred.GetTags(),
 			Providers: preferred.GetProviders(),
+			// Summarization is a text call. A configured tag list is a
+			// preference and degrades gracefully, so this hard filter keeps it
+			// off an image-generation model.
+			RequireOutputModality: models.ModalityText,
 		}
 		if _, err := registry.Resolve(selector, availableProviders); err == nil {
 			return selector, "agent model (summarizes in the window that filled)", nil
@@ -465,11 +469,23 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 // an Anthropic user still gets Haiku and everyone else gets their provider's
 // equivalent.
 //
-// Single tag by design. Adding "meta" would score four narrowly-tagged models
-// above better-suited "fast" ones, which is backwards for a latency-sensitive
-// one-shot call.
+// The tag list is a PREFERENCE ladder, weighted by position: "fast" outscores
+// "moderate", so a user with a fast model still gets it, and a user whose only
+// provider has none (the codex driver ships no fast-tagged model — see the
+// note on gpt-5.6-terra in models.yaml) degrades to moderate instead of
+// failing to resolve. Titling that cannot resolve is invisible: it falls back
+// to a truncated first message that looks like a real title.
+//
+// RequireOutputModality is the HARD half and is what makes the ladder safe.
+// Tag scoring degrades gracefully, and `fast` is carried by image-generation
+// models too (gpt-image-2.5-flare, gemini-3.1-flash-lite-image), so without it
+// a user with no fast TEXT model could silently title chats with an image
+// model. Capability is a requirement; speed is a preference.
 func titleModelSelector() models.ModelSelector {
-	return models.ModelSelector{Tags: []string{models.TagFast}}
+	return models.ModelSelector{
+		Tags:                  []string{models.TagFast, models.TagModerate},
+		RequireOutputModality: models.ModalityText,
+	}
 }
 
 // generateTitle generates a concise, meaningful title using the LLM

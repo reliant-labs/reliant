@@ -296,8 +296,15 @@ func decodeGeminiImages(response *genai.GenerateContentResponse) ([]Image, error
 // known set. The SDK ships 18 finish reasons, six of them image-specific, and
 // Google adds more; an allow-list would silently downgrade a brand-new refusal
 // into a retry that bills the user for the same "no" twice.
+// The rule is stated over a plain string in explanatoryFinishReasonString so
+// the Antigravity client, whose finish reason never passes through an SDK
+// type, decides this question identically rather than growing a second policy.
 func explanatoryFinishReason(reason genai.FinishReason) string {
-	trimmed := strings.TrimSpace(string(reason))
+	return explanatoryFinishReasonString(string(reason))
+}
+
+func explanatoryFinishReasonString(reason string) string {
+	trimmed := strings.TrimSpace(reason)
 	switch trimmed {
 	case "", string(genai.FinishReasonStop), string(genai.FinishReasonUnspecified):
 		return ""

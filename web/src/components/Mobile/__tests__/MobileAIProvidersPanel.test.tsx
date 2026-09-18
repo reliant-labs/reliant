@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
   provisionManagedKey: vi.fn(),
   claudeStart: vi.fn(),
   codexStart: vi.fn(),
+  antigravityStart: vi.fn(),
   copilotStart: vi.fn(),
   copilotReset: vi.fn(),
 }));
@@ -51,6 +52,7 @@ vi.mock("../../../store/apiKeySetupStore", () => ({
 vi.mock("../../../hooks", () => ({
   useCodexOAuth: () => ({ start: mocks.codexStart, cancel: vi.fn() }),
   useClaudeOAuth: () => ({ start: mocks.claudeStart, cancel: vi.fn() }),
+  useAntigravityOAuth: () => ({ start: mocks.antigravityStart, cancel: vi.fn() }),
   useCopilotOAuth: () => ({
     phase: "idle",
     isActive: false,
@@ -109,7 +111,7 @@ beforeEach(() => {
 describe("MobileAIProvidersPanel", () => {
   it("always shows the desktop-only Claude/Codex OAuth notice", () => {
     renderPanel();
-    const notice = screen.getByText(/claude and codex sign-in needs/i);
+    const notice = screen.getByText(/claude, codex and antigravity sign-in needs/i);
     expect(notice.textContent).toMatch(/github copilot/i);
   });
 
@@ -183,6 +185,25 @@ describe("MobileAIProvidersPanel", () => {
     await user.click(screen.getByRole("button", { name: /delete anthropic/i }));
     await waitFor(() => expect(mocks.updateProvider).toHaveBeenCalledWith("anthropic", ""));
     vi.unstubAllGlobals();
+  });
+
+  it("starts Antigravity's OWN flow, not Codex's, when Antigravity is picked", async () => {
+    // The ternary this replaced (`kind === "claude" ? claudeOAuth : codexOAuth`)
+    // routed Antigravity into the Codex flow with no error anywhere — the user
+    // would have linked a ChatGPT account from a Google button.
+    mocks.antigravityStart.mockResolvedValue({ ok: true, message: "Connected!" });
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    renderPanel();
+
+    await user.click(screen.getByText("Antigravity"));
+    await user.click(
+      await screen.findByRole("button", { name: /login with antigravity/i }),
+    );
+
+    await waitFor(() => expect(mocks.antigravityStart).toHaveBeenCalled());
+    expect(mocks.codexStart).not.toHaveBeenCalled();
+    expect(mocks.claudeStart).not.toHaveBeenCalled();
   });
 
   it("starts the Claude OAuth flow through the shared useClaudeOAuth hook", async () => {

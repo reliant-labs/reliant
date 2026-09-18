@@ -11,10 +11,22 @@ import { api } from "../api/client";
 import { useApiKeySetupStore } from "../store/apiKeySetupStore";
 import { cn } from "../lib/utils";
 import { logger } from "../lib/logger";
-import { useCodexOAuth, useClaudeOAuth, useCopilotOAuth, useOAuthAvailability } from "../hooks";
+import {
+  useCodexOAuth,
+  useClaudeOAuth,
+  useAntigravityOAuth,
+  useCopilotOAuth,
+  useOAuthAvailability,
+} from "../hooks";
 import { OAuthHelperPanel } from "./OAuthHelperPanel";
 import { CopilotDevicePanel } from "./CopilotDevicePanel";
 import { getEventBus } from "../lib/events";
+import {
+  REDIRECT_OAUTH_DISPLAY_NAMES,
+  isRedirectOAuthProvider,
+  resolveOAuthFlow,
+  type RedirectOAuthProvider,
+} from "../lib/oauth-providers";
 
 const PROVIDERS = [
   {
@@ -30,6 +42,13 @@ const PROVIDERS = [
     docsUrl: "https://github.com/openai/codex",
     keyFormat: "",
     usesOAuth: "codex" as const,
+  },
+  {
+    id: "antigravity" as const,
+    name: "Antigravity",
+    docsUrl: "https://antigravity.google",
+    keyFormat: "",
+    usesOAuth: "antigravity" as const,
   },
   {
     id: "copilot" as const,
@@ -139,18 +158,34 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
   const [isSaving, setIsSaving] = useState(false);
   const codexOAuth = useCodexOAuth();
   const claudeOAuth = useClaudeOAuth();
+  const antigravityOAuth = useAntigravityOAuth();
   const copilotOAuth = useCopilotOAuth();
+
+  // One entry per redirect provider, keyed by the same union the provider
+  // table's `usesOAuth` carries. This replaces
+  // `oauthType === "claude" ? claudeOAuth : codexOAuth`, which silently ran
+  // the Codex flow for anything that was not Claude — so Antigravity would
+  // have connected a ChatGPT account with no error anywhere. Typing the map as
+  // Record<RedirectOAuthProvider, …> makes a missing provider a compile error.
+  const redirectOAuthFlows: Record<
+    RedirectOAuthProvider,
+    ReturnType<typeof useClaudeOAuth>
+  > = {
+    claude: claudeOAuth,
+    codex: codexOAuth,
+    antigravity: antigravityOAuth,
+  };
+
   const provider = useMemo(
     () => PROVIDERS.find((p) => p.id === selectedProvider)!,
     [selectedProvider]
   );
 
   // Only probe the localhost OAuth helper while the redirect-based OAuth panel
-  // is actually on screen (modal open + Codex/Claude selected) — never
+  // is actually on screen (modal open + a redirect provider selected) — never
   // proactively on mount, which would trip Chrome's Local Network Access
   // prompt. Copilot uses the device flow and needs no local helper.
-  const usesLocalHelper =
-    provider.usesOAuth === "codex" || provider.usesOAuth === "claude";
+  const usesLocalHelper = isRedirectOAuthProvider(provider.usesOAuth);
   const oauthAvailability = useOAuthAvailability({
     enabled: showModal && usesLocalHelper,
   });
@@ -159,6 +194,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     if (!showModal) {
       codexOAuth.cancel();
       claudeOAuth.cancel();
+      antigravityOAuth.cancel();
       copilotOAuth.reset();
       setApiKey("");
       setValidationResult(null);
@@ -167,14 +203,14 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
       setShowKey(false);
       setSelectedProvider("claude");
     }
-  }, [showModal, codexOAuth, claudeOAuth, copilotOAuth]);
+  }, [showModal, codexOAuth, claudeOAuth, antigravityOAuth, copilotOAuth]);
 
-  const handleConnectOAuth = useCallback(async (oauthType: "codex" | "claude") => {
+  const handleConnectOAuth = useCallback(async (oauthType: RedirectOAuthProvider) => {
     setIsValidating(true);
     setValidationResult(null);
 
-    const oauthHook = oauthType === "claude" ? claudeOAuth : codexOAuth;
-    const displayName = oauthType === "claude" ? "Claude Code" : "Codex";
+    const oauthHook = resolveOAuthFlow(redirectOAuthFlows, oauthType);
+    const displayName = REDIRECT_OAUTH_DISPLAY_NAMES[oauthType];
 
     try {
       const result = await oauthHook.start();
@@ -206,7 +242,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     } finally {
       setIsValidating(false);
     }
-  }, [codexOAuth, claudeOAuth, onClose]);
+  }, [codexOAuth, claudeOAuth, antigravityOAuth, onClose]);
 
   // Device-flow login for GitHub Copilot. The visible user-code panel is driven
   // reactively by `copilotOAuth` state; this only handles the terminal success
@@ -245,7 +281,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     }
 
     // For redirect-based OAuth providers, use the dedicated handler
-    if (provider.usesOAuth) {
+    if (isRedirectOAuthProvider(provider.usesOAuth)) {
       await handleConnectOAuth(provider.usesOAuth);
       return;
     }

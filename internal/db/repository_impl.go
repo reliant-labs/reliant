@@ -2366,6 +2366,48 @@ func (r *Repo) DeleteCodexAuthTokens(ctx context.Context, userID string) error {
 	return r.settings.DeleteCodexAuthTokens(ctx, userID)
 }
 
+func (r *Repo) GetAntigravityAuthTokens(ctx context.Context, userID string) (*AntigravityAuthTokens, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user_id cannot be empty")
+	}
+
+	return r.settings.GetAntigravityAuthTokens(ctx, userID)
+}
+
+func (r *Repo) SetAntigravityAuthTokens(ctx context.Context, userID string, tokens AntigravityAuthTokens) error {
+	if userID == "" {
+		return fmt.Errorf("user_id cannot be empty")
+	}
+	if strings.TrimSpace(tokens.AccessToken) == "" {
+		return fmt.Errorf("access token cannot be empty")
+	}
+
+	return r.settings.SetAntigravityAuthTokens(ctx, userID, tokens)
+}
+
+// CompareAndSwapAntigravityAuthTokens persists refreshed tokens only when the
+// stored refresh token still equals expectedRefreshToken (i.e. no new sign-in
+// or disconnect replaced the row in between). Returns true when the write
+// happened.
+func (r *Repo) CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens AntigravityAuthTokens) (bool, error) {
+	if userID == "" {
+		return false, fmt.Errorf("user_id cannot be empty")
+	}
+	if strings.TrimSpace(tokens.AccessToken) == "" {
+		return false, fmt.Errorf("access token cannot be empty")
+	}
+
+	return r.settings.CompareAndSwapAntigravityAuthTokens(ctx, userID, expectedRefreshToken, tokens)
+}
+
+func (r *Repo) DeleteAntigravityAuthTokens(ctx context.Context, userID string) error {
+	if userID == "" {
+		return fmt.Errorf("user_id cannot be empty")
+	}
+
+	return r.settings.DeleteAntigravityAuthTokens(ctx, userID)
+}
+
 func (r *Repo) GetCopilotAuthTokens(ctx context.Context, userID string) (*CopilotAuthTokens, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user_id cannot be empty")

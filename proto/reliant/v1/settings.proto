@@ -89,6 +89,10 @@ service SettingsService {
   // and marks Claude as connected for the current user.
   rpc CompleteClaudeOAuth(CompleteClaudeOAuthRequest) returns (CompleteClaudeOAuthResponse) {}
 
+  // CompleteAntigravityOAuth exchanges an OAuth authorization code + PKCE
+  // verifier and marks Antigravity as connected for the current user.
+  rpc CompleteAntigravityOAuth(CompleteAntigravityOAuthRequest) returns (CompleteAntigravityOAuthResponse) {}
+
   // StartCopilotDeviceAuth begins the GitHub Copilot device-authorization flow
   // and returns the device/user codes plus polling parameters. The frontend
   // drives polling via PollCopilotDeviceAuth.
@@ -484,6 +488,20 @@ message CompleteClaudeOAuthRequest {
 }
 
 message CompleteClaudeOAuthResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+// Antigravity authenticates through Google's OAuth endpoints. Unlike Claude,
+// Google's token endpoint does not require the state value echoed back on the
+// exchange, so this carries only the code, the PKCE verifier and the redirect.
+message CompleteAntigravityOAuthRequest {
+  string code = 1;
+  string code_verifier = 2;
+  string redirect_uri = 3;
+}
+
+message CompleteAntigravityOAuthResponse {
   bool success = 1;
   string message = 2;
 }
