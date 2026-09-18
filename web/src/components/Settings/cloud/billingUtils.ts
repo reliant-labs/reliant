@@ -223,7 +223,19 @@ export function sortPlansForDisplay<T extends PlanPricing>(plans: T[]): T[] {
  * rather than shown unlabelled, and a size in this list that no plan offers is
  * never presented.
  */
-export const DAEMON_SIZE_ORDER = ["small", "medium", "large", "xl"] as const;
+export const DAEMON_SIZE_ORDER = [
+  "small",
+  "medium",
+  "large",
+  "xl",
+  // The catalog sells plan_compute_2xl at $299 with a real Stripe price. A
+  // size missing from this list is dropped by `offeredDaemonSizes`, so leaving
+  // it out did not omit the tier gracefully — it made a priced, purchasable
+  // machine silently unbuyable, with nothing on screen to say why. Which sizes
+  // are OFFERED is still the catalog's decision; this list only bounds what
+  // the client can label.
+  "2xl",
+] as const;
 
 export type DaemonSizeName = (typeof DAEMON_SIZE_ORDER)[number];
 
@@ -291,6 +303,7 @@ const SIZE_DISPLAY_LABELS: Record<string, string> = {
   medium: "Medium",
   large: "Large",
   xl: "XL",
+  "2xl": "2XL",
 };
 
 export function formatSizeLabel(size: string): string {
@@ -302,7 +315,10 @@ export function formatAllowedSizes(sizes: string[]): string {
   const labeled = sizes
     .map((s) => SIZE_DISPLAY_LABELS[s.toLowerCase()])
     .filter((label): label is string => !!label);
-  if (labeled.length === 4) return "All sizes";
+  // "All sizes" only when the plan genuinely allows every size this client can
+  // label. Hardcoded as 4 while the ladder had four rungs, which meant adding
+  // 2xl would have made a large-and-below plan claim it ran everything.
+  if (labeled.length === DAEMON_SIZE_ORDER.length) return "All sizes";
   return labeled.join(", ");
 }
 
@@ -395,6 +411,52 @@ export function estimateCreditRunwayDays(
 export function formatRunway(days: number): string {
   if (days >= RUNWAY_CAP_DAYS) return `~${RUNWAY_CAP_DAYS}+ days at recent use`;
   return `~${days} ${days === 1 ? "day" : "days"} at recent use`;
+}
+
+// ── Automatic top-ups ─────────────────────────────────────────────────
+
+/**
+ * What to suggest recharging, and the ceiling to pair it with.
+ *
+ * Derived from OBSERVED SPEND rather than fixed, because the right amount for
+ * someone burning $2/day and someone burning $40/day are not the same number.
+ * The target is roughly a fortnight of their actual usage, rounded to a whole
+ * preset-sized figure so the suggestion reads as a considered amount rather
+ * than an arithmetic result like "$27.43".
+ *
+ * The ceiling is 4x the recharge amount: enough headroom that a normal month
+ * never silently stops, low enough that a runaway cannot drain a card. It is
+ * MANDATORY server-side — there is no uncapped state for a charger that fires
+ * with nobody watching — so it is chosen here rather than left blank.
+ *
+ * Lives here, beside the other money formatters, because TWO surfaces offer
+ * this rule: the out-of-credit modal and the billing page's control. Two
+ * copies of the sizing logic would be free to recommend different numbers for
+ * the same account, and a user who saw $25 in one place and $30 in the other
+ * would have no way to tell which was the real suggestion.
+ */
+export function suggestRecharge(dailySpendUsd: number | null): {
+  amountCents: number;
+  maxPerMonthCents: number;
+  thresholdCents: number;
+} {
+  const fortnightCents = dailySpendUsd
+    ? Math.round(dailySpendUsd * 14 * 100)
+    : 0;
+  // Round up to the nearest $5, floor $10, cap $100. The cap is not a judgement
+  // about what anyone can afford — it is a limit on what we will suggest
+  // unprompted for an automatic charge.
+  const rounded = Math.ceil(fortnightCents / 500) * 500;
+  const amountCents = Math.min(Math.max(rounded, 1000), 10000);
+  return {
+    amountCents,
+    maxPerMonthCents: amountCents * 4,
+    // Recharge when about three days remain, so the refill lands before the
+    // balance actually hits zero rather than after.
+    thresholdCents: dailySpendUsd
+      ? Math.max(Math.round(dailySpendUsd * 3 * 100), 500)
+      : 500,
+  };
 }
 
 // ── Compute capacity ──────────────────────────────────────────────────

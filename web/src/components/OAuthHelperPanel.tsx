@@ -2,7 +2,11 @@ import { useEffect, useState } from "react";
 import { Check, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { authServeCommand } from "@/lib/cli-commands";
-import { ReliantDownloadOptions } from "@/components/ReliantDownloadOptions";
+import {
+  describeTerminal,
+  ReliantDownloadOptions,
+  useDetectedOS,
+} from "@/components/ReliantDownloadOptions";
 
 export interface OAuthHelperPanelProps {
   /** Display name of the OAuth provider (e.g. "Claude Code", "Codex"). */
@@ -62,6 +66,8 @@ export function OAuthHelperPanel({
   // Mirrors the pattern in SelfHostedDaemonConnect.tsx.
   // ──────────────────────────────────────────────────────────────────────────
   const isElectron = typeof window !== "undefined" && !!window.electronAPI;
+  const { name: terminalName, howToOpen: terminalHowToOpen } =
+    describeTerminal(useDetectedOS());
   const [cliInstalled, setCliInstalled] = useState<boolean | null>(null);
   const [cliPath, setCliPath] = useState<string | null>(null);
   const [installingCli, setInstallingCli] = useState(false);
@@ -170,10 +176,18 @@ export function OAuthHelperPanel({
         </p>
         {!available && !loading && (
           <div className="space-y-3">
-            {/* Install the reliant CLI (the helper command runs through it). */}
-            <div className="space-y-1.5">
-              <p className={cn(bodyText, "text-muted-foreground")}>
-                Don&apos;t have the Reliant CLI? Install it:
+            {/* ── STEP 1: install ────────────────────────────────────────
+            
+                Same defect as the self-hosted connect panel, same fix: the
+                download block and the "then run this" command were adjacent
+                blocks in one flat `space-y-3` stack, distinguished only by
+                two lines of muted prose. The install half now sits in its own
+                tinted container so the boundary is a surface change, and both
+                halves are numbered — "Install it:" followed by "Then run:"
+                described a sequence without ever presenting one. */}
+            <div className="space-y-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+              <p className={cn(bodyText, "font-medium text-foreground")}>
+                1. Install the Reliant CLI
               </p>
 
               {isElectron && cliInstalled === false && (
@@ -218,7 +232,19 @@ export function OAuthHelperPanel({
                   and left those users with no way forward on the only screen
                   that could unblock them. */}
               {showManualInstall && (
-                <ReliantDownloadOptions size={compact ? "compact" : "default"} />
+                <ReliantDownloadOptions
+                  size={compact ? "compact" : "default"}
+                  // Inside the desktop app Reliant is by definition already
+                  // downloaded, so leading with the download block buries the
+                  // command that actually unblocks the user. Folded, not
+                  // removed: the helper may be needed on another machine.
+                  defaultCollapsed={isElectron}
+                  collapsedNote={
+                    isElectron
+                      ? "You are running the Reliant desktop app, so it is already installed here."
+                      : undefined
+                  }
+                />
               )}
 
               {installError && (
@@ -226,9 +252,14 @@ export function OAuthHelperPanel({
               )}
             </div>
 
-            {/* Then run the OAuth helper. */}
-            <div className="space-y-1.5">
-              <p className={cn(bodyText, "text-muted-foreground")}>Then run:</p>
+            {/* ── STEP 2: run the helper ─────────────────────────────────── */}
+            <div className="space-y-1.5 rounded-lg border border-border/60 bg-background p-3">
+              <p className={cn(bodyText, "font-medium text-foreground")}>
+                2. Run this in {terminalName}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {terminalHowToOpen}
+              </p>
               <code className={codeBlockClass}>{authServeCommand()}</code>
             </div>
           </div>

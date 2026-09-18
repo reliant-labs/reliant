@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
@@ -22,7 +23,8 @@ import { HOMEBREW_CASK_INSTALL } from "@/lib/cli-commands";
 const DOWNLOAD_BASE =
   import.meta.env.VITE_DOWNLOAD_BASE_URL || "https://downloads.reliantlabs.io";
 
-export type DetectedOS = "mac-arm64" | "mac-x64" | "windows" | "linux" | "unknown";
+export type DetectedOS =
+  "mac-arm64" | "mac-x64" | "windows" | "linux" | "unknown";
 
 interface DownloadLink {
   label: string;
@@ -93,15 +95,20 @@ function getInitialOS(): DetectedOS {
 }
 
 type UserAgentDataLike = {
-  getHighEntropyValues?: (hints: string[]) => Promise<{ architecture?: string }>;
+  getHighEntropyValues?: (
+    hints: string[],
+  ) => Promise<{ architecture?: string }>;
 };
 
 async function detectMacArch(): Promise<"mac-arm64" | "mac-x64"> {
-  const uaData = (navigator as Navigator & { userAgentData?: UserAgentDataLike })
-    .userAgentData;
+  const uaData = (
+    navigator as Navigator & { userAgentData?: UserAgentDataLike }
+  ).userAgentData;
   if (uaData?.getHighEntropyValues) {
     try {
-      const { architecture } = await uaData.getHighEntropyValues(["architecture"]);
+      const { architecture } = await uaData.getHighEntropyValues([
+        "architecture",
+      ]);
       if (architecture === "arm") return "mac-arm64";
       if (architecture === "x86") return "mac-x64";
     } catch {
@@ -150,10 +157,72 @@ export function useDetectedOS(): DetectedOS {
   return detectedOS;
 }
 
+/**
+ * Which terminal app to name, and how to tell someone to open it.
+ *
+ * "Run this command" over a code block silently assumes the reader knows they
+ * need a terminal, that their OS ships one, and how to open it. That is where
+ * a non-developer stops, and it was the only instruction on those screens
+ * with nothing attached to it.
+ *
+ * This lives beside `useDetectedOS` because it is the same platform question,
+ * and because BOTH surfaces that print a command need it — the self-hosted
+ * daemon panel and the OAuth helper. Wrong-OS guidance is worse than none, so
+ * an unknown platform gets generic wording rather than a guess.
+ */
+export function describeTerminal(os: DetectedOS): {
+  name: string;
+  howToOpen: string;
+} {
+  if (os === "windows") {
+    return {
+      name: "PowerShell",
+      howToOpen:
+        "Open PowerShell — press Win, type “PowerShell”, and press Enter.",
+    };
+  }
+  if (os === "mac-arm64" || os === "mac-x64") {
+    return {
+      name: "Terminal",
+      howToOpen:
+        "Open Terminal — press ⌘ + Space, type “Terminal”, and press Enter.",
+    };
+  }
+  if (os === "linux") {
+    return {
+      name: "your terminal",
+      howToOpen:
+        "Open your terminal — on most desktops that is Ctrl + Alt + T, or search your apps for “Terminal”.",
+    };
+  }
+  return {
+    name: "a terminal",
+    howToOpen: "Open a terminal window on that machine.",
+  };
+}
+
 export interface ReliantDownloadOptionsProps {
   /** Compact sizing for dense cards (onboarding, modals). */
   size?: "default" | "compact";
   className?: string;
+  /**
+   * Start folded behind a "Show download instructions" toggle.
+   *
+   * For surfaces that have EVIDENCE Reliant is already on a machine — the
+   * user is reading this inside the desktop app, the `reliant` CLI is on
+   * PATH, or their account already has a daemon registered. Telling someone
+   * to download the thing they are currently running is noise, and it is the
+   * first thing on the screen, so it pushes the step they actually need
+   * below the fold.
+   *
+   * It FOLDS rather than disappearing because the evidence is about a
+   * machine, not about the user: someone setting up a second laptop or a
+   * server still needs these links, and they are reading this page from the
+   * machine that is already set up.
+   */
+  defaultCollapsed?: boolean;
+  /** Line shown beside the toggle while collapsed, explaining the fold. */
+  collapsedNote?: string;
 }
 
 /**
@@ -164,10 +233,23 @@ export interface ReliantDownloadOptionsProps {
 export function ReliantDownloadOptions({
   size = "default",
   className,
+  defaultCollapsed = false,
+  collapsedNote,
 }: ReliantDownloadOptionsProps) {
   const detectedOS = useDetectedOS();
   const [showOtherPlatforms, setShowOtherPlatforms] = useState(false);
   const compact = size === "compact";
+
+  // `defaultCollapsed` arrives LATE on the surfaces that matter: the Electron
+  // CLI probe and ListDaemons both resolve after first paint, so a plain
+  // `useState(defaultCollapsed)` would snapshot "expanded" and never fold.
+  // Deriving it instead lets a late signal fold the block, while an explicit
+  // click wins permanently — the user cannot be collapsed out of a panel they
+  // just opened.
+  const [expandedOverride, setExpandedOverride] = useState<boolean | null>(
+    null,
+  );
+  const expanded = expandedOverride ?? !defaultCollapsed;
 
   const primaryDownload = useMemo(
     () =>
@@ -181,8 +263,37 @@ export function ReliantDownloadOptions({
     [primaryDownload],
   );
 
+  if (!expanded) {
+    return (
+      <div className={cn("space-y-1.5", className)}>
+        <button
+          type="button"
+          onClick={() => setExpandedOverride(true)}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-sky-600 transition-colors hover:text-sky-500 dark:text-sky-400 dark:hover:text-sky-300"
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+          Show download instructions
+        </button>
+        {collapsedNote && (
+          <p className="text-xs text-muted-foreground">{collapsedNote}</p>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-3", className)}>
+      {defaultCollapsed && (
+        <button
+          type="button"
+          onClick={() => setExpandedOverride(false)}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+          Hide download instructions
+        </button>
+      )}
+
       {primaryDownload ? (
         <div className="space-y-3">
           <a

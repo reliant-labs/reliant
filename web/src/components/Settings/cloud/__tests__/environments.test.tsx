@@ -25,7 +25,23 @@ const mocks = vi.hoisted(() => ({
   caps: { cloudDaemons: true },
   listDaemons: vi.fn(async () => ({ daemons: [] })),
   getComputeSubscription: vi.fn(async () => ({})),
+  getComputeEligibility: vi.fn(async () => ({
+    eligible: true,
+    reason: 0,
+    hasActiveSubscription: true,
+    grantedMinutesRemaining: 0,
+    planName: 'Compute Small',
+    allowedDaemonSizes: ['small'],
+  })),
   listDaemonTokens: vi.fn(async () => []),
+  navigate: vi.fn(),
+}))
+
+// The machines gate reads compute eligibility from the server rather than
+// deriving it from the subscription, so this module must be mocked for the
+// section to render at all.
+vi.mock('@/services/controlPlane/billing', () => ({
+  getComputeEligibility: mocks.getComputeEligibility,
 }))
 
 vi.mock('@/lib/event-context', () => ({
@@ -47,8 +63,10 @@ vi.mock('@/services/controlPlane/capabilities', () => ({
   capabilities: mocks.caps,
 }))
 
+// useNavigate backs useGoToBilling, which the un-funded prompt routes through.
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({}),
+  useNavigate: () => mocks.navigate,
 }))
 
 // The real module exports proto enums at module scope that environments.tsx
@@ -102,6 +120,14 @@ describe('EnvironmentsSection', () => {
     vi.clearAllMocks()
     mocks.listDaemons.mockResolvedValue({ daemons: [] })
     mocks.getComputeSubscription.mockResolvedValue({})
+    mocks.getComputeEligibility.mockResolvedValue({
+      eligible: true,
+      reason: 0,
+      hasActiveSubscription: true,
+      grantedMinutesRemaining: 0,
+      planName: 'Compute Small',
+      allowedDaemonSizes: ['small'],
+    })
     mocks.listDaemonTokens.mockResolvedValue([])
   })
 

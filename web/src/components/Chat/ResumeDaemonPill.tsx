@@ -37,8 +37,20 @@ function writeDismissed(sig: string): void {
 
 function formatResumeError(error: string): string {
   const normalized = error.toLowerCase();
-  if (normalized.includes("resource_exhausted") || normalized.includes("free tier compute limit")) {
-    return "Free tier compute limit reached. Upgrade your plan to resume this environment.";
+  // There is no free tier, so a resume refused for quota means the account's
+  // compute entitlement is spent — the fix is a plan or a coupon, not waiting
+  // for an allowance to reset. The old copy ("Free tier compute limit
+  // reached") named a tier that does not exist and implied the user was on it.
+  //
+  // The literal-string arm is kept alongside the code because the server's
+  // message is not guaranteed to survive as a typed error through every
+  // transport; it now matches on the entitlement wording rather than "free
+  // tier", which nothing emits any more.
+  if (
+    normalized.includes("resource_exhausted") ||
+    normalized.includes("compute limit")
+  ) {
+    return "You've used the compute included with your account. Upgrade or redeem a coupon to resume this environment.";
   }
   return error;
 }

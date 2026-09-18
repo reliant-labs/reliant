@@ -8,7 +8,6 @@
 import { create } from "zustand";
 import { api } from "../api/client";
 import { logger } from "../lib/logger";
-import { useAuthStore } from "./authStore";
 import { useModalStore } from "./modalStore";
 
 /** Open the central API-key-setup modal via the unified modal store. */
@@ -35,29 +34,11 @@ const AUTO_MANAGED_PROVIDERS = new Set(["reliant"]);
 type ProviderStatus = Awaited<ReturnType<typeof api.settings.getProviders>>[number];
 
 /**
- * Guards the managed-key self-heal to one attempt per session. The
- * control-plane sync RPC is idempotent, but we don't want to fire it on every
- * ensure() call — only when we first observe a signed-in user with no usable
- * provider. Cleared on `reset()` (logout) so the next login re-attempts.
- */
-let managedKeySyncAttempted = false;
-
-/**
- * Returns true when the current user is signed into Reliant (has an active
- * session). Such users are eligible for the managed Reliant key, which is
- * provisioned lazily from their JWT — so a missing key here is something we
- * can self-heal rather than a reason to prompt for a manual key.
- */
-function isReliantSessionActive(): boolean {
-  const { user, session } = useAuthStore.getState();
-  return !!(user && session);
-}
-
-/**
  * Match onboarding `detectCompletedItems` / checklist: key or OAuth-backed
  * provider. This is backend truth — a live session is NOT treated as
- * credentials, because a signed-in user may not have a synced Reliant key yet
- * (see `loadProviderCredentials`, which self-heals that case).
+ * credentials. Being signed in says nothing about whether the user has paid
+ * for a managed key, and treating it as a credential is what previously let a
+ * new account appear to have the Reliant provider configured.
  */
 function hasAnyProviderCredentials(providers: ProviderStatus[]): boolean {
   return providers.some((p) => p.hasApiKey || p.configured);
@@ -72,43 +53,43 @@ function hasAnyManualProviderCredentials(providers: ProviderStatus[]): boolean {
 }
 
 /**
- * Fetch provider statuses, self-healing the managed Reliant key when the user
- * is signed in but has no usable provider. The setup modal should only appear
- * when the backend genuinely has no credentials — not merely because a synced
- * key hasn't been minted yet. `provisionManagedKey` is idempotent server-side
- * and a no-op in local (no control-plane) mode.
+ * Fetch provider statuses. Reports exactly what the backend says — nothing
+ * here provisions anything.
+ *
+ * ── Why there is deliberately NO managed-key self-heal ──
+ *
+ * This used to mint the managed Reliant key whenever the caller was signed in
+ * and had no provider credentials, on the theory that a missing key was a sync
+ * gap rather than a real absence. Both of those conditions are true of a
+ * brand-new user standing on the onboarding model step, and `checkApiKeys` runs
+ * from `AuthInitializer` on every sign-in — so signing up silently enabled the
+ * Reliant provider for someone who had not paid for it. They then hit the LLM
+ * proxy's wallet gate on their first message and were told a quota was
+ * exhausted, for a provider they never finished choosing.
+ *
+ * A managed key is a PURCHASED entitlement now, so granting one belongs at a
+ * commit point — an explicit user action, or a webhook confirming money moved.
+ * `commitLaunchPlan`'s `grantAiAccess` is that place: it is guarded on the user
+ * having actually chosen `reliant_credits` and fires only from a terminal
+ * onboarding step. This function was a second, unguarded path to the same
+ * grant, which is precisely the pattern `commitLaunchPlan`'s header forbids
+ * ("never from a `useEffect` observing a state change, and never as a side
+ * effect of preparing an option the user has not yet taken").
+ *
+ * The behaviour it bought — don't prompt a user whose key hasn't minted yet —
+ * no longer describes anything real: minting requires payment, so a user with
+ * no credentials genuinely has none, and the setup modal is the correct answer.
+ *
+ * Users who legitimately want a managed key reach it through explicit UI:
+ * `CombinedGeneralSettings`' enable-Reliant button, the mobile providers panel,
+ * or a coupon redemption in `RedeemCouponForm`.
  */
 async function loadProviderCredentials(): Promise<{
   providers: ProviderStatus[];
   hasAnyKey: boolean;
   hasAnyManualKey: boolean;
 }> {
-  let providers = await api.settings.getProviders();
-
-  if (
-    !hasAnyProviderCredentials(providers) &&
-    isReliantSessionActive() &&
-    !managedKeySyncAttempted
-  ) {
-    managedKeySyncAttempted = true;
-    try {
-      const { onboardingService } = await import(
-        "../services/controlPlane/onboarding"
-      );
-      const result = await onboardingService.provisionManagedKey();
-      if (result.synced) {
-        logger.info(
-          "[ApiKeySetupStore] Self-healed managed Reliant key; re-checking providers"
-        );
-        providers = await api.settings.getProviders();
-      }
-    } catch (error) {
-      logger.warn(
-        "[ApiKeySetupStore] Managed Reliant key self-heal failed",
-        error
-      );
-    }
-  }
+  const providers = await api.settings.getProviders();
 
   return {
     providers,
@@ -156,7 +137,6 @@ export const useApiKeySetupStore = create<ApiKeySetupState>((set, get) => ({
    * Called when user logs out so we can check again on next login.
    */
   reset: () => {
-    managedKeySyncAttempted = false;
     set({
       hasChecked: false,
       isChecking: false,

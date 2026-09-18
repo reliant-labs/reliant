@@ -71,17 +71,25 @@ describe('suggestedLimitCents', () => {
 })
 
 describe('ComputeOverageControl', () => {
-  it('states plainly that the limit does not stop a running machine', () => {
-    // THE point of this control's copy. The cap gates CreateDaemon and
-    // ResumeDaemon and nothing else, so a user who reads it as a hard ceiling
-    // and leaves a machine up over a weekend is billed for the weekend.
+  it('says the limit pauses running machines, without promising a hard ceiling', () => {
+    // THE point of this control's copy, and it had to change when the cap
+    // became real. It previously asserted the opposite — "already running
+    // keeps running until it goes idle" — because the billing sweep decided
+    // on the free-tier global spend cap, which could never fire, so the limit
+    // gated CreateDaemon/ResumeDaemon and nothing else.
+    //
+    // The sweep now enforces this cap directly (svcdaemon ComputeFundingChecker)
+    // and suspends a running machine within about a minute of it being met. So
+    // the copy must say the limit pauses running machines, AND must still not
+    // promise an instantaneous ceiling: a user who reads it as absolute and is
+    // then billed past it is the failure this sentence exists to prevent.
     renderControl({ enabled: true, budgetCents: 2000n })
 
     expect(
-      screen.getByText(/already running keeps running until it goes idle/i),
+      screen.getByText(/pauses running ones shortly after the limit is reached/i),
     ).toBeInTheDocument()
     expect(
-      screen.getByText(/final bill can pass the limit/i),
+      screen.getByText(/final bill can pass the limit slightly/i),
     ).toBeInTheDocument()
   })
 

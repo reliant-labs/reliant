@@ -7,8 +7,9 @@ import { useSurface } from "@/lib/surfaceContext";
 /**
  * Anonymous-session sign-in nudge.
  *
- * Free-tier users run on anonymous Supabase sessions; their chats and
- * workspaces are tied to that browser session, so losing it loses their work.
+ * A user who has not signed in yet runs on an anonymous Supabase session; their
+ * chats and workspaces are tied to that browser session, so losing it loses
+ * their work.
  * This periodically (escalating backoff: 1h → 24h → 7d → 30d → every 30d)
  * prompts them to attach a real identity via the EXISTING upgrade flow.
  *

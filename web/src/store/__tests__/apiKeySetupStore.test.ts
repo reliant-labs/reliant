@@ -84,9 +84,8 @@ describe("apiKeySetupStore credential gating", () => {
 
   it("shows the setup modal for a signed-in user with no synced key (no session bypass)", async () => {
     authState = signedIn;
-    // Backend reports no usable provider, and self-heal cannot mint a key.
+    // Backend reports no usable provider. A live session is not a credential.
     getProviders.mockResolvedValue([providerStatus({})]);
-    provisionManagedKey.mockResolvedValue({ synced: false });
 
     await useApiKeySetupStore.getState().checkApiKeys();
 
@@ -95,18 +94,39 @@ describe("apiKeySetupStore credential gating", () => {
     expect(openModal).toHaveBeenCalledWith("api-key-setup");
   });
 
-  it("self-heals the managed Reliant key and suppresses the modal", async () => {
+  // REGRESSION: signing in used to mint a managed Reliant key on the spot,
+  // via a self-heal in loadProviderCredentials whose two conditions ("signed
+  // in", "no provider credentials") are exactly a brand-new account on the
+  // onboarding model step. checkApiKeys runs from AuthInitializer on every
+  // sign-in, so a user who never entered a coupon or card ended up with the
+  // Reliant provider enabled and then hit the LLM proxy's wallet gate on their
+  // first message. Granting a purchased entitlement belongs at an explicit
+  // commit point (commitLaunchPlan.grantAiAccess), never here.
+  it("never provisions a managed key for a signed-in user with no credentials", async () => {
     authState = signedIn;
-    // First fetch: nothing configured. Self-heal succeeds. Re-fetch: configured.
-    getProviders
-      .mockResolvedValueOnce([providerStatus({})])
-      .mockResolvedValueOnce([providerStatus({ configured: true })]);
-    provisionManagedKey.mockResolvedValue({ synced: true });
+    getProviders.mockResolvedValue([providerStatus({})]);
 
     await useApiKeySetupStore.getState().checkApiKeys();
 
-    expect(provisionManagedKey).toHaveBeenCalledTimes(1);
-    expect(getProviders).toHaveBeenCalledTimes(2);
+    expect(provisionManagedKey).not.toHaveBeenCalled();
+    // Exactly one read, because there is no mint-then-recheck round trip.
+    expect(getProviders).toHaveBeenCalledTimes(1);
+    expect(useApiKeySetupStore.getState().hasApiKey).toBe(false);
+    // The setup modal IS the correct answer now: with no free tier, a user
+    // holding no credentials genuinely has none.
+    expect(useApiKeySetupStore.getState().showModal).toBe(true);
+    expect(openModal).toHaveBeenCalledWith("api-key-setup");
+  });
+
+  it("reports a synced managed key as configured without prompting", async () => {
+    authState = signedIn;
+    // The key exists because something authorized it — a completed checkout,
+    // a redeemed coupon, or the explicit enable-Reliant button in settings.
+    getProviders.mockResolvedValue([providerStatus({ configured: true })]);
+
+    await useApiKeySetupStore.getState().checkApiKeys();
+
+    expect(provisionManagedKey).not.toHaveBeenCalled();
     expect(useApiKeySetupStore.getState().hasApiKey).toBe(true);
     expect(useApiKeySetupStore.getState().showModal).toBe(false);
     expect(openModal).not.toHaveBeenCalled();

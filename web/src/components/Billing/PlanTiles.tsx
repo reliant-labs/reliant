@@ -26,15 +26,25 @@ import { cn } from "@/lib/utils";
 /**
  * One purchasable plan, reduced to what these tiles render.
  *
- * The tile shows `label` rather than deriving one, because the two callers
- * choose along different axes: onboarding presents ONE plan per machine size
- * ("Small", "Medium" — size and plan are a single question there), while
- * settings presents the catalog by plan name. Deriving the label here would
- * force one of them to lie about what the user is picking.
+ * The tile shows `label` rather than deriving one, because the callers choose
+ * along different axes: the two size-led surfaces (onboarding, and the
+ * settings Plans tab) present ONE plan per machine size, while the mobile
+ * screen lists the catalog by plan name. Deriving the label here would force
+ * one of them to lie about what the user is picking.
  */
 export interface ComputePlanOption {
   planId: string;
   label: string;
+  /**
+   * What this row buys, beneath its name — "4 GB RAM · 1 CPU".
+   *
+   * A real slot rather than something the caller concatenates into `label`.
+   * Onboarding used to build `"Medium — 4 GB RAM · 1 CPU"` and then had to
+   * read its coupon-coverage sentence from `size` instead, with a comment
+   * explaining why, because the one string it had could not be un-concatenated
+   * back into a bare machine name. Two facts, two fields.
+   */
+  detail?: string;
   /** The machine size this tile represents, when the caller selects by size. */
   size?: DaemonSizeName;
   monthlyPriceCents: number;
@@ -50,11 +60,23 @@ export function PlanTiles({
   selectedPlanId,
   onSelect,
   coveredPlanId,
+  currentPlanId,
 }: {
   plans: ComputePlanOption[];
   loading?: boolean;
   selectedPlanId: string | undefined;
   onSelect: (option: ComputePlanOption) => void;
+  /**
+   * The plan this user is ALREADY subscribed to, marked as such and not
+   * offered as a purchase.
+   *
+   * A different fact from `coveredPlanId` below and deliberately not merged
+   * with it: "covered" means a grant pays for this machine's TIME right now,
+   * "current" means this is the subscription being renewed each month. A user
+   * switching plans needs to see which row they are on, and must not be able
+   * to buy it again.
+   */
+  currentPlanId?: string | null;
   /**
    * The ONE plan this user's existing entitlement already pays for, shown as
    * "Covered" instead of a monthly price.
@@ -84,6 +106,7 @@ export function PlanTiles({
           plan={plan}
           selected={plan.planId === selectedPlanId}
           covered={plan.planId === coveredPlanId}
+          current={plan.planId === currentPlanId}
           onSelect={() => onSelect(plan)}
         />
       ))}
@@ -114,26 +137,37 @@ export function PlanTileRow({
   plan,
   selected,
   covered,
+  current,
   onSelect,
 }: {
   plan: ComputePlanOption;
   selected: boolean;
   covered?: boolean;
+  /** The user already subscribes to this plan — see PlanTiles' currentPlanId. */
+  current?: boolean;
   onSelect: () => void;
 }) {
   return (
     <button
       type="button"
       aria-pressed={selected}
+      // Nothing to buy on the plan you are already on. Disabled rather than
+      // hidden: a user comparing machines needs to see which one they have,
+      // and removing the row would make the list they are choosing from
+      // silently different from the list of machines.
+      disabled={current}
       onClick={onSelect}
       className={cn(
         "flex w-full items-center justify-between gap-4 rounded-lg border px-4 py-3 text-left transition-colors",
-        selected
-          ? "border-primary bg-primary/10"
-          : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
+        current
+          ? "cursor-default border-primary/60 bg-primary/5"
+          : selected
+            ? "border-primary bg-primary/10"
+            : "border-border bg-background hover:border-primary/40 hover:bg-muted/50",
       )}
     >
-      {/* The row names the MACHINE and its price. Nothing else.
+      {/* The row names the MACHINE, what it reserves, and its price. Nothing
+          else — and specifically not an hours figure.
       
           It used to carry "N hours included each month" under the size, and
           that line was wrong in the way a per-row number always is when the
@@ -156,11 +190,25 @@ export function PlanTileRow({
       <span className="min-w-0">
         <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
           {plan.label}
-          {selected && <CheckCircle2 className="h-4 w-4 text-primary" />}
+          {(selected || current) && (
+            <CheckCircle2 className="h-4 w-4 text-primary" />
+          )}
         </span>
+        {/* The specs, in their own slot. Callers pass a `detail` rather than
+            folding it into `label`, so the bare machine name stays available
+            to the prose that needs it. */}
+        {plan.detail && (
+          <span className="block text-xs text-muted-foreground">
+            {plan.detail}
+          </span>
+        )}
       </span>
       <span className="flex-shrink-0 text-sm font-semibold text-foreground">
-        {covered ? (
+        {current ? (
+          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
+            Current plan
+          </span>
+        ) : covered ? (
           <span className="rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold uppercase tracking-wider text-primary">
             Covered
           </span>
@@ -207,7 +255,7 @@ export function describeIncludedHours(plan: ComputePlanOption): string {
  * policy actually is.
  *
  * "machines pause" — this is the part that must not be guessed at, and it is
- * NOT the free-tier suspension path. `enforcement.Check` returns early on
+ * NOT the unsubscribed-org suspension path. `enforcement.Check` returns early on
  * `isPaid(sub)`, so ENFORCEMENT_SUSPEND_ON_OVERAGE never touches a paying
  * subscriber. Paid plans are gated in `svcdaemon`: included minutes, then any
  * coupon grant, and then `if !sub.OverageEnabled` the request is DENIED with
@@ -220,7 +268,27 @@ export function describeIncludedHours(plan: ComputePlanOption): string {
  * user who reads it as automatic would expect a bill they will never get —
  * and, worse, would not understand why their machine stopped.
  */
-export function PlanFinePrint({ plan }: { plan: ComputePlanOption }) {
+export function PlanFinePrint({
+  plan,
+  rateVariesBySize,
+}: {
+  plan: ComputePlanOption;
+  /**
+   * True when this sits beneath a LIST of machines rather than beside one.
+   *
+   * The included hours are uniform across the catalog — 9600 minutes at every
+   * size — which is what lets everything else here be said once. The OVERAGE
+   * RATE is not: control-plane prices it per plan (0.25 / 0.6 / 1.0 / 1.7
+   * cents per minute up the ladder). So naming one plan's rate under a list of
+   * four machines states a uniformity that does not exist, and it would do it
+   * in the currency the user is about to be charged in.
+   *
+   * With no machine chosen there is no rate to name, so the policy is stated
+   * WITHOUT a number. The figure appears in the checkout, where exactly one
+   * machine is selected and the rate quoted is that machine's own.
+   */
+  rateVariesBySize?: boolean;
+}) {
   return (
     <ul className="space-y-1.5 text-xs leading-relaxed text-muted-foreground">
       <li>
@@ -231,6 +299,14 @@ export function PlanFinePrint({ plan }: { plan: ComputePlanOption }) {
       <li>
         {plan.includedMinutes < 0 ? (
           <>Hours are unlimited on this plan.</>
+        ) : rateVariesBySize ? (
+          <>
+            If you use all {Math.round(plan.includedMinutes / 60)} hours, new
+            machines pause until next month — unless you turn on overage
+            billing, which keeps them running at that machine&apos;s
+            per-hour rate. Overage is off unless you switch it on, and you can
+            set a monthly cap.
+          </>
         ) : plan.overageCentsPerMinute > 0 ? (
           <>
             If you use all {Math.round(plan.includedMinutes / 60)} hours, new

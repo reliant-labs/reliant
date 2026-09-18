@@ -101,13 +101,25 @@ export function ComputeBand({
           // The TRUE empty, and a different fact from "the detail didn't load".
           // A new user's overview was a wall of dashes; this is a sentence and
           // a next step.
-          <div>
-            <p className="text-lg font-semibold text-foreground">
-              No compute plan
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Machines run on a plan — pick one to get started.
-            </p>
+          // The empty state carries its own action rather than relying on
+          // `Change plan` in the header. That button is correctly named for
+          // someone who HAS a plan, and it is the quietest control on the card
+          // (outline, header-right) — so the one user with nothing to change
+          // was told to pick a plan and offered no way to do it near the words
+          // asking them to. An empty state that names a next step without
+          // providing one is the dead end this band exists to replace.
+          <div className="flex flex-col items-start gap-3">
+            <div>
+              <p className="text-lg font-semibold text-foreground">
+                No compute plan
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Machines run on a plan — pick one to get started.
+              </p>
+            </div>
+            <Button size="sm" onClick={onChangePlan}>
+              Choose a plan
+            </Button>
           </div>
         ) : (
           <>
@@ -134,7 +146,7 @@ export function ComputeBand({
               // three characters: the data arrived, was unusable, and rendered
               // as a legitimate value meaning "this plan includes no hours" —
               // next to a purchase button.
-              <p className="rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+              <p className="rounded-md border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground">
                 Plan details are unavailable — the control plane may not have
                 restarted since the plan catalog changed.
               </p>
@@ -148,7 +160,7 @@ export function ComputeBand({
               // by SAYING so, not by leaving a gap. A blank where hours used
               // belongs reads as zero, which is the reading this exists to
               // prevent.
-              <div className="flex flex-col gap-2 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p>Usage unavailable for this period.</p>
                   {includedHoursLabel && (
@@ -180,7 +192,7 @@ export function ComputeBand({
             has some with no plan at all. Nesting it under the plan hid it from
             exactly the user most likely to be looking for it. */}
         {grantedMinutesRemaining > 0 && (
-          <div className="flex flex-col gap-1 rounded-md border border-border bg-muted/40 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium text-foreground">Coupon minutes</p>
               <p className="text-xs text-muted-foreground">
@@ -270,8 +282,11 @@ function CapacityBar({
       </div>
 
       <div className="mt-2 flex items-center gap-1">
-        {/* Included segment. */}
-        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-muted">
+        {/* Included segment. The track is `bg-background` for the same reason
+            every inset on this page is: a track is a well the fill sits in,
+            and `bg-muted` is lighter than the card in every dark theme, so it
+            would read as raised. Matches the credit meter's track. */}
+        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-background">
           <div
             role="progressbar"
             aria-label="Included hours used"
@@ -289,7 +304,7 @@ function CapacityBar({
         <span aria-hidden className="h-3 w-px bg-border" />
         {/* Overage segment — narrow, because it is the exception, not half the
             capacity. */}
-        <div className="h-2.5 w-1/4 overflow-hidden rounded-full bg-muted">
+        <div className="h-2.5 w-1/4 overflow-hidden rounded-full bg-background">
           <div
             className="h-full rounded-full bg-destructive"
             style={{ width: `${capacity.overagePct}%` }}

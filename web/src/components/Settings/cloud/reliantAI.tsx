@@ -231,12 +231,6 @@ function ReliantAIPanel() {
       ? (overviewQ.error as Error).message || "Failed to load Reliant AI data."
       : "";
 
-  const capLabel = entitlement
-    ? entitlement && overview?.spendCapUnlimited
-      ? "Unlimited"
-      : usdFromCents(entitlement.monthlySpendCapCents)
-    : "—";
-
   const handleRevoke = (key: LLMKey) => {
     if (!confirm(`Revoke "${key.name}"? This cannot be undone.`)) return;
     revokeMut.mutate(key.id);
@@ -271,7 +265,7 @@ function ReliantAIPanel() {
           unfunded account. Say which it is, and point at the two ways out
           (redeem below, or billing) instead of leaving the user to guess. */}
       {!loading && !hasFunds && (
-        <div className="rounded-md border border-border bg-muted/40 p-3 text-sm">
+        <div className="rounded-md border border-border bg-card p-3 text-sm">
           <p className="font-medium text-foreground">
             Reliant AI has no credit yet
           </p>
@@ -330,7 +324,7 @@ function ReliantAIPanel() {
                 </p>
                 {allowedModels.length > 0 && (
                   <div className="mt-4">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                       Available models
                     </p>
                     <div className="mt-2 flex flex-wrap gap-1.5">
@@ -383,37 +377,44 @@ function ReliantAIPanel() {
                 <p className="text-3xl font-semibold text-foreground">
                   {usd(totalSpend)}
                 </p>
-                <div className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      This period
-                    </p>
-                    <p className="mt-1 font-medium text-foreground">
-                      {usdFromCents(overview?.currentPeriodSpendCents)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Remaining
-                    </p>
-                    <p className="mt-1 font-medium text-foreground">
-                      {overview?.spendCapUnlimited
-                        ? "Unlimited"
-                        : usdFromCents(overview?.remainingSpendCents)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                      Monthly cap
-                    </p>
-                    <p className="mt-1 font-medium text-foreground">{capLabel}</p>
-                  </div>
-                </div>
-                {overview?.spendCapReached && (
-                  <p className="mt-3 text-sm text-warning">
-                    Your monthly spend cap has been reached.
-                  </p>
-                )}
+                {/* ── "Monthly cap" and "Remaining" were DELETED here, and must
+                    not be reinstated from the proto fields, which are still on
+                    the wire and still look inviting.
+
+                    They rendered `monthly_spend_cap_cents`, and that field
+                    enforces NOTHING. It is assigned in exactly one place in
+                    control-plane — `MonthlySpendCapCents: -1` in
+                    resolveCurrentUserReliantEntitlement — and never
+                    overwritten, so `spend_cap_unlimited` is unconditionally
+                    true, `remaining_spend_cents` unconditionally 0, and
+                    `spend_cap_reached` can never fire. Nothing in
+                    internal/llmproxy or internal/enforcement reads the field at
+                    all: the proxy is the single choke point for LLM traffic and
+                    it gates on WALLET BALANCE.
+
+                    So the tiles read "Unlimited" forever beside a "Remaining"
+                    that was structurally meaningless. A cap shown as unlimited
+                    invites the reading that some other value WOULD be enforced,
+                    which is not true of this field — and the residue of the
+                    retired per-plan cap model (max_llm_spend_monthly, still in
+                    plans.yaml) is not a reason to keep claiming one.
+
+                    Reliant AI is passthrough at no markup, so the honest
+                    ceiling is the user's own: auto-recharge's mandatory
+                    max_per_month_cents on the Billing page, which we DO honour.
+                    That is what the pointer below names. */}
+                <p className="mt-4 text-sm text-muted-foreground">
+                  Spent this period:{" "}
+                  <span className="font-medium text-foreground">
+                    {usdFromCents(overview?.currentPeriodSpendCents)}
+                  </span>
+                </p>
+                <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+                  Reliant AI is billed straight through to the provider at no
+                  markup, so your spend is bounded by your credit rather than by
+                  a plan limit. To put a ceiling on it, set a monthly limit for
+                  automatic top-ups on the Billing page.
+                </p>
               </CardContent>
             </Card>
           </div>
@@ -810,7 +811,7 @@ function CreateKeyForm({
   };
 
   return (
-    <div className="mb-4 space-y-4 rounded-lg border border-border bg-muted/30 p-4">
+    <div className="mb-4 space-y-4 rounded-lg border border-border/60 bg-background p-4">
       <div className="space-y-2">
         <label className="text-sm font-medium text-foreground">Key name</label>
         <input

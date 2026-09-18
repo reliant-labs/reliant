@@ -103,6 +103,8 @@ vi.mock("@/hooks/useCloudBillingQueries", async (importOriginal) => {
     useCurrentUserInvoices: () => query(undefined),
     useBillingEmail: () => query(undefined),
     useSetComputeOverage: () => mutation(),
+    useWalletAutoRecharge: () => query(undefined),
+    useSetWalletAutoRecharge: () => mutation(),
     useCreateCheckoutSession: () => mutation(),
     useCreateWalletTopupSession: () => mutation(),
     useCreateBillingPortalSession: () => mutation(),
@@ -402,6 +404,33 @@ describe("degraded data disables only the controls that depend on it", () => {
     // NOT the stale-catalog advice, which would send a brand new user to look
     // at infrastructure.
     expect(compute.queryByText(/control plane/i)).toBeNull();
+  });
+
+  /**
+   * The empty state must carry its OWN action, beside the sentence that asks
+   * for one.
+   *
+   * `Change plan` in the header is not that action. It is named for someone who
+   * already has a plan, and it is the quietest control on the card — outline
+   * variant, header-right, furthest from the copy. So the single user with
+   * nothing at all was told to "pick one to get started" and left to find an
+   * unrelated-sounding button to do it with.
+   *
+   * Asserted by ROLE and position rather than by text alone: a `<p>` reading
+   * "choose a plan" would satisfy a text query while remaining exactly the dead
+   * end being fixed, which is the same defect as the Machines badge that looked
+   * like a button and was not.
+   */
+  it("gives the no-plan empty state its own button, and it navigates", async () => {
+    state.sub = undefined;
+    renderSection();
+
+    const compute = within(computeBand());
+    const choose = compute.getByRole("button", { name: /choose a plan/i });
+    expect(choose).toBeEnabled();
+
+    await userEvent.setup().click(choose);
+    expect(routerState.search.tab).toBe("plans");
   });
 
   /**

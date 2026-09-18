@@ -1,9 +1,9 @@
 /**
  * Anonymous-session sign-in nudge — schedule + persistence logic.
  *
- * Free-tier users start out as anonymous Supabase sessions. Their chats and
- * workspaces are tied to that session (see UpgradeAccount.tsx), so if they lose
- * the browser session they lose their work. This module owns the *pure* logic
+ * A user who has not signed in yet runs on an anonymous Supabase session. Their
+ * chats and workspaces are tied to that session (see UpgradeAccount.tsx), so if
+ * they lose the browser session they lose their work. This module owns the *pure* logic
  * for deciding when to nudge them to attach a real identity, with an escalating
  * (exponential-ish) backoff so we prompt more often early and then back off:
  *

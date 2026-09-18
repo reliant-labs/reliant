@@ -96,7 +96,11 @@ function renderPage(overrides: {
   const confirmSettlement =
     overrides.confirmSettlement ?? vi.fn(async () => true);
   render(
+    // The amount is the CALLER's now. This component no longer owns a picker —
+    // every surface that mounts it already has one, and rendering a second was
+    // asking the user to choose the same number twice.
     <WalletTopupCheckout
+      amountCents={2500}
       confirmSettlement={confirmSettlement}
       onDone={onDone}
     />,
@@ -116,22 +120,41 @@ beforeEach(() => {
 // ── Tests ────────────────────────────────────────────────────────────────
 
 describe("WalletTopupCheckout — the page is ours", () => {
-  it("renders our own amount selector and submit button, not Stripe's", () => {
+  it("confirms the caller's amount and names the charge, without a second picker", () => {
     renderPage();
     // Our controls, around Stripe's card fields.
     //
-    // The picker offers CREDIT ($25.00 — what lands in the balance) while the
-    // button names the CHARGE ($26.25 — credit plus the processing fee). The
-    // two deliberately differ, and the button carries the larger one because it
-    // is the last number read before paying and the one that reaches the card
-    // statement.
-    expect(
-      screen.getByRole("button", { name: /^\$25\.00$/ }),
-    ).toBeInTheDocument();
+    // The heading states the CREDIT ($25.00 — what lands in the balance) while
+    // the button names the CHARGE ($26.25 — credit plus the processing fee).
+    // The two deliberately differ, and the button carries the larger one
+    // because it is the last number read before paying and the one that
+    // reaches the card statement.
+    expect(screen.getByText(/adding \$25\.00 of credit/i)).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /^Pay \$26\.25$/ }),
     ).toBeInTheDocument();
     expect(screen.getByTestId("payment-element")).toBeInTheDocument();
+  });
+
+  /**
+   * The "double setup issue", made falsifiable.
+   *
+   * The caller has ALREADY asked how much credit to buy — the credit band's
+   * preset row on the billing page, the amount picker on onboarding's model
+   * step — so a grid of the same four amounts here asked the user to decide
+   * the same thing twice, the second time in a bigger control.
+   *
+   * Asserting on the buttons rather than the heading is what makes this a test
+   * of the picker's absence: reinstating it under a different heading would be
+   * the same defect, and a heading assertion would pass.
+   */
+  it("renders no amount picker of its own", () => {
+    renderPage();
+    for (const amount of ["$10.00", "$25.00", "$50.00", "$100.00"]) {
+      expect(
+        screen.queryByRole("button", { name: new RegExp(`^\\${amount}$`) }),
+      ).toBeNull();
+    }
   });
 
   it("puts coupon redemption on the page as a way to pay, not behind a link", () => {
@@ -144,6 +167,7 @@ describe("WalletTopupCheckout — the page is ours", () => {
   it("shows a covered leg rather than hiding it, so a coupon's value stays visible", () => {
     render(
       <WalletTopupCheckout
+        amountCents={2500}
         confirmSettlement={vi.fn(async () => false)}
         onDone={vi.fn()}
         legs={[

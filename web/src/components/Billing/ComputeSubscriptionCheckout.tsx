@@ -95,6 +95,12 @@ export interface ComputeSubscriptionCheckoutProps {
   onDone: () => void;
   /** Rendered when the user must link an identity before purchasing. */
   renderIdentityRequired?: (message: string) => React.ReactNode;
+  /**
+   * The plan this user already subscribes to, marked in the list and not
+   * offered as a purchase. Undefined on surfaces where nobody can have one
+   * yet (onboarding), which is why it is not required.
+   */
+  currentPlanId?: string | null;
   loadingPlans?: boolean;
   className?: string;
 }
@@ -106,6 +112,7 @@ export function ComputeSubscriptionCheckout({
   confirmSettlement,
   onDone,
   renderIdentityRequired,
+  currentPlanId,
   loadingPlans,
   className,
 }: ComputeSubscriptionCheckoutProps) {
@@ -152,20 +159,21 @@ export function ComputeSubscriptionCheckout({
       )}
     >
       <section className="space-y-3 p-5">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Choose your machine
         </h3>
         <PlanTiles
           plans={plans}
           loading={loadingPlans}
           selectedPlanId={selected?.planId}
+          currentPlanId={currentPlanId}
           onSelect={onSelectPlan}
         />
         {selected && <PlanFinePrint plan={selected} />}
       </section>
 
       <section className="space-y-3 border-t border-border p-5">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Pay with card
         </h3>
         {selected ? (
@@ -202,8 +210,12 @@ export function ComputeSubscriptionCheckout({
       {/* Beside the card, inside the same surface — not below a 600px iframe
           where it was easy to miss. A code is also the one instrument that
           still works when the plan catalog does not load. */}
-      <section className="space-y-2 border-t border-border bg-muted/20 p-5">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      {/* Set apart by a rule and a recess, not by a tint. `bg-muted/20` here
+          was a 20%-alpha wash that vanished on dark themes and reversed
+          direction on light ones — see the elevation note in
+          Settings/cloud/ui/card.tsx. `bg-background` recesses in both. */}
+      <section className="space-y-2 border-t border-border bg-background p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">

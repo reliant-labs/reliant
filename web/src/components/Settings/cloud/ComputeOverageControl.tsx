@@ -17,10 +17,13 @@ import { cn } from "@/lib/utils";
  *  - It asks for the ceiling and the permission in ONE submit. The server
  *    replaces both on every call, and a two-step UI would make "overage on,
  *    no ceiling" a state a user passes through on the way to setting a limit.
- *  - It says plainly that the limit gates STARTING a machine and does not stop
- *    one already running. That is the actual server behaviour, and a cap the
- *    user reads as a hard ceiling — which then bills them for a weekend — is
- *    worse than no cap at all.
+ *  - It says plainly what the limit does: it gates STARTING a machine, and the
+ *    billing sweep pauses a running one shortly after the cap is met. It is
+ *    still not an instantaneous hard ceiling, and the copy must not imply one —
+ *    a cap the user reads as absolute, which then bills them past it, is worse
+ *    than no cap at all. (Until the sweep learned to enforce this cap it could
+ *    only gate starts, and a running machine billed until it went idle; the
+ *    copy promised exactly that and now would be wrong the other way.)
  *  - It never submits from an effect. This authorizes spend, so it moves only
  *    on an explicit click.
  */
@@ -263,13 +266,18 @@ export function ComputeOverageControl({
               Enter a limit above $0, or choose one of the other options.
             </p>
           )}
-          {/* The load-bearing sentence. The server's cap is checked when a
-              machine STARTS (CreateDaemon / ResumeDaemon) and nowhere else, so
-              promising a hard ceiling here would be false. */}
+          {/* The load-bearing sentence, and it changed when the cap became
+              real. The server checks it when a machine STARTS (CreateDaemon /
+              ResumeDaemon) AND on the billing sweep, which suspends a running
+              machine once the cap is met. The sweep runs about once a minute,
+              so the overshoot is now bounded by that interval rather than by
+              whenever the machine happened to go idle. Still not a hard
+              ceiling — promising one would be false — but a much smaller
+              caveat than the one this replaced. */}
           <p id="overage-limit-caveat" className="text-xs text-muted-foreground">
-            This limit stops new machines from starting. A machine that&apos;s
-            already running keeps running until it goes idle, so your final bill
-            can pass the limit by the cost of finishing what&apos;s in flight.
+            This limit stops new machines from starting, and pauses running ones
+            shortly after the limit is reached. Your final bill can pass the
+            limit slightly, by whatever a machine spends before it&apos;s paused.
           </p>
         </OverageOption>
 
@@ -296,7 +304,7 @@ export function ComputeOverageControl({
           {/* No bar when there is no measurement: an empty track reads as
               "nothing spent", which is the claim we are refusing to make. */}
           {spentAgainstCap.pct !== null && (
-            <div className="h-2 rounded-full bg-muted">
+            <div className="h-2 rounded-full bg-background">
               <div
                 className={cn(
                   "h-2 rounded-full",

@@ -18,10 +18,19 @@ import { cn } from "@/lib/utils";
  *
  * The differentiation here is SHAPE, not colour, which is what the repo's
  * styling contract requires and also what actually reads at a glance. This
- * band is a filled, borderless reservoir (`bg-muted/40`, no `border`), its
- * primary number is DOLLARS REMAINING, its bar depletes left-to-right, and its
- * time axis looks BACKWARD — burn rate, not a renewal date. `ComputeBand` is
- * the deliberate inverse on every one of those axes.
+ * band is a filled, borderless reservoir — one unbroken `rounded-2xl` slab
+ * with no `border` and no header rule — its primary number is DOLLARS
+ * REMAINING, its bar depletes left-to-right, and its time axis looks BACKWARD
+ * (burn rate, not a renewal date). `ComputeBand` is the deliberate inverse on
+ * every one of those axes: bordered, ruled into sections, forward-looking.
+ *
+ * It fills with `bg-card`, the same elevation as the compute band beside it,
+ * because both are primary surfaces sitting on the page and neither is nested
+ * in the other. The fill used to be `bg-muted/40`, which is the elevation bug
+ * `ui/card.tsx` documents at length: `--muted` is LIGHTER than `--card` in
+ * every dark theme and DARKER in every light one, so the reservoir floated on
+ * one and sank on the other while the compute band stayed put. Shape carries
+ * the distinction; elevation must not, or the page tilts by theme.
  *
  * Every value is a resolved prop. This component makes no business decision,
  * calls no mutation, and knows no price: the anti-anonymous-purchase guarantee
@@ -42,6 +51,16 @@ export interface CreditBandProps {
   onRedeemed: () => void;
   /** The embedded checkout panel, mounted by the parent. */
   checkout?: ReactNode;
+  /**
+   * The automatic-top-up control, mounted by the parent.
+   *
+   * Credit's answer to compute's overage control, and the reason it is a slot
+   * rather than something this band builds: the band resolves no data and
+   * calls no mutation, and a budget rule is a server round-trip either way.
+   * Its absence from this band is complaint #3's second half — the feature was
+   * built, shipped, and reachable only from the out-of-credit modal.
+   */
+  spendControl?: ReactNode;
 }
 
 export function CreditBand({
@@ -54,6 +73,7 @@ export function CreditBand({
   onRetryBalance,
   onRedeemed,
   checkout,
+  spendControl,
 }: CreditBandProps) {
   // Never offer to spend against a number we could not read. This disables the
   // top-up presets and nothing else — the coupon form does not depend on the
@@ -72,7 +92,7 @@ export function CreditBand({
       // us to. Pinning the class instead would pin styling, break on every
       // visual tweak, and still not catch the two bands being made identical.
       data-band-shape="reservoir"
-      className="rounded-2xl bg-muted/40 px-5 py-5 sm:px-6"
+      className="rounded-2xl bg-card px-5 py-5 sm:px-6"
     >
       <div className="flex items-center gap-2">
         <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -143,7 +163,15 @@ export function CreditBand({
       <div className="mt-5 flex flex-col gap-3 border-t border-border/60 pt-4">
         {/* A named group, not a bare row of dollar buttons: "$25" on its own
             says nothing about what it does, and the label has to be reachable
-            programmatically rather than by proximity. */}
+            programmatically rather than by proximity.
+
+            This is now the ONLY amount picker in the credit flow. The checkout
+            panel below used to render a second grid of these same four amounts
+            under "How much credit?", so a user who pressed $25 here was asked
+            to press $25 again a few hundred pixels down. The panel confirms the
+            amount instead, and these buttons stay live while it is open — so
+            changing your mind is one click on the control you already used,
+            rather than a decision you make twice. */}
         <div
           role="group"
           aria-label="Add credit"
@@ -156,6 +184,10 @@ export function CreditBand({
             <Button
               key={cents}
               size="sm"
+              // Pressed, not merely coloured. Once this is the only picker, the
+              // selected amount is state a screen reader has to be able to
+              // read back — `variant="primary"` alone announces nothing.
+              aria-pressed={topupInFlightCents === cents}
               variant={topupInFlightCents === cents ? "primary" : "outline"}
               disabled={balanceUnavailable}
               title={
@@ -199,6 +231,14 @@ export function CreditBand({
           </div>
         )}
       </div>
+
+      {/* Budgets and limits, on the page rather than behind an emergency.
+          Divided off from the top-up actions above because it answers a
+          different question: those spend money now, this decides what may be
+          spent later. */}
+      {spendControl && (
+        <div className="mt-5 border-t border-border/60 pt-4">{spendControl}</div>
+      )}
     </section>
   );
 }

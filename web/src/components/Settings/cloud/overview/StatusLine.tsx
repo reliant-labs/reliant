@@ -17,7 +17,7 @@ export function StatusLine({ parts }: { parts: string[] }) {
   if (parts.length === 0) return null;
 
   return (
-    <div className="flex items-start gap-2 rounded-md border border-border bg-muted/40 px-4 py-3">
+    <div className="flex items-start gap-2 rounded-md border border-border bg-card px-4 py-3">
       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
       <p className="text-sm text-foreground">{parts.join(" · ")}</p>
     </div>
