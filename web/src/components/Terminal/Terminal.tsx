@@ -32,6 +32,18 @@ const WS_MAX_RECONNECT_ATTEMPTS = 10;
 // real reconnect trigger in that state is the daemon-status subscription
 // flipping to online; this timer only guards against stale client-side status.
 const DAEMON_OFFLINE_RETRY_DELAY = 30000;
+// How long the daemon must stay offline before the terminal tears down a
+// session over it.
+//
+// `daemonOnline` is derived from a 5s poll, and a daemon dropping out of one
+// ListDaemons response is both common and self-healing — a daemon that
+// reconnects flips to DISCONNECTED for a tick on the way through. Acting on
+// the first offline observation would close a healthy websocket and replace a
+// live session with an overlay for a machine that never actually went away,
+// which is a worse failure than the one this transition fixes. A grace period
+// longer than one poll interval means two consecutive observations have to
+// agree before we act.
+const DAEMON_OFFLINE_GRACE_DELAY = 6000;
 
 /**
  * Terminal connection lifecycle:
@@ -59,6 +71,12 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
   const connectionStateRef = useRef<TerminalConnectionState>("connecting");
   // Set when the server reports "no daemon connected" for the current attempt.
   const daemonUnavailableRef = useRef(false);
+  // Armed while the daemon looks offline but has not yet been offline long
+  // enough to act on. See DAEMON_OFFLINE_GRACE_DELAY.
+  const daemonOfflineGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Set when we close a healthy socket ourselves because the daemon went
+  // away, so ws.onclose can tell that close apart from a shell exiting.
+  const closedForDaemonOfflineRef = useRef(false);
   const connectWebSocketRef = useRef<(() => Promise<(() => void) | undefined>) | null>(null);
   const updateSessionPID = useTerminalStore((state) => state.updateSessionPID);
   const setDaemonSessionId = useTerminalStore((state) => state.setDaemonSessionId);
@@ -81,6 +99,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
   useEffect(() => {
     const wasOnline = daemonOnlineRef.current;
     daemonOnlineRef.current = daemonOnline;
+
     if (!wasOnline && daemonOnline && connectionStateRef.current === "waiting_for_daemon") {
       logger.info("[Terminal] Daemon came online, reconnecting", { sessionId });
       if (reconnectTimerRef.current) {
@@ -91,7 +110,78 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
       updateConnectionState("connecting");
       void connectWebSocketRef.current?.();
     }
+
+    // Daemon went away while we were showing a live session.
+    //
+    // This is the ONLY thing that notices, because the websocket is to the
+    // api-server, not to the daemon: when the daemon dies the socket stays
+    // open, so ws.onclose never fires and the state machine sits in
+    // "connected" forever. The terminal kept rendering a healthy prompt for a
+    // machine that was gone, while every other daemon-backed surface — chat,
+    // ConnectDaemonModal, DaemonConnectingGate — showed the offline state
+    // correctly. Only a refresh, which remounts against an already-offline
+    // daemon, ever corrected it.
+    //
+    // Deliberately debounced rather than immediate: see
+    // DAEMON_OFFLINE_GRACE_DELAY. `daemonOnline` is `!!activeDaemon ||
+    // daemonStatusLoading` — true while status is LOADING by design, so this
+    // never fires on the gap before the first poll lands.
+    if (wasOnline && !daemonOnline) {
+      const state = connectionStateRef.current;
+      if (state === "connected" || state === "connecting") {
+        if (!daemonOfflineGraceTimerRef.current) {
+          daemonOfflineGraceTimerRef.current = setTimeout(() => {
+            daemonOfflineGraceTimerRef.current = null;
+            // Re-check both facts at fire time. The daemon may have come back
+            // during the grace window, and the session may have ended on its
+            // own — in either case there is nothing to tear down.
+            if (daemonOnlineRef.current) return;
+            const current = connectionStateRef.current;
+            if (current !== "connected" && current !== "connecting") return;
+
+            logger.info("[Terminal] Daemon went offline, session is dead", { sessionId });
+
+            // Close the now-useless socket. It is open to the api-server but
+            // the PTY behind it is gone, so anything typed into it is
+            // silently dropped. Closing routes us through the existing
+            // ws.onclose "daemon offline" branch, which owns the fallback
+            // retry timer — so the recovery path here is the same one a real
+            // socket drop takes, rather than a second one to keep in sync.
+            //
+            // The flag tells that branch this close was ours: without it a
+            // clean 1000 close would be read as "shell exited" and print
+            // "Session ended" into the scrollback.
+            closedForDaemonOfflineRef.current = true;
+            const ws = wsRef.current;
+            if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+              ws.close();
+            } else {
+              // No socket to close (already gone, or we never got one).
+              // Show the overlay directly; nothing else will.
+              closedForDaemonOfflineRef.current = false;
+              updateConnectionState("waiting_for_daemon");
+            }
+          }, DAEMON_OFFLINE_GRACE_DELAY);
+        }
+      }
+    } else if (daemonOnline && daemonOfflineGraceTimerRef.current) {
+      // Came back inside the grace window — the blip self-healed, leave the
+      // live session alone.
+      clearTimeout(daemonOfflineGraceTimerRef.current);
+      daemonOfflineGraceTimerRef.current = null;
+    }
   }, [daemonOnline, sessionId, updateConnectionState]);
+
+  // Clear the grace timer on unmount. The main effect's cleanup handles the
+  // reconnect timer; this one is owned here.
+  useEffect(() => {
+    return () => {
+      if (daemonOfflineGraceTimerRef.current) {
+        clearTimeout(daemonOfflineGraceTimerRef.current);
+        daemonOfflineGraceTimerRef.current = null;
+      }
+    };
+  }, []);
 
   // Main terminal initialization effect - only runs once per sessionId
   useEffect(() => {
@@ -275,6 +365,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
       // Per-attempt evidence: cleared here, set by this attempt's messages.
       daemonUnavailableRef.current = false;
+      closedForDaemonOfflineRef.current = false;
 
       // Use the main gRPC base URL for terminal WebSocket connections.
       const baseURL = getGRPCBaseURLPublic();
@@ -391,8 +482,16 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         // terminal instance is disposed, do nothing.
         if (disposed) return;
 
+        // We closed this socket ourselves because the daemon went offline.
+        // Checked BEFORE the 1000 branch: our own close() reports code 1000,
+        // which would otherwise read as "the shell exited cleanly" and both
+        // print "Session ended" into the scrollback and park the terminal in
+        // "disconnected" instead of the waiting overlay.
+        const closedForDaemonOffline = closedForDaemonOfflineRef.current;
+        closedForDaemonOfflineRef.current = false;
+
         // Normal exit (e.g. shell exited) — code 1000 means clean close.
-        if (event.code === 1000) {
+        if (event.code === 1000 && !closedForDaemonOffline) {
           term.write("\r\n\x1b[93mSession ended\x1b[0m\r\n");
           updateConnectionState("disconnected");
           return;
@@ -403,7 +502,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         // Don't burn backoff attempts: show a calm persistent waiting state
         // and let the daemon-status subscription trigger the reconnect, with
         // a slow fallback retry in case that status is stale.
-        if (daemonUnavailableRef.current || !daemonOnlineRef.current) {
+        if (closedForDaemonOffline || daemonUnavailableRef.current || !daemonOnlineRef.current) {
           // Deliberately NOT written into the buffer. Machine availability is
           // transient state, not session output — writing it to the scrollback
           // left "Waiting for daemon to come online..." permanently interleaved

@@ -170,6 +170,53 @@ func extractProviderReconnectSummary(errLower string) string {
 	}
 }
 
+// modelGroupPattern pulls the model the gateway was asked for out of a LiteLLM
+// routing error. LiteLLM reports it as `Received Model Group=<name>`, which is
+// the model id the user actually selected — the upstream publisher path in the
+// same message is an internal Vertex resource name and means nothing to them.
+var modelGroupPattern = regexp.MustCompile(`Received Model Group=([^\s\n]+)`)
+
+// extractModelUnavailableSummary recognizes a model that the gateway advertises
+// but cannot currently serve.
+//
+// This reached a user mid-stream, verbatim, as a red card:
+//
+//	litellm.NotFoundError: VertexAIException - Publisher model
+//	`projects/.../publishers/anthropic/models/claude-opus-5` was not found
+//	Received Model Group=claude-opus-5
+//	Available Model Group Fallbacks=None
+//
+// The cause is real and outside the user's control: the model is listed in the
+// catalog and offered in the picker, but the deployment is not entitled to it
+// upstream. Nothing in that blob says so. It reads like a crash, names a Vertex
+// resource path the user has never seen, and buries the one useful fact — which
+// model failed — in the middle.
+//
+// The summary says what is true (this model is unavailable to this deployment),
+// and what to do (pick another), because the user cannot fix an entitlement and
+// retrying the same model cannot succeed.
+func extractModelUnavailableSummary(errMsg, errLower string) string {
+	// Anchored on LiteLLM's own routing vocabulary rather than a bare "was not
+	// found": the gateway is the only thing that emits these, and a loose match
+	// would claim unrelated not-found errors (a missing file, a deleted chat)
+	// as model-availability problems.
+	routingMiss := strings.Contains(errLower, "model group fallbacks") ||
+		strings.Contains(errLower, "received model group")
+	notFound := strings.Contains(errLower, "notfounderror") ||
+		strings.Contains(errLower, "was not found") ||
+		strings.Contains(errLower, "invalid model name")
+	if !routingMiss || !notFound {
+		return ""
+	}
+
+	if matches := modelGroupPattern.FindStringSubmatch(errMsg); len(matches) == 2 {
+		return fmt.Sprintf(
+			"%s isn't available on your account right now — pick a different model to continue",
+			matches[1])
+	}
+	return "That model isn't available on your account right now — pick a different model to continue"
+}
+
 // extractInfrastructureSummary describes a failure in OUR storage layer rather
 // than at the provider.
 //
@@ -237,6 +284,16 @@ func extractLLMErrorSummary(errMsg string) string {
 
 	if reconnectSummary := extractProviderReconnectSummary(errLower); reconnectSummary != "" {
 		return reconnectSummary
+	}
+
+	// A model the gateway advertises but cannot serve. Placed AFTER the auth
+	// branches (a 401 on a model request is an auth problem, not an
+	// availability one) and BEFORE the JSON/pattern fallbacks, which would
+	// otherwise classify it by its embedded "not_found_error" type as the
+	// generic "Model or resource not found at the AI provider" — true, but it
+	// neither names the model nor says what to do about it.
+	if modelSummary := extractModelUnavailableSummary(errMsg, errLower); modelSummary != "" {
+		return modelSummary
 	}
 
 	// First, try to extract from embedded JSON error payload

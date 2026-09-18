@@ -5,6 +5,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // CommandHandler processes a daemon command and returns a JSON-encoded response payload.
@@ -37,9 +39,38 @@ func (r *CommandRegistry) Handle(ctx context.Context, commandType string, payloa
 	handler, ok := r.handlers[commandType]
 	r.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("unknown daemon command type: %q", commandType)
+		return nil, unknownCommandError(commandType)
 	}
 	return handler(ctx, payload)
+}
+
+// unknownCommandError explains a registry miss as what it always is: version
+// skew.
+//
+// Every command type is registered from an init() in this package, so the set a
+// daemon serves is fixed at build time. The server only ever asks for a command
+// it knows about, which means a miss says the server is newer than this daemon
+// — never that something is broken, and never anything the user can fix by
+// retrying.
+//
+// The old text was the raw lookup failure:
+//
+//	unknown daemon command type: "auth.open_oauth_helper"
+//
+// which reached a user in production as an opaque `{"code":"internal"}` blob
+// after their daemon predated the PR that added that handler. It named the
+// symptom and buried the one thing they could act on. This leads with the cause
+// and the fix, and keeps the command name — the detail that makes a bug report
+// actionable — at the end.
+//
+// The version is read locally rather than plumbed through the wire protocol:
+// the daemon is the process that knows which build it is, and the error travels
+// back to the server as a plain string, so stating it here needs no proto
+// change and cannot disagree with the binary actually running.
+func unknownCommandError(commandType string) error {
+	return fmt.Errorf(
+		"this machine is running an older version of Reliant (%s) that doesn't support %q — update it to continue",
+		version.Get().Version, commandType)
 }
 
 // defaultRegistry is the global command registry for the daemon runtime.
