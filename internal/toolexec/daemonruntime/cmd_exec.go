@@ -15,7 +15,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
-	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
@@ -139,7 +138,16 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		waitCh := make(chan error, 1)
 		go func() { waitCh <- cmd.Wait() }()
 
-		if bgResp, backgrounded := pollForBackgroundDetach(ctx, cmd, req, &stdoutBuf, &stderrBuf, waitCh, start); backgrounded {
+		bgResp, backgrounded := daemon.PollForBackgroundDetach(ctx, daemon.DetachOptions{
+			Cmd:        cmd,
+			Command:    req.Command,
+			WorkingDir: req.WorkingDir,
+			StartTime:  start,
+			StdoutBuf:  &stdoutBuf,
+			StderrBuf:  &stderrBuf,
+			WaitErrCh:  waitCh,
+		})
+		if backgrounded {
 			// Adopted: the background manager owns the command now, so the
 			// grace timer stays armed rather than being stopped here.
 			return json.Marshal(bgResp)
@@ -165,99 +173,6 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	resp.Combined = daemon.CombineOutput(resp.Stdout, resp.Stderr)
 
 	return json.Marshal(resp)
-}
-
-// backgroundPollInterval is how often a running command checks whether the user
-// asked to detach it. 100ms is imperceptible to a person clicking the button and
-// negligible against commands that run long enough to be worth backgrounding.
-const backgroundPollInterval = 100 * time.Millisecond
-
-// pollForBackgroundDetach waits for the command to finish OR for the user to ask
-// that it be detached into a background process, whichever comes first.
-//
-// This restores behaviour that existed and was deleted (see
-// internal/llm/tools/shell_unix.go at 74e60c49^). Until now the API server set
-// an in-memory "backgrounded" flag that NOTHING read: shell.BackgroundSignal
-// lives in the API server's memory while the command runs in the DAEMON, a
-// separate process that may not even be on the same machine. So clicking
-// "background" marked the tool_calls row BACKGROUNDED, told the UI it worked,
-// and left the command running in the foreground still blocking the workflow.
-// Every backgrounded call in the database has a NULL background_process_id
-// because no process was ever created.
-//
-// Returns (result, true) when the command was adopted into the background
-// manager; the caller returns that result immediately and the process keeps
-// running under shell_output / shell_kill. Returns (_, false) when the command
-// finished on its own, and the caller proceeds with the normal result path.
-func pollForBackgroundDetach(
-	ctx context.Context,
-	cmd *exec.Cmd,
-	req daemon.RunCommandRequest,
-	stdoutBuf, stderrBuf *bytes.Buffer,
-	waitCh chan error,
-	start time.Time,
-) (daemon.CommandResult, bool) {
-	ticker := time.NewTicker(backgroundPollInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case waitErr := <-waitCh:
-			// Finished before anyone asked to detach it (or in the same
-			// instant). The output is real and complete, so report it normally
-			// rather than pretending it was backgrounded.
-			//
-			// waitCh is buffered with capacity 1 and has exactly one sender, so
-			// putting the result back is guaranteed not to block and lets the
-			// caller's own receive observe it. cmd.Wait() is still called only
-			// once.
-			waitCh <- waitErr
-			return daemon.CommandResult{}, false
-
-		case <-ctx.Done():
-			return daemon.CommandResult{}, false
-
-		case <-ticker.C:
-			toolCallID, requested := backgroundRequested(ctx)
-			if !requested {
-				continue
-			}
-
-			process, adoptErr := shell.GetBackgroundManager().AdoptRunningProcess(shell.AdoptRunningProcessOptions{
-				Cmd:        cmd,
-				Command:    req.Command,
-				WorkingDir: req.WorkingDir,
-				StartTime:  start,
-				StdoutBuf:  stdoutBuf,
-				StderrBuf:  stderrBuf,
-				WaitErrCh:  waitCh,
-			})
-			if adoptErr != nil {
-				// Adoption failed: the command is still running and still owned
-				// by this call, so fall back to waiting for it. Saying so beats
-				// reporting a background process that does not exist.
-				logging.Warn("[exec.run] Failed to adopt process into background; continuing in foreground",
-					"error", adoptErr, "toolCallID", toolCallID)
-				return daemon.CommandResult{}, false
-			}
-
-			logging.Info("[exec.run] Detached command into background process",
-				"processID", process.ID, "toolCallID", toolCallID)
-
-			out := fmt.Sprintf(
-				"Command detached into a background process.\nProcess ID: %s\nCommand: %s\nUse shell_output to read its output and shell_kill to stop it.",
-				process.ID, req.Command)
-			resp := daemon.CommandResult{
-				Stdout:       out,
-				DurationMs:   time.Since(start).Milliseconds(),
-				ExitCode:     0,
-				Backgrounded: true,
-				ProcessID:    process.ID,
-			}
-			resp.Combined = daemon.CombineOutput(resp.Stdout, resp.Stderr)
-			return resp, true
-		}
-	}
 }
 
 // =============================================================================
