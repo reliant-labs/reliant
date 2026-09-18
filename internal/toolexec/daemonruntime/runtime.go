@@ -979,7 +979,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	// id — the same correlation cancellation uses, and the only handle the
 	// daemon has on a running execution.
 	requestID := req.RequestId
-	ctx = WithBackgroundProbe(ctx, func() (string, bool) {
+	ctx = daemon.WithBackgroundProbe(ctx, func() (string, bool) {
 		return d.takeBackgroundRequest(requestID)
 	})
 
@@ -1218,7 +1218,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 	// Backgrounding is addressed the same way, and for the same reason: the
 	// only id a user can name from the UI is the tool call's. Probe both so a
 	// request that arrives under either id reaches this execution.
-	execCtx = WithBackgroundProbe(execCtx, func() (string, bool) {
+	execCtx = daemon.WithBackgroundProbe(execCtx, func() (string, bool) {
 		if toolCallID, ok := d.takeBackgroundRequest(req.RequestId); ok {
 			return toolCallID, true
 		}
