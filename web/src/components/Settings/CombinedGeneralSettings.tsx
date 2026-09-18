@@ -686,6 +686,15 @@ export function CombinedGeneralSettings({
     }
   };
 
+  // Abandon an in-flight sign-in. Aborting releases the loopback port now
+  // rather than at the receiver's timeout, and the resulting `cancelled`
+  // result is already treated as a non-error by the start path.
+  const handleCancelOAuth = (oauthType: RedirectOAuthProvider) => {
+    resolveOAuthFlow(redirectOAuthFlows, oauthType).cancel();
+    setValidating(false);
+    setValidationMessage(null);
+  };
+
   const handleConnectOAuth = async (oauthType: RedirectOAuthProvider) => {
     setValidating(true);
     setValidationMessage(null);
@@ -866,6 +875,12 @@ export function CombinedGeneralSettings({
                       )
                     }
                     connecting={validating}
+                    onCancel={() =>
+                      handleCancelOAuth(
+                        providerConfigs[selectedProvider as ProviderId]
+                          ?.usesOAuth as RedirectOAuthProvider
+                      )
+                    }
                     buttonVariant="subtle"
                   />
 

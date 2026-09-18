@@ -57,7 +57,19 @@ func ResolveBasePath(ctx context.Context, repo db.Repository, projectID string, 
 
 	if wtID != "" {
 		worktree, err := repo.GetWorktree(ctx, wtID)
-		if err == nil {
+		// A worktree is usable only if it has a PATH, not merely a row.
+		//
+		// The err==nil check alone was not enough. A worktree whose creation
+		// failed leaves a real row — status FAILED, path empty — so the lookup
+		// SUCCEEDS and this returned "" instead of falling through, which sent
+		// callers an empty base. The proxy filesystem service then refused
+		// every request with "project %q has no workspace path to scope this
+		// request to", naming the project, whose path was correct all along.
+		//
+		// Treating an empty path like a missing row degrades to the project
+		// root, which is what a chat with no worktree already gets, rather
+		// than failing outright.
+		if err == nil && strings.TrimSpace(worktree.Path) != "" {
 			return worktree.Path, nil
 		}
 	}

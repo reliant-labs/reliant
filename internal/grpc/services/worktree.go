@@ -467,9 +467,18 @@ func (s *WorktreeService) finishWorktreeCreate(
 	}
 	successes := make([]repoCreateResult, 0, len(repos))
 
+	// Declared before fail() so the rollback can remove the workspace root.
+	// Assigned by the first successful per-repo create below.
+	var workspaceRoot string
+
 	// The row is kept as FAILED rather than deleted: a workspace that silently
 	// never appears is indistinguishable from a bug, whereas a visible failed
 	// row can be retried or dismissed.
+	//
+	// Creation is ALL-OR-NOTHING on disk. A multi-repo workspace that got
+	// three repos in before the fourth failed is not a usable workspace, so
+	// the checkouts that DID succeed are torn down rather than left as a
+	// partial tree that later reads as real.
 	fail := func(reason error) {
 		for _, s2 := range successes {
 			repoPath := filepath.Join(project.Path, s2.repo.RelativePath)
@@ -478,8 +487,35 @@ func (s *WorktreeService) finishWorktreeCreate(
 				"worktree_path": s2.worktreePath,
 			}, nil)
 		}
+		// Remove the workspace root itself. The per-repo deletes above clear
+		// <root>/<repo.rel>, which leaves the root behind for a multi-repo
+		// workspace — an empty directory that looks like a workspace to
+		// anything that stats it. Empty-only, for the same reason as the
+		// daemon-side rollback.
+		if workspaceRoot != "" {
+			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
+				"project_path":  project.Path,
+				"worktree_path": workspaceRoot,
+			}, nil)
+		}
+
 		logging.Error("Worktree creation failed", "error", reason, "worktreeID", worktree.ID)
 		worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+		// A FAILED row must carry NO path.
+		//
+		// The row is inserted with an empty path and only settled at the end
+		// (see the comment above the ACTIVE branch), so on the common failure
+		// path this is already "". It is cleared explicitly because a failure
+		// AFTER the path was assigned — the UpdateWorktree error below is
+		// exactly that case — would otherwise leave a FAILED row pointing at
+		// directories this function just deleted.
+		//
+		// That combination is what breaks callers: filepreview.ResolveBasePath
+		// falls back to the project path only when the worktree LOOKUP errors,
+		// so a row that exists with an unusable path is returned as-is and
+		// every scoped filesystem RPC fails. Empty is the honest value, and it
+		// is the one ResolveBasePath can now recognize.
+		worktree.Path = ""
 		worktree.UpdatedAt = time.Now().UTC()
 		if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
 			logging.Error("Failed to mark worktree failed", "error", err, "worktreeID", worktree.ID)
@@ -487,7 +523,6 @@ func (s *WorktreeService) finishWorktreeCreate(
 		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 	}
 
-	var workspaceRoot string
 	for _, repo := range repos {
 		repoPath := filepath.Join(project.Path, repo.RelativePath)
 

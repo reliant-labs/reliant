@@ -207,7 +207,6 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
   });
 
   const saving = saveKeyMutation.isPending;
-  const validating = validateKeyMutation.isPending;
 
   // Wallet balance still decides what this step SAYS — managed Reliant draws
   // on the org wallet and the LLM proxy rejects a zero balance outright — but
@@ -304,6 +303,20 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
     },
     [creditCents, creditsAvailable, onNext, plan, updatePlan],
   );
+
+  // Whether a redirect sign-in is in flight, read from the hook that owns it.
+  const oauthRunning = isRedirectOAuthProvider(provider.usesOAuth)
+    ? resolveOAuthFlow(redirectOAuthFlows, provider.usesOAuth).isRunning
+    : false;
+
+  // Abandon an in-flight sign-in. The hooks report an aborted run as
+  // `cancelled`, which handleConnectOAuth already declines to surface as an
+  // error, so stopping deliberately leaves no banner behind.
+  const handleCancelOAuth = useCallback(() => {
+    if (!isRedirectOAuthProvider(provider.usesOAuth)) return;
+    resolveOAuthFlow(redirectOAuthFlows, provider.usesOAuth).cancel();
+    setValidationResult(null);
+  }, [provider.usesOAuth, claudeOAuth, codexOAuth, antigravityOAuth]);
 
   const handleConnectOAuth = useCallback(async () => {
     if (!isRedirectOAuthProvider(provider.usesOAuth)) return;
@@ -576,7 +589,13 @@ export function ModelStep({ plan, updatePlan, onNext }: StepProps) {
               loading={oauthAvailability.loading}
               onRetry={oauthAvailability.recheck}
               onConnect={handleConnectOAuth}
-              connecting={validating}
+              // The OAuth flow's own state. This was previously wired to
+              // validateKeyMutation.isPending, which no OAuth path ever sets,
+              // so the spinner never ran during a redirect sign-in and the
+              // button stayed clickable throughout — a second click aborted
+              // the attempt already in progress.
+              connecting={oauthRunning}
+              onCancel={handleCancelOAuth}
               connectLabel={`Connect ${provider.name}`}
               buttonAlign="stretch"
               size="compact"

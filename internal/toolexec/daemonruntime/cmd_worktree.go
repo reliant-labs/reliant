@@ -239,6 +239,49 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	worktreeCmd.Dir = req.ProjectPath
 
 	if output, err := worktreeCmd.CombinedOutput(); err != nil {
+		// Roll back the directory this call created.
+		//
+		// MkdirAll above runs BEFORE git, so a failing `git worktree add`
+		// leaves an empty directory that looks like a real workspace to
+		// everything downstream. That is not hypothetical: a branch named
+		// `release` in a repo that already has `release/compute-tier-redesign`
+		// cannot be created (git stores refs as files, so `refs/heads/release`
+		// cannot be both a file and a directory), and the failure left
+		// `~/.reliant/worktrees/<id>/` on disk with no .git inside it, beside
+		// a DB row whose path was never filled in. Every filesystem RPC scoped
+		// to that worktree then failed with "no workspace path to scope this
+		// request to", which reads as a database problem and is not one.
+		//
+		// Removed only when EMPTY. git may have written a partial checkout
+		// before failing, and in a --force flow the directory can predate this
+		// call entirely; deleting a non-empty directory here could destroy
+		// work this function did not create. An empty directory is
+		// unambiguously ours and unambiguously useless.
+		//
+		// BOTH levels are swept, because MkdirAll above creates
+		// filepath.Dir(worktreePath), not worktreePath itself:
+		//
+		//   single-repo (sub_path "")  -> parent is .../worktrees, shared;
+		//                                 the leaf is git's to create.
+		//   multi-repo  (sub_path set) -> parent IS the workspace root
+		//                                 .../worktrees/<workspace_id>, and
+		//                                 that is the directory this call
+		//                                 invented and must take back.
+		//
+		// The reported orphan was the multi-repo shape: the workspace root
+		// survived as an empty directory. Sweeping the leaf first and then the
+		// parent covers both without a special case, and os.Remove refuses a
+		// non-empty directory, so the shared .../worktrees parent is never at
+		// risk.
+		removeIfEmpty := func(dir string) {
+			if entries, rerr := os.ReadDir(dir); rerr == nil && len(entries) == 0 {
+				_ = os.Remove(dir)
+			}
+		}
+		removeIfEmpty(worktreePath)
+		if parent := filepath.Dir(worktreePath); parent != worktreePath {
+			removeIfEmpty(parent)
+		}
 		return json.Marshal(worktreeCreateResponse{
 			Error: string(output),
 		})
