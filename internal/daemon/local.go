@@ -796,8 +796,11 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 	// that repository; every other tool loses its cleanup just as completely,
 	// only without the evidence. The escalation is on its own timer so
 	// WaitDelay above keeps meaning only the pipe drain — see ExecGraceDelay.
+	// Not deferred: this command may be ADOPTED into the background manager
+	// below, outliving this function, and the timer must stay armed for as long
+	// as cancellation can still fire. Stopped on every path where this function
+	// owns the command through to completion.
 	stopGrace := osutil.ApplyGracefulCancel(cmd, ExecGraceDelay)
-	defer stopGrace()
 
 	// Snapshot the cgroup's oom_kill counter so a SIGKILL during the
 	// command's lifetime can be attributed to the kernel OOM killer.
@@ -815,8 +818,33 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 				logging.Debug("Failed to adjust command oom_score_adj", "pid", cmd.Process.Pid, "error", adjErr)
 			}
 		}
-		err = cmd.Wait()
+
+		// Wait in a goroutine so the command can be detached into a background
+		// process while it is still running. This is the path an LLM tool call
+		// takes — the daemon runtime gives its local executor a LocalClient —
+		// so without it the "push to background" button reaches nothing.
+		// cmd.Wait() may be called exactly once, so its result travels on this
+		// channel and is handed to the background manager on adoption.
+		waitCh := make(chan error, 1)
+		go func() { waitCh <- cmd.Wait() }()
+
+		bgResp, backgrounded := PollForBackgroundDetach(ctx, DetachOptions{
+			Cmd:        cmd,
+			Command:    req.Command,
+			WorkingDir: req.WorkingDir,
+			StartTime:  start,
+			StdoutBuf:  &stdoutBuf,
+			StderrBuf:  &stderrBuf,
+			WaitErrCh:  waitCh,
+		})
+		if backgrounded {
+			// Adopted: the background manager owns the command now, so the
+			// grace timer stays armed rather than being stopped here.
+			return &bgResp, nil
+		}
+		err = <-waitCh
 	}
+	stopGrace()
 	duration := time.Since(start)
 
 	// Shared with the daemon's exec.run handler so the two exec paths cannot

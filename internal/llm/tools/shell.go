@@ -413,6 +413,28 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return ToolResponse{}, fmt.Errorf("command execution failed: %w", err)
 	}
 
+	// The user pushed this command to the background while it was running, so
+	// it did not complete — it was handed to the background manager and is
+	// still going. Report it the same shape as a command started in the
+	// background, or the workflow records a completion that never happened and
+	// the tool_calls row keeps a NULL background_process_id.
+	if result.Backgrounded {
+		metadata := ShellResponseMetadata{
+			StartTime: startTime.UnixMilli(),
+			EndTime:   time.Now().UnixMilli(),
+			ProcessID: result.ProcessID,
+		}
+		bgOutput := BashBackgroundOutput{
+			ProcessID:    result.ProcessID,
+			Command:      params.Command,
+			Backgrounded: true,
+		}
+		bgJSON, _ := json.Marshal(bgOutput)
+		response := WithResponseMetadata(NewTextResponse(string(bgJSON)), metadata)
+		response.Backgrounded = true
+		return response, nil
+	}
+
 	stdout := result.Stdout
 	stderr := result.Stderr
 	exitCode := result.ExitCode
