@@ -82,9 +82,11 @@ import {
   type PortAccessRule,
 } from "@/services/controlPlane/environments";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
-// The plan/size rule and the overage formatter, shared with the billing
-// purchase grid so the two surfaces cannot disagree about what a plan allows.
-import { formatOverageRate, isSizeAllowedByPlan } from "./billingUtils";
+import { getComputeEligibility } from "@/services/controlPlane/billing";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
+// The overage formatter, shared with the billing purchase grid so the two
+// surfaces cannot disagree about how a rate is written.
+import { formatOverageRate } from "./billingUtils";
 
 // ── Query keys ──────────────────────────────────────────────────────────────
 const QK = {
@@ -94,6 +96,7 @@ const QK = {
   // "Make public" there invalidates this panel's rules query and vice-versa.
   ports: portAccessRulesQueryKey,
   computeSub: ["cp", "environments", "computeSubscription"] as const,
+  computeEligibility: ["cp", "environments", "computeEligibility"] as const,
 };
 
 // ── Status presentation ─────────────────────────────────────────────────────
@@ -173,6 +176,21 @@ const sizeLabel: Record<number, string> = {
   [DaemonSize.XL]: "XL",
 };
 
+// ── Copy for the un-funded state ────────────────────────────────────────────
+//
+// Both strings name the COUPON first, then the plan, because the server's own
+// denial does — checkDaemonSizeAllowed returns "redeem a coupon code or
+// subscribe to a compute plan to start a machine", and that ordering is
+// deliberate: since the signup auto-grant was removed every brand-new account
+// lands here, and a code is the path most of them were handed. A prompt that
+// says only "subscribe" hides the option the user is holding.
+//
+// This replaced a `<Badge variant="neutral">` — a bordered pill that looked
+// like a button, did nothing on click, and named no way forward at all.
+const NO_FUNDING_CTA = "Redeem a coupon or choose a plan";
+const NO_FUNDING_DESCRIPTION =
+  "Redeem a coupon code or subscribe to a compute plan to start a machine. Machines run on the compute sizes your plan allows.";
+
 const IDLE_TIMEOUT_OPTIONS = [
   { value: "15m", label: "15 minutes" },
   { value: "30m", label: "30 minutes" },
@@ -182,22 +200,24 @@ const IDLE_TIMEOUT_OPTIONS = [
 ] as const;
 
 /**
- * Which sizes may this plan run?
+ * Which sizes may this caller run, per the server?
  *
- * The rule is `isSizeAllowedByPlan`, shared with the billing purchase grid, so
- * the two surfaces cannot disagree about what a plan unlocks. Billing asks
- * "which plan buys me a Medium?"; this asks "which sizes may I run now?" —
- * different questions, one answer.
+ * The answer arrives on `GetCurrentUserComputeEligibility.allowed_daemon_sizes`
+ * as wire strings ("small", "medium", …); this maps them onto the tiers this
+ * page can render. Sizes the client has no tier for are dropped rather than
+ * guessed at.
  *
- * It is a membership test, not a ladder: a plan allowing `[small, large]` and
- * not `medium` offers exactly that. Returns null when there is no plan at all,
- * which the caller reads as "not subscribed".
+ * It used to be derived here from the compute SUBSCRIPTION, which is the bug
+ * this replaces: a coupon grants machine minutes and no subscription, so that
+ * derivation decided a fully-entitled user could run nothing. The server
+ * resolves the set — from the plan, or from plan_compute_free when there is
+ * none — and the client no longer holds an opinion about it.
+ *
+ * It is a membership test, not a ladder: an allowed set of `[small, large]`
+ * without `medium` offers exactly that.
  */
-function allowedSizeTiers(
-  plan?: Parameters<typeof isSizeAllowedByPlan>[0],
-): DaemonSize[] | null {
-  if (!plan) return null;
-  return SIZE_TIERS.filter((t) => isSizeAllowedByPlan(plan, t.name)).map(
+function sizeTiersFromWire(allowedDaemonSizes: string[]): DaemonSize[] {
+  return SIZE_TIERS.filter((t) => allowedDaemonSizes.includes(t.name)).map(
     (t) => t.value,
   );
 }
@@ -368,6 +388,10 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
   const [createOpen, setCreateOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Daemon | null>(null);
   const [actionError, setActionError] = useState("");
+  // Routes to /settings/billing?tab=plans — the place a coupon is redeemed and
+  // a plan is bought. Shared with every other "go buy compute" call site so
+  // the destination cannot drift; see the hook's own header.
+  const goToBilling = useGoToBilling();
 
   const daemonsQ = useQuery({
     queryKey: QK.daemons,
@@ -376,14 +400,43 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
     refetchInterval: 15_000,
   });
 
+  // THE GATE. GetCurrentUserComputeEligibility is the server's own prediction
+  // of internal/svcdaemon.checkDaemonSizeAllowed, and it is the only thing that
+  // decides whether machine creation is offered here.
+  //
+  // This page used to gate on getComputeSubscription() alone, which is a
+  // strictly narrower rule than the server's: a redeemed compute coupon grants
+  // machine MINUTES and no subscription, so that check reported "not
+  // subscribed" for a user the server would have happily started a machine
+  // for, and replaced New Machine with a dead badge telling them to subscribe.
+  // Predicting a server rule by reimplementing a piece of it is how that
+  // happened; asking the server is how it stops happening.
+  const eligibilityQ = useQuery({
+    queryKey: QK.computeEligibility,
+    queryFn: () => getComputeEligibility(),
+    staleTime: 30_000,
+  });
+  const allowedSizes = useMemo(
+    () => sizeTiersFromWire(eligibilityQ.data?.allowedDaemonSizes ?? []),
+    [eligibilityQ.data?.allowedDaemonSizes],
+  );
+  // Both halves are required and they are different facts: eligibility is
+  // "is there funding at all", sizes is "is there anything runnable". The
+  // server enforces both, so offering a Create button that satisfies only one
+  // would just move the denial to after the click.
+  const canCreate = Boolean(eligibilityQ.data?.eligible) && allowedSizes.length > 0;
+
+  // Not part of the gate — the per-minute overage rate is a display fact that
+  // only an active subscription states, and the eligibility response
+  // deliberately carries no price. A coupon-funded user has no subscription
+  // and therefore no rate to show, which is the truthful answer rather than a
+  // zero standing in for one.
   const computeSubQ = useQuery({
     queryKey: QK.computeSub,
     queryFn: () => getComputeSubscription(),
     staleTime: 30_000,
   });
   const plan = computeSubQ.data?.plan;
-  const allowedSizes = useMemo(() => allowedSizeTiers(plan), [plan]);
-  const hasActivePlan = !!computeSubQ.data && allowedSizes !== null && allowedSizes.length > 0;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: QK.daemons });
 
@@ -428,12 +481,14 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
           <option value={String(DaemonStatus.FAILED)}>Failed</option>
           <option value={String(DaemonStatus.DISCONNECTED)}>Disconnected</option>
         </select>
-        {hasActivePlan ? (
+        {canCreate ? (
           <Button onClick={() => setCreateOpen(true)}>
             <Plus className="h-4 w-4" /> New Machine
           </Button>
-        ) : !computeSubQ.isLoading ? (
-          <Badge variant="neutral" label="Subscribe to a compute plan to create machines" />
+        ) : !eligibilityQ.isLoading ? (
+          <Button variant="outline" onClick={goToBilling}>
+            {NO_FUNDING_CTA}
+          </Button>
         ) : null}
       </div>
 
@@ -458,23 +513,27 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
           icon={Server}
           title="No machines"
           description={
-            hasActivePlan
+            canCreate
               ? "Create your first cloud machine."
-              : "Subscribe to a compute plan, then create a machine. Machines run on the compute sizes your plan allows."
+              : NO_FUNDING_DESCRIPTION
           }
           action={
-            hasActivePlan ? (
+            canCreate ? (
               <Button onClick={() => setCreateOpen(true)}>
                 <Plus className="h-4 w-4" /> New Machine
               </Button>
-            ) : undefined
+            ) : (
+              <Button variant="outline" onClick={goToBilling}>
+                {NO_FUNDING_CTA}
+              </Button>
+            )
           }
         />
       ) : (
         <div className="space-y-6">
           {managedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Cloud machines
               </h3>
               <ManagedMachinesTable
@@ -489,7 +548,7 @@ function EnvironmentsList({ onOpenDetail }: { onOpenDetail: (id: string) => void
           )}
           {selfHostedDaemons.length > 0 && (
             <div className="space-y-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Self-hosted machines
               </h3>
               <SelfHostedMachinesTable
@@ -710,7 +769,11 @@ function CreateEnvironmentModal({
 }: {
   open: boolean;
   onClose: () => void;
-  allowedSizes: DaemonSize[] | null;
+  // Always a list, never null. The nullable form used to mean "no plan, so
+  // nothing is known"; the server now answers the size question directly, so
+  // an empty list means exactly "no size may be started" and there is no
+  // third, unknowable state to model.
+  allowedSizes: DaemonSize[];
   overageCentsPerMinute: number;
   onCreated: () => void;
 }) {
@@ -725,7 +788,7 @@ function CreateEnvironmentModal({
   const [error, setError] = useState("");
 
   const tiers = useMemo(
-    () => (allowedSizes ? SIZE_TIERS.filter((t) => allowedSizes.includes(t.value)) : []),
+    () => SIZE_TIERS.filter((t) => allowedSizes.includes(t.value)),
     [allowedSizes],
   );
 
@@ -733,7 +796,7 @@ function CreateEnvironmentModal({
   // first allowed size rather than to a constant. Undefined when the plan
   // allows nothing at all, which is what makes Create unclickable.
   const effectiveSize = useMemo((): DaemonSize | undefined => {
-    if (!allowedSizes || allowedSizes.length === 0) return undefined;
+    if (allowedSizes.length === 0) return undefined;
     return size !== null && allowedSizes.includes(size) ? size : allowedSizes[0];
   }, [allowedSizes, size]);
 
@@ -1131,7 +1194,7 @@ function TokenRevealModal({ token, onClose, title }: { token: string | null; onC
           <p className="text-sm text-foreground">Copy this token now. You won't be able to see it again.</p>
         </div>
         <div className="flex items-center gap-2">
-          <code className="flex-1 overflow-x-auto rounded-md bg-muted px-3 py-2 font-mono text-sm text-foreground">{token}</code>
+          <code className="flex-1 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-sm text-foreground">{token}</code>
           <Button variant="outline" onClick={copy}>
             {copied ? <><Check className="h-4 w-4 text-success" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
           </Button>

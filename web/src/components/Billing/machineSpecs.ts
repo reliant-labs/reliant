@@ -17,10 +17,27 @@
  * internal/svcdaemon/service.go, pinned there by TestDaemonSizeResourcesLadder.
  * If that ladder moves, this moves with it.
  *
- * Only what this screen RENDERS is duplicated. The real ladder also carries a
- * per-size data disk (config.DaemonStorageSizeForTier) and a 2xl tier; both are
- * deliberately absent here, because an unrendered copy of a ladder is a drift
- * bug with nobody reading it to notice.
+ * Only what these screens RENDER is duplicated. The real ladder also carries a
+ * per-size data disk (config.DaemonStorageSizeForTier), deliberately absent
+ * here, because an unrendered copy of a ladder is a drift bug with nobody
+ * reading it to notice.
+ *
+ * ── Why 2xl is here now, having been excluded ─────────────────────────
+ *
+ * The exclusion was right while `DAEMON_SIZE_ORDER` stopped at xl: an entry
+ * nothing could render was exactly the unread copy this file refuses to keep.
+ * It is wrong now, and for a reason that is not about this file. The catalog
+ * sells `plan_compute_2xl` at $299 with a real Stripe price, and both machine
+ * lists are built from `offeredDaemonSizes` — the union of what the CATALOG
+ * allows. A priced tier the client cannot name is not omitted gracefully;
+ * `offeredDaemonSizes` drops any size `DAEMON_SIZE_ORDER` does not list, so
+ * the top of the ladder is silently unbuyable and nothing on screen says so.
+ *
+ * That is the same class of defect as the hardcoded plan allowlist billingUtils
+ * deleted: a client-side table deciding which server-side products exist. So
+ * the size is added to `DAEMON_SIZE_ORDER`, its label to the display map, and
+ * its shape here. The catalog still decides whether a 2xl row APPEARS — an
+ * environment that does not sell one shows four rows, exactly as before.
  */
 
 import type { DaemonSizeName } from "@/components/Settings/cloud/billingUtils";
@@ -37,15 +54,19 @@ export interface MachineSpec {
 }
 
 /**
- * Keyed by `DaemonSizeName`, so the four sizes this client can label are
- * exactly the four with specs — a size added to one and forgotten in the other
- * is a type error rather than a blank cell.
+ * Keyed by `DaemonSizeName`, so the sizes this client can label are exactly
+ * the sizes with specs — a size added to one and forgotten in the other is a
+ * type error rather than a blank cell.
  */
 export const MACHINE_SPECS: Record<DaemonSizeName, MachineSpec> = {
   small: { cpuReserved: 0.5, cpuBurst: 2, memoryReservedGb: 2, memoryBurstGb: 4 },
   medium: { cpuReserved: 1, cpuBurst: 4, memoryReservedGb: 4, memoryBurstGb: 8 },
   large: { cpuReserved: 2, cpuBurst: 8, memoryReservedGb: 8, memoryBurstGb: 16 },
   xl: { cpuReserved: 4, cpuBurst: 16, memoryReservedGb: 16, memoryBurstGb: 32 },
+  // 8/32 CPU and 32Gi/64Gi memory — control-plane's db.DaemonSize2XL row.
+  // Holds both burst multiples (4× CPU, 2× memory), so adding it does not
+  // silence the burst sentence below.
+  "2xl": { cpuReserved: 8, cpuBurst: 32, memoryReservedGb: 32, memoryBurstGb: 64 },
 };
 
 /**

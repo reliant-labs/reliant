@@ -149,7 +149,10 @@ vi.mock("@/services/controlPlane/reliantAI", () => ({
 }));
 
 import { ComputeStep } from "../steps/ComputeStep";
-import { MACHINE_SPECS } from "../machineSpecs";
+// Under Billing/, not OnboardingFlow/: the settings Plans tab renders the same
+// specs on the same rows, so a machine's shape is a billing fact that
+// onboarding reads rather than one onboarding owns and billing borrows.
+import { MACHINE_SPECS } from "@/components/Billing/machineSpecs";
 
 function wrapper() {
   const client = new QueryClient({

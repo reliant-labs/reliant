@@ -601,11 +601,10 @@ func shouldRetryReliantAPIError(apierr *openai.Error) (bool, string) {
 	}
 
 	// HTTP 429 + error.code == "insufficient_quota" is the reliant-managed
-	// free-tier global budget exhaustion signal (see
-	// control-plane/internal/service/llmproxy/proxy.go). Retrying is futile —
-	// the budget is hard-capped for the month. Surface as a terminal error
-	// so the workflow stops retrying and the frontend can open the
-	// upgrade-required modal.
+	// credit-exhaustion signal (see control-plane/internal/llmproxy). Retrying
+	// is futile — the caller's wallet is empty and only adding credit clears
+	// it. Surface as a terminal error so the workflow stops retrying and the
+	// frontend can open the upgrade-required modal.
 	if apierr.StatusCode == 429 && isReliantManagedQuotaError(apierr) {
 		return false, "reliant_managed_quota_exhausted"
 	}
@@ -720,8 +719,8 @@ func containsAny(haystack string, needles ...string) bool {
 }
 
 // ReliantManagedQuotaMarker is a stable substring baked into the error message
-// returned when the reliant-managed (LiteLLM virtual key) free-tier budget is
-// exhausted. The marker survives Temporal's JSON stringification of activity
+// returned when the reliant-managed (LiteLLM virtual key) credit is exhausted.
+// The marker survives Temporal's JSON stringification of activity
 // errors so the frontend can detect the case in the chat-error stream and
 // surface the upgrade-required modal.
 //
@@ -735,8 +734,8 @@ const ReliantManagedQuotaMarker = string(chatmarkers.KindReliantManagedQuotaExha
 const DefaultReliantUpgradeURL = "/billing/plans"
 
 // ErrReliantManagedQuotaExhausted is the sentinel error returned when the
-// reliant-managed LLM (LiteLLM virtual key) free-tier global budget is
-// exhausted. Only the reliant driver emits this — user-provided keys to
+// reliant-managed LLM (LiteLLM virtual key) credit is exhausted.
+// Only the reliant driver emits this — user-provided keys to
 // OpenAI / Anthropic / etc. surface their own provider's quota errors
 // unchanged, which is correct because that's the user's own billing
 // relationship, not ours.
@@ -750,7 +749,8 @@ type ErrReliantManagedQuotaExhausted struct {
 	// field; falls back to DefaultReliantUpgradeURL when missing.
 	UpgradeURL string
 	// Message is the upstream proxy's human-readable error message
-	// (e.g. "Free tier quota exceeded — please upgrade your plan.").
+	// (e.g. "You're out of Reliant credit. Add credit to your account to
+	// continue.").
 	Message string
 }
 
@@ -772,8 +772,8 @@ func (e *ErrReliantManagedQuotaExhausted) Error() string {
 }
 
 // isReliantManagedQuotaError returns true when the OpenAI-shape error body
-// from LiteLLM (proxied by control-plane/internal/service/llmproxy) signals
-// the free-tier global budget is exhausted. The proxy emits:
+// from LiteLLM (proxied by control-plane/internal/llmproxy) signals that the
+// caller's Reliant credit is exhausted. The proxy emits:
 //
 //	{"error":{"message":"…","type":"insufficient_quota","code":"insufficient_quota","upgrade_url":"…"}}
 //

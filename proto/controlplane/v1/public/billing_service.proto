@@ -589,6 +589,13 @@ message GetCurrentUserComputeEligibilityResponse {
   // subscription.
   int64 granted_minutes_remaining = 4;
   string plan_name = 5;
+  // The daemon sizes this caller may actually start, resolved from the active
+  // compute subscription's plan and falling back to plan_compute_free
+  // (["small"]) when there is none. Eligibility alone cannot drive a size
+  // picker: a coupon-funded caller is eligible with no subscription, and a
+  // client that re-derived the free plan's list locally is what locked coupon
+  // holders out of the machines page. Empty means no size may be started.
+  repeated string allowed_daemon_sizes = 6;
 }
 
 // === Invoice preview ===

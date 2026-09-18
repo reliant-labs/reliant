@@ -241,6 +241,36 @@ Use the standard Tailwind + CSS variable token path for UI styling:
 - Run `npm run lint:css` from `web/` when changing stylesheets; keep the Stylelint config focused on correctness/hygiene rather than formatting churn.
 - When changing tokens or color-scheme CSS, run the color-scheme contract test and a web build path when practical.
 
+#### Elevation: `bg-background` recesses, `bg-muted` does not
+
+For nesting a panel inside another panel, use:
+
+```
+page                     bg-background
+primary surface          bg-card + border-border
+inset inside a surface   bg-background + border-border/60
+```
+
+Never nest a card inside a card, and **never reach for `bg-muted` to build
+structure** — it is interaction state (hover, selected, disabled) only.
+
+The reason is not taste. `--muted` moves in OPPOSITE directions between light
+and dark across all seven schemes in `web/src/themes/professional-themes.css`:
+in dark it is *lighter* than `--card` (pure-black: background 0%, card 10%,
+muted 15%), in light it is *darker* (background 98%, card 100%, muted 94–96%).
+So the same class recesses on one theme and lifts on the other, and a
+`bg-muted/40` inset reads as a well to whoever built it and as a faint floating
+slab to everyone on the other mode. That is exactly how the billing surfaces
+ended up as a stack of near-identical near-black rectangles. `bg-background` is
+the only token that recesses in BOTH modes.
+
+The border is load-bearing, not decoration: light mode gives the inset only two
+points of luminance, so `border-border/60` is what makes the well read at all.
+
+The long version, including the heading ladder (page heading / panel heading /
+section label / stat caption) these surfaces now follow, is the comment block
+at the top of `web/src/components/Settings/cloud/ui/card.tsx`.
+
 ---
 
 ### Onboarding: the step you see is derived, and a background effect can end the flow

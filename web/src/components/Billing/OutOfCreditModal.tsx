@@ -38,48 +38,17 @@ import { AlertCircle, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
 import { Modal } from "@/components/ui/Modal";
-import { formatCentsAsDollars } from "@/components/Settings/cloud/billingUtils";
+// The sizing rule is shared with the billing page's auto-recharge control.
+// Two copies would be free to recommend different numbers for one account.
+import {
+  formatCentsAsDollars,
+  suggestRecharge,
+} from "@/components/Settings/cloud/billingUtils";
 import {
   useSetWalletAutoRecharge,
   useWalletAutoRecharge,
 } from "@/hooks/useCloudBillingQueries";
 import { cn } from "@/lib/utils";
-
-/**
- * What to suggest recharging, and the ceiling to pair it with.
- *
- * Derived from OBSERVED SPEND rather than fixed, because the right amount for
- * someone burning $2/day and someone burning $40/day are not the same number.
- * The target is roughly a fortnight of their actual usage, rounded to a whole
- * preset-sized figure so the suggestion reads as a considered amount rather
- * than an arithmetic result like "$27.43".
- *
- * The ceiling is 4x the recharge amount: enough headroom that a normal month
- * never silently stops, low enough that a runaway cannot drain a card. It is
- * MANDATORY server-side — there is no uncapped state for a charger that fires
- * with nobody watching — so it is chosen here rather than left blank.
- */
-export function suggestRecharge(dailySpendUsd: number | null): {
-  amountCents: number;
-  maxPerMonthCents: number;
-  thresholdCents: number;
-} {
-  const fortnightCents = dailySpendUsd ? Math.round(dailySpendUsd * 14 * 100) : 0;
-  // Round up to the nearest $5, floor $10, cap $100. The cap is not a judgement
-  // about what anyone can afford — it is a limit on what we will suggest
-  // unprompted for an automatic charge.
-  const rounded = Math.ceil(fortnightCents / 500) * 500;
-  const amountCents = Math.min(Math.max(rounded, 1000), 10000);
-  return {
-    amountCents,
-    maxPerMonthCents: amountCents * 4,
-    // Recharge when about three days remain, so the refill lands before the
-    // balance actually hits zero rather than after.
-    thresholdCents: dailySpendUsd
-      ? Math.max(Math.round(dailySpendUsd * 3 * 100), 500)
-      : 500,
-  };
-}
 
 export interface OutOfCreditModalProps {
   isOpen: boolean;
@@ -150,7 +119,7 @@ export function OutOfCreditModal({
             below a recommendation rather than a guess. */}
         {dailySpendUsd !== null && (
           <dl
-            className="space-y-1.5 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm"
+            className="space-y-1.5 rounded-lg border border-border/60 bg-background px-4 py-3 text-sm"
             data-testid="out-of-credit-usage"
           >
             <div className="flex items-center justify-between">

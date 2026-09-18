@@ -106,6 +106,10 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
   useCurrentUserInvoices: () => query(undefined),
   useBillingEmail: () => query(undefined),
   useSetComputeOverage: () => mutation(),
+  // Credit's budget control now lives in the credit band, so every render of
+  // BillingSection reaches these.
+  useWalletAutoRecharge: () => query(undefined),
+  useSetWalletAutoRecharge: () => mutation(),
   useCreateCheckoutSession: () => mutation(),
   useCreateWalletTopupSession: () => mutation(),
   useCreateBillingPortalSession: () => mutation(),

@@ -171,6 +171,41 @@ describe("offeredDaemonSizes", () => {
     ]);
   });
 
+  /**
+   * 2xl is a real, priced tier and must be offerable.
+   *
+   * `plan_compute_2xl` sells at $299 with a Stripe price id, so a client that
+   * cannot label the size does not omit the tier gracefully — this function
+   * DROPS any size `DAEMON_SIZE_ORDER` does not list, which made the top of
+   * the ladder silently unbuyable with nothing on screen to explain it. Same
+   * class of defect as the hardcoded plan allowlist billingUtils deleted: a
+   * client-side table deciding which server products exist.
+   *
+   * The catalog still decides whether a 2xl row APPEARS — the assertion below
+   * about a catalog that sells nothing bigger than large is what pins that.
+   */
+  it("offers 2xl when the catalog sells it", () => {
+    const with2xl = [
+      ...catalog,
+      plan("tier_omega", {
+        priceCents: 29900n,
+        displayOrder: 5,
+        allowedDaemonSizes: ["small", "medium", "large", "xl", "2xl"],
+      }),
+    ];
+    expect(offeredDaemonSizes(with2xl)).toEqual([
+      "small",
+      "medium",
+      "large",
+      "xl",
+      "2xl",
+    ]);
+  });
+
+  it("still offers no 2xl to a catalog that does not sell one", () => {
+    expect(offeredDaemonSizes(catalog)).not.toContain("2xl");
+  });
+
   it("is empty when the catalog names no sizes at all", () => {
     expect(offeredDaemonSizes([plan("tier_bare", { priceCents: 1000n })])).toEqual(
       [],

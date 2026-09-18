@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowUpRight,
   BarChart3,
-  Check,
   CheckCircle2,
   CreditCard,
   Cpu,
@@ -48,8 +47,6 @@ import {
   TOPUP_PRESETS_CENTS,
   derivePlanDisplay,
   isPurchasableComputePlan,
-  isSizeAllowedByPlan,
-  offeredDaemonSizes,
   sortPlansForDisplay,
   formatAllowedSizes,
   formatBillingError,
@@ -57,7 +54,6 @@ import {
   formatCurrencyFromWalletFields,
   formatDayLabel,
   formatOverageRate,
-  formatSizeLabel,
   formatTimestampDate,
   getWalletBalanceState,
   getWalletWarning,
@@ -68,13 +64,17 @@ import {
   deriveComputeCapacity,
   estimateCreditRunwayDays,
   isPlanDetailUnavailable,
-  type DaemonSizeName,
 } from "./billingUtils";
 import { useLLMSpend } from "@/hooks/useReliantAIQueries";
 import {
   ComputeSubscriptionCheckout,
   type ComputePlanOption,
 } from "@/components/Billing/ComputeSubscriptionCheckout";
+// The machine list, its derivation, and the uniform facts beneath it — shared
+// with the onboarding compute step so one choice has one presentation.
+import { PlanFinePrint, PlanTiles, describeIncludedHours } from "@/components/Billing/PlanTiles";
+import { deriveMachineOptions } from "@/components/Billing/machineOptions";
+import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
 import { formatMachineMinutesShort } from "@/lib/formatMachineMinutes";
@@ -85,13 +85,16 @@ import {
   type BillingTab,
   type VisibleBillingTab,
 } from "@/routeSchemas";
-import { cn } from "@/lib/utils";
 // The two bands. Each owns ONE product's presentation and none of its business
 // rules — they take resolved props and call no mutation, so every purchase
 // still passes through useCloudBillingQueries' identity chokepoint.
 import { CreditBand } from "./overview/CreditBand";
 import { ComputeBand } from "./overview/ComputeBand";
 import { StatusLine } from "./overview/StatusLine";
+// Credit's budget control — the wallet twin of ComputeOverageControl. Until it
+// landed here, the auto-recharge RPCs had exactly one caller (OutOfCreditModal),
+// so the feature was offered only after the user had already run out.
+import { WalletAutoRechargeSection } from "./WalletAutoRechargeControl";
 
 /**
  * Three tabs, not four.
@@ -277,7 +280,7 @@ function CheckoutReturnBanner({
 
   if (outcome === "cancelled") {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 rounded-md border border-border bg-card px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-medium text-foreground">
             Checkout wasn&apos;t completed
@@ -352,7 +355,7 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
       : undefined;
 
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/40 px-4 py-3">
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3">
       <p className="text-sm text-muted-foreground">
         You came here from setup. Pick a plan and you can head straight back.
       </p>
@@ -764,11 +767,15 @@ function OverviewTab({
             checkout={
               topupCents !== null && (
                 <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-                  {/* Our own page, the same component onboarding mounts —
-                      which is the point of the change: one top-up experience,
-                      not two that drift. */}
+                  {/* Our own page. The amount is the BAND's — the preset row
+                      above is the only amount picker on this surface, and it
+                      stays visible and live while this is open, so changing
+                      your mind is one click on the control you already used.
+                      This page used to render a second grid of the same four
+                      amounts under "How much credit?", which asked the user to
+                      pick $25 twice. */}
                   <WalletTopupCheckout
-                    defaultAmountCents={topupCents}
+                    amountCents={topupCents}
                     confirmSettlement={creditHasLanded}
                     onDone={handleCheckoutDone}
                   />
@@ -783,6 +790,21 @@ function OverviewTab({
                   </div>
                 </div>
               )
+            }
+            spendControl={
+              <WalletAutoRechargeSection
+                // The same 30-day window the runway above is drawn from, so
+                // the suggested top-up is sized from the user's OWN burn rate
+                // rather than a constant. Null when the server could not
+                // measure it — the control then falls back to a flat
+                // suggestion rather than inventing a rate.
+                dailySpendUsd={
+                  spendQ.data && (spendQ.data.sampleDays ?? 0) > 0
+                    ? spendQ.data.totalSpend / spendQ.data.sampleDays
+                    : null
+                }
+                onAddCard={handleManageStripe}
+              />
             }
           />
 
@@ -945,19 +967,40 @@ function BillingEmailRow() {
 
 // ── Plans tab: the purchase surface ─────────────────────────────────────
 //
-// One place, one decision. A user does not want "a plan" — they want a
-// machine of a particular size, and the plan is what unlocks it. So size is
-// the FIRST control, and it filters the grid: `PlanLimits.allowed_daemon_sizes`
-// is the server's rule, and a plan that cannot run the chosen size is
-// unselectable rather than merely dimmed. Choosing a size and a plan that
-// disagree used to be expressible, and produced a purchase the server refused
-// later at CreateDaemon time.
+// ONE list of machines. Not a size filter, not a card grid, and not both at
+// once — which is what this was.
 //
-// Payment mounts in place. Nothing here navigates: the previous version built
+// ── What was here, and why all three parts had to go ──────────────────
+//
+// The tab stacked THREE controls for one decision: a `SizePicker` radiogroup,
+// then `ComputeSubscriptionCheckout` (which carries its OWN machine list) once
+// a plan was chosen, and beneath both a four-across grid of plan `<Card>`s. So
+// clicking a card mounted a second copy of the same choice ABOVE it while the
+// cards stayed below. The owner's report — "the cards are the only first
+// option, but when clicked pop these options up. however the cards are still
+// there at the bottom" — is a description of exactly that.
+//
+// The size filter was worse than redundant, it was information-free. Every
+// compute plan's `allowed_daemon_sizes` CONTAINS every cheaper plan's
+// (small ⊂ medium ⊂ large ⊂ xl in control-plane's plans.yaml), so "which
+// plans run Medium?" always answers "Medium and everything above it" and the
+// filter could only ever dim the cheaper cards. Size and plan are ONE axis:
+// picking a size picks the cheapest plan that runs it. Filtering one axis by
+// itself is not a filter.
+//
+// So what remains is the list onboarding already got right — one row per
+// machine size, with its specs and its price — built from the SAME
+// `deriveMachineOptions` the compute step uses, so the two surfaces cannot
+// drift back apart. The facts that do not vary by size (the 160 included
+// hours, the burst ceiling, the overage/pause policy) are stated ONCE beneath
+// the list, never per row; `PlanTiles.tsx` carries the long version of why.
+//
+// Payment mounts in place. Nothing here navigates: an earlier version built
 // hosted return URLs and set window.location, which on desktop escaped to the
-// system browser and on a phone backgrounded the tab. The panel owns session
-// creation, the anonymous-user refusal, and the server-confirmation poll — so
-// this component holds no billing logic of its own beyond "what did they pick".
+// system browser and on a phone backgrounded the tab. The checkout panel owns
+// intent creation, the anonymous-user refusal, and the server-confirmation
+// poll — so this component holds no billing logic of its own beyond "what did
+// they pick".
 
 function PlansTab() {
   const plansQ = usePlans();
@@ -981,48 +1024,27 @@ function PlansTab() {
   // but its prices never reached the database" — see the empty state below.
   //
   // Deliberately-unpriced plans are excluded: `plan_compute_free` carries no
-  // Stripe price in any environment because a free trial is never charged
-  // through checkout, so counting it told users to restart a control plane
-  // whose catalog was already correct.
+  // Stripe price in any environment because it is never sold through checkout
+  // — it exists server-side as the daemon-SIZE allowance for a user funded by
+  // a coupon rather than a subscription. Counting it told users to restart a
+  // control plane whose catalog was already correct.
   const unpricedPlanCount = (plansQ.data?.plans ?? []).filter(
     isUnpricedComputePlan,
   ).length;
   const currentPlanId = subQ.data?.subscription?.plan?.id ?? null;
 
-  // Which sizes to offer is the union of what the catalog sells, not this
-  // client's enum: a catalog that stops selling XL stops offering it here with
-  // no frontend change.
-  const sizes = offeredDaemonSizes(computePlans);
-  const [chosenSize, setChosenSize] = useState<DaemonSizeName | null>(null);
-  // Default to the smallest size on offer until the user says otherwise, so
-  // the grid is never empty and no plan is refused before a choice is made.
-  const activeSize: DaemonSizeName | null =
-    chosenSize && sizes.includes(chosenSize) ? chosenSize : (sizes[0] ?? null);
-
   const loading = plansQ.isLoading || subQ.isLoading;
 
   /**
-   * The purchasable catalog in the checkout's shape.
+   * The machine list — ONE row per size, cheapest plan that runs it.
    *
-   * Labelled by plan NAME here, unlike onboarding: this tab shows the whole
-   * catalog and lets the user pick a plan directly, so the tile has to name
-   * the thing being bought.
+   * The same derivation onboarding renders, which is the point of it being a
+   * function rather than a loop in each file. This tab differs from onboarding
+   * in exactly one way, and it is not the rows: the user may already have a
+   * plan, so a row can be `current`.
    */
   const planOptions: ComputePlanOption[] = useMemo(
-    () =>
-      computePlans.flatMap((plan) => {
-        const d = derivePlanDisplay(plan);
-        if (d.monthlyPriceCents === null) return [];
-        return [
-          {
-            planId: plan.id,
-            label: plan.name,
-            monthlyPriceCents: d.monthlyPriceCents,
-            includedMinutes: d.includedMinutes,
-            overageCentsPerMinute: d.overageCentsPerMinute,
-          },
-        ];
-      }),
+    () => deriveMachineOptions(computePlans),
     [computePlans],
   );
 
@@ -1054,14 +1076,22 @@ function PlansTab() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
-          <Cpu className="h-5 w-5 text-muted-foreground" />
-          Compute plans
+        {/* Panel heading — the middle rung of the ladder in ui/card.tsx, the
+            same weight CardTitle renders. It read `text-base` here and in the
+            two panels below while every card on the page used `text-sm`, so
+            three headings of one level came in two sizes. */}
+        <h3 className="flex items-center gap-2 text-sm font-semibold leading-none tracking-tight text-foreground">
+          <Cpu className="h-4 w-4 text-muted-foreground" />
+          Choose your machine
         </h3>
+        {/* Says what the list is, not how to operate it. The old copy —
+            "pick the machine size you need, THEN the plan that runs it" —
+            described two steps because there used to be two controls, and
+            there is only ever one decision to make. */}
         <p className="text-sm text-muted-foreground">
-          Pick the machine size you need, then the plan that runs it. One
-          subscription covers every machine on your account and includes a
-          monthly bucket of hours shared across them.
+          Bigger machines cost more per month. One subscription covers every
+          machine on your account and shares one monthly bucket of hours
+          across them.
         </p>
       </div>
 
@@ -1094,201 +1124,114 @@ function PlansTab() {
             description="Compute plans are not configured for this environment yet."
           />
         )
-      ) : (
-        <>
-          {activeSize && (
-            <SizePicker
-              sizes={sizes}
-              value={activeSize}
-              onChange={(size) => {
-                setChosenSize(size);
-                // A size change invalidates the plan in flight: continuing to
-                // show a checkout for a plan that no longer matches the choice
-                // is how the two silently disagree.
-                setCheckoutPlanId(null);
-              }}
-            />
-          )}
-
-          {checkoutPlanId && (
-            <div className="flex flex-col gap-3">
-              {/* The same component onboarding mounts — one compute checkout,
-                  not two that drift. It carries its own plan tiles, so
-                  switching plans here updates the mounted form in place
-                  instead of tearing down a Stripe iframe and minting a new
-                  session. */}
-              <ComputeSubscriptionCheckout
-                plans={planOptions}
-                selectedPlanId={checkoutPlanId}
-                onSelectPlan={(option) => setCheckoutPlanId(option.planId)}
-                confirmSettlement={computeHasLanded}
-                onDone={handleCheckoutDone}
-                renderIdentityRequired={(message) => (
-                  <LinkIdentityModal
-                    message={message}
-                    returnTo={`/settings/billing?tab=plans&planId=${encodeURIComponent(checkoutPlanId)}`}
-                    onLinked={() => setLinkAttempt((n) => n + 1)}
-                    onDismiss={() => undefined}
-                  />
-                )}
-                key={`compute:${linkAttempt}`}
+      ) : checkoutPlanId ? (
+        /* The checkout REPLACES the list rather than sitting above it.
+        
+           Rendering both is the defect this tab had: the checkout carries its
+           own machine list, so mounting it under the tab's list showed every
+           machine twice, and switching in one did not move the other. One
+           list is on screen at a time, and while a purchase is
+           open it is the checkout's, because that is the one wired to the
+           form collecting the card. */
+        <div className="flex flex-col gap-3">
+          {/* The same component onboarding and mobile mount — one compute
+              checkout, not three that drift. Switching machines inside it
+              updates the mounted Stripe form in place rather than tearing
+              down an iframe and minting a new session. */}
+          <ComputeSubscriptionCheckout
+            plans={planOptions}
+            selectedPlanId={checkoutPlanId}
+            onSelectPlan={(option) => setCheckoutPlanId(option.planId)}
+            confirmSettlement={computeHasLanded}
+            onDone={handleCheckoutDone}
+            currentPlanId={currentPlanId}
+            renderIdentityRequired={(message) => (
+              <LinkIdentityModal
+                message={message}
+                returnTo={`/settings/billing?tab=plans&planId=${encodeURIComponent(checkoutPlanId)}`}
+                onLinked={() => setLinkAttempt((n) => n + 1)}
+                onDismiss={() => undefined}
               />
-              <div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setCheckoutPlanId(null)}
+            )}
+            key={`compute:${linkAttempt}`}
+          />
+          <div>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setCheckoutPlanId(null)}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4 rounded-xl border border-border bg-card p-5">
+          {/* ONE list. Each row is a machine size, its specs and its price;
+              clicking one opens the checkout for the cheapest plan that runs
+              it. The row a user is already subscribed to is marked and cannot
+              be bought again — `currentPlanId` is what PlanTiles needs that
+              this tab knows and onboarding does not. */}
+          <PlanTiles
+            plans={planOptions}
+            selectedPlanId={undefined}
+            currentPlanId={currentPlanId}
+            onSelect={(option) => setCheckoutPlanId(option.planId)}
+          />
+
+          {/* Everything true of EVERY machine, said once, beneath the list.
+          
+              Neither varies by size — the allowance is 9600 minutes at every
+              rung of the catalog's ladder — and a per-row copy of a uniform
+              fact implies it varies. PlanTiles.tsx carries the long version:
+              a per-row hours figure shipped once, read four different stale
+              numbers off a lagging dev database, and taught users that a
+              bigger machine buys more time. It buys a bigger machine.
+              
+              Sized from a real row so the figures still track the catalog
+              rather than being written down here a second time. */}
+          {planOptions.length > 0 && (
+            <div className="space-y-2 border-t border-border pt-4">
+              <p
+                className="text-xs leading-relaxed text-muted-foreground"
+                data-testid="plans-hours-note"
+              >
+                {describeIncludedHours(planOptions[0])}
+              </p>
+              {/* The burst ceiling. Rows print the RESERVED figures, which
+                  undersell a machine that compiles on four times the cores it
+                  reserves — and the headroom is uniform, so it is one
+                  sentence here rather than one per row. Absent
+                  entirely if the ladder stops being uniform; see
+                  machineSpecs' machineBurst, which withholds rather than
+                  picking one tier's ratio to speak for the rest. */}
+              {MACHINE_BURST && (
+                <p
+                  className="text-xs leading-relaxed text-muted-foreground"
+                  data-testid="plans-burst-note"
                 >
-                  Cancel
-                </Button>
-              </div>
+                  Those are the reserved figures. When a build needs more, a
+                  machine can burst to {MACHINE_BURST.cpu}× the CPU and{" "}
+                  {MACHINE_BURST.memory}× the memory it reserves, at no extra
+                  cost.
+                </p>
+              )}
+              {/* What happens at the end of the hours.
+              
+                  `rateVariesBySize` because it does: the hours are uniform
+                  across the catalog but the overage RATE is priced per plan,
+                  so quoting one machine's rate beneath four would assert a
+                  uniformity the catalog does not have. The policy is stated
+                  here; the number appears in the checkout, where exactly one
+                  machine is selected. */}
+              <PlanFinePrint plan={planOptions[0]} rateVariesBySize />
+              <p className="text-xs text-muted-foreground">
+                Payment opens on this page — you won&apos;t leave Reliant.
+              </p>
             </div>
           )}
-
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {computePlans.map((plan) => {
-              const d = derivePlanDisplay(plan);
-              // isPurchasableComputePlan already required a server price, so
-              // this is unreachable rather than a filter — but a plan with no
-              // price must never render one, so it stays.
-              if (d.monthlyPriceCents === null) return null;
-              const isCurrent = currentPlanId === plan.id;
-              // The gate. A plan that cannot run the chosen size is refused
-              // here, once, and both the disabled control and the explanation
-              // read from the same value.
-              const runsChosenSize =
-                !activeSize || isSizeAllowedByPlan(plan, activeSize);
-              const overageLabel = formatOverageRate(d.overageCentsPerMinute);
-              const includedHoursLabel =
-                d.includedMinutes < 0
-                  ? "Unlimited"
-                  : `${Math.round(d.includedMinutes / 60)}`;
-              return (
-                <Card
-                  key={plan.id}
-                  data-testid={`plan-card-${plan.id}`}
-                  className={cn(
-                    isCurrent && "ring-1 ring-primary",
-                    !runsChosenSize && "opacity-60",
-                  )}
-                >
-                  <CardContent className="flex h-full flex-col gap-4">
-                    <div>
-                      <h4 className="text-base font-semibold text-foreground">
-                        {plan.name}
-                      </h4>
-                      <div className="mt-1">
-                        <span className="text-3xl font-bold text-foreground">
-                          ${(d.monthlyPriceCents / 100).toFixed(0)}
-                        </span>
-                        <span className="text-sm text-muted-foreground">/mo</span>
-                      </div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Runs {formatAllowedSizes(d.allowedSizes).toLowerCase()}
-                      </p>
-                    </div>
-                    <ul className="flex-1 space-y-2 text-sm text-muted-foreground">
-                      <li className="flex items-start gap-2">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        {includedHoursLabel === "Unlimited"
-                          ? "Unlimited hours / month"
-                          : `${includedHoursLabel} hours included / month`}
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        Overage: {overageLabel}
-                      </li>
-                    </ul>
-                    <Button
-                      fullWidth
-                      variant={isCurrent ? "outline" : "primary"}
-                      disabled={isCurrent || !runsChosenSize}
-                      onClick={() => setCheckoutPlanId(plan.id)}
-                    >
-                      {isCurrent
-                        ? `Current plan — ${plan.name}`
-                        : currentPlanId
-                          ? `Switch to ${plan.name}`
-                          : `Choose ${plan.name}`}
-                    </Button>
-                    {/* Says WHY, rather than leaving a dimmed card to be
-                        interpreted. A refusal the user cannot explain reads as
-                        a broken page. */}
-                    {!runsChosenSize && activeSize && (
-                      <p className="text-xs text-muted-foreground">
-                        Doesn&apos;t run {formatSizeLabel(activeSize).toLowerCase()}{" "}
-                        machines.
-                      </p>
-                    )}
-                    {runsChosenSize && !isCurrent && (
-                      <p className="text-xs text-muted-foreground">
-                        Payment opens on this page — you won&apos;t leave
-                        Reliant.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </>
+        </div>
       )}
-    </div>
-  );
-}
-
-/**
- * Machine size, as a radio group.
- *
- * A real `radiogroup` rather than a row of styled buttons, because this is a
- * single-choice control and assistive tech should be told so — and because the
- * plan grid's whole contents depend on it, which makes it the most important
- * control on the page rather than a decoration above one.
- */
-function SizePicker({
-  sizes,
-  value,
-  onChange,
-}: {
-  sizes: DaemonSizeName[];
-  value: DaemonSizeName;
-  onChange: (size: DaemonSizeName) => void;
-}) {
-  return (
-    <div>
-      <p className="text-sm font-medium text-foreground">
-        What size machines do you need?
-      </p>
-      <p className="mt-0.5 text-sm text-muted-foreground">
-        Bigger machines need a bigger plan. Plans that can&apos;t run this size
-        are shown but can&apos;t be picked.
-      </p>
-      <div
-        role="radiogroup"
-        aria-label="Machine size"
-        className="mt-3 flex flex-wrap gap-2"
-      >
-        {sizes.map((size) => {
-          const selected = size === value;
-          return (
-            <button
-              key={size}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(size)}
-              className={cn(
-                "rounded-lg border-2 px-4 py-2 text-sm font-medium transition-colors",
-                selected
-                  ? "border-primary bg-primary/5 text-foreground"
-                  : "border-border bg-card text-muted-foreground hover:border-muted-foreground/40",
-              )}
-            >
-              {formatSizeLabel(size)}
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -1333,8 +1276,10 @@ function InvoicesPanel() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h3 className="text-base font-semibold text-foreground">Invoices</h3>
-        <p className="text-sm text-muted-foreground">
+        <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
+          Invoices
+        </h3>
+        <p className="mt-1 text-sm text-muted-foreground">
           View and download your past invoices.
         </p>
       </div>
@@ -1437,7 +1382,7 @@ function UsagePanel() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-base font-semibold text-foreground">
+        <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
           Compute usage
         </h3>
         <div className="inline-flex w-full rounded-md border border-border p-1 sm:w-auto">
@@ -1588,6 +1533,8 @@ function UsageStat({
   return (
     <Card>
       <CardContent>
+        {/* Stat caption, deliberately a rung below a section label: it must not
+            compete with the figure under it. See ui/card.tsx. */}
         <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {label}
         </p>

@@ -46,10 +46,7 @@ import {
 import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
 
 import { RedeemCouponForm } from "@/components/RedeemCouponForm";
-import {
-  TOPUP_PRESETS_CENTS,
-  formatCentsAsDollars,
-} from "@/components/Settings/cloud/billingUtils";
+import { formatCentsAsDollars } from "@/components/Settings/cloud/billingUtils";
 import type { RedeemCouponResult } from "@/services/controlPlane/reliantAI";
 import { cn } from "@/lib/utils";
 
@@ -57,9 +54,6 @@ import { useWalletTopupQuote } from "@/hooks/useCloudBillingQueries";
 
 import { getStripe, isStripeConfigured } from "./stripe";
 import { useWalletTopupIntent } from "./useWalletTopupIntent";
-// The amount selector moved out for the same reason the plan tiles did: the
-// onboarding model step now asks how much credit to buy WITHOUT a card.
-import { CreditAmountPicker } from "./CreditAmountPicker";
 
 /** How long to wait for the webhook before saying we could not confirm. */
 const SETTLE_TIMEOUT_MS = 60_000;
@@ -97,8 +91,27 @@ export interface WalletTopupCheckoutProps {
   legs?: EntitlementLeg[];
   /** Rendered when the user must link an identity before purchasing. */
   renderIdentityRequired?: (message: string) => React.ReactNode;
-  /** Seed amount; the user can change it. */
-  defaultAmountCents?: number;
+  /**
+   * How much credit to buy. CHOSEN BY THE CALLER, not here.
+   *
+   * This used to be `defaultAmountCents` and seed a picker this component
+   * owned — which meant every caller already had an amount selector (the
+   * credit band's preset row, onboarding's `CreditAmountPicker`) and then this
+   * page asked the same question a second time, in a bigger control, under the
+   * heading "How much credit?". A user who pressed $25 was immediately asked to
+   * press $25 again. The picker is the CALLER's, because the caller is where
+   * the decision is actually made; this page prices it, charges it, and
+   * confirms it.
+   */
+  amountCents: number;
+  /**
+   * Change the amount from inside the payment page.
+   *
+   * Optional, and it renders a plain "change" affordance rather than a second
+   * grid: the amount is still the caller's state, so this hands the decision
+   * back rather than forking it.
+   */
+  onChangeAmount?: () => void;
   className?: string;
 }
 
@@ -107,10 +120,10 @@ export function WalletTopupCheckout({
   onDone,
   legs,
   renderIdentityRequired,
-  defaultAmountCents = TOPUP_PRESETS_CENTS[1],
+  amountCents,
+  onChangeAmount,
   className,
 }: WalletTopupCheckoutProps) {
-  const [amountCents, setAmountCents] = useState<number>(defaultAmountCents);
   const [settled, setSettled] = useState(false);
 
   // A coupon can pay for this leg outright, which is the whole reason the form
@@ -143,11 +156,24 @@ export function WalletTopupCheckout({
     <div className={cn("space-y-6", className)}>
       {legs && legs.length > 0 && <EntitlementSummary legs={legs} />}
 
+      {/* What is being bought, CONFIRMED rather than re-asked. The choice was
+          made by whoever mounted this page; repeating the picker here is the
+          "double setup" the owner complained about. */}
       <section className="space-y-3">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          How much credit?
-        </h3>
-        <CreditAmountPicker value={amountCents} onChange={setAmountCents} />
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Adding {formatCentsAsDollars(amountCents)} of credit
+          </h3>
+          {onChangeAmount && (
+            <button
+              type="button"
+              onClick={onChangeAmount}
+              className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              Change amount
+            </button>
+          )}
+        </div>
         <p className="text-xs text-muted-foreground">
           Passthrough billing to the underlying API provider at no markup.
         </p>
@@ -155,7 +181,7 @@ export function WalletTopupCheckout({
       </section>
 
       <section className="space-y-3">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Pay with card
         </h3>
         <TopupPaymentForm
@@ -170,7 +196,7 @@ export function WalletTopupCheckout({
       </section>
 
       <section className="space-y-2 border-t border-border pt-5">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -225,7 +251,7 @@ function TopupCostBreakdown({ creditCents }: { creditCents: number }) {
   return (
     <dl
       data-testid="topup-cost-breakdown"
-      className="space-y-1.5 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm"
+      className="space-y-1.5 rounded-lg border border-border/60 bg-background px-4 py-3 text-sm"
     >
       <div className="flex items-center justify-between">
         <dt className="text-muted-foreground">Credit to your balance</dt>

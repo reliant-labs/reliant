@@ -12,16 +12,14 @@ import {
   type ComputePlanOption,
 } from "@/components/Billing/PlanTiles";
 import {
-  DAEMON_SIZE_ORDER,
-  derivePlanDisplay,
   formatSizeLabel,
   isPurchasableComputePlan,
-  smallestPlanAllowingSize,
   sortPlansForDisplay,
 } from "@/components/Settings/cloud/billingUtils";
+import { deriveMachineOptions } from "@/components/Billing/machineOptions";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
 import { getForcedEligibility } from "../forcedEligibility";
-import { MACHINE_BURST, formatMachineSpec } from "../machineSpecs";
+import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import {
   DaemonStatus,
   type DaemonInfo,
@@ -171,45 +169,16 @@ export function ComputeStep({
 
   // Which sizes to offer is the union of what the catalog sells, and plan and
   // size are ONE axis — picking a size picks the cheapest plan that runs it.
-  const planOptions = useMemo<ComputePlanOption[]>(() => {
-    const offered = new Set<string>();
-    for (const p of computePlans) {
-      for (const s of p.structuredLimits?.allowedDaemonSizes ?? []) {
-        offered.add(s.toLowerCase());
-      }
-    }
-    const out: ComputePlanOption[] = [];
-    for (const size of DAEMON_SIZE_ORDER.filter((s) => offered.has(s))) {
-      const sizePlan = smallestPlanAllowingSize(computePlans, size);
-      if (!sizePlan) continue;
-      const display = derivePlanDisplay(sizePlan);
-      if (display.monthlyPriceCents == null) continue;
-      // What the size actually BUYS, beside the size's name. "Medium" is a
-      // label for a machine, not a description of one, and the user picking it
-      // had no way to know whether it would hold their build. The figures are
-      // the reserved floor; the burst ceiling is stated once under the list
-      // (see MACHINE_BURST_MULTIPLE) rather than four times inside it.
-      const spec = formatMachineSpec(size);
-      const sizeLabel = formatSizeLabel(size);
-      out.push({
-        planId: sizePlan.id,
-        // Size IS the choice here — one plan per size, cheapest that runs it —
-        // so the tile is labelled by the machine, not by the plan's name.
-        //
-        // The spec rides in `label` because that is the seam PlanTiles gives a
-        // caller — it renders the caller's label rather than deriving one,
-        // precisely so its two callers can name different axes. Adding a spec
-        // slot to PlanTiles instead would push an onboarding-only concern into
-        // the component the settings checkout also renders.
-        label: spec ? `${sizeLabel} — ${spec}` : sizeLabel,
-        size,
-        monthlyPriceCents: display.monthlyPriceCents,
-        includedMinutes: display.includedMinutes,
-        overageCentsPerMinute: display.overageCentsPerMinute,
-      });
-    }
-    return out;
-  }, [computePlans]);
+  //
+  // The derivation is shared with the settings Plans tab (deriveMachineOptions).
+  // It used to live inline here, and the Plans tab answered the same question
+  // a different way — a plan-name grid behind a size filter — which is the
+  // divergence that produced two unlike surfaces for one choice. One
+  // declaration, two callers that differ only in what a row DOES.
+  const planOptions = useMemo<ComputePlanOption[]>(
+    () => deriveMachineOptions(computePlans),
+    [computePlans],
+  );
 
   // The machine sizes are shown to EVERYONE who can choose a hosted machine.
   //
@@ -254,10 +223,11 @@ export function ComputeStep({
    * choosing one is visibly a purchase.
    */
   const coveredPlanId = machineCovered ? planOptions[0]?.planId : undefined;
-  // Read from `size`, NOT from the tile's `label`. The label now carries the
-  // machine's specs as well as its name, and this sentence has to read as
-  // prose: "covers the Small machine", never "covers the Small — 2 GB RAM ·
-  // 0.5 CPU machine".
+  // Read from `size` rather than reformatting the row. The specs live in the
+  // row's own `detail` slot now, so `label` is already the bare machine name —
+  // but this sentence is prose about a SIZE, not a restatement of a row, and
+  // deriving it from the size keeps it that way if the row's label ever
+  // changes again. It must read "covers the Small machine".
   const smallestOfferedSize = planOptions[0]?.size;
   const coveredSizeLabel = smallestOfferedSize
     ? formatSizeLabel(smallestOfferedSize)

@@ -235,7 +235,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
       )}
     >
       <section className="space-y-3 p-5">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           What you&apos;re getting
         </h3>
         <OrderSummary
@@ -250,7 +250,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
 
       {owed.length > 0 && (
         <section className="space-y-3 border-t border-border p-5">
-          <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Pay with card
           </h3>
           {cannotPriceCredit ? (
@@ -276,8 +276,11 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
         </section>
       )}
 
-      <section className="space-y-2 border-t border-border bg-muted/20 p-5">
-        <h3 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+      {/* Set apart by a rule and a recess, not by a tint — the same treatment
+          the compute checkout's coupon section gets. See the elevation note in
+          Settings/cloud/ui/card.tsx for why `bg-muted` is not it. */}
+      <section className="space-y-2 border-t border-border bg-background p-5">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Or use a code
         </h3>
         <p className="text-xs text-muted-foreground">

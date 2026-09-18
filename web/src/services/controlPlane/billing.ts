@@ -41,6 +41,16 @@ export interface ComputeEligibility {
   hasActiveSubscription: boolean;
   grantedMinutesRemaining: number;
   planName: string;
+  /**
+   * The daemon sizes the server will actually let this caller start, resolved
+   * from their compute plan and falling back to plan_compute_free (["small"])
+   * when there is none. Wire strings, matching `PlanLimits.allowed_daemon_sizes`.
+   *
+   * Read this instead of deriving sizes from the subscription: a coupon-funded
+   * caller is eligible with NO subscription, so a client that asked the
+   * subscription decided such a user could run nothing at all.
+   */
+  allowedDaemonSizes: string[];
 }
 
 /**
@@ -63,6 +73,7 @@ export async function getComputeEligibility(): Promise<ComputeEligibility> {
     // neighbouring compute-usage wrapper's convention.
     grantedMinutesRemaining: Number(res.grantedMinutesRemaining),
     planName: res.planName,
+    allowedDaemonSizes: res.allowedDaemonSizes,
   };
 }
 

@@ -60,8 +60,8 @@ type Kind string
 // reliant/web/src/lib/chatMarkers.ts and the drift-guard tests.
 const (
 	// KindReliantManagedQuotaExhausted signals the reliant-managed
-	// (LiteLLM virtual key) free-tier global budget has been exhausted by
-	// the user. Payload is the upgrade URL the frontend should route to.
+	// (LiteLLM virtual key) credit has been exhausted by the user.
+	// Payload is the upgrade URL the frontend should route to.
 	// Producer: internal/llm/drivers/reliant/driver.go.
 	KindReliantManagedQuotaExhausted Kind = "RELIANT_MANAGED_QUOTA_EXHAUSTED"
 

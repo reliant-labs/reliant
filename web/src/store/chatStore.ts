@@ -239,11 +239,22 @@ function openReliantManagedQuotaModal(
   // Strip the marker tail from the message so the user-facing copy is clean.
   const cleanMessage = stripChatMarker(errorMessage);
   useModalStore.getState().openModal("upgrade-required", {
-    // Mirrors the canonical code used by the Connect-side enforcement path
-    // (control-plane/internal/enforcement/check.go) so UpgradeRequiredModal
-    // shows the same "Free tier quota exceeded" copy regardless of which
-    // path tripped it.
-    reason: "free_tier_global_budget",
+    // This path has NO headers to read: the error reaches us as a
+    // Temporal-serialized marker string in the chat-error stream, so unlike
+    // the Connect path (api/upgradeInterceptor.ts, which forwards the server's
+    // X-Reliant-Reason verbatim) the reason has to be supplied here.
+    //
+    // It used to claim `free_tier_global_budget` — the service-wide operator
+    // cap — on the grounds of matching the enforcement path's copy. That was
+    // wrong in the common case and actively misleading: the marker only ever
+    // fires for the reliant-managed driver, and by far the usual cause is the
+    // caller's own credit balance hitting zero, which is what control-plane's
+    // preflightBillingGate rejects. Telling that user a shared budget was
+    // exhausted pointed them at someone else's problem.
+    //
+    // The server's own message still renders verbatim beneath the title, so if
+    // the genuine cause was the global cap the user sees that text too.
+    reason: "reliant_credit_exhausted",
     message: cleanMessage,
     upgradeUrl,
   });

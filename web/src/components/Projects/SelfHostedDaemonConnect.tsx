@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { create } from "@bufbuild/protobuf";
-import {
-  Check,
-  Copy,
-  Download,
-  Loader2,
-  Terminal,
-} from "lucide-react";
+import { Check, Copy, Download, Loader2, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { grpcClient } from "@/api/grpc-client";
 import { CreateDaemonTokenRequestSchema } from "@/gen/reliant/v1/daemon_token_pb";
@@ -18,11 +12,11 @@ import {
   GATEWAY_URL_PLACEHOLDER,
 } from "@/lib/cli-commands";
 import {
+  describeTerminal,
   ReliantDownloadOptions,
   supportsHomebrewCask,
   useDetectedOS,
 } from "@/components/ReliantDownloadOptions";
-
 
 /**
  * Why the caller is showing these instructions, which decides how the panel
@@ -39,6 +33,37 @@ import {
  *   spinner, "check connection" button) are dropped.
  */
 export type SelfHostedDaemonConnectMode = "bootstrap" | "reference";
+
+/**
+ * A numbered step label. The steps were previously "1." and "2." rendered as
+ * bare text with downloading numbered as nothing at all, so the sequence
+ * started at the second thing the user had to do.
+ */
+function StepHeading({
+  index,
+  title,
+  tone = "neutral",
+}: {
+  index: number;
+  title: string;
+  tone?: "sky" | "neutral";
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        className={cn(
+          "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full text-2xs font-semibold",
+          tone === "sky"
+            ? "bg-sky-500/20 text-sky-700 dark:text-sky-300"
+            : "bg-muted text-muted-foreground",
+        )}
+      >
+        {index}
+      </span>
+      <span className="text-xs font-medium text-foreground">{title}</span>
+    </div>
+  );
+}
 
 interface SelfHostedDaemonConnectProps {
   /**
@@ -182,6 +207,36 @@ export function SelfHostedDaemonConnect({
     setTimeout(() => setPatCopied(false), 2000);
   };
 
+  // ──────────────────────────────────────────────────────────────────────────
+  // Is Reliant already installed SOMEWHERE? — decides whether step 1 is folded
+  //
+  // Three independent signals, weakest last:
+  //
+  //   1. `cliInstalled` — the `reliant` CLI is on PATH on THIS machine. The
+  //      strongest: the download would install the thing we just found.
+  //   2. `isElectron` — this is the desktop app, so Reliant is by definition
+  //      downloaded and running on the machine the user is reading from.
+  //   3. `daemons.length > 0` — the account has a daemon registered. Weaker
+  //      than the other two, because the daemon may be on a different machine
+  //      entirely, which is precisely why this FOLDS the block instead of
+  //      removing it.
+  //
+  // Each note names the evidence rather than asserting a conclusion, so a
+  // user setting up a second machine can see why we folded it and reopen it.
+  // ──────────────────────────────────────────────────────────────────────────
+  const installLikelyDone =
+    cliInstalled === true || isElectron || daemons.length > 0;
+  const installEvidenceNote =
+    cliInstalled === true
+      ? "The reliant CLI is already installed on this machine."
+      : isElectron
+        ? "You are running the Reliant desktop app, so it is already installed here."
+        : daemons.length > 0
+          ? "You already have a machine connected. Open this if you are setting up another one."
+          : undefined;
+
+  const terminal = describeTerminal(detectedOS);
+
   const handleManualCheck = () => {
     if (activeDaemon) {
       setManualFeedback("Daemon connected.");
@@ -238,147 +293,207 @@ export function SelfHostedDaemonConnect({
         </div>
       </div>
 
-      <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs leading-relaxed text-foreground">
-        <span className="font-medium">Already downloaded Reliant?</span>{" "}
-        <span className="text-muted-foreground">
+      {/* ── STEP 1: get Reliant onto the machine ───────────────────────────
+      
+          This used to be a bare <ReliantDownloadOptions /> sitting between a
+          sky-tinted "already downloaded?" note and an unlabelled `border-t`
+          that opened "1. Generate an access token". Three problems, all the
+          same problem: the download block had no heading of its own, so it
+          read as body copy belonging to the note above it; the steps were
+          numbered 1 and 2 with downloading numbered as nothing, so the one
+          action most users start with was outside the sequence; and a 1px
+          hairline was the only thing dividing "get the app" from "now do this
+          in a terminal". The reported symptom was that the download
+          instructions blend into the post-download instructions.
+          
+          So the install is step 1 of three, in its own tinted container, and
+          the two terminal steps share one neutral container beneath it. The
+          tint is the separator the hairline was trying to be — sky for "get
+          the software", recessed neutral for "then configure it" — and the
+          numbering now covers the whole sequence, so nothing the user has to
+          do is unnumbered. */}
+      <section className="space-y-3 rounded-xl border border-sky-500/30 bg-sky-500/5 p-4">
+        <StepHeading
+          index={1}
+          title="Install Reliant on that machine"
+          tone="sky"
+        />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          <span className="font-medium text-foreground">
+            Already downloaded Reliant?
+          </span>{" "}
           Opening the desktop app installs the{" "}
           <code className="font-mono">reliant</code> CLI on your PATH and starts
           the daemon automatically — no terminal commands needed. This screen
           will react the moment it connects.
-        </span>
-      </div>
+        </p>
+        {/* Folded when we have evidence Reliant is already on a machine —
+            see `installLikelyDone`. Still reachable, because the evidence is
+            about THIS machine and the user may be setting up another. */}
+        <ReliantDownloadOptions
+          defaultCollapsed={installLikelyDone}
+          collapsedNote={installEvidenceNote}
+        />
+      </section>
 
-      <ReliantDownloadOptions />
-
-      <div className="space-y-2 border-t border-border/30 pt-3">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-foreground">
-            1. Generate an access token
-          </span>
-          {pat && (
-            <span className="text-2xs uppercase tracking-wider text-emerald-500">
-              Ready
-            </span>
-          )}
-        </div>
-        {pat ? (
-          <div className="flex items-center gap-2">
-            <code className="flex-1 select-all truncate rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
-              {pat}
-            </code>
+      {/* ── STEPS 2–3: what to do once it is installed ─────────────────────
+      
+          One recessed container for both terminal steps, so the boundary
+          against the tinted install block above is a surface change rather
+          than a hairline. `bg-background` is the inset token that recesses in
+          BOTH light and dark; `bg-muted` would lift in dark and sink in light
+          (see the elevation note in web/src/components/Settings/cloud/ui/card.tsx). */}
+      <section className="space-y-4 rounded-xl border border-border/60 bg-background p-4">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <StepHeading index={2} title="Generate an access token" />
+            {pat && (
+              <span className="text-2xs uppercase tracking-wider text-emerald-500">
+                Ready
+              </span>
+            )}
+          </div>
+          {pat ? (
+            <div className="flex items-center gap-2">
+              <code className="flex-1 select-all truncate rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground">
+                {pat}
+              </code>
+              <button
+                type="button"
+                onClick={handleCopyPat}
+                className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                {patCopied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    Copy
+                  </>
+                )}
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
-              onClick={handleCopyPat}
-              className="flex items-center gap-1.5 rounded-lg border border-border/40 bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
-            >
-              {patCopied ? (
-                <>
-                  <Check className="h-3.5 w-3.5 text-emerald-500" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy className="h-3.5 w-3.5" />
-                  Copy
-                </>
+              onClick={handleGeneratePat}
+              disabled={generatingPat}
+              className={cn(
+                "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors",
+                generatingPat
+                  ? "cursor-not-allowed bg-muted text-muted-foreground"
+                  : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
               )}
+            >
+              {generatingPat && <Loader2 className="h-4 w-4 animate-spin" />}
+              {generatingPat ? "Generating..." : "Generate token"}
             </button>
-          </div>
-        ) : (
-          <button
-            type="button"
-            onClick={handleGeneratePat}
-            disabled={generatingPat}
-            className={cn(
-              "inline-flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-colors",
-              generatingPat
-                ? "cursor-not-allowed bg-muted text-muted-foreground"
-                : "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
-            )}
-          >
-            {generatingPat && <Loader2 className="h-4 w-4 animate-spin" />}
-            {generatingPat ? "Generating..." : "Generate token"}
-          </button>
-        )}
-        {pat && (
-          <p className="text-xs text-yellow-600 dark:text-yellow-400">
-            The token is shown once. Copy it now.
+          )}
+          {pat && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-400">
+              The token is shown once. Copy it now.
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5 border-t border-border/50 pt-4">
+          <StepHeading
+            index={3}
+            title={`Start the daemon in ${terminal.name}`}
+          />
+
+          {/* Say HOW to open the terminal, not just what to type.
+        
+            "2. Start the daemon" above a code block assumes the reader knows
+            they need a terminal, knows their OS ships one, and knows how to
+            open it. That is the step where a non-developer stops, and it was
+            the only step with no instruction attached — the code block was
+            the whole of it.
+            
+            `describeTerminal` picks the app by detected OS so the name is one
+            a user can actually search for in their launcher: Terminal on
+            macOS and Linux, PowerShell on Windows. Wrong-OS guidance would be
+            worse than none, so an unknown platform gets the generic wording
+            rather than a guess. */}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            {terminal.howToOpen} Then paste this in and press{" "}
+            <span className="font-medium text-foreground">Enter</span>:
           </p>
-        )}
-      </div>
 
-      <div className="space-y-1.5">
-        <span className="block text-xs font-medium text-foreground">
-          2. Start the daemon
-        </span>
-
-        {/*
+          {/*
           Inside the Electron app we know whether the `reliant` CLI is already
           on $PATH (the main process installs it on first launch). If it's
           missing, surface a one-click install button so the user doesn't have
           to hunt through Settings → About.
         */}
-        {isElectron && cliInstalled === false && (
-          <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
-            <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
-              <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+          {isElectron && cliInstalled === false && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 p-2.5 space-y-2">
+              <p className="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-300">
+                <Terminal className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+                <span>
+                  The <code className="font-mono">reliant</code> command is not
+                  on your PATH yet. Install it to run the daemon from your
+                  terminal.
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={handleInstallCli}
+                disabled={installingCli}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                  installingCli
+                    ? "cursor-not-allowed bg-muted text-muted-foreground"
+                    : "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200",
+                )}
+              >
+                {installingCli && (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                {installingCli ? "Installing..." : "Install reliant CLI"}
+              </button>
+            </div>
+          )}
+
+          {isElectron && cliInstalled === true && cliPath && (
+            <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
+              <Check className="h-3 w-3" />
               <span>
-                The <code className="font-mono">reliant</code> command is not on
-                your PATH yet. Install it to run the daemon from your terminal.
+                <code className="font-mono">reliant</code> CLI installed at{" "}
+                <code className="font-mono">{cliPath}</code>
               </span>
             </p>
-            <button
-              type="button"
-              onClick={handleInstallCli}
-              disabled={installingCli}
-              className={cn(
-                "inline-flex w-full items-center justify-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
-                installingCli
-                  ? "cursor-not-allowed bg-muted text-muted-foreground"
-                  : "bg-zinc-950 text-white hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200",
-              )}
-            >
-              {installingCli && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-              {installingCli ? "Installing..." : "Install reliant CLI"}
-            </button>
-          </div>
-        )}
-
-        {isElectron && cliInstalled === true && cliPath && (
-          <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400">
-            <Check className="h-3 w-3" />
-            <span>
-              <code className="font-mono">reliant</code> CLI installed at{" "}
-              <code className="font-mono">{cliPath}</code>
-            </span>
-          </p>
-        )}
-
-        <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
-          {daemonStartCommand()}
-        </code>
-        {daemonStartCommandNeedsEditing() && (
-          <p className="text-xs text-yellow-600 dark:text-yellow-400">
-            Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway address
-            before running this. It is a separate process from the API server,
-            so the daemon cannot infer it on localhost.
-          </p>
-        )}
-        <p className="text-xs text-muted-foreground">
-          The command will prompt you to paste the token.
-          {isElectron && cliInstalled === false && (
-            <>
-              {" "}
-              If you skip the CLI install, reopening the desktop app adds{" "}
-              <code className="font-mono">reliant</code> to your PATH
-              {supportsHomebrewCask(detectedOS)
-                ? ", or you can install the cask with Homebrew"
-                : ""}
-              .
-            </>
           )}
-        </p>
-      </div>
+
+          <code className="block select-all rounded border border-border/40 bg-background px-3 py-2 font-mono text-xs text-foreground break-all">
+            {daemonStartCommand()}
+          </code>
+          {daemonStartCommandNeedsEditing() && (
+            <p className="text-xs text-yellow-600 dark:text-yellow-400">
+              Replace {GATEWAY_URL_PLACEHOLDER} with your daemon-gateway address
+              before running this. It is a separate process from the API server,
+              so the daemon cannot infer it on localhost.
+            </p>
+          )}
+          <p className="text-xs text-muted-foreground">
+            The command will prompt you to paste the token.
+            {isElectron && cliInstalled === false && (
+              <>
+                {" "}
+                If you skip the CLI install, reopening the desktop app adds{" "}
+                <code className="font-mono">reliant</code> to your PATH
+                {supportsHomebrewCask(detectedOS)
+                  ? ", or you can install the cask with Homebrew"
+                  : ""}
+                .
+              </>
+            )}
+          </p>
+        </div>
+      </section>
 
       {error && <p className="text-center text-xs text-destructive">{error}</p>}
 

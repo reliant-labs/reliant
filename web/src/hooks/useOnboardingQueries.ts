@@ -106,8 +106,11 @@ export function computeIneligibleCopy(
 }
 
 const INELIGIBLE_REASON_COPY: Partial<Record<ComputeIneligibleReason, string>> = {
+  // Still emitted: svcdaemon raises ReasonTrialExpired and svcbilling maps it
+  // here for an org whose one-time signup trial lapsed. New accounts get no
+  // trial at all any more, so this is a legacy-account path, not the default.
   [ComputeIneligibleReason.TRIAL_EXPIRED]:
-    'Your free trial has ended — redeem a coupon code or choose a plan to keep running machines.',
+    'Your compute trial has ended — redeem a coupon code or choose a plan to keep running machines.',
   [ComputeIneligibleReason.NO_SUBSCRIPTION]:
     'Redeem a coupon code or choose a plan to start a cloud machine.',
   [ComputeIneligibleReason.NO_ORGANIZATION]: 'Finishing account setup…',

@@ -46,6 +46,17 @@
 
 @layer base {
   :root {
+    /* Tells the browser which palette to draw native UI with — autofill
+       backgrounds, scrollbars, date pickers. Without it Chrome assumes a light
+       page and picks its light autofill fill even while the app renders dark. */
+    color-scheme: light;
+
+    /* Surface an autofilled control paints itself with. Resolved lazily, so the
+       per-theme --background override applies without restating this token in
+       all ten color-scheme blocks. Auth inputs are bg-transparent over a
+       bg-background card, so this matches what they sit on. */
+    --autofill-bg: var(--background);
+
     /* VIBRANT BLUE LIGHT THEME - colorful & modern */
     --background: 0 0% 98%;          /* Soft white, not harsh */
     --foreground: 0 0% 15%;          /* True neutral dark gray */
@@ -142,6 +153,8 @@
   }
 
   .dark {
+    color-scheme: dark;
+
     /* VIBRANT BLUE DARK THEME - colorful & modern */
     --background: 222 47% 11%;       /* Page — the darkest surface */
     --foreground: 210 40% 98%;       /* Soft white text */
@@ -423,13 +436,55 @@
     background-size: 20px 20px;
   }
 
-  /* Fix autofill background to be transparent */
+  /*
+   * Autofill. Chrome/Safari paint their OWN near-white background on a filled
+   * control via an internal `background-color` that no author rule can set, so
+   * the only way to cover it is to paint over it with an opaque inset shadow.
+   *
+   * `transparent inset` — what this used to be — covers nothing, leaving the
+   * browser's light fill visible while `-webkit-text-fill-color` still forced
+   * the themed foreground on top. In dark mode that is white text on a white
+   * box, which is the bug this rule was supposed to prevent.
+   *
+   * The shadow must also be `!important`: Tailwind's `transition-colors` and
+   * `ring-*` utilities land in the utilities layer, which outranks this base
+   * rule, and every auth input carries them.
+   *
+   * WebKit-generated pseudo-state is one of the documented `!important`
+   * exceptions in reliant.md's styling contract.
+   */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus,
-  input:-webkit-autofill:active {
-    -webkit-box-shadow: 0 0 0 30px transparent inset !important;
+  input:-webkit-autofill:active,
+  select:-webkit-autofill,
+  select:-webkit-autofill:hover,
+  select:-webkit-autofill:focus,
+  select:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  textarea:-webkit-autofill:hover,
+  textarea:-webkit-autofill:focus,
+  textarea:-webkit-autofill:active {
+    /* The ring vars are re-composed here on purpose. This declaration is
+       !important, so it would otherwise drop the focus ring that Tailwind's
+       `focus:ring-2` builds as a box-shadow — invisible focus on exactly the
+       field a password manager just filled. The fill is inset and the ring is
+       outset, so they do not overlap; the fallbacks make this a no-op when no
+       ring utility is active. */
+    -webkit-box-shadow:
+      0 0 0 1000px hsl(var(--autofill-bg)) inset,
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000) !important;
+    box-shadow:
+      0 0 0 1000px hsl(var(--autofill-bg)) inset,
+      var(--tw-ring-offset-shadow, 0 0 #0000),
+      var(--tw-ring-shadow, 0 0 #0000) !important;
     -webkit-text-fill-color: hsl(var(--foreground)) !important;
+    caret-color: hsl(var(--foreground));
+
+    /* The inset shadow repaints instantly, but the browser's own background
+       fades in. Parking that transition far in the future is the standard way
+       to keep the two from disagreeing for a frame. */
     transition: background-color 5000s ease-in-out 0s;
   }
 }
