@@ -140,6 +140,26 @@ func convertMessages(messages []message.Message) []*content {
 
 		case message.Assistant:
 			var parts []*part
+			// Reasoning goes FIRST, because it is what the rest of the turn
+			// was derived from and the server reads the parts in order.
+			//
+			// Replaying it is not about showing the model its own thoughts: it
+			// is the signature. Gemini 3.x signs a reasoning step and rejects
+			// a later request that replays the step unsigned. In the failing
+			// conversation the signature lived on the THINKING block (968
+			// bytes) while the tool_call block had none, so dropping reasoning
+			// here discarded the only copy and the next request 400'd.
+			//
+			// A signature with no readable text is still emitted — the store
+			// deliberately keeps those rows (see db.IsBlockValid), and they
+			// are exactly the ones that keep a thread moving.
+			if reasoning := msg.ReasoningContent(); reasoning.Thinking != "" || reasoning.Signature != "" {
+				parts = append(parts, &part{
+					Text:             reasoning.Thinking,
+					Thought:          true,
+					ThoughtSignature: reasoning.Signature,
+				})
+			}
 			if text := msg.Content().String(); text != "" {
 				parts = append(parts, &part{Text: text})
 			}
@@ -237,7 +257,13 @@ func convertMessagesWithValidation(messages []message.Message) []*content {
 		}
 		usable := false
 		for _, p := range c.Parts {
-			if p != nil && (p.Text != "" || p.FunctionCall != nil || p.FunctionResponse != nil || p.InlineData != nil) {
+			// A bare thought signature counts as usable content. It carries no
+			// text, but it is what the server verifies to let the model resume
+			// its own reasoning — appending an "[Empty message]" placeholder
+			// beside it would inject fake user-visible text into a turn whose
+			// only job is to carry the signature.
+			if p != nil && (p.Text != "" || p.ThoughtSignature != "" ||
+				p.FunctionCall != nil || p.FunctionResponse != nil || p.InlineData != nil) {
 				usable = true
 				break
 			}

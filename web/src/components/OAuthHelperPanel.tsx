@@ -21,6 +21,23 @@ export interface OAuthHelperPanelProps {
   onConnect: () => void;
   /** True while the OAuth flow is in progress. */
   connecting: boolean;
+  /**
+   * Abandon an in-flight sign-in.
+   *
+   * Without this the panel is a dead end while `connecting`: the login button
+   * is disabled, and only the provider redirect can re-enable it. A user who
+   * closed the tab or dismissed the consent screen produces no redirect, so the
+   * spinner stays until the receiver's own timeout — ten minutes on desktop,
+   * never in web mode — and quitting the app is the only way out.
+   *
+   * Cancelling also releases the loopback port immediately, which matters for
+   * Codex: its port 1455 is fixed by OpenAI, so a leaked listener blocks every
+   * later attempt.
+   *
+   * Optional only so callers that genuinely cannot abort keep compiling; they
+   * get the old disabled button rather than one that lies about what it does.
+   */
+  onCancel?: () => void;
   /** Override the login button label. Defaults to `Login with ${providerName}`. */
   connectLabel?: string;
   /** Layout for the action button row. */
@@ -48,6 +65,7 @@ export function OAuthHelperPanel({
   onRetry,
   onConnect,
   connecting,
+  onCancel,
   connectLabel,
   buttonAlign = "end",
   buttonVariant = "primary",
@@ -139,6 +157,22 @@ export function OAuthHelperPanel({
     </button>
   );
 
+  // Shown only while a flow is in flight, and deliberately beside the spinner
+  // rather than replacing it: the flow may still complete, so this offers a way
+  // out without implying the attempt has already failed.
+  const cancelButton = connecting && onCancel && (
+    <button
+      type="button"
+      onClick={onCancel}
+      className={cn(
+        "rounded-lg border border-border/40 bg-background px-4 py-2.5 text-sm font-medium transition-colors hover:bg-muted",
+        buttonAlign === "stretch" && "w-full",
+      )}
+    >
+      Cancel
+    </button>
+  );
+
   const retryButton = (
     <button
       type="button"
@@ -170,9 +204,14 @@ export function OAuthHelperPanel({
           Authenticate via {providerName}
         </p>
         <p className={cn(bodyText, "text-muted-foreground")}>
-          {available
-            ? `Sign in with ${providerName} to connect your account.`
-            : "The local OAuth helper is not running. We need this to intercept your credentials:"}
+          {connecting
+            ? // Names what the app is waiting on. A bare spinner is
+              // indistinguishable from a hung app, which is what made users
+              // quit and reopen rather than finish or cancel.
+              `Waiting for you to finish signing in to ${providerName} in your browser. If you closed the tab or want to start over, cancel and try again.`
+            : available
+              ? `Sign in with ${providerName} to connect your account.`
+              : "The local OAuth helper is not running. We need this to intercept your credentials:"}
         </p>
         {!available && !loading && (
           <div className="space-y-3">
@@ -267,11 +306,12 @@ export function OAuthHelperPanel({
       </div>
       <div
         className={cn(
-          "flex pt-1",
+          "flex gap-2 pt-1",
           buttonAlign === "stretch" ? "justify-stretch" : "justify-end",
         )}
       >
         {available ? loginButton : retryButton}
+        {cancelButton}
       </div>
     </div>
   );

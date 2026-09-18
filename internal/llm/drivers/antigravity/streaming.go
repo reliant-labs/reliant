@@ -154,9 +154,24 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 			if cand.Content == nil {
 				continue
 			}
+			// Signatures do not have to ride on the functionCall part they
+			// belong to. They arrive on the preceding thought part, or on a
+			// bare signature-only part beside the call, and a call replayed
+			// without one makes the NEXT request fail with "Function call is
+			// missing a thought_signature" — naming a position several turns
+			// back, which is why the fault reads as random.
+			//
+			// So the candidate's signature is collected and applied to every
+			// call in that candidate that did not carry its own. Candidate
+			// scope is the correct scope: it is the unit the server signs.
+			candidateSig := ""
+			var unsignedCalls []int
 			for _, p := range cand.Content.Parts {
 				if p == nil {
 					continue
+				}
+				if p.ThoughtSignature != "" && candidateSig == "" {
+					candidateSig = p.ThoughtSignature
 				}
 				switch {
 				case p.FunctionCall != nil:
@@ -170,6 +185,9 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 						Type:             "function",
 						Finished:         true,
 						ThoughtSignature: p.ThoughtSignature,
+					}
+					if call.ThoughtSignature == "" {
+						unsignedCalls = append(unsignedCalls, len(toolCalls))
 					}
 					toolCalls = append(toolCalls, call)
 					eventChan <- llm.DriverEvent{Type: llm.EventToolUseStart, ToolCall: &call}
@@ -206,6 +224,20 @@ func (c *Client) consumeStream(ctx context.Context, body io.Reader, eventChan ch
 					text.WriteString(p.Text)
 					eventChan <- llm.DriverEvent{Type: llm.EventContentDelta, Content: p.Text}
 				}
+			}
+
+			// Backfill AFTER the loop: a signature-only part can follow the
+			// call it belongs to, so the candidate's signature is not known
+			// until every part has been read.
+			if candidateSig != "" {
+				for _, idx := range unsignedCalls {
+					toolCalls[idx].ThoughtSignature = candidateSig
+				}
+			} else if len(unsignedCalls) > 0 {
+				// Worth a line in the log: this is the state that will 400 on
+				// the next request rather than on this one.
+				logging.Warn("[ANTIGRAVITY] Function call arrived with no thought signature anywhere in its candidate",
+					"unsignedCalls", len(unsignedCalls))
 			}
 		}
 		return nil

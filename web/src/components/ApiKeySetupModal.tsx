@@ -244,6 +244,18 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
     }
   }, [codexOAuth, claudeOAuth, antigravityOAuth, onClose]);
 
+  // Abandon an in-flight redirect sign-in. Aborting the hook's controller
+  // rejects the pending wait, which `runAntigravityOAuthFlow` and its siblings
+  // classify as `cancelled` — so no error banner appears for a deliberate stop
+  // — and releases the loopback port rather than leaving it bound until the
+  // receiver's timeout.
+  const handleCancelOAuth = useCallback(() => {
+    if (!isRedirectOAuthProvider(provider.usesOAuth)) return;
+    resolveOAuthFlow(redirectOAuthFlows, provider.usesOAuth).cancel();
+    setIsValidating(false);
+    setValidationResult(null);
+  }, [provider.usesOAuth, codexOAuth, claudeOAuth, antigravityOAuth]);
+
   // Device-flow login for GitHub Copilot. The visible user-code panel is driven
   // reactively by `copilotOAuth` state; this only handles the terminal success
   // (close + refetch) and error paths.
@@ -444,6 +456,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
               onRetry={oauthAvailability.recheck}
               onConnect={handleValidate}
               connecting={isValidating}
+              onCancel={handleCancelOAuth}
             />
 
             {validationResult && (

@@ -333,3 +333,31 @@ func missingMigrationVersions(db *sql.DB, want []int64) ([]int64, error) {
 func getUserIDFromAuthFile() (string, error) {
 	return auth.ReadUserIDFromAuthFile()
 }
+
+// PendingMigrations returns the versions this binary embeds that the database
+// has not recorded applied, ascending — the same set WaitForSchema blocks on,
+// exposed for tooling that wants to report it instead of wait for it
+// (`reliant db migrate status`).
+func PendingMigrations(db *sql.DB) ([]int64, error) {
+	if err := initGoose(); err != nil {
+		return nil, err
+	}
+
+	want, err := embeddedMigrationVersions()
+	if err != nil {
+		return nil, err
+	}
+
+	return missingMigrationVersions(db, want)
+}
+
+// EmbeddedMigrationVersions returns every migration version compiled into this
+// binary, ascending. Paired with PendingMigrations it gives "n of m applied"
+// without a second source of truth for what m is.
+func EmbeddedMigrationVersions() ([]int64, error) {
+	if err := initGoose(); err != nil {
+		return nil, err
+	}
+
+	return embeddedMigrationVersions()
+}

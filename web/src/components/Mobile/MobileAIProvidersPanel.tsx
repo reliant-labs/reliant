@@ -449,6 +449,15 @@ export function MobileAIProvidersPanel({
     }
   };
 
+  // Abandon an in-flight sign-in so the panel is never a dead end while the
+  // provider tab is gone. The hook reports the abort as `cancelled`, which the
+  // start path already declines to surface as an error.
+  const handleCancelOAuth = (kind: RedirectOAuthProvider) => {
+    resolveOAuthFlow(redirectOAuthFlows, kind).cancel();
+    setConnectingOAuth(false);
+    setOauthBanner(null);
+  };
+
   const handleConnectOAuth = async (kind: RedirectOAuthProvider) => {
     setConnectingOAuth(true);
     setOauthBanner(null);
@@ -626,6 +635,9 @@ export function MobileAIProvidersPanel({
                     void handleConnectOAuth(config.usesOAuth as RedirectOAuthProvider)
                   }
                   connecting={connectingOAuth}
+                  onCancel={() =>
+                    handleCancelOAuth(config.usesOAuth as RedirectOAuthProvider)
+                  }
                   buttonAlign="stretch"
                 />
                 <BannerMessage banner={oauthBanner} />
