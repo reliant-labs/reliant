@@ -74,6 +74,33 @@ func (b *daemonProxyBase) dispatch(
 // errors cross the transport as plain strings, not wrapped Go errors.
 const daemonErrDirNotExistMarker = "working dir does not exist"
 
+// daemonErrOutdatedMarker mirrors the phrase daemonruntime's
+// unknownCommandError builds. Same wire-contract reasoning as above: the text
+// is all that survives the transport.
+//
+// A daemon reporting this is older than the server asking, which is a state the
+// user has to resolve by updating their machine — retrying cannot help.
+const daemonErrOutdatedMarker = "older version of Reliant"
+
+// IsDaemonOutdatedError reports whether err is a daemon-too-old failure, i.e.
+// the server asked for a command the daemon's build does not have.
+func IsDaemonOutdatedError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), daemonErrOutdatedMarker)
+}
+
+// DaemonOutdatedConnectError maps a version-skew failure onto
+// FailedPrecondition, preserving the daemon's own explanation.
+//
+// FailedPrecondition rather than Internal or Unavailable, deliberately:
+// Internal says Reliant is broken and invites a bug report for something that
+// is not a defect, and Unavailable invites a retry that cannot succeed until
+// the daemon is updated. FailedPrecondition is the code that means "the system
+// is not in the state this call requires" — which is exactly true, and is the
+// only one of the three that points the user at the action that fixes it.
+func DaemonOutdatedConnectError(err error) *connect.Error {
+	return connect.NewError(connect.CodeFailedPrecondition, err)
+}
+
 // mapDaemonDispatchError converts a SendDaemonCommand failure into a Connect
 // error whose code reflects the failure class. SendDaemonCommand flattens every
 // failure — transport, timeout, unresolved daemon, unknown command, and
@@ -84,6 +111,14 @@ const daemonErrDirNotExistMarker = "working dir does not exist"
 // The invariant that matters most: whatever the class, the caller gets a loud
 // Connect error, NEVER an empty success.
 func mapDaemonDispatchError(commandType string, err error) *connect.Error {
+	// The daemon is older than this server and has no handler for the command.
+	// Surfaced verbatim and WITHOUT the "daemon command X failed" wrapper: the
+	// daemon's message already names the command and states the fix, and
+	// prefixing it buries that behind plumbing vocabulary.
+	if IsDaemonOutdatedError(err) {
+		return DaemonOutdatedConnectError(err)
+	}
+
 	// The daemon answered, but the requested working directory is absent on its
 	// filesystem. That's a missing resource / precondition on the request, not
 	// an infrastructure outage, so it must not read as a retryable "unavailable".
