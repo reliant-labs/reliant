@@ -26,7 +26,41 @@ func TestTitleModel_SelectsByTagNotAHardcodedModel(t *testing.T) {
 	selector := titleModelSelector()
 	assert.Empty(t, selector.ID,
 		"titling must not name a model: a user without that model's provider cannot title at all")
-	assert.Equal(t, []string{models.TagFast}, selector.Tags)
+
+	// A preference ladder, not a single tag: the codex driver ships no
+	// fast-tagged text model, so "fast" alone left a codex-only user with no
+	// resolution at all once the refused gpt-5.4-mini mapping was removed.
+	assert.Equal(t, []string{models.TagFast, models.TagModerate}, selector.Tags)
+
+	// The load-bearing half. Tags degrade gracefully and `fast` is carried by
+	// image-generation models (gpt-image-2.5-flare, gemini-3.1-flash-lite-
+	// image), so without a hard modality requirement titling can resolve to a
+	// model that cannot emit text. Verified: bare TagFast on codex resolves to
+	// gpt-image-2.5-flare.
+	assert.Equal(t, models.ModalityText, selector.RequireOutputModality,
+		"titling must REQUIRE text output; speed is only a preference")
+}
+
+// The regression that motivated RequireOutputModality: for every provider, the
+// titling selector must land on a model that can actually emit text. Tag
+// scoring alone cannot guarantee this, because image models carry latency tags
+// too.
+func TestTitleModel_NeverResolvesToAnImageModel(t *testing.T) {
+	registry := models.MustGetRegistry()
+
+	for _, provider := range []string{
+		"anthropic", "openai", "gemini", "codex",
+		"openrouter", "copilot", "reliant", "vertexai",
+	} {
+		t.Run(provider, func(t *testing.T) {
+			resolved, err := registry.Resolve(titleModelSelector(), []string{provider})
+			require.NoError(t, err)
+			assert.Truef(t, resolved.Definition.Capabilities.CanOutput(models.ModalityText),
+				"titling for %s resolved to %q, which emits %v — it cannot produce a title",
+				provider, resolved.Definition.ID,
+				resolved.Definition.Capabilities.EffectiveOutputModalities())
+		})
+	}
 }
 
 // The bug this fixes: a user with no Anthropic credentials must still get a

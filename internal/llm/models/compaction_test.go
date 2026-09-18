@@ -133,16 +133,16 @@ func TestCompactionThresholdForProvider(t *testing.T) {
 // threshold derives from 272k rather than the (unreachable) platform window.
 //
 // The list covers only models the ChatGPT-account backend actually serves.
-// gpt-5.4, gpt-5.3-codex and gpt-5.2-codex used to be here, but the backend
-// refuses them for a ChatGPT account, so their codex provider mapping was
-// removed and there is no codex window to pin.
+// gpt-5.4, gpt-5.4-mini, gpt-5.3-codex and gpt-5.2-codex used to be here, but
+// the backend refuses them for a ChatGPT account, so their codex provider
+// mapping was removed and there is no codex window to pin.
 func TestGPT5CodexProviderWindowRegistered(t *testing.T) {
 	const codexWindow = 272_000
 	registry, err := GetRegistry()
 	if err != nil {
 		t.Fatalf("failed to load registry: %v", err)
 	}
-	for _, id := range []string{"gpt-5.5", "gpt-5.4-mini"} {
+	for _, id := range []string{"gpt-5.5"} {
 		def, ok := registry.GetDefinition(id)
 		if !ok {
 			t.Errorf("model %q not found in registry", id)

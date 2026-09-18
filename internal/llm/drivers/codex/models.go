@@ -18,16 +18,21 @@ const Family models.Family = "codex"
 // using Codex with a ChatGPT account."}` — so listing a model here that the
 // backend will not serve makes it resolvable and then fails every request.
 //
-// gpt-5.4, gpt-5.3-codex, gpt-5.3-codex-spark and gpt-5.2-codex were verified
-// refused and are served by the openai/openrouter drivers instead. See the
-// note above gpt-5.5 in models.yaml for the probe and the full list.
+// gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark and gpt-5.2-codex
+// were verified refused and are served by the openai/openrouter drivers
+// instead. See the note above gpt-5.5 in models.yaml for the probe and the
+// full list.
+//
+// gpt-5.4-mini is refused despite its parent family being served; a `-mini`
+// does not inherit the family's acceptance. Listing it here made it the only
+// codex model tagged `fast`, so chat titling resolved to it and 400'd on
+// every chat.
 var SupportedModels = []models.ModelID{
 	models.GPT6Astra,
 	models.GPT56Sol,
 	models.GPT56Luna,
 	models.GPT56Terra,
 	models.GPT55,
-	models.GPT54Mini,
 }
 
 // createClient is the driver factory function for the registry

@@ -244,7 +244,24 @@ func (s *StreamingService) StreamUserUpdates(
 
 		case delta, ok := <-hubEventCh:
 			if !ok {
-				return nil
+				// The ephemeral delta hub went away (NATS restart wiped the
+				// memory-backed stream, consumer torn down). That is a
+				// DEGRADATION of live token streaming, not a reason to end the
+				// stream: everything durable — messages, approvals, tool calls,
+				// chat state — still arrives over chatUpdateCh from the DB.
+				//
+				// Returning here used to end the RPC, which the client reads as
+				// a disconnect; it reconnects, resubscribes, the hub fails the
+				// same way, and the cycle repeats. Measured in dev at ~20
+				// reconnects/second for hours, each dragging a full
+				// ListChats/GetChat/ListArchivedChats refetch behind it.
+				//
+				// Drop to a nil channel so this branch is never selected again
+				// and the stream stays up on its durable path.
+				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Delta hub closed — continuing without live deltas",
+					"chatID", subscribeChatID[:min(8, len(subscribeChatID))])
+				hubEventCh = nil
+				continue
 			}
 			if err := s.sendStreamingDeltaViaUserStream(subscribeChatID, delta, lastChatSeq, stream); err != nil {
 				return err
