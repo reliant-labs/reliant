@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -202,18 +203,38 @@ func NewForgeService(router toolexec.DaemonRouter, projects forgeProjectLookup) 
 
 // forgeReportReply mirrors daemonruntime.forgeReportResponse.
 //
-// Report is a raw string rather than a decoded structure: this layer never
-// parses forge's document, so it has no reason to know its shape, and keeping
-// it opaque means a newer forge that adds a field needs no change here. It is
-// declared as string (not json.RawMessage) because it goes straight into the
-// proto's report_json field.
+// Report is json.RawMessage, and it MUST match the daemon's field type rather
+// than the proto's. The daemon sends forge's document verbatim as a JSON
+// OBJECT (daemonruntime.forgeReportResponse.Report is json.RawMessage); a
+// `string` here made every forge.* RPC fail at the decode with
+//
+//	cannot unmarshal object into Go struct field forgeReportReply.report of type string
+//
+// which surfaced as the forge UI silently not appearing: the sidebar entry is
+// gated on GetTopology succeeding, so a decode failure reads as "not a forge
+// project" rather than as an error anyone sees.
+//
+// It stays OPAQUE — this layer never parses forge's document, so a newer forge
+// that adds a field needs no change here. RawMessage preserves that while
+// being the type the wire actually carries; reportJSON() renders it for the
+// proto's string field.
 type forgeReportReply struct {
-	IsForgeProject    bool   `json:"is_forge_project"`
-	Supported         bool   `json:"supported"`
-	ForgeVersion      string `json:"forge_version"`
-	UnsupportedReason string `json:"unsupported_reason"`
-	ExitCode          int32  `json:"exit_code"`
-	Report            string `json:"report"`
+	IsForgeProject    bool            `json:"is_forge_project"`
+	Supported         bool            `json:"supported"`
+	ForgeVersion      string          `json:"forge_version"`
+	UnsupportedReason string          `json:"unsupported_reason"`
+	ExitCode          int32           `json:"exit_code"`
+	Report            json.RawMessage `json:"report"`
+}
+
+// reportJSON renders the opaque report for the proto's report_json string
+// field. Empty (not "null") when forge returned no document, so a caller
+// checking for emptiness does not have to special-case JSON's null literal.
+func (r forgeReportReply) reportJSON() string {
+	if len(r.Report) == 0 || string(r.Report) == "null" {
+		return ""
+	}
+	return string(r.Report)
 }
 
 // forgeProjectPath resolves a project id to its path on the DAEMON's
@@ -427,7 +448,7 @@ func (s *ForgeService) GetTopology(
 
 	return connect.NewResponse(&reliantv1.GetForgeTopologyResponse{
 		Meta:       forgeMeta(reply, verify, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -461,7 +482,7 @@ func (s *ForgeService) VerifyEnv(
 
 	return connect.NewResponse(&reliantv1.VerifyForgeEnvResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -512,7 +533,7 @@ func (s *ForgeService) ListSecrets(
 
 	return connect.NewResponse(&reliantv1.ListForgeSecretsResponse{
 		Meta:       forgeMeta(reply, false, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -543,7 +564,7 @@ func (s *ForgeService) GetAudit(
 
 	return connect.NewResponse(&reliantv1.GetForgeAuditResponse{
 		Meta:       forgeMeta(reply, false, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -577,7 +598,7 @@ func (s *ForgeService) GetEnvStatus(
 
 	return connect.NewResponse(&reliantv1.GetForgeEnvStatusResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -678,7 +699,7 @@ func (s *ForgeService) PlanPromote(
 
 	return connect.NewResponse(&reliantv1.PlanForgePromoteResponse{
 		Meta:       forgeMeta(reply, false, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -797,7 +818,7 @@ func (s *ForgeService) ApplyPromote(
 	// pointer and deployed nothing.
 	return connect.NewResponse(&reliantv1.PromoteForgeEnvResponse{
 		Meta:       forgeMeta(reply.forgeReportReply, false, ""),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -992,7 +1013,7 @@ func (s *ForgeService) PlanDeploy(
 
 	return connect.NewResponse(&reliantv1.PlanForgeDeployResponse{
 		Meta:       forgeMeta(reply, true, unreachable),
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -1128,7 +1149,7 @@ func (s *ForgeService) StartDeploy(
 			Meta:       forgeMeta(reply.forgeReportReply, false, ""),
 			Env:        env,
 			JobStatus:  reliantv1.ForgeDeployJobStatus_FORGE_DEPLOY_JOB_STATUS_UNSPECIFIED,
-			ReportJson: reply.Report,
+			ReportJson: reply.reportJSON(),
 		}), nil
 	}
 
@@ -1141,7 +1162,7 @@ func (s *ForgeService) StartDeploy(
 		Env:        env,
 		JobStatus:  forgeDeployJobStatus(reply.JobStatus),
 		StartedAt:  reply.StartedAt,
-		ReportJson: reply.Report,
+		ReportJson: reply.reportJSON(),
 	}), nil
 }
 
@@ -1200,6 +1221,6 @@ func (s *ForgeService) GetDeployStatus(
 		JobStatusDetail: reply.JobStatusDetail,
 		StartedAt:       reply.StartedAt,
 		FinishedAt:      reply.FinishedAt,
-		ReportJson:      reply.Report,
+		ReportJson:      reply.reportJSON(),
 	}), nil
 }

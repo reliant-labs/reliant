@@ -69,7 +69,9 @@ func forgeDaemonReply(t *testing.T, isProject, supported bool, exitCode int, rep
 		"exit_code":        exitCode,
 	}
 	if report != "" {
-		env["report"] = report
+		// RawMessage: the real daemon sends the report as an OBJECT, never as
+		// a JSON string. See deployReply in forge_deploy_test.go.
+		env["report"] = json.RawMessage(report)
 	}
 	b, err := json.Marshal(env)
 	require.NoError(t, err)
@@ -446,4 +448,62 @@ func TestForgeService_ListSecrets_ErrorCarriesNoReportText(t *testing.T) {
 
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), canary)
+}
+
+// THE DAEMON SENDS AN OBJECT, NOT A STRING, and this pins that contract.
+//
+// forgeReportReply.Report was declared `string` while
+// daemonruntime.forgeReportResponse.Report is json.RawMessage, so every
+// forge.* RPC failed at the decode with "cannot unmarshal object into Go
+// struct field forgeReportReply.report of type string".
+//
+// The symptom was worse than the error: the sidebar's forge entry is gated on
+// GetTopology SUCCEEDING, so a decode failure reads as "not a forge project"
+// and the whole UI silently does not appear. Nothing in the product surfaces
+// the error — it only exists in the api-server log.
+func TestForgeReportReplyDecodesTheDaemonsObjectReport(t *testing.T) {
+	// Byte-for-byte the shape the daemon marshals.
+	const wire = `{
+		"is_forge_project": true,
+		"supported": true,
+		"forge_version": "v0.1.17",
+		"exit_code": 0,
+		"report": {"envs": [{"name": "dev", "state": "ok"}], "project": "control-plane"}
+	}`
+
+	var reply forgeReportReply
+	if err := json.Unmarshal([]byte(wire), &reply); err != nil {
+		t.Fatalf("decoding the daemon's reply: %v", err)
+	}
+	if !reply.IsForgeProject || !reply.Supported {
+		t.Errorf("flags lost in the decode: %+v", reply)
+	}
+	// The report stays OPAQUE — passed through verbatim, never re-encoded.
+	// A newer forge adding a field must need no change here.
+	var got map[string]any
+	if err := json.Unmarshal([]byte(reply.reportJSON()), &got); err != nil {
+		t.Fatalf("reportJSON is not valid JSON: %v", err)
+	}
+	if got["project"] != "control-plane" {
+		t.Errorf("report body altered in transit: %v", got)
+	}
+}
+
+// An absent report renders as empty, not the literal "null", so a caller
+// checking for emptiness does not have to special-case JSON's null.
+func TestForgeReportReplyRendersAbsentReportAsEmpty(t *testing.T) {
+	for name, wire := range map[string]string{
+		"omitted": `{"is_forge_project": false}`,
+		"null":    `{"is_forge_project": false, "report": null}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var reply forgeReportReply
+			if err := json.Unmarshal([]byte(wire), &reply); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got := reply.reportJSON(); got != "" {
+				t.Errorf("reportJSON() = %q, want empty", got)
+			}
+		})
+	}
 }

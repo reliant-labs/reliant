@@ -40,7 +40,15 @@ func deployReply(t *testing.T, report string, extra map[string]any) []byte {
 		"exit_code":        0,
 	}
 	if report != "" {
-		env["report"] = report
+		// RawMessage, not a Go string. `env["report"] = report` marshals the
+		// document as a JSON STRING, which the real daemon never sends — it
+		// sends an OBJECT (daemonruntime.forgeReportResponse.Report is
+		// json.RawMessage). That fixture bug is why a `string` field on
+		// forgeReportReply passed every test here and then failed against a
+		// live daemon with "cannot unmarshal object into Go struct field
+		// forgeReportReply.report of type string", which surfaced as the
+		// forge UI silently not appearing.
+		env["report"] = json.RawMessage(report)
 	}
 	for k, v := range extra {
 		env[k] = v
@@ -574,7 +582,7 @@ func TestForgeService_GetDeployStatus_RolloutStatesSurviveVerbatim(t *testing.T)
 			env := map[string]any{
 				"is_forge_project": true, "supported": true,
 				"forge_version": "v0.1.15", "exit_code": 1,
-				"report": report,
+				"report": json.RawMessage(report),
 				"handle": "deploy-7f3a", "env": "prod",
 				"job_status":  "completed",
 				"started_at":  "2026-07-01T00:25:15Z",

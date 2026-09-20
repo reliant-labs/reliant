@@ -34,7 +34,9 @@ func promoteReply(t *testing.T, report string, refusal map[string]any) []byte {
 		"exit_code":        0,
 	}
 	if report != "" {
-		env["report"] = report
+		// RawMessage: the real daemon sends the report as an OBJECT, never as
+		// a JSON string. See deployReply in forge_deploy_test.go.
+		env["report"] = json.RawMessage(report)
 	}
 	if refusal != nil {
 		env["promote_refused"] = refusal
