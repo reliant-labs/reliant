@@ -14,6 +14,7 @@
  * legible ("AI access ready / your machine couldn't start") instead of a
  * blank wait.
  */
+import { useEffect, useRef } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { DaemonConnectingGate } from "./DaemonConnectingGate";
@@ -77,19 +78,33 @@ export function ProvisioningGate({
   const waitingOnMachine =
     daemonTask?.status === "complete" && Boolean(commit.daemonId);
 
-  // A commit that asked for nothing has nothing to show. Skipping straight
-  // through is correct — the local + own-key path should not be made to watch
-  // a checklist of work that did not happen.
-  if (visibleTasks.length === 0) {
+  // A commit that asked for nothing has nothing to show, and nothing to ask.
+  // The local + own-key path should neither watch a checklist of work that did
+  // not happen nor click Continue on an otherwise empty card — the user made
+  // their last real choice on the step behind this one, so leaving is the only
+  // thing this render can mean.
+  //
+  // Exiting is a navigation, so it cannot happen during render, and it must
+  // happen exactly once: `onContinue` is a new identity on most parent renders,
+  // so a plain dependency array would fire it again on every one of them.
+  const nothingToDo = visibleTasks.length === 0;
+  const autoContinuedRef = useRef(false);
+  useEffect(() => {
+    if (!nothingToDo || autoContinuedRef.current) return;
+    autoContinuedRef.current = true;
+    onContinue();
+  }, [nothingToDo, onContinue]);
+
+  if (nothingToDo) {
+    // One frame at most, but never a blank card: an exit that stalls should
+    // look like a wait rather than like a broken step.
     return (
-      <div data-testid="provisioning-gate-nothing-to-do">
-        <button
-          type="button"
-          onClick={onContinue}
-          className="w-full rounded-lg bg-primary py-3 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
-        >
-          Continue
-        </button>
+      <div
+        className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground"
+        data-testid="provisioning-gate-nothing-to-do"
+      >
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Finishing up…
       </div>
     );
   }
