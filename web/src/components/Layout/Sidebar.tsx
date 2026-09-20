@@ -40,7 +40,6 @@ import {
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChatList, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
-import { useForgeProject } from "../../hooks/useForgeProject";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
@@ -612,20 +611,25 @@ function SidebarComponent({
 }: SidebarProps) {
   const currentProject = useProjectStore((state) => state.currentProject);
   const { data: chats = [] } = useChatList(currentProject?.id);
-  // TWO independent conditions, both required.
+  // ONE condition: the experimental gate. While the forge UI is unreleased this
+  // is off in a packaged build, so the entry does not exist for anyone who has
+  // not opted in.
   //
-  // 1. The experimental gate. While the forge UI is unreleased this is off in a
-  //    packaged build, so the entry does not exist for anyone who has not opted
-  //    in. Checked FIRST and passed down to the hook so a disabled feature makes
-  //    no RPC at all — a hidden entry that still polls the daemon every render
-  //    is not actually off.
-  // 2. The project genuinely being a forge project, per the daemon's LIVE
-  //    forge.yaml check — NOT Project.is_forge, which is written at create time
-  //    and never recomputed, so it reads false for control-plane despite its
-  //    forge.yaml existing. See useForgeProject.
-  const forgeUIEnabled = isForgeUIEnabled();
-  const { isForgeProject } = useForgeProject(forgeUIEnabled ? currentProject?.id : undefined);
-  const showForgeEntry = forgeUIEnabled && isForgeProject;
+  // IT IS DELIBERATELY NOT ALSO GATED ON THE PROJECT BEING A FORGE PROJECT,
+  // and that is a reversal. Forge is a top-level feature, so the entry sits
+  // beside New chat / Projects / Workflows and stays PUT — a nav item that
+  // appears and disappears as you switch projects is harder to learn than one
+  // that is always there, and "is this a forge project?" is a question the
+  // destination can answer better than the nav can. Clicking it in a non-forge
+  // project lands on ForgeStates' NotForgeProject screen, which says so
+  // plainly.
+  //
+  // It also removes a failure mode that actually bit us: the old gate required
+  // a LIVE GetTopology call to succeed, so when that RPC broke (a report-type
+  // mismatch, fixed separately) the whole feature silently vanished with
+  // nothing in the UI to say why. A nav entry whose visibility depends on an
+  // RPC is a nav entry that can be deleted by a bug.
+  const showForgeEntry = isForgeUIEnabled();
   // Focus target for the "focus the chat list" shortcut. The list has no
   // single natural control to focus, so the pane container takes it and
   // ordinary tab-order takes over from there.
@@ -1417,6 +1421,14 @@ function SidebarComponent({
             onClick={handleNewChat}
             testId="create-chat-button"
           />
+          {showForgeEntry && (
+            <SidebarNavButton
+              icon={<Boxes className="h-4 w-4" />}
+              label="Forge"
+              onClick={onOpenForge}
+              testId="sidebar-forge-button"
+            />
+          )}
           <SidebarNavButton
             icon={<FolderOpen className="h-4 w-4" />}
             label="Projects"
@@ -1433,14 +1445,6 @@ function SidebarComponent({
             label="Search"
             onClick={onOpenChatSearch}
           />
-          {showForgeEntry && (
-            <SidebarNavButton
-              icon={<Boxes className="h-4 w-4" />}
-              label="Forge"
-              onClick={onOpenForge}
-              testId="sidebar-forge-button"
-            />
-          )}
         </nav>
       </div>
 

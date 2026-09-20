@@ -1,19 +1,25 @@
 /**
- * The Forge sidebar entry is gated on a LIVE forge.yaml check, never on
- * `Project.is_forge`.
+ * The Forge sidebar entry is gated on the EXPERIMENTAL FLAG ONLY — never on
+ * whether the current project is a forge project.
  *
- * WHY THIS TEST EXISTS. `Project.is_forge` is populated at clone /
- * project-create time and never recomputed on read (the proto field comment says
- * so). Verified against the real dev database: the `control-plane` project row
- * carries is_forge = false while control-plane/forge.yaml exists on disk. So
- * gating the nav entry on that column would hide the forge screens from the very
- * project they were built against — and the failure is SILENT, because a missing
- * nav entry is indistinguishable from a feature nobody built.
+ * WHY IT IS NOT ALSO GATED ON THE PROJECT. Forge is a top-level feature, so
+ * the entry sits beside New chat / Projects / Workflows and stays PUT. A nav
+ * item that appears and disappears as you switch projects is harder to learn
+ * than one that is always there, and "is this a forge project?" is a question
+ * the destination answers better than the nav can: clicking it in an ordinary
+ * project lands on the NotForgeProject screen, which says so in words.
  *
- * The authority is `ForgeReportMeta.isForgeProject`, which the daemon derives by
- * statting forge.yaml at request time, surfaced through useForgeProject. These
- * cases pin that the entry follows the live answer and, specifically, that a
- * stale-false `is_forge` on the project row does NOT suppress it.
+ * It also removes a failure mode that actually shipped. The old gate required
+ * a LIVE GetTopology call to succeed, so when that RPC broke on a report-type
+ * mismatch the entire feature silently vanished — a missing nav entry is
+ * indistinguishable from a feature nobody built, and nothing in the UI said
+ * otherwise. A nav entry whose visibility depends on an RPC is a nav entry
+ * that a bug can delete.
+ *
+ * `Project.is_forge` is irrelevant here now, and these cases pin that: it is
+ * populated at create time and never recomputed (control-plane's row carries
+ * is_forge=false while its forge.yaml exists), so neither value may affect
+ * the entry either way.
  */
 import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -57,14 +63,6 @@ vi.mock("../../hooks/message-queries", () => ({
 
 // The gate under test. Mocked at the hook boundary so each case can state the
 // LIVE verdict directly, which is the thing the entry must follow.
-const forgeGate = vi.hoisted(() => ({
-  value: { isForgeProject: false, isDetermined: false },
-}));
-
-vi.mock("../../hooks/useForgeProject", () => ({
-  useForgeProject: () => forgeGate.value,
-}));
-
 // The EXPERIMENTAL gate, independent of the is-this-a-forge-project question.
 // Mocked separately because the two conditions are independent and the entry
 // requires BOTH — a test that could only vary one of them would pass while the
@@ -88,7 +86,6 @@ function renderSidebar() {
 describe("Sidebar forge nav entry", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    forgeGate.value = { isForgeProject: false, isDetermined: false };
     experimentalGate.enabled = true;
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
@@ -149,88 +146,48 @@ describe("Sidebar forge nav entry", () => {
     } as unknown as Partial<ReturnType<typeof useProjectStore.getState>>);
   }
 
-  it("shows the entry when the daemon confirms a forge project", () => {
+  it("shows the entry whenever the experimental flag is on", () => {
     setProject(true);
-    forgeGate.value = { isForgeProject: true, isDetermined: true };
-
     renderSidebar();
-
     expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
   });
 
-  it("hides the entry for an ordinary non-forge project", () => {
+  // THE REVERSAL. An ordinary project still gets the entry; the destination
+  // explains itself rather than the nav hiding the feature.
+  it("shows the entry for a project that is NOT a forge project", () => {
     setProject(false);
-    forgeGate.value = { isForgeProject: false, isDetermined: true };
-
     renderSidebar();
-
-    expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
-  });
-
-  /**
-   * THE REGRESSION THIS FILE IS FOR. control-plane's row says is_forge = false
-   * while forge.yaml exists, so the live check says yes. The entry must follow
-   * the live check. A future change that reads Project.is_forge to decide fails
-   * here.
-   */
-  it("shows the entry when the row's is_forge is stale-false but forge.yaml exists", () => {
-    setProject(false);
-    forgeGate.value = { isForgeProject: true, isDetermined: true };
-
-    renderSidebar();
-
     expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
   });
 
-  /**
-   * The inverse skew: a row claiming is_forge = true for a project whose
-   * forge.yaml is gone (deleted, or a path that moved). Trusting the column here
-   * would offer screens with nothing behind them.
-   */
-  it("hides the entry when the row claims is_forge but forge.yaml is absent", () => {
-    setProject(true);
-    forgeGate.value = { isForgeProject: false, isDetermined: true };
-
+  // is_forge is stale by construction — populated at create time, never
+  // recomputed — so neither value may move the entry.
+  it.each([true, false])("ignores Project.is_forge = %s", (isForge) => {
+    setProject(isForge);
     renderSidebar();
-
-    expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
+    expect(screen.getByTestId("sidebar-forge-button")).toBeInTheDocument();
   });
 
-  it("does not show the entry before the live answer arrives", () => {
-    setProject(true);
-    forgeGate.value = { isForgeProject: false, isDetermined: false };
-
-    renderSidebar();
-
-    expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
-  });
-
-  /**
-   * THE EXPERIMENTAL GATE. While the forge UI is unreleased it is off in a
-   * packaged build, and then the entry must not exist EVEN FOR a confirmed forge
-   * project — the strongest possible "yes" on the other condition.
-   *
-   * This is the case that would regress if someone removed the gate from the
-   * sidebar and relied on the route guard alone: the nav entry would reappear
-   * for every forge project in a shipped build.
-   */
-  it("hides the entry when the experimental gate is off, even for a forge project", () => {
-    setProject(true);
-    forgeGate.value = { isForgeProject: true, isDetermined: true };
+  // The flag is the ONLY gate, so turning it off must remove the entry
+  // completely — a packaged build with no opt-in behaves as it did before the
+  // feature existed.
+  it("hides the entry when the experimental gate is off", () => {
     experimentalGate.enabled = false;
-
+    setProject(true);
     renderSidebar();
-
     expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
   });
 
-  it("requires BOTH gates — the experimental one alone is not enough", () => {
-    setProject(false);
-    forgeGate.value = { isForgeProject: false, isDetermined: true };
-    experimentalGate.enabled = true;
-
+  // Forge is promoted, so it sits directly under New chat and ABOVE Projects.
+  // Pinned because the position is the product decision, not an accident of
+  // where the JSX was appended.
+  it("sits between New chat and Projects", () => {
+    setProject(true);
     renderSidebar();
-
-    expect(screen.queryByTestId("sidebar-forge-button")).not.toBeInTheDocument();
+    const labels = screen
+      .getByRole("navigation", { name: /chat sidebar navigation/i })
+      .querySelectorAll("button");
+    const text = Array.from(labels).map((b) => b.textContent?.trim());
+    expect(text.slice(0, 3)).toEqual(["New chat", "Forge", "Projects"]);
   });
 });
