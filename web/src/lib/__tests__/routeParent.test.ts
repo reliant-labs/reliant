@@ -45,6 +45,32 @@ describe("getParentRouteNavigateOptions", () => {
     });
   });
 
+  // The three forge paths are peer tabs of one surface, not a hub and its
+  // children, so closing any of them leaves forge entirely. Pinned explicitly:
+  // the fallback would give the same answer today, and a future /forge hub route
+  // must not silently turn "close" into a redirect back into forge.
+  it("returns / as parent of every forge tab", () => {
+    expect(getParentRouteNavigateOptions("/forge/topology")).toEqual({
+      to: "/",
+      search: {},
+    });
+    expect(getParentRouteNavigateOptions("/forge/status")).toEqual({
+      to: "/",
+      search: {},
+    });
+    expect(getParentRouteNavigateOptions("/forge/secrets")).toEqual({
+      to: "/",
+      search: {},
+    });
+  });
+
+  it("returns / as parent of a bare /forge", () => {
+    expect(getParentRouteNavigateOptions("/forge")).toEqual({
+      to: "/",
+      search: {},
+    });
+  });
+
   it("returns / for unknown routes", () => {
     expect(getParentRouteNavigateOptions("/")).toEqual({ to: "/", search: {} });
     expect(getParentRouteNavigateOptions("/anything/else")).toEqual({

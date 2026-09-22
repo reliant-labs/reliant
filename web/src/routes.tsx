@@ -4,6 +4,7 @@ import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
 import { isForgeUIEnabled } from './lib/forgeFeature'
+import { getIsDev } from './lib/constants'
 import {
   authSearchSchema,
   githubOAuthCallbackSearchSchema,
@@ -12,6 +13,8 @@ import {
   oauthCallbackSearchSchema,
   onboardingSearchSchema,
   proxyAuthSearchSchema,
+  forgeEnvSearchSchema,
+  forgeTopologySearchSchema,
   settingsParamsSchema,
   settingsSearchSchema,
   upgradeSearchSchema,
@@ -57,6 +60,15 @@ const UpgradeAccount = lazyRouteComponent(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
 const DesignSandboxPage = lazyRouteComponent(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
+// Proving harness for the forge → reliant token bridge (see index.css).
+const ForgeTokenSandbox = lazyRouteComponent(
+  () => import('./components/forge-ui/ForgeTokenSandbox'), 'default')
+// Proving harness for the cluster-workload inventory, rendering REAL captured
+// `forge env status --json` output in every color scheme without a session.
+const WorkloadInventoryPreview = lazyRouteComponent(
+  () => import('./components/Forge/Environments/__preview__/WorkloadInventoryPreview'), 'default')
+const SecretsPreview = lazyRouteComponent(
+  () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
 const SettingsPage = lazyRouteComponent(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRouteComponent(
@@ -93,8 +105,12 @@ const MobileWorkflowDetailRoute = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileWorkflowDetailRoute')
 const MobileChatWorkflowRoute = lazyRouteComponent(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
+const ForgeLayout = lazyRouteComponent(
+  () => import('./components/Forge/ForgeLayout'), 'ForgeLayout')
 const ForgeTopologyPage = lazyRouteComponent(
   () => import('./components/Forge/ForgeTopologyPage'), 'ForgeTopologyPage')
+const ForgeEnvironmentsPage = lazyRouteComponent(
+  () => import('./components/Forge/Environments/ForgeEnvironmentsPage'), 'ForgeEnvironmentsPage')
 const ForgeStatusPage = lazyRouteComponent(
   () => import('./components/Forge/Status/ForgeStatusPage'), 'ForgeStatusPage')
 const ForgeSecretsPage = lazyRouteComponent(
@@ -347,6 +363,52 @@ const designSandboxRoute = createRoute({
   component: DesignSandboxPage,
 })
 
+// Both forge preview routes below are UNAUTHENTICATED but DEV-BUILD ONLY.
+//
+// Unauthenticated because the bugs these screens fix were VISUAL: they have to
+// be lookable-at in every color scheme without standing up a session, which is
+// exactly what made them useful during the rebuild.
+//
+// Dev-only because the workloads preview embeds a CAPTURED PRODUCTION REPORT —
+// real workload names, the real GKE context and the real namespace
+// (gke_reliant-labs-475814_us-central1_prod / control-plane-prod). No secrets
+// and no credentials, but it is our infrastructure topology, and an
+// unauthenticated route on rootRoute is reachable in a packaged build by
+// anyone who types the path. A harness that only ever runs on a developer's
+// machine costs nothing; shipping our cluster coordinates to every install is
+// not a trade worth making for a debugging convenience.
+//
+// getIsDev() is read at render, never snapshot at module scope, matching
+// ForgeGate. In a packaged build these fall through to rootRoute's
+// notFoundComponent and behave exactly as if they were never written.
+function DevOnlyRoute({ children }: { children: React.ReactNode }) {
+  if (!getIsDev()) return <Navigate to="/" search={{}} />
+  return <>{children}</>
+}
+
+const forgeTokenSandboxRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-token-sandbox',
+  component: () => <DevOnlyRoute><ForgeTokenSandbox /></DevOnlyRoute>,
+})
+
+const forgeWorkloadsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-workloads-preview',
+  component: () => <DevOnlyRoute><WorkloadInventoryPreview /></DevOnlyRoute>,
+})
+
+// The secrets surface, against fabricated store states. Same reasoning as the
+// workloads preview: the complaint it answers was visual, so it has to be
+// LOOKED at in every scheme, and the states that are easiest to get wrong
+// (destroyed, soft-deleted, declared-but-never-set) are the hardest to
+// reproduce on demand against a live OpenBao.
+const forgeSecretsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-secrets-preview',
+  component: () => <DevOnlyRoute><SecretsPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -437,33 +499,72 @@ function ForgeGate({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-// The forge release/environment topology for the currently-selected project.
-// It reads projectStore.currentProject rather than taking a param, so it is
-// scoped by the same selection the rest of the app uses and needs no id in the
-// URL. Sits under authenticatedLayoutRoute because the RPCs it makes are
-// per-user and resolve the project against the caller's ownership.
-const forgeTopologyRoute = createRoute({
+// Pathless layout route owning the forge surface's chrome, tabs and project
+// resolution. See components/Forge/ForgeLayout.tsx for the full reasoning; the
+// short version is that all three screens sit under `_authenticated`, which
+// renders NO app chrome, so without a layout of their own they had no header,
+// no exit and no way to resolve a project on a cold load. /settings and
+// /workflow each solve the same problem by rendering their own header; forge
+// has three screens rather than one, so the header belongs on a shared parent.
+//
+// The gate stays on each CHILD rather than moving here, so that every forge
+// route carries it independently — see the ForgeGate comment above.
+const forgeLayoutRoute = createRoute({
   getParentRoute: () => authenticatedLayoutRoute,
+  id: '_forge',
+  component: ForgeLayout,
+})
+
+// `/forge` alone is not a screen — it is what a user types or bookmarks when
+// they mean "the forge UI". Send them to the topology, which is the entry point
+// the sidebar already uses.
+const forgeIndexRedirectRoute = createRoute({
+  getParentRoute: () => forgeLayoutRoute,
+  path: '/forge',
+  component: () => <Navigate to="/forge/topology" search={{}} />,
+})
+
+// The forge release/environment topology. `project` is in the URL so a refresh
+// or a pasted link can resolve the project without ModernApp, which never mounts
+// on these routes — that was the dead-end refresh bug. Sits under
+// authenticatedLayoutRoute because the RPCs it makes are per-user and resolve
+// the project against the caller's ownership.
+const forgeTopologyRoute = createRoute({
+  getParentRoute: () => forgeLayoutRoute,
   path: '/forge/topology',
+  validateSearch: forgeTopologySearchSchema,
   component: () => <ForgeGate><ForgeTopologyPage /></ForgeGate>,
 })
 
-// The forge env-runtime checks and project-audit strip, both read-only. Same
-// project resolution as the topology route above (projectStore.currentProject,
-// no id in the URL) for the same reason: the RPCs are per-user and resolve the
-// project against the caller's ownership on the daemon side.
+// Per-environment identity: cluster context, namespace, current release. Reads
+// the same topology report the Releases matrix does, through the same cached
+// query, so the two can never disagree about which environments exist. `env` is
+// in the schema so the sidebar can carry a selection here and back without the
+// param being stripped on the way through.
+const forgeEnvironmentsRoute = createRoute({
+  getParentRoute: () => forgeLayoutRoute,
+  path: '/forge/environments',
+  validateSearch: forgeEnvSearchSchema,
+  component: () => <ForgeGate><ForgeEnvironmentsPage /></ForgeGate>,
+})
+
+// The forge env-runtime checks and project-audit strip, both read-only. `env` is
+// a search param so a topology row can link straight into one environment's
+// checks, and so the selection survives a refresh.
 const forgeStatusRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
+  getParentRoute: () => forgeLayoutRoute,
   path: '/forge/status',
+  validateSearch: forgeEnvSearchSchema,
   component: () => <ForgeGate><ForgeStatusPage /></ForgeGate>,
 })
 
-// Per-environment secret PRESENCE for the currently-selected project. Read-only,
-// and structurally incapable of showing a value — see Secrets/SecretRow.tsx.
-// Scoped like the topology route: no id in the URL, ownership enforced server-side.
+// Per-environment secret PRESENCE. Read-only, and structurally incapable of
+// showing a value — see Secrets/SecretRow.tsx. Same params as the status route,
+// for the same reasons.
 const forgeSecretsRoute = createRoute({
-  getParentRoute: () => authenticatedLayoutRoute,
+  getParentRoute: () => forgeLayoutRoute,
   path: '/forge/secrets',
+  validateSearch: forgeEnvSearchSchema,
   component: () => <ForgeGate><ForgeSecretsPage /></ForgeGate>,
 })
 
@@ -608,6 +709,9 @@ const routeTree = rootRoute.addChildren([
   verifyEmailRoute,
   upgradeRoute,
   designSandboxRoute,
+  forgeTokenSandboxRoute,
+  forgeWorkloadsPreviewRoute,
+  forgeSecretsPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([
@@ -627,9 +731,13 @@ const routeTree = rootRoute.addChildren([
       mobileGitHubRoute,
     ]),
     onboardingRoute,
-    forgeTopologyRoute,
-    forgeSecretsRoute,
-    forgeStatusRoute,
+    forgeLayoutRoute.addChildren([
+      forgeIndexRedirectRoute,
+      forgeEnvironmentsRoute,
+      forgeTopologyRoute,
+      forgeSecretsRoute,
+      forgeStatusRoute,
+    ]),
     settingsRoute,
     connectorConsentRoute,
     settingsSectionRoute,

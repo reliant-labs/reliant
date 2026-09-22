@@ -10,7 +10,16 @@
  *   /workflow/$workflowName → /workflow
  *   /workflow               → /
  *   /settings, /settings/*  → /
+ *   /forge, /forge/*        → /
  *   anything else           → /
+ *
+ * Forge is flat for the same reason settings is, but arrived at differently:
+ * /forge/topology, /forge/status and /forge/secrets are peer TABS of one
+ * surface, not a hub and its children, so there is no intermediate view to step
+ * back to. Treating /forge as a parent would make closing a tab land on a bare
+ * /forge, which only redirects to topology — a close that visibly does nothing.
+ * These cases are written out rather than left to the fallback because the
+ * fallback's answer being correct here is a coincidence worth pinning.
  *
  * Settings is deliberately flat. Unlike /workflow, which is a distinct hub
  * view, /settings and /settings/$section render the same SettingsPage — the
@@ -33,6 +42,9 @@ export function getParentRouteNavigateOptions(
     return { to: "/workflow" };
   }
   if (pathname === "/workflow") {
+    return { to: "/", search: {} };
+  }
+  if (pathname === "/forge" || pathname.startsWith("/forge/")) {
     return { to: "/", search: {} };
   }
   return { to: "/", search: {} };

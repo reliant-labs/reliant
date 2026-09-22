@@ -23,9 +23,24 @@
  *
  * Read-only by construction: it never offers to re-run a check or restart a
  * service. It reports.
+ *
+ * LAYOUT. Two standard surfaces — checks, then services — each a `Card` holding
+ * a real `<table>` with a real `<thead>`. Every fact has its own column, so a
+ * reader can scan one column down the page instead of re-parsing a differently
+ * shaped flex row each time. The env picker is NOT here: the forge layout
+ * renders shared EnvTabs above this panel, and the `env` prop is what this
+ * component is told to report on.
+ *
+ * SURFACES. The page is `bg-background`; each Card is `bg-card` + `border-border`;
+ * anything inset inside a card (the evidence block in CheckRow) is
+ * `bg-background` + `border-border/60`. Cards are never nested, and `bg-muted`
+ * is never used for structure — `--muted` inverts direction between light and
+ * dark across the seven schemes in themes/professional-themes.css, so a
+ * muted-backed panel recesses in one mode and lifts in the other.
  */
 
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui";
 import type { ForgeOutcome } from "@/services/forge/topology";
 import {
   checksOf,
@@ -80,6 +95,9 @@ const VERDICT_LABELS: Record<EnvStatusVerdict, string> = {
   "no-checks": "Nothing measured",
 };
 
+/** Shared column-header treatment, so both tables on the screen read alike. */
+const TH = "px-4 py-2 text-left text-xs font-medium text-muted-foreground";
+
 export function EnvStatusPanel({
   outcome,
   isLoading,
@@ -89,23 +107,29 @@ export function EnvStatusPanel({
 }: EnvStatusPanelProps) {
   if (isLoading && !outcome) {
     return (
-      <div
+      <Card
         data-testid="forge-status-loading"
-        className="mx-auto max-w-lg rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground"
+        variant="outlined"
+        size="lg"
+        hover={false}
+        className="border border-dashed border-border text-center text-sm text-muted-foreground"
       >
-        Running runtime checks for {env}…
-      </div>
+        Running runtime checks for <span className="font-mono">{env}</span>…
+      </Card>
     );
   }
 
   if (error && !outcome) {
     return (
-      <div
+      <Card
         data-testid="forge-status-error"
-        className="mx-auto max-w-lg rounded-lg border border-destructive/40 bg-destructive/10 px-6 py-12 text-center text-sm text-destructive"
+        variant="outlined"
+        size="lg"
+        hover={false}
+        className="border border-destructive/40 bg-destructive/10 text-center text-sm text-destructive"
       >
         Could not reach your daemon to run forge&apos;s runtime checks: {error.message}
-      </div>
+      </Card>
     );
   }
 
@@ -124,10 +148,12 @@ export function EnvStatusPanel({
 
   return (
     <div className="space-y-4" data-testid="forge-env-status">
-      <header className="space-y-2">
+      <header className="space-y-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="text-lg font-medium text-foreground">Runtime checks</h1>
-          <span className="font-mono text-xs text-muted-foreground">env {reportEnv}</span>
+          {/* Prose heading, so it is not monospaced. The env name beside it IS
+              an identifier and keeps the mono face. */}
+          <h1 className="text-base font-semibold text-foreground">Runtime checks</h1>
+          <span className="font-mono text-sm text-muted-foreground">{reportEnv}</span>
           {report.head_commit_at && (
             <span className="text-xs text-muted-foreground">
               measured against HEAD at {report.head_commit_at}
@@ -155,25 +181,55 @@ export function EnvStatusPanel({
       </header>
 
       {checks.length === 0 ? (
-        <div
+        <Card
           data-testid="forge-status-no-checks"
-          className="rounded-lg border border-dashed border-border px-6 py-10 text-center text-sm text-muted-foreground"
+          variant="outlined"
+          size="lg"
+          hover={false}
+          className="border border-dashed border-border text-center text-sm text-muted-foreground"
         >
-          Forge returned no runtime checks for {reportEnv}. Nothing here has been measured — this is
-          not a statement that the environment is healthy.
-        </div>
+          Forge returned no runtime checks for <span className="font-mono">{reportEnv}</span>.
+          Nothing here has been measured — this is not a statement that the environment is healthy.
+        </Card>
       ) : (
-        <>
+        <div className="space-y-3">
           <DispositionLegend report={report} />
-          <ul
-            data-testid="forge-status-checks"
-            className="overflow-hidden rounded-lg border border-border"
+
+          <Card
+            variant="default"
+            size="sm"
+            hover={false}
+            // `elevation-1` IS the card surface (--surface-raised maps to
+            // --card); a second bg-* class here would just race it.
+            className="overflow-hidden border-border p-0"
           >
-            {checks.map((check) => (
-              <CheckRow key={check.name} check={check} />
-            ))}
-          </ul>
-        </>
+            <table className="w-full border-collapse text-left">
+              <thead>
+                <tr className="border-b border-border">
+                  <th scope="col" className={TH}>
+                    Result
+                  </th>
+                  <th scope="col" className={TH}>
+                    Check
+                  </th>
+                  <th scope="col" className={TH}>
+                    Detail
+                  </th>
+                  <th scope="col" className={cn(TH, "text-right")}>
+                    Took
+                  </th>
+                </tr>
+              </thead>
+              {/* The testid stays on the row container, so the contract test's
+                  "every check is rendered" count still reads check rows. */}
+              <tbody data-testid="forge-status-checks">
+                {checks.map((check) => (
+                  <CheckRow key={check.name} check={check} />
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
       )}
 
       {report.services && report.services.length > 0 && (
@@ -192,6 +248,12 @@ export function EnvStatusPanel({
  * WHICH command is duplicated because it could not read argv — the same
  * "undetermined is not a no" rule as the checks above, so it is surfaced rather
  * than silently rendering as "no duplicates".
+ *
+ * Those three flags share one right-hand "Notes" column rather than getting a
+ * column each: they are sparse, so a column per flag would be almost entirely
+ * empty cells. They keep their individual treatments — the two measured warnings
+ * solid, `attribution undetermined` dashed and ringed — which is what carries
+ * the distinction, not their position.
  */
 function ServiceSummary({
   services,
@@ -201,58 +263,107 @@ function ServiceSummary({
   return (
     <section className="space-y-2" data-testid="forge-status-services">
       <h2 className="text-sm font-medium text-foreground">Services forge resolved</h2>
-      <ul className="overflow-hidden rounded-lg border border-border">
-        {services.map((service, index) => {
-          const name = service.name || `Service ${index + 1}`;
-          const stale = (service.serving ?? []).some((proc) => proc.stale === true);
-          return (
-            <li
-              key={name}
-              data-testid={`forge-status-service-${name}`}
-              className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-3 py-2 text-xs last:border-b-0"
-            >
-              <span
-                // Listening is a point-in-time port probe, so it is a measured
-                // fact and gets a solid treatment either way.
-                className={cn(
-                  "inline-flex shrink-0 items-center rounded-md border border-solid px-2 py-0.5 font-mono",
-                  service.listening
-                    ? "border-success/40 bg-success/15 text-success"
-                    : "border-destructive/40 bg-destructive/15 text-destructive"
-                )}
-              >
-                {service.listening ? "listening" : "down"}
-              </span>
-              <span className="min-w-0 flex-1 truncate text-foreground">{name}</span>
-              {service.kind && (
-                <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-                  {service.kind}
-                </span>
-              )}
-              {typeof service.port === "number" && service.port > 0 && (
-                <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-                  :{service.port}
-                </span>
-              )}
-              {stale && (
-                <span className="shrink-0 rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 font-mono text-2xs text-warning">
-                  stale build
-                </span>
-              )}
-              {service.duplicate && (
-                <span className="shrink-0 rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 font-mono text-2xs text-warning">
-                  duplicate process
-                </span>
-              )}
-              {service.attribution_undetermined && (
-                <span className="shrink-0 rounded-md border border-dashed border-muted-foreground/60 px-2 py-0.5 font-mono text-2xs text-muted-foreground ring-1 ring-inset ring-muted-foreground/30">
-                  attribution undetermined
-                </span>
-              )}
-            </li>
-          );
-        })}
-      </ul>
+
+      <Card
+        variant="default"
+        size="sm"
+        hover={false}
+        className="overflow-hidden border-border p-0"
+      >
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border">
+              <th scope="col" className={TH}>
+                State
+              </th>
+              <th scope="col" className={TH}>
+                Service
+              </th>
+              <th scope="col" className={TH}>
+                Kind
+              </th>
+              <th scope="col" className={cn(TH, "text-right")}>
+                Port
+              </th>
+              <th scope="col" className={cn(TH, "text-right")}>
+                Notes
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {services.map((service, index) => {
+              const name = service.name || `Service ${index + 1}`;
+              const stale = (service.serving ?? []).some((proc) => proc.stale === true);
+              const hasNote = stale || service.duplicate || service.attribution_undetermined;
+              return (
+                <tr
+                  key={name}
+                  data-testid={`forge-status-service-${name}`}
+                  className="border-b border-border/60 last:border-b-0"
+                >
+                  <td className="whitespace-nowrap px-4 py-2 align-middle">
+                    <span
+                      // Listening is a point-in-time port probe, so it is a
+                      // measured fact and gets a solid treatment either way.
+                      className={cn(
+                        "inline-flex items-center rounded-md border border-solid px-2 py-0.5 text-xs",
+                        service.listening
+                          ? "border-success/40 bg-success/15 text-success"
+                          : "border-destructive/40 bg-destructive/15 text-destructive"
+                      )}
+                    >
+                      {service.listening ? "Listening" : "Down"}
+                    </span>
+                  </td>
+
+                  {/* A service name is an identifier, so it stays mono. */}
+                  <td className="px-4 py-2 align-middle font-mono text-sm text-foreground">
+                    {name}
+                  </td>
+
+                  <td className="whitespace-nowrap px-4 py-2 align-middle text-sm text-muted-foreground">
+                    {service.kind || <span aria-hidden="true">—</span>}
+                  </td>
+
+                  <td className="whitespace-nowrap px-4 py-2 text-right align-middle font-mono text-sm tabular-nums text-muted-foreground">
+                    {typeof service.port === "number" && service.port > 0 ? (
+                      service.port
+                    ) : (
+                      <span aria-hidden="true">—</span>
+                    )}
+                  </td>
+
+                  <td className="px-4 py-2 text-right align-middle">
+                    {hasNote ? (
+                      <div className="flex flex-wrap justify-end gap-1">
+                        {stale && (
+                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning">
+                            Stale build
+                          </span>
+                        )}
+                        {service.duplicate && (
+                          <span className="rounded-md border border-solid border-warning/40 bg-warning/15 px-2 py-0.5 text-xs text-warning">
+                            Duplicate process
+                          </span>
+                        )}
+                        {service.attribution_undetermined && (
+                          <span className="rounded-md border border-dashed border-muted-foreground/60 px-2 py-0.5 text-xs text-muted-foreground ring-1 ring-inset ring-muted-foreground/30">
+                            Attribution undetermined
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span aria-hidden="true" className="text-xs text-muted-foreground">
+                        —
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </Card>
     </section>
   );
 }

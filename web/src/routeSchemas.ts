@@ -336,6 +336,42 @@ export const mobileNewChatSearchSchema = z.object({
   worktreeId: z.string().optional(),
 });
 
+/**
+ * Search params for the forge screens.
+ *
+ * `project` is a project id, and it is what makes a forge URL survive a refresh.
+ * The forge routes do not mount ModernApp, which is the only thing that resolves
+ * `projectStore.currentProject` on a page load, so before this param existed a
+ * reload of /forge/topology had no way to learn which project it was about and
+ * dead-ended. ForgeLayout reflects the resolved project into this param and
+ * reads it back on the next load. It is a param rather than a path segment to
+ * match the existing three forge paths and to keep it optional — absent means
+ * "resolve it the normal way", not "no project".
+ *
+ * `env` is an environment name, on the two routes that have a per-environment
+ * view. It moved out of component state so that a topology row can link into a
+ * specific environment's status, and so a refresh keeps the selection.
+ */
+export const forgeTopologySearchSchema = z.object({
+  project: z.string().optional(),
+});
+
+export const forgeEnvSearchSchema = z.object({
+  project: z.string().optional(),
+  env: z.string().optional(),
+  /**
+   * `secret` selects one secret's detail view on /forge/secrets, for the same
+   * reason `env` is a param rather than state: a version history is a thing
+   * people link each other to ("look at what happened to DATABASE_URL"), and a
+   * refresh while reading one should not throw you back to the list.
+   *
+   * It is a NAME, never a value — the whole surface is incapable of holding a
+   * value, so there is nothing here that could leak into a URL, a browser
+   * history entry, or a referrer header.
+   */
+  secret: z.string().optional(),
+});
+
 export const onboardingSearchSchema = z.object({
   plan: launchPlanSchema.optional(),
   "reset-onboarding": z.boolean().optional(),

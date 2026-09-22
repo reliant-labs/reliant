@@ -29,6 +29,20 @@ import type { ForgeAuditReport } from "../services/forge/audit";
 import { deployTokenFor, type ForgeDeployReport } from "../services/forge/deploy";
 import { confirmationTokenFor, type ForgePromotePlan } from "../services/forge/promote";
 import type { ForgeSecretsReport } from "../services/forge/secrets";
+import {
+  availabilityFromError,
+  deleteSecret,
+  destroySecret,
+  getSecretVersions,
+  hasControlPlane,
+  listSecrets,
+  setSecret,
+  undeleteSecret,
+  type ManagedSecretHistory,
+  type ManagedSecretSummary,
+  type ManagedStoreAvailability,
+  type SetSecretResult,
+} from "../services/forge/secretStore";
 import type { ForgeEnvStatusReport } from "../services/forge/status";
 import {
   mergeVerifyIntoTopology,
@@ -53,6 +67,10 @@ export const forgeKeys = {
     [...forgeKeys.all, "deploy-plan", projectId, env] as const,
   deployStatus: (projectId: string, handle: string) =>
     [...forgeKeys.all, "deploy-status", projectId, handle] as const,
+  managedSecrets: (projectId: string, env: string) =>
+    [...forgeKeys.all, "managed-secrets", projectId, env] as const,
+  managedSecretVersions: (projectId: string, env: string, name: string) =>
+    [...forgeKeys.all, "managed-secret-versions", projectId, env, name] as const,
 };
 
 // ── Topology ────────────────────────────────────────────────────────────────
@@ -458,5 +476,176 @@ export function useForgeDeployStatus(
       query.state.data && query.state.data.jobStatus !== "running" ? false : 2_000,
     staleTime: 0,
     retry: 1,
+  });
+}
+
+// ── Managed secret store ────────────────────────────────────────────────────
+//
+// These hooks talk to control-plane's SecretStoreService (Connect), not to the
+// daemon. They are a separate axis from useForgeSecrets, which reads forge's
+// own declaration report — see services/forge/secretSurface.ts for why the
+// screen needs both and how they are joined.
+
+/**
+ * useManagedSecrets loads the managed store's metadata for one (project, env).
+ *
+ * A FAILURE HERE IS USUALLY NOT AN ERROR. control-plane answers Unavailable
+ * when no OpenBao is bound, and Unimplemented when the control plane predates
+ * the service; both mean "this deployment has no managed store", which is a
+ * state the screen describes rather than a fault it reports. So the hook
+ * resolves those into an `availability` the caller can render, and only a
+ * genuine transport failure surfaces as `unreachable`.
+ *
+ * `throwOnError: false` is deliberate: react-query's default of treating every
+ * rejection as an error would put a red banner in front of a user whose only
+ * crime is running reliant without a control plane.
+ *
+ * staleTime is short (5s) for the same reason useForgeSecrets uses 5s — this is
+ * the thing the user is actively changing. They set a secret and come straight
+ * back expecting the row to have moved.
+ */
+export function useManagedSecrets(
+  projectId: string | null | undefined,
+  env: string | null | undefined
+) {
+  return useQuery<{ availability: ManagedStoreAvailability; secrets: ManagedSecretSummary[] }>({
+    queryKey: forgeKeys.managedSecrets(projectId ?? "", env ?? ""),
+    queryFn: async () => {
+      if (!hasControlPlane()) {
+        return { availability: "no-control-plane" as const, secrets: [] };
+      }
+      try {
+        return {
+          availability: "available" as const,
+          secrets: await listSecrets(projectId as string, env as string),
+        };
+      } catch (err) {
+        // The error object itself is NOT propagated into the cache or into any
+        // message. Only the classification survives — a Connect error's detail
+        // string is the kind of place a request echo could end up.
+        return { availability: availabilityFromError(err), secrets: [] };
+      }
+    },
+    enabled: !!projectId && !!env,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
+/**
+ * useManagedSecretVersions loads ONE secret's version history.
+ *
+ * Enabled only when a name is selected, so opening the detail panel is what
+ * fetches the history rather than the list page pre-fetching every secret's —
+ * which on a project with fifty secrets would be fifty round trips to render a
+ * table nobody has opened yet.
+ */
+export function useManagedSecretVersions(
+  projectId: string | null | undefined,
+  env: string | null | undefined,
+  name: string | null | undefined
+) {
+  return useQuery<ManagedSecretHistory>({
+    queryKey: forgeKeys.managedSecretVersions(projectId ?? "", env ?? "", name ?? ""),
+    queryFn: () => getSecretVersions(projectId as string, env as string, name as string),
+    enabled: !!projectId && !!env && !!name,
+    staleTime: 5_000,
+    retry: 1,
+  });
+}
+
+/**
+ * Invalidate both managed views for one (project, env).
+ *
+ * Every mutation below calls this rather than writing into the cache directly.
+ * An optimistic cache write would mean this module CONSTRUCTING a summary, and
+ * the only honest source for "what version does this secret have now" is the
+ * store — KV-v2's cas can reject a write, another actor can write between our
+ * read and our write, and a fabricated row would paper over both.
+ */
+function useInvalidateManagedSecrets(
+  projectId: string | null | undefined,
+  env: string | null | undefined
+) {
+  const queryClient = useQueryClient();
+  return useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: forgeKeys.managedSecrets(projectId ?? "", env ?? ""),
+    });
+    // The versions queries are per-name; invalidating the prefix catches
+    // whichever detail panel happens to be open.
+    void queryClient.invalidateQueries({
+      queryKey: [...forgeKeys.all, "managed-secret-versions", projectId ?? "", env ?? ""],
+    });
+    // forge's own declaration report can also move: setting a secret that was
+    // declared-unset changes the row's origin on the next read.
+    void queryClient.invalidateQueries({
+      queryKey: forgeKeys.secrets(projectId ?? "", env ?? ""),
+    });
+  }, [queryClient, projectId, env]);
+}
+
+/**
+ * useSetManagedSecret writes a new version.
+ *
+ * THE VALUE PASSES THROUGH AND IS NOT RETAINED. It is a mutation VARIABLE, so
+ * react-query holds it in `mutation.variables` for the lifetime of the
+ * mutation — which is why the form calls `reset()` after a successful write
+ * rather than leaving it parked in the hook's state. Nothing here logs it, and
+ * the success payload is a version number.
+ */
+export function useSetManagedSecret(
+  projectId: string | null | undefined,
+  env: string | null | undefined
+) {
+  const invalidate = useInvalidateManagedSecrets(projectId, env);
+  return useMutation<SetSecretResult, Error, { name: string; value: string; cas?: number }>({
+    mutationFn: ({ name, value, cas }) =>
+      setSecret({ projectId: projectId as string, env: env as string, name, value, cas }),
+    onSuccess: invalidate,
+  });
+}
+
+/** useDeleteManagedSecret soft-deletes. Recoverable — see useUndeleteManagedSecret. */
+export function useDeleteManagedSecret(
+  projectId: string | null | undefined,
+  env: string | null | undefined
+) {
+  const invalidate = useInvalidateManagedSecrets(projectId, env);
+  return useMutation<void, Error, { name: string; versions?: number[] }>({
+    mutationFn: ({ name, versions }) =>
+      deleteSecret({ projectId: projectId as string, env: env as string, name, versions }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useUndeleteManagedSecret(
+  projectId: string | null | undefined,
+  env: string | null | undefined
+) {
+  const invalidate = useInvalidateManagedSecrets(projectId, env);
+  return useMutation<void, Error, { name: string; versions: number[] }>({
+    mutationFn: ({ name, versions }) =>
+      undeleteSecret({ projectId: projectId as string, env: env as string, name, versions }),
+    onSuccess: invalidate,
+  });
+}
+
+/**
+ * useDestroyManagedSecret permanently destroys versions. IRREVERSIBLE.
+ *
+ * A separate hook against a separate RPC, never a flag on delete — the
+ * distinction is visible at every layer from the Bao path up, and the UI adds a
+ * confirmation on top of that rather than relying on it alone.
+ */
+export function useDestroyManagedSecret(
+  projectId: string | null | undefined,
+  env: string | null | undefined
+) {
+  const invalidate = useInvalidateManagedSecrets(projectId, env);
+  return useMutation<void, Error, { name: string; versions: number[] }>({
+    mutationFn: ({ name, versions }) =>
+      destroySecret({ projectId: projectId as string, env: env as string, name, versions }),
+    onSuccess: invalidate,
   });
 }

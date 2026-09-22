@@ -344,28 +344,55 @@ func invokeForgeReport(ctx context.Context, inv forgeInvocation) ([]byte, error)
 // writes them and because the alternative — enumerating which forge version
 // gained which flag — is a second copy of forge's history that would rot.
 //
-// Verified against the pinned forge v0.1.13 via the reliant binary:
+// Verified against an installed forge v0.1.17:
 //
-//	reliant forge env topology --json  -> stderr "unknown flag: --json", exit 1
-//	reliant forge env topology         -> stderr `unknown command "topology" for "reliant forge env"`, exit 1
+//	forge secret list dev --json  -> stderr "…Error: unknown flag: --json", exit 1
+//	forge env topology --json     -> stderr "…Error: unknown flag: --json", exit 1
+//	forge env nosuchthing         -> stderr `…Error: unknown command "nosuchthing" for "forge env"`, exit 1
 var forgeUnsupportedMarkers = []string{
 	"unknown command",
 	"unknown flag",
 	"unknown shorthand flag",
 }
 
+// cobraErrorPrefix is what cobra puts in front of the complaint on its final
+// stderr line. It is stripped before matching, and stripped from the reason we
+// keep: the UI renders the reason beside the version as forge's own words, and
+// "Error: unknown flag: --json" reads as a second error rather than a cause.
+const cobraErrorPrefix = "error: "
+
 // forgeUnsupportedReason reports whether this outcome is a version-capability
-// miss, and forge's first line of complaint if so.
+// miss, and forge's own complaint if so.
 //
-// Requires stdout to be empty. A forge that emitted a full report and then
-// complained about something on stderr has answered the question, and must not
-// be downgraded to "unsupported" — that would discard a valid report.
+// Two guards keep this from swallowing real failures, and both matter:
+//
+//   - Stdout must be empty. A forge that emitted a full report and then
+//     complained about something on stderr has answered the question, and must
+//     not be downgraded to "unsupported" — that would discard a valid report,
+//     including `secret list`'s exit-1 "a declared secret has no value"
+//     VERDICT, which is data.
+//   - The marker must be ANCHORED at the start of the line, after cobra's
+//     "Error: " prefix is removed. Substring matching would reclassify any
+//     runtime failure that merely mentions a flag — "docker compose up:
+//     unknown flag: --foo" is a broken deploy, not an old forge — and telling
+//     a user to upgrade over that hides the real fault.
+//
+// Anchoring after stripping the prefix is the part that was previously wrong:
+// cobra prints its complaint as the LAST line of a usage dump and prefixes it
+// with "Error: ", so a matcher anchored on the bare marker matched nothing a
+// real binary ever emits, and every too-old forge escaped as a generic exit 1.
 func forgeUnsupportedReason(res forgeCommandResult) (string, bool) {
 	if res.ExitCode == 0 || len(bytes.TrimSpace(res.Stdout)) > 0 {
 		return "", false
 	}
 	for _, line := range strings.Split(string(res.Stderr), "\n") {
 		trimmed := strings.TrimSpace(line)
+		// Strip cobra's prefix case-insensitively while keeping the
+		// original casing of the complaint itself for the reason.
+		if len(trimmed) >= len(cobraErrorPrefix) &&
+			strings.EqualFold(trimmed[:len(cobraErrorPrefix)], cobraErrorPrefix) {
+			trimmed = strings.TrimSpace(trimmed[len(cobraErrorPrefix):])
+		}
 		lower := strings.ToLower(trimmed)
 		for _, marker := range forgeUnsupportedMarkers {
 			if strings.HasPrefix(lower, marker) {

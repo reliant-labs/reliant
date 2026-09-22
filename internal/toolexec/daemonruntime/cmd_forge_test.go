@@ -664,6 +664,19 @@ func TestForgeUnsupportedReasonClassification(t *testing.T) {
 			want: false,
 		},
 		{
+			// Anchoring, not substring matching. A supported command
+			// that fails while shelling out to a tool with its OWN
+			// flag problem is a broken deploy, not an old forge.
+			// Substring matching here would send the user to upgrade
+			// forge and hide the real fault.
+			name: "a nested tool's flag complaint is not forge being too old",
+			res: forgeCommandResult{
+				Stderr:   []byte("Error: docker compose up: unknown flag: --wait-timeout"),
+				ExitCode: 1,
+			},
+			want: false,
+		},
+		{
 			name: "exit zero is never unsupported",
 			res:  forgeCommandResult{Stderr: []byte("unknown flag: --json"), ExitCode: 0},
 			want: false,
@@ -680,6 +693,152 @@ func TestForgeUnsupportedReasonClassification(t *testing.T) {
 				t.Errorf("unsupported = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// cobraUnknownFlagStderr is the VERBATIM stderr of an installed forge v0.1.17
+// asked for a flag it does not have:
+//
+//	forge secret list dev --json   -> exit 1
+//
+// Captured rather than paraphrased, because the two details that broke the
+// classifier are both absent from a paraphrase: cobra dumps the usage block
+// FIRST, and prefixes its complaint with "Error: ". A matcher written against
+// the idealized string "unknown flag: --json" matches neither.
+const cobraUnknownFlagStderr = `Usage:
+  forge secret list <environment> [flags]
+
+Flags:
+  -h, --help   help for list
+
+Global Flags:
+      --silence-experimental   suppress the experimental-features warning (also: FORGE_SILENCE_EXPERIMENTAL=1)
+
+Error: unknown flag: --json
+`
+
+const cobraUnknownCommandStderr = `Usage:
+  forge env [command]
+
+Global Flags:
+      --silence-experimental   suppress the experimental-features warning
+
+Use "forge env [command] --help" for more information about a command.
+
+Error: unknown command "topology" for "forge env"
+`
+
+func TestForgeUnsupportedReasonMatchesRealCobraStderr(t *testing.T) {
+	// The regression. Every marker cobra emits is prefixed with "Error: "
+	// and buried under a usage dump, so anchoring on the bare marker made
+	// a too-old binary escape as a generic exit-1 failure. The user saw
+	// "could not reach your daemon", which was false — the daemon was
+	// reached and answered.
+	for _, tc := range []struct {
+		name       string
+		stderr     string
+		wantReason string
+	}{
+		{"unknown flag", cobraUnknownFlagStderr, "unknown flag: --json"},
+		{"unknown command", cobraUnknownCommandStderr, `unknown command "topology" for "forge env"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reason, ok := forgeUnsupportedReason(forgeCommandResult{
+				Stderr:   []byte(tc.stderr),
+				ExitCode: 1,
+			})
+			if !ok {
+				t.Fatalf("real cobra stderr must classify as unsupported:\n%s", tc.stderr)
+			}
+			// The reason is shown to a user next to the version, so it
+			// carries forge's complaint WITHOUT cobra's "Error: " noise.
+			if reason != tc.wantReason {
+				t.Errorf("reason = %q, want %q", reason, tc.wantReason)
+			}
+		})
+	}
+}
+
+func TestForgeSecretListTooOldIsUnsupportedNotFailure(t *testing.T) {
+	// End-to-end for the reported bug: `forge secret list <env> --json`
+	// against a forge that predates the flag must produce the structured
+	// unsupported outcome the UI already renders, not an error that the
+	// proxy dresses up as "could not reach your daemon".
+	dir := forgeProject(t)
+	stubForge(t, forgeCommandResult{
+		Stderr:   []byte(cobraUnknownFlagStderr),
+		ExitCode: 1,
+	}, nil)
+
+	raw, err := handle(t, "forge.secret_list", forgeSecretListRequest{ProjectPath: dir, Env: "dev"})
+	if err != nil {
+		t.Fatalf("a too-old forge must not surface as an error: %v", err)
+	}
+	got := decodeForgeResponse(t, raw)
+	if !got.IsForgeProject {
+		t.Error("is_forge_project must be true when forge.yaml exists")
+	}
+	if got.Supported {
+		t.Error("supported must be false when the binary lacks --json")
+	}
+	if got.ForgeVersion == "" {
+		t.Error("forge_version must be stamped so the UI can name the version")
+	}
+	// The secret path withholds stderr unconditionally, so the reason is
+	// deliberately empty here even though the outcome is unsupported.
+	if got.UnsupportedReason != "" {
+		t.Errorf("the secret path must withhold forge's stderr, got %q", got.UnsupportedReason)
+	}
+}
+
+func TestForgeOperationalFailureIsNotReclassifiedAsTooOld(t *testing.T) {
+	// The guard on the fix. Telling a user to upgrade forge because their
+	// KCL is broken is worse than the bug being fixed: it sends them to
+	// the wrong remedy and hides a real fault. A usage dump on stderr is
+	// NOT by itself evidence of a version miss.
+	dir := forgeProject(t)
+	stubForge(t, forgeCommandResult{
+		Stderr: []byte("Usage:\n  forge env status <environment> [flags]\n\n" +
+			"Error: render KCL: deploy/kcl/prod/main.k:12: undefined name 'imag'\n"),
+		ExitCode: 1,
+	}, nil)
+
+	_, err := handle(t, "forge.env_status", forgeEnvStatusRequest{ProjectPath: dir, Env: "prod"})
+	if err == nil {
+		t.Fatal("a genuine operational failure must remain an error, not become 'your forge is too old'")
+	}
+	if !strings.HasPrefix(err.Error(), forgeCommandFailedPrefix) {
+		t.Errorf("expected the failure prefix, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "render KCL") {
+		t.Errorf("the real cause must survive into the error, got %v", err)
+	}
+}
+
+func TestForgeSecretListMissingValueVerdictStaysData(t *testing.T) {
+	// `forge secret list` exits 1 as a VERDICT when a declared secret has
+	// no value. That is the answer to the question, not a failure, and the
+	// unsupported classifier must not intercept it — stdout carries a
+	// report, which is what distinguishes the two.
+	dir := forgeProject(t)
+	stubForge(t, forgeCommandResult{
+		Stdout:   []byte(`{"env":"dev","ok":false,"secrets":[{"name":"API_KEY","has_value":false}]}`),
+		ExitCode: 1,
+	}, nil)
+
+	raw, err := handle(t, "forge.secret_list", forgeSecretListRequest{ProjectPath: dir, Env: "dev"})
+	if err != nil {
+		t.Fatalf("the missing-value verdict is data, not an error: %v", err)
+	}
+	got := decodeForgeResponse(t, raw)
+	if !got.Supported {
+		t.Error("supported must be true — forge answered the question")
+	}
+	if got.ExitCode != 1 {
+		t.Errorf("the verdict exit code must be carried, got %d", got.ExitCode)
+	}
+	if len(got.Report) == 0 {
+		t.Error("the report must be preserved")
 	}
 }
 

@@ -3,10 +3,13 @@
 /**
  * Route component for /forge/status.
  *
- * It resolves WHICH project to ask about the same way ForgeTopologyPage does —
- * from `projectStore.currentProject`, sending only the id, because the api-server
- * resolves that id to a path on the DAEMON's filesystem itself and the browser
- * has no business asserting a daemon-side path.
+ * It does NOT resolve the project — ForgeLayout does, for all three forge
+ * screens, and it guarantees one exists by the time this mounts (rendering a
+ * picker rather than the outlet when resolution comes back empty). That is why
+ * there is no no-project empty state here any more: the old one was a dead end,
+ * a sentence asking the user to select a project on a page offering no way to.
+ * Only the project's `id` is sent; the api-server resolves it to a path on the
+ * DAEMON's filesystem and enforces that the caller owns it.
  *
  * WHICH ENVIRONMENT comes from the topology ledger rather than from a hardcoded
  * list or a free-text box. The declared environments are a fact forge already
@@ -15,43 +18,65 @@
  * read of the existing cache in the common case: a user arriving from the
  * topology screen pays nothing for it.
  *
- * Env selection is component state rather than a URL search param. A param would
- * need a schema in routeSchemas.ts, and the panel is a read-only snapshot nobody
- * deep-links into a specific environment of; if that changes, a param is the
- * right answer and this is the place to add it.
+ * Env selection is a URL search param, NOT component state. The previous comment
+ * here argued that a param was unnecessary because "the panel is a read-only
+ * snapshot nobody deep-links into a specific environment of" — that stopped
+ * being true the moment topology rows became links into this screen. It is also
+ * what makes a refresh keep the selection instead of silently resetting to dev.
  *
  * The audit strip sits ABOVE the panel and stays collapsed: per-project static
  * health is context for the env checks, not a competitor for attention.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
-import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import { useForgeAudit, useForgeEnvStatus, useForgeTopology } from "@/hooks/forge-queries";
 import { environments } from "@/services/forge/topology";
+import PageHeader from "@/components/forge-ui/page_header";
 
 import { AuditStrip } from "../Audit/AuditStrip";
+import { EnvTabs } from "../EnvTabs";
 import { EnvStatusPanel } from "./EnvStatusPanel";
 
 /**
- * The env asked about before the ledger has loaded. Every forge project has a
- * `dev`, and asking about it immediately means the panel shows measured results
- * on first paint instead of an empty selector.
+ * The env asked about before the ledger has loaded, and before the URL names
+ * one. Every forge project has a `dev`, so asking about it immediately means the
+ * panel shows measured results on first paint instead of an empty selector.
  */
 const DEFAULT_ENV = "dev";
 
 export function ForgeStatusPage() {
+  const navigate = useNavigate();
+  const { project: projectParam, env: envParam } = useSearch({
+    from: "/_authenticated/_forge/forge/status",
+  });
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projectId = currentProject?.id ?? null;
+
+  // The URL is the source of truth once the layout has resolved it; the store is
+  // the fallback for the tick before the param lands.
+  const projectId = projectParam ?? currentProject?.id ?? null;
 
   const topology = useForgeTopology(projectId);
-  const [selectedEnv, setSelectedEnv] = useState<string>(DEFAULT_ENV);
+  const selectedEnv = envParam ?? DEFAULT_ENV;
+
+  const selectEnv = useCallback(
+    (env: string) => {
+      void navigate({
+        to: ".",
+        search: (prev: Record<string, unknown>) => ({ ...prev, env }),
+        replace: true,
+      });
+    },
+    [navigate]
+  );
 
   /**
    * The environments forge declares. Only the `report` outcome carries any — for
-   * every other outcome the list is empty and the selector hides itself, which is
-   * correct: the panel below will be rendering that same outcome's explanation.
+   * every other outcome the list is empty and the tab strip hides itself, which
+   * is correct: the panel below will be rendering that same outcome's
+   * explanation.
    */
   const envNames = useMemo(() => {
     if (topology.data?.kind !== "report") return [];
@@ -59,31 +84,30 @@ export function ForgeStatusPage() {
   }, [topology.data]);
 
   /**
-   * If the ledger turns out not to declare the default, move to the first env it
-   * does. Without this a project whose environments are named `staging`/`prod`
-   * would sit on a `dev` that forge will answer about with nothing useful.
+   * If the ledger turns out not to declare the selected env, move to the first
+   * one it does. Without this a project whose environments are named
+   * `staging`/`prod` would sit on a `dev` that forge will answer about with
+   * nothing useful — and now that the env comes from the URL, the same applies
+   * to a stale or hand-typed `?env=`.
    */
   useEffect(() => {
     if (envNames.length === 0) return;
-    if (!envNames.includes(selectedEnv)) setSelectedEnv(envNames[0]);
-  }, [envNames, selectedEnv]);
+    if (!envNames.includes(selectedEnv)) selectEnv(envNames[0]);
+  }, [envNames, selectedEnv, selectEnv]);
 
   const status = useForgeEnvStatus(projectId, selectedEnv);
   const audit = useForgeAudit(projectId);
 
-  if (!projectId) {
-    return (
-      <div
-        data-testid="forge-status-no-project"
-        className="mx-auto max-w-lg rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground"
-      >
-        Select a project to see its forge runtime checks.
-      </div>
-    );
-  }
-
   return (
-    <div className="h-full space-y-4 overflow-y-auto bg-background p-6">
+    // No padding or scroll container here: the forge shell (SidebarLayout) owns
+    // both, and nesting a second scroller inside it produced a page that could
+    // scroll in two places at once.
+    <div className="space-y-6">
+      <PageHeader
+        title="Status"
+        subtitle="Runtime checks forge ran against this environment, and static checks against the project."
+      />
+
       <AuditStrip
         outcome={audit.data}
         isLoading={audit.isLoading}
@@ -91,31 +115,12 @@ export function ForgeStatusPage() {
         projectName={currentProject?.name}
       />
 
-      {envNames.length > 0 && (
-        <div
-          data-testid="forge-status-env-picker"
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="Environment"
-        >
-          {envNames.map((env) => (
-            <button
-              key={env}
-              type="button"
-              onClick={() => setSelectedEnv(env)}
-              aria-pressed={env === selectedEnv}
-              className={cn(
-                "rounded-md border px-2.5 py-1 font-mono text-xs",
-                env === selectedEnv
-                  ? "border-primary/40 bg-primary/10 text-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {env}
-            </button>
-          ))}
-        </div>
-      )}
+      <EnvTabs
+        envs={envNames}
+        selected={selectedEnv}
+        onSelect={selectEnv}
+        isLoading={topology.isLoading}
+      />
 
       <EnvStatusPanel
         outcome={status.data}

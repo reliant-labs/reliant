@@ -12,11 +12,19 @@
  * projection the list does), so the header can never claim a tally the list below
  * it contradicts.
  *
- * The undetermined entry keeps its full-opacity ringed treatment here too, so the
- * legend looks like the rows it explains.
+ * Each entry is the same `Badge` the rows use, with the same variant and the
+ * same vocabulary classes layered over it, so the legend looks like the thing it
+ * explains. In particular the undetermined entry keeps its full-opacity ringed
+ * treatment here too.
+ *
+ * The count is NOT monospaced. It is a quantity, not an identifier, and the
+ * earlier `font-mono text-lg` rendering made the digits the loudest thing in the
+ * legend. `tabular-nums` keeps them from jittering as the tally changes, which
+ * is the only thing the mono font was actually buying.
  */
 
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui";
 import {
   dispositionTally,
   type CheckDisposition,
@@ -24,6 +32,7 @@ import {
 } from "@/services/forge/status";
 
 import {
+  DISPOSITION_BADGE_VARIANT,
   DISPOSITION_BLURBS,
   DISPOSITION_LABELS,
   DISPOSITION_STYLES,
@@ -43,28 +52,27 @@ export function DispositionLegend({ report }: { report: ForgeEnvStatusReport }) 
   const tally = dispositionTally(report);
 
   return (
-    <div
-      data-testid="forge-status-legend"
-      className="flex flex-wrap gap-2 rounded-lg border border-border px-3 py-2"
-    >
+    <div data-testid="forge-status-legend" className="flex flex-wrap items-center gap-2">
       {ORDER.map(({ disposition, status }) => {
         const style = DISPOSITION_STYLES[disposition];
         const Icon = ICON_BY_STATUS[status];
         return (
-          <div
+          <Badge
             key={disposition}
             data-legend-disposition={disposition}
             title={DISPOSITION_BLURBS[disposition]}
+            variant={DISPOSITION_BADGE_VARIANT[disposition]}
+            size="sm"
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs",
+              "gap-1.5 rounded-md font-sans hover:scale-100",
               style.container,
               style.foreground
             )}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>{DISPOSITION_LABELS[disposition]}</span>
-            <span className="font-mono">{tally[disposition]}</span>
-          </div>
+            <span className="tabular-nums">{tally[disposition]}</span>
+          </Badge>
         );
       })}
     </div>

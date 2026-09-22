@@ -51,7 +51,35 @@
 import { AlertTriangle, CheckCircle2, HelpCircle, MinusCircle, OctagonAlert } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
+import type { BadgeProps } from "@/components/ui/Badge";
 import type { CheckDisposition } from "@/services/forge/status";
+
+/**
+ * DISPOSITION_BADGE_VARIANT picks the shared `Badge` variant each disposition
+ * renders as, so these chips are the same primitive the rest of the app uses
+ * rather than a hand-rolled pill.
+ *
+ * The variant carries the HUE only. It cannot carry the rest of the vocabulary:
+ * Badge has no dashed variant, no ring, and no dimmed variant, and those three
+ * axes are precisely the ones that survive a greyscale screenshot. So the
+ * variant supplies the base and DISPOSITION_STYLES below layers fill, border
+ * style, opacity and ring over it — both halves are required, and dropping
+ * either one collapses a distinction this file exists to keep.
+ *
+ * Both unmeasured dispositions map to `outline` because it is the only variant
+ * with no fill and no hue, which is the correct starting point for "we did not
+ * measure this". They then diverge on opacity and ring.
+ */
+export const DISPOSITION_BADGE_VARIANT: Record<
+  CheckDisposition,
+  NonNullable<BadgeProps["variant"]>
+> = {
+  "measured-good": "success",
+  "measured-degraded": "warning",
+  "measured-bad": "destructive",
+  "not-applicable": "outline",
+  undetermined: "outline",
+};
 
 export interface DispositionStyle {
   /** Badge/row-chip container classes: fill, border style, and any ring. */

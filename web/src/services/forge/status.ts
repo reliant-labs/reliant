@@ -40,6 +40,8 @@
  * a verified pass.
  */
 
+import type { ForgeClusterInventory } from "./workloads";
+
 // ── Check status and disposition ────────────────────────────────────────────
 
 /** The five statuses forge's doctor package can put on a check result. */
@@ -187,7 +189,23 @@ export interface ForgeEnvStatusReport {
   env?: string;
   database_url?: string;
   head_commit_at?: string;
+  /**
+   * The HOST PROCESSES on the reader's own machine. NOT a deployment
+   * inventory, and the distinction is not pedantry: rendering this array under
+   * a heading that read like one is what showed two local dev servers for a
+   * prod that runs sixteen cluster workloads. The cluster's real contents are
+   * `workloads` below.
+   */
   services?: ForgeServiceRow[];
+  /**
+   * The CLUSTER INVENTORY — what this environment actually deploys. A
+   * DOCUMENT, not an array: its `status` says whether the workload list is an
+   * inventory at all, because forge lists workloads it could not see. Optional
+   * because a forge predating it omits the key entirely, which is a third
+   * answer ("nobody was asked") and must not render as "deploys nothing".
+   * See ./workloads, which owns this shape and the branch it requires.
+   */
+  workloads?: ForgeClusterInventory;
   /**
    * The env-runtime checks — eight of them across five signals (app, metrics,
    * traces, logs, profiles), plus the compose-infra check every signal keeps.

@@ -24,9 +24,10 @@
  */
 
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 
 import { TopologyView } from "../TopologyView";
+import type { TopologyViewProps } from "../TopologyView";
 import { CERTAINTY_STYLES } from "../stateVocabulary";
 import type { ForgeOutcome, ForgeTopologyReport } from "@/services/forge/topology";
 import { ForgeReachability } from "@/gen/reliant/v1/forge_pb";
@@ -97,9 +98,18 @@ function withStates(states: string[]): ForgeTopologyReport {
   return report;
 }
 
-function renderView(outcome: ForgeOutcome<ForgeTopologyReport>) {
+function renderView(
+  outcome: ForgeOutcome<ForgeTopologyReport>,
+  extra: Partial<TopologyViewProps> = {}
+) {
   return render(
-    <TopologyView outcome={outcome} isLoading={false} onVerify={vi.fn()} projectName="control-plane" />
+    <TopologyView
+      outcome={outcome}
+      isLoading={false}
+      onVerify={vi.fn()}
+      projectName="control-plane"
+      {...extra}
+    />
   );
 }
 
@@ -302,6 +312,15 @@ describe("environment-level facts", () => {
     expect(row.querySelector('button[aria-label^="Verify dev"]')).toBeNull();
   });
 
+  it("keeps the promote-not-deploy caveat in the column header too", () => {
+    // The caveat used to live only in the stacked cell's tooltip. Now that the
+    // timestamp has a column of its own, the HEADER is what labels it for a
+    // reader skimming the table, so it is pinned here.
+    renderView(reportOutcome(baseReport()));
+    const header = screen.getByRole("columnheader", { name: /promoted/i });
+    expect(header.textContent?.toLowerCase()).not.toContain("deploy");
+  });
+
   it("reports promotion lag in both units forge provides", () => {
     const report = baseReport();
     report.environments![0].release = "v1.3.0";
@@ -317,5 +336,87 @@ describe("environment-level facts", () => {
     const row = screen.getByTestId("env-row-prod");
     expect(row.textContent).toContain("3 releases behind");
     expect(row.textContent).toContain("69d10h");
+  });
+});
+
+/**
+ * The table has to BE a table.
+ *
+ * The regression these guard against is the one the screen shipped with: every
+ * env-level fact stacked into the row header's flex column, so rows were ~200px
+ * tall, nothing lined up with the image cells, and the "columns" existed only
+ * for images. Asserting on `<td>` count and on real `<th scope="col">` headers
+ * pins the structure rather than the styling, so a restyle is free but a
+ * collapse back into one cell is not.
+ */
+describe("the matrix is a real table", () => {
+  it("gives every env-level fact its own column header", () => {
+    renderView(reportOutcome(baseReport()));
+    for (const name of [/environment/i, /release/i, /status/i, /promoted/i, /cluster/i, /actions/i]) {
+      expect(screen.getByRole("columnheader", { name })).toBeTruthy();
+    }
+  });
+
+  it("puts each fact in its own cell rather than stacking them in the row header", () => {
+    renderView(reportOutcome(baseReport()));
+    const row = screen.getByTestId("env-row-prod");
+
+    // Exactly one row header — the env name — and everything else is a <td>.
+    expect(row.querySelectorAll("th").length).toBe(1);
+
+    // release + status + promoted + cluster + 4 images + actions = 9 data cells.
+    expect(row.querySelectorAll("td").length).toBe(4 + 4 + 1);
+
+    // The release is NOT inside the row header any more.
+    const rowHeader = row.querySelector("th")!;
+    expect(rowHeader.textContent).toContain("prod");
+    expect(rowHeader.textContent).not.toContain("v1.5.15");
+  });
+
+  it("renders a header for every image column, as an identifier", () => {
+    renderView(reportOutcome(baseReport()));
+    const header = screen.getByRole("columnheader", { name: "internal-console" });
+    // An image name is an identifier, so it keeps the mono face and its case.
+    expect(header.querySelector(".font-mono")).not.toBeNull();
+  });
+});
+
+/**
+ * Clickable environments.
+ *
+ * `onOpenEnv` is the topology screen's answer to "I want things to be more
+ * clickable and navigatable": the env name becomes the entry point into that
+ * env's status screen. Two properties matter and both are asserted — the
+ * control is REAL (a button with an accessible name, not a div with a handler),
+ * and it does NOT swallow the row, because Promote…/Deploy… are siblings and
+ * nesting interactive elements would produce overlapping hit targets.
+ */
+describe("environment rows as navigation", () => {
+  it("makes the environment name a real control with an accessible name", () => {
+    const onOpenEnv = vi.fn();
+    renderView(reportOutcome(baseReport()), { onOpenEnv, projectId: "proj_1" });
+
+    const control = screen.getByRole("button", { name: "View prod status" });
+    fireEvent.click(control);
+    expect(onOpenEnv).toHaveBeenCalledWith("prod");
+  });
+
+  it("does not nest the promote and deploy controls inside it", () => {
+    renderView(reportOutcome(baseReport()), { onOpenEnv: vi.fn(), projectId: "proj_1" });
+
+    const envControl = screen.getByRole("button", { name: "View prod status" });
+    const promote = screen.getByTestId("promote-open-prod");
+    const deploy = screen.getByTestId("deploy-open-prod");
+
+    expect(envControl.contains(promote)).toBe(false);
+    expect(envControl.contains(deploy)).toBe(false);
+    expect(promote.contains(envControl)).toBe(false);
+  });
+
+  it("renders the env as inert text when there is nowhere to navigate", () => {
+    renderView(reportOutcome(baseReport()));
+    expect(screen.queryByRole("button", { name: "View prod status" })).toBeNull();
+    // The name is still there — it just is not a control.
+    expect(within(screen.getByTestId("env-row-prod")).getByText("prod")).toBeTruthy();
   });
 });

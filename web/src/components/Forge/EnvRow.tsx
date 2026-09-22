@@ -3,29 +3,41 @@
 /**
  * One environment's row in the topology matrix.
  *
- * The left column carries the facts an operator reads before looking at any
- * cell: what the env is bound to, how far behind it is, where it runs, and the
- * two caveats that are invisible everywhere else —
+ * ONE FACT PER CELL. This row used to stack the release, the lag, the promote
+ * time, the cluster, the note, the action buttons AND both dialogs into a single
+ * `<th>` with a `flex-col`, which made every row ~200px tall while the image
+ * columns sat on one baseline — a table in name only. Each fact now has its own
+ * `<td>` under a real `<th scope="col">` in TopologyView, so a row is one line
+ * and the columns actually line up. The env column stays sticky so row identity
+ * survives horizontal scrolling on a project with many images.
+ *
+ * The facts an operator reads before looking at any cell are what the env
+ * column carries, plus the two caveats that are invisible everywhere else —
  *
  *   PROMOTE time, labelled as such. `promoted_at` looks like a deploy timestamp
  *   and is not one: promotion writes a pointer, deployment moves bytes, and the
  *   gap between them being invisible is the entire reason `forge env verify`
- *   exists. Forge's own text output carries the caveat inline; so does this.
+ *   exists. The caveat survives the move into its own column three ways: the
+ *   column header says "Promoted", the cell carries the word for a screen
+ *   reader reading it out of context, and the tooltip states it in full.
  *
  *   DIRTY tree. A release cut from a tree with uncommitted changes ships bytes
  *   that correspond to no reviewable commit. This row is the only place that
- *   fact surfaces in the UI.
+ *   fact surfaces in the UI, so it stays a hard `Badge` — never a tooltip-only
+ *   hint.
  *
  * The two non-active binding states get their own treatment rather than being
  * dropped: `unbound` (never promoted) is NORMAL and says so, and `undeclared`
  * (bound in the ledger, but no deploy/kcl/<env>/ in this checkout) is a real
- * reportable state that carries forge's own explanation.
+ * reportable state that carries forge's own explanation as VISIBLE text, not
+ * only as a tooltip.
  */
 
 import { useState } from "react";
-import { AlertTriangle, Clock, RefreshCw, Rocket, Upload } from "lucide-react";
+import { AlertTriangle, ChevronRight, Clock, RefreshCw, Rocket, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import {
@@ -58,7 +70,16 @@ export interface EnvRowProps {
    * latest. Absent means no entry point: this row will not invent a target.
    */
   promoteRelease?: string | null;
+  /**
+   * Navigate to this env's status screen. Absent = the env name is inert text
+   * rather than a control, which is the correct rendering when the host screen
+   * has nowhere to send the reader.
+   */
+  onOpenEnv?: (env: string) => void;
 }
+
+/** Shared padding so every cell in the row sits on the same baseline. */
+const CELL = "px-3 py-2 align-middle";
 
 export function EnvRow({
   env,
@@ -68,6 +89,7 @@ export function EnvRow({
   verifyNotice,
   projectId,
   promoteRelease,
+  onOpenEnv,
 }: EnvRowProps) {
   const binding = envBindingState(env);
   const lag = describeLag(env.lag);
@@ -99,183 +121,265 @@ export function EnvRow({
   const [deployOpen, setDeployOpen] = useState(false);
   const canDeploy = !!projectId;
 
+  const cluster = [env.kube_context, env.namespace].filter(Boolean).join(" · ");
+
   return (
-    <tr className="border-b border-border last:border-0" data-testid={`env-row-${env.env}`}>
+    <tr
+      // bg-card on the ROW (not on the sticky cell) is what makes `bg-inherit`
+      // below work: a sticky cell must be opaque or the scrolling columns show
+      // through it, and inheriting is the only way it can be opaque AND pick up
+      // the row's hover tint. bg-muted here is interaction state, which is the
+      // one thing --muted is for.
+      className="border-b border-border/60 bg-card last:border-0 hover:bg-muted/40"
+      data-testid={`env-row-${env.env}`}
+    >
+      {/* Environment — sticky, so which row you are reading survives a
+          horizontal scroll through the image columns. */}
       <th
         scope="row"
-        className="sticky left-0 z-10 bg-background px-3 py-2 text-left align-top font-normal"
+        className={cn(CELL, "sticky left-0 z-10 bg-inherit text-left font-normal")}
       >
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2">
+          {onOpenEnv ? (
+            // A real control, not a row-level click handler: Promote…/Deploy…
+            // are siblings in the actions column and nesting them inside a
+            // clickable row would make two overlapping hit targets.
+            <button
+              type="button"
+              onClick={() => onOpenEnv(env.env)}
+              aria-label={`View ${env.env} status`}
+              className={cn(
+                "group/env inline-flex items-center gap-1 rounded-sm font-mono text-sm font-medium",
+                "text-foreground hover:text-primary hover:underline",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              )}
+            >
+              {env.env}
+              <ChevronRight
+                className="h-3.5 w-3.5 shrink-0 text-muted-foreground group-hover/env:text-primary"
+                aria-hidden="true"
+              />
+            </button>
+          ) : (
             <span className="font-mono text-sm font-medium text-foreground">{env.env}</span>
-            {binding === "unbound" && (
-              // Never promoted. Explicitly not a problem — it has declared
-              // nothing that could be wrong.
-              <span
-                data-testid={`binding-${env.env}`}
-                className="rounded-full border border-dashed border-border px-2 py-0.5 text-2xs text-muted-foreground"
-              >
-                never promoted
-              </span>
-            )}
-            {binding === "undeclared" && (
-              <Tooltip
-                content={
-                  env.note ||
-                  "This environment is bound in the release ledger, but this checkout has no deploy/kcl/<env>/ for it, so its cluster and namespace cannot be resolved."
-                }
-              >
-                <span
-                  data-testid={`binding-${env.env}`}
-                  className="rounded-full border border-dashed border-border px-2 py-0.5 text-2xs text-muted-foreground"
-                >
-                  not declared here
-                </span>
-              </Tooltip>
-            )}
-            {dirty && (
-              // A dirty-tree release corresponds to no reviewable commit. This
-              // is the only place that surfaces, so it is a hard badge, not a
-              // tooltip-only hint.
-              <Tooltip content="This release was cut from a tree with uncommitted changes. The bytes it ships correspond to no reviewable commit.">
-                <span
-                  data-testid={`dirty-${env.env}`}
-                  className="inline-flex items-center gap-1 rounded-full bg-destructive/15 px-2 py-0.5 text-2xs text-destructive"
-                >
-                  <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-                  dirty tree
-                </span>
-              </Tooltip>
-            )}
-          </div>
-
-          {env.release && (
-            <span className="font-mono text-xs text-muted-foreground">{env.release}</span>
           )}
 
+          {binding === "unbound" && (
+            // Never promoted. Explicitly not a problem — it has declared
+            // nothing that could be wrong.
+            <Badge
+              variant="outline"
+              size="sm"
+              data-testid={`binding-${env.env}`}
+              className="whitespace-nowrap font-sans text-muted-foreground"
+            >
+              never promoted
+            </Badge>
+          )}
+
+          {binding === "undeclared" && (
+            <Badge
+              variant="outline"
+              size="sm"
+              data-testid={`binding-${env.env}`}
+              className="whitespace-nowrap font-sans text-muted-foreground"
+            >
+              not declared here
+            </Badge>
+          )}
+
+          {dirty && (
+            // A dirty-tree release corresponds to no reviewable commit. This
+            // is the only place that surfaces, so it is a hard badge, not a
+            // tooltip-only hint.
+            <Tooltip content="This release was cut from a tree with uncommitted changes. The bytes it ships correspond to no reviewable commit.">
+              <Badge
+                variant="destructive"
+                size="sm"
+                data-testid={`dirty-${env.env}`}
+                className="whitespace-nowrap font-sans"
+              >
+                <AlertTriangle className="mr-1 h-3 w-3 shrink-0" aria-hidden="true" />
+                dirty tree
+              </Badge>
+            </Tooltip>
+          )}
+        </div>
+      </th>
+
+      {/* Release — an identifier, so mono. */}
+      <td className={cn(CELL, "whitespace-nowrap")}>
+        {env.release ? (
+          <span className="font-mono text-sm text-foreground">{env.release}</span>
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">no release bound</span>
+          </span>
+        )}
+      </td>
+
+      {/* Status — how far behind, plus forge's own explanation when the env is
+          in a state that would otherwise look like missing data. The note is
+          VISIBLE text, not just a tooltip: it is the only thing that explains
+          an undeclared env. */}
+      <td className={cn(CELL, "max-w-xs")}>
+        <div className="flex flex-col gap-0.5">
           {lag && (
             <span
               className={cn(
-                "text-2xs",
+                "text-xs",
                 env.lag?.current ? "text-muted-foreground" : "text-warning"
               )}
             >
               {lag}
             </span>
           )}
-
-          {env.promoted_at && (
-            // "Promoted" is the label, never "deployed". See the file comment.
-            <Tooltip content="When this environment was PROMOTED to the release — not when it was deployed. Promotion writes a pointer; deployment moves bytes. Verify an environment to find out what is actually running.">
-              <span
-                data-testid={`promoted-${env.env}`}
-                className="inline-flex items-center gap-1 text-2xs text-muted-foreground"
-              >
-                <Clock className="h-3 w-3" aria-hidden="true" />
-                promoted {formatTimestamp(env.promoted_at)}
-              </span>
-            </Tooltip>
-          )}
-
-          {(env.kube_context || env.namespace) && (
-            <span className="truncate font-mono text-2xs text-muted-foreground/80">
-              {env.kube_context}
-              {env.kube_context && env.namespace ? " · " : ""}
-              {env.namespace}
+          {binding !== "active" && env.note && (
+            <span className="truncate text-xs text-muted-foreground" title={env.note}>
+              {env.note}
             </span>
           )}
-
-          {binding !== "active" && env.note && (
-            <span className="text-2xs text-muted-foreground">{env.note}</span>
-          )}
-
-          {/* Verify is per-env on purpose: one cluster, a 75s budget, and a slow
-              cluster here cannot keep every other row unverifiable. */}
-          <div className="flex flex-wrap items-center gap-1 pt-1">
-            {binding === "active" && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => onVerify(env.env)}
-                loading={isVerifying}
-                disabled={isVerifying}
-                leftIcon={<RefreshCw className="h-3 w-3" />}
-                aria-label={`Verify ${env.env} against its live cluster`}
-              >
-                {isVerifying ? "Reading cluster…" : "Verify"}
-              </Button>
-            )}
-
-            {/* Offered for unbound envs too — a first promote is a normal
-                operation, and it is the case the confirmation token's
-                expect_unbound half exists for. */}
-            {canPromote && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setPromoteOpen(true)}
-                leftIcon={<Upload className="h-3 w-3" />}
-                aria-label={`Preview promoting ${env.env} to ${promoteRelease}`}
-                data-testid={`promote-open-${env.env}`}
-              >
-                Promote…
-              </Button>
-            )}
-
-            {/* Deploy sits beside promote because they are the two halves of
-                shipping, and the pair being adjacent is what makes the difference
-                legible: promote moves a pointer in the repo, deploy moves bytes to
-                a cluster. The label carries the ellipsis for the same reason
-                promote's does — this opens a preview, it does not deploy. */}
-            {canDeploy && (
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setDeployOpen(true)}
-                leftIcon={<Rocket className="h-3 w-3" />}
-                aria-label={`Preview deploying ${env.env} to its declared cluster`}
-                data-testid={`deploy-open-${env.env}`}
-              >
-                Deploy…
-              </Button>
-            )}
-          </div>
-
           {verifyNotice && (
-            <span data-testid={`verify-notice-${env.env}`} className="text-2xs text-muted-foreground">
+            <span
+              data-testid={`verify-notice-${env.env}`}
+              className="truncate text-xs text-muted-foreground"
+              title={verifyNotice}
+            >
               {verifyNotice}
             </span>
           )}
-
-          {/* Mounted only while open, so a closed dialog holds no plan and
-              therefore no confirmation token from a previous session. */}
-          {canPromote && promoteOpen && (
-            <PromoteDialog
-              isOpen={promoteOpen}
-              onClose={() => setPromoteOpen(false)}
-              projectId={projectId}
-              env={env.env}
-              release={promoteRelease as string}
-            />
-          )}
-
-          {/* Mounted only while open, so a closed dialog holds no plan and
-              therefore no confirmation token — and in particular no remembered
-              declared context — from a previous session. */}
-          {canDeploy && deployOpen && (
-            <DeployDialog
-              isOpen={deployOpen}
-              onClose={() => setDeployOpen(false)}
-              projectId={projectId}
-              env={env.env}
-            />
+          {!lag && !verifyNotice && !(binding !== "active" && env.note) && (
+            <span className="text-xs text-muted-foreground">
+              <span aria-hidden="true">—</span>
+              <span className="sr-only">no lag reported</span>
+            </span>
           )}
         </div>
-      </th>
+      </td>
+
+      {/* Promoted — never "deployed". See the file comment. */}
+      <td className={cn(CELL, "whitespace-nowrap")}>
+        {env.promoted_at ? (
+          <Tooltip content="When this environment was PROMOTED to the release — not when it was deployed. Promotion writes a pointer; deployment moves bytes. Verify an environment to find out what is actually running.">
+            <span
+              data-testid={`promoted-${env.env}`}
+              className="inline-flex items-center gap-1 text-xs text-muted-foreground"
+            >
+              <Clock className="h-3 w-3 shrink-0" aria-hidden="true" />
+              {/* The word travels with the value, so a screen reader that reads
+                  this cell out of its column still gets the caveat. */}
+              <span className="sr-only">promoted </span>
+              {formatTimestamp(env.promoted_at)}
+            </span>
+          </Tooltip>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">never promoted</span>
+          </span>
+        )}
+      </td>
+
+      {/* Cluster — kube context and namespace are identifiers, so mono. */}
+      <td className={cn(CELL, "max-w-xs")}>
+        {cluster ? (
+          <span
+            className="block truncate font-mono text-xs text-muted-foreground"
+            title={cluster}
+          >
+            {cluster}
+          </span>
+        ) : (
+          <span className="text-xs text-muted-foreground">
+            <span aria-hidden="true">—</span>
+            <span className="sr-only">no cluster resolved</span>
+          </span>
+        )}
+      </td>
 
       {images.map((image) => (
         <TopologyCell key={image} env={env.env} cell={cellFor(env, image)} />
       ))}
+
+      {/* Actions — a real column, right-aligned, with real buttons. Verify is
+          per-env on purpose: one cluster, a 75s budget, and a slow cluster here
+          cannot keep every other row unverifiable. */}
+      <td className={cn(CELL, "whitespace-nowrap text-right")}>
+        <div className="inline-flex items-center justify-end gap-1.5">
+          {binding === "active" && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onVerify(env.env)}
+              loading={isVerifying}
+              disabled={isVerifying}
+              leftIcon={<RefreshCw className="h-3 w-3" />}
+              aria-label={`Verify ${env.env} against its live cluster`}
+            >
+              {isVerifying ? "Reading cluster…" : "Verify"}
+            </Button>
+          )}
+
+          {/* Offered for unbound envs too — a first promote is a normal
+              operation, and it is the case the confirmation token's
+              expect_unbound half exists for. */}
+          {canPromote && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPromoteOpen(true)}
+              leftIcon={<Upload className="h-3 w-3" />}
+              aria-label={`Preview promoting ${env.env} to ${promoteRelease}`}
+              data-testid={`promote-open-${env.env}`}
+            >
+              Promote…
+            </Button>
+          )}
+
+          {/* Deploy sits beside promote because they are the two halves of
+              shipping, and the pair being adjacent is what makes the difference
+              legible: promote moves a pointer in the repo, deploy moves bytes to
+              a cluster. The label carries the ellipsis for the same reason
+              promote's does — this opens a preview, it does not deploy. */}
+          {canDeploy && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDeployOpen(true)}
+              leftIcon={<Rocket className="h-3 w-3" />}
+              aria-label={`Preview deploying ${env.env} to its declared cluster`}
+              data-testid={`deploy-open-${env.env}`}
+            >
+              Deploy…
+            </Button>
+          )}
+        </div>
+
+        {/* Mounted only while open, so a closed dialog holds no plan and
+            therefore no confirmation token from a previous session. */}
+        {canPromote && promoteOpen && (
+          <PromoteDialog
+            isOpen={promoteOpen}
+            onClose={() => setPromoteOpen(false)}
+            projectId={projectId}
+            env={env.env}
+            release={promoteRelease as string}
+          />
+        )}
+
+        {/* Mounted only while open, so a closed dialog holds no plan and
+            therefore no confirmation token — and in particular no remembered
+            declared context — from a previous session. */}
+        {canDeploy && deployOpen && (
+          <DeployDialog
+            isOpen={deployOpen}
+            onClose={() => setDeployOpen(false)}
+            projectId={projectId}
+            env={env.env}
+          />
+        )}
+      </td>
     </tr>
   );
 }

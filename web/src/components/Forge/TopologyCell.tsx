@@ -39,10 +39,14 @@ export function TopologyCell({ cell, env }: TopologyCellProps) {
   if (cell.kind === "absent") {
     // Explicitly "not in this release" — never an empty cell.
     return (
-      <td className="px-2 py-1.5 text-center align-middle" data-testid={`cell-${env}-${cell.image}`} data-absent="true">
+      <td
+        className="px-3 py-2 text-center align-middle"
+        data-testid={`cell-${env}-${cell.image}`}
+        data-absent="true"
+      >
         <Tooltip content={`${cell.image} is not in this environment's release`}>
           <span
-            className="inline-flex h-7 w-full items-center justify-center rounded-md text-muted-foreground/60"
+            className="inline-flex h-6 w-full items-center justify-center rounded-md text-muted-foreground/60"
             aria-label={`${cell.image}: not in this release`}
           >
             <span aria-hidden="true">·</span>
@@ -68,7 +72,7 @@ export function TopologyCell({ cell, env }: TopologyCellProps) {
     .join("\n");
 
   return (
-    <td className="px-2 py-1.5 align-middle" data-testid={`cell-${env}-${cell.image}`}>
+    <td className="px-3 py-2 align-middle" data-testid={`cell-${env}-${cell.image}`}>
       <Tooltip content={tooltip}>
         <span
           // data-certainty is the stable hook the contract test reads. The
@@ -76,14 +80,17 @@ export function TopologyCell({ cell, env }: TopologyCellProps) {
           data-certainty={cell.certainty}
           data-state={cell.state}
           className={cn(
-            "inline-flex h-7 w-full items-center justify-center gap-1.5 rounded-md px-2 text-xs",
+            "inline-flex h-6 w-full items-center justify-center gap-1.5 rounded-md px-2 text-xs",
             style.container,
             style.foreground
           )}
           aria-label={`${cell.image} in ${env}: ${label}`}
         >
           <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span className="truncate font-mono">{label}</span>
+          {/* A state name ("Not checked", "Drift") is prose, not an identifier,
+              so it is not monospace. The digests it describes are — see the
+              tooltip, which renders them through shortDigest. */}
+          <span className="truncate">{label}</span>
         </span>
       </Tooltip>
     </td>

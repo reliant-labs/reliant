@@ -4,11 +4,16 @@
  * The project-audit STATUS STRIP — compact by design.
  *
  * This is per-project static health, not environment topology, and it must not
- * compete with the topology view for attention. So it is one collapsed line by
- * default: a verdict badge, the project's name and kind, and counts. The ~18
- * categories (and the ~58KB of `details` that comes with them on a project the
- * size of control-plane) render only when a reader asks, and even then only their
- * one-line summaries. The details bag is never dumped.
+ * compete with the env checks below it for attention. So it is one collapsed
+ * line by default: a verdict badge, the project's name and kind, and counts. The
+ * ~18 categories (and the ~58KB of `details` that comes with them on a project
+ * the size of control-plane) render only when a reader asks, and even then only
+ * their one-line summaries. The details bag is never dumped.
+ *
+ * That collapsed-context role is why this file does NOT get the full Card
+ * treatment the env-status tables get. It is a single bordered strip that opens
+ * into a table; a card here would make the least important surface on the screen
+ * the most prominent one.
  *
  * SEVERITY IS GATED ON `error` ONLY. This is the rule that decides whether the
  * strip is useful or ignored. control-plane's real audit today is overall_status
@@ -35,6 +40,8 @@ import { AlertTriangle, ChevronDown, ChevronRight, CircleCheck, HelpCircle, Octa
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui";
+import type { BadgeProps } from "@/components/ui/Badge";
 import type { ForgeOutcome } from "@/services/forge/topology";
 import {
   auditCategories,
@@ -58,6 +65,10 @@ import {
  * status panel gives an undetermined check, because it means the same thing — a
  * status this build could not read is a gap in the report, not a pass and not a
  * failure.
+ *
+ * These layer OVER a shared `Badge` variant (below). The variant carries the hue;
+ * these carry fill, border style and ring, which are the axes that survive a
+ * greyscale screenshot and which Badge has no variant for.
  */
 const SEVERITY_STYLES: Record<AuditSeverity, string> = {
   clean: "border-solid border-success/40 bg-success/15 text-success",
@@ -65,6 +76,14 @@ const SEVERITY_STYLES: Record<AuditSeverity, string> = {
   problem: "border-solid border-destructive/40 bg-destructive/15 text-destructive",
   unreadable:
     "border-dashed border-muted-foreground/60 bg-transparent text-muted-foreground ring-1 ring-inset ring-muted-foreground/30",
+};
+
+/** The shared Badge variant per severity. `unreadable` is the only unhued one. */
+const SEVERITY_BADGE_VARIANT: Record<AuditSeverity, NonNullable<BadgeProps["variant"]>> = {
+  clean: "success",
+  notice: "warning",
+  problem: "destructive",
+  unreadable: "outline",
 };
 
 const SEVERITY_ICONS: Record<AuditSeverity, LucideIcon> = {
@@ -92,6 +111,9 @@ export interface AuditStripProps {
   projectName?: string;
 }
 
+/** Shared column-header treatment, matching the env-status tables. */
+const TH = "px-3 py-2 text-left text-xs font-medium text-muted-foreground";
+
 export function AuditStrip({ outcome, isLoading, error, projectName }: AuditStripProps) {
   const [expanded, setExpanded] = useState(false);
 
@@ -99,7 +121,7 @@ export function AuditStrip({ outcome, isLoading, error, projectName }: AuditStri
     return (
       <div
         data-testid="forge-audit-loading"
-        className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
+        className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground"
       >
         Auditing {projectName ?? "this project"}…
       </div>
@@ -110,7 +132,7 @@ export function AuditStrip({ outcome, isLoading, error, projectName }: AuditStri
     return (
       <div
         data-testid="forge-audit-error"
-        className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        className="rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
       >
         Could not reach your daemon to audit this project: {error.message}
       </div>
@@ -148,36 +170,48 @@ export function AuditStrip({ outcome, isLoading, error, projectName }: AuditStri
         type="button"
         onClick={() => setExpanded((previous) => !previous)}
         aria-expanded={expanded}
-        className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-left"
+        className="flex w-full items-center gap-x-3 rounded-lg px-3 py-2 text-left hover:bg-accent/50"
       >
         {expanded ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
 
+        {/* This ONE chip is a <span>, not the shared <Badge>, and the reason is
+            structural rather than stylistic: Badge renders a <div>, and a
+            <button>'s content model is phrasing content, so a Badge here would
+            be invalid markup. It carries the same severity classes as the Badge
+            in the category table below, so the two still read identically.
+            Worth fixing properly by giving Badge an `as` prop in
+            components/ui/Badge.tsx — out of scope for this pass. */}
         <span
           data-testid="forge-audit-verdict"
           data-severity={severity}
           className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs",
+            // The verdict word is prose ("Needs attention"), not an identifier.
+            "inline-flex shrink-0 items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium",
             SEVERITY_STYLES[severity]
           )}
         >
           <VerdictIcon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-          <span className="font-mono">{verdictLabel(verdict)}</span>
+          <span>{verdictLabel(verdict)}</span>
         </span>
 
-        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
-          <span className="text-foreground">{report.project_name || projectName || "Project"}</span>
+        <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+          {/* The project name is an identifier; the kind and the count are not. */}
+          <span className="font-mono text-foreground">
+            {report.project_name || projectName || "Project"}
+          </span>
           {report.project_kind ? ` · ${report.project_kind}` : ""}
           {` · ${rows.length} categor${rows.length === 1 ? "y" : "ies"}`}
         </span>
 
         {/* Counts, not a single number: "2 warnings, 0 errors" is a different
             statement from "2 findings", and the difference is exactly what keeps
-            a warn-only project from reading as broken. */}
-        <span className="shrink-0 font-mono text-2xs text-muted-foreground">
+            a warn-only project from reading as broken. Not monospaced — these
+            are quantities, and tabular-nums is what stops them jittering. */}
+        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
           {tally.problem} error{tally.problem === 1 ? "" : "s"} · {tally.notice} warn
           {tally.notice === 1 ? "" : "s"}
           {tally.unreadable > 0 ? ` · ${tally.unreadable} unreadable` : ""}
@@ -188,76 +222,104 @@ export function AuditStrip({ outcome, isLoading, error, projectName }: AuditStri
           to: a warn-only project is where a reader is most likely to over-read
           the badge, so it says in words that warnings are not errors. */}
       {!expanded && (verdict === "notice" || verdict === "unreadable") && (
-        <p
-          data-testid="forge-audit-verdict-note"
-          className="px-3 pb-2 text-2xs text-muted-foreground"
-        >
+        <p data-testid="forge-audit-verdict-note" className="px-3 pb-2 text-xs text-muted-foreground">
           {verdictSentence(verdict)}
         </p>
       )}
 
       {expanded && (
-        <div className="border-t border-border px-3 py-2">
-          <p className="pb-2 text-2xs text-muted-foreground">{verdictSentence(verdict)}</p>
+        <div className="border-t border-border">
+          <div className="space-y-1 px-3 py-2">
+            <p className="text-xs text-muted-foreground">{verdictSentence(verdict)}</p>
 
-          {report.overall_status && (
-            <p className="pb-2 text-2xs text-muted-foreground">
-              forge&apos;s own roll-up:{" "}
-              <span className="font-mono text-foreground">{report.overall_status}</span>
-              {report.binary_version ? (
-                <>
-                  {" · forge "}
-                  <span className="font-mono">{report.binary_version}</span>
-                </>
-              ) : null}
-            </p>
-          )}
+            {report.overall_status && (
+              <p className="text-xs text-muted-foreground">
+                forge&apos;s own roll-up:{" "}
+                <span className="font-mono text-foreground">{report.overall_status}</span>
+                {report.binary_version ? (
+                  <>
+                    {" · forge "}
+                    <span className="font-mono">{report.binary_version}</span>
+                  </>
+                ) : null}
+              </p>
+            )}
+          </div>
 
           {rows.length === 0 ? (
-            <p data-testid="forge-audit-no-categories" className="text-xs text-muted-foreground">
+            <p data-testid="forge-audit-no-categories" className="px-3 pb-2 text-sm text-muted-foreground">
               Forge&apos;s audit returned no categories, so nothing has been assessed.
             </p>
           ) : (
-            <ul data-testid="forge-audit-categories" className="space-y-1">
-              {rows.map((row) => {
-                const Icon = SEVERITY_ICONS[row.severity];
-                return (
-                  <li
-                    key={row.key}
-                    data-testid={`forge-audit-category-${row.key}`}
-                    data-severity={row.severity}
-                    data-audit-status={row.status ?? ""}
-                    data-advisory={row.advisory ? "true" : undefined}
-                    className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5"
-                  >
-                    <span
-                      data-severity-badge={row.severity}
-                      className={cn(
-                        "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-2xs",
-                        SEVERITY_STYLES[row.severity]
-                      )}
-                    >
-                      <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
-                      <span className="font-mono">{auditStatusLabel(row.status)}</span>
-                    </span>
-                    <span className="shrink-0 font-mono text-xs text-foreground">{row.key}</span>
-                    {/* Advisory is labelled where it appears, so a reader who
-                        sees findings listed under an OK category knows forge
-                        meant them as a hint, not a defect. */}
-                    {row.advisory && (
-                      <span className="shrink-0 text-2xs text-muted-foreground">
-                        advisory · non-gating
-                      </span>
-                    )}
-                    {row.summary && (
-                      <span className="min-w-0 flex-1 text-2xs text-muted-foreground">
-                        {row.summary}
-                      </span>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+            /* One row per category, as a real table: the status, the category
+               key, and its summary each get a column, so eighteen categories
+               scan as eighteen lines instead of eighteen ragged wrapped
+               paragraphs. The inset well is bg-background + border-border/60 —
+               never bg-muted, which inverts direction between light and dark. */
+            <div className="border-t border-border/60 bg-background">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="border-b border-border/60">
+                    <th scope="col" className={TH}>
+                      Status
+                    </th>
+                    <th scope="col" className={TH}>
+                      Category
+                    </th>
+                    <th scope="col" className={TH}>
+                      Summary
+                    </th>
+                  </tr>
+                </thead>
+                <tbody data-testid="forge-audit-categories">
+                  {rows.map((row) => {
+                    const Icon = SEVERITY_ICONS[row.severity];
+                    return (
+                      <tr
+                        key={row.key}
+                        data-testid={`forge-audit-category-${row.key}`}
+                        data-severity={row.severity}
+                        data-audit-status={row.status ?? ""}
+                        data-advisory={row.advisory ? "true" : undefined}
+                        className="border-b border-border/60 last:border-b-0"
+                      >
+                        <td className="whitespace-nowrap px-3 py-2 align-top">
+                          <Badge
+                            data-severity-badge={row.severity}
+                            variant={SEVERITY_BADGE_VARIANT[row.severity]}
+                            size="sm"
+                            className={cn(
+                              "gap-1 rounded-md font-sans hover:scale-100",
+                              SEVERITY_STYLES[row.severity]
+                            )}
+                          >
+                            <Icon className="h-3 w-3 shrink-0" aria-hidden="true" />
+                            <span>{auditStatusLabel(row.status)}</span>
+                          </Badge>
+                        </td>
+
+                        {/* The category key is forge's identifier, verbatim. */}
+                        <td className="whitespace-nowrap px-3 py-2 align-top font-mono text-sm text-foreground">
+                          {row.key}
+                        </td>
+
+                        <td className="px-3 py-2 align-top text-sm text-muted-foreground">
+                          {row.summary || <span aria-hidden="true">—</span>}
+                          {/* Advisory is labelled where it appears, so a reader
+                              who sees findings listed under an OK category knows
+                              forge meant them as a hint, not a defect. */}
+                          {row.advisory && (
+                            <span className="ml-2 whitespace-nowrap text-xs text-muted-foreground">
+                              advisory · non-gating
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}
@@ -284,7 +346,7 @@ function AuditNotice({
     <div
       data-testid={testId}
       className={cn(
-        "rounded-lg border px-3 py-2 text-xs text-muted-foreground",
+        "rounded-lg border px-3 py-2 text-sm text-muted-foreground",
         dashed ? "border-dashed border-border" : "border-border"
       )}
     >

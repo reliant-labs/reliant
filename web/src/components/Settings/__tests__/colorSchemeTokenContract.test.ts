@@ -67,6 +67,12 @@ describe('professional color scheme token contract', () => {
   })
 
   it('does not keep legacy data-theme selectors in global CSS', () => {
-    expect(INDEX_CSS).not.toContain('data-theme')
+    // Match a SELECTOR ([data-theme...]), not the bare string. The bare
+    // match also caught the comment block that explains why reliant does
+    // NOT use data-theme — forge's palette flips on it and reliant's flips
+    // on `.dark` — so documenting the decision tripped the guard against
+    // the decision. Strip comments first, then look for real usage.
+    const withoutComments = INDEX_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    expect(withoutComments).not.toMatch(/\[data-theme/)
   })
 })

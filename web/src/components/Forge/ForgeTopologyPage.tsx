@@ -3,25 +3,38 @@
 /**
  * Route component for /forge/topology.
  *
- * All this does is resolve WHICH project to ask about and wire the hooks to
- * TopologyView. The project comes from `projectStore.currentProject` — the same
- * source every other project-scoped screen uses, kept in sync with the URL by
- * App's `/project/$projectId` param — and only its `id` is sent. The api-server
- * resolves the id to a path on the DAEMON's filesystem itself (enforcing that the
- * caller owns the project), which is why no path is passed from here: the browser
- * has no business knowing, or asserting, a daemon-side path.
+ * All this does is wire the hooks to TopologyView. It does NOT resolve the
+ * project — ForgeLayout does, because all three forge screens need the same
+ * answer and only a parent can guarantee it has been reached before any child
+ * renders. The layout also guarantees a project EXISTS by the time this mounts:
+ * if resolution comes back empty it renders the project picker instead of the
+ * outlet, which is why there is no no-project empty state here any more. That
+ * state used to be a dead end — a sentence telling the user to select a project
+ * on a page with nothing that could select one.
+ *
+ * Only the project's `id` is ever sent. The api-server resolves the id to a path
+ * on the DAEMON's filesystem itself (enforcing that the caller owns the project),
+ * which is why no path is passed from here: the browser has no business knowing,
+ * or asserting, a daemon-side path.
  */
 
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 
 import { useProjectStore } from "@/store/projectStore";
 import { useForgeTopology, useVerifyForgeEnv } from "@/hooks/forge-queries";
+import PageHeader from "@/components/forge-ui/page_header";
 
 import { TopologyView } from "./TopologyView";
 
 export function ForgeTopologyPage() {
+  const navigate = useNavigate();
+  const { project: projectParam } = useSearch({ from: "/_authenticated/_forge/forge/topology" });
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projectId = currentProject?.id ?? null;
+
+  // The URL is the source of truth once the layout has resolved it; the store is
+  // the fallback for the tick before the param lands.
+  const projectId = projectParam ?? currentProject?.id ?? null;
 
   const topology = useForgeTopology(projectId);
   const { verify, pendingEnv, lastOutcome } = useVerifyForgeEnv(projectId);
@@ -56,19 +69,29 @@ export function ForgeTopologyPage() {
     }
   }, [lastOutcome]);
 
-  if (!projectId) {
-    return (
-      <div
-        data-testid="forge-no-project"
-        className="mx-auto max-w-lg rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground"
-      >
-        Select a project to see its forge release topology.
-      </div>
-    );
-  }
+  /**
+   * Clicking an environment opens that env's status screen. This is the single
+   * change that most directly makes the surface navigable: the matrix rows were
+   * inert, and status was reachable only by typing its URL. `env` is a search
+   * param precisely so a row can link into it.
+   */
+  const onOpenEnv = useCallback(
+    (env: string) => {
+      void navigate({ to: "/forge/status", search: { project: projectId ?? undefined, env } });
+    },
+    [navigate, projectId]
+  );
 
   return (
-    <div className="h-full overflow-y-auto bg-background p-6">
+    // No padding or scroll container here: the forge shell (SidebarLayout) owns
+    // both, and nesting a second scroller inside it produced a page that could
+    // scroll in two places at once.
+    <div className="space-y-6">
+      <PageHeader
+        title="Releases"
+        subtitle="What each environment is promoted to, and whether the cluster agrees."
+      />
+
       <TopologyView
         outcome={topology.data}
         isLoading={topology.isLoading}
@@ -78,6 +101,7 @@ export function ForgeTopologyPage() {
         verifyNotices={verifyNotices}
         projectName={currentProject?.name}
         projectId={projectId}
+        onOpenEnv={onOpenEnv}
       />
     </div>
   );
