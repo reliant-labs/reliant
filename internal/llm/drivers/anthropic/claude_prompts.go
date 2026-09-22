@@ -44,6 +44,7 @@ func randomCCH() string {
 
 // claudeCodeBillingHeader builds block[0]: the (uncached) billing header.
 //
+// Format, 2.1.280: `x-anthropic-billing-header: cc_version=<v>; cc_entrypoint=cli; cch=<5hex>; [cc_prev_req=<req_…>;] cc_prompt_id=<uuid>; cc_turn_origin=human;`
 // Format, 2.1.261: `x-anthropic-billing-header: cc_version=<v>; cc_entrypoint=cli; cch=<5hex>; cc_prompt_id=<uuid>;`
 // Format, 2.1.204: `x-anthropic-billing-header: cc_version=<v>; cc_entrypoint=cli; cch=<5hex>; [cc_prev_req=<req_…>;]`
 //
@@ -65,6 +66,9 @@ func claudeCodeBillingHeader(profile claudeCodeProfile) string {
 		profile.billingVersion, randomCCH())
 	if profile.billingPromptID {
 		header += fmt.Sprintf(" cc_prompt_id=%s;", uuid.New().String())
+	}
+	if profile.billingTurnOrigin {
+		header += " cc_turn_origin=human;"
 	}
 	return header
 }

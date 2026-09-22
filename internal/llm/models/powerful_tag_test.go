@@ -2,6 +2,7 @@
 package models
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -64,6 +65,10 @@ func TestPowerfulTagMembership(t *testing.T) {
 		ids = append(ids, model.ID)
 	}
 
+	// claude-5.5-opus is deliberately ABSENT. It is the flagship pick and sits
+	// above fable-5.1 in definition order, so tagging it powerful would also
+	// repoint a bare [powerful] selector onto it — see the comment on its
+	// catalog entry.
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
 		"gpt-6-astra",
@@ -71,6 +76,104 @@ func TestPowerfulTagMembership(t *testing.T) {
 		"gemini-3.8-flash",
 		"vertex-claude-5.1-fable",
 	}, ids)
+}
+
+// Opus 5.5 must be reachable on all four providers the product exposes, with
+// the bare api_model everywhere except openrouter, which namespaces it. Note
+// the api_model is claude-opus-5-5, NOT claude-opus-5.5 — the capture's wire
+// spelling uses dashes, and the dotted form is the catalog id only.
+func TestClaude55OpusProviderMappings(t *testing.T) {
+	reg := MustGetRegistry()
+
+	def, ok := reg.GetDefinition("claude-5.5-opus")
+	require.True(t, ok)
+
+	got := make(map[string]string, len(def.Providers))
+	for _, p := range def.Providers {
+		got[p.Driver] = p.APIModel
+	}
+
+	assert.Equal(t, map[string]string{
+		"anthropic":  "claude-opus-5-5",
+		"openrouter": "anthropic/claude-opus-5-5",
+		"reliant":    "claude-opus-5-5",
+		"vertexai":   "claude-opus-5-5",
+	}, got)
+
+	assert.Equal(t, "adaptive", def.DriverSettings.ThinkingMode)
+
+	// The 2.1.280 capture sends max_tokens 128000 — double every other Claude
+	// entry. A copy-pasted 64000 would silently halve the output ceiling.
+	assert.Equal(t, 128000, def.Capabilities.MaxOutputTokens)
+}
+
+// Opus 5.5 is the flagship pick on EVERY provider that serves it, not just on
+// whichever one happens to sort first. A user with only Vertex configured must
+// get the same answer from [flagship] as a user with only Anthropic — the two
+// catalog entries (claude-5.5-opus and vertex-claude-5.5-opus) exist precisely
+// so that holds, and each must lead its own section of the file.
+func TestFlagshipResolvesToOpus55OnEveryProvider(t *testing.T) {
+	reg := MustGetRegistry()
+
+	for _, provider := range []string{"anthropic", "openrouter", "reliant", "vertexai"} {
+		t.Run(provider, func(t *testing.T) {
+			resolved, err := reg.Resolve(
+				ModelSelector{Tags: []string{TagFlagship}},
+				[]string{provider},
+			)
+			require.NoError(t, err)
+
+			// claude-5.5-opus carries its OWN vertexai mapping and leads the
+			// file, so it wins on index for every provider — the dedicated
+			// vertex-claude-5.5-opus entry is never what a bare [flagship]
+			// selector reaches. That entry exists for explicit id selection and
+			// for parity with the other vertex-* duplicates; the assertion that
+			// matters is that both spellings reach the same wire model.
+			assert.Equal(t, "claude-5.5-opus", resolved.Definition.ID)
+			assert.Equal(t, provider, resolved.Provider.Driver)
+			assert.Equal(t, "claude-opus-5-5", resolvedAPIModelSuffix(resolved.Provider.APIModel))
+		})
+	}
+
+	// The dedicated Vertex entry is reachable by explicit id and lands on the
+	// same wire model, so the two spellings can never diverge.
+	byID, err := reg.Resolve(ModelSelector{ID: "vertex-claude-5.5-opus"}, []string{"vertexai"})
+	require.NoError(t, err)
+	assert.Equal(t, "vertexai", byID.Provider.Driver)
+	assert.Equal(t, "claude-opus-5-5", byID.Provider.APIModel)
+}
+
+// resolvedAPIModelSuffix strips openrouter's `anthropic/` namespace so one
+// assertion covers every provider's spelling of the same wire model.
+func resolvedAPIModelSuffix(apiModel string) string {
+	if idx := strings.LastIndex(apiModel, "/"); idx != -1 {
+		return apiModel[idx+1:]
+	}
+	return apiModel
+}
+
+// Flagship and powerful must stay DIFFERENT models. Both resolve by definition
+// index, and claude-5.5-opus sits above claude-5.1-fable, so adding `powerful`
+// to 5.5 would collapse the two tiers onto one model without any test failing
+// on the tag list alone.
+func TestFlagshipAndPowerfulResolveToDifferentModels(t *testing.T) {
+	reg := MustGetRegistry()
+
+	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, allTestProviders)
+	require.NoError(t, err)
+	powerful, err := reg.Resolve(ModelSelector{Tags: []string{TagPowerful}}, allTestProviders)
+	require.NoError(t, err)
+
+	assert.Equal(t, "claude-5.5-opus", flagship.Definition.ID)
+	assert.Equal(t, "claude-5.1-fable", powerful.Definition.ID)
+
+	for _, id := range []string{"claude-5.5-opus", "vertex-claude-5.5-opus"} {
+		def, ok := reg.GetDefinition(id)
+		require.True(t, ok)
+		assert.Contains(t, def.Tags, TagFlagship, "%s must be flagship", id)
+		assert.NotContains(t, def.Tags, TagPowerful,
+			"%s must not be powerful — it would steal the powerful tier too", id)
+	}
 }
 
 // Adding models reorders nothing unless we say so: [flagship] and [fast] are
@@ -87,7 +190,9 @@ func TestResolve_ExistingTagTargetsUnchangedByNewModels(t *testing.T) {
 	// to the providers a user has configured — so this global pin is a canary
 	// for accidental reordering, not the model most users actually get.
 	for tag, want := range map[string]string{
-		TagFlagship: "claude-5-opus",
+		// claude-5.5-opus leads the file, so it is the flagship pick. This
+		// moved from claude-5-opus deliberately when 5.5 shipped.
+		TagFlagship: "claude-5.5-opus",
 		TagModerate: "claude-5-sonnet",
 		TagCheap:    "claude-4.5-haiku",
 		TagFast:     "gemini-3.5-flash",
