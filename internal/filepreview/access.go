@@ -40,6 +40,19 @@ const (
 	ScopeAllowAbsolute
 )
 
+// String names the scope so a refusal logged with it reads as the rule that
+// was applied rather than as an integer the reader has to look up.
+func (s PathScope) String() string {
+	switch s {
+	case ScopeBaseOnly:
+		return "base_only"
+	case ScopeAllowAbsolute:
+		return "allow_absolute"
+	default:
+		return "unknown"
+	}
+}
+
 // ResolveBasePath resolves the correct base path for file operations.
 // Returns the worktree path if worktree_id or chat_id is provided, otherwise returns project path.
 func ResolveBasePath(ctx context.Context, repo db.Repository, projectID string, worktreeID *string, chatID *string) (string, error) {

@@ -58,6 +58,13 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 		opts.SessionID = &generated
 	}
 
+	// The claude-cli release this model is fingerprinted against. The User-Agent,
+	// the bundled-SDK version below, the billing header's cc_version and the
+	// embedded prompt bodies must all come from the SAME release — a mixed
+	// combination is one no real client emits. Today that is 2.1.204 for most
+	// models, 2.1.261 for fable-5.1 and 2.1.280 for opus-5.5.
+	profile := claudeCodeProfileFor(opts.Model.APIModel)
+
 	// Headers that need exact lowercase casing (Go canonicalizes by default)
 	lowercaseHeaders := map[string]string{
 		"host":          "api.anthropic.com",
@@ -75,6 +82,15 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	}
 	if opts.SessionID != nil && *opts.SessionID != "" {
 		lowercaseHeaders["x-claude-code-session-id"] = *opts.SessionID
+	}
+	// 2.1.280 only. Both are absent from every earlier capture, so an empty
+	// value on the profile means the header is not sent at all rather than sent
+	// blank.
+	if profile.dispatchID != "" {
+		lowercaseHeaders["anthropic-dispatch-id"] = profile.dispatchID
+	}
+	if profile.requestClass != "" {
+		lowercaseHeaders["x-claude-code-request-class"] = profile.requestClass
 	}
 
 	// Build the transport chain:
@@ -112,13 +128,6 @@ func NewClaudeCodeClient(opts llm.DriverOptions) *ClaudeCodeClient {
 	customHTTPClient := &http.Client{
 		Transport: &decompressingTransport{base: llm.WrapWithIdleTimeout(finalTransport)},
 	}
-
-	// The claude-cli release this model is fingerprinted against. The User-Agent,
-	// the bundled-SDK version below, the billing header's cc_version and the
-	// embedded prompt bodies must all come from the SAME release — a mixed
-	// combination is one no real client emits. Today that is 2.1.204 for every
-	// model except fable-5.1, which is 2.1.261.
-	profile := claudeCodeProfileFor(opts.Model.APIModel)
 
 	clientOptions = append(clientOptions,
 		option.WithHTTPClient(customHTTPClient),
@@ -685,19 +694,21 @@ func (c *ClaudeCodeClient) streamResponseInternal(ctx context.Context, params an
 	return eventChan
 }
 
-// thinkingDisplayUpdates is the thinking.display value the 2.1.261 capture sends.
-// It postdates the SDK, whose declared ThinkingConfigAdaptiveDisplay constants are
-// only "summarized" and "omitted"; the type is a plain string, so the conversion
-// is the supported escape hatch rather than a workaround.
+// thinkingDisplayUpdates is the thinking.display value the 2.1.261 and 2.1.280
+// captures send. It postdates the SDK, whose declared ThinkingConfigAdaptiveDisplay
+// constants are only "summarized" and "omitted"; the type is a plain string, so the
+// conversion is the supported escape hatch rather than a workaround.
 const thinkingDisplayUpdates = anthropic.ThinkingConfigAdaptiveDisplay("updates")
 
 // claudeCodeThinkingConfig returns the base thinking config, adding the
-// display:"updates" field that only the fable-5.1 (2.1.261) fingerprint carries.
-// Every other adaptive model keeps emitting a bare {"type":"adaptive"}, so the
-// shared base.go builder stays untouched for the plain Anthropic driver.
+// display:"updates" field carried by the releases that send it (2.1.261 and
+// 2.1.280). Models on the 2.1.204 fingerprint keep emitting a bare
+// {"type":"adaptive"}, so the shared base.go builder stays untouched for the
+// plain Anthropic driver.
 func (c *ClaudeCodeClient) claudeCodeThinkingConfig() anthropic.ThinkingConfigParamUnion {
 	thinking := c.getThinkingConfig()
-	if c.options.Model.APIModel == apiModelFable51 && thinking.OfAdaptive != nil {
+	profile := claudeCodeProfileFor(c.options.Model.APIModel)
+	if profile.thinkingDisplay && thinking.OfAdaptive != nil {
 		thinking.OfAdaptive.Display = thinkingDisplayUpdates
 	}
 	return thinking

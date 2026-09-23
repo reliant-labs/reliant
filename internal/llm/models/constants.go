@@ -14,6 +14,7 @@ const (
 	Claude5Fable   ModelID = "claude-5-fable"
 	Claude51Fable  ModelID = "claude-5.1-fable"
 	Claude5Opus    ModelID = "claude-5-opus"
+	Claude55Opus   ModelID = "claude-5.5-opus"
 )
 
 // OpenAI/GPT model IDs
@@ -71,6 +72,7 @@ const (
 	VertexClaude5Fable   ModelID = "vertex-claude-5-fable"
 	VertexClaude51Fable  ModelID = "vertex-claude-5.1-fable"
 	VertexClaude5Opus    ModelID = "vertex-claude-5-opus"
+	VertexClaude55Opus   ModelID = "vertex-claude-5.5-opus"
 )
 
 // Test/Mock model IDs

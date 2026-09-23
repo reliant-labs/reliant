@@ -32,6 +32,50 @@ models:
   # FLAGSHIP MODELS - Best overall for complex tasks
   # ============================================================================
 
+  # Claude 5.5 Opus is the flagship pick. Definition order IS resolution
+  # priority for tag selectors (ties break on index), so it leads the file: a
+  # bare [flagship] selector resolves here rather than to claude-5-opus.
+  #
+  # It deliberately does NOT carry `powerful`. It sits above claude-5.1-fable,
+  # which carries both tags, so tagging it powerful too would ALSO repoint a
+  # bare [powerful] selector here — silently, since both tags resolve by the
+  # same index rule. `powerful` stays pinned to fable-5.1 until that is an
+  # explicit decision.
+  #
+  # Its 2.1.280 capture sends max_tokens 128000, twice every other Claude entry.
+  - id: claude-5.5-opus
+    name: Claude 5.5 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: anthropic
+        api_model: claude-opus-5-5
+      - driver: openrouter
+        api_model: anthropic/claude-opus-5-5
+      - driver: reliant
+        api_model: claude-opus-5-5
+      - driver: vertexai
+        api_model: claude-opus-5-5
+      # GitHub Copilot: opus-5.5 mirrors the opus-5/opus-4.8 policy — served
+      # only on paid plans, so no `copilot` entry (it would 400 upstream).
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: xhigh
+
   - id: claude-5-opus
     name: Claude 5 Opus
     tags: [flagship, reasoning]
@@ -1217,6 +1261,37 @@ models:
   # ============================================================================
   # VERTEX AI MODELS - Google Cloud Vertex AI hosted models
   # ============================================================================
+
+  # Leads the Vertex block for the same reason claude-5.5-opus leads the file:
+  # definition order is resolution priority, so [flagship] scoped to vertexai
+  # resolves here. Its tags mirror claude-5.5-opus exactly — flagship, not
+  # powerful. The two entries describing one model must not disagree, or the
+  # tags would resolve to different models depending on which providers a user
+  # has configured.
+  - id: vertex-claude-5.5-opus
+    name: Vertex Claude 5.5 Opus
+    tags: [flagship, reasoning]
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1000000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf, text]
+    cost:
+      input_per_1m: 5.0
+      output_per_1m: 25.0
+      cached_input_per_1m: 0.5
+    providers:
+      - driver: vertexai
+        api_model: claude-opus-5-5
+    driver_settings:
+      thinking_mode: adaptive
+    default_thinking_level: xhigh
 
   - id: vertex-claude-5-opus
     name: Vertex Claude 5 Opus
