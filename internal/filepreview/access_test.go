@@ -65,6 +65,20 @@ func TestValidatePathTreatsRootAsBase(t *testing.T) {
 // it onto the base is the worst of the three options: it neither honours the
 // request nor refuses it, and for a write it lands somewhere the caller never
 // named.
+// A refusal is logged with the scope that produced it, so the scope has to
+// render as the rule rather than as its integer value.
+func TestPathScopeStringNamesTheRule(t *testing.T) {
+	if got := ScopeBaseOnly.String(); got != "base_only" {
+		t.Errorf("ScopeBaseOnly.String() = %q, want %q", got, "base_only")
+	}
+	if got := ScopeAllowAbsolute.String(); got != "allow_absolute" {
+		t.Errorf("ScopeAllowAbsolute.String() = %q, want %q", got, "allow_absolute")
+	}
+	if got := PathScope(99).String(); got != "unknown" {
+		t.Errorf("PathScope(99).String() = %q, want %q", got, "unknown")
+	}
+}
+
 func TestValidatePathRejectsAbsoluteOutsideBase(t *testing.T) {
 	base := filepath.Join(string(filepath.Separator), "tmp", "workspace")
 	outside := filepath.Join(string(filepath.Separator), "etc", "passwd")

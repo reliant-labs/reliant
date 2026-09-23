@@ -137,8 +137,11 @@ describe("ProvisioningGate", () => {
   });
 
   // The free path — local compute, own API key — commits nothing. Making that
-  // user watch a checklist of work that did not happen would be theatre.
-  it("does not make a no-op commit watch a checklist", () => {
+  // user watch a checklist of work that did not happen would be theatre, and
+  // asking them to click Continue on the resulting empty card is worse: the
+  // last real choice was made on the step behind it, so there is nothing for
+  // the click to decide.
+  it("exits by itself when the commit asked for nothing", () => {
     const onContinue = vi.fn();
     render(
       <ProvisioningGate
@@ -155,7 +158,33 @@ describe("ProvisioningGate", () => {
 
     expect(screen.queryByTestId("provisioning-gate")).not.toBeInTheDocument();
     expect(
-      screen.getByTestId("provisioning-gate-nothing-to-do"),
-    ).toBeInTheDocument();
+      screen.queryByRole("button", { name: /Continue/i }),
+    ).not.toBeInTheDocument();
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
+  // `onContinue` is a fresh closure on most parent renders, so a naive effect
+  // would re-fire the exit on every one of them — a navigation loop rather
+  // than a single handoff.
+  it("exits exactly once across re-renders", () => {
+    const skipped = makeCommit({
+      daemonId: undefined,
+      tasks: [
+        { name: "grant_ai_access", status: "skipped", detail: "" },
+        { name: "provision_daemon", status: "skipped", detail: "" },
+      ],
+    });
+    const onContinue = vi.fn();
+    const { rerender } = render(
+      <ProvisioningGate commit={skipped} onContinue={() => onContinue()} />,
+    );
+    rerender(
+      <ProvisioningGate commit={skipped} onContinue={() => onContinue()} />,
+    );
+    rerender(
+      <ProvisioningGate commit={skipped} onContinue={() => onContinue()} />,
+    );
+
+    expect(onContinue).toHaveBeenCalledTimes(1);
   });
 });

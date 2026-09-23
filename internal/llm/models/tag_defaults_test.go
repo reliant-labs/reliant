@@ -65,7 +65,7 @@ func TestResolve_TagWithoutDefaultLeavesThinkingLevelEmpty(t *testing.T) {
 	resolved, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, allTestProviders)
 	require.NoError(t, err)
 
-	require.Equal(t, "claude-5-opus", resolved.Definition.ID)
+	require.Equal(t, "claude-5.5-opus", resolved.Definition.ID)
 	assert.Empty(t, resolved.ThinkingLevel)
 	assert.NotEmpty(t, resolved.Definition.DefaultThinkingLevel,
 		"the model default is still what the consumer falls back to")

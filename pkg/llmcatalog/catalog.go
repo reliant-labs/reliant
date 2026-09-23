@@ -95,6 +95,7 @@ func usdNanos(usd float64) int64 {
 // entry that is absent from the catalog, or that lacks a `reliant` provider
 // mapping, fails the build rather than emitting a broken allowlist.
 var gatewayRoster = []string{
+	"claude-5.5-opus",
 	"claude-5.1-fable",
 	"claude-5-opus",
 	"claude-4.6-opus",

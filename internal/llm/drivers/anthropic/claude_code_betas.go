@@ -2,10 +2,10 @@
 package anthropic
 
 // Per-model anthropic-beta header strings, captured verbatim from real
-// claude-cli traffic (2.1.204 for every model except fable-5.1, whose capture is
-// 2.1.261). Order and content are load-bearing for fidelity, so each string is
-// stored exactly as captured rather than composed from feature flags. Keep these
-// byte-identical to the captures.
+// claude-cli traffic (2.1.204 for most models; fable-5.1 is 2.1.261 and
+// opus-5.5 is 2.1.280). Order and content are load-bearing for fidelity, so each
+// string is stored exactly as captured rather than composed from feature flags.
+// Keep these byte-identical to the captures.
 const (
 	// haiku-4.5 (api_model: claude-haiku-4-5-20251001)
 	betaHaiku45 = "oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,claude-code-20250219,advisor-tool-2026-03-01,advanced-tool-use-2025-11-20,server-side-fallback-2026-06-01,fallback-credit-2026-06-01,extended-cache-ttl-2025-04-11,cache-diagnosis-2026-04-07"
@@ -33,6 +33,15 @@ const (
 	// server-side-fallback from -2026-06-01 to -2026-07-01. context-1m is absent.
 	betaFable51 = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,per-turn-control-2026-07-01,advisor-tool-2026-03-01,advanced-tool-use-2025-11-20,effort-2025-11-24,server-side-fallback-2026-07-01,fallback-credit-2026-06-01,thinking-display-updates-2026-08-18,afk-mode-2026-01-31,extended-cache-ttl-2025-04-11,cache-diagnosis-2026-04-07"
 
+	// opus-5.5 (api_model: claude-opus-5-5) — captured from claude-cli/2.1.280.
+	// Versus betaFable51 it is opus-class, so context-1m-2025-08-07 returns in
+	// 3rd position. It also ADDS mid-conversation-tool-changes-2026-07-01,
+	// mid-conversation-system-clear-at-2026-08-21 and
+	// thinking-binding-controls-2026-08-01, and DROPS the whole server-side
+	// fallback pair (server-side-fallback / fallback-credit) plus afk-mode —
+	// consistent with the capture sending no `fallbacks` field at all.
+	betaOpus55 = "claude-code-20250219,oauth-2025-04-20,context-1m-2025-08-07,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,per-turn-control-2026-07-01,mid-conversation-tool-changes-2026-07-01,advisor-tool-2026-03-01,advanced-tool-use-2025-11-20,mid-conversation-system-clear-at-2026-08-21,effort-2025-11-24,thinking-binding-controls-2026-08-01,thinking-display-updates-2026-08-18,extended-cache-ttl-2025-04-11,cache-diagnosis-2026-04-07"
+
 	// betaDefault is retained for OLDER models not present in the captures
 	// (opus-4.5/4.6, sonnet-4.5/4.6). They still work with this set.
 	betaDefault = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24"
@@ -54,6 +63,8 @@ func claudeCodeBetaHeader(apiModel string) string {
 		return betaFable5
 	case apiModelFable51:
 		return betaFable51
+	case apiModelOpus55:
+		return betaOpus55
 	default:
 		return betaDefault
 	}

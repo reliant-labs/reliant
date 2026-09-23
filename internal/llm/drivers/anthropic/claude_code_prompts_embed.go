@@ -11,8 +11,8 @@ import (
 // by hand — they must stay byte-identical to the captured prompts so the spoof is
 // not flagged and prompt-cache keys match Claude Code's.
 //
-// Two CLI releases are represented: 2.1.204 (every model except fable-5.1) and
-// 2.1.261 (fable-5.1 only). A model must never mix blocks across releases — see
+// Three CLI releases are represented: 2.1.204 (most models), 2.1.261 (fable-5.1)
+// and 2.1.280 (opus-5.5). A model must never mix blocks across releases — see
 // claudeCodeProfile below.
 
 //go:embed ccprompts/identity.txt
@@ -39,10 +39,20 @@ var ccAgentFable51 string // agent block, fable-5.1 variant (2.1.261)
 //go:embed ccprompts/output_fable51.txt
 var ccOutputFable51 string // output block, fable-5.1 variant (2.1.261)
 
-// apiModelFable51 is the api_model string for Claude Fable 5.1. The model catalog
-// entry (id claude-5.1-fable) is owned elsewhere; this driver keys off the
-// api_model it sends on the wire.
-const apiModelFable51 = "claude-fable-5-1"
+//go:embed ccprompts/agent_opus55.txt
+var ccAgentOpus55 string // agent block, opus-5.5 variant (2.1.280)
+
+//go:embed ccprompts/output_opus55.txt
+var ccOutputOpus55 string // output block, opus-5.5 variant (2.1.280)
+
+// apiModelFable51 and apiModelOpus55 are the api_model strings for Claude Fable
+// 5.1 and Claude Opus 5.5. The model catalog entries (ids claude-5.1-fable and
+// claude-5.5-opus) are owned elsewhere; this driver keys off the api_model it
+// sends on the wire.
+const (
+	apiModelFable51 = "claude-fable-5-1"
+	apiModelOpus55  = "claude-opus-5-5"
+)
 
 // claudeCodeProfile is the complete per-model request fingerprint: which prompt
 // blocks the system array carries, and which claude-cli release the request must
@@ -77,9 +87,26 @@ type claudeCodeProfile struct {
 	stainlessVersion string
 
 	// billingPromptID selects the billing header's trailing segment. 2.1.261
-	// carries `cc_prompt_id=<uuid>;`; 2.1.204 carried `cc_prev_req=` instead
-	// (which we omit — see claudeCodeBillingHeader).
+	// and 2.1.280 carry `cc_prompt_id=<uuid>;`; 2.1.204 carried `cc_prev_req=`
+	// instead (which we omit — see claudeCodeBillingHeader).
 	billingPromptID bool
+
+	// billingTurnOrigin appends `cc_turn_origin=human;`, which only 2.1.280
+	// sends. Real 2.1.280 traffic also emits cc_turn_origin on non-human turns,
+	// but Reliant has no equivalent distinction to map onto it, and every
+	// request we send originates from a user turn.
+	billingTurnOrigin bool
+
+	// thinkingDisplay, when true, adds `display:"updates"` to an adaptive
+	// thinking config. 2.1.261 and 2.1.280 both send it; 2.1.204 sends a bare
+	// {"type":"adaptive"}. This is a per-release fact, not a per-model one, so
+	// it belongs here rather than in an api_model switch.
+	thinkingDisplay bool
+
+	// dispatchID and requestClass are the `anthropic-dispatch-id` and
+	// `x-claude-code-request-class` headers. Only 2.1.280 sends them; an empty
+	// value means the header is omitted entirely.
+	dispatchID, requestClass string
 }
 
 // The 2.1.204 fingerprint: verbose and lean prompt variants differ only in their
@@ -113,6 +140,26 @@ var (
 		billingVersion:    "2.1.261.a78",
 		stainlessVersion:  "0.112.1",
 		billingPromptID:   true,
+		thinkingDisplay:   true,
+	}
+
+	// profileOpus55 is the 2.1.280 fingerprint, captured from
+	// .dev/claude/opus-5.5.{curl,json}. Like 2.1.204 it sends NO
+	// reporting-outcomes block, so it is back to a 4-block system array — the
+	// block moved into the release's mid-conversation system turn, which
+	// Reliant does not send. It is the only profile carrying cc_turn_origin, a
+	// dispatch id and a request class.
+	profileOpus55 = claudeCodeProfile{
+		agent:             ccAgentOpus55,
+		output:            ccOutputOpus55,
+		cliVersion:        "2.1.280",
+		billingVersion:    "2.1.280.790",
+		stainlessVersion:  "0.112.1",
+		billingPromptID:   true,
+		billingTurnOrigin: true,
+		thinkingDisplay:   true,
+		dispatchID:        "v2d",
+		requestClass:      "main",
 	}
 )
 
@@ -127,6 +174,7 @@ var claudeCodeProfiles = map[string]claudeCodeProfile{
 	// spoof stays on one CLI fingerprint.
 	"claude-opus-5": profileLean204,
 	apiModelFable51: profileFable51,
+	apiModelOpus55:  profileOpus55,
 }
 
 // claudeCodeProfileFor returns the fingerprint for the given api_model.

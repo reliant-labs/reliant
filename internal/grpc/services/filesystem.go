@@ -117,9 +117,20 @@ func (s *FileSystemService) validatePathScoped(basePath, requestedPath string, s
 func validateWorkspacePath(basePath, requestedPath string, scope filepreview.PathScope) (string, error) {
 	absFullPath, err := filepreview.ValidatePathScoped(basePath, requestedPath, scope)
 	if err != nil {
+		// The refusal alone cannot be diagnosed: "outside the workspace" names
+		// neither the path the client sent nor the base it was compared
+		// against, and the pair is what distinguishes a traversal attempt from
+		// a client holding paths for a DIFFERENT workspace than the one the
+		// request resolved to (a chat on a worktree whose base is not under
+		// the project root, say). Both are needed, so both are logged here,
+		// once, at the single place the refusal is produced.
 		if errors.Is(err, filepreview.ErrPathOutsideBase) || errors.Is(err, filepreview.ErrAbsolutePathOutsideBase) {
+			logging.Warn("Refused a path outside the workspace",
+				"requested_path", requestedPath, "base_path", basePath, "scope", scope, "error", err)
 			return "", connect.NewError(connect.CodePermissionDenied, err)
 		}
+		logging.Warn("Rejected a malformed workspace path",
+			"requested_path", requestedPath, "base_path", basePath, "scope", scope, "error", err)
 		return "", connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	return absFullPath, nil
