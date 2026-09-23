@@ -95,6 +95,12 @@ import { StatusLine } from "./overview/StatusLine";
 // landed here, the auto-recharge RPCs had exactly one caller (OutOfCreditModal),
 // so the feature was offered only after the user had already run out.
 import { WalletAutoRechargeSection } from "./WalletAutoRechargeControl";
+// Deployment (infra) usage + its spending ceiling — the cpu/memory/storage
+// twin of the compute surface above, writing SetCurrentUserInfraOverage rather
+// than the compute pair. Ported from control-plane's internal-console, which
+// proxies to admin-api and therefore could never reach these RPCs at all.
+import { DeployUsageSection } from "./usage/DeployUsageSection";
+import { useDeployUsage } from "./usage/useDeployUsage";
 
 /**
  * Three tabs, not four.
@@ -813,14 +819,19 @@ function OverviewTab({
             planName={computeUi.planName}
             pricePerMonthLabel={computeUi.pricePerMonthLabel}
             renewsOnLabel={computeUi.renewsOnLabel}
-            includedHoursLabel={computeUi.includedHoursLabel}
-            usedHoursLabel={computeUi.usedHoursLabel}
             allowedSizesLabel={computeUi.allowedSizesLabel}
-            capacity={computeUi.capacity}
+            dimensions={[
+              {
+                id: "daemon_compute",
+                includedHoursLabel: computeUi.includedHoursLabel,
+                usedHoursLabel: computeUi.usedHoursLabel,
+                capacity: computeUi.capacity,
+                estimatedOverageCostLabel: computeUi.estimatedOverageCostLabel,
+              },
+            ]}
             grantedMinutesRemaining={computeUi.grantedMinutesRemaining}
             planDetailUnavailable={computeUi.planDetailUnavailable}
             usageUnavailable={computeUi.usageUnavailable}
-            estimatedOverageCostLabel={computeUi.estimatedOverageCostLabel}
             onChangePlan={onGoToPlans}
             onRetryUsage={() => void usageQ.refetch()}
             renderOverageControl={({ disabled, reason }) => (
@@ -1248,12 +1259,35 @@ function PlansTab() {
 // would make the deliberate lookup the thing you scroll past.
 
 function UsageAndInvoicesTab() {
+  // Deployment usage sits beside compute usage because they answer the same
+  // question about two products — "what have I run, and what will it cost" —
+  // and a customer reconciling one bill should not have to find two tabs.
+  //
+  // Gated on `available`, which is false until the public proto subtree
+  // carries the infra-overage pair and DeployService (see ./usage/
+  // useDeployUsage.ts for the exact unblock). A tab that rendered this
+  // half-wired would show a paying customer an empty dashboard about money.
+  const deployUsage = useDeployUsage();
+
   return (
     <div className="flex flex-col gap-8">
       <InvoicesPanel />
       <div className="border-t border-border pt-6">
         <UsagePanel />
       </div>
+      {deployUsage.available && (
+        <div className="border-t border-border pt-6">
+          <DeployUsageSection
+            summary={deployUsage.summary}
+            isLoading={deployUsage.isLoading}
+            error={deployUsage.error}
+            onRetry={deployUsage.refetch}
+            onSaveCap={deployUsage.saveCap}
+            isSavingCap={deployUsage.isSavingCap}
+            deploymentNames={deployUsage.deploymentNames}
+          />
+        </div>
+      )}
     </div>
   );
 }

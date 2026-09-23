@@ -1,0 +1,692 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// ForgeService exposes a forge project's release/env/secret state to the web
+// tier.
+//
+// Reliant is distributed: the api-server has no access to the user's
+// filesystem. A forge project's release ledger, deploy/kcl/<env>/, local secret
+// store and kubectl context live only on the DAEMON's disk, so every RPC here
+// is a thin hop onto a registered forge.* daemon command:
+//
+//   web -> ForgeService (api-server) -> SendDaemonCommand -> daemon -> forge
+//
+// FORGE IS THE BUSINESS LOGIC. This surface carries forge's own JSON report
+// through untouched in `report_json` rather than remodelling it field by field.
+// A proto mirror would be a SECOND schema of the same facts, free to disagree
+// with forge's and guaranteed to drift: forge's report contract is explicitly
+// additive, so a mirror silently drops every field added after it was written.
+// Callers parse report_json against forge's documented schema.
+service ForgeService {
+  // GetTopology returns the whole release/environment topology. Set verify to
+  // reconcile each environment against its live cluster.
+  rpc GetTopology(GetForgeTopologyRequest) returns (GetForgeTopologyResponse) {}
+
+  // VerifyEnv reconciles one environment against its live cluster.
+  rpc VerifyEnv(VerifyForgeEnvRequest) returns (VerifyForgeEnvResponse) {}
+
+  // ListSecrets returns declared/present/inert secrets for an environment.
+  // The report carries NAMES and BOOLEANS only, never a secret value.
+  rpc ListSecrets(ListForgeSecretsRequest) returns (ListForgeSecretsResponse) {}
+
+  // GetAudit returns the project audit rollup.
+  rpc GetAudit(GetForgeAuditRequest) returns (GetForgeAuditResponse) {}
+
+  // GetEnvStatus returns runtime checks for an environment.
+  rpc GetEnvStatus(GetForgeEnvStatusRequest) returns (GetForgeEnvStatusResponse) {}
+
+  // PlanPromote previews binding an environment to a release. READ-ONLY: it
+  // runs `forge env promote <release> --to <env> --plan`, which computes the
+  // entire change set and stops before forge's only write. Safe, idempotent,
+  // needs no confirmation. This is what a UI calls to render the diff.
+  rpc PlanPromote(PlanForgePromoteRequest) returns (PlanForgePromoteResponse) {}
+
+  // ApplyPromote WRITES the binding.
+  //
+  // A SEPARATE METHOD, not a flag on PlanPromote, and that is the whole safety
+  // design. A `dry_run` bool defaults to FALSE, and false is the destructive
+  // value — so a caller that forgets the field, or a client written before the
+  // field existed, would perform the WRITE by omission. Two method names have
+  // no such failure mode: the destructive call cannot be reached by accident,
+  // only by naming it, and which one happened is legible in a log line without
+  // reading a field.
+  //
+  // The request carries a confirmation token (see PromoteForgeEnvRequest). The
+  // server re-plans and REFUSES if the binding no longer matches what the
+  // caller last saw.
+  rpc ApplyPromote(PromoteForgeEnvRequest) returns (PromoteForgeEnvResponse) {}
+
+  // PlanDeploy previews deploying an environment. READ-ONLY: it runs
+  // `forge env deploy <env> --dry-run --json`, which renders the env, evaluates
+  // the declared-cluster guard and runs the preflight against the live target,
+  // then returns BEFORE the first kubectl apply. Safe, needs no confirmation.
+  // This is what a UI calls to show a human which cluster, which namespace,
+  // which images and which resources before asking them to approve it.
+  rpc PlanDeploy(PlanForgeDeployRequest) returns (PlanForgeDeployResponse) {}
+
+  // StartDeploy begins a REAL deploy to a LIVE CLUSTER, as a background job,
+  // and returns a handle immediately. Poll it with GetDeployStatus.
+  //
+  // WHY IT IS ASYNCHRONOUS, WHICH IS NOT A STYLE CHOICE. The daemon caps a
+  // single forge invocation at two minutes, shared with the five read commands.
+  // `forge env deploy` defaults to rollout mode `wait` with a FIVE-MINUTE budget
+  // PER RESOURCE, and a real environment has a dozen or more deployments. A
+  // synchronous call would therefore have the child KILLED MID-ROLLOUT: a
+  // half-converged cluster, plus an RPC reporting a timeout while the apply in
+  // fact landed. Nobody would know what shipped.
+  //
+  // Like the promote split, this is a SEPARATE METHOD from PlanDeploy rather
+  // than a flag on it, because a `dry_run` bool defaults to false and false is
+  // the destructive value.
+  //
+  // The request carries a confirmation token (see StartForgeDeployRequest). The
+  // server re-plans and REFUSES if the declared cluster or the bound release is
+  // no longer what the caller saw.
+  rpc StartDeploy(StartForgeDeployRequest) returns (StartForgeDeployResponse) {}
+
+  // GetDeployStatus polls a running or finished deploy by handle.
+  //
+  // Read job_status and the report TOGETHER: job_status answers "did the
+  // invocation reach a determinate outcome", and the report answers "did the
+  // deploy work". COMPLETED means forge ran and produced a report — never that
+  // the deploy succeeded.
+  rpc GetDeployStatus(GetForgeDeployStatusRequest) returns (GetForgeDeployStatusResponse) {}
+}
+
+// ForgeReachability says whether the state described by a report was actually
+// OBSERVED, and it is the distinction this whole surface exists to preserve.
+//
+// Forge deliberately separates "I could not reach the cluster" (exit 2) from
+// "the release is wrong" (exit 1), because a VPN blip is not evidence of a
+// release defect, and a check that cries wolf is a check that gets switched
+// off. That separation has to survive the RPC boundary: a cluster read that
+// timed out comes back as a SUCCESSFUL RPC carrying UNREACHABLE, so the UI
+// renders "unknown", not a red banner and not a green one.
+enum ForgeReachability {
+  // Not applicable: the command reads no cluster, or none was attempted
+  // (e.g. GetTopology without verify, where every image is "not_verified").
+  FORGE_REACHABILITY_UNSPECIFIED = 0;
+
+  // The cluster was read. The report reflects what is actually running.
+  FORGE_REACHABILITY_OK = 1;
+
+  // The cluster could NOT be read — forge exited 2, or the read exceeded its
+  // budget. Live state is UNKNOWN. It is neither healthy nor drifted, and a
+  // client must not render it as either.
+  FORGE_REACHABILITY_UNREACHABLE = 2;
+}
+
+// ForgeReportMeta is stamped on every response so a client can tell the five
+// outcomes apart without parsing the report body.
+message ForgeReportMeta {
+  // False means there is no forge.yaml at the project path. This is a NORMAL,
+  // expected answer — most reliant projects are not forge projects — and it is
+  // deliberately not an RPC error. When false, report_json is empty.
+  bool is_forge_project = 1;
+
+  // False means the forge this reliant was built against does not have the
+  // command or flag required. Surfaced as data, never as an error, so the UI
+  // can say "your forge is too old for this view" instead of rendering an
+  // empty screen that reads as "you have no environments".
+  bool supported = 2;
+
+  // The forge version reliant was built against. Always populated.
+  string forge_version = 3;
+
+  // Forge's own short complaint ("unknown flag: --json"), present only when
+  // supported is false. Never populated on the secret path.
+  string unsupported_reason = 4;
+
+  // Forge's exit status when a report was produced: 0 ok, 1 drift/missing,
+  // 2 unreachable. Lets a client distinguish "checked, all good" from
+  // "checked, found problems" without re-deriving either from the body.
+  int32 exit_code = 5;
+
+  // Whether the live cluster was actually observed. See ForgeReachability.
+  ForgeReachability reachability = 6;
+
+  // Why the cluster could not be read, when reachability is UNREACHABLE.
+  // Diagnostic text for a human; clients must branch on reachability, not on
+  // this string.
+  string unreachable_reason = 7;
+}
+
+// ============================================
+// GetTopology
+// ============================================
+
+message GetForgeTopologyRequest {
+  string project_id = 1;
+
+  // Reconcile every environment against its live cluster. Off by default, and
+  // that default is load-bearing: without it every image's state is
+  // "not_verified", which means UNKNOWN, not OK. A client that paints
+  // not_verified green is claiming a clean bill of health for an environment
+  // nobody looked at.
+  bool verify = 2;
+
+  // Narrow the report to these environments. Empty means all declared.
+  repeated string envs = 3;
+}
+
+message GetForgeTopologyResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env topology --json` document, verbatim. Empty when the project
+  // is not a forge project, when the command is unsupported, or when the
+  // cluster was unreachable before a report could be produced.
+  string report_json = 2;
+}
+
+// ============================================
+// VerifyEnv
+// ============================================
+
+message VerifyForgeEnvRequest {
+  string project_id = 1;
+  string env = 2;
+}
+
+message VerifyForgeEnvResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env verify --json` document, verbatim.
+  string report_json = 2;
+}
+
+// ============================================
+// ListSecrets
+// ============================================
+
+message ListForgeSecretsRequest {
+  string project_id = 1;
+  string env = 2;
+}
+
+// ListForgeSecretsResponse is CONSTRAINED BY DESIGN: meta plus forge's
+// document, and nothing else.
+//
+// `forge secret list --json` is built so that no field in its report can carry
+// a secret VALUE — the report type graph holds only names, booleans and
+// coordinates, and forge pins that with a reflection test over an allow-list.
+// The daemon layer preserves it by withholding forge's stderr entirely on this
+// path. This message is the last link in that chain, so it gets the same
+// treatment: adding a field here is how a value would eventually reach a
+// browser, and TestListForgeSecretsResponseCannotCarrySecretValues fails if
+// anyone adds one.
+message ListForgeSecretsResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `secret list --json` document, verbatim. Names and booleans only.
+  string report_json = 2;
+}
+
+// ============================================
+// GetAudit
+// ============================================
+
+message GetForgeAuditRequest {
+  string project_id = 1;
+}
+
+message GetForgeAuditResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `project audit --json` document, verbatim.
+  string report_json = 2;
+}
+
+// ============================================
+// GetEnvStatus
+// ============================================
+
+message GetForgeEnvStatusRequest {
+  string project_id = 1;
+  string env = 2;
+}
+
+message GetForgeEnvStatusResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env status --json` document, verbatim. Its checks carry
+  // pass/fail/warn/skip/unknown; UNKNOWN means the check could not be
+  // measured and is neither a pass nor a fail. Nothing on this path collapses
+  // it into either.
+  string report_json = 2;
+}
+
+// ============================================
+// PlanPromote — the read-only preview
+// ============================================
+
+message PlanForgePromoteRequest {
+  string project_id = 1;
+
+  // The environment to preview binding. Passed to forge as `--to <env>`.
+  string env = 2;
+
+  // The already-built release to preview binding it to (e.g. "v1.5.15").
+  string release = 3;
+}
+
+message PlanForgePromoteResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env promote --plan --json` document, verbatim. Always
+  // dry_run:true / applied:false — nothing was written.
+  //
+  // Fields worth naming because a client that drops them misleads: `direction`
+  // ("ahead" | "behind" | "initial" | "same" | "unknown"), where BEHIND is a
+  // ROLLBACK; `images[].change` ("unchanged" | "changed" | "added" |
+  // "removed"), where REMOVED means a workload would be DELETED; and
+  // `ships_nothing` / `next_step`, which say that promote moves a pointer and
+  // nothing reaches a cluster until `forge env deploy` runs.
+  string report_json = 2;
+}
+
+// ============================================
+// ApplyPromote — the guarded write
+// ============================================
+
+// PromoteForgeEnvRequest carries the CONFIRMATION TOKEN that authorises the
+// write: which environment, which target release, and — the part that makes it
+// a token rather than a set of arguments — the release the caller last saw the
+// environment bound to.
+//
+// WHY OPTIMISTIC CONCURRENCY ON A SINGLE-FILE WRITE. A forge EnvBinding keeps
+// NO HISTORY: it is {release, resolved, promoted_at}, so a promote OVERWRITES
+// the previous release outright. There is no prior-release field to read back
+// and nothing to undo from — recovery means finding the old value in git, if
+// the ledger was even committed. So the server re-plans, compares the binding
+// forge actually holds against the claim below, and writes only if they agree.
+// Disagreement means someone promoted in between, and it is refused with the
+// binding that was actually found (see PromoteForgeEnvResponse).
+message PromoteForgeEnvRequest {
+  string project_id = 1;
+
+  // The environment to bind. Passed to forge as `--to <env>`.
+  string env = 2;
+
+  // The already-built release to bind it to.
+  string release = 3;
+
+  // The release the caller last saw this environment bound to. Required unless
+  // expect_unbound is set. The write proceeds only if the ledger still holds
+  // this exact release.
+  string expected_current_release = 4;
+
+  // Assert the caller saw NO binding at all — a first promote.
+  //
+  // A separate field from an empty expected_current_release on purpose, because
+  // those are three different claims and only two are legitimate: "I saw
+  // v1.3.0", "I saw nothing", and "I did not fill this in". Collapsing the last
+  // two would let an unpopulated request authorise a blind overwrite of an
+  // environment that IS bound, which is the exact accident the guard exists to
+  // prevent. A request with neither field set is rejected.
+  bool expect_unbound = 5;
+}
+
+// ForgePromoteRefusalReason is why a promote was not applied.
+enum ForgePromoteRefusalReason {
+  // Not refused.
+  FORGE_PROMOTE_REFUSAL_REASON_UNSPECIFIED = 0;
+
+  // The environment's current binding is not what the caller said it last saw:
+  // someone promoted in between, or the caller's page is stale. Nothing was
+  // written. The response carries the binding that was actually found so the
+  // caller can re-render and decide, rather than retrying blind.
+  FORGE_PROMOTE_REFUSAL_REASON_STALE_CURRENT_RELEASE = 1;
+}
+
+// ForgePromoteRefusal is the state the guard found, when it refused.
+//
+// IT TRAVELS AS A CONNECT ERROR DETAIL, NOT AS A RESPONSE FIELD. A refusal
+// fails the RPC with FailedPrecondition and attaches this message as a detail.
+// That is deliberate: a refusal carried in a successful response is only safe
+// if every client remembers to check the field, and a client that forgets sees
+// a 200 and tells a user the promote worked. On the error path the default
+// behaviour of every client — including generated hooks that surface non-OK
+// codes automatically — is to fail closed. The structured facts survive either
+// way, which is the point of using a detail rather than an error string.
+message ForgePromoteRefusal {
+  ForgePromoteRefusalReason reason = 1;
+
+  // What the caller claimed. Echoed so a client can diff the two without
+  // holding onto its own request.
+  string expected_current_release = 2;
+  bool expected_unbound = 3;
+
+  // What the ledger actually holds NOW. bound is separate from a non-empty
+  // release so "never promoted" stays distinguishable from a binding carrying
+  // a blank version.
+  bool actual_bound = 4;
+  string actual_current_release = 5;
+
+  // RFC3339 for when the binding that was found was WRITTEN. This is what tells
+  // an operator whether they were beaten by seconds or are reading a week-old
+  // page.
+  string actual_promoted_at = 6;
+
+  // One-sentence human phrasing. Clients must branch on reason, not on this.
+  string detail = 7;
+}
+
+message PromoteForgeEnvResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env promote --json` document, verbatim.
+  //
+  // On success this is the plan that was APPLIED (applied:true), not the
+  // preview — so a client shows what actually happened rather than assuming its
+  // preview was still accurate. On a refusal it is the FRESH plan the guard
+  // computed against real current state, so the caller can re-render the true
+  // diff without another round trip.
+  //
+  // `ships_nothing` and `next_step` are carried through unchanged even on a
+  // successful apply. A promote that succeeded still shipped NOTHING: it moved
+  // a pointer, and not one byte reaches any cluster until `forge env deploy`
+  // runs. A client that renders this as a deployment is wrong.
+  //
+  // There is deliberately NO refusal field here. A refusal is not a kind of
+  // success: it arrives as a FailedPrecondition error carrying a
+  // ForgePromoteRefusal detail, so this message exists only for promotes that
+  // actually happened. That means a client cannot receive this message at all
+  // without the write having been applied — a property a nullable field could
+  // not give it.
+  string report_json = 2;
+}
+
+// ============================================
+// DEPLOY — the only path on this surface that mutates a LIVE CLUSTER
+// ============================================
+//
+// Promote writes one pointer into a file in the repo, recoverable from git.
+// Deploy applies manifests to Kubernetes, and for a cloud environment that is
+// not recoverable from anywhere. So this path is more conservative than
+// promote's in three ways, each visible in the shapes below.
+//
+// 1. THREE METHODS, because an apply cannot be synchronous. See StartDeploy.
+//
+// 2. THE CONFIRMATION TOKEN CARRIES THE CLUSTER, not just the release. forge
+//    deploys to the context the environment's KCL DECLARES and never to the
+//    ambient kubectl current-context, so the declared context is the only thing
+//    that decides where bytes land — and it comes from a file anyone can edit
+//    between a preview and a confirmation.
+//
+// 3. TWO ESCAPE HATCHES ARE DELIBERATELY ABSENT AND MUST STAY ABSENT. forge's
+//    `--skip-preflight` (which bypasses verifying that referenced Secret keys
+//    and container images exist on the LIVE target before applying) and
+//    `--no-digest` (which ships a mutable tag instead of an immutable digest)
+//    have no field here. Both exist for a human at a terminal who has weighed
+//    the consequence; an RPC field for either would be set once as a workaround
+//    for an unrelated problem and then stay set forever.
+//    TestForgeDeployRequestsCarryNoEscapeHatches fails if one is added.
+
+// ForgeDeployJobStatus is whether the detached invocation reached a determinate
+// outcome. IT IS NOT THE DEPLOY'S VERDICT, and conflating the two is the mistake
+// this enum exists to prevent: whether the deploy WORKED is answered by forge's
+// report (ok, exit_code, rollout.results), carried verbatim alongside. A client
+// must read both.
+enum ForgeDeployJobStatus {
+  // Not recorded. Never produced deliberately; treat as UNKNOWN.
+  FORGE_DEPLOY_JOB_STATUS_UNSPECIFIED = 0;
+
+  // Forge is still executing. NOT a success and NOT a failure — the apply is in
+  // flight and its outcome does not exist yet. A client must keep polling and
+  // must not render either a green or a red terminal state.
+  FORGE_DEPLOY_JOB_STATUS_RUNNING = 1;
+
+  // Forge exited and produced a parseable report. THIS DOES NOT MEAN THE DEPLOY
+  // SUCCEEDED — a deploy whose rollout failed, timed out, or was never waited on
+  // arrives under exactly this status, with the truth in report_json.
+  FORGE_DEPLOY_JOB_STATUS_COMPLETED = 2;
+
+  // The invocation never got off the ground, so NOTHING can have been applied.
+  // Reserved for exactly that: forge could not be started, or the pinned forge
+  // does not understand the command. A process that started and then died is
+  // UNKNOWN, not this.
+  FORGE_DEPLOY_JOB_STATUS_FAILED = 3;
+
+  // The invocation started and ended without a determinable outcome — killed by
+  // a timeout or a signal, the daemon restarted and lost the handle, or forge
+  // exited without a parseable document. MANIFESTS MAY OR MAY NOT HAVE REACHED
+  // THE CLUSTER.
+  //
+  // THIS IS THE STATE THAT MUST NOT BE COLLAPSED. Rendering it as success paints
+  // a possibly half-converged cluster green; rendering it as failure invites a
+  // retry against a cluster that may already be converging. The only correct
+  // client behaviour is to tell the operator to go and verify the environment.
+  FORGE_DEPLOY_JOB_STATUS_UNKNOWN = 4;
+}
+
+// ============================================
+// PlanDeploy — the read-only preview
+// ============================================
+
+message PlanForgeDeployRequest {
+  string project_id = 1;
+
+  // The environment to preview deploying. forge's positional argument.
+  string env = 2;
+}
+
+message PlanForgeDeployResponse {
+  ForgeReportMeta meta = 1;
+
+  // Forge's `env deploy --dry-run --json` document, verbatim. Always
+  // mode:"dry_run" — nothing was applied.
+  //
+  // Fields worth naming because a client that drops them misleads:
+  // `guard.declared_context` (THE CLUSTER THIS WOULD DEPLOY TO — the thing to
+  // put in front of a human before they confirm) alongside
+  // `guard.current_context`, which is INFORMATIONAL ONLY and which forge never
+  // reads; `guard.verdict` ("allow" | "refuse"), where refuse means forge will
+  // not deploy at all; `target.namespace` and `target.all_kube_contexts`, the
+  // latter being every cluster a multi-cluster env writes to; `images[].pinning`
+  // ("digest" | "tag"), where TAG is a mutable reference that may not be the
+  // bytes that were built; `preflight.status`, where any "skipped_*" value means
+  // NOTHING WAS CHECKED rather than nothing was wrong; and `rollout.mode` plus
+  // `rollout.timeout_seconds`, which is the budget PER RESOURCE, not for the set.
+  string report_json = 2;
+}
+
+// ============================================
+// StartDeploy — the guarded, asynchronous apply
+// ============================================
+
+// StartForgeDeployRequest carries the CONFIRMATION TOKEN that authorises writing
+// to a live cluster: which environment, which cluster the operator saw named, and
+// which release they reviewed. The server re-plans and refuses on any
+// disagreement, having applied nothing.
+message StartForgeDeployRequest {
+  string project_id = 1;
+
+  // The environment to deploy. forge's positional argument.
+  string env = 2;
+
+  // THE CLUSTER THE CALLER SAW NAMED in the plan
+  // (`guard.declared_context` from PlanDeploy), and the most important field in
+  // this message.
+  //
+  // forge applies to the context the env's KCL DECLARES, never to the ambient
+  // current-context, so this is the only thing that determines where bytes land
+  // — and it can change between the preview and the confirmation, because it
+  // comes from a file anyone can edit. Without this check a UI could show
+  // someone "k3d-control-plane", have the KCL edited, and apply to a production
+  // GKE cluster on their click.
+  //
+  // REQUIRED, with no "I did not populate it" spelling: there is no legitimate
+  // deploy whose target cluster the operator did not see.
+  string expected_declared_context = 3;
+
+  // The release the caller last saw this environment bound to. Required unless
+  // expect_unbound is set.
+  //
+  // The deploy ships THAT release's pinned per-image digests, so a deploy
+  // authorised against one release and executed against another ships code
+  // nobody reviewed.
+  string expected_current_release = 4;
+
+  // Assert the caller saw NO release binding — an environment that deploys by
+  // resolved tag.
+  //
+  // A separate field from an empty expected_current_release on purpose, because
+  // those are three different claims and only two are legitimate: "I saw
+  // v1.3.0", "I saw no binding", and "I did not fill this in". Collapsing the
+  // last two would let an unpopulated request authorise shipping whatever the
+  // environment happens to be bound to now. A request with neither field set is
+  // rejected.
+  bool expect_unbound = 5;
+}
+
+// ForgeDeployRefusalReason is why a deploy was not STARTED. In every case
+// nothing was applied.
+enum ForgeDeployRefusalReason {
+  // Not refused.
+  FORGE_DEPLOY_REFUSAL_REASON_UNSPECIFIED = 0;
+
+  // The environment's KCL now declares a DIFFERENT kubectl context than the one
+  // the caller was authorised against. The headline guard: a deploy must never
+  // land on a cluster the operator did not see named. The response carries both
+  // contexts so the caller can show the difference rather than retry blind.
+  FORGE_DEPLOY_REFUSAL_REASON_STALE_DECLARED_CONTEXT = 1;
+
+  // The environment is bound to a different release than the caller reviewed, so
+  // deploying would ship digests nobody looked at.
+  FORGE_DEPLOY_REFUSAL_REASON_STALE_CURRENT_RELEASE = 2;
+
+  // FORGE ITSELF will not deploy: kubectl's contexts could not be listed, or the
+  // declared context is absent from the kubeconfig. Surfaced as its own reason
+  // rather than folded into a generic failure, because the fix is different and
+  // forge supplies it (guard_fix).
+  FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED = 3;
+
+  // A deploy of this environment is already in flight. Refused rather than
+  // queued — two concurrent applies race each other's rollout and leave the
+  // cluster converging toward two different manifest streams. The response
+  // carries the running handle so the caller can poll it instead.
+  FORGE_DEPLOY_REFUSAL_REASON_ALREADY_RUNNING = 4;
+}
+
+// ForgeDeployRefusal is the state the guard found, when it refused.
+//
+// IT TRAVELS AS A CONNECT ERROR DETAIL, NOT AS A RESPONSE FIELD — the same
+// decision ForgePromoteRefusal documents, and it matters more here. A refusal
+// carried in a successful response is only safe if every client remembers to
+// check the field, and a client that forgets would show a spinner waiting for a
+// deploy that was never started. On the error path every client fails closed by
+// default, and the structured facts survive in the detail.
+message ForgeDeployRefusal {
+  ForgeDeployRefusalReason reason = 1;
+
+  // One-sentence human phrasing. Clients must branch on reason, not on this.
+  string detail = 2;
+
+  // The declared-context claim, and the context actually declared NOW. Both are
+  // carried so a client can render "you approved X, it now says Y" without
+  // holding onto its own request.
+  string expected_declared_context = 3;
+  string actual_declared_context = 4;
+
+  // The bound-release claim, and the binding actually found. actual_bound is
+  // separate from a non-empty release so "no binding" stays distinguishable from
+  // a binding carrying a blank version.
+  string expected_current_release = 5;
+  bool expected_unbound = 6;
+  string actual_current_release = 7;
+  bool actual_bound = 8;
+
+  // Forge's own guard decision, when IT is the refusal
+  // (FORGE_DEPLOY_REFUSAL_REASON_GUARD_REFUSED). guard_fix is forge's own
+  // statement of what would make the deploy possible.
+  string guard_verdict = 9;
+  string guard_reason = 10;
+  string guard_fix = 11;
+
+  // The in-flight deploy's handle, on an already-running refusal. Poll it with
+  // GetDeployStatus rather than starting another.
+  string running_handle = 12;
+}
+
+message StartForgeDeployResponse {
+  ForgeReportMeta meta = 1;
+
+  // The handle for the detached deploy. Pass it to GetDeployStatus.
+  string handle = 2;
+
+  // The environment being deployed, echoed.
+  string env = 3;
+
+  // Always FORGE_DEPLOY_JOB_STATUS_RUNNING here. Stated explicitly rather than
+  // implied so a client reads the same field from this response and from
+  // GetDeployStatus, instead of special-casing the first poll.
+  ForgeDeployJobStatus job_status = 4;
+
+  // RFC3339 for when the deploy was started.
+  string started_at = 5;
+
+  // The GUARD PLAN — the read-only `--dry-run` document the server just computed
+  // and authorised this deploy against. NOT an apply report; no apply report
+  // exists yet, and mode is "dry_run".
+  //
+  // It is carried so a client can render exactly what was approved, rather than
+  // trusting a preview it fetched earlier and which may have been computed
+  // against different state.
+  //
+  // There is deliberately NO refusal field on this message. A refusal is not a
+  // kind of started deploy: it arrives as a FailedPrecondition error carrying a
+  // ForgeDeployRefusal detail. So a client cannot receive this message at all
+  // without a deploy actually having been started — a property a nullable field
+  // could not give it.
+  string report_json = 6;
+}
+
+// ============================================
+// GetDeployStatus — polling
+// ============================================
+
+message GetForgeDeployStatusRequest {
+  string project_id = 1;
+
+  // The handle returned by StartDeploy.
+  string handle = 2;
+}
+
+message GetForgeDeployStatusResponse {
+  ForgeReportMeta meta = 1;
+
+  string handle = 2;
+  string env = 3;
+
+  // The JOB's lifecycle — see ForgeDeployJobStatus. Read it together with
+  // report_json: this field says whether the invocation reached a determinate
+  // outcome, report_json says whether the deploy worked.
+  ForgeDeployJobStatus job_status = 4;
+
+  // Why the job is in a non-completed terminal state, in a sentence. For
+  // UNKNOWN this is the text that tells an operator manifests may or may not
+  // have landed and the environment must be verified. Clients branch on
+  // job_status, not on this string.
+  string job_status_detail = 5;
+
+  // RFC3339 timestamps. finished_at is empty while the job is running.
+  string started_at = 6;
+  string finished_at = 7;
+
+  // Forge's `env deploy --json` document, verbatim, once the job has produced
+  // one. Empty while running, and empty for a job that died before emitting it.
+  //
+  // Its `rollout.results[].state` carries "ready" | "failed" | "timed_out" |
+  // "not_waited", and the last two are THE ABSENCE OF AN ANSWER rather than
+  // either outcome: a Deployment that did not become ready inside its budget may
+  // be mid-pull on a cold node or may be crash-looping, and forge does not know
+  // which. Nothing between forge and this field reinterprets them, and a client
+  // must not either — collapsing timed_out into ready is the
+  // green-deploy-over-a-broken-environment failure that made forge's
+  // RolloutPolicy exist.
+  string report_json = 8;
+}

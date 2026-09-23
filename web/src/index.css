@@ -3,6 +3,224 @@
 @import "./themes/professional-themes.css";
 @config "../tailwind.config.js";
 
+/*
+ * ═══════════════════════════════════════════════════════════════════════
+ * FORGE COMPONENT-LIBRARY TOKEN BRIDGE
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * `forge component install <name> --dir .` drops component SOURCE into
+ * src/. Those components are written against forge's own semantic token
+ * vocabulary (`bg-surface`, `text-ink`, `bg-danger-surface`, …), which is
+ * not reliant's (`bg-card`, `text-foreground`, `bg-destructive`, …).
+ * Without a bridge every forge token is an undefined color and the
+ * component renders with transparent backgrounds and inherited text.
+ *
+ * This block is that bridge: forge's 28 token names re-expressed in terms
+ * of reliant's EXISTING HSL theme variables. Done here, once, at the theme
+ * layer, every forge component — installed today or by a future
+ * `forge component install` — inherits all ten of reliant's color schemes
+ * plus light/dark for free.
+ *
+ * ── Why here and not the two obvious alternatives ────────────────────
+ *
+ * NOT by importing forge's oklch palette as a second set of colors: that
+ * puts two palettes in one app. Forge components would render in forge's
+ * indigo regardless of the scheme the user picked, and would not flip with
+ * reliant's `.dark` class (forge's palette flips on `data-theme`, which
+ * reliant does not set).
+ *
+ * NOT by find-replacing forge's class names inside the installed files:
+ * those files are overwritten by the next `forge component install`, so
+ * the edit would have to be redone on every reinstall, forever.
+ *
+ * ── How the plumbing works (verified against the v4 compiler) ────────
+ *
+ * Reliant's palette is declared in tailwind.config.js (`@config` above) as
+ * `hsl(var(--x) / <alpha-value>)`. Tailwind v4's `@theme` takes PRECEDENCE
+ * over those JS-config colors: declaring `--color-accent` here replaces the
+ * config's `accent` entry outright. That is load-bearing for the accent
+ * collision below — and it is why every name declared here was checked
+ * against the config first.
+ *
+ * The values are `hsl(var(--reliant-var))` rather than literal colors, so
+ * they resolve lazily. `--card`, `--foreground` et al. are redefined per
+ * scheme on `:root[data-color-scheme=…]` and `.dark[data-color-scheme=…]`,
+ * and BOTH selectors match the <html> element — the same element these
+ * `--color-*` properties are declared on — so a scheme or dark-mode switch
+ * recomputes them with no extra work.
+ *
+ * ── THE ACCENT COLLISION — the one genuinely dangerous mapping ───────
+ *
+ * `accent` exists in BOTH vocabularies and means OPPOSITE things:
+ *
+ *   forge    `accent` = the primary ACTION color (filled buttons, active
+ *            tabs, focus rings). Its text pairing is `on-accent`.
+ *   reliant  `--accent` = a muted SURFACE tint. professional-themes.css
+ *            literally comments it "Kept in step with --muted", and it is
+ *            the ghost/outline hover fill in ui/Button.tsx
+ *            (`hover:bg-accent hover:text-accent-foreground`).
+ *
+ * Reliant uses `bg-accent` at ~159 call sites. Because `@theme` overrides
+ * the config, a global `--color-accent: hsl(var(--primary))` would repaint
+ * every one of them — turning quiet hover tints into solid primary fills.
+ * So `accent` is the ONE token that is SCOPED rather than global:
+ *
+ *   outside .forge-ui   accent → --accent   (unchanged; today's behavior)
+ *   inside  .forge-ui   accent → --primary  (what forge components mean)
+ *
+ * Scoping it takes BOTH halves below, and neither is sufficient alone —
+ * this was verified in a browser, not reasoned about:
+ *
+ *   1. `.forge-ui` re-declares `--color-accent` and friends DIRECTLY.
+ *      Overriding only the `--forge-accent-src` input does nothing, because
+ *      CSS substitutes a `var()` inside a custom property at the element
+ *      where that property is DECLARED — here `:root`, via `@theme`. The
+ *      computed value inherits down already-substituted, so a descendant
+ *      changing the input arrives far too late. (Measured: the scope had
+ *      literally no effect on `bg-accent` until these were added.)
+ *   2. The `--forge-accent-src` indirection stays anyway, because Tailwind
+ *      inlines the THEME-LEVEL value as the pre-`@supports` fallback for
+ *      alpha modifiers (`bg-accent/40` emits
+ *      `color-mix(…, hsl(var(--forge-accent-src)) 40%, …)`). That fallback
+ *      never consults `--color-accent`, so without the indirection it would
+ *      keep resolving against the wrong source on older engines.
+ *
+ * Together: (1) fixes the modern path, (2) fixes the fallback path.
+ *
+ * CONSEQUENCE, so it is not a surprise later: wrap forge components in
+ * `.forge-ui`. A forge component rendered outside it still paints — it
+ * just draws its primary actions in reliant's muted tint, which reads as
+ * "the button lost its color" rather than as an obvious failure.
+ * `--accent-foreground` is remapped alongside it inside the scope so the
+ * fill/text pair stays coherent for any reliant primitive nested there.
+ *
+ * ── THE MUTED-INVERSION TRAP — read before touching `surface-muted` ──
+ *
+ * The obvious mapping for forge's `surface-muted` (table heads, row
+ * hovers, tab strips) is reliant's `--muted`. It is WRONG, and wrong in a
+ * way that only shows up in half the themes. `--muted` moves in OPPOSITE
+ * directions between light and dark across all ten schemes:
+ *
+ *   |              | dark schemes           | light schemes          |
+ *   |--------------|------------------------|------------------------|
+ *   | --background | 11–14% (0% pure-black) | 97–98%                 |
+ *   | --card       | 17–20% (10%)           | 100% — lightest        |
+ *   | --muted      | 21–24% (15%)           | 94–96%                 |
+ *
+ * So `bg-muted` RECESSES in light and LIFTS in dark. A forge table head
+ * mapped to it would read as a recessed header on a light scheme and as a
+ * floating slab on a dark one. `--background` is the only token that
+ * recesses in BOTH modes, and it is already what reliant's own elevation
+ * rule prescribes for an inset (see the comment block atop
+ * components/Settings/cloud/ui/card.tsx). Hence:
+ *
+ *   surface        → --card        (primary surface: cards, panels)
+ *   surface-muted  → --background  (inset/subtle fill — NEVER --muted)
+ *
+ * `--muted` stays what reliant says it is: interaction state only.
+ *
+ * ── Tokens reliant has no direct equivalent for ──────────────────────
+ *
+ * Derived from an existing variable rather than hardcoded, so they track
+ * the active scheme instead of pinning a color:
+ *
+ *   ink-subtle      forge has a THREE-level text ramp (ink / ink-muted /
+ *                   ink-subtle); reliant has two. The third rung is
+ *                   --muted-foreground at 72% alpha — below the muted
+ *                   rung in both modes without inventing a hue.
+ *   *-surface       the tinted badge/banner fills: the status hue at 12%
+ *                   alpha. Tints over whatever surface it sits on, so it
+ *                   works on --card and --background alike.
+ *   *-border        the same hue at 38% — visible against both.
+ *   *-ink           text on a *-surface tint. Maps to the full-strength
+ *                   status color, which is darkened in light schemes and
+ *                   brightened in dark ones already.
+ *   border-strong   --input, which per-scheme is deliberately one step
+ *                   stronger than --border in BOTH modes (light 82% vs
+ *                   86%; dark 38% vs 32%).
+ *
+ * Radius and shadow need no bridge: forge components use `rounded-md/lg`
+ * and `shadow-sm/md/lg`, which reliant's config and Tailwind's defaults
+ * already define.
+ */
+@theme {
+  /* Surfaces — see the muted-inversion trap above before changing these. */
+  --color-surface: hsl(var(--card));
+  --color-surface-muted: hsl(var(--background));
+  --color-border: hsl(var(--border));
+  --color-border-strong: hsl(var(--input));
+  /* Text ramp — three forge rungs onto reliant's two plus a derived third. */
+  --color-ink: hsl(var(--foreground));
+  --color-ink-muted: hsl(var(--muted-foreground));
+  --color-ink-subtle: hsl(var(--muted-foreground) / 0.72);
+  /* Accent — resolves through --forge-accent-src; scoped, see above. */
+  --color-accent: hsl(var(--forge-accent-src));
+  --color-accent-hover: hsl(var(--forge-accent-src) / 0.85);
+  --color-on-accent: hsl(var(--forge-accent-ink-src));
+  --color-accent-surface: hsl(var(--forge-accent-src) / 0.12);
+  --color-accent-border: hsl(var(--forge-accent-src) / 0.38);
+  --color-accent-ink: hsl(var(--forge-accent-src));
+  /* Danger → reliant's destructive. */
+  --color-danger: hsl(var(--destructive));
+  --color-danger-hover: hsl(var(--destructive) / 0.85);
+  --color-on-danger: hsl(var(--destructive-foreground));
+  --color-danger-surface: hsl(var(--destructive) / 0.12);
+  --color-danger-border: hsl(var(--destructive) / 0.38);
+  --color-danger-ink: hsl(var(--destructive));
+  /* Success → reliant's success. */
+  --color-success: hsl(var(--success));
+  --color-success-surface: hsl(var(--success) / 0.12);
+  --color-success-border: hsl(var(--success) / 0.38);
+  --color-success-ink: hsl(var(--success));
+  /* Warning → reliant's warning. */
+  --color-warning: hsl(var(--warning));
+  /* The hover twin of --color-warning, matching --color-danger-hover's 0.85.
+     confirmation_dialog's warning variant references it; without it the
+     button's hover state renders transparent. */
+  --color-warning-hover: hsl(var(--warning) / 0.85);
+  --color-on-warning: hsl(var(--warning-foreground));
+  --color-warning-surface: hsl(var(--warning) / 0.12);
+  --color-warning-border: hsl(var(--warning) / 0.38);
+  --color-warning-ink: hsl(var(--warning));
+}
+
+/*
+ * Default accent source: reliant's own --accent, so every pre-existing
+ * `bg-accent` call site outside .forge-ui renders exactly as it does today.
+ */
+:root {
+  --forge-accent-src: var(--accent);
+  --forge-accent-ink-src: var(--accent-foreground);
+}
+
+/*
+ * Opt-in scope for forge's component library. Inside it, `accent` takes on
+ * forge's meaning (the primary action color) — and --accent-foreground moves
+ * with it so a reliant primitive nested in this subtree keeps a legible
+ * fill/text pair rather than inheriting a mismatched one.
+ */
+.forge-ui {
+  /* Half 2: fixes the alpha-modifier fallback path. */
+  --forge-accent-src: var(--primary);
+  --forge-accent-ink-src: var(--primary-foreground);
+
+  /*
+   * Half 1: fixes the modern path. These MUST be restated — a var() inside
+   * a custom property is substituted where that property is declared
+   * (:root), so overriding only the inputs above has no effect here.
+   */
+  --color-accent: hsl(var(--primary));
+  --color-accent-hover: hsl(var(--primary) / 0.85);
+  --color-on-accent: hsl(var(--primary-foreground));
+  --color-accent-surface: hsl(var(--primary) / 0.12);
+  --color-accent-border: hsl(var(--primary) / 0.38);
+  --color-accent-ink: hsl(var(--primary));
+
+  /* Keep reliant primitives nested here on a coherent fill/text pair. */
+  --accent: var(--primary);
+  --accent-foreground: var(--primary-foreground);
+}
+
 /* Animations */
 @layer utilities {
   @keyframes pulse-border {

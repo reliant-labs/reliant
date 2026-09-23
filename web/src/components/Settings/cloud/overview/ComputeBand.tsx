@@ -29,21 +29,38 @@ import { cn } from "@/lib/utils";
  * `renderOverageControl` is a slot rather than inline markup on purpose — the
  * spend-cap work replaces what sits there, and a band that owned the control's
  * internals would have to be restructured to accept it.
+ *
+ * `dimensions` is the metered-usage half of the plan — hours used of hours
+ * included, and where the overage boundary falls — reshaped from three flat
+ * props (`includedHoursLabel` / `usedHoursLabel` / `capacity`) into a
+ * collection so a future metered dimension (CPU, memory, storage, egress,
+ * CDN) is one more array entry rather than three more band props. M0.6 keeps
+ * this at exactly one entry — daemon compute — and the render below is the
+ * bare pre-reshape markup for a 1-element array: `dimensions.map(...)`
+ * returns its children directly with no wrapping element, so the DOM for a
+ * single dimension is unchanged.
  */
+export interface ComputeBandDimension {
+  /** Stable id, e.g. "daemon_compute". Used only as the React key. */
+  id: string;
+  includedHoursLabel: string | null;
+  usedHoursLabel: string | null;
+  capacity: ComputeCapacity | null;
+  estimatedOverageCostLabel: string | null;
+}
+
 export interface ComputeBandProps {
   /** Null when there is no subscription — the true empty. */
   planName: string | null;
   pricePerMonthLabel: string | null;
   renewsOnLabel: string | null;
-  includedHoursLabel: string | null;
-  usedHoursLabel: string | null;
+  /** What tiers/sizes this plan may run — a PLAN fact, not a per-dimension one. */
   allowedSizesLabel: string | null;
-  capacity: ComputeCapacity | null;
+  dimensions: ComputeBandDimension[];
   grantedMinutesRemaining: number;
   /** The plan row arrived without its detail — see isPlanDetailUnavailable. */
   planDetailUnavailable: boolean;
   usageUnavailable: boolean;
-  estimatedOverageCostLabel: string | null;
   onChangePlan: () => void;
   onRetryUsage: () => void;
   renderOverageControl: (args: { disabled: boolean; reason?: string }) => React.ReactNode;
@@ -53,18 +70,19 @@ export function ComputeBand({
   planName,
   pricePerMonthLabel,
   renewsOnLabel,
-  includedHoursLabel,
-  usedHoursLabel,
   allowedSizesLabel,
-  capacity,
+  dimensions,
   grantedMinutesRemaining,
   planDetailUnavailable,
   usageUnavailable,
-  estimatedOverageCostLabel,
   onChangePlan,
   onRetryUsage,
   renderOverageControl,
 }: ComputeBandProps) {
+  // M0.6 is a reshape, not a new feature: the single-dimension case reads
+  // straight off dimensions[0] rather than joining across an array, so the
+  // rendered text is byte-identical to the pre-reshape single-prop version.
+  const primary = dimensions[0];
   return (
     <section
       aria-labelledby="compute-band-heading"
@@ -163,9 +181,9 @@ export function ComputeBand({
               <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-background px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <p>Usage unavailable for this period.</p>
-                  {includedHoursLabel && (
+                  {primary?.includedHoursLabel && (
                     <p className="mt-0.5 text-xs">
-                      Your plan includes {includedHoursLabel.replace(" included", "")}.
+                      Your plan includes {primary.includedHoursLabel.replace(" included", "")}.
                     </p>
                   )}
                 </div>
@@ -174,13 +192,17 @@ export function ComputeBand({
                 </Button>
               </div>
             ) : (
-              capacity && (
-                <CapacityBar
-                  capacity={capacity}
-                  usedHoursLabel={usedHoursLabel}
-                  includedHoursLabel={includedHoursLabel}
-                  estimatedOverageCostLabel={estimatedOverageCostLabel}
-                />
+              dimensions.map(
+                (d) =>
+                  d.capacity && (
+                    <CapacityBar
+                      key={d.id}
+                      capacity={d.capacity}
+                      usedHoursLabel={d.usedHoursLabel}
+                      includedHoursLabel={d.includedHoursLabel}
+                      estimatedOverageCostLabel={d.estimatedOverageCostLabel}
+                    />
+                  ),
               )
             )}
 
