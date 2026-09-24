@@ -1137,15 +1137,27 @@ reliant forge cluster
 
 Delete the k3d cluster
 
+Delete the k3d cluster named by --config's metadata.name, and FIRST every
+cluster nested on its docker network (declared with `owner`, so it has no
+config file of its own and cannot outlive its owner's network).
+
+Given an environment, delete every k3d cluster its KCL declares instead —
+including secondaries declared with `owner` and no config file, which
+--config cannot name. Secondaries are deleted before their owner: k3d cannot
+remove a docker network a secondary is still attached to.
+
+This deletes whole clusters, and with them every namespace on them — including
+other environments' and other worktrees' stacks sharing the cluster.
+
 ```
-reliant forge cluster down [flags]
+reliant forge cluster down [environment] [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file (ignored when an environment is given) |
 
 ---
 
@@ -1320,20 +1332,28 @@ Create the k3d cluster from deploy/k3d.yaml.
 If the cluster already exists, this is a no-op success. With --wait,
 blocks until the cluster's nodes report ready.
 
+Given an environment, the clusters come from that environment's KCL instead
+of a k3d config file: every forge.Cluster the env's bundle declares is ensured exactly
+as `forge env up <env>` ensures it — the declared pod/Service CIDRs, API port,
+owner network and registry-inherit included, none of which a k3d YAML carries.
+Use it whenever the env declares its clusters: a cluster created from the bare
+config file lacks those fields, and the env's own deploy then refuses it.
+
 Examples:
   forge cluster up
   forge cluster up --wait
   forge cluster up --config deploy/k3d.custom.yaml
+  forge cluster up dev-k8s --wait
 
 ```
-reliant forge cluster up [flags]
+reliant forge cluster up [environment] [flags]
 ```
 
 **Flags:**
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--config` | `string` | `deploy/k3d.yaml` | k3d config file |
+| `--config` | `string` | `deploy/k3d.yaml` | k3d config file (ignored when an environment is given) |
 | `--wait` | `bool` | - | Wait until cluster nodes are ready |
 
 ---
