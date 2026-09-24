@@ -260,7 +260,7 @@ db-driver-audit:
 	@echo "$(YELLOW)Running DB driver audit...$(NC)"
 	@./scripts/db-driver-audit.sh
 
-## pin-forge: Pin forge + forge/pkg to forge's current origin/main commit
+## pin-forge: Pin forge to forge's current origin/main commit
 # Pre-launch we pin by COMMIT, not tag — a tag costs three CI cycles and up to
 # 20 minutes of module-proxy lag before a one-line forge fix can reach prod,
 # where every bug we chase actually lives. See docs/pinning.md for the mode
